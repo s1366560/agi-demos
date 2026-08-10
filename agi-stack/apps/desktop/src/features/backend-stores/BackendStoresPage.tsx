@@ -34,7 +34,11 @@ export function BackendStoresPage({
   const [editing, setEditing] = useState<BackendStore | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const canMutate = controller !== null && model.allowedActions.includes('create');
+  const allowedActions = useMemo(() => new Set(model.allowedActions), [model.allowedActions]);
+  const canCreate = controller !== null && allowedActions.has('create');
+  const canUpdate = controller !== null && allowedActions.has('update');
+  const canTest = controller !== null && allowedActions.has('test');
+  const showForm = canCreate || (editing !== null && canUpdate);
   const defaultEngine = planeData.types[0]?.type ?? defaultEngineType(plane);
 
   useEffect(() => {
@@ -59,6 +63,7 @@ export function BackendStoresPage({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!controller) return;
+    if ((editing && !canUpdate) || (!editing && !canCreate)) return;
     setMessage(null);
     try {
       const connectionConfig = parseObject(form.connectionConfig);
@@ -86,7 +91,7 @@ export function BackendStoresPage({
   };
 
   const testDraft = async () => {
-    if (!controller) return;
+    if (!controller || !canTest) return;
     setMessage(null);
     try {
       const result = await controller.testDraft(plane, {
@@ -129,7 +134,7 @@ export function BackendStoresPage({
         ))}
       </nav>
 
-      {canMutate ? (
+      {showForm ? (
         <form onSubmit={(event) => void submit(event)}>
           <h2>{t(editing ? 'backendStores.editTitle' : 'backendStores.createTitle')}</h2>
           <label>
@@ -176,13 +181,15 @@ export function BackendStoresPage({
             />
           </label>
           <div>
-            <button
-              type="button"
-              onClick={() => void testDraft()}
-              disabled={Boolean(model.busyAction)}
-            >
-              {t('backendStores.testDraft')}
-            </button>
+            {canTest ? (
+              <button
+                type="button"
+                onClick={() => void testDraft()}
+                disabled={Boolean(model.busyAction)}
+              >
+                {t('backendStores.testDraft')}
+              </button>
+            ) : null}
             <button type="submit" disabled={!form.name.trim() || Boolean(model.busyAction)}>
               {t(editing ? 'common.save' : 'backendStores.create')}
             </button>
@@ -206,6 +213,7 @@ export function BackendStoresPage({
         plane={plane}
         busy={Boolean(model.busyAction)}
         controller={controller}
+        allowedActions={model.allowedActions}
         confirmDelete={confirmDelete}
         onConfirmDelete={setConfirmDelete}
         onEdit={(store) => {
@@ -223,6 +231,7 @@ function StoreList({
   plane,
   busy,
   controller,
+  allowedActions,
   confirmDelete,
   onConfirmDelete,
   onEdit,
@@ -232,6 +241,7 @@ function StoreList({
   plane: BackendStorePlane;
   busy: boolean;
   controller: BackendStoresController | null;
+  allowedActions: readonly string[];
   confirmDelete: string | null;
   onConfirmDelete: (storeId: string | null) => void;
   onEdit: (store: BackendStore) => void;
@@ -239,8 +249,8 @@ function StoreList({
 }>) {
   const { t } = useI18n();
   const mutable = useMemo(
-    () => new Set(controller ? ['update', 'delete', 'test'] : []),
-    [controller],
+    () => new Set(controller ? allowedActions : []),
+    [allowedActions, controller],
   );
   if (stores.length === 0) return <p>{t('backendStores.empty')}</p>;
   return (

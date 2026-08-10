@@ -8,6 +8,13 @@ Module._initPaths();
 
 const require = createRequire(import.meta.url);
 const compiledRoot = '/tmp/agistack-desktop-test-dist/src';
+require.extensions['.css'] = () => {};
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
+const { I18nProvider } = require(`${compiledRoot}/i18n.js`);
+const { BackendStoresPage } = require(
+  `${compiledRoot}/features/backend-stores/BackendStoresPage.js`,
+);
 const { BACKEND_STORES_ROUTE_ID, createBackendStoresClient } = require(
   `${compiledRoot}/features/backend-stores/backendStoresClient.js`,
 );
@@ -23,7 +30,7 @@ const { PROJECT_PLAYBOOKS_ROUTE_ID, createProjectPlaybooksClient } = require(
 const { createProjectPlaybooksController } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksController.js`,
 );
-const { createProjectPlaybooksEventSource } = require(
+const { createCloudProjectPlaybooksEventSource, createProjectPlaybooksEventSource } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksEventSource.js`,
 );
 const { createProjectPlaybooksRouteModuleLoader } = require(
@@ -37,12 +44,13 @@ const {
   executeVaultBoundCloudRequest,
 } = require('/tmp/agistack-desktop-test-dist/electron/main/cloudRequestPolicy.js');
 const {
+  authorizeVaultBoundCloudSocket,
+} = require('/tmp/agistack-desktop-test-dist/electron/main/cloudSocketPolicy.js');
+const {
   desktopApiAuthenticationAvailable,
   desktopApiFetch,
   desktopVaultBoundCloudRequestBroker,
-} = require(
-  `${compiledRoot}/api/cloudRequestBroker.js`,
-);
+} = require(`${compiledRoot}/api/cloudRequestBroker.js`);
 
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
@@ -250,7 +258,12 @@ test('Electron vault-bound broker admits only observed tenant/project/workspace 
     {
       path: '/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages',
       method: 'POST',
-      body: { content: 'hello', sender_type: 'human', mentions: [], context_items: [] },
+      body: {
+        content: 'hello',
+        sender_type: 'human',
+        mentions: [],
+        context_items: [],
+      },
     },
     cloudRequestDependencies((url, init) => {
       requests.push({ url, init });
@@ -707,7 +720,9 @@ test('shared desktop fetch adapter serializes bounded FormData without renderer 
     const oversized = new FormData();
     oversized.append(
       'file',
-      new Blob([new Uint8Array(512 * 1024 + 1)], { type: 'application/octet-stream' }),
+      new Blob([new Uint8Array(512 * 1024 + 1)], {
+        type: 'application/octet-stream',
+      }),
       'oversized.bin',
     );
     await assert.rejects(
@@ -867,7 +882,10 @@ test('shared desktop fetch adapter reconstructs only exact privileged binary env
     assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [0, 1, 2, 3]);
     assert.equal(response.headers.get('content-type'), 'image/png');
     assert.equal(response.headers.get('content-disposition'), 'attachment; filename="plot.png"');
-    assert.deepEqual(commands[0].args.request.response, { kind: 'binary', max_bytes: 64 });
+    assert.deepEqual(commands[0].args.request.response, {
+      kind: 'binary',
+      max_bytes: 64,
+    });
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete globalThis.window;
@@ -962,7 +980,12 @@ test('privileged event streams reject endpoint, MIME, size, secret, and renderer
 
   for (const [body, headers, maxBytes, expected] of [
     ['data: {}\n\n', { 'Content-Type': 'application/json' }, 64, /MIME type is invalid/u],
-    ['data: {"token":"vault-only-token"}\n\n', { 'Content-Type': 'text/event-stream' }, 64, /protected credential/u],
+    [
+      'data: {"token":"vault-only-token"}\n\n',
+      { 'Content-Type': 'text/event-stream' },
+      64,
+      /protected credential/u,
+    ],
     ['data: {"status":"running"}\n\n', { 'Content-Type': 'text/event-stream' }, 16, /too large/u],
   ]) {
     await assert.rejects(
@@ -1097,19 +1120,15 @@ test('shared desktop fetch adapter preserves idempotency-only mutation authority
   };
 
   try {
-    const response = await desktopApiFetch(
-      cloudConfig,
-      '/api/v1/projects/',
-      {
-        method: 'POST',
-        headers: new Headers({
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'Idempotency-Key': 'project-create-12345678',
-        }),
-        body: JSON.stringify({ tenant_id: 'tenant-1', name: 'Project 2' }),
-      },
-    );
+    const response = await desktopApiFetch(cloudConfig, '/api/v1/projects/', {
+      method: 'POST',
+      headers: new Headers({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'project-create-12345678',
+      }),
+      body: JSON.stringify({ tenant_id: 'tenant-1', name: 'Project 2' }),
+    });
     assert.deepEqual(await response.json(), { id: 'project-2' });
     assert.deepEqual(commands[0].args.request.mutation, {
       kind: 'idempotency-only',
@@ -1186,7 +1205,11 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       method: 'POST',
       body: { user_code: 'ABCD-EFGH' },
     },
-    { path: '/api/v1/invitations/accept/invitation-token', method: 'POST', body: {} },
+    {
+      path: '/api/v1/invitations/accept/invitation-token',
+      method: 'POST',
+      body: {},
+    },
     {
       path: '/api/v1/tenants/',
       method: 'POST',
@@ -1214,7 +1237,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       method: 'GET',
     },
     { path: '/api/v1/deploys/deploy-1', method: 'GET' },
-    { path: '/api/v1/instances/?page=1&page_size=20&status=running', method: 'GET' },
+    {
+      path: '/api/v1/instances/?page=1&page_size=20&status=running',
+      method: 'GET',
+    },
     { path: '/api/v1/instances/instance-1/restart', method: 'POST' },
     { path: '/api/v1/instances/instance-1', method: 'DELETE' },
     { path: '/api/v1/projects/sandboxes?limit=100&offset=0', method: 'GET' },
@@ -1223,7 +1249,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       path: '/api/v1/skills/evolution/overview?tenant_id=tenant-1',
       method: 'GET',
     },
-    { path: '/api/v1/skills/evolution/config?tenant_id=tenant-1', method: 'GET' },
+    {
+      path: '/api/v1/skills/evolution/config?tenant_id=tenant-1',
+      method: 'GET',
+    },
     {
       path: '/api/v1/skills/evolution/config?tenant_id=tenant-1',
       method: 'PUT',
@@ -1285,7 +1314,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
     { path: '/api/v1/tenants/tenant-1/analytics?period=30d', method: 'GET' },
     { path: '/api/v1/tasks/stats', method: 'GET' },
     { path: '/api/v1/tasks/queue-depth', method: 'GET' },
-    { path: '/api/v1/tasks/recent?limit=50&offset=0&status=running', method: 'GET' },
+    {
+      path: '/api/v1/tasks/recent?limit=50&offset=0&status=running',
+      method: 'GET',
+    },
     { path: '/api/v1/tasks/task-1/retry', method: 'POST' },
     { path: '/api/v1/tasks/retry-pending?limit=10', method: 'POST' },
     { path: '/api/v1/agent/bindings?tenant_id=tenant-1', method: 'GET' },
@@ -1295,7 +1327,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       method: 'PUT',
       body: { max_iterations: 12 },
     },
-    { path: '/api/v1/agent/trace/runs/tenant/tenant-1?limit=20', method: 'GET' },
+    {
+      path: '/api/v1/agent/trace/runs/tenant/tenant-1?limit=20',
+      method: 'GET',
+    },
     {
       path: '/api/v1/agent/trace/runs/tenant/tenant-1/active/count',
       method: 'GET',
@@ -1345,7 +1380,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       body: { expected_revision: 3, idempotency_key: 'run-key-12345678' },
     },
     { path: '/api/v1/tenants/tenant-1/billing', method: 'GET' },
-    { path: '/api/v1/tenants/tenant-1/invitations?limit=50&offset=0', method: 'GET' },
+    {
+      path: '/api/v1/tenants/tenant-1/invitations?limit=50&offset=0',
+      method: 'GET',
+    },
     {
       path: '/api/v1/tenants/tenant-1/trust/policies?workspace_id=workspace-1',
       method: 'GET',
@@ -1364,7 +1402,10 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
       path: '/api/v1/agent/workflows/patterns?tenant_id=tenant-1&page=1&page_size=50',
       method: 'GET',
     },
-    { path: '/api/v1/genes/?tenant_id=tenant-1&page=1&page_size=20', method: 'GET' },
+    {
+      path: '/api/v1/genes/?tenant_id=tenant-1&page=1&page_size=20',
+      method: 'GET',
+    },
   ];
 
   for (const request of requests) {
@@ -1515,6 +1556,52 @@ test('Backend Stores uses Cloud authority from Local-online through the vault br
   assert.equal(snapshot.scopeRevision, 13);
   assert.equal(snapshot.allowedActions.includes('create'), true);
   assert.equal(requests.length, 5);
+});
+
+test('Backend Stores renders mutation controls only for explicitly allowed actions', () => {
+  const mutationCalls = [];
+  const controller = {
+    async create() {
+      mutationCalls.push('create');
+    },
+    async update() {
+      mutationCalls.push('update');
+    },
+    async remove() {
+      mutationCalls.push('delete');
+    },
+    async testDraft() {
+      mutationCalls.push('test-draft');
+      return { success: true, version: null };
+    },
+    async testStore() {
+      mutationCalls.push('test-store');
+      return { success: true, version: null };
+    },
+  };
+  const memberMarkup = renderBackendStores(
+    backendStoresViewModel(['view', 'list'], 'tenant_member'),
+    controller,
+  );
+
+  assert.match(memberMarkup, />graph-1</u);
+  assert.doesNotMatch(memberMarkup, />Create backend store</u);
+  assert.doesNotMatch(memberMarkup, />Test configuration</u);
+  assert.doesNotMatch(memberMarkup, />Test</u);
+  assert.doesNotMatch(memberMarkup, />Edit</u);
+  assert.doesNotMatch(memberMarkup, />Delete</u);
+  assert.deepEqual(mutationCalls, []);
+
+  const adminMarkup = renderBackendStores(
+    backendStoresViewModel(['view', 'list', 'create', 'update', 'delete', 'test'], 'admin'),
+    controller,
+  );
+  assert.match(adminMarkup, />Create backend store</u);
+  assert.match(adminMarkup, />Test configuration</u);
+  assert.match(adminMarkup, />Test</u);
+  assert.match(adminMarkup, />Edit</u);
+  assert.match(adminMarkup, />Delete</u);
+  assert.deepEqual(mutationCalls, []);
 });
 
 test('Backend Stores controller aborts stale scope loads and exposes CRUD/test actions', async () => {
@@ -1686,15 +1773,24 @@ test('Project Playbooks refresh events are project-scoped and unsubscribe cleanl
 
   socket.readyState = 1;
   socket.onopen();
-  assert.deepEqual(sent, [
-    { type: 'subscribe_project_events', project_id: 'project-1' },
-  ]);
+  assert.deepEqual(sent, [{ type: 'subscribe_project_events', project_id: 'project-1' }]);
   socket.onmessage({
-    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-2' }),
+    data: JSON.stringify({
+      type: 'reflection_complete',
+      project_id: 'project-2',
+    }),
   });
-  socket.onmessage({ data: JSON.stringify({ type: 'workspace_updated', project_id: 'project-1' }) });
   socket.onmessage({
-    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-1' }),
+    data: JSON.stringify({
+      type: 'workspace_updated',
+      project_id: 'project-1',
+    }),
+  });
+  socket.onmessage({
+    data: JSON.stringify({
+      type: 'reflection_complete',
+      project_id: 'project-1',
+    }),
   });
   assert.equal(observed, 1);
 
@@ -1705,9 +1801,137 @@ test('Project Playbooks refresh events are project-scoped and unsubscribe cleanl
   });
   assert.equal(closed, 1);
   socket.onmessage?.({
-    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-1' }),
+    data: JSON.stringify({
+      type: 'reflection_complete',
+      project_id: 'project-1',
+    }),
   });
   assert.equal(observed, 1);
+});
+
+test('Project Playbooks Local-online event source uses the trusted Cloud origin and cleans up', async () => {
+  const opened = [];
+  const sent = [];
+  const closed = [];
+  let transportListener = null;
+  let refreshes = 0;
+  let projectionLoads = 0;
+  const transport = {
+    subscribe(listener) {
+      transportListener = listener;
+      return () => {
+        transportListener = null;
+      };
+    },
+    async open(input) {
+      opened.push(input);
+      await authorizeVaultBoundCloudSocket(input.request, cloudSocketDependencies());
+      queueMicrotask(() => {
+        transportListener?.({
+          socketId: input.socketId,
+          type: 'open',
+          protocol: 'memstack.auth',
+        });
+      });
+    },
+    async send(input) {
+      sent.push({ ...input, frame: { ...input.frame } });
+    },
+    async close(input) {
+      closed.push(input);
+      queueMicrotask(() => {
+        transportListener?.({
+          socketId: input.socketId,
+          type: 'close',
+          code: input.code,
+          reason: input.reason,
+          wasClean: true,
+        });
+      });
+    },
+  };
+  const source = createCloudProjectPlaybooksEventSource(localConfig, {
+    projectionClient: {
+      async load(signal) {
+        projectionLoads += 1;
+        assert.equal(signal.aborted, false);
+        return { apiBaseUrl: 'https://cloud.memstack.test' };
+      },
+    },
+    transport: () => transport,
+    sessionId: () => 'playbooks_cloud_session_1',
+  });
+  const unsubscribe = source.subscribe(projectScope, () => {
+    refreshes += 1;
+  });
+
+  await waitFor(() => sent.length === 1);
+  assert.equal(projectionLoads, 1);
+  assert.equal(opened.length, 1);
+  assert.equal(new URL(opened[0].request.url).origin, 'wss://cloud.memstack.test');
+  assert.notEqual(new URL(opened[0].request.url).origin, 'ws://127.0.0.1:43117');
+  assert.deepEqual(opened[0].request.scope, {
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    workspace_id: null,
+    conversation_id: null,
+  });
+  assert.deepEqual(JSON.parse(sent[0].frame.text), {
+    type: 'subscribe_project_events',
+    project_id: 'project-1',
+  });
+
+  transportListener({
+    socketId: opened[0].socketId,
+    type: 'message',
+    frame: {
+      binary: false,
+      text: JSON.stringify({
+        type: 'reflection_complete',
+        project_id: 'project-1',
+      }),
+    },
+  });
+  assert.equal(refreshes, 1);
+
+  unsubscribe();
+  await waitFor(() => closed.length === 1);
+  assert.deepEqual(JSON.parse(sent.at(-1).frame.text), {
+    type: 'unsubscribe_project_events',
+    project_id: 'project-1',
+  });
+  assert.equal(closed[0].reason, 'project_playbooks_unsubscribe');
+});
+
+test('Project Playbooks event cleanup aborts a pending trusted-session projection', async () => {
+  let projectionSignal = null;
+  let socketOpens = 0;
+  const source = createCloudProjectPlaybooksEventSource(localConfig, {
+    projectionClient: {
+      load(signal) {
+        projectionSignal = signal;
+        return new Promise(() => {});
+      },
+    },
+    transport: () => ({
+      subscribe() {
+        return () => {};
+      },
+      async open() {
+        socketOpens += 1;
+      },
+      async send() {},
+      async close() {},
+    }),
+    sessionId: () => 'playbooks_cloud_session_2',
+  });
+
+  const unsubscribe = source.subscribe(projectScope, () => {});
+  await waitFor(() => projectionSignal !== null);
+  unsubscribe();
+
+  assert.equal(projectionSignal.aborted, true);
+  assert.equal(socketOpens, 0);
 });
 
 test('Project Playbooks route binds reflection refresh and native Cloud socket cleanup', () => {
@@ -1809,6 +2033,91 @@ function storePayload(id) {
     source: 'user',
     readonly: false,
   };
+}
+
+function renderBackendStores(model, controller) {
+  return renderToStaticMarkup(
+    React.createElement(
+      I18nProvider,
+      null,
+      React.createElement(BackendStoresPage, {
+        model,
+        controller,
+        onRetry() {},
+      }),
+    ),
+  );
+}
+
+function backendStoresViewModel(allowedActions, membershipRole) {
+  return Object.freeze({
+    routeId: 'backend-stores',
+    state: 'ready',
+    scope: tenantScope,
+    reasonCode: null,
+    retryVisible: true,
+    busyAction: null,
+    allowedActions: Object.freeze([...allowedActions]),
+    membershipRole,
+    graph: Object.freeze({
+      stores: Object.freeze([
+        Object.freeze({
+          id: 'graph-1',
+          tenantId: 'tenant-1',
+          name: 'graph-1',
+          engineType: 'neo4j',
+          status: 'ready',
+          healthStatus: null,
+          detectedVersion: '5.26',
+          connectionConfig: Object.freeze({}),
+          indexConfig: Object.freeze({}),
+          createdAt: null,
+          updatedAt: null,
+          source: 'user',
+          readonly: false,
+        }),
+      ]),
+      types: Object.freeze([]),
+    }),
+    retrieval: Object.freeze({
+      stores: Object.freeze([]),
+      types: Object.freeze([]),
+    }),
+  });
+}
+
+function cloudSocketDependencies() {
+  return {
+    async loadTrustedSession() {
+      return {
+        version: 1,
+        api_base_url: 'https://cloud.memstack.test',
+        runtime_mode: 'cloud',
+        credential_kind: 'cloud_bearer',
+        credential: 'vault-only-token',
+        expires_at: null,
+      };
+    },
+    async fetch(url, init) {
+      assert.equal(url, 'https://cloud.memstack.test/api/v1/workspace-context');
+      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer vault-only-token');
+      return jsonResponse({
+        context: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: null,
+        },
+      });
+    },
+  };
+}
+
+async function waitFor(predicate) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error('condition_not_reached');
 }
 
 function backendSnapshot(tenantId) {

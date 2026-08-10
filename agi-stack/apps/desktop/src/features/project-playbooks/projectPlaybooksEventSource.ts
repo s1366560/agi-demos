@@ -1,10 +1,15 @@
 import { DesktopApiClient } from '../../api/client';
 import {
+  desktopCloudSessionProjectionClient,
+  type CloudSessionProjectionClient,
+} from '../../api/cloudSessionProjectionClient';
+import {
   CLOUD_SOCKET_CLOSED,
   CLOUD_SOCKET_CLOSING,
   CLOUD_SOCKET_OPEN,
   createCloudSocketBridge,
   desktopCloudSocketTransport,
+  type CloudSocketBridgeTransport,
 } from '../../api/cloudSocketBridge';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { ProjectKnowledgeScope } from '../project-knowledge/projectKnowledgeClient';
@@ -25,6 +30,12 @@ export type ProjectPlaybooksEventSource = Readonly<{
 
 export type ProjectPlaybooksEventSourceDependencies = Readonly<{
   openSocket(scope: ProjectKnowledgeScope): ProjectPlaybooksEventSocket;
+}>;
+
+export type CloudProjectPlaybooksEventSourceDependencies = Readonly<{
+  projectionClient: CloudSessionProjectionClient | null;
+  transport(): CloudSocketBridgeTransport | null;
+  sessionId(): string;
 }>;
 
 export function createProjectPlaybooksEventSource(
@@ -72,28 +83,71 @@ export function createProjectPlaybooksEventSource(
 
 export function createCloudProjectPlaybooksEventSource(
   config: DesktopRuntimeConfig,
+  dependencies: CloudProjectPlaybooksEventSourceDependencies = defaultCloudProjectPlaybooksEventSourceDependencies(),
 ): ProjectPlaybooksEventSource {
   const runtimeConfig = Object.freeze({ ...config });
-  return createProjectPlaybooksEventSource({
-    openSocket(scope) {
-      const transport = desktopCloudSocketTransport();
-      if (!transport) throw new Error('cloud_socket_broker_missing');
-      const client = new DesktopApiClient(runtimeConfig);
-      const socket = createCloudSocketBridge(
-        {
-          kind: 'agent',
-          url: client.agentWsUrl(`playbooks_${globalThis.crypto.randomUUID()}`),
-          scope: {
-            tenant_id: scope.tenantId,
-            project_id: scope.projectId,
-            workspace_id: runtimeConfig.workspaceId.trim() || null,
-            conversation_id: null,
+  return Object.freeze({
+    subscribe(scopeInput, listener) {
+      const scope = requireCloudProjectScope(scopeInput);
+      if (typeof listener !== 'function') {
+        throw new Error('project_playbooks_event_listener_invalid');
+      }
+      const controller = new AbortController();
+      let active = true;
+      let disconnect: (() => void) | null = null;
+      const connect = async (): Promise<void> => {
+        const projection = await dependencies.projectionClient?.load(controller.signal);
+        if (!active) return;
+        if (!projection) throw new Error('cloud_session_projection_unavailable');
+        const transport = dependencies.transport();
+        if (!transport) throw new Error('cloud_socket_broker_missing');
+        const cloudConfig = Object.freeze({
+          ...runtimeConfig,
+          apiBaseUrl: projection.apiBaseUrl,
+          deviceAuthorizationBaseUrl: projection.apiBaseUrl,
+        });
+        const source = createProjectPlaybooksEventSource({
+          openSocket(currentScope) {
+            const client = new DesktopApiClient(cloudConfig);
+            const sessionId = nonEmpty(dependencies.sessionId());
+            if (!sessionId) throw new Error('project_playbooks_event_session_invalid');
+            const socket = createCloudSocketBridge(
+              {
+                kind: 'agent',
+                url: client.agentWsUrl(sessionId),
+                scope: {
+                  tenant_id: currentScope.tenantId,
+                  project_id: currentScope.projectId,
+                  workspace_id: runtimeConfig.workspaceId.trim() || null,
+                  conversation_id: null,
+                },
+              },
+              transport,
+            );
+            return socket as unknown as ProjectPlaybooksEventSocket;
           },
-        },
-        transport,
-      );
-      return socket as unknown as ProjectPlaybooksEventSocket;
+        });
+        const nextDisconnect = source.subscribe(scope, listener);
+        if (active) disconnect = nextDisconnect;
+        else nextDisconnect();
+      };
+      void connect().catch(() => undefined);
+      return () => {
+        if (!active) return;
+        active = false;
+        controller.abort();
+        disconnect?.();
+        disconnect = null;
+      };
     },
+  });
+}
+
+function defaultCloudProjectPlaybooksEventSourceDependencies(): CloudProjectPlaybooksEventSourceDependencies {
+  return Object.freeze({
+    projectionClient: desktopCloudSessionProjectionClient(),
+    transport: desktopCloudSocketTransport,
+    sessionId: () => `playbooks_${globalThis.crypto.randomUUID()}`,
   });
 }
 
