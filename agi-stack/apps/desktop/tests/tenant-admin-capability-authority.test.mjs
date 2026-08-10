@@ -38,9 +38,9 @@ test('tenant admin capability client publishes only observed Cloud actions', asy
       calls,
       'audit',
       observed(
-        ['view', 'filter', 'inspect-runtime-hooks'],
-        'degraded',
-        'file_ipc_missing',
+        ['view', 'filter', 'inspect-runtime-hooks', 'export'],
+        'available',
+        null,
         false,
         17,
       ),
@@ -71,9 +71,9 @@ test('tenant admin capability client publishes only observed Cloud actions', asy
   assert.deepEqual(
     capabilities['tenant-tenant-audit-logs'],
     expectedCapability(
-      ['view', 'filter', 'inspect-runtime-hooks'],
-      'degraded',
-      'file_ipc_missing',
+      ['view', 'filter', 'inspect-runtime-hooks', 'export'],
+      'available',
+      null,
       false,
       17,
     ),

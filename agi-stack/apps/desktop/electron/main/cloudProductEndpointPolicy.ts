@@ -58,6 +58,18 @@ const TENANT_AUDIT_QUERY = new Set([
   'start_time',
   'end_time',
 ]);
+const TENANT_AUDIT_EXPORT_QUERY = new Set([
+  'format',
+  'action',
+  'resource_type',
+  'actor',
+  'hook_name',
+  'executor_kind',
+  'hook_family',
+  'isolation_mode',
+  'start_time',
+  'end_time',
+]);
 const TENANT_EVENT_QUERY = new Set([
   'tenant_id',
   'page',
@@ -1453,6 +1465,17 @@ function authorizePrivilegedTransfer(
     target.searchParams.get('max_bytes') === String(request.response.max_bytes)
   ) {
     return endpoint('project', null, requiredIdentifier(segments[4]), null);
+  }
+  if (
+    segments.length === 7 &&
+    segments[3] === 'tenants' &&
+    segments[5] === 'audit-logs' &&
+    segments[6] === 'export' &&
+    request.method === 'GET' &&
+    allowedQueryKeys(target.searchParams, TENANT_AUDIT_EXPORT_QUERY, ['format']) &&
+    ['csv', 'json'].includes(target.searchParams.get('format') ?? '')
+  ) {
+    return endpoint('tenant-admin', requiredIdentifier(segments[4]), null, null);
   }
   return null;
 }

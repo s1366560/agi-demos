@@ -87,6 +87,7 @@ const ACTION_CATALOG = Object.freeze({
     'view',
     'filter',
     'inspect-runtime-hooks',
+    'export',
   ]),
   [TENANT_TRUST_ROUTE_ID]: Object.freeze([
     'view',

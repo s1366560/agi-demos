@@ -99,9 +99,9 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
           ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
         ),
         tenantAuditClient: probe(
-          'degraded',
-          'tenant_audit_export_file_ipc_unavailable',
-          ['view', 'filter', 'inspect-runtime-hooks'],
+          'available',
+          null,
+          ['view', 'filter', 'inspect-runtime-hooks', 'export'],
           17,
         ),
         tenantTrustClient: probe('available', null, ['view', 'list', 'create', 'revoke']),
@@ -134,9 +134,9 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
     assert.deepEqual(
       pickCapability(snapshot.capabilities['tenant-tenant-audit-logs']),
       {
-        availability: 'degraded',
-        reason_code: 'tenant_audit_export_file_ipc_unavailable',
-        allowed_actions: ['view', 'filter', 'inspect-runtime-hooks'],
+        availability: 'available',
+        reason_code: null,
+        allowed_actions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
       },
     );
     assert.equal(

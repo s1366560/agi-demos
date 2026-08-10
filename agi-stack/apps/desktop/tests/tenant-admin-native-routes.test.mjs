@@ -183,7 +183,7 @@ test('billing client closes permissions and remains degraded until invoice file 
   );
 });
 
-test('audit client uses filter and runtime-summary authority without renderer download fallback', async () => {
+test('audit client observes filter, runtime-summary, and bounded native export authority', async () => {
   const requests = [];
   await withFetch(
     async (url, init = {}) => {
@@ -221,10 +221,14 @@ test('audit client uses filter and runtime-summary authority without renderer do
         limit: 20,
         offset: 0,
       });
-      assert.equal(observed.availability, 'degraded');
-      assert.equal(observed.reasonCode, 'tenant_audit_export_file_ipc_unavailable');
-      assert.deepEqual(observed.allowedActions, ['view', 'filter', 'inspect-runtime-hooks']);
-      assert.equal(observed.allowedActions.includes('export'), false);
+      assert.equal(observed.availability, 'available');
+      assert.equal(observed.reasonCode, null);
+      assert.deepEqual(observed.allowedActions, [
+        'view',
+        'filter',
+        'inspect-runtime-hooks',
+        'export',
+      ]);
       assert.equal(observed.entries[0].action, 'workspace.updated');
       assert.equal(observed.runtimeSummary.total, 1);
       assert.equal(observed.authorityRevision, 7);
@@ -236,6 +240,75 @@ test('audit client uses filter and runtime-summary authority without renderer do
   assert.equal(filtered.pathname.endsWith('/filter'), true);
   assert.equal(filtered.searchParams.get('resource_type'), 'workspace');
   assert.equal(filtered.searchParams.get('limit'), '20');
+});
+
+test('audit client exports the active filters through a bounded binary request', async () => {
+  const requests = [];
+  await withFetch(
+    async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      const target = new URL(String(url));
+      assert.equal(target.pathname, '/api/v1/tenants/tenant-1/audit-logs/export');
+      assert.equal(target.searchParams.get('format'), 'csv');
+      assert.equal(target.searchParams.get('action'), 'workspace.updated');
+      assert.equal(target.searchParams.get('resource_type'), 'workspace');
+      assert.equal(target.searchParams.get('actor'), 'user-1');
+      return new Response('id,action\naudit-1,workspace.updated\n', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Length': '37',
+        },
+      });
+    },
+    async () => {
+      const result = await createTenantAuditClient(cloudConfig).exportLogs(
+        scope,
+        'csv',
+        {
+          action: 'workspace.updated',
+          resourceType: 'workspace',
+          actor: 'user-1',
+        },
+      );
+      assert.equal(result.suggestedName, 'audit-logs.csv');
+      assert.equal(result.mimeType, 'text/csv');
+      assert.equal(await result.blob.text(), 'id,action\naudit-1,workspace.updated\n');
+    },
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(new Headers(requests[0].init.headers).get('Accept'), 'text/csv');
+  assert.equal(
+    new Headers(requests[0].init.headers).get('Authorization'),
+    'Bearer trusted-session',
+  );
+});
+
+test('audit client cancels an unknown-length direct response at the native file limit', async () => {
+  let cancelled = false;
+  await withFetch(
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(8 * 1024 * 1024));
+            controller.enqueue(new Uint8Array(8 * 1024 * 1024));
+            controller.enqueue(Uint8Array.of(1));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { headers: { 'Content-Type': 'text/csv' } },
+      ),
+    async () => {
+      await assert.rejects(
+        createTenantAuditClient(cloudConfig).exportLogs(scope, 'csv'),
+        (error) => reasonCode(error) === 'tenant_audit_export_too_large',
+      );
+    },
+  );
+  assert.equal(cancelled, true);
 });
 
 test('audit client reuses an unfiltered page total as authority revision', async () => {
@@ -397,8 +470,21 @@ test('four controllers expose stale, forbidden, conflict, retry, and empty prese
 
   const auditDeferred = Promise.withResolvers();
   const audit = createTenantAuditController({
-    client: { load: () => auditDeferred.promise },
+    client: {
+      load: () => auditDeferred.promise,
+      exportLogs: async () => ({
+        suggestedName: 'audit-logs.csv',
+        mimeType: 'text/csv',
+        blob: new Blob(['audit']),
+      }),
+    },
     initialScope: scope,
+    saveExport: async (input) => {
+      assert.equal(input.suggestedName, 'audit-logs.csv');
+      assert.equal(input.mimeType, 'text/csv');
+      assert.equal(await input.blob.text(), 'audit');
+      return { status: 'saved', bytesWritten: 5 };
+    },
   });
   const auditLoading = audit.load(scope);
   auditDeferred.resolve(auditSnapshot());
@@ -406,7 +492,8 @@ test('four controllers expose stale, forbidden, conflict, retry, and empty prese
   const reload = audit.load(scope);
   assert.equal(audit.getSnapshot().state, 'stale');
   await reload;
-  assert.equal(audit.getSnapshot().state, 'degraded');
+  assert.equal(audit.getSnapshot().state, 'ready');
+  assert.deepEqual(await audit.exportLogs('csv'), { status: 'saved', bytesWritten: 5 });
 
   const trust = createTenantTrustController({
     client: {
@@ -567,10 +654,10 @@ function auditSnapshot() {
   return {
     scope,
     authority: 'cloud',
-    availability: 'degraded',
-    reasonCode: 'tenant_audit_export_file_ipc_unavailable',
+    availability: 'available',
+    reasonCode: null,
     contractVersion: '4.0.0',
-    allowedActions: ['view', 'filter', 'inspect-runtime-hooks'],
+    allowedActions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
     data,
     ...data,
   };

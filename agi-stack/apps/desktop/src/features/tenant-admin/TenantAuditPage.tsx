@@ -40,6 +40,24 @@ export function TenantAuditPage({
         <p>{t('tenantAdmin.audit.subtitle')}</p>
       </header>
       <TenantAdminDegradedNotice reasonCode={model.reasonCode} />
+      {controller && model.allowedActions.includes('export') ? (
+        <div>
+          <button
+            type="button"
+            disabled={Boolean(model.busyAction)}
+            onClick={() => void controller.exportLogs('csv').catch(() => undefined)}
+          >
+            {t('tenantAdmin.audit.exportCsv')}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(model.busyAction)}
+            onClick={() => void controller.exportLogs('json').catch(() => undefined)}
+          >
+            {t('tenantAdmin.audit.exportJson')}
+          </button>
+        </div>
+      ) : null}
       {controller ? (
         <form
           onSubmit={(event) => {

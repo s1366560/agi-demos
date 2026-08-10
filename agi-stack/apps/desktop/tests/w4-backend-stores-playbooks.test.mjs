@@ -846,6 +846,66 @@ test('privileged Cloud binary responses are endpoint-bound, size-capped, and rec
   );
 });
 
+test('tenant audit export is the only tenant-admin binary transfer allowlisted', async () => {
+  const path =
+    '/api/v1/tenants/tenant-1/audit-logs/export?' +
+    'format=json&action=workspace.updated&resource_type=workspace&actor=user-1';
+  const result = await executeVaultBoundCloudRequest(
+    {
+      path,
+      method: 'GET',
+      response: { kind: 'binary', max_bytes: 16 * 1024 * 1024 },
+    },
+    cloudRequestDependencies((url) => {
+      if (new URL(url).pathname === '/api/v1/workspace-context') {
+        return jsonResponse({
+          context: {
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
+            workspace_id: null,
+            revision: 5,
+          },
+        });
+      }
+      return new Response('[{"id":"audit-1"}]', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Disposition': 'attachment; filename="audit-logs.json"',
+        },
+      });
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.body.kind, 'binary');
+  assert.equal(result.body.mime_type, 'application/json');
+  assert.equal(result.body.filename, 'audit-logs.json');
+
+  for (const rejectedPath of [
+    '/api/v1/tenants/tenant-1/audit-logs/export',
+    '/api/v1/tenants/tenant-1/audit-logs/export?format=xml',
+    '/api/v1/tenants/tenant-1/audit-logs/export?format=csv&include_credentials=true',
+  ]) {
+    await assert.rejects(
+      executeVaultBoundCloudRequest(
+        {
+          path: rejectedPath,
+          method: 'GET',
+          response: { kind: 'binary', max_bytes: 16 * 1024 * 1024 },
+        },
+        {
+          async loadTrustedSession() {
+            throw new Error('invalid audit export must reject before vault access');
+          },
+          async fetch() {
+            throw new Error('invalid audit export must reject before network access');
+          },
+        },
+      ),
+      /cloud request endpoint is not allowed/u,
+    );
+  }
+});
+
 test('shared desktop fetch adapter reconstructs only exact privileged binary envelopes', async () => {
   const originalWindow = globalThis.window;
   const originalFetch = globalThis.fetch;

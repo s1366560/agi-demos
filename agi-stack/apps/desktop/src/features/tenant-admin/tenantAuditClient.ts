@@ -1,3 +1,5 @@
+import { desktopApiCredential } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { TenantAdminAuthoritySnapshot } from './tenantAdminController';
 import {
@@ -17,7 +19,13 @@ import {
 
 export const TENANT_AUDIT_ROUTE_ID = 'tenant-tenant-audit-logs' as const;
 export const TENANT_AUDIT_LOCAL_REASON = 'cloud_tenant_audit_authority_not_applicable' as const;
-export const TENANT_AUDIT_FILE_REASON = 'tenant_audit_export_file_ipc_unavailable' as const;
+
+export type TenantAuditExportFormat = 'csv' | 'json';
+export type TenantAuditExport = Readonly<{
+  suggestedName: string;
+  mimeType: 'text/csv' | 'application/json';
+  blob: Blob;
+}>;
 
 export type TenantAuditEntry = Readonly<{
   id: string;
@@ -67,10 +75,18 @@ export type TenantAuditClient = Readonly<{
     query?: TenantAuditQuery,
     options?: TenantAdminRequestOptions,
   ) => Promise<TenantAuditSnapshot>;
+  exportLogs: (
+    scope: TenantAdminScope,
+    format: TenantAuditExportFormat,
+    query?: TenantAuditQuery,
+    options?: TenantAdminRequestOptions,
+  ) => Promise<TenantAuditExport>;
 }>;
 
 const CONTRACT_VERSION = '4.0.0' as const;
-const ACTIONS = Object.freeze(['view', 'filter', 'inspect-runtime-hooks']);
+const ACTIONS = Object.freeze(['view', 'filter', 'inspect-runtime-hooks', 'export']);
+const MAX_AUDIT_EXPORT_BYTES = 16 * 1024 * 1024;
+const MAX_AUDIT_EXPORT_ERROR_BYTES = 2 * 1024 * 1024;
 
 export function createTenantAuditClient(config: DesktopRuntimeConfig): TenantAuditClient {
   const runtimeConfig = Object.freeze({ ...config });
@@ -117,8 +133,8 @@ export function createTenantAuditClient(config: DesktopRuntimeConfig): TenantAud
       return Object.freeze({
         scope: currentScope,
         authority: 'cloud',
-        availability: 'degraded',
-        reasonCode: TENANT_AUDIT_FILE_REASON,
+        availability: 'available',
+        reasonCode: null,
         contractVersion: CONTRACT_VERSION,
         allowedActions: ACTIONS,
         authorityRevision,
@@ -126,7 +142,124 @@ export function createTenantAuditClient(config: DesktopRuntimeConfig): TenantAud
         ...data,
       });
     },
+    async exportLogs(scope, format, query = {}, options) {
+      const currentScope = requireCloudTenantScope(
+        runtimeConfig,
+        scope,
+        TENANT_AUDIT_LOCAL_REASON,
+      );
+      const exportFormat = requireExportFormat(format);
+      const normalized = normalizeQuery(query);
+      const mimeType = exportFormat === 'csv' ? 'text/csv' : 'application/json';
+      const headers = new Headers({ Accept: mimeType });
+      const credential = desktopApiCredential(runtimeConfig);
+      if (credential) headers.set('Authorization', `Bearer ${credential}`);
+      const response = await desktopApiFetch(
+        runtimeConfig,
+        auditExportPath(currentScope, exportFormat, normalized),
+        {
+          headers,
+          credentials: 'omit',
+          signal: options?.signal,
+        },
+        { responseType: 'binary', maxBytes: MAX_AUDIT_EXPORT_BYTES },
+      );
+      if (!response.ok) throw await auditExportError(response);
+      const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
+      if (contentType !== mimeType) {
+        throw tenantAdminError('tenant_audit_export_contract_invalid');
+      }
+      const declaredLength = Number(response.headers.get('content-length') ?? '0');
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIT_EXPORT_BYTES) {
+        throw tenantAdminError('tenant_audit_export_too_large');
+      }
+      const bytes = await readBoundedBytes(
+        response,
+        MAX_AUDIT_EXPORT_BYTES,
+        'tenant_audit_export_too_large',
+      );
+      const ownedBuffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(ownedBuffer).set(bytes);
+      const blob = new Blob([ownedBuffer], { type: mimeType });
+      return Object.freeze({
+        suggestedName: `audit-logs.${exportFormat}`,
+        mimeType,
+        blob,
+      });
+    },
   });
+}
+
+function auditExportPath(
+  scope: TenantAdminScope,
+  format: TenantAuditExportFormat,
+  query: TenantAuditData['query'],
+): string {
+  const params = new URLSearchParams({ format });
+  if (query.action) params.set('action', query.action);
+  if (query.resourceType) params.set('resource_type', query.resourceType);
+  if (query.actor) params.set('actor', query.actor);
+  if (query.fromDate) params.set('start_time', query.fromDate);
+  if (query.toDate) params.set('end_time', query.toDate);
+  return `${tenantPath(scope)}/audit-logs/export?${params.toString()}`;
+}
+
+function requireExportFormat(value: unknown): TenantAuditExportFormat {
+  if (value !== 'csv' && value !== 'json') {
+    throw tenantAdminError('tenant_audit_export_format_invalid', 422);
+  }
+  return value;
+}
+
+async function auditExportError(response: Response): Promise<Error> {
+  const bytes = await readBoundedBytes(
+    response,
+    MAX_AUDIT_EXPORT_ERROR_BYTES,
+    'tenant_audit_export_error_too_large',
+  );
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  } catch {
+    payload = null;
+  }
+  const reasonCode =
+    isRecord(payload) && typeof payload.reason_code === 'string' && payload.reason_code.trim()
+      ? payload.reason_code
+      : 'tenant_audit_export_failed';
+  return tenantAdminError(reasonCode, response.status);
+}
+
+async function readBoundedBytes(
+  response: Response,
+  limit: number,
+  reasonCode: string,
+): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel(reasonCode).catch(() => undefined);
+        throw tenantAdminError(reasonCode);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 function auditListPath(scope: TenantAdminScope, query: TenantAuditData['query']): string {
