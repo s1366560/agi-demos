@@ -510,10 +510,7 @@
           "surface": "desktop_cloud",
           "actions": [
             "view",
-            "view-status",
-            "list-runner-pools",
-            "list-agents",
-            "list-sessions"
+            "list-agents"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -538,8 +535,16 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_acp_authority_contract_invalid",
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_acp_status_pool_session_surfaces_unwired",
+      "cloud_actions": [
+        "view",
+        "list-agents",
+        "create-agent",
+        "update-agent",
+        "delete-agent",
+        "test-agent"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -559,7 +564,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "local_external_acp_not_applicable",
       "local_deviation": "External ACP runner pools, agents, and sessions require Cloud connection and governance authority; Local Desktop returns the stable cloud-only reason instead of fabricating an offline service.",
-      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete and test controls. Separate runner-instance, Agent-list, session-list and session lifecycle service methods are not called by the production page and are excluded from its API authority. Desktop now has a real production loader, App binding, typed client, controller and native Cloud management page with the same reviewed member and administrator actions. Its active client snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so Snapshot v4 normalizes it to tenant_acp_authority_contract_invalid and promotes no action. External ACP authority remains intentionally cloud-only for Local Desktop."
+      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete and test controls. Separate runner-instance, Agent-list, session-list and session lifecycle service methods are not called by the production page and are excluded from its API authority. Desktop has a revision-bound Cloud loader plus role-gated create, update, delete and test controls for the Agent list. The typed snapshot also loads status, runner pools and sessions, but TenantAcpPage does not render those three surfaces, so Cloud remains partial with only the page-reachable Agent actions. External ACP authority remains intentionally cloud-only for Local Desktop."
     },
     {
       "id": "tenant-tenant-templates",

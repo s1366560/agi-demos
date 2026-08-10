@@ -261,13 +261,13 @@
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks/summary",
           "authority": "cloud_service"
         },
         {
           "surface": "desktop_cloud",
           "method": "GET",
-          "path": "/api/v1/tenants/{tenant_id}/audit-logs/runtime-hooks/summary",
+          "path": "/api/v1/tenants/{tenant_id}/audit-logs/export",
           "authority": "cloud_service"
         },
         {
@@ -314,7 +314,8 @@
           "actions": [
             "view",
             "filter",
-            "inspect-runtime-hooks"
+            "inspect-runtime-hooks",
+            "export"
           ],
           "authentication": "authenticated",
           "authorization": [
@@ -325,11 +326,12 @@
         }
       ],
       "cloud_status": "partial",
-      "cloud_reason_code": "tenant_audit_export_file_ipc_unavailable",
+      "cloud_reason_code": "desktop_audit_runtime_hook_surface_incomplete",
       "cloud_actions": [
         "view",
         "filter",
-        "inspect-runtime-hooks"
+        "inspect-runtime-hooks",
+        "export"
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
@@ -343,13 +345,14 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAuditPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAuditPage.tsx",
+        "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_audit_authority_not_applicable",
       "local_deviation": "Local security and lifecycle diagnostics remain native-only evidence and do not masquerade as the Cloud tenant audit ledger or export authority.",
-      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and legacy global redirect. Desktop now has a real Cloud loader, App binding and revision-bound authority that renders audit rows, filters, runtime-hook summaries, pagination and retry. The native file bridge does not yet implement audit export, so export is neither advertised nor listed as a Desktop API contract and Cloud remains degraded with tenant_audit_export_file_ipc_unavailable. Local tenant audit governance remains not applicable."
+      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and legacy global redirect. Desktop has a real Cloud loader, App binding and revision-bound authority that renders audit rows, common filters, runtime-hook summaries, pagination and retry. CSV and JSON export now reuse the active query, the bounded Cloud binary broker, the strict endpoint allowlist and the native Electron save dialog, including safe cancellation. Cloud remains partial because the Web runtime-hook list, hook-specific filters and record-detail surface are not wired into TenantAuditPage. Local tenant audit governance remains not applicable."
     },
     {
       "id": "tenant-tenant-events",

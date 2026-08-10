@@ -125,9 +125,46 @@ test("Gene Market contracts only include APIs consumed by its owned production p
     },
   ]);
   assert.deepEqual(contractsFor("desktop_cloud"), [
+    { method: "GET", path: "/api/v1/genes/", authority: "cloud_service" },
+    { method: "POST", path: "/api/v1/genes/", authority: "cloud_service" },
     {
-      method: "NONE",
-      path: "unavailable:tenant_genes_authority_contract_invalid",
+      method: "PUT",
+      path: "/api/v1/genes/{gene_id}",
+      authority: "cloud_service",
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/genes/{gene_id}",
+      authority: "cloud_service",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/genes/{gene_id}/publish",
+      authority: "cloud_service",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/genes/{gene_id}/unpublish",
+      authority: "cloud_service",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/genes/instances/{instance_id}/install",
+      authority: "cloud_service",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/genes/{gene_id}/ratings",
+      authority: "cloud_service",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/genes/{gene_id}/reviews",
+      authority: "cloud_service",
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/genes/{gene_id}/reviews/{review_id}",
       authority: "cloud_service",
     },
   ]);
@@ -201,15 +238,19 @@ test("Gene Market actions preserve tenant and review ownership enforcement", () 
       actions: [
         "view",
         "list",
-        "inspect-genome",
-        "inspect-evolution",
-        "list-reviews",
         "rate",
         "create-review",
-        "delete-own-review",
       ],
       authentication: "authenticated",
       authorization: ["tenant_member"],
+      enforcement: "enforced",
+      feature_gate: null,
+    },
+    {
+      surface: "desktop_cloud",
+      actions: ["delete-own-review"],
+      authentication: "authenticated",
+      authorization: ["tenant_member", "resource_owner"],
       enforcement: "enforced",
       feature_gate: null,
     },

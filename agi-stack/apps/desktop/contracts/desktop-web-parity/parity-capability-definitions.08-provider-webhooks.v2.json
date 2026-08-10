@@ -734,8 +734,7 @@
           "feature_gate": "events"
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_webhooks_authority_contract_invalid",
+      "cloud_status": "implemented",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -755,7 +754,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_webhook_authority_required",
       "local_deviation": "Tenant webhook registration and secret rotation require an addressable Cloud service authority. Local Desktop keeps the native route contract but does not create an unaudited host callback service.",
-      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop now has a real production loader, App binding, typed client, controller and native Cloud management page with the reviewed CRUD and event-catalog contracts. Its active client snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so Snapshot v4 normalizes it to tenant_webhooks_authority_contract_invalid and promotes no action. Local remains explicitly cloud-only rather than an external-browser fallback."
+      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop has a real production loader, App binding, typed client, controller and native Cloud management page with the reviewed CRUD and event-catalog contracts. The route now binds its stable tenant scope revision around resource reads and preserves the administrator and feature-gate checks for every mutation. Local remains explicitly cloud-only rather than an external-browser fallback."
     }
   ],
   "source_ownership": {

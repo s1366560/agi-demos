@@ -324,9 +324,18 @@
       ],
       "web_status": "partial",
       "web_reason_code": "organization_registry_gene_policy_authorization_and_cluster_route_tenant_scope_incomplete",
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_org_settings_authority_contract_invalid",
-      "cloud_actions": [],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_org_settings_navigation_and_clusters_missing",
+      "cloud_actions": [
+        "view",
+        "inspect-stats",
+        "manage-registries",
+        "inspect-smtp",
+        "update-smtp",
+        "delete-smtp",
+        "test-smtp",
+        "manage-gene-policies"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -345,7 +354,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_organization_governance_not_applicable",
       "local_deviation": "Organization membership, registries, SMTP credentials, clusters, audit, and Gene policies require Cloud tenant authority. Local renderer state never stores registry or SMTP secrets.",
-      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP and Gene-policy children form one canonical Web area; its registry, Gene-policy and non-default cluster authorization defects keep Web degraded. Desktop now has a real Cloud route, App binding and typed page for tenant information and stats, registries, SMTP and Gene policies with role checks, but it does not reproduce the member, cluster and audit child navigation. More importantly, the active observation omits authorityRevision and is normalized to tenant_org_settings_authority_contract_invalid, so no Cloud action is currently route-reachable. Local organization governance remains not applicable."
+      "judgment_rationale": "OrgSettingsLayout and its information, member, cluster, audit, registry, SMTP and Gene-policy children form one canonical Web area; its registry, Gene-policy and non-default cluster authorization defects keep Web degraded. Desktop has a revision-bound Cloud route, App binding and typed page for tenant information and stats, registries, SMTP and Gene policies with role checks. Those page-reachable actions are available, but the native page does not reproduce the tenant-settings, member, cluster or audit navigation and does not render the Web cluster list or status, so Cloud remains partial. Local organization governance remains not applicable."
     },
     {
       "id": "tenant-tenant-settings",
@@ -486,9 +495,13 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_settings_authority_contract_invalid",
-      "cloud_actions": [],
+      "cloud_status": "implemented",
+      "cloud_actions": [
+        "view",
+        "update",
+        "delete",
+        "inspect-usage"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -507,7 +520,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_settings_not_applicable",
       "local_deviation": "Desktop application, runtime, and vault preferences remain separate native settings. Local mode does not present them as Cloud tenant metadata, quota, or deletion authority.",
-      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop now has a distinct canonical Cloud route, App binding, typed client, controller and page; reads and usage remain tenant-member operations while update and deletion remain tenant-owner operations. The active authority result omits the revision required by tenantRemainingCapabilityClient, so it is observed as tenant_settings_authority_contract_invalid and cannot be promoted into route availability. Application and vault settings stay separate, and Local tenant governance remains not applicable."
+      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop has a distinct canonical Cloud route, App binding, typed client, controller and page; reads and usage remain tenant-member operations while update and deletion remain tenant-owner operations. The client now observes a stable tenant scope revision around resource reads and preserves its owner checks for mutations, so the routed Cloud action set is available. Application and vault settings stay separate, and Local tenant governance remains not applicable."
     }
   ],
   "source_ownership": {

@@ -171,14 +171,31 @@ test("Gene Market records the evolution history shown by Gene Detail", () => {
       "inspect-evolution",
     ),
   );
-  assert.equal(genes.cloud_status, "unavailable");
+  assert.equal(genes.cloud_status, "partial");
   assert.equal(
     genes.cloud_reason_code,
-    "tenant_genes_authority_contract_invalid",
+    "desktop_gene_inspection_surfaces_unwired",
   );
-  assert.deepEqual(genes.cloud_actions, []);
-  assert.match(genes.judgment_rationale, /authorityRevision/u);
-  assert.match(genes.judgment_rationale, /tenant_genes_authority_contract_invalid/u);
+  assert.deepEqual(genes.cloud_actions, [
+    "view",
+    "list",
+    "create",
+    "update",
+    "delete",
+    "publish",
+    "unpublish",
+    "install",
+    "rate",
+    "create-review",
+    "delete-own-review",
+  ]);
+  assert.equal(
+    contractKeys(genes, "desktop_cloud").some((contract) =>
+      contract.startsWith("NONE unavailable:"),
+    ),
+    false,
+  );
+  assert.match(genes.judgment_rationale, /genome.*evolution.*review/iu);
 });
 
 test("Dead Letter Queue does not claim its unused single-message API", () => {
@@ -259,12 +276,9 @@ test("Decision Records inspects the selected list row without a detail GET", () 
   );
   assert.match(decisions.judgment_rationale, /default workspace placeholder/u);
   assert.match(decisions.judgment_rationale, /valid tenant workspace/u);
-  assert.equal(decisions.cloud_status, "unavailable");
-  assert.equal(
-    decisions.cloud_reason_code,
-    "tenant_decisions_authority_contract_invalid",
-  );
-  assert.deepEqual(decisions.cloud_actions, []);
+  assert.equal(decisions.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(decisions, "cloud_reason_code"), false);
+  assert.deepEqual(decisions.cloud_actions, decisions.actions);
 });
 
 test("Trust Policies records its invalid default workspace projection", () => {
@@ -367,12 +381,21 @@ test("Organization Settings records the cluster status projection", () => {
     false,
   );
   assert.match(orgSettings.judgment_rationale, /non-default cluster authorization/u);
-  assert.equal(orgSettings.cloud_status, "unavailable");
+  assert.equal(orgSettings.cloud_status, "partial");
   assert.equal(
     orgSettings.cloud_reason_code,
-    "tenant_org_settings_authority_contract_invalid",
+    "desktop_org_settings_navigation_and_clusters_missing",
   );
-  assert.deepEqual(orgSettings.cloud_actions, []);
+  assert.deepEqual(orgSettings.cloud_actions, [
+    "view",
+    "inspect-stats",
+    "manage-registries",
+    "inspect-smtp",
+    "update-smtp",
+    "delete-smtp",
+    "test-smtp",
+    "manage-gene-policies",
+  ]);
 });
 
 test("Project Workspaces records the production summary projection", () => {
@@ -771,9 +794,12 @@ test("Project Schema closes the production auth-me contract mismatch", () => {
     "project-project-schema",
   );
 
-  assert.equal(schema.cloud_status, "unavailable");
-  assert.equal(schema.cloud_reason_code, "project_schema_authority_unavailable");
-  assert.deepEqual(schema.cloud_actions, []);
+  assert.equal(schema.cloud_status, "partial");
+  assert.equal(
+    schema.cloud_reason_code,
+    "desktop_project_schema_actions_and_export_unwired",
+  );
+  assert.deepEqual(schema.cloud_actions, ["view", "list-entity-types"]);
   assert.deepEqual(contractKeys(schema, "desktop_cloud"), [
     "GET /api/v1/projects/{project_id}/schema/entities",
     "GET /api/v1/projects/{project_id}/schema/edges",
@@ -782,9 +808,9 @@ test("Project Schema closes the production auth-me contract mismatch", () => {
   assert.equal(schema.local_status, "unavailable");
   assert.equal(schema.local_authority, "none");
   assert.equal(schema.local_reason_code, "local_project_schema_authority_unavailable");
-  assert.match(schema.judgment_rationale, /auth\/me/u);
-  assert.match(schema.judgment_rationale, /user_id/u);
-  assert.match(schema.judgment_rationale, /userPayload\.id/u);
+  assert.doesNotMatch(schema.judgment_rationale, /userPayload\.id/u);
+  assert.match(schema.judgment_rationale, /entity.*list/iu);
+  assert.match(schema.judgment_rationale, /export/u);
 });
 
 test("Project Search records copy-result-id on every implemented surface", () => {

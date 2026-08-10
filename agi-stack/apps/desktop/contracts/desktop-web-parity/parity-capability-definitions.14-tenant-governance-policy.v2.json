@@ -272,9 +272,14 @@
       ],
       "web_status": "partial",
       "web_reason_code": "web_decision_records_default_workspace_scope_invalid",
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_decisions_authority_contract_invalid",
-      "cloud_actions": [],
+      "cloud_status": "implemented",
+      "cloud_actions": [
+        "view",
+        "list",
+        "filter",
+        "inspect",
+        "resolve-approval"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -293,7 +298,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop now has a real Cloud route, scoped list/filter/inspect UI and resolution controller, but the authority snapshot omits the required authorityRevision and is normalized to tenant_decisions_authority_contract_invalid. Local HITL records remain distinct from this Cloud ledger and the Local surface stays not applicable."
+      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop has a real Cloud route, scoped list/filter/inspect UI and administrator-only resolution controller. Its resource load is now bounded by stable tenant, workspace, membership and scope-revision observations, so the full routed action set is available without converting the scope revision into a decision-record version. Local HITL records remain distinct from this Cloud ledger and the Local surface stays not applicable."
     },
     {
       "id": "tenant-tenant-billing",

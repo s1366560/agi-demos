@@ -230,12 +230,12 @@ test("Project Maintenance closes its production scope and endpoint mismatches", 
     "project-project-maintenance",
   );
 
-  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(capability.cloud_status, "partial");
   assert.equal(
     capability.cloud_reason_code,
-    "project_maintenance_authority_unavailable",
+    "desktop_project_maintenance_surface_and_endpoints_incomplete",
   );
-  assert.deepEqual(capability.cloud_actions, []);
+  assert.deepEqual(capability.cloud_actions, ["view"]);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/maintenance/status?project_id={project_id}",
     "GET /api/v1/data/stats?project_id={project_id}",
@@ -252,9 +252,8 @@ test("Project Maintenance closes its production scope and endpoint mismatches", 
     capability.local_reason_code,
     "local_project_maintenance_authority_unavailable",
   );
-  assert.match(capability.judgment_rationale, /auth\/me/u);
-  assert.match(capability.judgment_rationale, /user_id/u);
-  assert.match(capability.judgment_rationale, /userPayload\.id/u);
+  assert.doesNotMatch(capability.judgment_rationale, /userPayload\.id/u);
+  assert.match(capability.judgment_rationale, /generic.*page/iu);
   assert.match(capability.judgment_rationale, /refresh\/incremental/u);
   assert.match(capability.judgment_rationale, /graph\/communities\/rebuild/u);
 });
@@ -439,21 +438,19 @@ test("Project Settings records only the routed page sandbox operations and autho
     "POST /api/v1/projects/{project_id}/sandbox/restart",
     "DELETE /api/v1/projects/{project_id}/sandbox",
   ]);
-  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(capability.cloud_status, "partial");
   assert.equal(
     capability.cloud_reason_code,
-    "project_settings_authority_unavailable",
+    "desktop_project_settings_actions_and_update_contract_mismatch",
   );
-  assert.deepEqual(capability.cloud_actions, []);
+  assert.deepEqual(capability.cloud_actions, ["view"]);
   assert.equal(capability.local_status, "unavailable");
   assert.equal(capability.local_authority, "none");
   assert.equal(
     capability.local_reason_code,
     "local_project_settings_authority_unavailable",
   );
-  assert.match(capability.judgment_rationale, /auth\/me/u);
-  assert.match(capability.judgment_rationale, /user_id/u);
-  assert.match(capability.judgment_rationale, /userPayload\.id/u);
+  assert.doesNotMatch(capability.judgment_rationale, /userPayload\.id/u);
   assert.match(capability.judgment_rationale, /PATCH/u);
   assert.match(capability.judgment_rationale, /PUT/u);
 

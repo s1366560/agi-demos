@@ -143,8 +143,62 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "NONE",
-          "path": "unavailable:tenant_genes_authority_contract_invalid",
+          "method": "GET",
+          "path": "/api/v1/genes/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "PUT",
+          "path": "/api/v1/genes/{gene_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/genes/{gene_id}",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/publish",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/unpublish",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/instances/{instance_id}/install",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/ratings",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "POST",
+          "path": "/api/v1/genes/{gene_id}/reviews",
+          "authority": "cloud_service"
+        },
+        {
+          "surface": "desktop_cloud",
+          "method": "DELETE",
+          "path": "/api/v1/genes/{gene_id}/reviews/{review_id}",
           "authority": "cloud_service"
         },
         {
@@ -245,16 +299,25 @@
           "actions": [
             "view",
             "list",
-            "inspect-genome",
-            "inspect-evolution",
-            "list-reviews",
             "rate",
-            "create-review",
-            "delete-own-review"
+            "create-review"
           ],
           "authentication": "authenticated",
           "authorization": [
             "tenant_member"
+          ],
+          "enforcement": "enforced",
+          "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": [
+            "delete-own-review"
+          ],
+          "authentication": "authenticated",
+          "authorization": [
+            "tenant_member",
+            "resource_owner"
           ],
           "enforcement": "enforced",
           "feature_gate": null
@@ -277,9 +340,21 @@
           "feature_gate": null
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_genes_authority_contract_invalid",
-      "cloud_actions": [],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_gene_inspection_surfaces_unwired",
+      "cloud_actions": [
+        "view",
+        "list",
+        "create",
+        "update",
+        "delete",
+        "publish",
+        "unpublish",
+        "install",
+        "rate",
+        "create-review",
+        "delete-own-review"
+      ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -314,7 +389,7 @@
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "local_deviation": "Local Desktop may manage and import local Gene and Genome packages, but organization publication, global market visibility, and remote ratings require a declared Cloud authority.",
-      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Web capability. Desktop now has a real production loader, App binding, typed Gene client, controller and native management page. The Cloud client exposes the reviewed member and administrator operations, but its active snapshot omits the authorityRevision required by tenantRemainingCapabilityClient, so v4 normalizes it to the observed tenant_genes_authority_contract_invalid terminal state and no action may be promoted. Local uses the same native route and calls the private sidecar, whose registered Gene contracts return local_gene_market_authority_unavailable; this is an observed structured-unavailable boundary, not a planned route or a fabricated market authority."
+      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Web capability. Desktop has a revision-bound Cloud loader, App binding, typed Gene client, controller and native management page for listing, CRUD, publish, install, rating and review mutations. The client also defines genome, evolution and review-list reads, but TenantGenesController and TenantGenesPage never call or render those inspection surfaces, so they are excluded from the Desktop Cloud contracts and actions and Cloud remains partial. Local uses the same native route and calls the private sidecar, whose registered Gene contracts return local_gene_market_authority_unavailable; this is an observed structured-unavailable boundary, not a planned route or a fabricated market authority."
     }
   ],
   "source_ownership": {

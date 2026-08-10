@@ -435,8 +435,7 @@
       ],
       "web_status": "partial",
       "web_reason_code": "web_pattern_delete_affordance_permission_partial",
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "tenant_patterns_authority_contract_invalid",
+      "cloud_status": "implemented",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -470,7 +469,7 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
-      "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop now has a real canonical loader, App binding, typed client/controller/presentation model and native list/delete page. The current Cloud observation omits authorityRevision and is rejected by tenantRemainingCapabilityClient as tenant_patterns_authority_contract_invalid, so the route cannot be promoted. Local reaches the private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."
+      "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop has a real canonical loader, App binding, typed client/controller/presentation model and role-gated native list/delete page. Its Cloud load now observes the tenant management scope before and after the resource read and returns the stable scope revision, so view, list and administrator delete are available without treating the scope revision as a resource version. Local reaches the private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."
     }
   ],
   "source_ownership": {

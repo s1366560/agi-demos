@@ -158,11 +158,18 @@
           "authorization": ["project_contributor"],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud", "actions": ["view", "list-entity-types"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "project_schema_authority_unavailable",
-      "cloud_actions": [],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_schema_actions_and_export_unwired",
+      "cloud_actions": ["view", "list-entity-types"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -198,7 +205,7 @@
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
         "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
       ],
-      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical Web capability, and SchemaOverview performs client-side JSON copy and download export without a separate export API. Desktop now has a real production loader, App binding, typed client, controller and native list page. However every Project Administration client first calls /api/v1/auth/me through observeProjectAdministrationScope; production returns user_id while the client reads userPayload.id. The resulting project_administration_scope_contract_invalid exception is normalized to the observed project_schema_authority_unavailable terminal state before entity, edge or mapping data can reach the route. Local uses the same real route but its renderer-declared static result remains closed with local_project_schema_authority_unavailable until a sidecar authority is observed."
+      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical Web capability, and SchemaOverview performs client-side JSON copy and download export without a separate export API. Desktop now binds the production user_id identity contract, project membership and workspace-context scope revision, so the native route can load entity, edge and mapping data. ProjectAdministrationPage renders only the entity-type list; it does not render edge types or mappings and exposes none of the schema mutations, copy or export actions, so Cloud remains partial with view and entity-list actions only. Local uses the same real route but its renderer-declared static result remains closed with local_project_schema_authority_unavailable until a sidecar authority is observed."
     },
     {
       "id": "project-project-channels",
@@ -714,11 +721,19 @@
           "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
+        },
+        {
+          "surface": "desktop_cloud",
+          "actions": ["view"],
+          "authentication": "authenticated",
+          "authorization": ["project_member"],
+          "enforcement": "enforced",
+          "feature_gate": null
         }
       ],
-      "cloud_status": "unavailable",
-      "cloud_reason_code": "project_maintenance_authority_unavailable",
-      "cloud_actions": [],
+      "cloud_status": "partial",
+      "cloud_reason_code": "desktop_project_maintenance_surface_and_endpoints_incomplete",
+      "cloud_actions": ["view"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
@@ -754,7 +769,7 @@
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
         "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
       ],
-      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now has a real production loader, App binding, typed client, controller and native list page. Its Cloud authority is nevertheless unavailable: observeProjectAdministrationScope reads userPayload.id while production /api/v1/auth/me returns user_id, so every load fails before revision authority is established and normalizes to project_maintenance_authority_unavailable. The typed client also calls /maintenance/incremental-refresh instead of the production /maintenance/refresh/incremental route and /maintenance/communities/rebuild instead of /graph/communities/rebuild; its page exposes no maintenance mutations or export. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
+      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now binds the production user_id identity contract and a revision-bound project scope, so the typed client can load its three status payloads. The generic ProjectAdministrationPage does not render those maintenance models and exposes no maintenance mutations or export. The client also calls /maintenance/incremental-refresh instead of /maintenance/refresh/incremental and /maintenance/communities/rebuild instead of /graph/communities/rebuild, so Cloud remains partial with route view only. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
     }
   ],
   "source_ownership": {

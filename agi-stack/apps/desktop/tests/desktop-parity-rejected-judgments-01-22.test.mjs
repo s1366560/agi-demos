@@ -279,11 +279,9 @@ test("Workflow Patterns excludes unbound detail and reset authorities", () => {
     capability.web_reason_code,
     "web_pattern_delete_affordance_permission_partial",
   );
-  assert.equal(capability.cloud_status, "unavailable");
-  assert.equal(
-    capability.cloud_reason_code,
-    "tenant_patterns_authority_contract_invalid",
-  );
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
+  assert.deepEqual(capability.cloud_actions, ["view", "list", "delete"]);
   assert.equal(capability.local_status, "unavailable");
   assert.equal(
     capability.local_reason_code,
@@ -521,6 +519,14 @@ test("ACP records only controls bound by AcpDashboard", () => {
     "test-agent",
     "list-sessions",
   ];
+  const expectedCloudActions = [
+    "view",
+    "list-agents",
+    "create-agent",
+    "update-agent",
+    "delete-agent",
+    "test-agent",
+  ];
 
   assert.deepEqual(capability.actions, expectedActions);
   assert.deepEqual(capability.web_actions, expectedActions);
@@ -537,12 +543,12 @@ test("ACP records only controls bound by AcpDashboard", () => {
     contractKeys(capability, "desktop_cloud"),
     contractKeys(capability, "web"),
   );
-  assert.deepEqual(capability.cloud_actions, expectedActions);
-  assertPermissionCoverage(capability, "desktop_cloud", expectedActions);
-  assert.equal(capability.cloud_status, "unavailable");
+  assert.deepEqual(capability.cloud_actions, expectedCloudActions);
+  assertPermissionCoverage(capability, "desktop_cloud", expectedCloudActions);
+  assert.equal(capability.cloud_status, "partial");
   assert.equal(
     capability.cloud_reason_code,
-    "tenant_acp_authority_contract_invalid",
+    "desktop_acp_status_pool_session_surfaces_unwired",
   );
   assert.ok(
     capability.cloud_entries.includes(
@@ -706,11 +712,8 @@ test("Webhooks records the gated event type catalog used by creation", () => {
   );
   assert.match(capability.judgment_rationale, /event type catalog/u);
   assert.match(capability.judgment_rationale, /feature gate/u);
-  assert.equal(capability.cloud_status, "unavailable");
-  assert.equal(
-    capability.cloud_reason_code,
-    "tenant_webhooks_authority_contract_invalid",
-  );
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
   assert.deepEqual(capability.cloud_actions, capability.web_actions);
   assert.deepEqual(
     contractKeys(capability, "desktop_cloud"),
