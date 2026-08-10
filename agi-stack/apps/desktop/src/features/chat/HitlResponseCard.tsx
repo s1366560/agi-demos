@@ -15,6 +15,9 @@ import {
 } from '../session/sessionDecisionModel';
 import type { A2UIActionView } from './a2uiAction';
 import {
+  browserCapabilityConsentView,
+  browserCredentialFillAllowResponseData,
+  browserFullCdpAllowResponseData,
   browserOriginAllowResponseData,
   browserOriginConsentView,
   buildDecisionResponse,
@@ -89,6 +92,15 @@ export function HitlResponseCard({
     hitlType === 'permission' ? permissionParameterPreview(item) : null;
   const browserOrigin =
     hitlType === 'permission' ? browserOriginConsentView(item, approvalRequest) : null;
+  const browserCapability =
+    hitlType === 'permission' ? browserCapabilityConsentView(item, approvalRequest) : null;
+  const browserConsentTitle = browserOrigin
+    ? t('chat.browserOrigin.title', { origin: browserOrigin.origin })
+    : browserCapability?.kind === 'browser_full_cdp'
+      ? t('chat.browserFullCdp.title', { origin: browserCapability.origin })
+      : browserCapability?.kind === 'browser_credential_fill'
+        ? t('chat.browserCredentialFill.title', { origin: browserCapability.origin })
+        : null;
 
   useEffect(() => {
     if (answered || expiry.state !== 'active') return;
@@ -132,9 +144,7 @@ export function HitlResponseCard({
   return (
     <div className="timeline-details">
       <Text as="p" size="2" className="timeline-detail-summary">
-        {browserOrigin
-          ? t('chat.browserOrigin.title', { origin: browserOrigin.origin })
-          : question}
+        {browserConsentTitle ?? question}
       </Text>
       {browserOrigin ? (
         <div className="agent-run-meta">
@@ -142,6 +152,19 @@ export function HitlResponseCard({
             <span>{t('chat.browserOrigin.toolRequest', { tool: browserOrigin.tool })}</span>
           ) : null}
           {browserOrigin.reason ? <span>{browserOrigin.reason}</span> : null}
+        </div>
+      ) : null}
+      {browserCapability ? (
+        <div className="agent-run-meta">
+          {browserCapability.tool ? (
+            <span>
+              {t('chat.browserOrigin.toolRequest', { tool: browserCapability.tool })}
+            </span>
+          ) : null}
+          {browserCapability.reason ? <span>{browserCapability.reason}</span> : null}
+          {browserCapability.kind === 'browser_credential_fill' ? (
+            <span>{t('chat.browserCredentialFill.description')}</span>
+          ) : null}
         </div>
       ) : null}
       <div className="agent-run-meta">
@@ -246,7 +269,7 @@ export function HitlResponseCard({
             })}
           </small>
         </div>
-      ) : !answered && !browserOrigin && (hitlType === 'permission' || hitlType === 'decision') ? (
+      ) : !answered && !browserOrigin && !browserCapability && (hitlType === 'permission' || hitlType === 'decision') ? (
         <Text size="1" color="red">
           {t('approval.incomplete', {
             fields: 'action, target, data, reason, risk, reversibility, scope, evidence',
@@ -324,7 +347,70 @@ export function HitlResponseCard({
         </>
       ) : null}
 
-      {!answered && hitlType === 'permission' && !browserOrigin ? (
+      {!answered && hitlType === 'permission' && browserCapability?.kind === 'browser_full_cdp' ? (
+        <>
+          <Flex gap="2" wrap="wrap">
+            <Button
+              size="1"
+              color="green"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(browserFullCdpAllowResponseData('once'))}
+            >
+              {t('chat.browserFullCdp.allowOnce')}
+            </Button>
+            <Button
+              size="1"
+              color="amber"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(browserFullCdpAllowResponseData('site'))}
+            >
+              {t('chat.browserFullCdp.allowSite')}
+            </Button>
+            <Button
+              size="1"
+              color="red"
+              variant="soft"
+              disabled={responseDisabled || !requestId || busy}
+              loading={busy}
+              onClick={() => void submit(permissionDenialResponseData())}
+            >
+              {t('chat.deny')}
+            </Button>
+          </Flex>
+          <Text size="1" color="amber">
+            {t('chat.browserFullCdp.warning')}
+          </Text>
+        </>
+      ) : null}
+
+      {!answered && hitlType === 'permission' && browserCapability?.kind === 'browser_credential_fill' ? (
+        <Flex gap="2" wrap="wrap">
+          <Button
+            size="1"
+            color="green"
+            disabled={responseDisabled || !requestId || busy}
+            loading={busy}
+            onClick={() => void submit(browserCredentialFillAllowResponseData())}
+          >
+            {t('chat.browserCredentialFill.allowOnce')}
+          </Button>
+          <Button
+            size="1"
+            color="red"
+            variant="soft"
+            disabled={responseDisabled || !requestId || busy}
+            loading={busy}
+            onClick={() => void submit(permissionDenialResponseData())}
+          >
+            {t('chat.deny')}
+          </Button>
+        </Flex>
+      ) : null}
+
+      {!answered && hitlType === 'permission' && !browserOrigin && !browserCapability ? (
         <>
           <Flex gap="2" wrap="wrap">
             <Button

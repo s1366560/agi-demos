@@ -50,6 +50,14 @@ export type BrowserOriginConsentView = {
 
 export type BrowserOriginConsentScope = 'once' | 'site' | 'all';
 
+export type BrowserCapabilityConsentKind = 'browser_full_cdp' | 'browser_credential_fill';
+
+export type BrowserCapabilityConsentView = BrowserOriginConsentView & {
+  kind: BrowserCapabilityConsentKind;
+};
+
+export type BrowserFullCdpConsentScope = 'once' | 'site';
+
 /**
  * Browser-origin consent detection (M2). The sidecar persists the agent's
  * permission HITL with `payload.decision` on the `permission_asked` timeline
@@ -63,22 +71,21 @@ export function browserOriginConsentView(
   item: AgentTimelineItem,
   approvalRequest: DesktopApprovalRequest | undefined,
 ): BrowserOriginConsentView | null {
-  const payload = recordValue(item.payload);
-  const decisions = [approvalRequest?.decision ?? null, recordValue(payload?.decision)];
-  for (const decision of decisions) {
-    if (!decision) continue;
-    const target = recordValue(decision.target);
-    if (!target || target.kind !== 'browser_origin') continue;
-    const origin = firstString(target.id);
-    if (!origin) continue;
-    const action = recordValue(decision.action);
-    return {
-      origin,
-      tool: firstString(action?.name, payload?.tool, payload?.tool_name, item.toolName),
-      reason: firstString(decision.reason, payload?.reason),
-    };
-  }
-  return null;
+  const view = browserConsentViewForKinds(item, approvalRequest, BROWSER_ORIGIN_TARGET_KINDS);
+  return view ? { origin: view.origin, tool: view.tool, reason: view.reason } : null;
+}
+
+/**
+ * Browser capability consent detection (M3). Same DecisionContext plumbing
+ * as `browser_origin`, with target kind `browser_full_cdp` (elevated:
+ * once/site scopes only, no all-sites) or `browser_credential_fill`
+ * (vault-backed fill, once scope only). Target id remains the origin host.
+ */
+export function browserCapabilityConsentView(
+  item: AgentTimelineItem,
+  approvalRequest: DesktopApprovalRequest | undefined,
+): BrowserCapabilityConsentView | null {
+  return browserConsentViewForKinds(item, approvalRequest, BROWSER_CAPABILITY_TARGET_KINDS);
 }
 
 /** Browser-origin consent response contract: allow with once/site/all scopes. */
@@ -86,6 +93,49 @@ export function browserOriginAllowResponseData(
   scope: BrowserOriginConsentScope,
 ): Record<string, unknown> {
   return { action: 'allow', granted: true, scope };
+}
+
+/** Full-CDP consent response contract: allow with once/site scopes only. */
+export function browserFullCdpAllowResponseData(
+  scope: BrowserFullCdpConsentScope,
+): Record<string, unknown> {
+  return { action: 'allow', granted: true, scope };
+}
+
+/** Credential-fill consent response contract: allow once only. */
+export function browserCredentialFillAllowResponseData(): Record<string, unknown> {
+  return { action: 'allow', granted: true, scope: 'once' };
+}
+
+const BROWSER_ORIGIN_TARGET_KINDS = new Set(['browser_origin']);
+const BROWSER_CAPABILITY_TARGET_KINDS = new Set<BrowserCapabilityConsentKind>([
+  'browser_full_cdp',
+  'browser_credential_fill',
+]);
+
+function browserConsentViewForKinds<K extends string>(
+  item: AgentTimelineItem,
+  approvalRequest: DesktopApprovalRequest | undefined,
+  kinds: ReadonlySet<K>,
+): (BrowserOriginConsentView & { kind: K }) | null {
+  const payload = recordValue(item.payload);
+  const decisions = [approvalRequest?.decision ?? null, recordValue(payload?.decision)];
+  for (const decision of decisions) {
+    if (!decision) continue;
+    const target = recordValue(decision.target);
+    const kind = firstString(target?.kind) as K | null;
+    if (!target || !kind || !kinds.has(kind)) continue;
+    const origin = firstString(target.id);
+    if (!origin) continue;
+    const action = recordValue(decision.action);
+    return {
+      kind,
+      origin,
+      tool: firstString(action?.name, payload?.tool, payload?.tool_name, item.toolName),
+      reason: firstString(decision.reason, payload?.reason),
+    };
+  }
+  return null;
 }
 
 const ENV_INPUT_TYPES = new Set<HitlEnvVarFieldView['inputType']>([

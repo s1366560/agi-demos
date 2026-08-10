@@ -5,6 +5,9 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  browserCapabilityConsentView,
+  browserCredentialFillAllowResponseData,
+  browserFullCdpAllowResponseData,
   browserOriginAllowResponseData,
   browserOriginConsentView,
   buildDecisionResponse,
@@ -306,6 +309,133 @@ test('browser origin consent view reads the decision target from payload or appr
   assert.equal(browserOriginConsentView(item('permission_asked', {}), undefined), null);
 });
 
+test('browser capability consent view reads full_cdp and credential_fill targets', () => {
+  const fullCdp = browserCapabilityConsentView(
+    item('permission_asked', {
+      decision: {
+        action: { name: 'browser_cdp_evaluate', label: 'Evaluate' },
+        target: { kind: 'browser_full_cdp', id: 'Example.COM' },
+        reason: 'Need DevTools control',
+      },
+    }),
+    undefined,
+  );
+  assert.deepEqual(fullCdp, {
+    kind: 'browser_full_cdp',
+    origin: 'Example.COM',
+    tool: 'browser_cdp_evaluate',
+    reason: 'Need DevTools control',
+  });
+
+  const credentialFill = browserCapabilityConsentView(item('permission_asked', {}), {
+    decision: {
+      action: { name: 'browser_fill_credentials' },
+      target: { kind: 'browser_credential_fill', id: 'foo.test' },
+    },
+  });
+  assert.deepEqual(credentialFill, {
+    kind: 'browser_credential_fill',
+    origin: 'foo.test',
+    tool: 'browser_fill_credentials',
+    reason: null,
+  });
+
+  // browser_origin stays on the M2 view; other kinds and missing origins fail closed.
+  assert.equal(
+    browserCapabilityConsentView(
+      item('permission_asked', { decision: { target: { kind: 'browser_origin', id: 'a.com' } } }),
+      undefined,
+    ),
+    null,
+  );
+  assert.equal(
+    browserCapabilityConsentView(
+      item('permission_asked', {
+        decision: { target: { kind: 'browser_full_cdp' } },
+      }),
+      undefined,
+    ),
+    null,
+  );
+  assert.equal(
+    browserCapabilityConsentView(item('permission_asked', {}), undefined),
+    null,
+  );
+  // The M2 origin view ignores the M3 capability kinds.
+  assert.equal(
+    browserOriginConsentView(
+      item('permission_asked', {
+        decision: { target: { kind: 'browser_full_cdp', id: 'a.com' } },
+      }),
+      undefined,
+    ),
+    null,
+  );
+});
+
+test('browser capability allow responses carry the sidecar scope contract', () => {
+  assert.deepEqual(browserFullCdpAllowResponseData('once'), {
+    action: 'allow',
+    granted: true,
+    scope: 'once',
+  });
+  assert.deepEqual(browserFullCdpAllowResponseData('site'), {
+    action: 'allow',
+    granted: true,
+    scope: 'site',
+  });
+  assert.deepEqual(browserCredentialFillAllowResponseData(), {
+    action: 'allow',
+    granted: true,
+    scope: 'once',
+  });
+});
+
+test('browser capability cards wire once/site consent without an all-sites scope', () => {
+  for (const contract of [
+    /browserCapabilityConsentView\(item, approvalRequest\)/,
+    /browserFullCdpAllowResponseData\('once'\)/,
+    /browserFullCdpAllowResponseData\('site'\)/,
+    /browserCredentialFillAllowResponseData\(\)/,
+    /browserCapability\?\.kind === 'browser_full_cdp'/,
+    /browserCapability\?\.kind === 'browser_credential_fill'/,
+    /hitlType === 'permission' && !browserOrigin && !browserCapability/,
+  ]) {
+    assert.match(cardSource, contract);
+  }
+  // Elevated capability: full CDP must never offer an all-sites grant.
+  assert.doesNotMatch(cardSource, /browserFullCdpAllowResponseData\('all'\)/);
+  for (const key of [
+    'chat.browserFullCdp.title',
+    'chat.browserFullCdp.warning',
+    'chat.browserFullCdp.allowOnce',
+    'chat.browserFullCdp.allowSite',
+    'chat.browserCredentialFill.title',
+    'chat.browserCredentialFill.description',
+    'chat.browserCredentialFill.allowOnce',
+    'settings.browserFullCdp',
+    'settings.browserFullCdpDescription',
+    'settings.browserFullCdpToggle',
+    'settings.browserFullCdpToggleDescription',
+    'settings.browserFullCdpWarning',
+    'settings.browserFullCdpGrantsLoading',
+    'settings.browserFullCdpGrantsEmpty',
+    'settings.browserCredentials',
+    'settings.browserCredentialsDescription',
+    'settings.browserCredentialsVaultNote',
+    'settings.browserCredentialsSave',
+    'settings.browserCredentialsEmpty',
+    'settings.browserCredentialsDelete',
+    'settings.browserAudit',
+    'settings.browserAuditRefresh',
+    'settings.browserAuditEmpty',
+    'settings.browserAuditOutcome.ok',
+    'settings.browserAuditOutcome.consent',
+    'settings.browserAuditOutcome.error',
+  ]) {
+    assert.equal(i18nSource.split(`'${key}'`).length - 1, 2, `${key} must cover both locales`);
+  }
+});
 test('browser origin allow responses carry the sidecar scope contract', () => {
   assert.deepEqual(browserOriginAllowResponseData('once'), {
     action: 'allow',
