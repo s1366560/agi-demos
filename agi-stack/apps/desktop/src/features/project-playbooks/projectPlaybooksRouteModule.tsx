@@ -13,12 +13,14 @@ import type {
   ProjectPlaybooksViewModel,
 } from './projectPlaybooksController';
 import { PROJECT_PLAYBOOKS_ROUTE_ID } from './projectPlaybooksClient';
+import type { ProjectPlaybooksEventSource } from './projectPlaybooksEventSource';
 
 export type ProjectPlaybooksRouteContext = Readonly<
   DesktopRouteContext & { tenantId: string; projectId: string }
 >;
 export type ProjectPlaybooksRouteBinding = Readonly<{
   controller: ProjectPlaybooksController;
+  events: ProjectPlaybooksEventSource;
   scope: ProjectKnowledgeScope;
 }>;
 
@@ -88,9 +90,20 @@ function ControllerSurface({ binding }: Readonly<{ binding: ProjectPlaybooksRout
     binding.controller.getSnapshot,
   );
   useEffect(() => {
+    const unsubscribe = binding.events.subscribe(binding.scope, () => {
+      void binding.controller.retry();
+    });
     void binding.controller.load(binding.scope);
-    return () => binding.controller.stop();
-  }, [binding.controller, binding.scope]);
+    return () => {
+      unsubscribe();
+      binding.controller.stop();
+    };
+  }, [
+    binding.controller,
+    binding.events,
+    binding.scope.tenantId,
+    binding.scope.projectId,
+  ]);
   return <ProjectPlaybooksPage model={model} onRetry={() => void binding.controller.retry()} />;
 }
 

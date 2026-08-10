@@ -659,6 +659,7 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/features/project-playbooks/ProjectPlaybooksPage.tsx",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksClient.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
+      "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksEventSource.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx",
     ],
   };

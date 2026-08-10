@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import Module, { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -21,6 +22,9 @@ const { PROJECT_PLAYBOOKS_ROUTE_ID, createProjectPlaybooksClient } = require(
 );
 const { createProjectPlaybooksController } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksController.js`,
+);
+const { createProjectPlaybooksEventSource } = require(
+  `${compiledRoot}/features/project-playbooks/projectPlaybooksEventSource.js`,
 );
 const { createProjectPlaybooksRouteModuleLoader } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksRouteModule.js`,
@@ -51,6 +55,14 @@ const cloudConfig = Object.freeze({
   mode: 'cloud',
   workspaceRoot: '',
 });
+const playbooksRouteSource = readFileSync(
+  new URL('../src/features/project-playbooks/projectPlaybooksRouteModule.tsx', import.meta.url),
+  'utf8',
+);
+const appRouteRegistrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const localConfig = Object.freeze({
   ...cloudConfig,
   apiBaseUrl: 'http://127.0.0.1:43117',
@@ -85,7 +97,7 @@ test('W4 production registry exposes scoped Backend Stores and Project Playbooks
     {
       path: '/tenant/:tenantId/backend-stores',
       scope: ['tenant'],
-      permissions: [['authenticated', 'tenant_admin']],
+      permissions: [['authenticated', 'tenant_member']],
       localPolicy: 'cloud_only',
     },
   );
@@ -1644,6 +1656,67 @@ test('Project Playbooks fails closed in Local and ignores stale project response
   controller.stop();
 });
 
+test('Project Playbooks refresh events are project-scoped and unsubscribe cleanly', () => {
+  const sent = [];
+  let closed = 0;
+  let observed = 0;
+  const socket = {
+    readyState: 0,
+    onopen: null,
+    onmessage: null,
+    onerror: null,
+    onclose: null,
+    send(payload) {
+      sent.push(JSON.parse(payload));
+    },
+    close() {
+      closed += 1;
+      this.readyState = 3;
+    },
+  };
+  const source = createProjectPlaybooksEventSource({
+    openSocket(scope) {
+      assert.deepEqual(scope, projectScope);
+      return socket;
+    },
+  });
+  const unsubscribe = source.subscribe(projectScope, () => {
+    observed += 1;
+  });
+
+  socket.readyState = 1;
+  socket.onopen();
+  assert.deepEqual(sent, [
+    { type: 'subscribe_project_events', project_id: 'project-1' },
+  ]);
+  socket.onmessage({
+    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-2' }),
+  });
+  socket.onmessage({ data: JSON.stringify({ type: 'workspace_updated', project_id: 'project-1' }) });
+  socket.onmessage({
+    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-1' }),
+  });
+  assert.equal(observed, 1);
+
+  unsubscribe();
+  assert.deepEqual(sent.at(-1), {
+    type: 'unsubscribe_project_events',
+    project_id: 'project-1',
+  });
+  assert.equal(closed, 1);
+  socket.onmessage?.({
+    data: JSON.stringify({ type: 'reflection_complete', project_id: 'project-1' }),
+  });
+  assert.equal(observed, 1);
+});
+
+test('Project Playbooks route binds reflection refresh and native Cloud socket cleanup', () => {
+  assert.match(playbooksRouteSource, /binding\.events\.subscribe\(binding\.scope/u);
+  assert.match(playbooksRouteSource, /binding\.controller\.retry\(\)/u);
+  assert.match(playbooksRouteSource, /unsubscribe\(\)[\s\S]*binding\.controller\.stop\(\)/u);
+  assert.match(appRouteRegistrySource, /createCloudProjectPlaybooksEventSource\(currentConfig\)/u);
+});
+
 test('Project Playbooks uses Cloud authority from Local-online through the vault broker', async () => {
   const requests = [];
   const broker = recordingBroker(requests, async (request) => {
@@ -1687,6 +1760,11 @@ test('W4 route modules keep stable identity and native content ownership', async
           },
         },
         initialScope: projectScope,
+      }),
+      events: createProjectPlaybooksEventSource({
+        openSocket() {
+          throw new Error('event socket must not open while loading the route module');
+        },
       }),
       scope: projectScope,
     }),

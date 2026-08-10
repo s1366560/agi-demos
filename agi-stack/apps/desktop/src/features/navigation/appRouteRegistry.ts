@@ -95,6 +95,7 @@ import {
 } from './desktopProductionRouteRegistry';
 import { createProjectPlaybooksClient } from '../project-playbooks/projectPlaybooksClient';
 import { createProjectPlaybooksController } from '../project-playbooks/projectPlaybooksController';
+import { createCloudProjectPlaybooksEventSource } from '../project-playbooks/projectPlaybooksEventSource';
 import { createProjectPlaybooksRouteModuleLoader } from '../project-playbooks/projectPlaybooksRouteModule';
 import {
   createDeadLetterQueueRouteBindingForRuntime,
@@ -351,6 +352,7 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
               ),
               initialScope: scope,
             }),
+            events: createCloudProjectPlaybooksEventSource(currentConfig),
             scope,
           });
         },

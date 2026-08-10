@@ -207,7 +207,7 @@ export function createDesktopProductionRouteRegistry({
     scope: ['tenant'],
     navGroup: 'tenant-governance-management',
     capability: BACKEND_STORES_ROUTE_ID,
-    requiredPermission: [['authenticated', 'tenant_admin']],
+    requiredPermission: [['authenticated', 'tenant_member']],
     localPolicy: 'cloud_only',
     structuralReadiness: structuralReadiness(BACKEND_STORES_ROUTE_ID, implementedLoaders),
     loader: productionLoader(BACKEND_STORES_ROUTE_ID, implementedLoaders, () =>
