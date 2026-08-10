@@ -27,6 +27,7 @@ const NATIVE_FILE_SAVE_CHANNEL = 'agistack:native-file-save';
 const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
 const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
+const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
 const allowedCommands = new Set([
   'frontend_ready',
   'trusted_session_save',
@@ -47,6 +48,14 @@ const allowedCommands = new Set([
   'request_microphone_access',
   'focus_main_window',
   'window_controls',
+  'iab_status',
+  'iab_list_tabs',
+  'iab_create_tab',
+  'iab_close_tab',
+  'iab_focus_tab',
+  'iab_show_pane',
+  'iab_set_bounds',
+  'iab_hide_pane',
 ]);
 
 async function invokeDesktopCommand<T = unknown>(
@@ -150,6 +159,54 @@ function onSidecarRecovered(listener: () => void): () => void {
   return () => ipcRenderer.removeListener(SIDECAR_RECOVERED_CHANNEL, wrappedListener);
 }
 
+export type IabTabSnapshot = Readonly<{
+  tabId: number;
+  windowId: number;
+  title: string;
+  url: string;
+  active: boolean;
+}>;
+
+export type IabTabsChangedPayload = Readonly<{
+  tabs: readonly IabTabSnapshot[];
+  activeTabId: number | null;
+}>;
+
+function onIabTabsChanged(listener: (payload: IabTabsChangedPayload) => void): () => void {
+  if (typeof listener !== 'function') {
+    throw new Error('iab tabs-changed listener is invalid');
+  }
+  const wrappedListener = (_event: unknown, payload: IabTabsChangedPayload): void =>
+    listener(payload);
+  ipcRenderer.on(IAB_TABS_CHANGED_CHANNEL, wrappedListener);
+  return () => ipcRenderer.removeListener(IAB_TABS_CHANGED_CHANNEL, wrappedListener);
+}
+
+const iabBridge = Object.freeze({
+  status: (): Promise<{ status: string }> => invokeDesktopCommand('iab_status'),
+  listTabs: (): Promise<IabTabsChangedPayload> => invokeDesktopCommand('iab_list_tabs'),
+  createTab: (url?: string): Promise<{ tabId: number }> =>
+    invokeDesktopCommand('iab_create_tab', url === undefined ? {} : { url }),
+  closeTab: (tabId: number): Promise<void> =>
+    invokeDesktopCommand('iab_close_tab', { tabId }),
+  focusTab: (tabId: number): Promise<void> =>
+    invokeDesktopCommand('iab_focus_tab', { tabId }),
+  showPane: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<void> => invokeDesktopCommand('iab_show_pane', bounds),
+  setBounds: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<void> => invokeDesktopCommand('iab_set_bounds', bounds),
+  hidePane: (): Promise<void> => invokeDesktopCommand('iab_hide_pane'),
+  onTabsChanged: onIabTabsChanged,
+});
+
 contextBridge.exposeInMainWorld(
   '__MEMSTACK_DESKTOP__',
   Object.freeze({
@@ -162,6 +219,7 @@ contextBridge.exposeInMainWorld(
     focusMainWindow,
     windowControls,
     files: fileBridge,
+    iab: iabBridge,
     events: Object.freeze({
       onSidecarRecovered,
     }),

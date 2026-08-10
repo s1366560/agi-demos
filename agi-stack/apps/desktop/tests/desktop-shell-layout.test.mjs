@@ -254,11 +254,13 @@ test('right sidebar hosts the context rail and canvas behind an activity bar', (
   assert.match(appSource, /rightSidebarAvailable[\s\S]*?activeSection === 'chat'/);
   assert.match(appSource, /rightSidebarAvailable && rightSidebarOpen[\s\S]*?<DesktopRightSidebar/);
   assert.match(appSource, /rightSidebarAvailable=\{rightSidebarAvailable\}/);
-  // Activity bar: context and canvas entries with pressed state, canvas can disable.
+  // Activity bar: context, canvas, and browser entries with pressed state;
+  // context/canvas stay session-scoped, browser does not.
   assert.match(rightSidebarSource, /desktop-right-activity-bar/);
-  assert.equal((rightSidebarSource.match(/aria-pressed=\{activePanel ===/g) ?? []).length, 2);
-  assert.match(rightSidebarSource, /disabled=\{!canvasAvailable\}/);
+  assert.equal((rightSidebarSource.match(/aria-pressed=\{effectivePanel ===/g) ?? []).length, 3);
+  assert.match(rightSidebarSource, /disabled=\{!canvasAvailable \|\| viewModel === null\}/);
   assert.match(rightSidebarSource, /<SessionContextRail/);
+  assert.match(rightSidebarSource, /<BrowserPanel/);
   // Canvas layout maps to panel width: focus widens, split restores default.
   assert.match(rightSidebarSource, /layout === 'focus'\) panelWidth\.resize\(/);
   assert.match(rightSidebarSource, /panelWidth\.reset\(\)/);
@@ -300,6 +302,7 @@ test('titlebar and status bar copy exists in both locales', () => {
     'tabs.close',
     'rightbar.context',
     'rightbar.canvas',
+    'rightbar.browser',
     'rightbar.close',
     'rightbar.resize',
   ]) {

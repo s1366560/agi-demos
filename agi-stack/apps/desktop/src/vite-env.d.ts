@@ -81,6 +81,26 @@ type DesktopFileIngestResult = Readonly<{
   files: readonly DesktopFilePayload[];
 }>;
 
+type DesktopIabTabSnapshot = Readonly<{
+  tabId: number;
+  windowId: number;
+  title: string;
+  url: string;
+  active: boolean;
+}>;
+
+type DesktopIabTabsPayload = Readonly<{
+  tabs: readonly DesktopIabTabSnapshot[];
+  activeTabId: number | null;
+}>;
+
+type DesktopIabPaneBounds = Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>;
+
 interface Window {
   __MEMSTACK_DESKTOP__?: {
     runtime: 'electron';
@@ -101,6 +121,17 @@ interface Window {
       save(request: DesktopFileSaveRequest): Promise<DesktopFileSaveResult>;
       open(request: DesktopFileOpenRequest): Promise<DesktopFileOpenResult>;
       ingest(request: DesktopFileIngestRequest): Promise<DesktopFileIngestResult>;
+    }>;
+    iab?: Readonly<{
+      status(): Promise<{ status: string }>;
+      listTabs(): Promise<DesktopIabTabsPayload>;
+      createTab(url?: string): Promise<{ tabId: number }>;
+      closeTab(tabId: number): Promise<void>;
+      focusTab(tabId: number): Promise<void>;
+      showPane(bounds: DesktopIabPaneBounds): Promise<void>;
+      setBounds(bounds: DesktopIabPaneBounds): Promise<void>;
+      hidePane(): Promise<void>;
+      onTabsChanged(listener: (payload: DesktopIabTabsPayload) => void): () => void;
     }>;
     core?: {
       invoke?: DesktopInvoke;

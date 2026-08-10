@@ -37,10 +37,13 @@ export default defineConfig(({ command }) => ({
       outDir: resolve(desktopRoot, 'out/preload'),
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
-        input: resolve(desktopRoot, 'electron/preload/index.ts'),
+        input: {
+          index: resolve(desktopRoot, 'electron/preload/index.ts'),
+          iab: resolve(desktopRoot, 'electron/preload/iabPreload.ts'),
+        },
         output: {
           format: 'cjs',
-          entryFileNames: 'index.cjs',
+          entryFileNames: '[name].cjs',
         },
       },
     },
