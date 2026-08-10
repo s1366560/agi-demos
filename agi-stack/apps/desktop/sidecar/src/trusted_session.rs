@@ -33,7 +33,7 @@ pub(crate) struct TrustedSessionRecord {
     pub(crate) runtime_mode: TrustedSessionRuntimeMode,
     pub(crate) credential_kind: TrustedSessionCredentialKind,
     pub(crate) credential: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub(crate) expires_at: Option<String>,
 }
 
@@ -275,6 +275,16 @@ mod tests {
         broker.save(record.clone()).expect("save trusted session");
 
         assert_eq!(broker.load().expect("load trusted session"), Some(record));
+    }
+
+    #[test]
+    fn session_without_expiry_serializes_an_explicit_null() {
+        let mut record = cloud_record();
+        record.expires_at = None;
+
+        let serialized = serde_json::to_value(record).expect("serialize trusted session");
+
+        assert_eq!(serialized.get("expires_at"), Some(&serde_json::Value::Null));
     }
 
     #[test]
