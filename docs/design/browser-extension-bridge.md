@@ -273,3 +273,24 @@ browser-client ui.moveMouse(tabId,x,y)  (JSON-RPC request,吞所有错误)
 - **完整 CDP 无 all 选项**: 高危能力(scope `all` 被 `valid_permission_response` 拒绝),与 Codex 的 history/CDP 策略一致。
 - **sun_path 限制**: macOS 每用户临时目录长度接近 104 字节 socket 路径上限,测试夹具需短路径根。
 - **browser_* 工具的审计独立于工作区账本**(M2 起绕过幂等账本),审计表是浏览器动作的完整取证记录。
+
+## 12. M4 实现记录( 2026-08-10 )
+
+实现组件:
+
+| 组件 | 位置 | 验证 |
+|---|---|---|
+| 多后端桥接注册表 | sidecar `browser_bridge.rs`(服务器主动 hello 识别后端、per-backend 会话/心跳/路由、`request_on`) | sidecar 440 测试 |
+| side panel 会话铸造 | `getSidePanelSession`(仅 unix 传输 + chrome-extension 后端,双门 + 审计) | 铸造凭证 `/auth/me` 端到端验证 |
+| 扩展 side panel 聊天 | `apps/browser-extension/entrypoints/sidepanel/` + `src/sidepanel-chat.ts`(SW 内 HTTP/WS,绕 CORS;HITL 项降级引导桌面端) | 扩展 115 测试 |
+| 多后端 crate 维度 | `BridgeEndpoint.request_on`、HostState 全量 `(backend, tabId)` 键、聚合 `list_tabs`(离线后端容错)、逐键键盘模式 | crate 97+2 测试 |
+| iab 内嵌浏览器 | `electron/main/iab/`(WebContentsView 池、专属导航策略、手写 RFC6455 WS 客户端、JS 合成输入保焦点、光标注入 + chrome.runtime shim)、渲染器 Browser 面板 | 33 单测(含真 WS-over-unix 握手) |
+| 上架准备 | 零依赖自绘图标(16/48/128)+ `docs/design/browser-extension-store-listing.md` | 构建 manifest 校验 |
+
+关键设计落地事实:
+
+- **side panel 认证路径**: 全部 HTTP/WS 在扩展 SW 内发起(`host_permissions: <all_urls>` 覆盖 loopback,天然绕过 CORS);面板页面是哑 UI;launch token 只在 UID 校验后的 unix socket 上传输。
+- **iab 输入不抢焦点**: `Input.*` 翻译成页内合成事件(Codex iab 同构),跨域 iframe 不支持。
+- **iab 光标通道**: 复用扩展编译产物 + 页内 chrome.runtime shim + console.log 前缀桥接回主进程。
+- **registry  freshness**: 冒烟/崩溃会留下失效 registry+socket;broker/iab 的 stale 容错依赖重试循环(见下条修复)。
+- **实机验证发现的缺陷(已修复)**: iab 重连循环在桥离线时使主进程停摆。根因: `backend.ts` 的 `onClose` 闭包引用 `await` 返回前的 `const socket`(TDZ),连接失败时同步抛出 `ReferenceError`,未捕获异常触发 Electron 模态 `NSAlert` 停泵(定时器饿死、窗口不出、DevTools 无响应、0% CPU)。修复: 握手完成前不发 `onClose`、TDZ 安全持有者、error 路径显式 `destroy()`、日志节流(每 12 次一条)。教训: **Electron 主进程的未捕获异常会变成模态对话框,异步闭包捕获 await 绑定的 const 是定时炸弹**。实机终验: 窗口正常、循环健康、iab 后端连接应用 sidecar(`connected_backends: ["iab"]`)、建 tab 成功。
