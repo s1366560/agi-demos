@@ -33,6 +33,14 @@ const screenStyles = readFileSync(
   'utf8',
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const nativeCloudAuthSource = readFileSync(
+  new URL('../src/api/nativeCloudAuthClient.ts', import.meta.url),
+  'utf8',
+);
+const cloudAuthenticationAuthoritySource = readFileSync(
+  new URL('../electron/main/cloudAuthenticationAuthority.ts', import.meta.url),
+  'utf8',
+);
 
 test('forced password validation matches the Web field contract', () => {
   assert.deepEqual(
@@ -179,7 +187,7 @@ test('the forced password screen is localized, accessible, and cannot bypass the
   }
 });
 
-test('App retains the transient token only for the guarded flow and persists after success', () => {
+test('App retains fallback tokens only for the guarded flow and keeps native tokens in the vault', () => {
   assert.match(appSource, /pendingPasswordChangeRef/);
   assert.match(desktopAuthSource, /passwordChangeTokenRetained = true/);
   assert.match(desktopAuthSource, /passwordChangeGateAuthState\(false, null\)/);
@@ -193,8 +201,29 @@ test('App retains the transient token only for the guarded flow and persists aft
   const flowEnd = desktopAuthSource.indexOf('const hydrateLocalSession', flowStart);
   const flowSource = desktopAuthSource.slice(flowStart, flowEnd);
   const passwordChange = flowSource.indexOf('.forceChangePassword(');
-  const trustedSave = flowSource.indexOf('saveNativeTrustedSession(');
+  const projectedSession = flowSource.indexOf('hydrateProjectedCloudSession(');
   assert.ok(passwordChange >= 0);
-  assert.ok(trustedSave > passwordChange);
-  assert.doesNotMatch(flowSource, /localStorage|sessionStorage/);
+  assert.ok(projectedSession > passwordChange);
+  assert.doesNotMatch(
+    flowSource,
+    /localStorage|sessionStorage|saveNativeTrustedSession/,
+  );
+
+  assert.match(
+    nativeCloudAuthSource,
+    /invoke\('cloud_auth_force_password_change', input\)/,
+  );
+  const tokenAdoption = cloudAuthenticationAuthoritySource.indexOf(
+    'await this.#adoptToken(apiBaseUrl, token, input.trustedDevice)',
+  );
+  const passwordChangeStart = cloudAuthenticationAuthoritySource.indexOf(
+    'async forceChangePassword(',
+  );
+  const trustedSessionRead = cloudAuthenticationAuthoritySource.indexOf(
+    'const session = await this.#trustedSession()',
+    passwordChangeStart,
+  );
+  assert.ok(tokenAdoption >= 0);
+  assert.ok(passwordChangeStart > tokenAdoption);
+  assert.ok(trustedSessionRead > passwordChangeStart);
 });
