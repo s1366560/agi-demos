@@ -186,12 +186,6 @@
         {
           "surface": "desktop_cloud",
           "method": "POST",
-          "path": "/api/v1/genes/{gene_id}/ratings",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
           "path": "/api/v1/genes/{gene_id}/reviews",
           "authority": "cloud_service"
         },
@@ -299,7 +293,6 @@
           "actions": [
             "view",
             "list",
-            "rate",
             "create-review"
           ],
           "authentication": "authenticated",
@@ -351,7 +344,6 @@
         "publish",
         "unpublish",
         "install",
-        "rate",
         "create-review",
         "delete-own-review"
       ],
@@ -389,7 +381,7 @@
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "local_deviation": "Local Desktop may manage and import local Gene and Genome packages, but organization publication, global market visibility, and remote ratings require a declared Cloud authority.",
-      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Web capability. Desktop has a revision-bound Cloud loader, App binding, typed Gene client, controller and native management page for listing, CRUD, publish, install, rating and review mutations. The client also defines genome, evolution and review-list reads, but TenantGenesController and TenantGenesPage never call or render those inspection surfaces, so they are excluded from the Desktop Cloud contracts and actions and Cloud remains partial. Local uses the same native route and calls the private sidecar, whose registered Gene contracts return local_gene_market_authority_unavailable; this is an observed structured-unavailable boundary, not a planned route or a fabricated market authority."
+      "judgment_rationale": "GeneMarket, GeneDetail, and GenomeDetail directly implement the canonical Web capability. Desktop has a revision-bound Cloud loader, App binding, typed Gene client, controller and native management page for listing, CRUD, publish, install and review mutations. Its page-reachable Gene rating calls /genes/{gene_id}/ratings, while the canonical Web rate action is GenomeDetail's /genes/genomes/{genome_id}/ratings contract, so Desktop rating is deliberately excluded from the parity action and API projection. The client also defines genome, evolution and review-list reads, but TenantGenesController and TenantGenesPage never call or render those inspection surfaces, so they are excluded from the Desktop Cloud contracts and actions and Cloud remains partial. Local uses the same native route and calls the private sidecar, whose registered Gene contracts return local_gene_market_authority_unavailable; this is an observed structured-unavailable boundary, not a planned route or a fabricated market authority."
     }
   ],
   "source_ownership": {

@@ -185,7 +185,6 @@ test("Gene Market records the evolution history shown by Gene Detail", () => {
     "publish",
     "unpublish",
     "install",
-    "rate",
     "create-review",
     "delete-own-review",
   ]);
@@ -196,6 +195,7 @@ test("Gene Market records the evolution history shown by Gene Detail", () => {
     false,
   );
   assert.match(genes.judgment_rationale, /genome.*evolution.*review/iu);
+  assert.match(genes.judgment_rationale, /Gene rating.*excluded/iu);
 });
 
 test("Dead Letter Queue does not claim its unused single-message API", () => {

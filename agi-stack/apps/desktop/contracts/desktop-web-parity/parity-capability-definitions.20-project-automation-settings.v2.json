@@ -398,18 +398,6 @@
         },
         {
           "surface": "desktop_cloud",
-          "method": "PATCH",
-          "path": "/api/v1/projects/{project_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/sandbox",
           "authority": "cloud_service"
@@ -418,18 +406,6 @@
           "surface": "desktop_cloud",
           "method": "GET",
           "path": "/api/v1/projects/{project_id}/sandbox/stats",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/projects/{project_id}/sandbox/restart",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "DELETE",
-          "path": "/api/v1/projects/{project_id}/sandbox",
           "authority": "cloud_service"
         },
         {
@@ -541,7 +517,7 @@
         "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
       ],
       "local_deviation": "Local project settings may configure bounded workspace and sandbox resources, but secrets and arbitrary host paths must remain outside renderer state and outside the page contract.",
-      "judgment_rationale": "The production Web Project Settings page updates or deletes project metadata, reads the sandbox and its stats, and exposes restart and terminate controls. Sandbox reads are project-member safe, update, restart and terminate require project admin or owner authority, and delete remains project-owner only. Ensure, health, sync, execute, terminal, desktop and proxy-cookie endpoints are not called by this routed page and belong to a wider sandbox capability instead. Desktop now binds the production user_id identity contract and revision-bound project scope, so its generic page can render the project record. ProjectAdministrationPage exposes none of the update, delete, sandbox inspection, restart or terminate interactions, and the typed update client sends PATCH while the production project route accepts PUT; Cloud therefore remains partial with view only. Local binds the same real route but remains renderer-declared and closed with local_project_settings_authority_unavailable."
+      "judgment_rationale": "The production Web Project Settings page updates or deletes project metadata, reads the sandbox and its stats, and exposes restart and terminate controls. Sandbox reads are project-member safe, update, restart and terminate require project admin or owner authority, and delete remains project-owner only. Ensure, health, sync, execute, terminal, desktop and proxy-cookie endpoints are not called by this routed page and belong to a wider sandbox capability instead. Desktop now binds the production user_id identity contract and revision-bound project scope, so its controller loads the project, sandbox and sandbox-stats records. ProjectAdministrationPage renders only the project record and exposes none of the update, delete, sandbox inspection, restart or terminate interactions, so client-only mutation methods are excluded from the Desktop Cloud API projection. The latent typed update method still sends PATCH while the production project route accepts PUT; this remains an explicit completion gap while Cloud stays partial with view only. Local binds the same real route but remains renderer-declared and closed with local_project_settings_authority_unavailable."
     }
   ],
   "source_ownership": {

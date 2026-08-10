@@ -658,36 +658,6 @@
           "authority": "cloud_service"
         },
         {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/maintenance/incremental-refresh",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/maintenance/deduplicate",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/maintenance/invalidate-edges",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/maintenance/communities/rebuild",
-          "authority": "cloud_service"
-        },
-        {
-          "surface": "desktop_cloud",
-          "method": "POST",
-          "path": "/api/v1/maintenance/embeddings/rebuild?project_id={project_id}",
-          "authority": "cloud_service"
-        },
-        {
           "surface": "desktop_local",
           "method": "NONE",
           "path": "unavailable:local_project_maintenance_authority_unavailable",
@@ -769,7 +739,7 @@
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
         "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
       ],
-      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now binds the production user_id identity contract and a revision-bound project scope, so the typed client can load its three status payloads. The generic ProjectAdministrationPage does not render those maintenance models and exposes no maintenance mutations or export. The client also calls /maintenance/incremental-refresh instead of /maintenance/refresh/incremental and /maintenance/communities/rebuild instead of /graph/communities/rebuild, so Cloud remains partial with route view only. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
+      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now binds the production user_id identity contract and a revision-bound project scope, so the controller loads its three status payloads. The generic ProjectAdministrationPage does not render those maintenance models and exposes no maintenance mutations or export, so client-only POST methods are excluded from the Desktop Cloud API projection. Those latent client methods also call /maintenance/incremental-refresh instead of /maintenance/refresh/incremental and /maintenance/communities/rebuild instead of /graph/communities/rebuild; these endpoint mismatches remain explicit completion gaps while Cloud stays partial with route view only. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
     }
   ],
   "source_ownership": {

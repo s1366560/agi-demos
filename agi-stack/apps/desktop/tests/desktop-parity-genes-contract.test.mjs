@@ -154,11 +154,6 @@ test("Gene Market contracts only include APIs consumed by its owned production p
     },
     {
       method: "POST",
-      path: "/api/v1/genes/{gene_id}/ratings",
-      authority: "cloud_service",
-    },
-    {
-      method: "POST",
       path: "/api/v1/genes/{gene_id}/reviews",
       authority: "cloud_service",
     },
@@ -238,7 +233,6 @@ test("Gene Market actions preserve tenant and review ownership enforcement", () 
       actions: [
         "view",
         "list",
-        "rate",
         "create-review",
       ],
       authentication: "authenticated",

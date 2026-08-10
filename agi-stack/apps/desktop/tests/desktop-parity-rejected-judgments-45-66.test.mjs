@@ -240,11 +240,6 @@ test("Project Maintenance closes its production scope and endpoint mismatches", 
     "GET /api/v1/maintenance/status?project_id={project_id}",
     "GET /api/v1/data/stats?project_id={project_id}",
     "GET /api/v1/maintenance/embeddings/status?project_id={project_id}",
-    "POST /api/v1/maintenance/incremental-refresh",
-    "POST /api/v1/maintenance/deduplicate",
-    "POST /api/v1/maintenance/invalidate-edges",
-    "POST /api/v1/maintenance/communities/rebuild",
-    "POST /api/v1/maintenance/embeddings/rebuild?project_id={project_id}",
   ]);
   assert.equal(capability.local_status, "unavailable");
   assert.equal(capability.local_authority, "none");
@@ -431,12 +426,8 @@ test("Project Settings records only the routed page sandbox operations and autho
   ]);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/projects/{project_id}",
-    "PATCH /api/v1/projects/{project_id}",
-    "DELETE /api/v1/projects/{project_id}",
     "GET /api/v1/projects/{project_id}/sandbox",
     "GET /api/v1/projects/{project_id}/sandbox/stats",
-    "POST /api/v1/projects/{project_id}/sandbox/restart",
-    "DELETE /api/v1/projects/{project_id}/sandbox",
   ]);
   assert.equal(capability.cloud_status, "partial");
   assert.equal(
