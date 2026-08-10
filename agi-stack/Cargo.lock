@@ -54,6 +54,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "agistack-adapters-browser"
+version = "0.1.0"
+dependencies = [
+ "agistack-core",
+ "async-trait",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+]
+
+[[package]]
 name = "agistack-adapters-cli-harness"
 version = "0.1.0"
 dependencies = [
@@ -285,6 +300,7 @@ name = "agistack-desktop-sidecar"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "agistack-adapters-browser",
  "agistack-adapters-device",
  "agistack-adapters-http-llm",
  "agistack-adapters-local-tools",

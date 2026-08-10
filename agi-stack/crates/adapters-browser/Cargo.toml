@@ -1,0 +1,25 @@
+[package]
+name = "agistack-adapters-browser"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Browser-bridge client for the desktop sidecar: speaks the fixed JSON-RPC 2.0
+# bridge contract (design doc browser-extension-bridge §2/§4) to a Chrome
+# extension via the native-messaging broker over WebSocket, and exposes
+# READ-ONLY browser tools (list tabs / snapshot / screenshot / console logs)
+# behind the existing `ToolHost` port. Like adapters-mcp it is tokio-bound and
+# lives strictly outside the core (ADR-0001).
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "macros", "rt"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }

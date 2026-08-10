@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/plugin-host",
     "crates/adapters-mem",
+    "crates/adapters-browser",
     "crates/adapters-device",
     "crates/adapters-local-tools",
     "crates/adapters-http-llm",
