@@ -10,7 +10,7 @@ import logging
 import secrets
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -77,6 +77,7 @@ class OAuthAuthorizationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     redirect_to: str = "/"
+    callback_surface: Literal["web", "desktop"] = "web"
 
 
 class OAuthCallbackRequest(BaseModel):
@@ -285,6 +286,7 @@ async def begin_oauth_authorization(
             request.app.state.container.redis(),
             provider_id=provider,
             redirect_to=body.redirect_to,
+            callback_surface=body.callback_surface,
         )
     except (OAuthLoginError, ValueError) as exc:
         raise _oauth_http_error(exc) from exc

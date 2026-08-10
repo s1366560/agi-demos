@@ -1,9 +1,9 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   CreateTenantAgentBindingInput,
@@ -166,7 +166,7 @@ async function requestJson(
   if (options.idempotencyKey) {
     headers.set('Idempotency-Key', options.idempotencyKey);
   }
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: options.method,
     headers,
     body:

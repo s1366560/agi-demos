@@ -14,88 +14,92 @@ const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'ut
 const globalStyles = readFileSync(new URL('../src/styles/chrome.css', import.meta.url), 'utf8');
 const runtimeConfigStyles = readFileSync(
   new URL('../src/features/runtime/RuntimeConfigPanel.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const sessionStyles = readFileSync(
   new URL('../src/features/session/SessionWorkspace.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sessionWorkspaceSource = readFileSync(
   new URL('../src/features/session/SessionWorkspace.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const contextRailSource = readFileSync(
   new URL('../src/features/session/SessionContextRail.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const rightSidebarSource = readFileSync(
   new URL('../src/features/chrome/DesktopRightSidebar.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const rightSidebarStyles = readFileSync(
   new URL('../src/features/chrome/DesktopRightSidebar.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sessionChangesSource = readFileSync(
   new URL('../src/features/session/SessionChangesCanvas.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sessionTerminalSource = readFileSync(
   new URL('../src/features/session/SessionTerminalCanvas.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sessionEvidenceSource = readFileSync(
   new URL('../src/features/session/SessionEvidenceCanvas.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const runtimeConfigSource = readFileSync(
   new URL('../src/features/runtime/RuntimeConfigPanel.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sidebarSource = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const sidebarStyles = readFileSync(
   new URL('../src/features/navigation/DesktopSidebar.css', import.meta.url),
-  'utf8'
+  'utf8',
+);
+const canonicalNavigationSource = readFileSync(
+  new URL('../src/features/navigation/desktopCanonicalNavigationCatalog.ts', import.meta.url),
+  'utf8',
 );
 const workspaceDockSource = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const workspaceDockStyles = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const workspaceOverviewSource = readFileSync(
   new URL('../src/features/workspace/WorkspaceOverview.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const workspaceOverviewStyles = readFileSync(
   new URL('../src/features/workspace/WorkspaceOverview.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const settingsCoreSource = readFileSync(
   new URL('../src/features/settings/SettingsCorePages.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const settingsCoreStyles = readFileSync(
   new URL('../src/features/settings/SettingsCorePages.css', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const chatPanelSource = readFileSync(
   new URL('../src/features/chat/ChatPanel.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const noProjectQaSource = readFileSync(
   new URL('../src/qa/NoProjectEntryQa.tsx', import.meta.url),
-  'utf8'
+  'utf8',
 );
 const noProjectQaHtml = readFileSync(
   new URL('../qa/workspace-no-project.html', import.meta.url),
-  'utf8'
+  'utf8',
 );
 
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
@@ -136,7 +140,7 @@ test('workspace tree gives the Radix viewport the full available navigation heig
 test('authenticated identities without a project remain inside the desktop shell', () => {
   const renderWorkbench =
     appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/
+      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
     )?.[0] ?? '';
 
   assert.match(appSource, /const identityAuthenticated = isIdentityAuthenticated\(auth\)/);
@@ -159,7 +163,10 @@ test('authenticated identities without a project get a source-aligned selection 
   assert.match(workspaceOverviewSource, /className="workspace-design-context-empty"/);
   assert.match(workspaceOverviewSource, /overview\.noProjectTitle/);
   assert.match(workspaceOverviewStyles, /\.workspace-design-context-empty\s*\{/);
-  assert.match(workspaceDockSource, /const hasProjectScope = Boolean\(currentProjectId\.trim\(\)\)/);
+  assert.match(
+    workspaceDockSource,
+    /const hasProjectScope = Boolean\(currentProjectId\.trim\(\)\)/,
+  );
   assert.match(workspaceDockSource, /workspaceTree\.selectProjectDescription/);
 });
 
@@ -184,7 +191,10 @@ test('the hierarchy QA exposes an authoritative empty-workspace project state', 
     noProjectQaSource,
     /const workspaceAuthority:[\s\S]*?= selectedProject[\s\S]*?status: 'ready', items: \[\]/,
   );
-  assert.match(noProjectQaSource, /nodeState=\{\{ projects: projectNodeState, workspaces: \{\} \}\}/);
+  assert.match(
+    noProjectQaSource,
+    /nodeState=\{\{ projects: projectNodeState, workspaces: \{\} \}\}/,
+  );
   assert.match(noProjectQaSource, /<NewTaskFlow/);
   assert.match(noProjectQaSource, /workspaceAuthority=\{workspaceAuthority\}/);
   assert.match(noProjectQaSource, /preferredWorkspaceId=""/);
@@ -229,11 +239,11 @@ test('workspace hydration and refresh fail closed across tenant boundaries', () 
 test('tenant and project changes require server-issued workspace context authority', () => {
   const hydrateCloudSession =
     desktopAuthSource.match(
-      /const hydrateCloudSession = async \([\s\S]*?\n  const login = async/
+      /const hydrateCloudSession = async \([\s\S]*?\n  const login = async/,
     )?.[0] ?? '';
   const applySettingsContext =
     appSource.match(
-      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/
+      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/,
     )?.[0] ?? '';
 
   assert.match(hydrateCloudSession, /identityClient\.getWorkspaceContext\(\)/);
@@ -241,10 +251,7 @@ test('tenant and project changes require server-issued workspace context authori
   assert.match(hydrateCloudSession, /context: null/);
   assert.match(hydrateCloudSession, /tenantId: '',[\s\S]*projectId: '',[\s\S]*workspaceId: ''/);
   assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing/);
-  assert.match(
-    applySettingsContext,
-    /const requestConfig = configRef\.current/,
-  );
+  assert.match(applySettingsContext, /const requestConfig = configRef\.current/);
   assert.match(
     applySettingsContext,
     /const requestIsCurrent = \(\) =>[\s\S]*?authAttemptRevisionRef\.current === authAttemptRevision[\s\S]*?isSameDesktopRequestScope\(requestConfig, configRef\.current\)/,
@@ -271,7 +278,7 @@ test('tenant and project changes require server-issued workspace context authori
 test('workspace settings freeze and expose selection semantics while a switch is pending', () => {
   const workspaceSettingsPage =
     settingsCoreSource.match(
-      /export function WorkspaceSettingsPage\([\s\S]*?\nexport function GeneralSettingsPage/
+      /export function WorkspaceSettingsPage\([\s\S]*?\nexport function GeneralSettingsPage/,
     )?.[0] ?? '';
 
   assert.match(workspaceSettingsPage, /disabled=\{loading \|\| applying\}/);
@@ -320,22 +327,19 @@ test('workspace creation uses its dedicated surface while session creation stays
 test('an authoritative context switch closes settings even when workspace hydration degrades', () => {
   const applySettingsContext =
     appSource.match(
-      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/
+      /const applySettingsContext = async \(tenantId: string, projectId: string\) => \{[\s\S]*?\n  \};/,
     )?.[0] ?? '';
 
   assert.match(applySettingsContext, /await refreshRuntime\(nextConfig, \[selectedProject\]\)/);
   assert.doesNotMatch(applySettingsContext, /contextSwitchLoadFailed/);
   assert.match(appSource, /connection === 'error'[\s\S]*runtime\.retryWorkspace/);
-  assert.match(
-    appSource,
-    /workbenchRef\.current\?\.focus\(\);[\s\S]*void refreshRuntime\(\)/
-  );
+  assert.match(appSource, /workbenchRef\.current\?\.focus\(\);[\s\S]*void refreshRuntime\(\)/);
 });
 
 test('runtime refresh hydrates unbound tasks plus selected or expanded workspaces', () => {
   const refreshRuntime =
     appSource.match(
-      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/,
     )?.[0] ?? '';
 
   assert.match(refreshRuntime, /projectConversationLoadTargets\(/);
@@ -349,18 +353,21 @@ test('runtime refresh hydrates unbound tasks plus selected or expanded workspace
 test('runtime refresh preserves workspace expansion changes made while hydration is pending', () => {
   const refreshRuntime =
     appSource.match(
-      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/,
     )?.[0] ?? '';
 
   assert.match(
     refreshRuntime,
-    /const committedExpandedWorkspaceIds = reconcileExpandedWorkspaceIds\(\s*expandedWorkspaceIdsRef\.current,/
+    /const committedExpandedWorkspaceIds = reconcileExpandedWorkspaceIds\(\s*expandedWorkspaceIdsRef\.current,/,
   );
   assert.match(
     refreshRuntime,
-    /expandedWorkspaceIdsRef\.current = committedExpandedWorkspaceIds;[\s\S]*setExpandedWorkspaceIds\(committedExpandedWorkspaceIds\)/
+    /expandedWorkspaceIdsRef\.current = committedExpandedWorkspaceIds;[\s\S]*setExpandedWorkspaceIds\(committedExpandedWorkspaceIds\)/,
   );
-  assert.doesNotMatch(refreshRuntime, /expandedWorkspaceIdsRef\.current = nextExpandedWorkspaceIds/);
+  assert.doesNotMatch(
+    refreshRuntime,
+    /expandedWorkspaceIdsRef\.current = nextExpandedWorkspaceIds/,
+  );
 });
 
 test('workspace tree loading and error states announce changes and expose explicit retries', () => {
@@ -372,7 +379,10 @@ test('workspace tree loading and error states announce changes and expose explic
   assert.match(sidebarSource, /onRetryProject=\{onRetryProject\}/);
   assert.match(sidebarSource, /onRetryWorkspace=\{onRetryWorkspace\}/);
   assert.match(appSource, /onRetryProject=\{\(\) => void refreshRuntime\(\)\}/);
-  assert.match(appSource, /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/);
+  assert.match(
+    appSource,
+    /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/,
+  );
   assert.match(workspaceDockStyles, /\.workspace-tree-state > button/);
   assert.match(workspaceDockSource, /availability === 'refreshing'/);
   assert.match(workspaceDockSource, /availability === 'stale-error'/);
@@ -380,22 +390,22 @@ test('workspace tree loading and error states announce changes and expose explic
   assert.match(workspaceDockSource, /sessionAvailability === 'stale-error'/);
   assert.match(
     workspaceDockSource,
-    /navigationRef\.current\?\.focus\(\);[\s\S]*onRetryProject\(\)/
+    /navigationRef\.current\?\.focus\(\);[\s\S]*onRetryProject\(\)/,
   );
   assert.match(
     workspaceDockSource,
-    /workspaceToggleRefs\.current\.get\(workspace\.id\)\?\.focus\(\);[\s\S]*onRetryWorkspace\(workspace\.id\)/
+    /workspaceToggleRefs\.current\.get\(workspace\.id\)\?\.focus\(\);[\s\S]*onRetryWorkspace\(workspace\.id\)/,
   );
 });
 
 test('authoritative conversation refresh removes only an unchanged missing selection', () => {
   const refreshRuntime =
     appSource.match(
-      /const refreshRuntime = useCallback\([\s\S]*?\n  const loadWorkspaceConversations = useCallback/
+      /const refreshRuntime = useCallback\([\s\S]*?\n  const loadWorkspaceConversations = useCallback/,
     )?.[0] ?? '';
   const loader =
     appSource.match(
-      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/,
     )?.[0] ?? '';
 
   assert.match(appSource, /const clearMissingConversationSelection = useCallback/);
@@ -407,7 +417,7 @@ test('authoritative conversation refresh removes only an unchanged missing selec
   assert.match(loader, /clearMissingConversationSelection\(/);
   assert.match(
     appSource,
-    /shouldClearConversationSelectionAfterRefresh\([\s\S]*agentConversationSessionRef\.current/
+    /shouldClearConversationSelectionAfterRefresh\([\s\S]*agentConversationSessionRef\.current/,
   );
   assert.match(appSource, /resetConversationTimeline\(\);[\s\S]*setAgentTaskSignals\(\[\]\)/);
   assert.match(appSource, /activeSectionRef\.current === 'chat'/);
@@ -416,34 +426,34 @@ test('authoritative conversation refresh removes only an unchanged missing selec
 
 test('workspace hierarchy uses native navigation controls instead of an incomplete ARIA tree', () => {
   assert.match(workspaceDockSource, /<nav[\s\S]*aria-label=\{t\('workspaceTree\.navigation'\)\}/);
-  assert.match(workspaceDockSource, /className="workspace-tree-toggle"[\s\S]*aria-expanded=\{workspaceExpanded\}/);
+  assert.match(
+    workspaceDockSource,
+    /className="workspace-tree-toggle"[\s\S]*aria-expanded=\{workspaceExpanded\}/,
+  );
   assert.doesNotMatch(workspaceDockSource, /role="(?:tree|treeitem|group)"/);
 });
 
 test('workspace tree keeps status out of subtitles while preserving an accessible status dot', () => {
   assert.match(workspaceDockSource, /<small>\{sessionSummary\}<\/small>/);
-  assert.doesNotMatch(
-    workspaceDockSource,
-    /\{sessionSummary\}\s*·\s*\{rootStatusLabel\}/
-  );
+  assert.doesNotMatch(workspaceDockSource, /\{sessionSummary\}\s*·\s*\{rootStatusLabel\}/);
   assert.match(
     workspaceDockSource,
-    /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusLabel\}[\s\S]*title=\{rootStatusLabel\}/
+    /data-status=\{rootStatus\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{rootStatusLabel\}[\s\S]*title=\{rootStatusLabel\}/,
   );
   assert.doesNotMatch(
     workspaceDockSource,
-    /conversationTreeMetadataSummary\(conversation\) \?\? statusLabel/
+    /conversationTreeMetadataSummary\(conversation\) \?\? statusLabel/,
   );
   assert.match(
     workspaceDockSource,
-    /className="workspace-tree-session-status"[\s\S]*data-status=\{statusPresentation\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{statusLabel\}[\s\S]*title=\{statusLabel\}/
+    /className="workspace-tree-session-status"[\s\S]*data-status=\{statusPresentation\.tone\}[\s\S]*role="img"[\s\S]*aria-label=\{statusLabel\}[\s\S]*title=\{statusLabel\}/,
   );
 });
 
 test('workspace conversation loads remain project scoped while the selected workspace changes', () => {
   const loader =
     appSource.match(
-      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/
+      /const loadWorkspaceConversations = useCallback\([\s\S]*?\n  const refreshMyWork = useCallback/,
     )?.[0] ?? '';
 
   assert.match(loader, /isSameDesktopProjectRequestScope\(requestConfig, configRef\.current\)/);
@@ -455,14 +465,14 @@ test('workspace conversation loads remain project scoped while the selected work
   assert.doesNotMatch(loader, /setDataset\(loadingDataset\)/);
   assert.match(
     appSource,
-    /conversationRequestGenerations[\s\S]*beginWorkspaceConversationRequest\([\s\S]*isCurrentWorkspaceConversationRequest\(/
+    /conversationRequestGenerations[\s\S]*beginWorkspaceConversationRequest\([\s\S]*isCurrentWorkspaceConversationRequest\(/,
   );
   assert.match(appSource, /activeRuntimeConversationRequestsRef/);
   assert.match(appSource, /supersedeWorkspaceConversationRequests\(/);
   assert.match(loader, /mergeConversationListWithCurrentRunAuthority\(/);
   assert.match(
     appSource,
-    /currentConversationResults[\s\S]*mergeConversationListWithCurrentRunAuthority\(/
+    /currentConversationResults[\s\S]*mergeConversationListWithCurrentRunAuthority\(/,
   );
 });
 
@@ -481,7 +491,10 @@ test('workspace roster hydration isolates authority failures from the runtime co
     refreshRuntime,
     /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceAgents\(\)\)/,
   );
-  assert.match(refreshRuntime, /const nextDataset = \{[\s\S]*workspaceMembers,[\s\S]*workspaceAgents,/);
+  assert.match(
+    refreshRuntime,
+    /const nextDataset = \{[\s\S]*workspaceMembers,[\s\S]*workspaceAgents,/,
+  );
   assert.match(refreshRuntime, /failLoadingWorkspaceAuthority\(/);
 });
 
@@ -503,11 +516,11 @@ test('sidebar bell opens the real Activity inbox workbench section', () => {
   );
   assert.match(sidebarSource, /onNavigate\(id\)/);
   assert.doesNotMatch(sidebarSource, /<i \/>/);
-  assert.match(sidebarSource, /activityUnreadCount > 0 \? <small>\{activityUnreadCount\}<\/small> : null/);
   assert.match(
-    appSource,
-    /if \(section === 'activity'\) switchSection\('activity'\)/,
+    sidebarSource,
+    /id === 'activity' && activityUnreadCount > 0 \? \(\s*<small>\{activityUnreadCount\}<\/small>\s*\) : null/,
   );
+  assert.match(appSource, /if \(section === 'activity'\) switchSection\('activity'\)/);
   assert.match(appSource, /if \(activeSection === 'activity'\) return renderActivityInbox\(\)/);
   assert.doesNotMatch(
     appSource,
@@ -528,27 +541,45 @@ test('command palette cannot bypass the workspace and conversation hierarchy', (
   const commandItems =
     appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
 
-  assert.doesNotMatch(commandItems, /id: '(?:search-memory|chats|run-selected-session|open-project)'/);
+  assert.doesNotMatch(
+    commandItems,
+    /id: '(?:search-memory|chats|run-selected-session|open-project)'/,
+  );
   assert.doesNotMatch(commandItems, /switchSection\('(?:chat|memory)'\)/);
   assert.doesNotMatch(commandItems, /Open in VS Code|Run selected session|Search local memory/);
 });
 
-test('command palette opens Tenant Tasks through the scoped production route registry', () => {
+test('command palette derives Tenant Tasks with every canonical production route', () => {
   const commandItems =
     appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
 
-  assert.match(commandItems, /id: 'tenant-tasks'/);
-  assert.match(commandItems, /label: t\('tenantTasks\.title'\)/);
-  assert.match(commandItems, /description: t\('tenantTasks\.commandDescription'\)/);
+  assert.match(canonicalNavigationSource, /'tenant-tenant-tasks', 'nav\.tasks'/);
   assert.match(
-    commandItems,
-    /desktopProductionRouteRegistry\.byId\.get\(TENANT_TASKS_ROUTE_ID\)/,
+    appSource,
+    /const desktopCanonicalNavigationRegistry = useMemo\([\s\S]*CANONICAL_DESKTOP_ROUTE_IDS\.map\([\s\S]*desktopProductionRouteRegistry\.byId\.get/u,
+  );
+  assert.match(appSource, /deriveDesktopNavigationDiscoveryEntries\(\{/);
+  assert.match(
+    appSource,
+    /deriveDesktopNavigationDiscoveryEntries\(\{[\s\S]*registry: desktopCanonicalNavigationRegistry/u,
   );
   assert.match(
-    commandItems,
-    /buildDesktopRoutePath\(tenantTasksRoute, \{\s*tenantId: config\.tenantId,/,
+    appSource,
+    /const routeCommandItems: CommandPaletteItem\[\] = routeDiscoveryEntries\.map/,
   );
-  assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(tenantTasksPath\)/);
+  assert.match(commandItems, /\.\.\.routeCommandItems/);
+  assert.doesNotMatch(commandItems, /id: 'tenant-tasks'/);
+  assert.match(appSource, /desktopProductionRouteNavigation\.openPath\(entry\.destinationPath\)/);
+});
+
+test('sidebar exposes one focus-restoring all-features launcher', () => {
+  assert.equal((sidebarSource.match(/featureDirectory\.open/g) ?? []).length, 1);
+  assert.match(sidebarSource, /aria-haspopup="dialog"/);
+  assert.match(sidebarSource, /onOpenFeatureDirectory\(event\.currentTarget\)/);
+  assert.match(
+    appSource,
+    /onOpenFeatureDirectory=\{\(trigger\) => openCommandPalette\(trigger\)\}/,
+  );
 });
 
 test('command palette opens Project Support through the scoped production route registry', () => {
@@ -567,6 +598,20 @@ test('command palette opens Project Support through the scoped production route 
     /buildDesktopRoutePath\(projectSupportRoute, \{\s*tenantId: config\.tenantId,\s*projectId: config\.projectId,/,
   );
   assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(projectSupportPath\)/);
+  assert.match(
+    appSource,
+    /item\.kind === 'route' && item\.id\.startsWith\('route:'\) && item\.routeId/u,
+  );
+});
+
+test('command palette exposes Browser Integration as a native settings entry', () => {
+  const commandItems =
+    appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
+
+  assert.match(commandItems, /id: 'browser-integration-settings'/);
+  assert.match(commandItems, /label: t\('settings\.browser'\)/);
+  assert.match(commandItems, /description: t\('settings\.browserDescription'\)/);
+  assert.match(commandItems, /openSettingsEntry\('browser_integration'\)/);
 });
 
 test('connection recovery cannot bypass governed model or workspace settings', () => {
@@ -657,9 +702,15 @@ test('session status chrome localizes every workspace-attempt state', () => {
   for (const status of ['pending', 'awaiting_leader_adjudication', 'accepted', 'rejected']) {
     assert.match(sessionWorkspaceSource, new RegExp(`${status}: 'session\\.status`));
   }
-  assert.doesNotMatch(sessionWorkspaceSource, /return labels\[normalized\] \? t\(labels\[normalized\]\) : status/);
+  assert.doesNotMatch(
+    sessionWorkspaceSource,
+    /return labels\[normalized\] \? t\(labels\[normalized\]\) : status/,
+  );
   assert.match(sessionWorkspaceSource, /status === 'accepted'[\s\S]*return 'green'/);
-  assert.match(sessionWorkspaceSource, /status === 'awaiting_leader_adjudication'[\s\S]*return 'amber'/);
+  assert.match(
+    sessionWorkspaceSource,
+    /status === 'awaiting_leader_adjudication'[\s\S]*return 'amber'/,
+  );
   assert.match(sessionWorkspaceSource, /status === 'rejected'[\s\S]*return 'red'/);
 });
 
@@ -675,10 +726,7 @@ test('session activity separates authoritative live state from recorded agent re
   assert.match(chatPanelSource, /session\.agentReportedEvidence/);
   assert.match(chatPanelSource, /session\.structuredEvidenceCount/);
   assert.doesNotMatch(chatPanelSource, /activitySummary\.evidence \|\| activityEvidence/);
-  assert.match(
-    sessionWorkspaceSource,
-    /sessionLiveIndicator\(viewModel\.status, liveConnected\)/,
-  );
+  assert.match(sessionWorkspaceSource, /sessionLiveIndicator\(viewModel\.status, liveConnected\)/);
   assert.doesNotMatch(
     sessionWorkspaceSource,
     /liveConnected \? t\('session\.liveConnected'\) : t\('session\.liveReconnecting'\)/,
@@ -693,7 +741,10 @@ test('timeline loaders reject deferred responses after request or scope authorit
 
   assert.match(timelineLoader, /sessionTimelineRequestIsCurrent/);
   assert.match(timelineLoader, /scopeEpoch: configScopeEpochRef\.current/);
-  assert.match(appSource, /timelineRequestRef\.current \+= 1;[\s\S]*setConversationTimeline\(emptyConversationTimeline\)/);
+  assert.match(
+    appSource,
+    /timelineRequestRef\.current \+= 1;[\s\S]*setConversationTimeline\(emptyConversationTimeline\)/,
+  );
 });
 
 test('desktop styles remove standalone workspace drawer and pull-request chrome', () => {
@@ -754,10 +805,7 @@ test('profile menu dismisses on outside interaction and Escape with focus restor
 });
 
 test('selected conversations are declarative socket state across workspace reconnects', () => {
-  assert.match(
-    appSource,
-    /useAgentSocket\([\s\S]*?scopedConversation\?\.id \?\? null[\s\S]*?\)/,
-  );
+  assert.match(appSource, /useAgentSocket\([\s\S]*?scopedConversation\?\.id \?\? null[\s\S]*?\)/);
   assert.doesNotMatch(appSource, /socket\.subscribeConversation\(/);
 });
 

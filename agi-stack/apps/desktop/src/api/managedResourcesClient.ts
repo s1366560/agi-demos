@@ -1,5 +1,6 @@
 import { parseDocument } from 'yaml';
 
+import { desktopApiFetch } from './cloudRequestBroker';
 import type {
   DesktopRuntimeConfig,
   ManagedAgentDefinition,
@@ -630,7 +631,7 @@ export class ManagedResourcesClient {
     const body =
       formDataBody ??
       (options.body === undefined ? undefined : JSON.stringify(options.body));
-    const response = await fetch(absoluteUrl(this.config.apiBaseUrl, path), {
+    const response = await desktopApiFetch(this.config, path, {
       method: options.method ?? 'GET',
       headers,
       body,
@@ -801,11 +802,6 @@ function requireValue(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`Missing ${label}`);
   return trimmed;
-}
-
-function absoluteUrl(baseUrl: string, path: string): string {
-  const base = baseUrl.trim().replace(/\/+$/, '');
-  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

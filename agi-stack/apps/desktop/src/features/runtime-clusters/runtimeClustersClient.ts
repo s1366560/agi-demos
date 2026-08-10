@@ -4,6 +4,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   RuntimeClusterHealth,
@@ -15,6 +16,7 @@ import type {
 } from './runtimeClustersTypes';
 
 type Fetch = typeof globalThis.fetch;
+type FetchPath = (path: string, init: RequestInit) => Promise<Response>;
 
 export type RuntimeClustersClientDependencies = Readonly<{
   fetch?: Fetch;
@@ -35,7 +37,9 @@ export function createRuntimeClustersClient(
   dependencies: RuntimeClustersClientDependencies = {},
 ): RuntimeClustersClient {
   const runtimeConfig = Object.freeze({ ...config });
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const fetchPath: FetchPath = dependencies.fetch
+    ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+    : (path, init) => desktopApiFetch(runtimeConfig, path, init);
   return Object.freeze({
     async list(scope, query = {}, options) {
       requireCloudScope(runtimeConfig, scope);
@@ -47,7 +51,7 @@ export function createRuntimeClustersClient(
       const payload = await requestJson(
         runtimeConfig,
         `/api/v1/clusters/?${params.toString()}`,
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parsePage(payload, scope);
@@ -57,7 +61,7 @@ export function createRuntimeClustersClient(
       const payload = await requestJson(
         runtimeConfig,
         `/api/v1/clusters/${encodeURIComponent(identifier(clusterId))}/health`,
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parseHealth(payload);
@@ -87,7 +91,7 @@ function requireCloudScope(
 async function requestJson(
   config: DesktopRuntimeConfig,
   path: string,
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   signal?: AbortSignal,
 ): Promise<unknown> {
   const headers = new Headers({ Accept: 'application/json' });
@@ -95,7 +99,7 @@ async function requestJson(
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await fetchPath(path, {
     method: 'GET',
     headers,
     signal,

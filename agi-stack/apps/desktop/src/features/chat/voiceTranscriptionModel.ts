@@ -1,4 +1,5 @@
 import type { DesktopRuntimeConfig } from '../../types';
+import { desktopCloudSocketTransport } from '../../api/cloudSocketBridge';
 
 export type VoiceTranscriptionAvailability =
   | 'available'
@@ -11,7 +12,14 @@ export type VoiceTranscriptionConnection =
       availability: 'available';
       scopeKey: string;
       url: string;
+      transport: 'electron' | 'web';
       protocols: string[];
+      scope: Readonly<{
+        tenant_id: string;
+        project_id: string;
+        workspace_id: string | null;
+        conversation_id: string;
+      }>;
     }
   | {
       availability: Exclude<VoiceTranscriptionAvailability, 'available'>;
@@ -51,8 +59,9 @@ export function resolveVoiceTranscriptionConnection(
   if (!normalizedProjectId || !normalizedConversationId) {
     return { availability: 'conversation_required' };
   }
+  const nativeTransport = desktopCloudSocketTransport();
   const credential = config.apiKey.trim();
-  if (!credential) return { availability: 'authentication_required' };
+  if (!nativeTransport && !credential) return { availability: 'authentication_required' };
 
   const url = new URL('/api/v1/voice/chat', config.apiBaseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -68,7 +77,14 @@ export function resolveVoiceTranscriptionConnection(
       normalizedConversationId,
     ].join('\u0000'),
     url: url.toString(),
-    protocols: ['memstack.auth', credential],
+    transport: nativeTransport ? 'electron' : 'web',
+    protocols: nativeTransport ? [] : ['memstack.auth', credential],
+    scope: {
+      tenant_id: config.tenantId.trim(),
+      project_id: normalizedProjectId,
+      workspace_id: config.workspaceId.trim() || null,
+      conversation_id: normalizedConversationId,
+    },
   };
 }
 

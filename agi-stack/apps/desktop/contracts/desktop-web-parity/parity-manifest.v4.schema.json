@@ -1,0 +1,1036 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MemStack Desktop and Web Native Parity Manifest v4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "references",
+    "source_inventories",
+    "production_entry_integrity",
+    "evidence_run_schema",
+    "capabilities"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./parity-manifest.v4.schema.json"
+    },
+    "schema_version": {
+      "const": "4.0.0"
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_revision",
+        "prototype_revision",
+        "web_revision",
+        "desktop_revision"
+      ],
+      "properties": {
+        "audit_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "prototype_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "web_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "desktop_revision": {
+          "$ref": "#/$defs/gitRevision"
+        }
+      }
+    },
+    "source_inventories": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "web_routes",
+        "local_routes"
+      ],
+      "properties": {
+        "web_routes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "source_revision"
+          ],
+          "properties": {
+            "path": {
+              "const": "./web-route-inventory.v2.json"
+            },
+            "source_revision": {
+              "$ref": "#/$defs/gitRevision"
+            }
+          }
+        },
+        "local_routes": {
+          "const": "../local-route-parity.v1.json"
+        }
+      }
+    },
+    "production_entry_integrity": {
+      "$ref": "#/$defs/productionEntryIntegrity"
+    },
+    "evidence_run_schema": {
+      "const": "./evidence-run.v1.schema.json"
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    }
+  },
+  "$defs": {
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorizationPredicate": {
+      "type": "string",
+      "enum": [
+        "global_admin",
+        "tenant_member",
+        "tenant_admin",
+        "tenant_owner",
+        "project_member",
+        "project_contributor",
+        "project_admin",
+        "project_owner",
+        "workspace_member",
+        "workspace_editor",
+        "workspace_manager",
+        "workspace_owner",
+        "conversation_access",
+        "conversation_owner_or_project_owner",
+        "memory_editor",
+        "memory_admin",
+        "resource_owner",
+        "valid_invitation_token",
+        "pending_device_code",
+        "trusted-renderer-origin",
+        "allowlisted-preload-bridge",
+        "sidecar-control",
+        "vault:use",
+        "signed-production-package",
+        "browser-origin-consent"
+      ]
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disposition",
+        "implementation_status",
+        "availability",
+        "reason_code",
+        "authority",
+        "supporting_authorities",
+        "allowed_actions",
+        "intentional_deviation"
+      ],
+      "properties": {
+        "disposition": {
+          "enum": [
+            "source_authority",
+            "native_equivalent",
+            "native_only",
+            "not_applicable"
+          ]
+        },
+        "implementation_status": {
+          "enum": [
+            "implemented",
+            "partial",
+            "missing",
+            "unavailable",
+            "not_applicable"
+          ]
+        },
+        "availability": {
+          "enum": [
+            "available",
+            "degraded",
+            "unavailable",
+            "not_applicable"
+          ]
+        },
+        "reason_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authority": {
+          "enum": [
+            "web_service",
+            "cloud_service",
+            "sidecar",
+            "electron",
+            "browser_extension",
+            "none"
+          ]
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "intentional_deviation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supporting_authorities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "web_service",
+              "cloud_service",
+              "sidecar",
+              "electron",
+              "browser_extension"
+            ]
+          }
+        }
+      }
+    },
+    "productionEntries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "web",
+        "desktop_cloud",
+        "local_online",
+        "local_offline",
+        "native_only"
+      ],
+      "properties": {
+        "web": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "desktop_cloud": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productionEntry"
+          }
+        },
+        "local_online": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productionEntry"
+          }
+        },
+        "local_offline": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productionEntry"
+          }
+        },
+        "native_only": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productionEntry"
+          }
+        }
+      }
+    },
+    "productionEntryIntegrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hash_algorithm",
+        "verification_scope",
+        "execution_evidence"
+      ],
+      "properties": {
+        "hash_algorithm": {
+          "const": "sha256"
+        },
+        "verification_scope": {
+          "const": "source_content_integrity_only"
+        },
+        "execution_evidence": {
+          "const": false
+        }
+      }
+    },
+    "productionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_type",
+        "path",
+        "sha256",
+        "declaration"
+      ],
+      "properties": {
+        "entry_type": {
+          "enum": [
+            "source",
+            "declaration"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "declaration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(planned|not_applicable):"
+        }
+      }
+    },
+    "apiContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "method",
+        "path",
+        "authority",
+        "authority_role"
+      ],
+      "properties": {
+        "surface": {
+          "enum": [
+            "web",
+            "desktop_cloud",
+            "local_online",
+            "local_offline",
+            "native_only"
+          ]
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "WS",
+            "IPC",
+            "NONE"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "authority": {
+          "enum": [
+            "web_service",
+            "cloud_service",
+            "sidecar",
+            "electron",
+            "browser_extension",
+            "none"
+          ]
+        },
+        "authority_role": {
+          "enum": [
+            "primary",
+            "supporting"
+          ]
+        }
+      }
+    },
+    "permissionRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "actions",
+        "authentication",
+        "authorization",
+        "enforcement",
+        "feature_gate"
+      ],
+      "properties": {
+        "surface": {
+          "enum": [
+            "web",
+            "desktop_cloud",
+            "local_online",
+            "local_offline",
+            "native_only"
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "authentication": {
+          "enum": [
+            "anonymous",
+            "authenticated",
+            "mixed",
+            "native_shell",
+            "none"
+          ]
+        },
+        "authorization": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/authorizationPredicate"
+          }
+        },
+        "enforcement": {
+          "enum": [
+            "enforced",
+            "missing",
+            "planned",
+            "not_applicable"
+          ]
+        },
+        "feature_gate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "routeEntryPermission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authentication",
+        "authorization"
+      ],
+      "properties": {
+        "authentication": {
+          "enum": [
+            "anonymous",
+            "authenticated",
+            "mixed",
+            "native_shell",
+            "none"
+          ]
+        },
+        "authorization": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/authorizationPredicate"
+          }
+        }
+      }
+    },
+    "auditedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_entry",
+        "roles",
+        "sha256"
+      ],
+      "properties": {
+        "source_entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "canonical_navigation_registry",
+              "production_dependency",
+              "production_router",
+              "routed_page"
+            ]
+          }
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "productionDependencyEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_source_entry",
+        "relationship",
+        "to_source_entry"
+      ],
+      "properties": {
+        "from_source_entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "relationship": {
+          "enum": [
+            "dynamic_import",
+            "re_export",
+            "static_import"
+          ]
+        },
+        "to_source_entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "webProductionDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependency_path",
+        "routed_source_entry",
+        "source_entry"
+      ],
+      "properties": {
+        "dependency_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productionDependencyEdge"
+          }
+        },
+        "routed_source_entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "source_entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "judgment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "tool_name",
+        "input",
+        "input_digest",
+        "output",
+        "rationale",
+        "latency_ms",
+        "recorded_at"
+      ],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "tool_name": {
+          "const": "structured_parity_judgment"
+        },
+        "input": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "input_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "web",
+            "desktop_cloud",
+            "local_online",
+            "local_offline",
+            "native_only"
+          ],
+          "properties": {
+            "verdict": {
+              "const": "accepted"
+            },
+            "web": {
+              "$ref": "#/$defs/surfaceSummary"
+            },
+            "desktop_cloud": {
+              "$ref": "#/$defs/surfaceSummary"
+            },
+            "local_online": {
+              "$ref": "#/$defs/surfaceSummary"
+            },
+            "local_offline": {
+              "$ref": "#/$defs/surfaceSummary"
+            },
+            "native_only": {
+              "$ref": "#/$defs/surfaceSummary"
+            }
+          }
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "latency_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "surfaceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disposition",
+        "implementation_status",
+        "availability",
+        "reason_code",
+        "authority",
+        "supporting_authorities"
+      ],
+      "properties": {
+        "disposition": {
+          "enum": [
+            "source_authority",
+            "native_equivalent",
+            "native_only",
+            "not_applicable"
+          ]
+        },
+        "implementation_status": {
+          "enum": [
+            "implemented",
+            "partial",
+            "missing",
+            "unavailable",
+            "not_applicable"
+          ]
+        },
+        "availability": {
+          "enum": [
+            "available",
+            "degraded",
+            "unavailable",
+            "not_applicable"
+          ]
+        },
+        "reason_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authority": {
+          "enum": [
+            "web_service",
+            "cloud_service",
+            "sidecar",
+            "electron",
+            "browser_extension",
+            "none"
+          ]
+        },
+        "supporting_authorities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "web_service",
+              "cloud_service",
+              "sidecar",
+              "electron",
+              "browser_extension"
+            ]
+          }
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "domain",
+        "scope",
+        "source_revision",
+        "web_route_ids",
+        "web_route_registration_ids",
+        "web_production_dependencies",
+        "audited_web_sources",
+        "production_entries",
+        "api_contracts",
+        "required_permissions",
+        "route_entry_permissions",
+        "permission_requirements",
+        "data_states",
+        "interaction_states",
+        "expected_observable_result",
+        "surfaces",
+        "evidence_requirements",
+        "journeys",
+        "judgment"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "domain": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "global",
+              "tenant",
+              "project",
+              "workspace",
+              "instance"
+            ]
+          }
+        },
+        "source_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "web_route_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "web_route_registration_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "web_production_dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/webProductionDependency"
+          }
+        },
+        "audited_web_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/auditedSource"
+          }
+        },
+        "production_entries": {
+          "$ref": "#/$defs/productionEntries"
+        },
+        "api_contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/apiContract"
+          }
+        },
+        "required_permissions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "route_entry_permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/routeEntryPermission"
+          }
+        },
+        "permission_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/permissionRequirement"
+          }
+        },
+        "data_states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "loading",
+              "empty",
+              "ready",
+              "stale",
+              "conflict",
+              "forbidden",
+              "unavailable",
+              "retry"
+            ]
+          }
+        },
+        "interaction_states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "expected_observable_result": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "surfaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "web",
+            "desktop_cloud",
+            "local_online",
+            "local_offline",
+            "native_only"
+          ],
+          "properties": {
+            "web": {
+              "$ref": "#/$defs/surface"
+            },
+            "desktop_cloud": {
+              "$ref": "#/$defs/surface"
+            },
+            "local_online": {
+              "$ref": "#/$defs/surface"
+            },
+            "local_offline": {
+              "$ref": "#/$defs/surface"
+            },
+            "native_only": {
+              "$ref": "#/$defs/surface"
+            }
+          }
+        },
+        "evidence_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "contract",
+              "web_renderer",
+              "desktop_renderer",
+              "native_electron",
+              "sidecar_authority",
+              "desktop_bundle",
+              "release_pipeline",
+              "browser_extension"
+            ]
+          }
+        },
+        "judgment": {
+          "$ref": "#/$defs/judgment"
+        },
+        "journeys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/journey"
+          }
+        }
+      }
+    },
+    "journeyModePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "web",
+        "desktop_cloud",
+        "local_online",
+        "local_offline",
+        "native_only"
+      ],
+      "properties": {
+        "web": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        },
+        "desktop_cloud": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        },
+        "local_online": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        },
+        "local_offline": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        },
+        "native_only": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        }
+      }
+    },
+    "journeyActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "web",
+        "desktop_cloud",
+        "local_online",
+        "local_offline",
+        "native_only"
+      ],
+      "properties": {
+        "web": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "desktop_cloud": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "local_online": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "local_offline": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "native_only": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "journey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "mode_policy",
+        "actions",
+        "api_contracts",
+        "data_states",
+        "interaction_states",
+        "evidence_requirements",
+        "expected_observable_result"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "mode_policy": {
+          "$ref": "#/$defs/journeyModePolicy"
+        },
+        "actions": {
+          "$ref": "#/$defs/journeyActions"
+        },
+        "api_contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/apiContract"
+          }
+        },
+        "data_states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "loading",
+              "empty",
+              "ready",
+              "stale",
+              "conflict",
+              "forbidden",
+              "unavailable",
+              "retry",
+              "expired",
+              "answered",
+              "rejected"
+            ]
+          }
+        },
+        "interaction_states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "evidence_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "contract",
+              "web_renderer",
+              "desktop_renderer",
+              "native_electron",
+              "sidecar_authority",
+              "desktop_bundle",
+              "release_pipeline",
+              "vault_persistence",
+              "native_file_dialog",
+              "private_control_pipe",
+              "browser_extension"
+            ]
+          }
+        },
+        "expected_observable_result": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

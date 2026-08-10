@@ -40,6 +40,7 @@ test('voice call uses the scoped cloud voice endpoint without leaking credential
     'wss://cloud.memstack.test/api/v1/voice/chat?project_id=project-1&conversation_id=conversation-1',
   );
   assert.deepEqual(resolved.protocols, ['memstack.auth', 'ms_sk_test_credential']);
+  assert.equal(resolved.transport, 'web');
   assert.equal(resolved.url.includes('ms_sk_test_credential'), false);
   assert.equal(resolved.scopeKey.includes('ms_sk_test_credential'), false);
   assert.deepEqual(

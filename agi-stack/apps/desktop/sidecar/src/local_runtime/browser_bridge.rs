@@ -112,7 +112,7 @@ pub struct BrowserBridgeStatus {
 /// with camelCase keys (`schemaVersion`, `wsUrl`, ...) — that casing is part
 /// of the frozen wire contract.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BridgeRegistry {
     pub schema_version: u32,
     pub ws_url: String,
@@ -157,10 +157,33 @@ pub(crate) fn write_registry(path: &FsPath, registry: &BridgeRegistry) -> Result
 }
 
 pub(crate) fn read_registry(path: &FsPath) -> Result<BridgeRegistry, String> {
+    validate_registry_file_permissions(path)?;
     let serialized = std::fs::read_to_string(path)
         .map_err(|error| format!("browser bridge registry is unreadable: {error}"))?;
     serde_json::from_str(&serialized)
         .map_err(|error| format!("browser bridge registry is invalid: {error}"))
+}
+
+/// Reject registry paths whose filesystem shape or Unix mode could expose the
+/// bearer token. Windows ACL validation remains a release-platform blocker;
+/// regular-file and symlink validation is enforced on every platform.
+pub(crate) fn validate_registry_file_permissions(path: &FsPath) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| format!("browser bridge registry metadata is unreadable: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        return Err("browser bridge registry must be a regular file".to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode() & 0o777;
+        if mode & 0o077 != 0 {
+            return Err(format!(
+                "browser bridge registry permissions {mode:o} are broader than 0600"
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Validate the registry fields the broker depends on. Anything off-contract
@@ -183,26 +206,12 @@ pub(crate) fn validate_registry(registry: &BridgeRegistry) -> Result<(), String>
     Ok(())
 }
 
-/// Log a warning when the registry file is readable beyond the owner. The
-/// broker continues — the file was placed by whatever installed the host —
-/// but the exposure is surfaced.
+/// Log the permission failure before [`read_registry`] returns the same
+/// failure to the broker. The registry is never consumed after this warning.
 pub(crate) fn warn_if_registry_permissions_open(path: &FsPath) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = std::fs::metadata(path) {
-            let mode = metadata.permissions().mode() & 0o777;
-            if mode & 0o077 != 0 {
-                tracing::warn!(
-                    path = %path.display(),
-                    mode = %format!("{mode:o}"),
-                    "browser bridge registry permissions are broader than 0600"
-                );
-            }
-        }
+    if let Err(error) = validate_registry_file_permissions(path) {
+        tracing::warn!(path = %path.display(), %error, "browser bridge registry rejected");
     }
-    #[cfg(not(unix))]
-    let _ = path;
 }
 
 /// Constant-time bearer-token comparison.
@@ -604,6 +613,27 @@ mod tests {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     use tokio_tungstenite::tungstenite::Message as ClientMessage;
 
+    struct TestDirectory {
+        path: PathBuf,
+    }
+
+    impl TestDirectory {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "agistack-browser-registry-{label}-{}",
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir_all(&path).expect("create registry test directory");
+            Self { path }
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
     fn sample_registry() -> BridgeRegistry {
         BridgeRegistry {
             schema_version: REGISTRY_SCHEMA_VERSION,
@@ -632,6 +662,16 @@ mod tests {
         let round_trip: BridgeRegistry =
             serde_json::from_value(value).expect("deserialize registry");
         assert_eq!(round_trip, sample_registry());
+    }
+
+    #[test]
+    fn registry_rejects_unknown_fields() {
+        let mut value = serde_json::to_value(sample_registry()).expect("serialize registry");
+        value
+            .as_object_mut()
+            .expect("registry object")
+            .insert("unexpected".to_string(), json!(true));
+        assert!(serde_json::from_value::<BridgeRegistry>(value).is_err());
     }
 
     #[test]
@@ -664,19 +704,55 @@ mod tests {
     #[test]
     fn registry_write_enforces_private_permissions() {
         use std::os::unix::fs::PermissionsExt;
-        let root = std::env::temp_dir().join(format!(
-            "agistack-bridge-registry-test-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let path = root.join("registry.json");
+        let root = TestDirectory::new("private");
+        let path = root.path.join("registry.json");
         write_registry(&path, &sample_registry()).expect("write registry");
         let file_mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        let dir_mode = std::fs::metadata(&root).unwrap().permissions().mode() & 0o777;
+        let dir_mode = std::fs::metadata(&root.path).unwrap().permissions().mode() & 0o777;
         assert_eq!(file_mode, 0o600);
         assert_eq!(dir_mode, 0o700);
         let loaded = read_registry(&path).expect("read registry back");
         assert_eq!(loaded, sample_registry());
-        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn registry_read_rejects_group_or_world_permissions_without_leaking_the_token() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = TestDirectory::new("open-mode");
+        let path = root.path.join("registry.json");
+        let token = sample_registry().token;
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&sample_registry()).expect("serialize registry"),
+        )
+        .expect("write registry fixture");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .expect("set broad permissions");
+
+        let error = read_registry(&path).expect_err("0644 registry must fail closed");
+        assert!(error.contains("permissions"));
+        assert!(!error.contains(&token));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn registry_read_rejects_a_symlink() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let root = TestDirectory::new("symlink");
+        let target = root.path.join("target.json");
+        std::fs::write(
+            &target,
+            serde_json::to_vec(&sample_registry()).expect("serialize registry"),
+        )
+        .expect("write registry target");
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))
+            .expect("set target permissions");
+        let path = root.path.join("registry.json");
+        symlink(&target, &path).expect("create registry symlink");
+
+        let error = read_registry(&path).expect_err("symlink registry must fail closed");
+        assert!(error.contains("regular file"));
     }
 
     #[test]

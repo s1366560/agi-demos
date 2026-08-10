@@ -2,6 +2,10 @@ import {
   absoluteUrl,
   desktopApiCredential,
 } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   isTenantCreationPlan,
@@ -53,25 +57,26 @@ export function createTenantCreationClient(
         throw new TenantCreationError(validation.reasonCode);
       }
       const credential = desktopApiCredential(runtimeConfig);
-      if (!credential) {
+      if (!desktopApiAuthenticationAvailable(runtimeConfig)) {
         throw new TenantCreationError(
           'tenant_creation_authentication_required',
           401,
         );
       }
-      const response = await fetchImpl(
-        absoluteUrl(runtimeConfig.apiBaseUrl, '/api/v1/tenants/'),
-        {
+      const headers = new Headers({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      });
+      if (credential) headers.set('Authorization', `Bearer ${credential}`);
+      const init = {
           method: 'POST',
-          headers: new Headers({
-            Accept: 'application/json',
-            Authorization: `Bearer ${credential}`,
-            'Content-Type': 'application/json',
-          }),
+          headers,
           signal: options?.signal,
           body: JSON.stringify(validation.value),
-        },
-      );
+        } satisfies RequestInit;
+      const response = dependencies.fetch
+        ? await fetchImpl(absoluteUrl(runtimeConfig.apiBaseUrl, '/api/v1/tenants/'), init)
+        : await desktopApiFetch(runtimeConfig, '/api/v1/tenants/', init);
       const contentType = response.headers.get('content-type') ?? '';
       const payload = contentType.toLowerCase().includes('application/json')
         ? await response.json().catch(() => null)

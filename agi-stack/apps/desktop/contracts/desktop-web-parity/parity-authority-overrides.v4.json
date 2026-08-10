@@ -1,0 +1,95 @@
+{
+  "schema_version": "4.0.0",
+  "contracts": [
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://dialog/open-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "desktop_cloud",
+      "method": "IPC",
+      "path": "electron://dialog/save-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "electron://dialog/open-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "electron://dialog/save-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "local_offline",
+      "method": "IPC",
+      "path": "electron://dialog/open-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "content-and-export",
+      "surface": "local_offline",
+      "method": "IPC",
+      "path": "electron://dialog/save-file",
+      "authority": "electron",
+      "authority_role": "supporting"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "local-runtime",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "sidecar://local-runtime/terminal",
+      "authority": "sidecar",
+      "authority_role": "primary"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "local-runtime",
+      "surface": "local_online",
+      "method": "IPC",
+      "path": "sidecar://local-runtime/desktop",
+      "authority": "sidecar",
+      "authority_role": "primary"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "local-runtime",
+      "surface": "local_offline",
+      "method": "IPC",
+      "path": "sidecar://local-runtime/terminal",
+      "authority": "sidecar",
+      "authority_role": "primary"
+    },
+    {
+      "capability_id": "agent-workspace-tenant-agent-workspace",
+      "journey_id": "local-runtime",
+      "surface": "local_offline",
+      "method": "IPC",
+      "path": "sidecar://local-runtime/desktop",
+      "authority": "sidecar",
+      "authority_role": "primary"
+    }
+  ]
+}

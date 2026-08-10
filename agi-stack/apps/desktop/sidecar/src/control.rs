@@ -21,6 +21,7 @@ use crate::{
     data_migration::migrate_legacy_data,
     local_runtime::{browser_bridge, LocalRuntimeConfig, LocalRuntimeService},
     native_host,
+    oauth_pending_attempt::{OAuthPendingAttemptBroker, OAuthPendingAttemptRecord},
     trusted_session::{
         deserialize_local_record, serialize_local_record, TrustedSessionBroker,
         TrustedSessionRecord,
@@ -87,6 +88,7 @@ struct ControlResponse {
 
 struct ControlState {
     runtime: LocalRuntimeService,
+    oauth_pending_attempts: OAuthPendingAttemptBroker,
     trusted_sessions: TrustedSessionBroker,
 }
 
@@ -115,6 +117,7 @@ pub(crate) async fn run() -> Result<(), String> {
         credential_vault.clone(),
     )
     .await?;
+    let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
     let status = runtime.status();
     let ready = ready_response(
@@ -128,6 +131,7 @@ pub(crate) async fn run() -> Result<(), String> {
 
     let state = ControlState {
         runtime,
+        oauth_pending_attempts,
         trusted_sessions,
     };
     while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
@@ -264,6 +268,28 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 .map_err(|error| error.to_string())
                 .map(|()| Value::Null)
         }
+        "oauth_pending_attempt_save" => {
+            let broker = state.oauth_pending_attempts.clone();
+            parse_arg::<OAuthPendingAttemptRecord>(request.args.as_ref(), "input").and_then(
+                |record| {
+                    task::block_in_place(|| broker.save(record))
+                        .map_err(|error| error.to_string())
+                        .map(|()| Value::Null)
+                },
+            )
+        }
+        "oauth_pending_attempt_load" => {
+            let broker = state.oauth_pending_attempts.clone();
+            task::block_in_place(|| broker.load())
+                .map_err(|error| error.to_string())
+                .and_then(|record| serde_json::to_value(record).map_err(|error| error.to_string()))
+        }
+        "oauth_pending_attempt_clear" => {
+            let broker = state.oauth_pending_attempts.clone();
+            task::block_in_place(|| broker.clear())
+                .map_err(|error| error.to_string())
+                .map(|()| Value::Null)
+        }
         "local_trusted_session_save" => {
             parse_arg::<TrustedSessionRecord>(request.args.as_ref(), "input")
                 .and_then(|record| {
@@ -304,10 +330,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                     .and_then(|object| object.get("params"))
                     .cloned()
                     .unwrap_or(Value::Null);
-                state
-                    .runtime
-                    .browser_bridge_dev_call(&method, params)
-                    .await
+                state.runtime.browser_bridge_dev_call(&method, params).await
             }
             Err(error) => Err(error),
         },

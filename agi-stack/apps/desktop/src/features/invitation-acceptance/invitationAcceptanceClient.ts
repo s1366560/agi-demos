@@ -1,4 +1,8 @@
 import { absoluteUrl, desktopApiCredential } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   AcceptedInvitation,
@@ -81,25 +85,27 @@ export function createInvitationAcceptanceClient(
         throw new InvitationAcceptanceError('invitation_token_invalid');
       }
       const credential = desktopApiCredential(runtimeConfig);
-      if (!credential) {
+      if (!desktopApiAuthenticationAvailable(runtimeConfig)) {
         throw new InvitationAcceptanceError(
           'invitation_acceptance_authentication_required',
           401,
         );
       }
-      const response = await fetchImpl(
-        invitationUrl(runtimeConfig.apiBaseUrl, 'accept', token),
-        {
+      const headers = new Headers({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      });
+      if (credential) headers.set('Authorization', `Bearer ${credential}`);
+      const path = invitationPath('accept', token);
+      const init = {
           method: 'POST',
-          headers: new Headers({
-            Accept: 'application/json',
-            Authorization: `Bearer ${credential}`,
-            'Content-Type': 'application/json',
-          }),
+          headers,
           signal: options?.signal,
           body: '{}',
-        },
-      );
+        } satisfies RequestInit;
+      const response = dependencies.fetch
+        ? await dependencies.fetch(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+        : await desktopApiFetch(runtimeConfig, path, init);
       const payload = await jsonPayload(response);
       if (!response.ok) {
         throw new InvitationAcceptanceError(
@@ -123,10 +129,11 @@ function invitationUrl(
   action: 'verify' | 'accept',
   token: string,
 ): string {
-  return absoluteUrl(
-    apiBaseUrl,
-    `/api/v1/invitations/${action}/${encodeURIComponent(token)}`,
-  );
+  return absoluteUrl(apiBaseUrl, invitationPath(action, token));
+}
+
+function invitationPath(action: 'verify' | 'accept', token: string): string {
+  return `/api/v1/invitations/${action}/${encodeURIComponent(token)}`;
 }
 
 async function jsonPayload(response: Response): Promise<unknown> {

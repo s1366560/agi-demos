@@ -69,23 +69,6 @@ export function decodeNativeTrustedSession(value: unknown): NativeTrustedSession
   };
 }
 
-export async function loadNativeTrustedSession(): Promise<NativeTrustedSession | null> {
-  const invoke = requireDesktopInvoke();
-  const value = await invoke('trusted_session_load');
-  if (value === null || value === undefined) return null;
-  const session = decodeNativeTrustedSession(value);
-  if (!session) {
-    await clearNativeTrustedSession();
-    throw new Error('The trusted desktop session record is invalid.');
-  }
-  return session;
-}
-
-export async function saveNativeTrustedSession(session: NativeTrustedSession): Promise<void> {
-  const invoke = requireDesktopInvoke();
-  await invoke('trusted_session_save', { input: session });
-}
-
 export async function clearNativeTrustedSession(): Promise<void> {
   const invoke = requireDesktopInvoke();
   await invoke('trusted_session_clear');

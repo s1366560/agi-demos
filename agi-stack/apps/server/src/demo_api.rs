@@ -310,7 +310,7 @@ pub(crate) fn router(state: AppState) -> Router {
     //   * authed — strangled memory/episodes/recall (P1) + tenant reads (P2) —
     //     sits behind the F2 auth middleware, which verifies the `ms_sk_` bearer
     //     against `api_keys` and injects a scoped `Identity`.
-    //   * public — login + oauth stub (P2) — must NOT sit behind the key
+    //   * public — login and device/invitation entrypoints (P2) — must NOT sit behind the key
     //     middleware (you can't present a key before you have one).
     // The legacy `/v1/*` demo surface is disabled by default. It exposes
     // mutation endpoints without the production authentication middleware and

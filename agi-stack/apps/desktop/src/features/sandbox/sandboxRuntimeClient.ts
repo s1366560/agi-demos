@@ -1,3 +1,4 @@
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   createCloudTerminalSession,
@@ -471,17 +472,34 @@ async function requestResponse(
   path: string,
   signal?: AbortSignal,
 ): Promise<Response> {
-  const headers = new Headers({ Accept: 'application/json' });
+  const target = new URL(path, 'https://desktop.invalid');
+  const isDownload = target.pathname.endsWith('/sandbox/files/download');
+  const headers = new Headers({ Accept: isDownload ? '*/*' : 'application/json' });
   const apiKey = config.apiKey.trim();
   if (apiKey) headers.set('Authorization', `Bearer ${apiKey}`);
   const launchCapability = config.mode === 'local' ? config.localApiToken.trim() : '';
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
 
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
-    headers,
-    signal,
-    credentials: 'same-origin',
-  });
+  const response = await desktopApiFetch(
+    config,
+    path,
+    {
+      headers,
+      signal,
+      credentials: 'same-origin',
+    },
+    isDownload
+      ? {
+          responseType: 'binary',
+          maxBytes: requireBoundedInteger(
+            Number(target.searchParams.get('max_bytes')),
+            1,
+            DEFAULT_DOWNLOAD_LIMIT,
+            'max_bytes',
+          ),
+        }
+      : undefined,
+  );
   if (!response.ok) {
     throw new Error(`sandbox file request failed with HTTP ${response.status}`);
   }
@@ -745,8 +763,4 @@ function isMimeType(input: unknown): input is string {
 
 function isRevision(input: unknown): input is string {
   return typeof input === 'string' && input.length > 0 && input.length <= 256;
-}
-
-function absoluteUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.trim().replace(/\/+$/u, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }

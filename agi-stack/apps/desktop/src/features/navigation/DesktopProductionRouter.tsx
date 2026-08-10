@@ -259,6 +259,7 @@ function RouteBoundary({
   return (
     <div
       className="desktop-production-route-boundary"
+      data-reason-code={presentation.reasonCode ?? undefined}
       role={alert ? 'alert' : 'status'}
       aria-busy={
         state.status === 'idle' || state.status === 'loading' ? true : undefined
@@ -281,21 +282,18 @@ function RouteBoundary({
         </code>
       ) : null}
       {presentation.reasonCode ? (
+        <p className="desktop-production-route-reason">
+          {t(boundaryReasonMessageKey(presentation.reasonCode))}
+        </p>
+      ) : null}
+      {state.status === 'forbidden' ? (
         <dl className="desktop-production-route-details">
           <div>
-            <dt>{t('desktopProductionRouter.reasonCode')}</dt>
+            <dt>{t('desktopProductionRouter.missingPermissions')}</dt>
             <dd>
-              <code>{presentation.reasonCode}</code>
+              <code>{state.missingPermissions.join(', ')}</code>
             </dd>
           </div>
-          {state.status === 'forbidden' ? (
-            <div>
-              <dt>{t('desktopProductionRouter.missingPermissions')}</dt>
-              <dd>
-                <code>{state.missingPermissions.join(', ')}</code>
-              </dd>
-            </div>
-          ) : null}
         </dl>
       ) : null}
       {presentation.retryVisible ? (
@@ -311,6 +309,46 @@ function RouteBoundary({
       ) : null}
     </div>
   );
+}
+
+export function boundaryReasonMessageKey(reasonCode: string): string {
+  switch (reasonCode) {
+    case 'desktop_route_local_cloud_only':
+      return 'desktopProductionRouter.reason.cloudRequired';
+    case 'desktop_route_local_blocked_by_web_contract':
+      return 'desktopProductionRouter.reason.webContractBlocked';
+    case 'desktop_route_permission_denied':
+      return 'desktopProductionRouter.reason.permissionDenied';
+    case 'desktop_route_malformed':
+      return 'desktopProductionRouter.reason.routeMalformed';
+    case 'desktop_route_not_found':
+      return 'desktopProductionRouter.reason.routeNotFound';
+    case 'desktop_route_context_invalid':
+    case 'desktop_route_context_missing':
+      return 'desktopProductionRouter.reason.contextUnavailable';
+    case 'desktop_route_capability_missing':
+      return 'desktopProductionRouter.reason.capabilityMissing';
+    case 'desktop_route_capability_scope_mismatch':
+      return 'desktopProductionRouter.reason.scopeMismatch';
+    case 'desktop_route_capability_actions_missing':
+    case 'desktop_route_capability_authority_revision_invalid':
+    case 'desktop_route_capability_authority_source_mismatch':
+    case 'desktop_route_capability_authority_unobserved':
+      return 'desktopProductionRouter.reason.authorityUnavailable';
+    case 'desktop_route_permission_resolution_failed':
+      return 'desktopProductionRouter.reason.permissionResolutionFailed';
+    case 'desktop_route_capability_resolution_failed':
+      return 'desktopProductionRouter.reason.capabilityResolutionFailed';
+    case 'desktop_route_scope_switch_failed':
+      return 'desktopProductionRouter.reason.scopeSwitchFailed';
+    case 'desktop_route_module_load_failed':
+      return 'desktopProductionRouter.reason.moduleLoadFailed';
+    case 'desktop_route_structural_app_binding_missing':
+    case 'desktop_route_structural_loader_missing':
+      return 'desktopProductionRouter.reason.installationIncomplete';
+    default:
+      return 'desktopProductionRouter.reason.authorityUnavailable';
+  }
 }
 
 function boundaryPresentation(

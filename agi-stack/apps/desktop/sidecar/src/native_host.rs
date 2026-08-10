@@ -9,9 +9,11 @@
 //! versa. All logging goes to stderr so stdio stays protocol-clean.
 
 use std::{
+    fs::OpenOptions,
+    io::Write,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
@@ -20,7 +22,7 @@ use std::{
 use agistack_adapters_browser::framing;
 use agistack_adapters_browser::jsonrpc::{self, JsonRpcMessage};
 use futures_util::{SinkExt, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{
     net::TcpStream,
@@ -40,6 +42,8 @@ use crate::local_runtime::browser_bridge::{
 /// Native messaging host name the extension asks Chrome to launch.
 pub(crate) const HOST_NAME: &str = "com.memstack.browserbridge";
 const MANIFEST_FILE_NAME: &str = "com.memstack.browserbridge.json";
+const MANIFEST_DIR_OVERRIDE_ENV: &str = "AGISTACK_BROWSER_BRIDGE_MANIFEST_DIR";
+static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 /// Capped exponential backoff between WebSocket reconnect attempts.
 const BACKOFF_STEPS: [Duration; 4] = [
@@ -269,71 +273,184 @@ impl ManifestTarget {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn manifest_targets() -> Vec<ManifestTarget> {
-    let Ok(home) = browser_bridge::home_dir() else {
-        return Vec::new();
-    };
-    let base = home.join("Library/Application Support");
-    [
-        ("Google Chrome", base.join("Google/Chrome")),
-        ("Chromium", base.join("Chromium")),
-        ("Microsoft Edge", base.join("Microsoft Edge")),
-        ("Brave", base.join("BraveSoftware/Brave-Browser")),
-    ]
-    .into_iter()
-    .map(|(browser, profile_dir)| ManifestTarget {
-        browser,
-        hosts_dir: profile_dir.join("NativeMessagingHosts"),
-    })
-    .collect()
-}
-
-#[cfg(target_os = "linux")]
-fn manifest_targets() -> Vec<ManifestTarget> {
-    let Ok(home) = browser_bridge::home_dir() else {
-        return Vec::new();
-    };
-    let base = home.join(".config");
-    [
-        ("Google Chrome", base.join("google-chrome")),
-        ("Chromium", base.join("chromium")),
-        ("Microsoft Edge", base.join("microsoft-edge")),
-        ("Brave", base.join("BraveSoftware/Brave-Browser")),
-    ]
-    .into_iter()
-    .map(|(browser, profile_dir)| ManifestTarget {
-        browser,
-        hosts_dir: profile_dir.join("NativeMessagingHosts"),
-    })
-    .collect()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn manifest_targets() -> Vec<ManifestTarget> {
-    Vec::new()
-}
+#[path = "native_host/targets.rs"]
+mod targets;
+use targets::manifest_targets;
+#[cfg(test)]
+use targets::manifest_targets_from_override;
 
 // Chrome's manifest format itself is snake_case (`allowed_origins`); only the
 // sidecar↔Electron result payloads are camelCase.
-#[derive(Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct NativeMessagingManifest {
-    name: &'static str,
-    description: &'static str,
+    name: String,
+    description: String,
     path: PathBuf,
     #[serde(rename = "type")]
-    manifest_type: &'static str,
+    manifest_type: String,
     allowed_origins: Vec<String>,
 }
 
 fn manifest(host_path: &Path) -> NativeMessagingManifest {
     NativeMessagingManifest {
-        name: HOST_NAME,
-        description: "MemStack browser bridge native messaging host",
+        name: HOST_NAME.to_string(),
+        description: "MemStack browser bridge native messaging host".to_string(),
         path: host_path.to_path_buf(),
-        manifest_type: "stdio",
+        manifest_type: "stdio".to_string(),
         allowed_origins: vec![format!("chrome-extension://{DEFAULT_EXTENSION_ID}/")],
     }
+}
+
+impl NativeMessagingManifest {
+    fn is_owned(&self) -> bool {
+        self.name == HOST_NAME
+            && self.description == "MemStack browser bridge native messaging host"
+            && self.manifest_type == "stdio"
+            && self.allowed_origins == vec![format!("chrome-extension://{DEFAULT_EXTENSION_ID}/")]
+            && self.path.is_absolute()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ManifestState {
+    Missing,
+    Valid,
+    OwnedStale,
+    Collision,
+    Invalid,
+}
+
+struct ManifestInspection {
+    state: ManifestState,
+    original: Option<Vec<u8>>,
+    error: Option<String>,
+}
+
+fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> ManifestInspection {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return ManifestInspection {
+                state: ManifestState::Missing,
+                original: None,
+                error: None,
+            };
+        }
+        Err(error) => {
+            return ManifestInspection {
+                state: ManifestState::Invalid,
+                original: None,
+                error: Some(format!("manifest metadata is unreadable: {error}")),
+            };
+        }
+    };
+    if !metadata.file_type().is_file() {
+        return ManifestInspection {
+            state: ManifestState::Invalid,
+            original: None,
+            error: Some("manifest is not a regular file".to_string()),
+        };
+    }
+    let original = match std::fs::read(path) {
+        Ok(original) => original,
+        Err(error) => {
+            return ManifestInspection {
+                state: ManifestState::Invalid,
+                original: None,
+                error: Some(format!("manifest is unreadable: {error}")),
+            };
+        }
+    };
+    let parsed = match serde_json::from_slice::<NativeMessagingManifest>(&original) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            return ManifestInspection {
+                state: ManifestState::Invalid,
+                original: Some(original),
+                error: Some(format!("manifest JSON is invalid: {error}")),
+            };
+        }
+    };
+    let state = if parsed == *expected {
+        ManifestState::Valid
+    } else if parsed.is_owned() {
+        ManifestState::OwnedStale
+    } else {
+        ManifestState::Collision
+    };
+    ManifestInspection {
+        state,
+        original: Some(original),
+        error: None,
+    }
+}
+
+fn unique_temp_path(directory: &Path, purpose: &str) -> PathBuf {
+    let sequence = TEMP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    directory.join(format!(
+        ".{MANIFEST_FILE_NAME}.{}.{sequence}.{purpose}.tmp",
+        std::process::id()
+    ))
+}
+
+fn stage_bytes(directory: &Path, bytes: &[u8], purpose: &str) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    for _ in 0..100 {
+        let path = unique_temp_path(directory, purpose);
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(bytes).map_err(|error| error.to_string())?;
+                file.sync_all().map_err(|error| error.to_string())?;
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("could not allocate a unique manifest staging file".to_string())
+}
+
+fn restore_manifest(path: &Path, original: Option<&[u8]>) -> Result<(), String> {
+    match original {
+        Some(bytes) => {
+            let directory = path
+                .parent()
+                .ok_or_else(|| "manifest path has no parent directory".to_string())?;
+            let staged = stage_bytes(directory, bytes, "rollback")?;
+            std::fs::rename(&staged, path).map_err(|error| error.to_string())
+        }
+        None => match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.to_string()),
+        },
+    }
+}
+
+struct InstallPlan {
+    target: ManifestTarget,
+    original: Option<Vec<u8>>,
+    staged: PathBuf,
+}
+
+fn rollback_install(plans: &[InstallPlan], committed: usize) -> Vec<String> {
+    let mut errors = Vec::new();
+    for plan in plans[..committed].iter().rev() {
+        if let Err(error) = restore_manifest(&plan.target.manifest_path(), plan.original.as_deref())
+        {
+            errors.push(format!("{}: {error}", plan.target.browser));
+        }
+    }
+    for plan in plans {
+        if let Err(error) = std::fs::remove_file(&plan.staged) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                errors.push(format!("{} staging cleanup: {error}", plan.target.browser));
+            }
+        }
+    }
+    errors
 }
 
 /// One installed manifest, reported by `browser_bridge_install`.
@@ -366,6 +483,9 @@ pub(crate) struct ManifestStatus {
     pub browser: String,
     pub path: PathBuf,
     pub present: bool,
+    pub state: ManifestState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Write the native-messaging manifest into every detected browser. Windows
@@ -376,25 +496,111 @@ pub(crate) fn install_manifests() -> Result<InstallResult, String> {
     }
     let host_path = std::env::current_exe().map_err(|error| error.to_string())?;
     let host_path = host_path.canonicalize().unwrap_or(host_path);
-    let manifest = manifest(&host_path);
-    let serialized = serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?;
+    let targets = manifest_targets()?;
+    let mut commit = |source: &Path, destination: &Path| std::fs::rename(source, destination);
+    install_manifests_for_targets(&host_path, targets, &mut commit)
+}
 
+fn install_manifests_for_targets<F>(
+    host_path: &Path,
+    targets: Vec<ManifestTarget>,
+    commit: &mut F,
+) -> Result<InstallResult, String>
+where
+    F: FnMut(&Path, &Path) -> std::io::Result<()>,
+{
+    if !host_path.is_absolute() {
+        return Err("native messaging host path must be absolute".to_string());
+    }
+    let expected = manifest(host_path);
+    let serialized = serde_json::to_vec_pretty(&expected).map_err(|error| error.to_string())?;
     let mut installed = Vec::new();
     let mut skipped = Vec::new();
-    for target in manifest_targets() {
+    let mut pending = Vec::new();
+    for target in targets {
         let Some(profile_dir) = target.hosts_dir.parent() else {
-            continue;
+            return Err(format!(
+                "native messaging target {} has no profile directory",
+                target.browser
+            ));
         };
         if !profile_dir.is_dir() {
             skipped.push(target.browser.to_string());
             continue;
         }
-        std::fs::create_dir_all(&target.hosts_dir).map_err(|error| error.to_string())?;
         let path = target.manifest_path();
-        std::fs::write(&path, &serialized).map_err(|error| error.to_string())?;
+        let inspection = inspect_manifest(&path, &expected);
+        match inspection.state {
+            ManifestState::Valid => installed.push(InstalledManifest {
+                browser: target.browser.to_string(),
+                manifest_path: path,
+            }),
+            ManifestState::Missing | ManifestState::OwnedStale => {
+                pending.push((target, inspection.original));
+            }
+            ManifestState::Collision => {
+                return Err(format!(
+                    "native messaging manifest collision for {} at {}",
+                    target.browser,
+                    path.display()
+                ));
+            }
+            ManifestState::Invalid => {
+                return Err(format!(
+                    "native messaging manifest for {} is invalid: {}",
+                    target.browser,
+                    inspection
+                        .error
+                        .as_deref()
+                        .unwrap_or("unknown validation failure")
+                ));
+            }
+        }
+    }
+
+    let mut plans = Vec::new();
+    for (target, original) in pending {
+        let staged = match stage_bytes(&target.hosts_dir, &serialized, "install") {
+            Ok(staged) => staged,
+            Err(error) => {
+                let cleanup_errors = rollback_install(&plans, 0);
+                let cleanup = if cleanup_errors.is_empty() {
+                    String::new()
+                } else {
+                    format!("; cleanup failed: {}", cleanup_errors.join("; "))
+                };
+                return Err(format!(
+                    "failed to stage native messaging manifest for {}: {error}{cleanup}",
+                    target.browser
+                ));
+            }
+        };
+        plans.push(InstallPlan {
+            target,
+            original,
+            staged,
+        });
+    }
+
+    let mut committed = 0usize;
+    for plan in &plans {
+        let destination = plan.target.manifest_path();
+        if let Err(error) = commit(&plan.staged, &destination) {
+            let rollback_errors = rollback_install(&plans, committed);
+            let rollback = if rollback_errors.is_empty() {
+                String::new()
+            } else {
+                format!("; rollback failed: {}", rollback_errors.join("; "))
+            };
+            return Err(format!(
+                "failed to commit native messaging manifest for {}: {error}{rollback}",
+                plan.target.browser
+            ));
+        }
+        committed += 1;
         installed.push(InstalledManifest {
-            browser: target.browser.to_string(),
-            manifest_path: path,
+            browser: plan.target.browser.to_string(),
+            manifest_path: destination,
         });
     }
     Ok(InstallResult { installed, skipped })
@@ -405,71 +611,152 @@ pub(crate) fn uninstall_manifests() -> Result<UninstallResult, String> {
     if cfg!(windows) {
         return Err("windows native messaging registration is not supported in M1".to_string());
     }
-    let mut removed = Vec::new();
-    for target in manifest_targets() {
-        let path = target.manifest_path();
-        match std::fs::remove_file(&path) {
-            Ok(()) => removed.push(path.to_string_lossy().into_owned()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.to_string()),
+    uninstall_manifests_for_targets(manifest_targets()?)
+}
+
+struct UninstallPlan {
+    target: ManifestTarget,
+    original: Vec<u8>,
+    quarantine: PathBuf,
+}
+
+fn rollback_uninstall(plans: &[UninstallPlan]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for plan in plans {
+        let path = plan.target.manifest_path();
+        if let Err(error) = restore_manifest(&path, Some(&plan.original)) {
+            errors.push(format!("{}: {error}", plan.target.browser));
         }
+        if let Err(error) = std::fs::remove_file(&plan.quarantine) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                errors.push(format!(
+                    "{} quarantine cleanup: {error}",
+                    plan.target.browser
+                ));
+            }
+        }
+    }
+    errors
+}
+
+fn uninstall_manifests_for_targets(
+    targets: Vec<ManifestTarget>,
+) -> Result<UninstallResult, String> {
+    let ownership_contract = manifest(Path::new("/owned/current-sidecar"));
+    let mut owned = Vec::new();
+    for target in targets {
+        let path = target.manifest_path();
+        let inspection = inspect_manifest(&path, &ownership_contract);
+        match inspection.state {
+            ManifestState::Missing => {}
+            ManifestState::Valid | ManifestState::OwnedStale => {
+                let original = inspection.original.ok_or_else(|| {
+                    format!("owned manifest for {} could not be read", target.browser)
+                })?;
+                owned.push((target, original));
+            }
+            ManifestState::Collision => {
+                return Err(format!(
+                    "native messaging manifest collision for {} at {}",
+                    target.browser,
+                    path.display()
+                ));
+            }
+            ManifestState::Invalid => {
+                return Err(format!(
+                    "native messaging manifest for {} is invalid: {}",
+                    target.browser,
+                    inspection
+                        .error
+                        .as_deref()
+                        .unwrap_or("unknown validation failure")
+                ));
+            }
+        }
+    }
+
+    let mut plans: Vec<UninstallPlan> = Vec::new();
+    for (target, original) in owned {
+        let path = target.manifest_path();
+        let quarantine = unique_temp_path(&target.hosts_dir, "uninstall");
+        if let Err(error) = std::fs::rename(&path, &quarantine) {
+            let rollback_errors = rollback_uninstall(&plans);
+            let rollback = if rollback_errors.is_empty() {
+                String::new()
+            } else {
+                format!("; rollback failed: {}", rollback_errors.join("; "))
+            };
+            return Err(format!(
+                "failed to quarantine native messaging manifest for {}: {error}{rollback}",
+                target.browser
+            ));
+        }
+        plans.push(UninstallPlan {
+            target,
+            original,
+            quarantine,
+        });
+    }
+
+    let mut removed = Vec::new();
+    for plan in &plans {
+        if let Err(error) = std::fs::remove_file(&plan.quarantine) {
+            let rollback_errors = rollback_uninstall(&plans);
+            let rollback = if rollback_errors.is_empty() {
+                String::new()
+            } else {
+                format!("; rollback failed: {}", rollback_errors.join("; "))
+            };
+            return Err(format!(
+                "failed to remove native messaging manifest for {}: {error}{rollback}",
+                plan.target.browser
+            ));
+        }
+        removed.push(plan.target.manifest_path().to_string_lossy().into_owned());
     }
     Ok(UninstallResult { removed })
 }
 
 /// Probe every known manifest location for `browser_bridge_status`.
 pub(crate) fn manifest_statuses() -> Vec<ManifestStatus> {
-    manifest_targets()
+    let host_path = std::env::current_exe()
+        .map(|path| path.canonicalize().unwrap_or(path))
+        .unwrap_or_default();
+    match manifest_targets() {
+        Ok(targets) => manifest_statuses_for_targets(targets, &host_path),
+        Err(error) => vec![ManifestStatus {
+            browser: "QA Chromium".to_string(),
+            path: std::env::var_os(MANIFEST_DIR_OVERRIDE_ENV)
+                .map(PathBuf::from)
+                .unwrap_or_default(),
+            present: false,
+            state: ManifestState::Invalid,
+            error: Some(error),
+        }],
+    }
+}
+
+fn manifest_statuses_for_targets(
+    targets: Vec<ManifestTarget>,
+    host_path: &Path,
+) -> Vec<ManifestStatus> {
+    let expected = manifest(host_path);
+    targets
         .into_iter()
         .map(|target| {
             let path = target.manifest_path();
+            let inspection = inspect_manifest(&path, &expected);
             ManifestStatus {
                 browser: target.browser.to_string(),
-                present: path.is_file(),
+                present: inspection.state != ManifestState::Missing,
                 path,
+                state: inspection.state,
+                error: inspection.error,
             }
         })
         .collect()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unavailable_response_echoes_the_request_id() {
-        let response = sidecar_unavailable_response(
-            br#"{"jsonrpc":"2.0","id":42,"method":"getTabs","params":{}}"#,
-        )
-        .expect("a request gets an error response");
-        let value: Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(value["id"], 42);
-        assert_eq!(value["error"]["code"], 1);
-        assert_eq!(value["error"]["message"], "sidecar unavailable");
-    }
-
-    #[test]
-    fn notifications_and_garbage_get_no_error_response() {
-        assert!(sidecar_unavailable_response(
-            br#"{"jsonrpc":"2.0","method":"onCDPEvent","params":{}}"#
-        )
-        .is_none());
-        assert!(sidecar_unavailable_response(b"not json").is_none());
-    }
-
-    #[test]
-    fn manifest_matches_the_frozen_contract() {
-        let value = serde_json::to_value(manifest(Path::new("/opt/memstack/sidecar"))).unwrap();
-        assert_eq!(value["name"], HOST_NAME);
-        assert_eq!(
-            value["description"],
-            "MemStack browser bridge native messaging host"
-        );
-        assert_eq!(value["path"], "/opt/memstack/sidecar");
-        assert_eq!(value["type"], "stdio");
-        assert_eq!(
-            value["allowed_origins"],
-            json!([format!("chrome-extension://{DEFAULT_EXTENSION_ID}/")])
-        );
-    }
-}
+#[path = "native_host/manifest_tests.rs"]
+mod tests;

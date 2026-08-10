@@ -109,9 +109,10 @@ desktop-route-inventory: desktop-web-deps ## 桌面:验证 Web 生产路由与 p
 	cd ../web && node --test scripts/web-route-inventory.test.mjs
 	cd ../web && node scripts/web-route-inventory.mjs
 
-desktop-parity-contract: desktop-deps ## 桌面:验证 capability definitions、Agent judgments 与 manifest v2/v3 无漂移
+desktop-parity-contract: desktop-deps ## 桌面:验证 capability definitions、Agent judgments 与 manifest v2/v3/v4 无漂移
 	cd $(DESKTOP_APP_DIR) && node contracts/desktop-web-parity/generate-parity-manifest-v2.mjs --check
 	cd $(DESKTOP_APP_DIR) && node contracts/desktop-web-parity/generate-parity-manifest-v3.mjs --check
+	cd $(DESKTOP_APP_DIR) && node contracts/desktop-web-parity/generate-parity-manifest-v4.mjs --check
 
 desktop-paired-browser-qa: desktop-deps desktop-web-deps ## 桌面:成对验证 Web 与 Desktop production renderer 并保留成功证据
 	cd $(DESKTOP_APP_DIR) && AGISTACK_PAIRED_SOURCE_REVISION=$$(git rev-parse HEAD) $(PNPM) run qa:paired-production

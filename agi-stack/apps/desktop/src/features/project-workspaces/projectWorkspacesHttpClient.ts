@@ -1,9 +1,12 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   ProjectWorkspaceAgentBinding,
@@ -224,7 +227,7 @@ function requireCloudAction(
 }
 
 function requireRuntimeCredentials(config: DesktopRuntimeConfig): void {
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw contractError('project_workspaces_trusted_session_required');
   }
   if (config.mode === 'local' && !desktopLaunchCapability(config)) {
@@ -275,7 +278,7 @@ async function requestJson(
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),

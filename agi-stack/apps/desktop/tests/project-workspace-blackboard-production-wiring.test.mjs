@@ -4,8 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const compiledNavigationDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/navigation';
+const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
 mkdirSync(compiledNavigationDirectory, { recursive: true });
 writeFileSync(`${compiledNavigationDirectory}/NativeUnavailableRoute.css`, '');
 require.extensions['.css'] = () => {};
@@ -35,7 +34,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/project-blackboard/projectBlackboardRouteModule.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const registrySource = readFileSync(new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
@@ -51,11 +53,7 @@ const cloudConfig = Object.freeze({
 
 test('production catalog structurally implements both project routes with project-member permission', async () => {
   assert.ok(DESKTOP_CAPABILITY_NAMES.includes('project-project-workspaces'));
-  assert.ok(
-    DESKTOP_CAPABILITY_NAMES.includes(
-      'project-blackboard-dynamic-project-blackboard',
-    ),
-  );
+  assert.ok(DESKTOP_CAPABILITY_NAMES.includes('project-blackboard-dynamic-project-blackboard'));
   assert.ok(DESKTOP_IMPLEMENTED_ROUTE_IDS.includes(PROJECT_WORKSPACES_ROUTE_ID));
   assert.ok(DESKTOP_IMPLEMENTED_ROUTE_IDS.includes(PROJECT_BLACKBOARD_ROUTE_ID));
 
@@ -68,9 +66,7 @@ test('production catalog structurally implements both project routes with projec
   for (const routeId of [PROJECT_WORKSPACES_ROUTE_ID, PROJECT_BLACKBOARD_ROUTE_ID]) {
     const definition = registry.byId.get(routeId);
     assert.ok(definition);
-    assert.deepEqual(definition.requiredPermission, [
-      ['authenticated', 'project_member'],
-    ]);
+    assert.deepEqual(definition.requiredPermission, [['authenticated', 'project_member']]);
     assert.deepEqual(definition.structuralReadiness, { status: 'ready' });
     assert.equal(
       evaluateDesktopRouteAccess({
@@ -85,7 +81,9 @@ test('production catalog structurally implements both project routes with projec
         },
         mode: 'cloud',
         permissions: new Set(['authenticated']),
-        capability: observedCapability('cloud_service', { authority_revision: 1 }),
+        capability: observedCapability('cloud_service', {
+          authority_revision: 1,
+        }),
       }).status,
       'forbidden',
     );
@@ -102,7 +100,9 @@ test('production catalog structurally implements both project routes with projec
         },
         mode: 'cloud',
         permissions: new Set(['authenticated', 'project_member']),
-        capability: observedCapability('cloud_service', { authority_revision: 1 }),
+        capability: observedCapability('cloud_service', {
+          authority_revision: 1,
+        }),
       }).status,
       'allowed',
     );
@@ -110,7 +110,9 @@ test('production catalog structurally implements both project routes with projec
 });
 
 test('Workspaces to Blackboard navigation builds and restores the canonical scoped hash', () => {
-  const registry = createDesktopProductionRouteRegistry({ implementedLoaders: {} });
+  const registry = createDesktopProductionRouteRegistry({
+    implementedLoaders: {},
+  });
   const workspaces = registry.byId.get(PROJECT_WORKSPACES_ROUTE_ID);
   assert.ok(workspaces);
   assert.equal(
@@ -183,8 +185,7 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
                 scope,
                 authority: mode,
                 availability: mode === 'cloud' ? 'available' : 'degraded',
-                reasonCode:
-                  mode === 'cloud' ? null : 'local_workspace_lifecycle_partial',
+                reasonCode: mode === 'cloud' ? null : 'local_workspace_lifecycle_partial',
                 serviceVersion: mode === 'cloud' ? 'cloud' : 'sidecar',
                 contractVersion: '1.0.0',
                 authorityRevision: null,
@@ -203,8 +204,7 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
                 scope,
                 authority: mode,
                 availability: mode === 'cloud' ? 'available' : 'degraded',
-                reasonCode:
-                  mode === 'cloud' ? null : 'local_workspace_plan_read_only',
+                reasonCode: mode === 'cloud' ? null : 'local_workspace_plan_read_only',
                 initialSurface: mode === 'cloud' ? 'goals' : 'status',
                 allowedActions:
                   mode === 'cloud'
@@ -342,7 +342,9 @@ function observedCapability(authoritySource, overrides = {}) {
       instance_id: null,
     },
     authority_revision: null,
+    retryable: false,
     authority_source: authoritySource,
+    supporting_authority_sources: [],
     provenance: 'observed',
     ...overrides,
   };

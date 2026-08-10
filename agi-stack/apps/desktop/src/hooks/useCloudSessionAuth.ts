@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+
 import { useI18n } from '../i18n';
 import {
   classifyDeviceTokenError,
@@ -5,9 +7,18 @@ import {
   isWorkspaceContextUnavailableError,
 } from '../api/client';
 import {
+  desktopCloudSessionProjectionClient,
+  type CloudSessionProjection,
+} from '../api/cloudSessionProjectionClient';
+import {
+  desktopNativeOAuthClient,
+  type NativeOAuthProvider,
+  type NativeOAuthSessionEvent,
+} from '../api/nativeOAuthClient';
+import { desktopNativeCloudAuthClient } from '../api/nativeCloudAuthClient';
+import {
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
-  saveNativeTrustedSession,
 } from '../api/trustedSession';
 import {
   findWorkspaceProject,
@@ -20,6 +31,7 @@ import {
 import {
   runtimeConfigForLoginAvailability,
 } from '../features/auth/loginRuntimeModel';
+import { createProjectedCloudSessionState } from '../features/auth/nativeOAuthSessionModel';
 import {
   DesktopRuntimeConfig,
   LoginOutcome,
@@ -37,6 +49,8 @@ import type { DesktopAuthParams } from './useDesktopAuth';
 export function useCloudSessionAuth(params: DesktopAuthParams) {
   const { t } = useI18n();
   const {
+    auth,
+    config,
     runsInNativeDesktop,
     workspaceSso,
     setAuth,
@@ -54,10 +68,19 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
     deviceAuthAttemptIdRef,
     deviceAuthAttemptRef,
     commitRuntimeConfig,
+    nativeOAuthResumeRoute,
+    onNativeOAuthAuthenticated,
     resetProjectScopedState,
     refreshRuntime,
     applySectionSideEffects,
   } = params;
+  const [nativeOAuthProviders, setNativeOAuthProviders] = useState<
+    readonly NativeOAuthProvider[]
+  >([]);
+  const [nativeOAuthPendingProvider, setNativeOAuthPendingProvider] = useState<string | null>(null);
+  const nativeOAuthPendingProviderRef = useRef<string | null>(null);
+  const nativeOAuthExpiryTimerRef = useRef<number | null>(null);
+  const nativeOAuthEventHandlerRef = useRef<(event: NativeOAuthSessionEvent) => void>(() => {});
   const hydrateCloudSession = async (
     outcome: LoginOutcome,
     runtimeConfig: DesktopRuntimeConfig,
@@ -178,6 +201,213 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       setSettingsWindowOpen(true);
     }
     return true;
+  };
+
+  const clearNativeOAuthAttempt = () => {
+    if (nativeOAuthExpiryTimerRef.current !== null) {
+      window.clearTimeout(nativeOAuthExpiryTimerRef.current);
+      nativeOAuthExpiryTimerRef.current = null;
+    }
+    nativeOAuthPendingProviderRef.current = null;
+    setNativeOAuthPendingProvider(null);
+  };
+
+  const hydrateProjectedCloudSession = async (
+    authAttemptRevision: number,
+  ): Promise<CloudSessionProjection | null> => {
+    const projectionClient = desktopCloudSessionProjectionClient();
+    if (!projectionClient) throw new Error('cloud_session_projection_unavailable');
+    const projection = await projectionClient.load();
+    if (authAttemptRevisionRef.current !== authAttemptRevision) return null;
+    if (!projection) return null;
+    const projectedState = createProjectedCloudSessionState(projection, configRef.current);
+
+    contextRevisionRef.current = projection.workspaceContext.revision;
+    resetProjectScopedState();
+    commitRuntimeConfig(projectedState.config);
+    setAuth(projectedState.auth);
+    setLoginPassword('');
+    setDataset(emptyDataset);
+    setConnection('idle');
+    setError(null);
+    setLastSync(
+      new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    );
+    applySectionSideEffects('workspace');
+    return projection;
+  };
+
+  useEffect(() => {
+    if (
+      !runsInNativeDesktop ||
+      config.mode !== 'cloud' ||
+      auth.status === 'signed_in'
+    ) {
+      setNativeOAuthProviders([]);
+      return undefined;
+    }
+    const client = desktopNativeOAuthClient();
+    if (!client) {
+      setNativeOAuthProviders([]);
+      return undefined;
+    }
+    let active = true;
+    void client
+      .listProviders({ apiBaseUrl: config.apiBaseUrl })
+      .then((providers) => {
+        if (active) setNativeOAuthProviders(providers);
+      })
+      .catch(() => {
+        if (active) setNativeOAuthProviders([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [auth.status, config.apiBaseUrl, config.mode, runsInNativeDesktop]);
+
+  useEffect(() => {
+    if (!runsInNativeDesktop || config.mode !== 'cloud') return undefined;
+    const client = desktopNativeOAuthClient();
+    if (!client) return undefined;
+    let active = true;
+    void client
+      .restore()
+      .then((pending) => {
+        if (!active || pending.status !== 'pending') return;
+        nativeOAuthPendingProviderRef.current = pending.provider;
+        setNativeOAuthPendingProvider(pending.provider);
+        setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+        setConnection('loading');
+        setError(null);
+        const expiresIn = Math.max(0, pending.expiresAt - Date.now());
+        nativeOAuthExpiryTimerRef.current = window.setTimeout(() => {
+          if (nativeOAuthPendingProviderRef.current !== pending.provider) return;
+          void client.cancel().catch(() => undefined);
+          clearNativeOAuthAttempt();
+          const message = t('login.workspaceSsoFailed');
+          authAttemptRevisionRef.current += 1;
+          setAuth({ ...emptyAuthState, error: message });
+          setConnection('error');
+          setError(message);
+        }, expiresIn);
+      })
+      .catch(() => {
+        if (!active) return;
+        const message = t('login.workspaceSsoFailed');
+        setAuth({ ...emptyAuthState, error: message });
+        setConnection('error');
+        setError(message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [config.apiBaseUrl, config.mode, runsInNativeDesktop]);
+
+  nativeOAuthEventHandlerRef.current = (event: NativeOAuthSessionEvent) => {
+    const expectedProvider = nativeOAuthPendingProviderRef.current;
+    clearNativeOAuthAttempt();
+    if (
+      event.status === 'failed' ||
+      (expectedProvider !== null && expectedProvider !== event.provider)
+    ) {
+      const message = t('login.workspaceSsoFailed');
+      authAttemptRevisionRef.current += 1;
+      setAuth({ ...emptyAuthState, error: message });
+      setConnection('error');
+      setError(message);
+      return;
+    }
+
+    const authRevision = ++authAttemptRevisionRef.current;
+    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+    setConnection('loading');
+    setError(null);
+    void hydrateProjectedCloudSession(authRevision)
+      .then((projection) => {
+        if (!projection || authAttemptRevisionRef.current !== authRevision) return;
+        onNativeOAuthAuthenticated(event.resumeRoute, projection);
+      })
+      .catch(async () => {
+        if (authAttemptRevisionRef.current !== authRevision) return;
+        try {
+          await clearNativeTrustedSession();
+        } catch {
+          // The projection failure remains the user-facing error.
+        }
+        const message = t('login.workspaceSsoFailed');
+        setAuth({ ...emptyAuthState, error: message });
+        setConnection('error');
+        setError(message);
+      });
+  };
+
+  useEffect(() => {
+    if (!runsInNativeDesktop) return undefined;
+    const client = desktopNativeOAuthClient();
+    if (!client) return undefined;
+    const unsubscribe = client.subscribe((event) => nativeOAuthEventHandlerRef.current(event));
+    return () => {
+      unsubscribe();
+      if (nativeOAuthExpiryTimerRef.current !== null) {
+        window.clearTimeout(nativeOAuthExpiryTimerRef.current);
+        nativeOAuthExpiryTimerRef.current = null;
+      }
+    };
+  }, [runsInNativeDesktop]);
+
+  const beginNativeOAuth = async (provider: string): Promise<void> => {
+    const runtimeConfig = runtimeConfigForLoginAvailability(
+      configRef.current,
+      runsInNativeDesktop,
+    );
+    const client = desktopNativeOAuthClient();
+    if (!client || runtimeConfig.mode !== 'cloud') return;
+
+    if (nativeOAuthPendingProviderRef.current !== null) {
+      await client.cancel();
+    }
+    clearNativeOAuthAttempt();
+    const authRevision = ++authAttemptRevisionRef.current;
+    nativeOAuthPendingProviderRef.current = provider;
+    setNativeOAuthPendingProvider(provider);
+    setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
+    setConnection('loading');
+    setError(null);
+    try {
+      await clearNativeTrustedSession();
+      if (authAttemptRevisionRef.current !== authRevision) return;
+      const opened = await client.begin({
+        apiBaseUrl: runtimeConfig.apiBaseUrl,
+        provider,
+        resumeRoute: nativeOAuthResumeRoute(),
+      });
+      if (
+        authAttemptRevisionRef.current !== authRevision ||
+        nativeOAuthPendingProviderRef.current !== provider
+      ) {
+        return;
+      }
+      const expiresIn = Math.max(0, opened.expiresAt - Date.now());
+      nativeOAuthExpiryTimerRef.current = window.setTimeout(() => {
+        if (nativeOAuthPendingProviderRef.current !== provider) return;
+        void client.cancel().catch(() => undefined);
+        clearNativeOAuthAttempt();
+        const message = t('login.workspaceSsoFailed');
+        setAuth({ ...emptyAuthState, error: message });
+        setConnection('error');
+        setError(message);
+      }, expiresIn);
+    } catch {
+      if (authAttemptRevisionRef.current !== authRevision) return;
+      clearNativeOAuthAttempt();
+      const message = t('login.workspaceSsoFailed');
+      setAuth({ ...emptyAuthState, error: message });
+      setConnection('error');
+      setError(message);
+    }
   };
 
   const deviceAuthAttemptIsCurrent = (
@@ -317,6 +547,11 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       return;
     }
     authAttemptRevisionRef.current += 1;
+    if (current.nativeAttemptId) {
+      void desktopNativeCloudAuthClient()
+        ?.cancelDeviceAuthorization(current.nativeAttemptId)
+        .catch(() => undefined);
+    }
     supersedeWorkspaceSsoAttempt();
     setAuth(emptyAuthState);
     setConnection('idle');
@@ -352,6 +587,9 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
     let issuedDeviceCode = '';
     let issuedAccessToken = '';
     let tokenAdopted = false;
+    let nativeDeviceAttemptId = '';
+    let nativeSessionAdopted = false;
+    let nativeFlowCompleted = false;
     let keepExpiredPresentation = false;
     try {
       if (hasNativeTrustedSessionBroker()) {
@@ -362,6 +600,64 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
         }
         if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
           return;
+      }
+
+      const nativeAuthClient = runsInNativeDesktop ? desktopNativeCloudAuthClient() : null;
+      if (nativeAuthClient) {
+        const deviceAuthorization = await nativeAuthClient.beginDeviceAuthorization({
+          apiBaseUrl: runtimeConfig.apiBaseUrl,
+          deviceAuthorizationBaseUrl: runtimeConfig.deviceAuthorizationBaseUrl,
+          trustedDevice,
+        });
+        nativeDeviceAttemptId = deviceAuthorization.attemptId;
+        if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+        const activeAttempt = deviceAuthAttemptRef.current;
+        if (!activeAttempt || activeAttempt.attemptId !== attemptId) return;
+        activeAttempt.nativeAttemptId = nativeDeviceAttemptId;
+        activeAttempt.authorizationUrl = deviceAuthorization.authorizationUrl;
+        activeAttempt.userCode = deviceAuthorization.userCode;
+        const deadline = deviceAuthorization.expiresAt;
+        setWorkspaceSso({
+          userCode: deviceAuthorization.userCode,
+          authorizationUrl: deviceAuthorization.authorizationUrl,
+          expiresAt: deadline,
+          openError: null,
+        });
+        void openWorkspaceSsoUrl(
+          deviceAuthorization.authorizationUrl,
+          deviceAuthorization.userCode,
+          runtimeConfig.deviceAuthorizationBaseUrl,
+          attemptId,
+          authRevision,
+        );
+        let intervalSeconds = normalizeDeviceAuthorizationInterval(deviceAuthorization.interval);
+        while (deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
+          const remainingMs = deadline - Date.now();
+          if (remainingMs <= 0) throw new WorkspaceSsoFlowError('expired');
+          const waited = await waitForAbortableDelay(
+            Math.min(remainingMs, intervalSeconds * 1000),
+            controller.signal,
+          );
+          if (!waited || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) return;
+          const poll = await nativeAuthClient.pollDeviceAuthorization(nativeDeviceAttemptId);
+          if (poll.status === 'authorization_pending') {
+            intervalSeconds = normalizeDeviceAuthorizationInterval(poll.interval);
+            continue;
+          }
+          if (poll.status === 'expired') throw new WorkspaceSsoFlowError('expired');
+          nativeSessionAdopted = true;
+          setWorkspaceSso(null);
+          const projection = await hydrateProjectedCloudSession(authRevision);
+          if (!projection || !deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
+            return;
+          }
+          nativeFlowCompleted = true;
+          tokenAdopted = true;
+          deviceAuthAttemptRef.current = null;
+          controller.abort();
+          return;
+        }
+        return;
       }
 
       const loginClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
@@ -439,38 +735,12 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
           )
             return;
 
-          let persistenceWarning: string | null = null;
-          let persistedNativeSession = false;
-          if (trustedDevice && hasNativeTrustedSessionBroker()) {
-            try {
-              await saveNativeTrustedSession({
-                version: 1,
-                api_base_url: runtimeConfig.apiBaseUrl,
-                runtime_mode: 'cloud',
-                credential_kind: 'cloud_bearer',
-                credential: token.access_token,
-                expires_at: null,
-              });
-              persistedNativeSession = true;
-            } catch {
-              persistenceWarning = t('login.persistenceUnavailable');
-            }
-          }
           if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller)) {
-            if (persistedNativeSession) {
-              try {
-                await clearNativeTrustedSession();
-              } catch {
-                // The issued cloud credential is revoked in finally, so a stale broker record
-                // cannot recover an authenticated session even if this best-effort clear fails.
-              }
-            }
             return;
           }
           tokenAdopted = true;
           deviceAuthAttemptRef.current = null;
           controller.abort();
-          if (persistenceWarning) setError(persistenceWarning);
           return;
         } catch (caught) {
           if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))
@@ -514,6 +784,14 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
       setConnection('error');
       setError(message);
     } finally {
+      const nativeAuthClient = runsInNativeDesktop ? desktopNativeCloudAuthClient() : null;
+      if (nativeAuthClient && nativeSessionAdopted && !nativeFlowCompleted) {
+        await nativeAuthClient.signOut().catch(() => undefined);
+      } else if (nativeAuthClient && nativeDeviceAttemptId && !nativeSessionAdopted) {
+        await nativeAuthClient
+          .cancelDeviceAuthorization(nativeDeviceAttemptId)
+          .catch(() => undefined);
+      }
       if (issuedAccessToken && !tokenAdopted) {
         await revokeUnadoptedDeviceToken(issuedAccessToken, runtimeConfig);
       }
@@ -529,9 +807,13 @@ export function useCloudSessionAuth(params: DesktopAuthParams) {
     }
   };
   return {
+    beginNativeOAuth,
     cancelWorkspaceSso,
     hydrateCloudSession,
+    hydrateProjectedCloudSession,
     loginWithWorkspaceSso,
+    nativeOAuthPendingProvider,
+    nativeOAuthProviders,
     openCurrentWorkspaceSso,
     revokeUnadoptedDeviceToken,
     supersedeWorkspaceSsoAttempt,

@@ -1,7 +1,9 @@
-const SURFACE_NAMES = Object.freeze([
+const SURFACE_NAMES = Object.freeze(['web', 'desktop_cloud', 'desktop_local', 'native_only']);
+const V4_SURFACE_NAMES = Object.freeze([
   'web',
   'desktop_cloud',
-  'desktop_local',
+  'local_online',
+  'local_offline',
   'native_only',
 ]);
 const ACTIVE_AVAILABILITIES = new Set(['available', 'degraded']);
@@ -11,8 +13,10 @@ const UNAVAILABLE_CONTRACT_PREFIXES = Object.freeze(['planned:', 'unavailable:']
 
 export function validateParityStructuralClosure(manifest) {
   const issues = [];
+  const compoundAuthority = manifest?.schema_version === '4.0.0';
+  const surfaceNames = compoundAuthority ? V4_SURFACE_NAMES : SURFACE_NAMES;
   for (const capability of manifest?.capabilities ?? []) {
-    validateCapability(capability, issues);
+    validateCapability(capability, issues, compoundAuthority, surfaceNames);
   }
   return Object.freeze(issues.map((issue) => Object.freeze(issue)));
 }
@@ -49,9 +53,7 @@ export function downgradeStructurallyInvalidSurfaces(manifest) {
     }
   }
   for (const issue of issueBySurface.values()) {
-    const capability = normalized.capabilities.find(
-      ({ id }) => id === issue.capabilityId,
-    );
+    const capability = normalized.capabilities.find(({ id }) => id === issue.capabilityId);
     const surface = capability.surfaces[issue.surfaceName];
     capability.surfaces[issue.surfaceName] = {
       ...surface,
@@ -66,19 +68,15 @@ export function downgradeStructurallyInvalidSurfaces(manifest) {
 
 function compareDowngradeIssues(left, right) {
   const priority = (issue) =>
-    issue.code.startsWith('active_surface_')
-      ? 0
-      : issue.code.startsWith('active_journey_')
-        ? 1
-        : 2;
+    issue.code.startsWith('active_surface_') ? 0 : issue.code.startsWith('active_journey_') ? 1 : 2;
   return priority(left) - priority(right) || left.code.localeCompare(right.code);
 }
 
-function validateCapability(capability, issues) {
+function validateCapability(capability, issues, compoundAuthority, surfaceNames) {
   const capabilityId = stringValue(capability?.id, '<unknown-capability>');
   const apiContracts = arrayValue(capability?.api_contracts);
 
-  for (const surfaceName of SURFACE_NAMES) {
+  for (const surfaceName of surfaceNames) {
     const surface = capability?.surfaces?.[surfaceName];
     validateSurface({
       capabilityId,
@@ -86,11 +84,27 @@ function validateCapability(capability, issues) {
       surfaceName,
       contracts: contractsForSurface(apiContracts, surfaceName),
       issues,
+      compoundAuthority,
     });
   }
 
   for (const journey of arrayValue(capability?.journeys)) {
-    validateJourney({ capabilityId, capability, journey, issues });
+    validateJourney({
+      capabilityId,
+      capability,
+      journey,
+      issues,
+      compoundAuthority,
+      surfaceNames,
+    });
+  }
+  if (compoundAuthority) {
+    validateSupportingAuthorityUsage({
+      capabilityId,
+      capability,
+      issues,
+      surfaceNames,
+    });
   }
 }
 
@@ -100,6 +114,7 @@ function validateSurface({
   surfaceName,
   contracts,
   issues,
+  compoundAuthority,
 }) {
   if (!surface || typeof surface !== 'object' || Array.isArray(surface)) {
     pushIssue(issues, {
@@ -114,6 +129,14 @@ function validateSurface({
   const active = ACTIVE_AVAILABILITIES.has(availability);
   validateReasonCode({ capabilityId, surface, surfaceName, active, issues });
   validateAvailabilityPair({ capabilityId, surface, surfaceName, issues });
+  if (compoundAuthority) {
+    validateSupportingAuthorities({
+      capabilityId,
+      surface,
+      surfaceName,
+      issues,
+    });
+  }
 
   if (!active) return;
   if (!validActions(surface.allowed_actions)) {
@@ -130,12 +153,20 @@ function validateSurface({
     contracts,
     issues,
     issuePrefix: 'active_surface',
+    compoundAuthority,
   });
 }
 
-function validateJourney({ capabilityId, capability, journey, issues }) {
+function validateJourney({
+  capabilityId,
+  capability,
+  journey,
+  issues,
+  compoundAuthority,
+  surfaceNames,
+}) {
   const journeyId = stringValue(journey?.id, '<unknown-journey>');
-  for (const surfaceName of SURFACE_NAMES) {
+  for (const surfaceName of surfaceNames) {
     const policy = journey?.mode_policy?.[surfaceName];
     const actions = journey?.actions?.[surfaceName];
     if (policy === 'not_applicable') {
@@ -169,7 +200,49 @@ function validateJourney({ capabilityId, capability, journey, issues }) {
       contracts: contractsForSurface(journey?.api_contracts, surfaceName),
       issues,
       issuePrefix: 'active_journey',
+      compoundAuthority,
     });
+  }
+}
+
+function validateSupportingAuthorities({ capabilityId, surface, surfaceName, issues }) {
+  const supporting = surface.supporting_authorities;
+  if (
+    !Array.isArray(supporting) ||
+    new Set(supporting).size !== supporting.length ||
+    supporting.some(
+      (authority) =>
+        typeof authority !== 'string' || authority === 'none' || authority === surface.authority,
+    )
+  ) {
+    pushIssue(issues, {
+      code: 'surface_supporting_authorities_invalid',
+      capabilityId,
+      surfaceName,
+    });
+  }
+}
+
+function validateSupportingAuthorityUsage({ capabilityId, capability, issues, surfaceNames }) {
+  const allContracts = [
+    ...arrayValue(capability?.api_contracts),
+    ...arrayValue(capability?.journeys).flatMap((journey) => arrayValue(journey?.api_contracts)),
+  ];
+  for (const surfaceName of surfaceNames) {
+    const declared = arrayValue(capability?.surfaces?.[surfaceName]?.supporting_authorities);
+    const used = new Set(
+      contractsForSurface(allContracts, surfaceName)
+        .filter((contract) => contract?.authority_role === 'supporting')
+        .map((contract) => contract.authority),
+    );
+    for (const authority of new Set(declared)) {
+      if (used.has(authority)) continue;
+      pushIssue(issues, {
+        code: 'surface_supporting_authority_unused',
+        capabilityId,
+        surfaceName,
+      });
+    }
   }
 }
 
@@ -231,6 +304,7 @@ function validateActiveContracts({
   contracts,
   issues,
   issuePrefix,
+  compoundAuthority,
 }) {
   if (contracts.length === 0) {
     pushIssue(issues, {
@@ -250,6 +324,18 @@ function validateActiveContracts({
     });
     return;
   }
+  if (compoundAuthority) {
+    validateCompoundAuthorityContracts({
+      capabilityId,
+      journeyId,
+      surface,
+      surfaceName,
+      contracts,
+      issues,
+      issuePrefix,
+    });
+    return;
+  }
   if (
     (surfaceName === 'web' || surface.authority === 'none') &&
     contracts.every(isExplicitNoServiceContract)
@@ -259,6 +345,59 @@ function validateActiveContracts({
   if (!contracts.every((contract) => isModeMatchedAuthorityContract(contract, surface))) {
     pushIssue(issues, {
       code: `${issuePrefix}_api_authority_mismatch`,
+      capabilityId,
+      journeyId,
+      surfaceName,
+    });
+  }
+}
+
+function validateCompoundAuthorityContracts({
+  capabilityId,
+  journeyId,
+  surface,
+  surfaceName,
+  contracts,
+  issues,
+  issuePrefix,
+}) {
+  const primary = contracts.filter((contract) => contract?.authority_role === 'primary');
+  const supporting = contracts.filter((contract) => contract?.authority_role === 'supporting');
+  if (primary.length + supporting.length !== contracts.length) {
+    pushIssue(issues, {
+      code: `${issuePrefix}_api_authority_role_invalid`,
+      capabilityId,
+      journeyId,
+      surfaceName,
+    });
+  }
+  if (primary.length === 0) {
+    pushIssue(issues, {
+      code: `${issuePrefix}_api_primary_authority_missing`,
+      capabilityId,
+      journeyId,
+      surfaceName,
+    });
+  } else if (!primary.every((contract) => isModeMatchedAuthorityContract(contract, surface))) {
+    pushIssue(issues, {
+      code: `${issuePrefix}_api_authority_mismatch`,
+      capabilityId,
+      journeyId,
+      surfaceName,
+    });
+  }
+  const declaredSupporting = new Set(arrayValue(surface.supporting_authorities));
+  if (
+    supporting.some(
+      (contract) =>
+        contract.authority === 'none' ||
+        contract.authority === surface.authority ||
+        !declaredSupporting.has(contract.authority) ||
+        contract.method === 'NONE',
+    )
+  ) {
+    pushIssue(issues, {
+      code: `${issuePrefix}_api_supporting_authority_undeclared`,
       capabilityId,
       journeyId,
       surfaceName,
@@ -284,9 +423,10 @@ function isExplicitNoServiceContract(contract) {
 }
 
 function isModeMatchedAuthorityContract(contract, surface) {
-  if (!contract || contract.authority !== surface.authority || contract.authority === 'none') {
+  if (!contract || contract.authority !== surface.authority) {
     return false;
   }
+  if (contract.authority === 'none') return isExplicitNoServiceContract(contract);
   if (contract.method !== 'NONE') return true;
   return typeof contract.path === 'string' && contract.path.startsWith('native:');
 }

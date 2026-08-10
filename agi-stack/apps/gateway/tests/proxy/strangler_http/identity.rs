@@ -1,12 +1,36 @@
 use super::*;
 
 pub(super) async fn assert_identity_and_shares_routing(ctx: &StranglerHttpContext) {
+    assert_oauth_callback_routes(ctx).await;
     assert_current_user_routes(ctx).await;
     assert_tenant_read_and_device_routes(ctx).await;
     assert_tenant_writes(ctx).await;
     assert_invitation_routes(ctx).await;
     assert_trust_routes(ctx).await;
     assert_public_share_routes(ctx).await;
+}
+
+async fn assert_oauth_callback_routes(ctx: &StranglerHttpContext) {
+    for (method, path, body_in) in [
+        ("GET", "/api/v1/auth/oauth/providers", ""),
+        (
+            "POST",
+            "/api/v1/auth/oauth/github/authorize",
+            "{'redirect_to':'/'}",
+        ),
+        (
+            "POST",
+            "/api/v1/auth/oauth/github/callback",
+            "{'code':'opaque','state':'opaque'}",
+        ),
+    ] {
+        let body = ctx.public_body(method, path, body_in).await;
+        assert_backend(
+            &body,
+            "python",
+            &format!("OAuth authority {method} {path} remains on Python"),
+        );
+    }
 }
 
 async fn assert_current_user_routes(ctx: &StranglerHttpContext) {

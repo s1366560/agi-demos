@@ -1,4 +1,8 @@
-import { absoluteUrl, DesktopApiError, desktopApiCredential } from '../../api/client';
+import { DesktopApiError, desktopApiCredential } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 export type ProjectAgentAuthority = 'cloud' | 'local';
@@ -41,7 +45,7 @@ export function requireProjectAgentScope(
   if (config.tenantId !== tenantId || config.projectId !== projectId) {
     throw projectAgentError('project_agent_configured_scope_mismatch', 409);
   }
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw projectAgentError('project_agent_trusted_session_required', 401);
   }
   return Object.freeze({ authority: 'cloud', tenantId, projectId });
@@ -75,14 +79,14 @@ export async function requestProjectAgentJson(
   config: DesktopRuntimeConfig,
   options: RequestOptions,
 ): Promise<unknown> {
-  const url = new URL(absoluteUrl(config.apiBaseUrl, options.path));
+  const url = new URL(options.path, 'https://desktop.invalid');
   for (const [name, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined) url.searchParams.set(name, String(value));
   }
   const headers = new Headers({ Accept: 'application/json' });
   const credential = desktopApiCredential(config);
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
-  const response = await fetch(url, {
+  const response = await desktopApiFetch(config, `${url.pathname}${url.search}`, {
     method: 'GET',
     headers,
     credentials: 'omit',

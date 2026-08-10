@@ -1,8 +1,5 @@
-import {
-  absoluteUrl,
-  desktopApiCredential,
-  desktopLaunchCapability,
-} from '../../api/client';
+import { desktopApiCredential, desktopLaunchCapability } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import { readArtifactContentContractV2 } from './artifactContentContractV2';
 
@@ -165,13 +162,20 @@ async function requestArtifact(
     headers.set('Accept', '*/*');
   }
 
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
-    redirect: 'follow',
-  });
+  const response = await desktopApiFetch(
+    config,
+    path,
+    {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
+      redirect: 'follow',
+    },
+    path.endsWith('/content/bytes')
+      ? { responseType: 'binary', maxBytes: 16 * 1024 * 1024 }
+      : undefined,
+  );
   if (response.ok) return response;
 
   const payload = await readErrorPayload(response);

@@ -1,9 +1,9 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   TenantProjectRecord,
@@ -118,7 +118,7 @@ async function requestJson(
     headers.set('Idempotency-Key', options.idempotencyKey);
   }
   if (options.body) headers.set('Content-Type', 'application/json');
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: options.method,
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,

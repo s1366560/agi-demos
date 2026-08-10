@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { desktopApiCredential, DesktopApiClient } from "../api/client";
+import {
+  CLOUD_SOCKET_OPEN,
+  createCloudSocketBridge,
+  desktopCloudSocketTransport,
+} from "../api/cloudSocketBridge";
 import type {
   AgentInputFileMetadata,
   AgentWsEvent,
@@ -165,9 +170,9 @@ export function createPendingAgentMessageQueue(): PendingAgentMessageQueue {
 export function canQueuePendingAgentRunMessage(
   mode: DesktopRuntimeConfig["mode"],
   enabled: boolean,
-  credential: string,
+  authenticationAvailable: boolean,
 ): boolean {
-  return mode === "cloud" && enabled && Boolean(credential.trim());
+  return mode === "cloud" && enabled && authenticationAvailable;
 }
 
 export function pendingAgentRunQueueScopeKey(
@@ -176,7 +181,6 @@ export function pendingAgentRunQueueScopeKey(
 ): string {
   return [
     config.apiBaseUrl.trim(),
-    config.apiKey.trim(),
     config.localApiToken.trim(),
     config.mode,
     config.tenantId.trim(),
@@ -494,10 +498,15 @@ export function useAgentSocket(
     [config.apiBaseUrl, config.apiKey, config.localApiToken, config.mode],
   );
   const credential = desktopApiCredential(config);
+  const cloudSocketTransport = useMemo(
+    () => (config.mode === "cloud" ? desktopCloudSocketTransport() : null),
+    [config.mode],
+  );
+  const socketAuthenticationAvailable = Boolean(credential) || cloudSocketTransport !== null;
 
   const sendSocketMessage = useCallback((payload: Record<string, unknown>) => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    if (!socket || socket.readyState !== CLOUD_SOCKET_OPEN) return false;
     try {
       socket.send(JSON.stringify(payload));
       return true;
@@ -536,10 +545,14 @@ export function useAgentSocket(
         pendingAgentMessagesRef.current,
         message,
         sendSocketMessage,
-        canQueuePendingAgentRunMessage(config.mode, enabled, credential),
+        canQueuePendingAgentRunMessage(
+          config.mode,
+          enabled,
+          socketAuthenticationAvailable,
+        ),
       );
     },
-    [config.mode, credential, enabled, sendSocketMessage],
+    [config.mode, enabled, sendSocketMessage, socketAuthenticationAvailable],
   );
 
   useEffect(
@@ -677,8 +690,7 @@ export function useAgentSocket(
   }, [flushPendingEvents]);
 
   useEffect(() => {
-    const credential = desktopApiCredential(config);
-    if (!enabled || !credential) {
+    if (!enabled || !socketAuthenticationAvailable) {
       setConnected(false);
       setError(null);
       return;
@@ -754,10 +766,23 @@ export function useAgentSocket(
       if (disposed) return;
       let socket: WebSocket;
       try {
-        socket = new WebSocket(
-          client.agentWsUrl(`desktop-${Date.now()}`),
-          client.agentWsProtocols(),
-        );
+        const url = client.agentWsUrl(`desktop-${Date.now()}`);
+        socket =
+          config.mode === "cloud" && cloudSocketTransport
+            ? (createCloudSocketBridge(
+                {
+                  kind: "agent",
+                  url,
+                  scope: {
+                    tenant_id: config.tenantId.trim(),
+                    project_id: config.projectId.trim(),
+                    workspace_id: config.workspaceId.trim() || null,
+                    conversation_id: null,
+                  },
+                },
+                cloudSocketTransport,
+              ) as unknown as WebSocket)
+            : new WebSocket(url, client.agentWsProtocols());
         socketRef.current = socket;
       } catch (caught) {
         setError(String(caught));
@@ -775,7 +800,7 @@ export function useAgentSocket(
         flushPendingAgentRunMessages(
           pendingAgentMessagesRef.current,
           (payload) => {
-            if (socket.readyState !== WebSocket.OPEN) return false;
+            if (socket.readyState !== CLOUD_SOCKET_OPEN) return false;
             try {
               socket.send(JSON.stringify(payload));
               return true;
@@ -787,7 +812,7 @@ export function useAgentSocket(
         stopConnectionTimers();
         if (config.mode === "cloud") {
           heartbeatTimer = setInterval(() => {
-            if (socket.readyState === WebSocket.OPEN) {
+            if (socket.readyState === CLOUD_SOCKET_OPEN) {
               socket.send(JSON.stringify({ type: "heartbeat" }));
             }
           }, HEARTBEAT_INTERVAL_MS);
@@ -903,6 +928,7 @@ export function useAgentSocket(
     };
   }, [
     client,
+    cloudSocketTransport,
     config.apiKey,
     config.localApiToken,
     config.mode,
@@ -912,6 +938,7 @@ export function useAgentSocket(
     contextRevision,
     enabled,
     scheduleEventsFlush,
+    socketAuthenticationAvailable,
   ]);
 
   return {

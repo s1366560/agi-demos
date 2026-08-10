@@ -1,9 +1,9 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   TenantOverviewAvailability,
@@ -46,7 +46,7 @@ async function requestJson(
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: 'GET',
     headers,
     signal: options?.signal,

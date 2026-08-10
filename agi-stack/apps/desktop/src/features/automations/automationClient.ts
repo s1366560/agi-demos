@@ -1,10 +1,10 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
 import type { DesktopApiClient } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type {
   AutomationCapabilities,
   AutomationCreateInput,
@@ -179,13 +179,11 @@ async function runAutomation(
 
   let response: Response;
   try {
-    response = await fetch(
-      absoluteUrl(
-        config.apiBaseUrl,
-        `/api/v1/projects/${encodeURIComponent(
-          resolvedProjectId,
-        )}/cron-jobs/${encodeURIComponent(resolvedAutomationId)}/run`,
-      ),
+    response = await desktopApiFetch(
+      config,
+      `/api/v1/projects/${encodeURIComponent(
+        resolvedProjectId,
+      )}/cron-jobs/${encodeURIComponent(resolvedAutomationId)}/run`,
       {
         method: 'POST',
         headers,

@@ -321,19 +321,10 @@ test("steer outcome reads acks, durable echoes, and steer error codes", () => {
 });
 
 test("only an authenticated cloud socket may retain a turn for reconnect", () => {
-  assert.equal(
-    canQueuePendingAgentRunMessage("cloud", true, "ms_sk_session"),
-    true,
-  );
-  assert.equal(
-    canQueuePendingAgentRunMessage("cloud", false, "ms_sk_session"),
-    false,
-  );
-  assert.equal(canQueuePendingAgentRunMessage("cloud", true, ""), false);
-  assert.equal(
-    canQueuePendingAgentRunMessage("local", true, "local-session"),
-    false,
-  );
+  assert.equal(canQueuePendingAgentRunMessage("cloud", true, true), true);
+  assert.equal(canQueuePendingAgentRunMessage("cloud", false, true), false);
+  assert.equal(canQueuePendingAgentRunMessage("cloud", true, false), false);
+  assert.equal(canQueuePendingAgentRunMessage("local", true, true), false);
 });
 
 test("cloud agent turns wait in a bounded deduplicated queue until the socket opens", () => {
@@ -653,7 +644,7 @@ test("pending cloud turns reset when authenticated project authority changes", (
     currentKey,
     pendingAgentRunQueueScopeKey({ ...baseConfig, projectId: "project-2" }, 7),
   );
-  assert.notEqual(
+  assert.equal(
     currentKey,
     pendingAgentRunQueueScopeKey(
       { ...baseConfig, apiKey: "rotated-session" },

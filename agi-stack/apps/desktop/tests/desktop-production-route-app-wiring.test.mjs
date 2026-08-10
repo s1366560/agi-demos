@@ -2,23 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const appSource = readFileSync(
-  new URL('../src/App.tsx', import.meta.url),
-  'utf8',
-);
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
 const routerSource = readFileSync(
-  new URL(
-    '../src/features/navigation/DesktopProductionRouter.tsx',
-    import.meta.url,
-  ),
+  new URL('../src/features/navigation/DesktopProductionRouter.tsx', import.meta.url),
   'utf8',
 );
 
-test('App owns one production route registry with latest Project Overview, Search, and Cron bindings', () => {
+test('App owns one production route registry with the latest native route bindings', () => {
   assert.match(
     registrySource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -46,6 +40,22 @@ test('App owns one production route registry with latest Project Overview, Searc
   assert.match(
     appSource,
     /projectCronJobsRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api:\s*automationApi,[\s\S]*config,[\s\S]*project:\s*selectedProject,[\s\S]*runCapability:\s*automationRunCapability/u,
+  );
+  assert.match(
+    registrySource,
+    /BACKEND_STORES_ROUTE_ID[\s\S]*createBackendStoresRouteModuleLoader\(\{[\s\S]*createBackendStoresController\(\{[\s\S]*createBackendStoresClient\([\s\S]*desktopVaultBoundCloudRequestBroker\(\)/u,
+  );
+  assert.match(
+    registrySource,
+    /PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*createProjectPlaybooksRouteModuleLoader\(\{[\s\S]*createProjectPlaybooksController\(\{[\s\S]*createProjectPlaybooksClient\([\s\S]*desktopVaultBoundCloudRequestBroker\(\)/u,
+  );
+  assert.match(
+    registrySource,
+    /BACKEND_STORES_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"][\s\S]*PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"]/u,
+  );
+  assert.doesNotMatch(
+    registrySource,
+    /(?:BACKEND_STORES_ROUTE_ID|PROJECT_PLAYBOOKS_ROUTE_ID)[\s\S]{0,700}authority:\s*currentConfig\.mode/u,
   );
 });
 
@@ -106,16 +116,17 @@ test('App injects async Cloud or Local permission authority and real capability 
   assert.match(appSource, /desktopRouteBasePermissionsForAuth\(auth\)/u);
   assert.match(
     appSource,
-    /config\.mode === 'cloud'[\s\S]*createCloudDesktopRoutePermissionClient\(config\)[\s\S]*createLocalDesktopRoutePermissionClient\(config\)/u,
+    /const broker = desktopVaultBoundCloudRequestBroker\(\)[\s\S]*createVaultBoundCloudDesktopRoutePermissionClient\(config, broker\)/u,
+  );
+  assert.match(
+    appSource,
+    /createCloudDesktopRoutePermissionClient\(\s*config,\s*desktopVaultBoundCloudRequestBroker\(\),\s*\)/u,
   );
   assert.match(
     appSource,
     /createCloudDesktopRoutePermissionResolver\(options\)[\s\S]*createLocalDesktopRoutePermissionResolver\(options\)/u,
   );
-  assert.doesNotMatch(
-    appSource,
-    /getActiveConversationId:\s*\(\)\s*=>/u,
-  );
+  assert.doesNotMatch(appSource, /getActiveConversationId:\s*\(\)\s*=>/u);
   assert.doesNotMatch(appSource, /getActiveWorkspaceId:\s*\(\)\s*=>/u);
   assert.match(
     appSource,
@@ -126,6 +137,12 @@ test('App injects async Cloud or Local permission authority and real capability 
     /resolvePermissionSnapshot=\{\s*resolveProductionRoutePermissionSnapshot\s*\}/u,
   );
   assert.match(appSource, /resolveCapability=\{resolveProductionRouteCapability\}/u);
+  assert.match(
+    appSource,
+    /observedRouteRuntimeMode\s*=\s*desktopCapabilityState\.snapshot\?\.runtime_state[\s\S]*observedRouteRuntimeMode\s*&&\s*observedRouteRuntimeMode\s*!==\s*['"]native['"]/u,
+  );
+  assert.match(appSource, /match\.definition\.localPolicy\s*===\s*['"]cloud_only['"]/u);
+  assert.match(appSource, /mode=\{productionRouteRuntimeMode\}/u);
   assert.match(routerSource, /resolvePermissionSnapshot/u);
   assert.match(
     routerSource,
@@ -138,15 +155,10 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
     appSource,
     /createDesktopRouteScopeTransaction\(\{[\s\S]*getCurrent:[\s\S]*createAuthority:[\s\S]*commit:[\s\S]*refresh:/u,
   );
-  assert.match(
-    appSource,
-    /switchWorkspaceContext\([\s\S]*signal[\s\S]*\)/u,
-  );
+  assert.match(appSource, /switchWorkspaceContext\([\s\S]*signal[\s\S]*\)/u);
   assert.match(appSource, /switchScope=\{switchProductionRouteScope\}/u);
 
-  const transactionStart = appSource.indexOf(
-    'createDesktopRouteScopeTransaction({',
-  );
+  const transactionStart = appSource.indexOf('createDesktopRouteScopeTransaction({');
   const transactionEnd = appSource.indexOf(
     '\n  const switchProductionRouteScope',
     transactionStart,
@@ -165,32 +177,19 @@ test('production routing wraps the existing workbench tree without keying or rem
   const routerStart = appSource.lastIndexOf('<DesktopProductionRouter');
   const routerEnd = appSource.indexOf('</DesktopProductionRouter>', routerStart);
   const routedWorkbench =
-    routerStart >= 0 && routerEnd > routerStart
-      ? appSource.slice(routerStart, routerEnd)
-      : '';
+    routerStart >= 0 && routerEnd > routerStart ? appSource.slice(routerStart, routerEnd) : '';
 
   assert.match(routedWorkbench, /<SessionWorkspace/u);
   assert.match(routedWorkbench, /<section className="workbench-layout">/u);
   assert.doesNotMatch(routedWorkbench, /\bkey=/u);
-  assert.doesNotMatch(
-    routedWorkbench,
-    /<iframe|<webview|window\.open|shell\.openExternal/iu,
-  );
+  assert.doesNotMatch(routedWorkbench, /<iframe|<webview|window\.open|shell\.openExternal/iu);
   assert.match(appSource, /const socket = useAgentSocket\(/u);
 });
 
 test('anonymous unknown routes are handled natively before the login gate', () => {
-  const forcedPasswordGate = appSource.lastIndexOf(
-    "auth.status === 'password_change_required'",
-  );
-  const anonymousGate = appSource.indexOf(
-    'if (!identityAuthenticated)',
-    forcedPasswordGate,
-  );
-  const authenticatedShell = appSource.indexOf(
-    '\n  return (\n    <Theme',
-    anonymousGate + 1,
-  );
+  const forcedPasswordGate = appSource.lastIndexOf("auth.status === 'password_change_required'");
+  const anonymousGate = appSource.indexOf('if (!identityAuthenticated)', forcedPasswordGate);
+  const authenticatedShell = appSource.indexOf('\n  return (\n    <Theme', anonymousGate + 1);
   const anonymousSource =
     anonymousGate >= 0 && authenticatedShell > anonymousGate
       ? appSource.slice(anonymousGate, authenticatedShell)
@@ -204,15 +203,12 @@ test('anonymous unknown routes are handled natively before the login gate', () =
   );
   assert.match(
     anonymousSource,
-    /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{config\.mode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
+    /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{productionRouteRuntimeMode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
   );
 });
 
 test('invitation sign-in hands the preserved hash to LoginScreen and resets after authentication', () => {
-  assert.match(
-    appSource,
-    /forceLegacyChildren=\{invitationSignInRequested\}/u,
-  );
+  assert.match(appSource, /forceLegacyChildren=\{invitationSignInRequested\}/u);
   assert.match(
     appSource,
     /useEffect\(\(\) => \{[\s\S]*identityAuthenticated[\s\S]*setInvitationSignInRequested\(false\)[\s\S]*\}, \[identityAuthenticated, invitationSignInRequested\]\)/u,

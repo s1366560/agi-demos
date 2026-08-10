@@ -1,15 +1,15 @@
-import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-import { test } from "node:test";
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
   createBrowserDesktopHashLocationPort,
   createDesktopHashRouteHost,
-} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js");
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js');
 const {
   createDesktopRouteRegistry,
-} = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js");
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 function deferred() {
   let resolve;
@@ -25,23 +25,23 @@ function route(id, path, loader, overrides = {}) {
   return {
     id,
     path,
-    scope: ["tenant"],
-    navGroup: "tenant-core",
+    scope: ['tenant'],
+    navGroup: 'tenant-core',
     capability: id,
-    requiredPermission: [["authenticated"]],
-    localPolicy: "native_equivalent",
+    requiredPermission: [['authenticated']],
+    localPolicy: 'native_equivalent',
     loader,
     ...overrides,
   };
 }
 
-function capability(tenantId = "tenant-1", overrides = {}) {
+function capability(tenantId = 'tenant-1', overrides = {}) {
   return {
-    availability: "available",
+    availability: 'available',
     reason_code: null,
-    service_version: "3.0.0",
-    contract_version: "3.0.0",
-    allowed_actions: ["view"],
+    service_version: '3.0.0',
+    contract_version: '3.0.0',
+    allowed_actions: ['view'],
     scope: {
       tenant_id: tenantId,
       project_id: null,
@@ -49,8 +49,8 @@ function capability(tenantId = "tenant-1", overrides = {}) {
       instance_id: null,
     },
     authority_revision: 1,
-    authority_source: "cloud_service",
-    provenance: "observed",
+    authority_source: 'cloud_service',
+    provenance: 'observed',
     ...overrides,
   };
 }
@@ -77,8 +77,8 @@ function hashLocation(initialHash) {
 function hostOptions({
   registry,
   location,
-  mode = "cloud",
-  permissions = new Set(["authenticated"]),
+  mode = 'cloud',
+  permissions = new Set(['authenticated']),
   resolvePermissions,
   resolvePermissionSnapshot,
   resolveCapability = (_id, context) => capability(context.tenantId),
@@ -98,8 +98,8 @@ function hostOptions({
 
 function permissionSnapshot(context, overrides = {}) {
   return {
-    contract_version: "3.0.0",
-    subject_id: "user-1",
+    contract_version: '3.0.0',
+    subject_id: 'user-1',
     scope: {
       tenant_id: context.tenantId ?? null,
       project_id: context.projectId ?? null,
@@ -107,7 +107,7 @@ function permissionSnapshot(context, overrides = {}) {
       instance_id: context.instanceId ?? null,
       conversation_id: null,
     },
-    permissions: ["authenticated"],
+    permissions: ['authenticated'],
     authority_revision: 1,
     reason_code: null,
     ...overrides,
@@ -126,26 +126,26 @@ function waitForState(host, predicate) {
   });
 }
 
-test("host exposes malformed and not-found hash states without loading modules", async () => {
+test('host exposes malformed and not-found hash states without loading modules', async () => {
   let loadCount = 0;
   let permissionCount = 0;
   let permissionSnapshotCount = 0;
   let capabilityCount = 0;
   let scopeCount = 0;
   const registry = createDesktopRouteRegistry([
-    route("tenant-overview", "/tenant/:tenantId/overview", async () => {
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => {
       loadCount += 1;
-      return { default: "Overview" };
+      return { default: 'Overview' };
     }),
   ]);
   const authorityOptions = {
     resolvePermissions: () => {
       permissionCount += 1;
-      return new Set(["authenticated"]);
+      return new Set(['authenticated']);
     },
     resolvePermissionSnapshot: async () => {
       permissionSnapshotCount += 1;
-      return permissionSnapshot({ tenantId: "tenant-1" });
+      return permissionSnapshot({ tenantId: 'tenant-1' });
     },
     resolveCapability: () => {
       capabilityCount += 1;
@@ -156,7 +156,7 @@ test("host exposes malformed and not-found hash states without loading modules",
     },
   };
 
-  const malformedLocation = hashLocation("#/tenant/%E0%A4%A/overview");
+  const malformedLocation = hashLocation('#/tenant/%E0%A4%A/overview');
   const malformedHost = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -166,13 +166,13 @@ test("host exposes malformed and not-found hash states without loading modules",
   );
   await malformedHost.start();
   assert.deepEqual(malformedHost.getState(), {
-    status: "malformed",
-    location: "#/tenant/%E0%A4%A/overview",
-    reasonCode: "desktop_route_malformed",
+    status: 'malformed',
+    location: '#/tenant/%E0%A4%A/overview',
+    reasonCode: 'desktop_route_malformed',
   });
   malformedHost.stop();
 
-  const missingLocation = hashLocation("#/unknown?token=untrusted");
+  const missingLocation = hashLocation('#/unknown?token=untrusted');
   const missingHost = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -182,9 +182,9 @@ test("host exposes malformed and not-found hash states without loading modules",
   );
   await missingHost.start();
   assert.deepEqual(missingHost.getState(), {
-    status: "not_found",
-    location: "#/unknown?token=untrusted",
-    reasonCode: "desktop_route_not_found",
+    status: 'not_found',
+    location: '#/unknown?token=untrusted',
+    reasonCode: 'desktop_route_not_found',
   });
   missingHost.stop();
   assert.equal(loadCount, 0);
@@ -194,31 +194,31 @@ test("host exposes malformed and not-found hash states without loading modules",
   assert.equal(scopeCount, 0);
 });
 
-test("forbidden and unavailable routes never switch scope or load", async () => {
+test('forbidden and unavailable routes never switch scope or load', async () => {
   let loadCount = 0;
   let scopeCount = 0;
   let capabilityCount = 0;
   const registry = createDesktopRouteRegistry([
     route(
-      "tenant-billing",
-      "/tenant/:tenantId/billing",
+      'tenant-billing',
+      '/tenant/:tenantId/billing',
       async () => {
         loadCount += 1;
-        return { default: "Billing" };
+        return { default: 'Billing' };
       },
       {
-        requiredPermission: [["authenticated", "tenant_admin"]],
-        localPolicy: "cloud_only",
+        requiredPermission: [['authenticated', 'tenant_admin']],
+        localPolicy: 'cloud_only',
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/billing");
+  const location = hashLocation('#/tenant/tenant-1/billing');
 
   const forbiddenHost = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      permissions: new Set(["authenticated"]),
+      permissions: new Set(['authenticated']),
       resolveCapability: () => {
         capabilityCount += 1;
         return capability();
@@ -229,20 +229,20 @@ test("forbidden and unavailable routes never switch scope or load", async () => 
     }),
   );
   await forbiddenHost.start();
-  assert.equal(forbiddenHost.getState().status, "forbidden");
+  assert.equal(forbiddenHost.getState().status, 'forbidden');
   forbiddenHost.stop();
 
   const localHost = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      mode: "local",
-      permissions: new Set(["authenticated"]),
+      mode: 'local',
+      permissions: new Set(['authenticated']),
       resolveCapability: () => {
         capabilityCount += 1;
-        return capability("tenant-1", {
-          availability: "not_applicable",
-          reason_code: "cloud_runtime_pool_not_applicable",
+        return capability('tenant-1', {
+          availability: 'not_applicable',
+          reason_code: 'cloud_runtime_pool_not_applicable',
           service_version: null,
           contract_version: null,
           allowed_actions: [],
@@ -256,9 +256,9 @@ test("forbidden and unavailable routes never switch scope or load", async () => 
   );
   await localHost.start();
   assert.deepEqual(localHost.getState(), {
-    status: "unavailable",
+    status: 'unavailable',
     match: localHost.getState().match,
-    reasonCode: "cloud_runtime_pool_not_applicable",
+    reasonCode: 'cloud_runtime_pool_not_applicable',
     capability: localHost.getState().capability,
   });
   localHost.stop();
@@ -268,30 +268,30 @@ test("forbidden and unavailable routes never switch scope or load", async () => 
   assert.equal(capabilityCount, 1);
 });
 
-test("unauthenticated Local cloud-only routes stop before capability authority", async () => {
+test('unauthenticated Local cloud-only routes stop before capability authority', async () => {
   let capabilityCount = 0;
   let scopeCount = 0;
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
     route(
-      "tenant-pool",
-      "/tenant/:tenantId/pool",
+      'tenant-pool',
+      '/tenant/:tenantId/pool',
       async () => {
         loadCount += 1;
-        return { default: "Pool" };
+        return { default: 'Pool' };
       },
       {
-        requiredPermission: [["authenticated", "global_admin"]],
-        localPolicy: "cloud_only",
+        requiredPermission: [['authenticated', 'global_admin']],
+        localPolicy: 'cloud_only',
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/pool");
+  const location = hashLocation('#/tenant/tenant-1/pool');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      mode: "local",
+      mode: 'local',
       permissions: new Set(),
       resolveCapability: () => {
         capabilityCount += 1;
@@ -305,35 +305,35 @@ test("unauthenticated Local cloud-only routes stop before capability authority",
 
   await host.start();
 
-  assert.equal(host.getState().status, "forbidden");
+  assert.equal(host.getState().status, 'forbidden');
   assert.equal(capabilityCount, 0);
   assert.equal(scopeCount, 0);
   assert.equal(loadCount, 0);
   host.stop();
 });
 
-test("context permission resolver authorizes the exact matched route context", async () => {
+test('context permission resolver authorizes the exact matched route context', async () => {
   const permissionContexts = [];
   const registry = createDesktopRouteRegistry([
     route(
-      "project-overview",
-      "/tenant/:tenantId/project/:projectId",
-      async () => ({ default: "Project Overview" }),
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
+      async () => ({ default: 'Project Overview' }),
       {
-        scope: ["tenant", "project"],
-        requiredPermission: [["authenticated", "project_member"]],
+        scope: ['tenant', 'project'],
+        requiredPermission: [['authenticated', 'project_member']],
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-2/project/project-2");
+  const location = hashLocation('#/tenant/tenant-2/project/project-2');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      permissions: new Set(["authenticated"]),
+      permissions: new Set(['authenticated']),
       resolvePermissions: (context) => {
         permissionContexts.push(context);
-        return new Set(["authenticated", "project_member"]);
+        return new Set(['authenticated', 'project_member']);
       },
       resolveCapability: (_id, context) =>
         capability(context.tenantId, {
@@ -350,37 +350,37 @@ test("context permission resolver authorizes the exact matched route context", a
   await host.start();
 
   assert.deepEqual(permissionContexts, [
-    { tenantId: "tenant-2", projectId: "project-2" },
-    { tenantId: "tenant-2", projectId: "project-2" },
+    { tenantId: 'tenant-2', projectId: 'project-2' },
+    { tenantId: 'tenant-2', projectId: 'project-2' },
   ]);
-  assert.equal(host.getState().status, "ready");
+  assert.equal(host.getState().status, 'ready');
   assert.deepEqual(host.getState().match.context, {
-    tenantId: "tenant-2",
-    projectId: "project-2",
+    tenantId: 'tenant-2',
+    projectId: 'project-2',
   });
   host.stop();
 });
 
-test("permission resolver failures fail closed before capability or scope work and can retry", async () => {
+test('permission resolver failures fail closed before capability or scope work and can retry', async () => {
   let permissionAttempts = 0;
   let capabilityCount = 0;
   let scopeCount = 0;
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
     route(
-      "project-overview",
-      "/tenant/:tenantId/project/:projectId",
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
       async () => {
         loadCount += 1;
-        return { default: "Project Overview" };
+        return { default: 'Project Overview' };
       },
       {
-        scope: ["tenant", "project"],
-        requiredPermission: [["authenticated", "project_member"]],
+        scope: ['tenant', 'project'],
+        requiredPermission: [['authenticated', 'project_member']],
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/project/project-1");
+  const location = hashLocation('#/tenant/tenant-1/project/project-1');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -388,13 +388,13 @@ test("permission resolver failures fail closed before capability or scope work a
       resolvePermissions: (context) => {
         permissionAttempts += 1;
         assert.deepEqual(context, {
-          tenantId: "tenant-1",
-          projectId: "project-1",
+          tenantId: 'tenant-1',
+          projectId: 'project-1',
         });
         if (permissionAttempts === 1) {
-          throw new Error("permission authority unavailable");
+          throw new Error('permission authority unavailable');
         }
-        return new Set(["authenticated", "project_member"]);
+        return new Set(['authenticated', 'project_member']);
       },
       resolveCapability: (_id, context) => {
         capabilityCount += 1;
@@ -415,9 +415,9 @@ test("permission resolver failures fail closed before capability or scope work a
 
   await host.start();
   assert.deepEqual(host.getState(), {
-    status: "error",
+    status: 'error',
     match: host.getState().match,
-    reasonCode: "desktop_route_permission_resolution_failed",
+    reasonCode: 'desktop_route_permission_resolution_failed',
     retryable: true,
   });
   assert.equal(capabilityCount, 0);
@@ -425,7 +425,7 @@ test("permission resolver failures fail closed before capability or scope work a
   assert.equal(loadCount, 0);
 
   await host.retry();
-  assert.equal(host.getState().status, "ready");
+  assert.equal(host.getState().status, 'ready');
   assert.equal(permissionAttempts, 3);
   assert.equal(capabilityCount, 2);
   assert.equal(scopeCount, 1);
@@ -433,39 +433,38 @@ test("permission resolver failures fail closed before capability or scope work a
   host.stop();
 });
 
-test("async permission authority resolves after scope switch and gates module loading", async () => {
+test('async permission authority resolves after scope switch and gates module loading', async () => {
   const order = [];
   const registry = createDesktopRouteRegistry([
     route(
-      "tenant-billing",
-      "/tenant/:tenantId/billing",
+      'tenant-billing',
+      '/tenant/:tenantId/billing',
       async () => {
-        order.push("load");
-        return { default: "Billing" };
+        order.push('load');
+        return { default: 'Billing' };
       },
       {
-        requiredPermission: [["authenticated", "tenant_admin"]],
+        requiredPermission: [['authenticated', 'tenant_admin']],
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-2/billing");
+  const location = hashLocation('#/tenant/tenant-2/billing');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      permissions: new Set(["authenticated"]),
+      permissions: new Set(['authenticated']),
       resolvePermissionSnapshot: async (context, signal) => {
-        order.push("permission");
+        order.push('permission');
         assert.equal(signal.aborted, false);
         return permissionSnapshot(context, {
-          permissions: ["authenticated", "tenant_member", "tenant_admin"],
+          permissions: ['authenticated', 'tenant_member', 'tenant_admin'],
           authority_revision: 4,
         });
       },
-      resolveCapability: (_id, context) =>
-        capability(context.tenantId, { authority_revision: 4 }),
+      resolveCapability: (_id, context) => capability(context.tenantId, { authority_revision: 4 }),
       switchScope: async (_context, signal) => {
-        order.push("scope");
+        order.push('scope');
         assert.equal(signal.aborted, false);
       },
     }),
@@ -473,21 +472,63 @@ test("async permission authority resolves after scope switch and gates module lo
 
   await host.start();
 
-  assert.equal(host.getState().status, "ready");
-  assert.deepEqual(order, ["scope", "permission", "load"]);
+  assert.equal(host.getState().status, 'ready');
+  assert.deepEqual(order, ['scope', 'permission', 'load']);
   host.stop();
 });
 
-test("async permission authority validates scope and revision and retries closed failures", async () => {
+test('Local-online cloud-only routes pass the matched route to Cloud permission authority', async () => {
+  let observedLocalPolicy = null;
+  const registry = createDesktopRouteRegistry([
+    route(
+      'backend-stores',
+      '/tenant/:tenantId/backend-stores',
+      async () => ({ default: 'BackendStores' }),
+      {
+        requiredPermission: [['authenticated', 'tenant_admin']],
+        localPolicy: 'cloud_only',
+      },
+    ),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/backend-stores');
+  const host = createDesktopHashRouteHost(
+    hostOptions({
+      registry,
+      location: location.port,
+      mode: 'local_online',
+      permissions: new Set(['authenticated']),
+      resolvePermissionSnapshot: async (context, _signal, match) => {
+        observedLocalPolicy = match.definition.localPolicy;
+        return permissionSnapshot(context, {
+          permissions: ['authenticated', 'tenant_member', 'tenant_admin'],
+          authority_revision: 7,
+        });
+      },
+      resolveCapability: (_id, context) =>
+        capability(context.tenantId, {
+          authority_revision: 7,
+          supporting_authority_sources: ['sidecar', 'electron'],
+        }),
+    }),
+  );
+
+  await host.start();
+
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(observedLocalPolicy, 'cloud_only');
+  host.stop();
+});
+
+test('async permission authority validates scope and revision and retries closed failures', async () => {
   let attempts = 0;
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
-    route("tenant-overview", "/tenant/:tenantId/overview", async () => {
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => {
       loadCount += 1;
-      return { default: "Overview" };
+      return { default: 'Overview' };
     }),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/overview");
+  const location = hashLocation('#/tenant/tenant-1/overview');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -498,7 +539,7 @@ test("async permission authority validates scope and revision and retries closed
           return permissionSnapshot(context, {
             scope: {
               ...permissionSnapshot(context).scope,
-              tenant_id: "tenant-other",
+              tenant_id: 'tenant-other',
             },
           });
         }
@@ -507,46 +548,39 @@ test("async permission authority validates scope and revision and retries closed
         }
         return permissionSnapshot(context, { authority_revision: 4 });
       },
-      resolveCapability: () =>
-        capability("tenant-1", { authority_revision: 5 }),
+      resolveCapability: () => capability('tenant-1', { authority_revision: 5 }),
     }),
   );
 
   await host.start();
-  assert.equal(host.getState().status, "error");
-  assert.equal(
-    host.getState().reasonCode,
-    "desktop_route_permission_scope_mismatch",
-  );
+  assert.equal(host.getState().status, 'error');
+  assert.equal(host.getState().reasonCode, 'desktop_route_permission_scope_mismatch');
   assert.equal(loadCount, 0);
 
   await host.retry();
-  assert.equal(host.getState().status, "ready");
+  assert.equal(host.getState().status, 'ready');
   assert.equal(loadCount, 1);
 
   await host.retry();
-  assert.equal(host.getState().status, "error");
-  assert.equal(
-    host.getState().reasonCode,
-    "desktop_route_permission_revision_stale",
-  );
+  assert.equal(host.getState().status, 'error');
+  assert.equal(host.getState().reasonCode, 'desktop_route_permission_revision_stale');
   assert.equal(loadCount, 1);
   host.stop();
 });
 
-test("hash change aborts async permission authority and suppresses stale completion", async () => {
+test('hash change aborts async permission authority and suppresses stale completion', async () => {
   const firstPermission = deferred();
   const permissionStarted = deferred();
   const signals = [];
   const registry = createDesktopRouteRegistry([
-    route("tenant-one", "/tenant/:tenantId/one", async () => ({
-      default: "One",
+    route('tenant-one', '/tenant/:tenantId/one', async () => ({
+      default: 'One',
     })),
-    route("tenant-two", "/tenant/:tenantId/two", async () => ({
-      default: "Two",
+    route('tenant-two', '/tenant/:tenantId/two', async () => ({
+      default: 'Two',
     })),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/one");
+  const location = hashLocation('#/tenant/tenant-1/one');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -566,37 +600,36 @@ test("hash change aborts async permission authority and suppresses stale complet
   await permissionStarted.promise;
   const readyTwo = waitForState(
     host,
-    (state) =>
-      state.status === "ready" && state.match.definition.id === "tenant-two",
+    (state) => state.status === 'ready' && state.match.definition.id === 'tenant-two',
   );
-  location.navigate("#/tenant/tenant-1/two");
+  location.navigate('#/tenant/tenant-1/two');
   await readyTwo;
 
   assert.equal(signals[0].aborted, true);
-  firstPermission.resolve(permissionSnapshot({ tenantId: "tenant-1" }));
+  firstPermission.resolve(permissionSnapshot({ tenantId: 'tenant-1' }));
   await startPromise;
   await Promise.resolve();
-  assert.equal(host.getState().match.definition.id, "tenant-two");
+  assert.equal(host.getState().match.definition.id, 'tenant-two');
   host.stop();
 });
 
-test("host emits loading then ready or degraded after scope and lazy module resolve", async () => {
+test('host emits loading then ready or degraded after scope and lazy module resolve', async () => {
   const loadingStates = [];
   const registry = createDesktopRouteRegistry([
-    route("tenant-overview", "/tenant/:tenantId/overview", async () => ({
-      default: "Overview",
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => ({
+      default: 'Overview',
     })),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/overview");
+  const location = hashLocation('#/tenant/tenant-1/overview');
   const scopeContexts = [];
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
       resolveCapability: () =>
-        capability("tenant-1", {
-          availability: "degraded",
-          reason_code: "tenant_overview_read_only",
+        capability('tenant-1', {
+          availability: 'degraded',
+          reason_code: 'tenant_overview_read_only',
         }),
       switchScope: async (context, signal) => {
         assert.equal(signal.aborted, false);
@@ -604,44 +637,42 @@ test("host emits loading then ready or degraded after scope and lazy module reso
       },
     }),
   );
-  const unsubscribe = host.subscribe((state) =>
-    loadingStates.push(state.status),
-  );
+  const unsubscribe = host.subscribe((state) => loadingStates.push(state.status));
 
   await host.start();
 
-  assert.deepEqual(scopeContexts, [{ tenantId: "tenant-1" }]);
-  assert.deepEqual(loadingStates, ["loading", "degraded"]);
+  assert.deepEqual(scopeContexts, [{ tenantId: 'tenant-1' }]);
+  assert.deepEqual(loadingStates, ['loading', 'degraded']);
   assert.deepEqual(host.getState(), {
-    status: "degraded",
+    status: 'degraded',
     match: host.getState().match,
     capability: host.getState().capability,
-    module: { default: "Overview" },
+    module: { default: 'Overview' },
   });
   unsubscribe();
   host.stop();
 });
 
-test("capability scope drift switches authority before loading the route module", async () => {
-  let authorityTenantId = "tenant-1";
+test('capability scope drift switches authority before loading the route module', async () => {
+  let authorityTenantId = 'tenant-1';
   let permissionCount = 0;
   let scopeCount = 0;
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
     route(
-      "project-overview",
-      "/tenant/:tenantId/project/:projectId",
+      'project-overview',
+      '/tenant/:tenantId/project/:projectId',
       async () => {
         loadCount += 1;
-        return { default: "Project Overview" };
+        return { default: 'Project Overview' };
       },
       {
-        scope: ["tenant", "project"],
-        requiredPermission: [["authenticated", "project_member"]],
+        scope: ['tenant', 'project'],
+        requiredPermission: [['authenticated', 'project_member']],
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-2/project/project-2");
+  const location = hashLocation('#/tenant/tenant-2/project/project-2');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
@@ -649,16 +680,15 @@ test("capability scope drift switches authority before loading the route module"
       resolvePermissions: () => {
         permissionCount += 1;
         return new Set([
-          "authenticated",
-          ...(authorityTenantId === "tenant-2" ? ["project_member"] : []),
+          'authenticated',
+          ...(authorityTenantId === 'tenant-2' ? ['project_member'] : []),
         ]);
       },
       resolveCapability: () =>
         capability(authorityTenantId, {
           scope: {
             tenant_id: authorityTenantId,
-            project_id:
-              authorityTenantId === "tenant-1" ? "project-1" : "project-2",
+            project_id: authorityTenantId === 'tenant-1' ? 'project-1' : 'project-2',
             workspace_id: null,
             instance_id: null,
           },
@@ -675,41 +705,39 @@ test("capability scope drift switches authority before loading the route module"
   assert.equal(scopeCount, 1);
   assert.equal(permissionCount, 2);
   assert.equal(loadCount, 1);
-  assert.equal(host.getState().status, "ready");
-  assert.equal(host.getState().capability.scope.project_id, "project-2");
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(host.getState().capability.scope.project_id, 'project-2');
   host.stop();
 });
 
-test("capability scope drift cannot defer non-membership permissions", async () => {
+test('capability scope drift cannot defer non-membership permissions', async () => {
   let scopeCount = 0;
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
     route(
-      "project-settings",
-      "/tenant/:tenantId/project/:projectId/settings",
+      'project-settings',
+      '/tenant/:tenantId/project/:projectId/settings',
       async () => {
         loadCount += 1;
-        return { default: "Project Settings" };
+        return { default: 'Project Settings' };
       },
       {
-        scope: ["tenant", "project"],
-        requiredPermission: [
-          ["authenticated", "project_member", "tenant_admin"],
-        ],
+        scope: ['tenant', 'project'],
+        requiredPermission: [['authenticated', 'project_member', 'tenant_admin']],
       },
     ),
   ]);
-  const location = hashLocation("#/tenant/tenant-2/project/project-2/settings");
+  const location = hashLocation('#/tenant/tenant-2/project/project-2/settings');
   const host = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
-      resolvePermissions: () => new Set(["authenticated", "project_member"]),
+      resolvePermissions: () => new Set(['authenticated', 'project_member']),
       resolveCapability: () =>
-        capability("tenant-1", {
+        capability('tenant-1', {
           scope: {
-            tenant_id: "tenant-1",
-            project_id: "project-1",
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
             workspace_id: null,
             instance_id: null,
           },
@@ -722,23 +750,23 @@ test("capability scope drift cannot defer non-membership permissions", async () 
 
   await host.start();
 
-  assert.equal(host.getState().status, "forbidden");
-  assert.deepEqual(host.getState().missingPermissions, ["tenant_admin"]);
+  assert.equal(host.getState().status, 'forbidden');
+  assert.deepEqual(host.getState().missingPermissions, ['tenant_admin']);
   assert.equal(scopeCount, 0);
   assert.equal(loadCount, 0);
   host.stop();
 });
 
-test("hash changes abort prior scope work and suppress stale loader completion", async () => {
+test('hash changes abort prior scope work and suppress stale loader completion', async () => {
   const firstModule = deferred();
   const firstScopeSignal = deferred();
   const registry = createDesktopRouteRegistry([
-    route("tenant-one", "/tenant/:tenantId/one", () => firstModule.promise),
-    route("tenant-two", "/tenant/:tenantId/two", async () => ({
-      default: "Two",
+    route('tenant-one', '/tenant/:tenantId/one', () => firstModule.promise),
+    route('tenant-two', '/tenant/:tenantId/two', async () => ({
+      default: 'Two',
     })),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/one");
+  const location = hashLocation('#/tenant/tenant-1/one');
   const signals = [];
   const host = createDesktopHashRouteHost(
     hostOptions({
@@ -755,33 +783,32 @@ test("hash changes abort prior scope work and suppress stale loader completion",
   await firstScopeSignal.promise;
   const readyTwo = waitForState(
     host,
-    (state) =>
-      state.status === "ready" && state.match.definition.id === "tenant-two",
+    (state) => state.status === 'ready' && state.match.definition.id === 'tenant-two',
   );
-  location.navigate("#/tenant/tenant-1/two");
+  location.navigate('#/tenant/tenant-1/two');
   await readyTwo;
 
   assert.equal(signals[0].aborted, true);
   assert.equal(signals[1].aborted, false);
-  firstModule.resolve({ default: "One" });
+  firstModule.resolve({ default: 'One' });
   await startPromise;
   await Promise.resolve();
-  assert.equal(host.getState().status, "ready");
-  assert.equal(host.getState().match.definition.id, "tenant-two");
+  assert.equal(host.getState().status, 'ready');
+  assert.equal(host.getState().match.definition.id, 'tenant-two');
   host.stop();
 });
 
-test("loader errors are retryable and stop removes the hash listener and aborts work", async () => {
+test('loader errors are retryable and stop removes the hash listener and aborts work', async () => {
   let attempts = 0;
   const activeScope = deferred();
   const registry = createDesktopRouteRegistry([
-    route("tenant-overview", "/tenant/:tenantId/overview", async () => {
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => {
       attempts += 1;
-      if (attempts === 1) throw new Error("module failed");
-      return { default: "Overview" };
+      if (attempts === 1) throw new Error('module failed');
+      return { default: 'Overview' };
     }),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/overview");
+  const location = hashLocation('#/tenant/tenant-1/overview');
   let latestSignal;
   const host = createDesktopHashRouteHost(
     hostOptions({
@@ -796,13 +823,13 @@ test("loader errors are retryable and stop removes the hash listener and aborts 
 
   await host.start();
   assert.deepEqual(host.getState(), {
-    status: "error",
+    status: 'error',
     match: host.getState().match,
-    reasonCode: "desktop_route_module_load_failed",
+    reasonCode: 'desktop_route_module_load_failed',
     retryable: true,
   });
   await host.retry();
-  assert.equal(host.getState().status, "ready");
+  assert.equal(host.getState().status, 'ready');
   assert.equal(attempts, 2);
   assert.equal(location.listenerCount(), 1);
 
@@ -811,34 +838,34 @@ test("loader errors are retryable and stop removes the hash listener and aborts 
   assert.equal(latestSignal.aborted, true);
   assert.equal(location.listenerCount(), 0);
   const stoppedState = host.getState();
-  location.navigate("#/tenant/tenant-1/missing");
+  location.navigate('#/tenant/tenant-1/missing');
   await Promise.resolve();
   assert.equal(host.getState(), stoppedState);
 });
 
-test("capability and scope failures expose distinct retryable error states", async () => {
+test('capability and scope failures expose distinct retryable error states', async () => {
   let loadCount = 0;
   const registry = createDesktopRouteRegistry([
-    route("tenant-overview", "/tenant/:tenantId/overview", async () => {
+    route('tenant-overview', '/tenant/:tenantId/overview', async () => {
       loadCount += 1;
-      return { default: "Overview" };
+      return { default: 'Overview' };
     }),
   ]);
-  const location = hashLocation("#/tenant/tenant-1/overview");
+  const location = hashLocation('#/tenant/tenant-1/overview');
   const capabilityHost = createDesktopHashRouteHost(
     hostOptions({
       registry,
       location: location.port,
       resolveCapability: () => {
-        throw new Error("capability failed");
+        throw new Error('capability failed');
       },
     }),
   );
   await capabilityHost.start();
   assert.deepEqual(capabilityHost.getState(), {
-    status: "error",
+    status: 'error',
     match: capabilityHost.getState().match,
-    reasonCode: "desktop_route_capability_resolution_failed",
+    reasonCode: 'desktop_route_capability_resolution_failed',
     retryable: true,
   });
   capabilityHost.stop();
@@ -848,25 +875,25 @@ test("capability and scope failures expose distinct retryable error states", asy
       registry,
       location: location.port,
       switchScope: async () => {
-        throw new Error("scope failed");
+        throw new Error('scope failed');
       },
     }),
   );
   await scopeHost.start();
   assert.deepEqual(scopeHost.getState(), {
-    status: "error",
+    status: 'error',
     match: scopeHost.getState().match,
-    reasonCode: "desktop_route_scope_switch_failed",
+    reasonCode: 'desktop_route_scope_switch_failed',
     retryable: true,
   });
   scopeHost.stop();
   assert.equal(loadCount, 0);
 });
 
-test("browser location port reads hash and owns only the hashchange listener", () => {
+test('browser location port reads hash and owns only the hashchange listener', () => {
   const listeners = new Map();
   const target = {
-    location: { hash: "#/tenant/tenant-1/overview" },
+    location: { hash: '#/tenant/tenant-1/overview' },
     addEventListener(type, listener) {
       listeners.set(type, listener);
     },
@@ -880,9 +907,9 @@ test("browser location port reads hash and owns only the hashchange listener", (
     changes += 1;
   });
 
-  assert.equal(port.readHash(), "#/tenant/tenant-1/overview");
-  assert.deepEqual([...listeners.keys()], ["hashchange"]);
-  listeners.get("hashchange")();
+  assert.equal(port.readHash(), '#/tenant/tenant-1/overview');
+  assert.deepEqual([...listeners.keys()], ['hashchange']);
+  listeners.get('hashchange')();
   assert.equal(changes, 1);
   unsubscribe();
   assert.equal(listeners.size, 0);

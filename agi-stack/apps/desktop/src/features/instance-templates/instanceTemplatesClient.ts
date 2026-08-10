@@ -4,6 +4,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   InstanceTemplateCreateInput,
@@ -16,6 +17,7 @@ import type {
 } from './instanceTemplatesTypes';
 
 type Fetch = typeof globalThis.fetch;
+type FetchPath = (path: string, init: RequestInit) => Promise<Response>;
 
 export type InstanceTemplatesClientDependencies = Readonly<{
   fetch?: Fetch;
@@ -36,7 +38,9 @@ export function createInstanceTemplatesClient(
   dependencies: InstanceTemplatesClientDependencies = {},
 ): InstanceTemplatesClient {
   const runtimeConfig = Object.freeze({ ...config });
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const fetchPath: FetchPath = dependencies.fetch
+    ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+    : (path, init) => desktopApiFetch(runtimeConfig, path, init);
   return Object.freeze({
     async list(scope, query = {}, options) {
       requireCloudScope(runtimeConfig, scope);
@@ -59,7 +63,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         `/api/v1/instance-templates/?${params.toString()}`,
-        fetchImpl,
+        fetchPath,
         { method: 'GET', signal: options?.signal },
       );
       return parsePage(payload, scope);
@@ -69,7 +73,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         `/api/v1/instance-templates/${encodeURIComponent(identifier(templateId))}`,
-        fetchImpl,
+        fetchPath,
         { method: 'GET', signal: options?.signal },
       );
       return parseTemplate(payload, scope);
@@ -79,7 +83,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         `/api/v1/instance-templates/${encodeURIComponent(identifier(templateId))}/items`,
-        fetchImpl,
+        fetchPath,
         { method: 'GET', signal: options?.signal },
       );
       if (!Array.isArray(payload)) throw contractError();
@@ -90,7 +94,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         '/api/v1/instance-templates/',
-        fetchImpl,
+        fetchPath,
         {
           method: 'POST',
           signal: options?.signal,
@@ -110,7 +114,7 @@ export function createInstanceTemplatesClient(
       await request(
         runtimeConfig,
         `/api/v1/instance-templates/${encodeURIComponent(identifier(templateId))}`,
-        fetchImpl,
+        fetchPath,
         {
           method: 'DELETE',
           signal: options?.signal,
@@ -123,7 +127,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         `/api/v1/instance-templates/${encodeURIComponent(identifier(templateId))}/publish`,
-        fetchImpl,
+        fetchPath,
         { method: 'POST', signal: options?.signal },
       );
       return parseTemplate(payload, scope);
@@ -133,7 +137,7 @@ export function createInstanceTemplatesClient(
       const payload = await request(
         runtimeConfig,
         `/api/v1/instance-templates/${encodeURIComponent(identifier(templateId))}/clone`,
-        fetchImpl,
+        fetchPath,
         {
           method: 'POST',
           signal: options?.signal,
@@ -167,7 +171,7 @@ function requireCloudScope(
 async function request(
   config: DesktopRuntimeConfig,
   path: string,
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   options: Readonly<{
     method: 'GET' | 'POST' | 'DELETE';
     signal?: AbortSignal;
@@ -177,7 +181,7 @@ async function request(
 ): Promise<unknown> {
   const headers = requestHeaders(config);
   if (options.body) headers.set('Content-Type', 'application/json');
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await fetchPath(path, {
     method: options.method,
     headers,
     signal: options.signal,

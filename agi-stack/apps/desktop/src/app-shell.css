@@ -63,6 +63,25 @@
   scrollbar-gutter: stable;
 }
 
+.command-group {
+  display: grid;
+  gap: 4px;
+}
+
+.command-group + .command-group {
+  margin-top: 6px;
+}
+
+.command-group h2 {
+  margin: 0;
+  padding: 6px 10px 2px;
+  color: var(--desktop-faint);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .command-row {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) auto;

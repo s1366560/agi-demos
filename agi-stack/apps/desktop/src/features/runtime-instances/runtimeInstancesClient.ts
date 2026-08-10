@@ -4,6 +4,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   RuntimeInstanceSummary,
@@ -15,6 +16,7 @@ import type {
 } from './runtimeInstancesTypes';
 
 type Fetch = typeof globalThis.fetch;
+type FetchPath = (path: string, init: RequestInit) => Promise<Response>;
 type LocalRuntimeStatusReader = () => Promise<unknown>;
 
 export type RuntimeInstancesClientDependencies = Readonly<{
@@ -43,7 +45,9 @@ export function createRuntimeInstancesClient(
   dependencies: RuntimeInstancesClientDependencies = {},
 ): RuntimeInstancesClient {
   const runtimeConfig = Object.freeze({ ...config });
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const fetchPath: FetchPath = dependencies.fetch
+    ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+    : (path, init) => desktopApiFetch(runtimeConfig, path, init);
   const readLocalRuntimeStatus =
     dependencies.readLocalRuntimeStatus ?? defaultLocalRuntimeStatusReader;
 
@@ -66,7 +70,7 @@ export function createRuntimeInstancesClient(
         runtimeConfig,
         `/api/v1/instances/?${params.toString()}`,
         'GET',
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parseCloudPage(payload, scope);
@@ -77,7 +81,7 @@ export function createRuntimeInstancesClient(
         runtimeConfig,
         `/api/v1/instances/${encodeURIComponent(identifier(instanceId))}/restart`,
         'POST',
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
     },
@@ -87,7 +91,7 @@ export function createRuntimeInstancesClient(
         runtimeConfig,
         `/api/v1/instances/${encodeURIComponent(identifier(instanceId))}`,
         'DELETE',
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
     },
@@ -124,7 +128,7 @@ async function requestJson(
   config: DesktopRuntimeConfig,
   path: string,
   method: 'GET' | 'POST' | 'DELETE',
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   signal?: AbortSignal,
 ): Promise<unknown> {
   const headers = new Headers({ Accept: 'application/json' });
@@ -132,7 +136,7 @@ async function requestJson(
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await fetchPath(path, {
     method,
     headers,
     signal,

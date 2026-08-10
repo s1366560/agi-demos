@@ -15,6 +15,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import type { NativeOAuthProvider } from '../../api/nativeOAuthClient';
 import type { AuthState, RuntimeMode } from '../../types';
 import { useModalDialog } from '../settings/useModalDialog';
 import {
@@ -38,6 +39,9 @@ type LoginScreenProps = {
   onEmailLogin: (trustedDevice: boolean) => void;
   onLocalSession: (trustedDevice: boolean) => void;
   onWorkspaceSso: (trustedDevice: boolean) => void;
+  nativeOAuthProviders: readonly NativeOAuthProvider[];
+  nativeOAuthPendingProvider: string | null;
+  onNativeOAuth: (provider: string) => void;
   workspaceSso: WorkspaceSsoPresentation | null;
   onOpenWorkspaceSso: () => void;
   onCancelWorkspaceSso: () => void;
@@ -87,6 +91,9 @@ export function LoginScreen({
   onEmailLogin,
   onLocalSession,
   onWorkspaceSso,
+  nativeOAuthProviders,
+  nativeOAuthPendingProvider,
+  onNativeOAuth,
   workspaceSso,
   onOpenWorkspaceSso,
   onCancelWorkspaceSso,
@@ -251,6 +258,24 @@ export function LoginScreen({
 
           {effectiveMode === 'cloud' ? (
             <>
+              {nativeOAuthProviders.length > 0 ? (
+                <div className="desktop-login-oauth-providers">
+                  {nativeOAuthProviders.map((provider) => (
+                    <button
+                      className="desktop-login-sso"
+                      type="button"
+                      key={provider.id}
+                      disabled={busy}
+                      aria-busy={nativeOAuthPendingProvider === provider.id}
+                      onClick={() => onNativeOAuth(provider.id)}
+                    >
+                      <ExternalLinkIcon />
+                      {provider.displayName}
+                      <ArrowRightIcon />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <button
                 className="desktop-login-sso"
                 type="button"

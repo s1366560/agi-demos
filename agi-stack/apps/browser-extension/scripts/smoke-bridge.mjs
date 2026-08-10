@@ -11,7 +11,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,9 @@ const SIDECAR =
   resolve(here, '../../../target/debug/agistack-desktop-sidecar');
 
 const scratch = mkdtempSync(join(tmpdir(), 'memstack-bridge-smoke-'));
+const profileDir = join(scratch, 'profile');
+const profileHosts = join(profileDir, 'NativeMessagingHosts');
+const expectedManifestPath = join(profileHosts, 'com.memstack.browserbridge.json');
 let context = null;
 let sidecar = null;
 let failed = false;
@@ -51,7 +54,10 @@ async function startFixtureServer() {
   });
   await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
   const { port } = server.address();
-  return { url: `http://127.0.0.1:${port}/fixture.html`, close: () => server.close() };
+  return {
+    url: `http://127.0.0.1:${port}/fixture.html`,
+    close: () => server.close(),
+  };
 }
 
 async function cleanup() {
@@ -61,8 +67,11 @@ async function cleanup() {
   if (sidecar) {
     try {
       sidecar.stdin.write(
-        JSON.stringify({ type: 'request', id: 'uninstall', command: 'browser_bridge_uninstall' }) +
-          '\n',
+        JSON.stringify({
+          type: 'request',
+          id: 'uninstall',
+          command: 'browser_bridge_uninstall',
+        }) + '\n',
       );
       await new Promise((r) => setTimeout(r, 1500));
       sidecar.stdin.end();
@@ -83,7 +92,14 @@ setTimeout(async () => {
 }, 120_000);
 
 async function main() {
-  sidecar = spawn(SIDECAR, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+  mkdirSync(profileHosts, { recursive: true });
+  sidecar = spawn(SIDECAR, [], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      AGISTACK_BROWSER_BRIDGE_MANIFEST_DIR: profileHosts,
+    },
+  });
   createInterface({ input: sidecar.stderr }).on('line', (l) => {
     if (/error|warn/i.test(l)) console.log('[sidecar]', l.slice(0, 300));
   });
@@ -143,22 +159,17 @@ async function main() {
 
   const inst = await request('browser_bridge_install');
   if (!inst.ok) return fail('install failed: ' + JSON.stringify(inst.error));
+  if (
+    inst.result.installed.length !== 1 ||
+    resolve(inst.result.installed[0].manifestPath) !== resolve(expectedManifestPath)
+  ) {
+    return fail(`install escaped isolated profile: ${JSON.stringify(inst.result.installed)}`);
+  }
   log('manifest installed:', inst.result.installed.map((i) => i.browser).join(', '));
 
   // Branded Chrome blocks --load-extension; Playwright's Chromium allows it.
-  // Extensions require headed mode.
-  // Chromium resolves the user-level NativeMessagingHosts dir as
-  // <user-data-dir>/NativeMessagingHosts, so with a custom profile dir the
-  // system-wide install is invisible — mirror the manifest into the profile.
-  const profileDir = join(scratch, 'profile');
-  const profileHosts = join(profileDir, 'NativeMessagingHosts');
-  mkdirSync(profileHosts, { recursive: true });
-  const installedManifest = inst.result.installed.find((i) => i.browser === 'Chromium') ??
-    inst.result.installed[0];
-  copyFileSync(
-    installedManifest.manifestPath,
-    join(profileHosts, 'com.memstack.browserbridge.json'),
-  );
+  // Extensions require headed mode. The sidecar writes directly into this
+  // disposable profile's NativeMessagingHosts directory and nowhere else.
   context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
     args: [`--disable-extensions-except=${EXT_DIR}`, `--load-extension=${EXT_DIR}`],
@@ -178,7 +189,9 @@ async function main() {
     const t0 = performance.now();
     try {
       const st = await request('browser_bridge_status');
-      log(`poll ${i}: ${(performance.now() - t0).toFixed(0)}ms brokerConnected=${st.result?.brokerConnected}`);
+      log(
+        `poll ${i}: ${(performance.now() - t0).toFixed(0)}ms brokerConnected=${st.result?.brokerConnected}`,
+      );
       if (st.ok && st.result.brokerConnected) connected = true;
     } catch (e) {
       log(`poll ${i}: ${(performance.now() - t0).toFixed(0)}ms ERROR ${e.message}`);
@@ -201,10 +214,16 @@ async function main() {
   });
   const sessionBody = await sessionRes.text();
   const credential = sessionBody.match(/local-session-[0-9a-f-]+\.[A-Za-z0-9_-]+/)?.[0];
-  if (!credential) return fail(`local session mint failed: HTTP ${sessionRes.status} ${sessionBody.slice(0, 200)}`);
+  if (!credential)
+    return fail(
+      `local session mint failed: HTTP ${sessionRes.status} ${sessionBody.slice(0, 200)}`,
+    );
 
   const res = await fetch(`${ready.apiBaseUrl}/mcp/tools/list`, {
-    headers: { Authorization: `Bearer ${credential}`, 'x-agistack-launch': ready.apiToken },
+    headers: {
+      Authorization: `Bearer ${credential}`,
+      'x-agistack-launch': ready.apiToken,
+    },
   });
   if (res.status !== 200) return fail(`tools/list HTTP ${res.status}`);
   const body = await res.json();
@@ -219,7 +238,10 @@ async function main() {
   try {
     const dev = (method, params) => request('browser_bridge_dev_call', { method, params });
 
-    const group = await dev('ensureTabGroup', { key: 'smoke-run', title: 'MemStack Smoke' });
+    const group = await dev('ensureTabGroup', {
+      key: 'smoke-run',
+      title: 'MemStack Smoke',
+    });
     if (!group.ok) return fail('ensureTabGroup: ' + JSON.stringify(group.error));
     const groupId = group.result.groupId;
     log('tab group created:', groupId);
@@ -266,11 +288,15 @@ async function main() {
       });
       if (!step.ok) return fail(`dispatchMouseEvent ${type}: ` + JSON.stringify(step.error));
     }
-    await page.waitForFunction(() => window.__smokeClicks === 1, null, { timeout: 5000 });
+    await page.waitForFunction(() => window.__smokeClicks === 1, null, {
+      timeout: 5000,
+    });
     log('CDP input click ✔');
 
     // turnEnded: unmarked agent tab must be closed
-    const ended = await dev('turnEnded', { leases: [{ tabId, origin: 'agent' }] });
+    const ended = await dev('turnEnded', {
+      leases: [{ tabId, origin: 'agent' }],
+    });
     if (!ended.ok) return fail('turnEnded: ' + JSON.stringify(ended.error));
     if (ended.result.closed !== 1) return fail('turnEnded closed=' + ended.result.closed);
     const stillThere = context.pages().some((p) => p.url().startsWith(fixture.url));

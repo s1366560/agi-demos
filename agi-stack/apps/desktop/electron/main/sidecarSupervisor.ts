@@ -1,13 +1,5 @@
-import {
-  createHmac,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from 'node:crypto';
-import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from 'node:child_process';
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 const SIDECAR_PROTOCOL_VERSION = 1;
@@ -52,6 +44,14 @@ export type SidecarSupervisorOptions = {
   restartStabilityMs?: number;
   onRecovered?: () => void;
 };
+
+export function sidecarRendererEnvironment(
+  developmentUrl: URL | null,
+): Readonly<Record<string, string>> {
+  return Object.freeze({
+    AGISTACK_DESKTOP_RENDERER_ORIGIN: developmentUrl?.origin ?? '',
+  });
+}
 
 export type SidecarRuntimeIdentity = {
   pid: number;
@@ -103,10 +103,7 @@ export class SidecarSupervisor {
     }
   }
 
-  async invoke<T = unknown>(
-    command: string,
-    args?: Record<string, unknown>,
-  ): Promise<T> {
+  async invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T> {
     await this.start();
     const child = this.#child;
     if (!child || !this.#identity) {
@@ -123,17 +120,14 @@ export class SidecarSupervisor {
         reject,
         timeout,
       });
-      child.stdin.write(
-        `${JSON.stringify({ type: 'request', id, command, args })}\n`,
-        (error) => {
-          if (!error) return;
-          const pending = this.#pending.get(id);
-          if (!pending) return;
-          clearTimeout(pending.timeout);
-          this.#pending.delete(id);
-          pending.reject(new Error(`failed to send sidecar request: ${error.message}`));
-        },
-      );
+      child.stdin.write(`${JSON.stringify({ type: 'request', id, command, args })}\n`, (error) => {
+        if (!error) return;
+        const pending = this.#pending.get(id);
+        if (!pending) return;
+        clearTimeout(pending.timeout);
+        this.#pending.delete(id);
+        pending.reject(new Error(`failed to send sidecar request: ${error.message}`));
+      });
     });
   }
 
@@ -182,7 +176,10 @@ export class SidecarSupervisor {
       const handshakeTimeout = setTimeout(() => {
         fail(new Error('sidecar handshake timed out'));
       }, this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
-      const output = createInterface({ input: child.stdout, crlfDelay: Infinity });
+      const output = createInterface({
+        input: child.stdout,
+        crlfDelay: Infinity,
+      });
 
       const fail = (error: Error): void => {
         if (settled) return;
@@ -242,11 +239,7 @@ export class SidecarSupervisor {
       child.once('exit', (code, signal) => {
         const wasReady = this.#identity !== null;
         if (!settled) {
-          fail(
-            new Error(
-              `sidecar exited during handshake (${formatExitReason(code, signal)})`,
-            ),
-          );
+          fail(new Error(`sidecar exited during handshake (${formatExitReason(code, signal)})`));
           return;
         }
         if (this.#child === child) this.#child = null;
@@ -298,10 +291,9 @@ export class SidecarSupervisor {
 
   #scheduleRestart(): void {
     if (this.#restartDelay || this.#starting || !this.#shouldRun) return;
-    const delays =
-      this.#options.restartDelaysMs?.length
-        ? this.#options.restartDelaysMs
-        : DEFAULT_RESTART_DELAYS_MS;
+    const delays = this.#options.restartDelaysMs?.length
+      ? this.#options.restartDelaysMs
+      : DEFAULT_RESTART_DELAYS_MS;
     const delay = delays[Math.min(this.#restartAttempt, delays.length - 1)] ?? 10_000;
     this.#restartAttempt += 1;
     this.#restartDelay = new Promise<void>((resolve) => {
@@ -330,8 +322,7 @@ export class SidecarSupervisor {
 
   #armRestartStabilityReset(child: ChildProcessWithoutNullStreams): void {
     this.#clearRestartStabilityTimer();
-    const stabilityMs =
-      this.#options.restartStabilityMs ?? DEFAULT_RESTART_STABILITY_MS;
+    const stabilityMs = this.#options.restartStabilityMs ?? DEFAULT_RESTART_STABILITY_MS;
     this.#restartStabilityTimer = setTimeout(() => {
       this.#restartStabilityTimer = null;
       if (this.#child === child && this.#identity) this.#restartAttempt = 0;
@@ -368,11 +359,7 @@ function requireReadyMessage(value: unknown): SidecarReady {
   return message as SidecarReady;
 }
 
-function verifyReadyMessage(
-  ready: SidecarReady,
-  secret: Buffer,
-  expectedNonce: string,
-): void {
+function verifyReadyMessage(ready: SidecarReady, secret: Buffer, expectedNonce: string): void {
   if (ready.nonce !== expectedNonce) {
     throw new Error('sidecar handshake nonce is invalid');
   }

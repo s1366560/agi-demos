@@ -12,15 +12,10 @@ const {
 const {
   createDesktopWorkbenchCapabilityClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
-const {
-  DEFAULT_CONFIG,
-} = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const fixture = JSON.parse(
-  readFileSync(
-    new URL('./fixtures/desktop-capability-snapshot.v3.json', import.meta.url),
-    'utf8',
-  ),
+  readFileSync(new URL('./fixtures/desktop-capability-snapshot.v3.json', import.meta.url), 'utf8'),
 );
 
 const legacyFixture = JSON.parse(
@@ -43,15 +38,19 @@ const nullScope = {
 function declaredEntry(capability) {
   return {
     ...capability,
+    retryable: false,
     authority_source: 'renderer',
+    supporting_authority_sources: [],
     provenance: 'declared',
   };
 }
 
 function declaredSnapshot(snapshot) {
+  const { mode, ...legacySnapshot } = snapshot;
   return {
-    ...snapshot,
-    version: '4.0.0',
+    ...legacySnapshot,
+    version: '5.0.0',
+    runtime_state: mode === 'local' ? 'local_offline' : mode,
     capabilities: Object.fromEntries(
       DESKTOP_CAPABILITY_NAMES.map((name) => [
         name,
@@ -300,7 +299,7 @@ test('DesktopCapabilitySnapshot v3 validates authority fields and preserves the 
 
 test('DesktopCapabilitySnapshot v2 is read-only input and normalizes missing capabilities closed', () => {
   const snapshot = parseDesktopCapabilitySnapshot(legacyFixture);
-  assert.equal(snapshot?.version, '4.0.0');
+  assert.equal(snapshot?.version, '5.0.0');
   assert.deepEqual(
     snapshot?.capabilities.search,
     declaredEntry({
@@ -336,9 +335,7 @@ test('DesktopCapabilitySnapshot v3 rejects unsafe authority state and unsupporte
   assert.equal(parseDesktopCapabilitySnapshot(duplicateAction), null);
 
   const actionOnUnavailable = structuredClone(fixture);
-  actionOnUnavailable.capabilities.workspace_collaboration.allowed_actions.push(
-    'update',
-  );
+  actionOnUnavailable.capabilities.workspace_collaboration.allowed_actions.push('update');
   assert.equal(parseDesktopCapabilitySnapshot(actionOnUnavailable), null);
 
   const invalidScope = structuredClone(fixture);
@@ -412,7 +409,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
     );
 
     const snapshot = await client.loadSnapshot();
-    assert.equal(snapshot.version, '4.0.0');
+    assert.equal(snapshot.version, '5.0.0');
     assert.deepEqual(snapshot.capabilities.search, {
       availability: 'degraded',
       reason_code: 'local_embeddings_unavailable',
@@ -426,13 +423,12 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: 21,
+      retryable: false,
       authority_source: 'sidecar',
+      supporting_authority_sources: [],
       provenance: 'observed',
     });
-    assert.deepEqual(
-      snapshot.capabilities['project-project-search'],
-      snapshot.capabilities.search,
-    );
+    assert.deepEqual(snapshot.capabilities['project-project-search'], snapshot.capabilities.search);
     assert.deepEqual(snapshot.capabilities.automation_run, {
       availability: 'unavailable',
       reason_code: 'capability_authority_revision_unavailable',
@@ -446,7 +442,9 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: null,
+      retryable: false,
       authority_source: 'sidecar',
+      supporting_authority_sources: [],
       provenance: 'observed',
     });
     assert.deepEqual(snapshot.capabilities['project-project-cron-jobs'], {
@@ -462,7 +460,9 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         instance_id: null,
       },
       authority_revision: null,
+      retryable: false,
       authority_source: 'sidecar',
+      supporting_authority_sources: [],
       provenance: 'observed',
     });
   } finally {

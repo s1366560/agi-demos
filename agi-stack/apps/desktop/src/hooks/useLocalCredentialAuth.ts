@@ -2,12 +2,12 @@ import { useI18n } from '../i18n';
 import {
   DesktopApiClient,
 } from '../api/client';
+import { desktopNativeCloudAuthClient } from '../api/nativeCloudAuthClient';
 import {
   clearLocalTrustedSession,
   clearNativeTrustedSession,
   hasNativeTrustedSessionBroker,
   saveLocalTrustedSession,
-  saveNativeTrustedSession,
   type NativeTrustedSession,
 } from '../api/trustedSession';
 import {
@@ -45,6 +45,7 @@ import type { useCloudSessionAuth } from './useCloudSessionAuth';
 type CloudSessionAuthApi = Pick<
   ReturnType<typeof useCloudSessionAuth>,
   | 'hydrateCloudSession'
+  | 'hydrateProjectedCloudSession'
   | 'revokeUnadoptedDeviceToken'
   | 'supersedeWorkspaceSsoAttempt'
 >;
@@ -56,6 +57,7 @@ export function useLocalCredentialAuth(
   const { t } = useI18n();
   const {
     hydrateCloudSession,
+    hydrateProjectedCloudSession,
     revokeUnadoptedDeviceToken,
     supersedeWorkspaceSsoAttempt,
   } = cloudAuth;
@@ -104,7 +106,6 @@ export function useLocalCredentialAuth(
     setAuth((current) => ({ ...current, status: 'signing_in', error: null }));
     setConnection('loading');
     setError(null);
-    let persistenceWarning: string | null = null;
     let issuedAccessToken = '';
     let tokenAdopted = false;
     let passwordChangeTokenRetained = false;
@@ -118,6 +119,48 @@ export function useLocalCredentialAuth(
         }
         if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       }
+      const nativeAuthClient =
+        runsInNativeDesktop && runtimeConfig.mode === 'cloud'
+          ? desktopNativeCloudAuthClient()
+          : null;
+      if (nativeAuthClient) {
+        const result = await nativeAuthClient.loginWithPassword({
+          apiBaseUrl: runtimeConfig.apiBaseUrl,
+          username,
+          password: loginPassword,
+          trustedDevice,
+        });
+        if (authAttemptRevisionRef.current !== authAttemptRevision) {
+          await nativeAuthClient.signOut().catch(() => undefined);
+          return;
+        }
+        if (result.status === 'password_change_required') {
+          pendingPasswordChangeRef.current = {
+            outcome: {
+              access_token: '',
+              token_type: 'bearer',
+              must_change_password: true,
+            },
+            runtimeConfig,
+            trustedDevice,
+            authRevision: authAttemptRevision,
+          };
+          passwordChangeTokenRetained = true;
+          setLoginPassword('');
+          setAuth(passwordChangeGateAuthState(false, null));
+          setConnection('idle');
+          setError(null);
+          return;
+        }
+        const projection = await hydrateProjectedCloudSession(authAttemptRevision);
+        if (!projection) {
+          await nativeAuthClient.signOut().catch(() => undefined);
+          return;
+        }
+        tokenAdopted = true;
+        return;
+      }
+
       const loginClient = new DesktopApiClient({ ...runtimeConfig, apiKey: '' });
       const outcome = await loginClient.login(username, loginPassword);
       issuedAccessToken = outcome.access_token;
@@ -136,26 +179,9 @@ export function useLocalCredentialAuth(
         setError(null);
         return;
       }
-      if (trustedDevice && hasNativeTrustedSessionBroker()) {
-        const trustedSession: NativeTrustedSession = {
-          version: 1,
-          api_base_url: runtimeConfig.apiBaseUrl,
-          runtime_mode: 'cloud',
-          credential_kind: 'cloud_bearer',
-          credential: outcome.access_token,
-          expires_at: outcome.session?.expires_at ?? null,
-        };
-        try {
-          await saveNativeTrustedSession(trustedSession);
-        } catch {
-          persistenceWarning = t('login.persistenceUnavailable');
-        }
-        if (authAttemptRevisionRef.current !== authAttemptRevision) return;
-      }
       const hydrated = await hydrateCloudSession(outcome, runtimeConfig, authAttemptRevision);
       if (!hydrated) return;
       tokenAdopted = true;
-      if (persistenceWarning) setError(persistenceWarning);
     } catch (caught) {
       if (authAttemptRevisionRef.current !== authAttemptRevision) return;
       if (hasNativeTrustedSessionBroker()) {
@@ -195,8 +221,28 @@ export function useLocalCredentialAuth(
     setError(null);
     let passwordChanged = false;
     let tokenAdopted = false;
-    let persistedNativeSession = false;
     try {
+      const nativeAuthClient =
+        runsInNativeDesktop && pending.runtimeConfig.mode === 'cloud'
+          ? desktopNativeCloudAuthClient()
+          : null;
+      if (nativeAuthClient) {
+        await nativeAuthClient.forceChangePassword({ currentPassword, newPassword });
+        passwordChanged = true;
+        if (authAttemptRevisionRef.current !== pending.authRevision) {
+          await nativeAuthClient.signOut().catch(() => undefined);
+          return;
+        }
+        const projection = await hydrateProjectedCloudSession(pending.authRevision);
+        if (!projection) {
+          await nativeAuthClient.signOut().catch(() => undefined);
+          return;
+        }
+        tokenAdopted = true;
+        pendingPasswordChangeRef.current = null;
+        return;
+      }
+
       const passwordClient = new DesktopApiClient({
         ...pending.runtimeConfig,
         apiKey: pending.outcome.access_token,
@@ -211,42 +257,12 @@ export function useLocalCredentialAuth(
         return;
       }
 
-      let persistenceWarning: string | null = null;
-      if (pending.trustedDevice && hasNativeTrustedSessionBroker()) {
-        try {
-          await saveNativeTrustedSession({
-            version: 1,
-            api_base_url: pending.runtimeConfig.apiBaseUrl,
-            runtime_mode: 'cloud',
-            credential_kind: 'cloud_bearer',
-            credential: pending.outcome.access_token,
-            expires_at: pending.outcome.session?.expires_at ?? null,
-          });
-          persistedNativeSession = true;
-        } catch {
-          persistenceWarning = t('login.persistenceUnavailable');
-        }
-        if (authAttemptRevisionRef.current !== pending.authRevision) {
-          if (persistedNativeSession) {
-            await clearNativeTrustedSession().catch(() => undefined);
-          }
-          await revokeUnadoptedDeviceToken(
-            pending.outcome.access_token,
-            pending.runtimeConfig,
-          );
-          return;
-        }
-      }
-
       const hydrated = await hydrateCloudSession(
         completeForcedPasswordChangeOutcome(pending.outcome),
         pending.runtimeConfig,
         pending.authRevision,
       );
       if (!hydrated) {
-        if (persistedNativeSession) {
-          await clearNativeTrustedSession().catch(() => undefined);
-        }
         await revokeUnadoptedDeviceToken(
           pending.outcome.access_token,
           pending.runtimeConfig,
@@ -255,14 +271,10 @@ export function useLocalCredentialAuth(
       }
       tokenAdopted = true;
       pendingPasswordChangeRef.current = null;
-      if (persistenceWarning) setError(persistenceWarning);
     } catch (caught) {
       if (authAttemptRevisionRef.current !== pending.authRevision) return;
       if (passwordChanged) {
         pendingPasswordChangeRef.current = null;
-        if (persistedNativeSession) {
-          await clearNativeTrustedSession().catch(() => undefined);
-        }
         if (!tokenAdopted) {
           await revokeUnadoptedDeviceToken(
             pending.outcome.access_token,
@@ -294,10 +306,18 @@ export function useLocalCredentialAuth(
     setAuth(emptyAuthState);
     setConnection('idle');
     setError(null);
-    void revokeUnadoptedDeviceToken(
-      pending.outcome.access_token,
-      pending.runtimeConfig,
-    );
+    const nativeAuthClient =
+      runsInNativeDesktop && pending.runtimeConfig.mode === 'cloud'
+        ? desktopNativeCloudAuthClient()
+        : null;
+    if (nativeAuthClient) {
+      void nativeAuthClient.signOut().catch(() => undefined);
+    } else {
+      void revokeUnadoptedDeviceToken(
+        pending.outcome.access_token,
+        pending.runtimeConfig,
+      );
+    }
   };
 
   const hydrateLocalSession = async (
@@ -499,16 +519,22 @@ export function useLocalCredentialAuth(
     const authAttemptRevision = ++authAttemptRevisionRef.current;
     localResumeAttemptRef.current = '';
     const authenticatedClient = api;
-    const shouldRevoke = Boolean(config.apiKey.trim());
+    const nativeCloudAuthClient =
+      runsInNativeDesktop && config.mode === 'cloud'
+        ? desktopNativeCloudAuthClient()
+        : null;
+    const shouldRevoke = nativeCloudAuthClient !== null || Boolean(config.apiKey.trim());
     const hasCredentialBroker = hasNativeTrustedSessionBroker();
+    const nativeSignOut = nativeCloudAuthClient?.signOut();
     const [credentialRevoked, persistedCredentialCleared] = await Promise.all([
       shouldRevoke
-        ? authenticatedClient
-            .signOut()
+        ? (nativeSignOut ?? authenticatedClient.signOut())
             .then((outcome) => outcome.success === true)
             .catch(() => false)
         : Promise.resolve(false),
-      hasCredentialBroker
+      nativeSignOut
+        ? nativeSignOut.then(() => true).catch(() => false)
+        : hasCredentialBroker
         ? (config.mode === 'local'
             ? clearLocalTrustedSession()
             : clearNativeTrustedSession()

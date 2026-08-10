@@ -1,8 +1,8 @@
 import {
-  absoluteUrl,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   parseKasmProxySession,
@@ -193,7 +193,7 @@ async function requestJson(
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
 
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
     headers,
     credentials: config.mode === 'local' ? 'omit' : 'include',

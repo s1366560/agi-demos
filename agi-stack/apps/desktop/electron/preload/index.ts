@@ -27,10 +27,10 @@ const NATIVE_FILE_SAVE_CHANNEL = 'agistack:native-file-save';
 const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
 const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
+const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
+const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const allowedCommands = new Set([
   'frontend_ready',
-  'trusted_session_save',
-  'trusted_session_load',
   'trusted_session_clear',
   'local_trusted_session_save',
   'local_trusted_session_load',
@@ -39,6 +39,22 @@ const allowedCommands = new Set([
   'get_desktop_capabilities',
   'capture_current_display',
   'open_web_control_plane',
+  'cloud_request',
+  'cloud_session_projection',
+  'cloud_socket_open',
+  'cloud_socket_send',
+  'cloud_socket_close',
+  'cloud_auth_password',
+  'cloud_auth_force_password_change',
+  'cloud_auth_device_begin',
+  'cloud_auth_device_poll',
+  'cloud_auth_device_cancel',
+  'cloud_auth_signout',
+  'oauth_list_providers',
+  'oauth_begin_authorization',
+  'oauth_restore_authorization',
+  'oauth_cancel_authorization',
+  'cloud_request_cancel',
   'local_runtime_status',
   'local_runtime_configure',
   'browser_bridge_install',
@@ -88,10 +104,8 @@ function focusMainWindow(): Promise<void> {
 }
 
 const windowControls = Object.freeze({
-  minimize: (): Promise<void> =>
-    invokeDesktopCommand('window_controls', { action: 'minimize' }),
-  maximize: (): Promise<void> =>
-    invokeDesktopCommand('window_controls', { action: 'maximize' }),
+  minimize: (): Promise<void> => invokeDesktopCommand('window_controls', { action: 'minimize' }),
+  maximize: (): Promise<void> => invokeDesktopCommand('window_controls', { action: 'maximize' }),
   unmaximize: (): Promise<void> =>
     invokeDesktopCommand('window_controls', { action: 'unmaximize' }),
   toggleMaximize: (): Promise<void> =>
@@ -100,13 +114,10 @@ const windowControls = Object.freeze({
     invokeDesktopCommand('window_controls', { action: 'is_maximized' }).then(
       (result: unknown) => result === true,
     ),
-  close: (): Promise<void> =>
-    invokeDesktopCommand('window_controls', { action: 'close' }),
+  close: (): Promise<void> => invokeDesktopCommand('window_controls', { action: 'close' }),
 });
 
-async function saveNativeFile(
-  request: NativeFileSaveRequest,
-): Promise<NativeFileSaveResult> {
+async function saveNativeFile(request: NativeFileSaveRequest): Promise<NativeFileSaveResult> {
   const result: unknown = await ipcRenderer.invoke(
     NATIVE_FILE_SAVE_CHANNEL,
     compactNativeFileSaveRequest(request),
@@ -114,20 +125,13 @@ async function saveNativeFile(
   return validateNativeFileSaveResult(result);
 }
 
-async function openNativeFile(
-  request: NativeFileOpenRequest,
-): Promise<NativeFileOpenResult> {
+async function openNativeFile(request: NativeFileOpenRequest): Promise<NativeFileOpenResult> {
   const validatedRequest = validateNativeFileOpenRequest(request);
-  const result: unknown = await ipcRenderer.invoke(
-    NATIVE_FILE_OPEN_CHANNEL,
-    validatedRequest,
-  );
+  const result: unknown = await ipcRenderer.invoke(NATIVE_FILE_OPEN_CHANNEL, validatedRequest);
   return compactNativeFileOpenResult(result, validatedRequest.purpose);
 }
 
-async function ingestNativeFile(
-  request: NativeFileIngestRequest,
-): Promise<NativeFileIngestResult> {
+async function ingestNativeFile(request: NativeFileIngestRequest): Promise<NativeFileIngestResult> {
   const result: unknown = await ipcRenderer.invoke(
     NATIVE_FILE_INGEST_CHANNEL,
     compactNativeFileIngestRequest(request),
@@ -150,6 +154,26 @@ function onSidecarRecovered(listener: () => void): () => void {
   return () => ipcRenderer.removeListener(SIDECAR_RECOVERED_CHANNEL, wrappedListener);
 }
 
+function onOAuthSessionChanged(listener: (payload: unknown) => void): () => void {
+  if (typeof listener !== 'function') {
+    throw new Error('OAuth session listener is invalid');
+  }
+  const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown): void =>
+    listener(payload);
+  ipcRenderer.on(OAUTH_SESSION_CHANGED_CHANNEL, wrappedListener);
+  return () => ipcRenderer.removeListener(OAUTH_SESSION_CHANGED_CHANNEL, wrappedListener);
+}
+
+function onCloudSocketEvent(listener: (payload: unknown) => void): () => void {
+  if (typeof listener !== 'function') {
+    throw new Error('Cloud socket listener is invalid');
+  }
+  const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown): void =>
+    listener(payload);
+  ipcRenderer.on(CLOUD_SOCKET_EVENT_CHANNEL, wrappedListener);
+  return () => ipcRenderer.removeListener(CLOUD_SOCKET_EVENT_CHANNEL, wrappedListener);
+}
+
 contextBridge.exposeInMainWorld(
   '__MEMSTACK_DESKTOP__',
   Object.freeze({
@@ -164,6 +188,8 @@ contextBridge.exposeInMainWorld(
     files: fileBridge,
     events: Object.freeze({
       onSidecarRecovered,
+      onOAuthSessionChanged,
+      onCloudSocketEvent,
     }),
   }),
 );

@@ -8,9 +8,11 @@ require.extensions['.css'] = () => {};
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
-const { ToastProvider, ToastViewport, useToast } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/feedback/ToastCenter.js'
-);
+const {
+  ToastProvider,
+  ToastViewport,
+  useToast,
+} = require('/tmp/agistack-desktop-test-dist/src/features/feedback/ToastCenter.js');
 const toastModel = require('/tmp/agistack-desktop-test-dist/src/features/feedback/toastModel.js');
 
 const toastCenterSource = readFileSync(
@@ -23,7 +25,10 @@ const toastCssSource = readFileSync(
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const runStatusModelSource = readFileSync(new URL('../src/features/runtime/runStatusModel.ts', import.meta.url), 'utf8');
+const runStatusModelSource = readFileSync(
+  new URL('../src/features/runtime/runStatusModel.ts', import.meta.url),
+  'utf8',
+);
 const chatTranscriptSource = readFileSync(
   new URL('../src/features/chat/ChatTranscript.tsx', import.meta.url),
   'utf8',
@@ -107,7 +112,11 @@ test('enqueueToast caps the visible queue at three toasts', () => {
   const nextId = toastModel.createToastIdFactory(sequentialOrdinal());
   let queue = [];
   for (const kind of ['success', 'info', 'error', 'success']) {
-    queue = toastModel.enqueueToast(queue, { id: nextId(), kind, message: kind });
+    queue = toastModel.enqueueToast(queue, {
+      id: nextId(),
+      kind,
+      message: kind,
+    });
   }
   assert.equal(queue.length, toastModel.MAX_VISIBLE_TOASTS);
   assert.deepEqual(
@@ -251,7 +260,10 @@ test('mermaid source copy surfaces clipboard failure via toast', () => {
 
 test('memory copy surfaces success and clipboard failure via toasts', () => {
   assert.match(memoryTimelineCardsSource, /const \{ showToast \} = useToast\(\);/);
-  assert.match(memoryTimelineCardsSource, /showToast\('success', t\('toast\.copyMemorySuccess'\)\)/);
+  assert.match(
+    memoryTimelineCardsSource,
+    /showToast\('success', t\('toast\.copyMemorySuccess'\)\)/,
+  );
   assert.match(
     memoryTimelineCardsSource,
     /showToast\('error', t\('toast\.copyMemoryError', \{ detail: t\('toast\.clipboardUnavailable'\) \}\)\)/,
@@ -265,7 +277,7 @@ test('memory copy surfaces success and clipboard failure via toasts', () => {
 test('session run actions announce success via toast while errors stay inline', () => {
   assert.match(
     appSource,
-    /showToast\(\s*'success',\s*t\('toast\.sessionRunActionSuccess', \{ action: t\(SESSION_RUN_ACTION_LABEL_KEY\[action\]\) \}\),?\s*\)/,
+    /showToast\(\s*'success',\s*t\('toast\.sessionRunActionSuccess',\s*\{\s*action:\s*t\(SESSION_RUN_ACTION_LABEL_KEY\[action\]\),?\s*\}\),?\s*\)/,
   );
   assert.match(runStatusModelSource, /pause: 'session\.pauseRun'/);
   assert.match(runStatusModelSource, /approve: 'session\.approveRun'/);

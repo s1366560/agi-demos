@@ -1,9 +1,12 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   requireIdentifier,
@@ -63,7 +66,7 @@ export function requireTenantManagementScope<TScope extends TenantManagementScop
   if (config.mode === 'local' && localPolicy === 'cloud_only') {
     throw tenantAdminError(localReasonCode, 501);
   }
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw tenantAdminError('tenant_management_trusted_session_required', 401);
   }
   return scope;
@@ -164,7 +167,7 @@ async function request(
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  return fetch(absoluteUrl(config.apiBaseUrl, path), {
+  return desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
     headers,
     credentials: 'omit',

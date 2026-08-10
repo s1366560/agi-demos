@@ -1,11 +1,4 @@
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
   projectOverviewEnUS,
@@ -87,10 +80,7 @@ import {
   tenantProjectsEnUS,
   tenantProjectsZhCN,
 } from './features/tenant/locales/tenantProjectsMessages';
-import {
-  tenantTasksEnUS,
-  tenantTasksZhCN,
-} from './features/tenant/locales/tenantTasksMessages';
+import { tenantTasksEnUS, tenantTasksZhCN } from './features/tenant/locales/tenantTasksMessages';
 import {
   tenantWorkspacesEnUS,
   tenantWorkspacesZhCN,
@@ -155,19 +145,15 @@ const enUS: Record<string, string> = {
   'toast.sessionRunActionSuccess': 'Run action completed: {action}',
   'login.agentWorkspace': 'Agent workspace',
   'login.eyebrow': 'WORK THAT CONTINUES',
-  'login.headline':
-    'Your agents, projects, and decisions in one trusted workspace.',
+  'login.headline': 'Your agents, projects, and decisions in one trusted workspace.',
   'login.description':
     'Sign in once to resume tasks, review plans, switch project context, and govern every agent resource.',
   'login.kernelTitle': 'One task kernel',
-  'login.kernelDescription':
-    'Move between general work and code without losing context.',
+  'login.kernelDescription': 'Move between general work and code without losing context.',
   'login.reviewTitle': 'Review before action',
-  'login.reviewDescription':
-    'Plans, permissions, and outputs stay inspectable.',
+  'login.reviewDescription': 'Plans, permissions, and outputs stay inspectable.',
   'login.isolationTitle': 'Tenant isolation',
-  'login.isolationDescription':
-    'Projects, memory, credentials, and audit remain scoped.',
+  'login.isolationDescription': 'Projects, memory, credentials, and audit remain scoped.',
   'login.securityFooter': 'Encrypted session · SSO ready · Audit enabled',
   'login.welcome': 'WELCOME BACK',
   'login.signInTitle': 'Sign in to MemStack',
@@ -178,36 +164,29 @@ const enUS: Record<string, string> = {
   'login.localWorkspace': 'Continue with local workspace',
   'login.localWorkspaceUnavailable': 'The trusted local workspace is not ready yet.',
   'login.workspaceSso': 'Continue with workspace SSO',
-  'login.workspaceSsoUnavailable':
-    'Workspace SSO is not configured for this runtime.',
+  'login.workspaceSsoUnavailable': 'Workspace SSO is not configured for this runtime.',
   'login.deviceEyebrow': 'SECURE WORKSPACE SIGN-IN',
   'login.deviceTitle': 'Continue in your browser',
   'login.deviceDescription':
     'Approve this desktop from your organization session. This window will continue automatically.',
   'login.deviceExpiredTitle': 'This sign-in code has expired',
-  'login.deviceExpiredDescription':
-    'Start workspace SSO again to generate a new one-time code.',
+  'login.deviceExpiredDescription': 'Start workspace SSO again to generate a new one-time code.',
   'login.deviceCode': 'One-time code',
   'login.deviceVerificationAddress': 'Verification address',
   'login.deviceWaiting': 'Waiting for approval…',
   'login.deviceExpires': 'Expires in about {minutes} min',
   'login.deviceExpiresCountdown': 'Code expires in {time}',
   'login.deviceExpiredStatus': 'Expired',
-  'login.deviceExpiredDetail':
-    'The expired code can no longer authorize this desktop.',
+  'login.deviceExpiredDetail': 'The expired code can no longer authorize this desktop.',
   'login.deviceRequestNewCode': 'Request new code',
   'login.deviceOpenBrowser': 'Open browser',
   'login.deviceCancel': 'Cancel',
   'login.switchToLocal': 'Switch to local workspace',
-  'login.deviceOpenFailed':
-    'The browser did not open. Use Open browser to continue.',
-  'login.deviceInvalidUrl':
-    'The server returned an invalid authorization link.',
-  'login.deviceExpired':
-    'This sign-in code expired. Start workspace SSO again.',
+  'login.deviceOpenFailed': 'The browser did not open. Use Open browser to continue.',
+  'login.deviceInvalidUrl': 'The server returned an invalid authorization link.',
+  'login.deviceExpired': 'This sign-in code expired. Start workspace SSO again.',
   'login.deviceCancelled': 'Workspace SSO was cancelled.',
-  'login.workspaceSsoFailed':
-    'Workspace SSO could not be completed. Try again.',
+  'login.workspaceSsoFailed': 'Workspace SSO could not be completed. Try again.',
   'login.emailDivider': 'or use email',
   'login.workEmail': 'Work email',
   'login.password': 'Password',
@@ -222,15 +201,12 @@ const enUS: Record<string, string> = {
   'forcePassword.currentPassword': 'Current password',
   'forcePassword.newPassword': 'New password',
   'forcePassword.confirmPassword': 'Confirm new password',
-  'forcePassword.passwordHint':
-    'Use at least 8 characters and choose a different password.',
+  'forcePassword.passwordHint': 'Use at least 8 characters and choose a different password.',
   'forcePassword.currentRequired': 'Enter your current password.',
   'forcePassword.newRequired': 'Enter a new password.',
   'forcePassword.confirmRequired': 'Confirm your new password.',
-  'forcePassword.minimumLength':
-    'The new password must contain at least 8 characters.',
-  'forcePassword.mustDiffer':
-    'The new password must be different from your current password.',
+  'forcePassword.minimumLength': 'The new password must contain at least 8 characters.',
+  'forcePassword.mustDiffer': 'The new password must be different from your current password.',
   'forcePassword.mismatch': 'The new passwords do not match.',
   'forcePassword.showPasswords': 'Show passwords',
   'forcePassword.hidePasswords': 'Hide passwords',
@@ -253,10 +229,8 @@ const enUS: Record<string, string> = {
     'The authenticated workspace context does not match the selected project.',
   'login.localContextMissing':
     'The local session did not return an authoritative workspace context.',
-  'login.localTenantUnavailable':
-    'The active local tenant is not available to this user.',
-  'login.localProjectUnavailable':
-    'The active local project is not available to this user.',
+  'login.localTenantUnavailable': 'The active local tenant is not available to this user.',
+  'login.localProjectUnavailable': 'The active local project is not available to this user.',
   'login.localRuntimeNotReady': 'The trusted local runtime is not ready yet.',
   'login.manualApiKeyRequiresValidation':
     'Manual API keys must be validated by the server before opening a workspace.',
@@ -271,15 +245,145 @@ const enUS: Record<string, string> = {
   'login.forgotPassword': 'Forgot password?',
   'login.signingIn': 'Signing in…',
   'login.signIn': 'Sign in',
-  'login.legal':
-    'By continuing, you agree to your organization policies and MemStack terms.',
+  'login.legal': 'By continuing, you agree to your organization policies and MemStack terms.',
   'login.newToMemStack': 'New to MemStack?',
   'login.requestWorkspaceAccess': 'Request workspace access',
   'nav.home': 'Home',
   'nav.myWork': 'My Work',
   'nav.automations': 'Automations',
   'nav.search': 'Search',
+  'nav.agentWorkspace': 'Agent Workspace',
+  'nav.overview': 'Overview',
   'nav.projects': 'Projects',
+  'nav.workspaces': 'Workspaces',
+  'nav.tasks': 'Tasks',
+  'nav.analytics': 'Analytics',
+  'nav.agentConfiguration': 'Agent Configuration',
+  'nav.agentDefinitions': 'Agent Definitions',
+  'nav.agentBindings': 'Agent Bindings',
+  'nav.skills': 'Skills',
+  'nav.evolution': 'Evolution',
+  'nav.patterns': 'Patterns',
+  'nav.plugins': 'Plugins',
+  'nav.mcpServers': 'MCP Servers',
+  'nav.acp': 'ACP',
+  'nav.templates': 'Templates',
+  'nav.providers': 'Providers',
+  'nav.webhooks': 'Webhooks',
+  'nav.runtimes': 'Runtimes',
+  'nav.pool': 'Runtime Pool',
+  'nav.instances': 'Runtime Instances',
+  'nav.clusters': 'Clusters',
+  'nav.deploy': 'Deploy',
+  'nav.instanceTemplates': 'Instance Templates',
+  'nav.genes': 'Gene Market',
+  'nav.users': 'Users',
+  'nav.auditLogs': 'Audit Logs',
+  'nav.events': 'Events',
+  'nav.deadLetterQueue': 'Dead Letter Queue',
+  'nav.trustPolicies': 'Trust Policies',
+  'nav.decisionRecords': 'Decision Records',
+  'nav.billing': 'Billing',
+  'nav.orgSettings': 'Organization Settings',
+  'nav.settings': 'Settings',
+  'nav.blackboard': 'Blackboard',
+  'nav.team': 'Team',
+  'nav.memories': 'Memories',
+  'nav.entities': 'Entities',
+  'nav.communities': 'Communities',
+  'nav.knowledgeGraph': 'Knowledge Graph',
+  'nav.deepSearch': 'Advanced Search',
+  'nav.schema': 'Schema',
+  'nav.channels': 'Channels',
+  'nav.maintenance': 'Maintenance',
+  'nav.cronJobs': 'Cron Jobs',
+  Dashboard: 'Agent Dashboard',
+  'Activity Logs': 'Agent Activity Logs',
+  Patterns: 'Agent Patterns',
+  'featureDirectory.open': 'All features',
+  'featureDirectory.routeDescription': 'Open {label}',
+  'featureDirectory.group.desktopShell': 'Desktop',
+  'featureDirectory.group.auxiliary': 'Desktop tools',
+  'featureDirectory.group.tenantCore': 'Tenant core operations',
+  'featureDirectory.group.agentBuilding': 'Agent building',
+  'featureDirectory.group.extensions': 'Extensions and integrations',
+  'featureDirectory.group.runtime': 'Runtime infrastructure',
+  'featureDirectory.group.governance': 'Governance and management',
+  'featureDirectory.group.projectWorkspace': 'Project workspace',
+  'featureDirectory.group.knowledge': 'Project knowledge base',
+  'featureDirectory.group.discovery': 'Project discovery',
+  'featureDirectory.group.projectConfiguration': 'Project configuration',
+  'featureDirectory.disabled.desktop_navigation_authentication_required':
+    'Sign in to open this feature.',
+  'featureDirectory.disabled.desktop_route_context_missing':
+    'Select a {scope} before opening this feature.',
+  'featureDirectory.disabled.desktop_route_context_invalid':
+    'Select a valid {scope} before opening this feature.',
+  'featureDirectory.disabled.requiredContext': 'Select a {scope} before opening this feature.',
+  'featureDirectory.scope.global': 'global context',
+  'featureDirectory.scope.tenant': 'tenant',
+  'featureDirectory.scope.project': 'project',
+  'featureDirectory.scope.workspace': 'workspace',
+  'featureDirectory.scope.instance': 'runtime instance',
+  'backendStores.title': 'Backend Stores',
+  'backendStores.subtitle': 'Manage tenant graph and retrieval storage backends.',
+  'backendStores.planeLabel': 'Storage backend type',
+  'backendStores.plane.graph': 'Graph stores',
+  'backendStores.plane.retrieval': 'Retrieval stores',
+  'backendStores.createTitle': 'Create backend store',
+  'backendStores.editTitle': 'Edit backend store',
+  'backendStores.name': 'Name',
+  'backendStores.engine': 'Engine',
+  'backendStores.connectionConfig': 'Connection configuration (JSON)',
+  'backendStores.indexConfig': 'Index configuration (JSON)',
+  'backendStores.testDraft': 'Test configuration',
+  'backendStores.create': 'Create store',
+  'backendStores.created': 'Backend store created.',
+  'backendStores.updated': 'Backend store updated.',
+  'backendStores.empty': 'No backend stores are configured for this storage type.',
+  'backendStores.version': 'Detected version',
+  'backendStores.test': 'Test',
+  'backendStores.testSucceeded': 'Connection succeeded.',
+  'backendStores.testFailed': 'Connection test failed.',
+  'backendStores.reason.backend_stores_authority_unavailable':
+    'Backend store authority is temporarily unavailable. Retry when the cloud connection recovers.',
+  'backendStores.reason.backend_stores_admin_required':
+    'Tenant administrator access is required to change backend stores.',
+  'backendStores.reason.backend_stores_scope_conflict':
+    'The selected tenant changed. Refresh before continuing.',
+  'backendStores.reason.cloud_request_broker_missing':
+    'This desktop build cannot make vault-protected cloud requests.',
+  'projectPlaybooks.title': 'Project Playbooks',
+  'projectPlaybooks.subtitle':
+    'Review reusable procedures and reflection verdicts for this project.',
+  'projectPlaybooks.empty': 'No playbooks or reflection verdicts are available yet.',
+  'projectPlaybooks.playbooks': 'Playbooks',
+  'projectPlaybooks.verdicts': 'Reflection verdicts',
+  'projectPlaybooks.noPlaybooks': 'No playbooks have been distilled for this project.',
+  'projectPlaybooks.noVerdicts': 'No reflection verdicts have been recorded.',
+  'projectPlaybooks.hits': 'Uses',
+  'projectPlaybooks.trigger': 'Trigger',
+  'projectPlaybooks.step': 'Step',
+  'projectPlaybooks.noRationale': 'No rationale was provided.',
+  'projectPlaybooks.verdict.create': 'Create',
+  'projectPlaybooks.verdict.reinforce': 'Reinforce',
+  'projectPlaybooks.verdict.deprecate': 'Deprecate',
+  'projectPlaybooks.verdict.noop': 'No change',
+  'projectPlaybooks.reason.project_playbooks_authority_unavailable':
+    'Project playbook authority is temporarily unavailable.',
+  'projectPlaybooks.reason.project_playbooks_scope_unavailable':
+    'Select a project before opening its playbooks.',
+  'projectPlaybooks.reason.project_playbooks_scope_conflict':
+    'The selected project changed. Refresh before continuing.',
+  'projectPlaybooks.reason.project_playbooks_request_failed':
+    'Project playbooks could not be loaded.',
+  'projectPlaybooks.reason.project_playbooks_route_context_unavailable':
+    'Select a tenant and project before opening playbooks.',
+  'projectPlaybooks.reason.project_playbooks_route_binding_scope_mismatch':
+    'The project scope changed. Reopen this feature from the selected project.',
+  'projectPlaybooks.reason.cloud_request_broker_missing':
+    'This desktop build cannot make vault-protected cloud requests.',
+  'common.loading': 'Loading…',
   'auxiliary.eyebrow': 'MEMSTACK',
   'auxiliary.homeTitle': 'Good afternoon, {name}',
   'auxiliary.homeDescription':
@@ -313,8 +417,7 @@ const enUS: Record<string, string> = {
   'search.mode.faceted': 'Faceted',
   'search.mode.community': 'Community',
   'search.input.query': 'Search query',
-  'search.input.queryPlaceholder':
-    'Search memories, entities, episodes, and sources…',
+  'search.input.queryPlaceholder': 'Search memories, entities, episodes, and sources…',
   'search.input.startEntity': 'Start entity UUID',
   'search.input.startEntityPlaceholder': 'Enter an entity UUID…',
   'search.input.community': 'Community UUID',
@@ -344,10 +447,8 @@ const enUS: Record<string, string> = {
   'search.view.grid': 'Grid view',
   'search.view.list': 'List view',
   'search.loading': 'Searching the authoritative project index…',
-  'search.error.invalidInput':
-    'Complete the required search input and configuration.',
-  'search.error.requestFailed':
-    'Search could not be completed. Verify the project and retry.',
+  'search.error.invalidInput': 'Complete the required search input and configuration.',
+  'search.error.requestFailed': 'Search could not be completed. Verify the project and retry.',
   'search.capability.loading.title': 'Checking Search availability',
   'search.capability.loading.description':
     'Waiting for the runtime to declare its structured Search contract.',
@@ -365,8 +466,7 @@ const enUS: Record<string, string> = {
   'search.start.description':
     'Choose a retrieval mode, enter its required input, and search the selected project.',
   'search.empty.title': 'No matching results',
-  'search.empty.description':
-    'Adjust the query or search configuration and try again.',
+  'search.empty.description': 'Adjust the query or search configuration and try again.',
   'search.loadMore': 'Load 50 more results',
   'search.result.select': 'Select {title}',
   'search.result.untitled': 'Untitled result',
@@ -383,8 +483,7 @@ const enUS: Record<string, string> = {
   'commandPalette.apiKeyDescription':
     'Switch to the manual API key fallback without saving secrets.',
   'commandPalette.accountDescription': 'Review the signed-in account.',
-  'commandPalette.signInDescription':
-    'Open the email and password sign-in dialog.',
+  'commandPalette.signInDescription': 'Open the email and password sign-in dialog.',
   'commandPalette.refreshWorkspace': 'Refresh workspace',
   'commandPalette.refreshDescription':
     'Reload sessions, work items, the current plan, and sandbox state.',
@@ -412,16 +511,13 @@ const enUS: Record<string, string> = {
   'workspaceTree.loading': 'Loading workspaces…',
   'workspaceTree.loadingDescription': 'Reading the current project scope.',
   'workspaceTree.refreshing': 'Refreshing workspaces…',
-  'workspaceTree.refreshFailed':
-    'Refresh failed · showing last verified workspaces',
+  'workspaceTree.refreshFailed': 'Refresh failed · showing last verified workspaces',
   'workspaceTree.unavailable': 'Workspaces are unavailable',
   'workspaceTree.unavailableDescription':
     'The authoritative workspace catalog has not been loaded.',
   'workspaceTree.empty': 'No workspaces in this project',
-  'workspaceTree.emptyDescription':
-    'Create the first workspace for this project.',
-  'workspaceTree.selectProjectDescription':
-    'Choose a project in Settings to load its workspaces.',
+  'workspaceTree.emptyDescription': 'Create the first workspace for this project.',
+  'workspaceTree.selectProjectDescription': 'Choose a project in Settings to load its workspaces.',
   'workspaceTree.expand': 'Expand {name}',
   'workspaceTree.collapse': 'Collapse {name}',
   'workspaceTree.sessionCount': '{count} sessions',
@@ -430,20 +526,17 @@ const enUS: Record<string, string> = {
   'workspaceTree.group.week': 'Previous 7 days',
   'workspaceTree.group.older': 'Older',
   'workspaceTree.refreshingSessionCount': '{count} sessions · refreshing',
-  'workspaceTree.staleSessionCount':
-    '{count} verified sessions · refresh failed',
+  'workspaceTree.staleSessionCount': '{count} verified sessions · refresh failed',
   'workspaceTree.sessionsFor': '{name} sessions',
   'workspaceTree.sessionsDeferred': 'Load on expand',
   'workspaceTree.loadingSessions': 'Loading sessions…',
   'workspaceTree.loadingTasks': 'Loading tasks…',
   'workspaceTree.refreshingSessions': 'Refreshing sessions…',
-  'workspaceTree.sessionRefreshFailed':
-    'Refresh failed · showing last verified sessions',
+  'workspaceTree.sessionRefreshFailed': 'Refresh failed · showing last verified sessions',
   'workspaceTree.sessionsUnavailable': 'Sessions are unavailable',
   'workspaceTree.tasksUnavailable': 'Tasks are unavailable',
   'workspaceTree.noSessions': 'No sessions in this workspace',
-  'workspaceTree.noSessionsDescription':
-    'Start a task from the primary new-task action.',
+  'workspaceTree.noSessionsDescription': 'Start a task from the primary new-task action.',
   'workspaceTree.noTasks': 'No unbound task sessions',
   'workspaceTree.noTasksDescription':
     'Conversations linked to a workspace appear beneath that workspace.',
@@ -487,37 +580,29 @@ const enUS: Record<string, string> = {
   'workspaceCreate.name': 'Workspace name',
   'workspaceCreate.namePlaceholder': 'For example: Product launch',
   'workspaceCreate.objective': 'Objective',
-  'workspaceCreate.objectiveProgress':
-    '{count} characters · at least {minimum}',
+  'workspaceCreate.objectiveProgress': '{count} characters · at least {minimum}',
   'workspaceCreate.objectivePlaceholder':
     'Describe the outcome this workspace should help the team achieve.',
   'workspaceCreate.useCase': 'Use case',
   'workspaceCreate.useCase.general': 'General',
-  'workspaceCreate.useCase.generalDetail':
-    'Coordinate flexible knowledge work and execution.',
+  'workspaceCreate.useCase.generalDetail': 'Coordinate flexible knowledge work and execution.',
   'workspaceCreate.useCase.programming': 'Programming',
-  'workspaceCreate.useCase.programmingDetail':
-    'Develop, test, and review code in a sandbox.',
+  'workspaceCreate.useCase.programmingDetail': 'Develop, test, and review code in a sandbox.',
   'workspaceCreate.useCase.conversation': 'Conversation',
-  'workspaceCreate.useCase.conversationDetail':
-    'Maintain an ongoing assistant conversation.',
+  'workspaceCreate.useCase.conversationDetail': 'Maintain an ongoing assistant conversation.',
   'workspaceCreate.useCase.research': 'Research',
-  'workspaceCreate.useCase.researchDetail':
-    'Collect evidence and synthesize findings.',
+  'workspaceCreate.useCase.researchDetail': 'Collect evidence and synthesize findings.',
   'workspaceCreate.useCase.operations': 'Operations',
-  'workspaceCreate.useCase.operationsDetail':
-    'Run repeatable operational workflows.',
+  'workspaceCreate.useCase.operationsDetail': 'Run repeatable operational workflows.',
   'workspaceCreate.codeRoot': 'Sandbox code root',
   'workspaceCreate.codeRootPlaceholder': 'repository',
   'workspaceCreate.codeRootHint':
     'A child path beneath /workspace. For example, “repository” becomes /workspace/repository.',
   'workspaceCreate.collaboration': 'Collaboration mode',
   'workspaceCreate.collaboration.single': 'Single agent',
-  'workspaceCreate.collaboration.singleDetail':
-    'One agent owns the workspace context.',
+  'workspaceCreate.collaboration.singleDetail': 'One agent owns the workspace context.',
   'workspaceCreate.collaboration.shared': 'Shared agents',
-  'workspaceCreate.collaboration.sharedDetail':
-    'Multiple agents collaborate in shared context.',
+  'workspaceCreate.collaboration.sharedDetail': 'Multiple agents collaborate in shared context.',
   'workspaceCreate.collaboration.isolated': 'Isolated agents',
   'workspaceCreate.collaboration.isolatedDetail':
     'Multiple agents work with independently isolated context.',
@@ -534,15 +619,12 @@ const enUS: Record<string, string> = {
   'workspaceCreate.create': 'Create workspace',
   'workspaceCreate.creating': 'Creating…',
   'workspaceCreate.discardTitle': 'Discard workspace setup?',
-  'workspaceCreate.discardDescription':
-    'The information entered in this dialog will be lost.',
+  'workspaceCreate.discardDescription': 'The information entered in this dialog will be lost.',
   'workspaceCreate.keepEditing': 'Keep editing',
   'workspaceCreate.discard': 'Discard',
   'workspaceCreate.disabledSignIn': 'Sign in before creating a workspace.',
-  'workspaceCreate.disabledAuth':
-    'Configure authentication before creating a workspace.',
-  'workspaceCreate.disabledProject':
-    'Select a project before creating a workspace.',
+  'workspaceCreate.disabledAuth': 'Configure authentication before creating a workspace.',
+  'workspaceCreate.disabledProject': 'Select a project before creating a workspace.',
   'workspaceSettings.title': 'Workspace settings',
   'workspaceSettings.description':
     'Manage the operating profile for “{workspace}” without leaving the current project.',
@@ -559,18 +641,15 @@ const enUS: Record<string, string> = {
   'workspaceSettings.useCase': 'Use case',
   'workspaceSettings.collaboration': 'Collaboration mode',
   'workspaceSettings.codeContext': 'Code context',
-  'workspaceSettings.codeContextDetail':
-    'Programming work requires an isolated sandbox directory.',
+  'workspaceSettings.codeContextDetail': 'Programming work requires an isolated sandbox directory.',
   'workspaceSettings.codeRoot': 'Sandbox code root',
   'workspaceSettings.codeRootHint':
     'Leave empty for non-programming work, or use a child path under /workspace/.',
-  'workspaceSettings.codeRootInvalid':
-    'Use an isolated child path such as /workspace/repository.',
+  'workspaceSettings.codeRootInvalid': 'Use an isolated child path such as /workspace/repository.',
   'workspaceSettings.reset': 'Reset',
   'workspaceSettings.saving': 'Saving…',
   'workspaceSettings.success': 'Workspace settings saved.',
-  'workspaceSettings.duplicateError':
-    'Another workspace in this project already uses that name.',
+  'workspaceSettings.duplicateError': 'Another workspace in this project already uses that name.',
   'workspaceSettings.genericError':
     'The workspace could not be updated. Your edits are still available.',
   'workspaceSettings.scopeChanged':
@@ -579,13 +658,11 @@ const enUS: Record<string, string> = {
   'workspaceSettings.resetDescription':
     'All edits in this dialog will return to the latest server projection.',
   'workspaceSettings.discardTitle': 'Discard workspace changes?',
-  'workspaceSettings.discardDescription':
-    'Unsaved workspace changes will be lost.',
+  'workspaceSettings.discardDescription': 'Unsaved workspace changes will be lost.',
   'workspaceSettings.keepEditing': 'Keep editing',
   'workspaceSettings.discard': 'Discard',
   'workspaceMembers.title': 'Workspace members',
-  'workspaceMembers.description':
-    'Owners can add project members and manage their workspace role.',
+  'workspaceMembers.description': 'Owners can add project members and manage their workspace role.',
   'workspaceMembers.userId': 'User ID',
   'workspaceMembers.userIdPlaceholder': 'Enter an existing project member ID',
   'workspaceMembers.role': 'Role',
@@ -600,8 +677,7 @@ const enUS: Record<string, string> = {
   'workspaceMembers.empty': 'No workspace members are available.',
   'workspaceMembers.loading': 'Loading the authoritative member roster…',
   'workspaceMembers.error': 'The member roster could not be loaded.',
-  'workspaceMembers.unavailable':
-    'Member management is unavailable for this workspace.',
+  'workspaceMembers.unavailable': 'Member management is unavailable for this workspace.',
   'workspaceMembers.readOnly':
     'Only an owner from the authoritative member roster can manage workspace access.',
   'workspaceMembers.removeMember': 'Remove {member}',
@@ -612,8 +688,7 @@ const enUS: Record<string, string> = {
   'workspaceMembers.addSuccess': 'Workspace member added.',
   'workspaceMembers.updateSuccess': 'Workspace member role updated.',
   'workspaceMembers.removeSuccess': 'Workspace member removed.',
-  'workspaceMembers.permissionDenied':
-    'Only a workspace owner can change the member roster.',
+  'workspaceMembers.permissionDenied': 'Only a workspace owner can change the member roster.',
   'workspaceMembers.conflict':
     'That user is already a workspace member or the requested role conflicts with current access.',
   'workspaceMembers.genericError':
@@ -621,8 +696,7 @@ const enUS: Record<string, string> = {
   'workspaceMembers.scopeChanged':
     'The tenant, project, or workspace changed before this member update completed.',
   'workspaceAgents.title': 'Workspace Agents',
-  'workspaceAgents.description':
-    'Bind enabled project or tenant Agents to this workspace.',
+  'workspaceAgents.description': 'Bind enabled project or tenant Agents to this workspace.',
   'workspaceAgents.add': 'Add Agent',
   'workspaceAgents.agent': 'Agent',
   'workspaceAgents.active': 'Active',
@@ -630,8 +704,7 @@ const enUS: Record<string, string> = {
   'workspaceAgents.empty': 'No Agents are bound to this workspace.',
   'workspaceAgents.loading': 'Loading the authoritative Agent roster…',
   'workspaceAgents.error': 'The Agent roster could not be loaded.',
-  'workspaceAgents.unavailable':
-    'Agent binding management is unavailable for this workspace.',
+  'workspaceAgents.unavailable': 'Agent binding management is unavailable for this workspace.',
   'workspaceAgents.readOnly':
     'Only an owner or editor from the authoritative member roster can manage Agent bindings.',
   'workspaceAgents.removeAgent': 'Remove {agent}',
@@ -646,20 +719,17 @@ const enUS: Record<string, string> = {
   'workspaceAgents.definitionPlaceholder': 'Select an Agent',
   'workspaceAgents.noAvailable': 'All available Agents are already bound.',
   'workspaceAgents.loadingDefinitions': 'Loading available Agent definitions…',
-  'workspaceAgents.definitionsError':
-    'Available Agent definitions could not be loaded.',
+  'workspaceAgents.definitionsError': 'Available Agent definitions could not be loaded.',
   'workspaceAgents.retry': 'Retry',
   'workspaceAgents.displayName': 'Display name',
   'workspaceAgents.displayNamePlaceholder': 'Optional workspace label',
   'workspaceAgents.descriptionLabel': 'Description',
-  'workspaceAgents.descriptionPlaceholder':
-    'Optional workspace-specific responsibility',
+  'workspaceAgents.descriptionPlaceholder': 'Optional workspace-specific responsibility',
   'workspaceAgents.bind': 'Add Agent',
   'workspaceAgents.binding': 'Adding…',
   'workspaceAgents.bindSuccess': 'Workspace Agent added.',
   'workspaceAgents.unbindSuccess': 'Workspace Agent removed.',
-  'workspaceAgents.permissionDenied':
-    'Only a workspace owner or editor can change Agent bindings.',
+  'workspaceAgents.permissionDenied': 'Only a workspace owner or editor can change Agent bindings.',
   'workspaceAgents.conflict':
     'That Agent is already bound or conflicts with the current workspace configuration.',
   'workspaceAgents.genericError':
@@ -711,19 +781,16 @@ const enUS: Record<string, string> = {
   'settings.notifications': 'Notifications',
   'settings.notificationsDescription': 'Attention and review alerts',
   'settings.shortcuts': 'Keyboard shortcuts',
-  'settings.shortcutsDescription':
-    'Search every desktop shortcut by name or keypress',
+  'settings.shortcutsDescription': 'Search every desktop shortcut by name or keypress',
   'settings.browser': 'Browser Integration',
   'settings.browserDescription': 'Chrome extension bridge for the agent',
   'settings.browserTitle': 'Browser integration',
   'settings.browserSubtitle':
     'Connect the MemStack Browser Bridge extension to the desktop sidecar',
   'settings.browserEnable': 'Browser bridge',
-  'settings.browserEnableDescription':
-    'Allow the browser extension to talk to the local runtime',
+  'settings.browserEnableDescription': 'Allow the browser extension to talk to the local runtime',
   'settings.browserBridge': 'Bridge',
-  'settings.browserBridgeDescription':
-    'Chrome extension to native messaging broker to sidecar',
+  'settings.browserBridgeDescription': 'Chrome extension to native messaging broker to sidecar',
   'settings.browserBridgeEnabled': 'Enabled',
   'settings.browserBridgeDisabled': 'Disabled',
   'settings.browserStatus': 'Bridge status',
@@ -743,8 +810,7 @@ const enUS: Record<string, string> = {
   'settings.browserExtensionSetup': 'Extension setup',
   'settings.browserExtensionHint':
     'Load the MemStack Browser Bridge extension: chrome://extensions → Developer mode → Load unpacked → apps/browser-extension/.output/chrome-mv3. Expected ID: enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
-  'settings.browserUnavailable':
-    'Browser integration is only available in the native desktop app.',
+  'settings.browserUnavailable': 'Browser integration is only available in the native desktop app.',
   'settings.browserOriginGrants': 'Origin permissions',
   'settings.browserOriginGrantsDescription':
     'Browser site consents granted to the agent on this device',
@@ -760,8 +826,7 @@ const enUS: Record<string, string> = {
   'settings.mcp': 'MCP servers',
   'settings.mcpDescription': 'Tool servers and vault-bound credentials',
   'settings.mcpServers.title': 'MCP servers',
-  'settings.mcpServers.subtitle':
-    'Manage server registrations and scoped credentials',
+  'settings.mcpServers.subtitle': 'Manage server registrations and scoped credentials',
   'settings.mcpServers.createTitle': 'Add MCP server',
   'settings.mcpServers.createDescription':
     'Store only a vault credential reference in the server definition',
@@ -784,8 +849,7 @@ const enUS: Record<string, string> = {
   'settings.mcpServers.credentialKinds.header': 'HTTP header',
   'settings.mcpServers.credentialName': 'Credential name',
   'settings.mcpServers.secret': 'Secret value',
-  'settings.mcpServers.error.required':
-    'Complete the required server and credential fields',
+  'settings.mcpServers.error.required': 'Complete the required server and credential fields',
   'settings.mcpServers.empty': 'No MCP servers are registered for this project',
   'settings.mcpServers.loading': 'Loading MCP servers...',
   'settings.mcpServers.refresh': 'Refresh',
@@ -819,19 +883,16 @@ const enUS: Record<string, string> = {
   'settings.skillEditor.error.invalid_name':
     'Use lowercase letters and numbers separated by single hyphens.',
   'settings.skillEditor.error.invalid_metadata': 'Enter a valid JSON object.',
-  'settings.skillEditor.error.too_long':
-    'This value exceeds the supported length.',
+  'settings.skillEditor.error.too_long': 'This value exceeds the supported length.',
   'settings.skillPackages.importAction': 'Import',
   'settings.skillPackages.versionsAction': 'Versions',
   'settings.skillPackages.importTitle': 'Import Skill package',
   'settings.skillPackages.importDescription':
     'Add an AgentSkills-compatible package from a ZIP archive or complete SKILL.md.',
   'settings.skillPackages.zipPlaceholder': 'Choose a Skill ZIP archive',
-  'settings.skillPackages.zipDescription':
-    'The archive must contain exactly one SKILL.md.',
+  'settings.skillPackages.zipDescription': 'The archive must contain exactly one SKILL.md.',
   'settings.skillPackages.chooseZip': 'Choose ZIP',
-  'settings.skillPackages.filePickerFailed':
-    'Could not open the Skill ZIP: {error}',
+  'settings.skillPackages.filePickerFailed': 'Could not open the Skill ZIP: {error}',
   'settings.skillPackages.orPaste': 'or paste SKILL.md',
   'settings.skillPackages.skillMd': 'Complete SKILL.md',
   'settings.skillPackages.scope': 'Scope',
@@ -842,10 +903,8 @@ const enUS: Record<string, string> = {
   'settings.skillPackages.overwrite': 'Overwrite an existing package',
   'settings.skillPackages.overwriteDescription':
     'When a package with the same name exists, update it and create a version snapshot.',
-  'settings.skillPackages.contentRequired':
-    'Choose a ZIP archive or paste SKILL.md content.',
-  'settings.skillPackages.projectRequired':
-    'Select a project for project-scoped packages.',
+  'settings.skillPackages.contentRequired': 'Choose a ZIP archive or paste SKILL.md content.',
+  'settings.skillPackages.projectRequired': 'Select a project for project-scoped packages.',
   'settings.skillPackages.versionsTitle': '{name} versions',
   'settings.skillPackages.versionsDescription':
     'Inspect authoritative package snapshots and restore an earlier revision.',
@@ -854,8 +913,7 @@ const enUS: Record<string, string> = {
   'settings.skillPackages.noChangeSummary': 'No change summary',
   'settings.skillPackages.versionCreatedBy': '{author} · {date}',
   'settings.skillPackages.current': 'Current',
-  'settings.skillPackages.rollbackConfirm':
-    'Restore this version as a new revision?',
+  'settings.skillPackages.rollbackConfirm': 'Restore this version as a new revision?',
   'settings.skillPackages.rollback': 'Restore',
   'settings.skillPackages.exportAction': 'Export',
   'settings.skillPackages.previewVersion': 'Preview',
@@ -867,8 +925,7 @@ const enUS: Record<string, string> = {
   'settings.skillEvolution.description':
     'Review captured evidence, generated candidates, and the authoritative evolution route.',
   'settings.skillEvolution.route': 'Evolution route',
-  'settings.skillEvolution.routeDescription':
-    'Versions and generated candidates in newest order.',
+  'settings.skillEvolution.routeDescription': 'Versions and generated candidates in newest order.',
   'settings.skillEvolution.run': 'Run evolution',
   'settings.skillEvolution.running': 'Starting evolution…',
   'settings.skillEvolution.loading': 'Loading evolution state…',
@@ -877,8 +934,7 @@ const enUS: Record<string, string> = {
   'settings.skillEvolution.threshold': 'Session / score threshold',
   'settings.skillEvolution.enabled': 'Enabled',
   'settings.skillEvolution.disabled': 'Disabled',
-  'settings.skillEvolution.empty':
-    'No versions or evolution candidates are available.',
+  'settings.skillEvolution.empty': 'No versions or evolution candidates are available.',
   'settings.skillEvolution.version': 'Version',
   'settings.skillEvolution.status.version': 'Version',
   'settings.skillEvolution.status.pending_review': 'Pending review',
@@ -887,10 +943,8 @@ const enUS: Record<string, string> = {
   'settings.skillEvolution.noDetail': 'No detail was supplied.',
   'settings.skillEvolution.apply': 'Apply',
   'settings.skillEvolution.reject': 'Reject',
-  'settings.skillEvolution.applyConfirm':
-    'Apply this candidate as a new Skill version?',
-  'settings.skillEvolution.rejectConfirm':
-    'Reject this candidate without changing the Skill?',
+  'settings.skillEvolution.applyConfirm': 'Apply this candidate as a new Skill version?',
+  'settings.skillEvolution.rejectConfirm': 'Reject this candidate without changing the Skill?',
   'settings.plugins': 'Plugins',
   'settings.pluginsDescription': 'Connections and permissions',
   'settings.pluginManager.install': 'Install plugin',
@@ -898,8 +952,7 @@ const enUS: Record<string, string> = {
   'settings.pluginManager.installDescription':
     'Install a plugin package into the governed tenant runtime.',
   'settings.pluginManager.requirement': 'Package requirement',
-  'settings.pluginManager.requirementPlaceholder':
-    'memstack-plugin-github>=2.0',
+  'settings.pluginManager.requirementPlaceholder': 'memstack-plugin-github>=2.0',
   'settings.pluginManager.requirementHelp':
     'Use the exact package requirement approved for this deployment.',
   'settings.pluginManager.reload': 'Reload runtime',
@@ -907,46 +960,37 @@ const enUS: Record<string, string> = {
   'settings.pluginManager.configureTitle': 'Configure {name}',
   'settings.pluginManager.configureDescription':
     'Values are validated against the plugin schema before they are saved.',
-  'settings.pluginManager.loadingConfig':
-    'Loading the plugin configuration schema…',
+  'settings.pluginManager.loadingConfig': 'Loading the plugin configuration schema…',
   'settings.pluginManager.noFields': 'This plugin has no configurable fields.',
   'settings.pluginManager.unsupportedConfig':
     'This plugin does not publish a supported configuration schema.',
   'settings.pluginManager.selectOption': 'Select an option',
-  'settings.pluginManager.secretPlaceholder':
-    'Leave blank to keep the stored secret',
+  'settings.pluginManager.secretPlaceholder': 'Leave blank to keep the stored secret',
   'settings.pluginManager.uninstall': 'Uninstall',
-  'settings.pluginManager.uninstallConfirmation':
-    'Remove this plugin from the runtime?',
+  'settings.pluginManager.uninstallConfirmation': 'Remove this plugin from the runtime?',
   'settings.pluginManager.confirmUninstall': 'Uninstall permanently',
   'settings.pluginManager.error.required': 'This field is required.',
-  'settings.pluginManager.error.minimum':
-    'The value is below the allowed minimum.',
-  'settings.pluginManager.error.maximum':
-    'The value exceeds the allowed maximum.',
+  'settings.pluginManager.error.minimum': 'The value is below the allowed minimum.',
+  'settings.pluginManager.error.maximum': 'The value exceeds the allowed maximum.',
   'settings.pluginManager.error.invalid_number': 'Enter a valid number.',
   'settings.pluginManager.error.invalid_option': 'Select a supported option.',
   'settings.pluginActivity.action': 'Runtime activity',
   'settings.pluginActivity.title': 'Plugin runtime activity',
   'settings.pluginActivity.description':
     'Inspect control-plane actions, runtime diagnostics, capabilities, and channel reload plans.',
-  'settings.pluginActivity.sessionNote':
-    'Action history is retained for this settings session.',
+  'settings.pluginActivity.sessionNote': 'Action history is retained for this settings session.',
   'settings.pluginActivity.refresh': 'Refresh diagnostics',
   'settings.pluginActivity.loading': 'Loading runtime diagnostics…',
   'settings.pluginActivity.latestTrace': 'Latest control-plane trace',
   'settings.pluginActivity.diagnostics': 'Runtime diagnostics',
   'settings.pluginActivity.timeline': 'Operation timeline',
-  'settings.pluginActivity.noDiagnostics':
-    'No runtime diagnostics were reported.',
-  'settings.pluginActivity.noTimeline':
-    'No plugin actions have been recorded in this session.',
+  'settings.pluginActivity.noDiagnostics': 'No runtime diagnostics were reported.',
+  'settings.pluginActivity.noTimeline': 'No plugin actions have been recorded in this session.',
   'settings.pluginActivity.runtime': 'Runtime',
   'settings.pluginActivity.reloadMetric': 'reload {name}',
   'settings.pluginActivity.capability.channel_types': 'channel types',
   'settings.pluginActivity.capability.tool_factories': 'tool factories',
-  'settings.pluginActivity.capability.registered_tool_factories':
-    'registered tools',
+  'settings.pluginActivity.capability.registered_tool_factories': 'registered tools',
   'settings.pluginActivity.capability.hooks': 'hooks',
   'settings.pluginActivity.capability.commands': 'commands',
   'settings.pluginActivity.capability.services': 'services',
@@ -957,8 +1001,7 @@ const enUS: Record<string, string> = {
     'Connect project messaging channels through installed tenant plugins.',
   'settings.channels.add': 'Add connection',
   'settings.channels.loading': 'Loading project channel connections…',
-  'settings.channels.empty':
-    'No channel connections are configured for this project.',
+  'settings.channels.empty': 'No channel connections are configured for this project.',
   'settings.channels.type': 'Channel type',
   'settings.channels.name': 'Connection name',
   'settings.channels.descriptionField': 'Description',
@@ -970,8 +1013,7 @@ const enUS: Record<string, string> = {
   'settings.channels.deleteNamed': 'Delete {name}',
   'settings.channels.confirmDelete': 'Delete permanently',
   'settings.channels.selectOption': 'Select an option',
-  'settings.channels.secretPlaceholder':
-    'Leave blank to keep the stored secret',
+  'settings.channels.secretPlaceholder': 'Leave blank to keep the stored secret',
   'settings.channels.status.connected': 'Connected',
   'settings.channels.status.disconnected': 'Disconnected',
   'settings.channels.status.error': 'Error',
@@ -1014,8 +1056,7 @@ const enUS: Record<string, string> = {
   'settings.agentEditor.executionBackendAcp': 'External ACP Agent',
   'settings.agentEditor.externalAcpAgent': 'External ACP Agent',
   'settings.agentEditor.selectExternalAcpAgent': 'Select an external ACP Agent',
-  'settings.agentEditor.loadingExternalAcpAgents':
-    'Loading external ACP Agents…',
+  'settings.agentEditor.loadingExternalAcpAgents': 'Loading external ACP Agents…',
   'settings.agentEditor.model': 'Model',
   'settings.agentEditor.temperature': 'Temperature',
   'settings.agentEditor.maxTokens': 'Maximum tokens',
@@ -1064,20 +1105,16 @@ const enUS: Record<string, string> = {
   'settings.agentEditor.delegateMaxDepth': 'Maximum delegation depth',
   'settings.agentEditor.delegateBudgetTokens': 'Delegation token budget',
   'settings.agentEditor.delegateAllowedTools': 'Delegate tools',
-  'settings.agentEditor.listPlaceholder':
-    'One value per line or separated by commas',
+  'settings.agentEditor.listPlaceholder': 'One value per line or separated by commas',
   'settings.agentEditor.delete': 'Delete definition',
   'settings.agentEditor.deleteConfirmation': 'Delete this Agent definition?',
   'settings.agentEditor.confirmDelete': 'Delete permanently',
   'settings.agentEditor.error.required': 'This field is required.',
   'settings.agentEditor.error.invalid_name':
     'Use lowercase letters, numbers, and underscores; start with a letter.',
-  'settings.agentEditor.error.temperature_range':
-    'Temperature must be between 0 and 2.',
-  'settings.agentEditor.error.positive_integer':
-    'Enter a positive whole number.',
-  'settings.agentEditor.error.non_negative_integer':
-    'Enter zero or a positive whole number.',
+  'settings.agentEditor.error.temperature_range': 'Temperature must be between 0 and 2.',
+  'settings.agentEditor.error.positive_integer': 'Enter a positive whole number.',
+  'settings.agentEditor.error.non_negative_integer': 'Enter zero or a positive whole number.',
   'settings.agentEditor.error.hour_range': 'Enter a whole hour from 0 to 23.',
   'settings.subagents': 'SubAgents',
   'settings.subagentsDescription': 'Delegated specialist workers',
@@ -1085,8 +1122,7 @@ const enUS: Record<string, string> = {
   'settings.subagentLibrary.description':
     'Install published specialist templates into the current tenant.',
   'settings.subagentLibrary.loading': 'Loading SubAgent templates…',
-  'settings.subagentLibrary.empty':
-    'No published SubAgent templates are available.',
+  'settings.subagentLibrary.empty': 'No published SubAgent templates are available.',
   'settings.subagentLibrary.install': 'Install',
   'settings.subagentLibrary.installCount': '{count} installs',
   'settings.subagentLibrary.importFilesystem': 'Import for editing',
@@ -1121,17 +1157,14 @@ const enUS: Record<string, string> = {
   'settings.subagentEditor.error.required': 'This field is required.',
   'settings.subagentEditor.error.invalid_name':
     'Use lowercase letters, numbers, and underscores, beginning with a letter.',
-  'settings.subagentEditor.error.temperature_range':
-    'Enter a value from 0 to 2.',
-  'settings.subagentEditor.error.positive_integer':
-    'Enter a positive whole number.',
+  'settings.subagentEditor.error.temperature_range': 'Enter a value from 0 to 2.',
+  'settings.subagentEditor.error.positive_integer': 'Enter a positive whole number.',
   'settings.connectionRecovery': 'Connection recovery',
   'settings.connectionRecoveryDescription':
     'Repair the server and authenticated runtime connection used by this Desktop session.',
   'settings.connectionRecoveryEyebrow': 'RECOVERY',
   'settings.language': 'Language',
-  'settings.languageDescription':
-    'Changes apply immediately across navigation and Settings.',
+  'settings.languageDescription': 'Changes apply immediately across navigation and Settings.',
   'settings.chinese': '简体中文',
   'settings.english': 'English (US)',
   'settings.chineseBadge': '简',
@@ -1162,8 +1195,7 @@ const enUS: Record<string, string> = {
   'settings.currentOrganization': 'Current organization',
   'settings.sessionSecurity': 'Session security',
   'settings.security': 'Security',
-  'settings.securityDescription':
-    'Your organization controls sign-in and session policies.',
+  'settings.securityDescription': 'Your organization controls sign-in and session policies.',
   'settings.accountCreated': 'Account created',
   'settings.workspaceRoles': 'Workspace roles',
   'settings.notAvailable': 'Not available',
@@ -1181,15 +1213,13 @@ const enUS: Record<string, string> = {
   'settings.chooseTenant': 'Choose tenant',
   'settings.chooseTenantDescription':
     'Tenants define members, billing, credentials, memory, and policy boundaries.',
-  'settings.chooseTenantFirst':
-    'Choose a tenant to see its available projects.',
+  'settings.chooseTenantFirst': 'Choose a tenant to see its available projects.',
   'settings.chooseProject': 'Choose project',
   'settings.chooseProjectDescription':
     'Only projects available to your role in the selected tenant are shown.',
   'settings.noProjectSelected': 'No project selected',
   'settings.noProjects': 'No projects are available in this tenant.',
-  'settings.noProjectsDescription':
-    'Ask an administrator for access or choose another tenant.',
+  'settings.noProjectsDescription': 'Ask an administrator for access or choose another tenant.',
   'settings.noDescription': 'No description provided',
   'settings.memberCount': '{count} members',
   'settings.memberCountOne': '{count} member',
@@ -1200,10 +1230,8 @@ const enUS: Record<string, string> = {
   'settings.contextChange': 'Context change',
   'settings.contextChangeDescription':
     'Task lists, memory, agents, and permissions reload inside the selected project.',
-  'settings.selectedTenantUnavailable':
-    'The selected tenant is not available to this user.',
-  'settings.selectedProjectUnavailable':
-    'The selected project is not available for this tenant.',
+  'settings.selectedTenantUnavailable': 'The selected tenant is not available to this user.',
+  'settings.selectedProjectUnavailable': 'The selected project is not available for this tenant.',
   'settings.contextResponseMismatch':
     'The workspace context response did not match the selected project.',
   'settings.switchWorkspace': 'Switch workspace',
@@ -1223,11 +1251,9 @@ const enUS: Record<string, string> = {
     'Open the governed models, skills, plugins, and agents available in this context.',
   'settings.open': 'Open',
   'settings.appearanceTitle': 'Appearance',
-  'settings.appearanceSubtitle':
-    'Keep the dense desktop layout readable across long-running work.',
+  'settings.appearanceSubtitle': 'Keep the dense desktop layout readable across long-running work.',
   'settings.notificationsTitle': 'Notifications',
-  'settings.notificationsSubtitle':
-    'Only interrupt for states that need a human decision.',
+  'settings.notificationsSubtitle': 'Only interrupt for states that need a human decision.',
   'settings.appearanceSummary': 'Desktop appearance',
   'settings.appearanceSummaryDescription':
     'Effective presentation settings for this MemStack Desktop build.',
@@ -1250,22 +1276,19 @@ const enUS: Record<string, string> = {
     'Desktop notifications stay focused on review, approval, and required input.',
   'settings.reviewAlerts': 'Review alerts',
   'settings.reviewAlertsValue': 'On',
-  'settings.reviewAlertsDescription':
-    'Notify when a run needs approval, input, or final review.',
+  'settings.reviewAlertsDescription': 'Notify when a run needs approval, input, or final review.',
   'settings.preferenceOn': 'On',
   'settings.preferenceOff': 'Off',
   'settings.delivery': 'Delivery',
   'settings.deliveryValue': 'Desktop and in-app',
-  'settings.deliveryDescription':
-    'Choose where attention alerts appear on this device.',
+  'settings.deliveryDescription': 'Choose where attention alerts appear on this device.',
   'settings.deliveryGroupLabel': 'Notification delivery',
   'settings.deliveryDesktopAndInApp': 'Desktop and in-app',
   'settings.deliveryDesktopOnly': 'Desktop only',
   'settings.deliveryInAppOnly': 'In-app only',
   'settings.quietHours': 'Quiet hours',
   'settings.quietHoursValue': 'Off',
-  'settings.quietHoursDescription':
-    'Hold desktop interruptions during the selected hours.',
+  'settings.quietHoursDescription': 'Hold desktop interruptions during the selected hours.',
   'settings.quietHoursStart': 'Starts',
   'settings.quietHoursEnd': 'Ends',
   'settings.completionNotifications': 'System notifications',
@@ -1281,8 +1304,7 @@ const enUS: Record<string, string> = {
   'settings.shortcutsCatalog': 'Shortcut catalog',
   'settings.shortcutsCatalogDescription':
     'Every shortcut implemented in this build, grouped by surface.',
-  'settings.shortcutSearchPlaceholder':
-    'Search shortcuts or press a key combination',
+  'settings.shortcutSearchPlaceholder': 'Search shortcuts or press a key combination',
   'settings.shortcutSearchHint':
     'Type to filter by name, or press a modifier combination such as Ctrl K to filter by keys. Escape clears the key filter.',
   'settings.shortcutComboClear': 'Clear key filter',
@@ -1308,11 +1330,9 @@ const enUS: Record<string, string> = {
   'settings.attention': 'Attention',
   'settings.retry': 'Retry',
   'settings.noMatches': 'No matches',
-  'settings.noMatchesDescription':
-    'Try another name or clear the status filter.',
+  'settings.noMatchesDescription': 'Try another name or clear the status filter.',
   'settings.noResourceSelected': 'No resource selected',
-  'settings.noResourceSelectedDescription':
-    'Choose a resource from the catalog to inspect it.',
+  'settings.noResourceSelectedDescription': 'Choose a resource from the catalog to inspect it.',
   'settings.currentScope': 'Current scope',
   'settings.updatedAt': 'Updated',
   'settings.overview': 'Overview',
@@ -1343,13 +1363,11 @@ const enUS: Record<string, string> = {
   'settings.group.mcpServersDescription': 'Allowed MCP server connections',
   'settings.group.fallbackModels': 'Fallback models',
   'settings.group.fallbackModelsDescription': 'Declared fallback model order',
-  'settings.noCapabilitiesDescription':
-    'The server did not declare capability relationships.',
+  'settings.noCapabilitiesDescription': 'The server did not declare capability relationships.',
   'settings.refresh': 'Refresh',
   'settings.loading': 'Loading…',
   'settings.empty': 'No items are available in the current scope.',
-  'settings.unavailable':
-    'This management API is unavailable in the current runtime.',
+  'settings.unavailable': 'This management API is unavailable in the current runtime.',
   'settings.active': 'Active',
   'settings.all': 'All',
   'settings.disabled': 'Disabled',
@@ -1438,8 +1456,7 @@ const enUS: Record<string, string> = {
   'providers.loadFailed': 'Unable to load providers',
   'providers.retry': 'Retry',
   'providers.noProviders': 'No providers configured',
-  'providers.noProvidersDescription':
-    'Add a provider to connect credentials, models, and routing.',
+  'providers.noProvidersDescription': 'Add a provider to connect credentials, models, and routing.',
   'providers.modelProviderEyebrow': 'MODEL PROVIDER',
   'providers.identityDescription':
     'Provider credentials, endpoint health, available models, and workspace routing are managed independently.',
@@ -1451,12 +1468,10 @@ const enUS: Record<string, string> = {
   'providers.providerSaved': '{provider} saved',
   'providers.runtimeRefreshFailed':
     'Provider updated, but the runtime status could not be refreshed.',
-  'providers.contextChanged':
-    'Runtime context changed before this Provider action completed.',
+  'providers.contextChanged': 'Runtime context changed before this Provider action completed.',
   'providers.providerConnected': '{provider} connected',
   'providers.providerConfigured': '{provider} configuration validated',
-  'providers.providerAddedNeedsAttention':
-    '{provider} added; connection needs attention',
+  'providers.providerAddedNeedsAttention': '{provider} added; connection needs attention',
   'providers.localRuntimeUpdated': 'Local runtime selection updated',
   'providers.providerIdCopied': 'Provider ID copied',
   'providers.copyUnavailable': 'Clipboard access is unavailable',
@@ -1477,13 +1492,11 @@ const enUS: Record<string, string> = {
   'providers.connectionEyebrow': 'CONNECTION',
   'providers.providerHealth': 'Provider health',
   'providers.auth.api_key': 'API key',
-  'providers.auth.api_keyDescription':
-    'Save a credential securely for the current tenant',
+  'providers.auth.api_keyDescription': 'Save a credential securely for the current tenant',
   'providers.auth.oauth': 'OAuth',
   'providers.auth.oauthDescription': 'Reuse a provider account connection',
   'providers.auth.environment': 'Environment secret',
-  'providers.auth.environmentDescription':
-    'Reference an official-provider runtime variable',
+  'providers.auth.environmentDescription': 'Reference an official-provider runtime variable',
   'providers.auth.none': 'No authentication',
   'providers.auth.noneDescription': 'Connect without sending credentials',
   'providers.authAvailable': 'Available',
@@ -1523,8 +1536,7 @@ const enUS: Record<string, string> = {
   'providers.readOnlyDescription':
     'Tenant owner or administrator access is required to change this provider.',
   'providers.authentication': 'Authentication',
-  'providers.authenticationDescription':
-    'Choose how this provider authorizes requests.',
+  'providers.authenticationDescription': 'Choose how this provider authorizes requests.',
   'providers.authenticationMethod': 'Authentication method',
   'providers.apiKey': 'API key',
   'providers.apiKeyPlaceholder': 'Leave empty to keep the current credential',
@@ -1553,15 +1565,13 @@ const enUS: Record<string, string> = {
   'providers.advancedSettings': 'Advanced request settings',
   'providers.providerType': 'Provider type',
   'providers.connectionName': 'Connection name',
-  'providers.advancedUnavailable':
-    'Advanced request policy is managed by the server',
+  'providers.advancedUnavailable': 'Advanced request policy is managed by the server',
   'providers.advancedUnavailableDescription':
     'Timeouts and custom headers are not exposed by the current provider contract.',
   'providers.testingConnection': 'Testing provider…',
   'providers.validatingConfiguration': 'Validating configuration…',
   'providers.connectionVerified': 'Connection verified',
-  'providers.connectionPreviouslyVerified':
-    'Authentication works and the provider responded.',
+  'providers.connectionPreviouslyVerified': 'Authentication works and the provider responded.',
   'providers.connectionVerifiedWithModels':
     'Authentication works and {count} models were discovered.',
   'providers.connectionVerifiedDiscoveryUnavailable':
@@ -1579,8 +1589,7 @@ const enUS: Record<string, string> = {
   'providers.validateConfiguration': 'Validate configuration',
   'providers.saveConnection': 'Save connection',
   'providers.modelCatalogTitle': 'Choose models from this provider',
-  'providers.modelCatalogDescription':
-    'Only enabled models appear in agent and routing selectors.',
+  'providers.modelCatalogDescription': 'Only enabled models appear in agent and routing selectors.',
   'providers.staticCatalogDescription':
     'Models from the built-in static catalog are suggestions, not live discovery.',
   'providers.savingModels': 'Saving models…',
@@ -1630,8 +1639,7 @@ const enUS: Record<string, string> = {
   'providers.routingMutationUnavailableDescription':
     'The current server contract exposes roles for inspection but not for mutation.',
   'providers.defaultModel': 'Default model',
-  'providers.defaultModelDescription':
-    'Planning, tool use, and complex execution',
+  'providers.defaultModelDescription': 'Planning, tool use, and complex execution',
   'providers.fastModel': 'Fast model',
   'providers.fastModelDescription': 'Titles, summaries, and lightweight transforms',
   'providers.codingModel': 'Coding model',
@@ -1689,8 +1697,7 @@ const enUS: Record<string, string> = {
   'providers.connectProvider': 'Connect {provider}',
   'providers.connectProviderDescription':
     'Authenticate once at provider level, then verify before selecting models.',
-  'providers.authCapabilityUnavailable':
-    'Authentication capability unavailable',
+  'providers.authCapabilityUnavailable': 'Authentication capability unavailable',
   'providers.authCapabilityUnavailableDescription':
     'This server did not declare a supported authentication method for the provider.',
   'providers.probeUnsupported': 'Connection test unavailable',
@@ -1739,12 +1746,10 @@ const enUS: Record<string, string> = {
   'overview.workspacesUnavailableTitle': 'Workspaces are unavailable',
   'overview.workspacesUnavailableDescription':
     'The workspace catalog could not be verified, so last-known metrics are hidden.',
-  'overview.workspaceCatalogErrorTitle':
-    'Workspace catalog could not be loaded',
+  'overview.workspaceCatalogErrorTitle': 'Workspace catalog could not be loaded',
   'overview.workspaceCatalogErrorDescription':
     'Retry before creating or opening work in this project.',
-  'overview.workspaceCatalogUnavailableTitle':
-    'Workspace catalog is unavailable',
+  'overview.workspaceCatalogUnavailableTitle': 'Workspace catalog is unavailable',
   'overview.workspaceCatalogUnavailableDescription':
     'No authoritative workspace catalog has been loaded for this project.',
   'overview.workspaceCatalogUnavailableCardTitle': 'Load project workspaces',
@@ -1756,14 +1761,11 @@ const enUS: Record<string, string> = {
   'overview.firstTaskTitle': 'Start with your first task',
   'overview.firstTaskDescription':
     'Describe the goal and choose a general or programming scenario. Nothing runs until you approve the plan.',
-  'overview.workspaceSelectionUnavailableTitle':
-    'Selected workspace is unavailable',
+  'overview.workspaceSelectionUnavailableTitle': 'Selected workspace is unavailable',
   'overview.workspaceSelectionUnavailableDescription':
     'The current selection no longer matches the verified project catalog.',
-  'overview.workspaceSelectionUnavailableCardTitle':
-    'Choose a verified workspace',
-  'overview.workspaceSelectionUnavailableCardDescription':
-    'Refresh the project before continuing.',
+  'overview.workspaceSelectionUnavailableCardTitle': 'Choose a verified workspace',
+  'overview.workspaceSelectionUnavailableCardDescription': 'Refresh the project before continuing.',
   'overview.retryWorkspaces': 'Retry',
   'overview.description':
     'Authoritative plans, runs, human gates, tasks, and delivery evidence for this workspace.',
@@ -1799,53 +1801,41 @@ const enUS: Record<string, string> = {
   'overview.explicitWorkspaceBindings': 'Explicit workspace bindings',
   'overview.loading': 'Loading…',
   'overview.rosterError': 'Load failed',
-  'overview.loadingRosterDescription':
-    'Reading explicit bindings from this workspace',
+  'overview.loadingRosterDescription': 'Reading explicit bindings from this workspace',
   'overview.retryRosterDescription': 'Refresh workspace state to try again',
-  'overview.selectWorkspaceForRoster':
-    'Select a workspace to load its explicit bindings',
+  'overview.selectWorkspaceForRoster': 'Select a workspace to load its explicit bindings',
   'overview.noBoundAgents': 'No agents bound',
-  'overview.noBoundAgentsDescription':
-    'This workspace has no active agent bindings',
+  'overview.noBoundAgentsDescription': 'This workspace has no active agent bindings',
   'overview.executionEnvironment': 'Execution environment',
   'overview.projectSandbox': 'Project sandbox',
   'overview.connected': 'Connected',
   'overview.sandboxNotChecked': 'Not checked',
-  'overview.sandboxNotCheckedDescription':
-    'The runtime has not reported this sandbox yet',
+  'overview.sandboxNotCheckedDescription': 'The runtime has not reported this sandbox yet',
   'overview.sandboxReady': 'Ready',
   'overview.sandboxReadyDescription': 'Ready for isolated runs',
   'overview.sandboxPreparing': 'Preparing',
-  'overview.sandboxPreparingDescription':
-    'Preparing the isolated execution environment',
+  'overview.sandboxPreparingDescription': 'Preparing the isolated execution environment',
   'overview.sandboxFailed': 'Unavailable',
   'overview.sandboxFailedDescription': 'The runtime reported a sandbox failure',
   'overview.sandboxStopped': 'Stopped',
-  'overview.sandboxStoppedDescription':
-    'The isolated execution environment is stopped',
+  'overview.sandboxStoppedDescription': 'The isolated execution environment is stopped',
   'overview.sandboxUnavailable': 'Unavailable',
-  'overview.sandboxUnavailableDescription':
-    'The sandbox is not configured or cannot be reached',
+  'overview.sandboxUnavailableDescription': 'The sandbox is not configured or cannot be reached',
   'overview.sandboxDisconnected': 'Disconnected',
-  'overview.sandboxDisconnectedDescription':
-    'The runtime is disconnected from this sandbox',
+  'overview.sandboxDisconnectedDescription': 'The runtime is disconnected from this sandbox',
   'overview.sandboxOrphaned': 'Orphaned',
-  'overview.sandboxOrphanedDescription':
-    'The runtime no longer owns this sandbox',
+  'overview.sandboxOrphanedDescription': 'The runtime no longer owns this sandbox',
   'overview.sandboxUnknown': 'Status unavailable',
-  'overview.sandboxUnknownDescription':
-    'The runtime reported an unsupported sandbox state',
+  'overview.sandboxUnknownDescription': 'The runtime reported an unsupported sandbox state',
   'overview.sandboxReportedByRuntime': 'Status reported by the runtime',
-  'overview.runtimePolicySource':
-    'Credentials and tools follow the reported project policy',
+  'overview.runtimePolicySource': 'Credentials and tools follow the reported project policy',
   'overview.conversations': 'CONVERSATIONS',
   'overview.recentSessions': 'Recent sessions',
   'overview.totalCount': '{count} total',
   'overview.auditTrail': 'AUDIT TRAIL',
   'overview.recentActivity': 'Recent activity',
   'overview.noActivity': 'No recent activity',
-  'overview.noActivityDescription':
-    'Activity appears when the project reports audit events.',
+  'overview.noActivityDescription': 'Activity appears when the project reports audit events.',
   'overview.statusRunning': 'Running',
   'overview.statusNeedsInput': 'Needs input',
   'overview.statusReady': 'Ready',
@@ -1853,8 +1843,7 @@ const enUS: Record<string, string> = {
   'overview.activeCount': '{count} active',
   'overview.unavailable': 'Unavailable',
   'overview.rootGoalMissing': 'No workspace root goal has been declared',
-  'overview.rootGoalDescription':
-    'This goal is supplied by the workspace plan contract.',
+  'overview.rootGoalDescription': 'This goal is supplied by the workspace plan contract.',
   'overview.rootGoalMissingHelp':
     'Session plans remain visible below; the client does not invent a workspace-level goal.',
   'overview.refresh': 'Refresh state',
@@ -1883,8 +1872,7 @@ const enUS: Record<string, string> = {
   'overview.unknown': 'unknown',
   'overview.noPriority': 'no priority',
   'overview.noTasks': 'No current tasks',
-  'overview.noTasksDescription':
-    'Tasks appear only after an Agent publishes a structured plan.',
+  'overview.noTasksDescription': 'Tasks appear only after an Agent publishes a structured plan.',
   'overview.deliveryEvidence': 'Delivery evidence',
   'overview.artifacts': 'artifacts',
   'overview.delivered': 'delivered',
@@ -1892,8 +1880,7 @@ const enUS: Record<string, string> = {
   'overview.inspectEvidence': 'Inspect evidence',
   'overview.recentConversations': 'Recent conversations',
   'overview.noConversations': 'No conversations yet',
-  'overview.noConversationsDescription':
-    'Start a task to create the first workspace session.',
+  'overview.noConversationsDescription': 'Start a task to create the first workspace session.',
   'overview.runtimeContext': 'Runtime context',
   'overview.projectScope': 'Project scope',
   'overview.sandbox': 'Sandbox',
@@ -1927,8 +1914,7 @@ const enUS: Record<string, string> = {
   'workspaceCollaboration.state.error.title': 'Workspace surface unavailable',
   'workspaceCollaboration.state.error.description':
     'The canonical state could not be loaded. Retry after checking the connection.',
-  'workspaceCollaboration.state.unavailable.title':
-    'Not available in this runtime',
+  'workspaceCollaboration.state.unavailable.title': 'Not available in this runtime',
   'workspaceCollaboration.state.unavailable.description':
     'This runtime did not declare a compatible authority for the selected surface.',
   'workspaceCollaboration.mutation.error':
@@ -1999,8 +1985,7 @@ const enUS: Record<string, string> = {
   'activity.markAllRead': 'Mark all as read',
   'activity.unavailable': 'The authoritative activity feed is unavailable.',
   'activity.empty': 'No activity yet',
-  'activity.emptyDescription':
-    'New entries appear when a run needs input, finishes, or fails.',
+  'activity.emptyDescription': 'New entries appear when a run needs input, finishes, or fails.',
   'activity.groupEmpty': 'Nothing here right now.',
   'myWork.eyebrow': 'MY WORK',
   'myWork.codeEyebrow': 'CODE SESSIONS',
@@ -2011,8 +1996,7 @@ const enUS: Record<string, string> = {
   'myWork.description':
     'Project work that needs your input, approval, monitoring, or final review.',
   'myWork.taskFilters': 'Reset task filters',
-  'myWork.filterUnavailable':
-    'This filter needs explicit assignment and recency metadata.',
+  'myWork.filterUnavailable': 'This filter needs explicit assignment and recency metadata.',
   'myWork.statusFilter': 'My Work status filter',
   'myWork.filter.all': 'All',
   'myWork.filter.assigned': 'Assigned to me',
@@ -2021,23 +2005,18 @@ const enUS: Record<string, string> = {
   'myWork.filter.running': 'Active',
   'myWork.filter.ready_review': 'Review',
   'myWork.queue': 'Project work queue',
-  'myWork.commandDescription':
-    'Open authoritative project work that needs your attention.',
+  'myWork.commandDescription': 'Open authoritative project work that needs your attention.',
   'myWork.search': 'Search tasks…',
   'myWork.refresh': 'Refresh My Work',
   'myWork.loading': 'Loading current work',
-  'myWork.loadingDescription':
-    'Reading the authoritative project attention queue.',
+  'myWork.loadingDescription': 'Reading the authoritative project attention queue.',
   'myWork.unavailable': 'The authoritative My Work API is unavailable.',
   'myWork.empty': 'No work needs attention',
-  'myWork.emptyDescription':
-    'New items appear when a persisted task or request needs attention.',
+  'myWork.emptyDescription': 'New items appear when a persisted task or request needs attention.',
   'myWork.noMatches': 'No matching work',
-  'myWork.noMatchesDescription':
-    'No work matches the current mode, search, and status filter.',
+  'myWork.noMatchesDescription': 'No work matches the current mode, search, and status filter.',
   'myWork.clearFilters': 'Clear filters',
-  'myWork.staleHidden':
-    'The previous snapshot is hidden until the authoritative queue refreshes.',
+  'myWork.staleHidden': 'The previous snapshot is hidden until the authoritative queue refreshes.',
   'myWork.requiredAction': 'Required action',
   'myWork.workspace': 'Workspace',
   'myWork.modeUnclassified': 'Mode unavailable',
@@ -2074,8 +2053,7 @@ const enUS: Record<string, string> = {
   'myWork.openSession': 'Open session',
   'myWork.openSessionDescription':
     'Continue in the conversation with its current messages and backend-authorized actions.',
-  'myWork.sessionUnavailable':
-    'The selected record no longer has a loadable workspace session.',
+  'myWork.sessionUnavailable': 'The selected record no longer has a loadable workspace session.',
   'myWork.group.needs_input': 'Needs input',
   'myWork.group.needs_approval': 'Needs approval',
   'myWork.group.running': 'Running',
@@ -2198,8 +2176,7 @@ const enUS: Record<string, string> = {
   'session.closeCanvas': 'Close canvas',
   'session.reviewCanvas': 'Review canvas',
   'session.threadDescription': 'Prompts, agent updates, tools, and decisions',
-  'session.canvasDescription':
-    'Changes, plan, evidence, terminal, and delivery',
+  'session.canvasDescription': 'Changes, plan, evidence, terminal, and delivery',
   'session.needsAttention': 'Needs your attention',
   'session.runSnapshot': 'Run snapshot',
   'session.exploreMode': 'Explore',
@@ -2211,8 +2188,7 @@ const enUS: Record<string, string> = {
   'session.untitled': 'Untitled session',
   'session.elapsed': 'Elapsed',
   'session.workSurfaces': 'Work surfaces',
-  'session.workSurfacesDescription':
-    'Open a canvas only when you need to inspect or act.',
+  'session.workSurfacesDescription': 'Open a canvas only when you need to inspect or act.',
   'session.latestEvidence': 'Latest evidence',
   'session.changedFilesLabel': 'Changed files',
   'session.steerComposerPlaceholder': 'Steer this session…',
@@ -2220,10 +2196,8 @@ const enUS: Record<string, string> = {
   'session.inspectPlanDescription': 'Approved scope and structured progress',
   'session.inspectChangesDescription': 'Review the current change snapshot',
   'session.inspectChecksDescription': 'Review reported verification evidence',
-  'session.inspectArtifactsDescription':
-    'Review current immutable artifact versions',
-  'session.inspectActivityDescription':
-    'Inspect structured run and tool activity',
+  'session.inspectArtifactsDescription': 'Review current immutable artifact versions',
+  'session.inspectActivityDescription': 'Inspect structured run and tool activity',
   'session.needsInput': 'Your input is required',
   'session.needsInputDescription':
     'Review the latest request in the thread before this run can continue.',
@@ -2259,8 +2233,7 @@ const enUS: Record<string, string> = {
   'session.forkRecoveryTitle': 'Start an isolated recovery run?',
   'session.forkRecoveryDescription':
     'Fork recovery preserves the source run and creates a new run with a new isolated environment.',
-  'session.forkRecoveryNewRun':
-    'A new Run ID and isolated Worktree will be created.',
+  'session.forkRecoveryNewRun': 'A new Run ID and isolated Worktree will be created.',
   'session.forkRecoveryVerifiedHead':
     "The new Worktree starts from the source repository's last verified Git HEAD.",
   'session.forkRecoveryLocalChanges':
@@ -2272,15 +2245,13 @@ const enUS: Record<string, string> = {
   'session.cancelRecovery': 'Keep source run',
   'session.confirmForkRecovery': 'Fork and start',
   'session.stopRun': 'Stop',
-  'session.stopRunHint':
-    'Stop the current run. Changes and files produced so far are kept.',
+  'session.stopRunHint': 'Stop the current run. Changes and files produced so far are kept.',
   'session.stopping': 'Stopping…',
   'session.requestChanges': 'Request changes',
   'session.approveRun': 'Approve run',
   'session.approvingRun': 'Approving…',
   'session.changeRequestLabel': 'Change request feedback',
-  'session.changeRequestPlaceholder':
-    'Describe exactly what the agent should change or verify…',
+  'session.changeRequestPlaceholder': 'Describe exactly what the agent should change or verify…',
   'session.cancelAction': 'Cancel',
   'session.sendChanges': 'Send changes',
   'session.sendingChanges': 'Sending…',
@@ -2299,8 +2270,7 @@ const enUS: Record<string, string> = {
   'session.terminalStale': 'Detached from current run',
   'session.terminalError': 'Terminal stopped',
   'session.terminalIdle': 'Idle',
-  'session.terminalEmpty':
-    'Open the authorized run terminal to stream output here.',
+  'session.terminalEmpty': 'Open the authorized run terminal to stream output here.',
   'session.terminalOutput': 'Run terminal output',
   'session.openNewTerminal': 'Open new shell',
   'session.terminalAuthorityMismatch':
@@ -2372,8 +2342,7 @@ const enUS: Record<string, string> = {
   'sandbox.filesDirectory': 'Folder',
   'sandbox.filesDownload': 'Download {name}',
   'sandbox.runtimeToolsTitle': 'Sandbox runtime',
-  'sandbox.runtimeCapabilitiesLoading':
-    'Loading declared runtime capabilities…',
+  'sandbox.runtimeCapabilitiesLoading': 'Loading declared runtime capabilities…',
   'sandbox.runtimeCapabilitiesUnavailable':
     'The runtime capability contract is unavailable. No sandbox route was probed.',
   'sandbox.remoteDesktopTitle': 'Remote desktop',
@@ -2395,14 +2364,11 @@ const enUS: Record<string, string> = {
   'sandbox.remoteDesktopCookieAuth': 'Scoped secure session',
   'sandbox.remoteDesktopResolution': 'Remote desktop resolution',
   'sandbox.filePreviewTitle': 'File preview',
-  'sandbox.filePreviewTruncated':
-    'Preview truncated at the declared read limit.',
-  'sandbox.disabled.signIn':
-    'Sign in or use a manual API key before starting sandbox services.',
+  'sandbox.filePreviewTruncated': 'Preview truncated at the declared read limit.',
+  'sandbox.disabled.signIn': 'Sign in or use a manual API key before starting sandbox services.',
   'sandbox.disabled.authRequired':
     'An authenticated session is required before starting sandbox services.',
-  'sandbox.disabled.projectRequired':
-    'Select a project before starting sandbox services.',
+  'sandbox.disabled.projectRequired': 'Select a project before starting sandbox services.',
   'automations.kicker': 'PROJECT AUTOMATIONS',
   'automations.title': 'Automations',
   'automations.description':
@@ -2429,11 +2395,9 @@ const enUS: Record<string, string> = {
   'automations.loadFailed': 'Automations could not be loaded',
   'automations.retry': 'Retry',
   'automations.loading': 'Loading automations',
-  'automations.loadingBody':
-    'Reading project-scoped schedules and execution history.',
+  'automations.loadingBody': 'Reading project-scoped schedules and execution history.',
   'automations.empty': 'No automations in this project',
-  'automations.emptyBody':
-    'Create the first guarded project schedule to get started.',
+  'automations.emptyBody': 'Create the first guarded project schedule to get started.',
   'automations.list': 'Project automations',
   'automations.active': 'Active',
   'automations.paused': 'Paused',
@@ -2619,11 +2583,9 @@ const enUS: Record<string, string> = {
     'Reading the approved execution environment with fixed, read-only Git commands.',
   'session.changesError': 'Changes could not be loaded',
   'session.changesUnavailable': 'Changes are unavailable',
-  'session.changesUnavailableBody':
-    'This run is not bound to a readable repository environment.',
+  'session.changesUnavailableBody': 'This run is not bound to a readable repository environment.',
   'session.changesTruncated': 'Truncated',
-  'session.changesStatus.unattributed':
-    'Changes cannot be attributed to this run',
+  'session.changesStatus.unattributed': 'Changes cannot be attributed to this run',
   'session.changesStatus.unavailable': 'Run environment unavailable',
   'session.changesStatus.failed': 'Git inspection failed',
   'session.changesReason.base_revision_unavailable':
@@ -2636,22 +2598,18 @@ const enUS: Record<string, string> = {
     'The run workspace path is no longer available.',
   'session.changesReason.git_repository_unavailable':
     'The run workspace is not a readable Git repository.',
-  'session.changesReason.repository_path_invalid':
-    'The repository path could not be verified.',
-  'session.changesReason.workspace_path_invalid':
-    'The workspace path could not be verified.',
+  'session.changesReason.repository_path_invalid': 'The repository path could not be verified.',
+  'session.changesReason.workspace_path_invalid': 'The workspace path could not be verified.',
   'session.changesReason.worktree_identity_mismatch':
     'The persisted worktree identity no longer matches the run.',
-  'session.changesReason.git_diff_failed':
-    'Git could not produce a read-only diff for this run.',
+  'session.changesReason.git_diff_failed': 'Git could not produce a read-only diff for this run.',
   'session.changesReason.change_attribution_not_recorded':
     'No authoritative file or hunk attribution was recorded for this scope.',
   'session.changesReason.unknown': 'No authoritative reason was supplied.',
   'session.branchUnavailable': 'branch unavailable',
   'session.changedFiles': '{count} changed files',
   'session.changedFileTabs': 'Changed files',
-  'session.changeReferenceHint':
-    'Select a line to attach a structured reference.',
+  'session.changeReferenceHint': 'Select a line to attach a structured reference.',
   'session.expandAllChanges': 'Expand all',
   'session.collapseAllChanges': 'Collapse all',
   'session.expandChangeFile': 'Expand {path}',
@@ -2679,8 +2637,7 @@ const enUS: Record<string, string> = {
   'session.stoppingResponse': 'Stopping response…',
   'session.stopResponseDisconnected':
     'The response could not be stopped because the live Agent connection is unavailable.',
-  'session.stopResponseFailed':
-    'The Agent runtime could not stop this response. Try again.',
+  'session.stopResponseFailed': 'The Agent runtime could not stop this response. Try again.',
   'session.stopResponseNotRunning': 'This response is no longer running.',
   'session.conversationSummaryTitle': 'Conversation summary',
   'session.conversationSummaryCollapse': 'Collapse',
@@ -2696,8 +2653,7 @@ const enUS: Record<string, string> = {
     'Summary regeneration is available in cloud workspaces only.',
   'session.composerBlockedByRunState':
     'This run is not accepting ordinary input. Use the visible review, approval, or recovery action.',
-  'session.steeringAccepted':
-    'Steering persisted and will apply at the next durable run boundary.',
+  'session.steeringAccepted': 'Steering persisted and will apply at the next durable run boundary.',
   'session.queueAccepted': 'Queued for the next task at position {position}.',
   'session.queueHandoffRegion': 'Queued task handoff',
   'session.queueHandoffTitle': 'Next task queue',
@@ -2714,8 +2670,7 @@ const enUS: Record<string, string> = {
     'Review the request, then explicitly start a separate Agent planning turn.',
   'session.queueHandoffBlockedBody':
     'The source run ended without completion. This task was not started.',
-  'session.queueHandoffPromotedBody':
-    'The request was handed to a separate Agent planning turn.',
+  'session.queueHandoffPromotedBody': 'The request was handed to a separate Agent planning turn.',
   'session.queuePosition': 'Queue {position}',
   'session.startPlanTurn': 'Start planning',
   'session.startingPlanTurn': 'Starting…',
@@ -2737,8 +2692,7 @@ const enUS: Record<string, string> = {
   'session.canvasSources': 'Sources',
   'session.canvasVerification': 'Verification',
   'session.agents.title': 'Agent team',
-  'session.agents.description':
-    'Spawned Agent hierarchy and inter-Agent communication.',
+  'session.agents.description': 'Spawned Agent hierarchy and inter-Agent communication.',
   'session.agents.total': '{count} Agents',
   'session.agents.summary': 'Agent status summary',
   'session.agents.hierarchy': 'Agent hierarchy',
@@ -2827,8 +2781,7 @@ const enUS: Record<string, string> = {
   'session.context.summaryMessages': 'Summary messages',
   'session.context.updates': 'Context updates',
   'session.context.distribution': 'Token distribution',
-  'session.context.distributionDescription':
-    'Structured token totals by message category.',
+  'session.context.distributionDescription': 'Structured token totals by message category.',
   'session.context.noDistribution': 'No token distribution was reported.',
   'session.context.compressionSummary': 'Compression summary',
   'session.context.compressions': 'Compressions',
@@ -2836,8 +2789,7 @@ const enUS: Record<string, string> = {
   'session.context.averageRatio': 'Average ratio',
   'session.context.averageSavings': 'Average savings',
   'session.context.history': 'Compression history',
-  'session.context.historyDescription':
-    'Recent backend-recorded compression passes.',
+  'session.context.historyDescription': 'Recent backend-recorded compression passes.',
   'session.context.saved': 'saved',
   'session.context.noHistory': 'No compression history was reported.',
   'session.context.selectedCompression': 'Compression evidence',
@@ -2867,13 +2819,11 @@ const enUS: Record<string, string> = {
   'session.runtime.running': 'Running',
   'session.runtime.errors': 'Errors',
   'session.runtime.topology': 'Runtime resources',
-  'session.runtime.topologyDescription':
-    'Current state reconstructed from lifecycle events.',
+  'session.runtime.topologyDescription': 'Current state reconstructed from lifecycle events.',
   'session.runtime.selectedEvidence': 'Selected evidence',
   'session.runtime.selectedEvidenceDescription':
     'Latest structured fields for the selected resource or event.',
-  'session.runtime.noEvidence':
-    'Select a resource or event to inspect its evidence.',
+  'session.runtime.noEvidence': 'Select a resource or event to inspect its evidence.',
   'session.runtime.history': 'Lifecycle history',
   'session.runtime.historyDescription': 'Newest infrastructure events first.',
   'session.runtime.family.sandbox': 'Sandbox',
@@ -2937,8 +2887,7 @@ const enUS: Record<string, string> = {
     'This artifact version did not declare any checks; it is not treated as passed.',
   'session.evidence.missing': 'Missing',
   'session.evidence.currentArtifactCount': '{count} current artifacts',
-  'session.evidence.currentOnly':
-    'Current versions only · open an artifact to inspect history',
+  'session.evidence.currentOnly': 'Current versions only · open an artifact to inspect history',
   'session.runSummary.eyebrow': 'Session run',
   'session.runSummary.title': 'Run summary',
   'session.runSummary.filesChanged': '{count} files changed',
@@ -3071,16 +3020,13 @@ const enUS: Record<string, string> = {
   'chat.search.close': 'Close search',
   'chat.noModelsFound': 'No matching models',
   'chat.switchingModel': 'Switching model…',
-  'chat.selectedModelUnavailable':
-    'The selected model is no longer available in this workspace.',
-  'chat.modelRoutingContextChanged':
-    'The workspace model routing context changed. Please retry.',
+  'chat.selectedModelUnavailable': 'The selected model is no longer available in this workspace.',
+  'chat.modelRoutingContextChanged': 'The workspace model routing context changed. Please retry.',
   'chat.mentionCount': '{count} mentions',
   'chat.workspaceMentionsRouted': 'Routed to {count} workspace agents.',
   'chat.messageActions': 'Message actions',
   'chat.copyMessage': 'Copy message',
-  'chat.duplicateAssistantReplies':
-    '{count} identical replies from one execution',
+  'chat.duplicateAssistantReplies': '{count} identical replies from one execution',
   'chat.duplicateAssistantRepliesAudit': 'Review originals',
   'chat.duplicateAssistantReply': 'Reply {index}',
   'chat.canonicalStory.story': 'Story',
@@ -3102,51 +3048,36 @@ const enUS: Record<string, string> = {
   'chat.canonicalStory.outOfScope': 'Out of scope',
   'chat.canonicalStory.testable': 'Testable',
   'chat.canonicalStory.untestable': 'Untestable',
-  'chat.canonicalStory.invalidIssueCount':
-    'Canonical story has {count} validation issues',
-  'chat.canonicalStory.issue.parseError':
-    'The YAML could not be parsed safely.',
+  'chat.canonicalStory.invalidIssueCount': 'Canonical story has {count} validation issues',
+  'chat.canonicalStory.issue.parseError': 'The YAML could not be parsed safely.',
   'chat.canonicalStory.issue.aliasesForbidden': 'YAML aliases are not allowed.',
   'chat.canonicalStory.issue.sourceTooLong':
     'The source exceeds the {limit}-character safety limit.',
-  'chat.canonicalStory.issue.valueLimit':
-    'The story exceeds the {limit}-value safety limit.',
+  'chat.canonicalStory.issue.valueLimit': 'The story exceeds the {limit}-value safety limit.',
   'chat.canonicalStory.issue.depthLimit':
     'The story exceeds the {limit}-level nesting safety limit.',
-  'chat.canonicalStory.issue.stringTooLong':
-    '{path} exceeds the {limit}-character limit.',
-  'chat.canonicalStory.issue.collectionLimit':
-    '{path} must contain at most {limit} items.',
-  'chat.canonicalStory.issue.fieldLimit':
-    '{path} must contain at most {limit} fields.',
-  'chat.canonicalStory.issue.prohibitedField':
-    '{path} contains a prohibited field.',
-  'chat.canonicalStory.issue.positiveInteger':
-    '{path} must be a positive integer.',
-  'chat.canonicalStory.issue.stringRequired':
-    '{path} must be a non-empty string.',
+  'chat.canonicalStory.issue.stringTooLong': '{path} exceeds the {limit}-character limit.',
+  'chat.canonicalStory.issue.collectionLimit': '{path} must contain at most {limit} items.',
+  'chat.canonicalStory.issue.fieldLimit': '{path} must contain at most {limit} fields.',
+  'chat.canonicalStory.issue.prohibitedField': '{path} contains a prohibited field.',
+  'chat.canonicalStory.issue.positiveInteger': '{path} must be a positive integer.',
+  'chat.canonicalStory.issue.stringRequired': '{path} must be a non-empty string.',
   'chat.canonicalStory.issue.booleanRequired': '{path} must be a boolean.',
-  'chat.canonicalStory.issue.stringArrayRequired':
-    '{path} must be an array of strings.',
-  'chat.canonicalStory.issue.itemRequired':
-    '{path} must contain at least one item.',
+  'chat.canonicalStory.issue.stringArrayRequired': '{path} must be an array of strings.',
+  'chat.canonicalStory.issue.itemRequired': '{path} must contain at least one item.',
   'chat.canonicalStory.issue.arrayRequired': '{path} must be an array.',
-  'chat.canonicalStory.issue.minimumItems':
-    '{path} must contain at least {limit} items.',
-  'chat.canonicalStory.issue.uniqueAcceptanceIds':
-    'Acceptance criterion IDs must be unique.',
+  'chat.canonicalStory.issue.minimumItems': '{path} must contain at least {limit} items.',
+  'chat.canonicalStory.issue.uniqueAcceptanceIds': 'Acceptance criterion IDs must be unique.',
   'chat.canonicalStory.issue.objectRequired': '{path} must be an object.',
   'chat.canonicalStory.issue.passFailRequired': '{path} must be pass or fail.',
-  'chat.canonicalStory.issue.storyStatusRequired':
-    '{path} must be pass, warning, or fail.',
+  'chat.canonicalStory.issue.storyStatusRequired': '{path} must be pass, warning, or fail.',
   'chat.canonicalStory.issue.invalid': 'The Canonical Story schema is invalid.',
   'chat.replyMessage': 'Reply',
   'chat.editMessage': 'Edit message',
   'chat.deleteMessage': 'Delete message',
   'chat.deleteMessageTitle': 'Delete this message?',
   'chat.deleteMessageBody': 'Remove "{excerpt}" from this conversation view.',
-  'chat.deleteMessageBodyEmpty':
-    'Remove this message from this conversation view.',
+  'chat.deleteMessageBodyEmpty': 'Remove this message from this conversation view.',
   'chat.deleteMessageRestorationNote':
     'This only changes the current view. Reloading the conversation may restore the message.',
   'chat.messageRemoved': 'Message removed from this conversation view.',
@@ -3202,12 +3133,10 @@ const enUS: Record<string, string> = {
   'chat.permissionPreset.default': 'Default',
   'chat.permissionPreset.relaxed': 'Relaxed',
   'chat.permissionPreset.full': 'Full access',
-  'chat.permissionPreset.defaultDescription':
-    'Ask before every permission request.',
+  'chat.permissionPreset.defaultDescription': 'Ask before every permission request.',
   'chat.permissionPreset.relaxedDescription':
     'Auto-allow low-risk permission requests; ask for the rest.',
-  'chat.permissionPreset.fullDescription':
-    'Auto-allow every permission request in this session.',
+  'chat.permissionPreset.fullDescription': 'Auto-allow every permission request in this session.',
   'chat.fullAccessWarning.title': 'Enable full access for this session?',
   'chat.fullAccessWarning.body':
     'Every permission request in this session will be approved automatically, including destructive or irreversible actions. The change takes effect immediately and is remembered for this conversation.',
@@ -3218,8 +3147,7 @@ const enUS: Record<string, string> = {
   'chat.submitResponse': 'Submit response',
   'chat.expiresIn': 'Expires in {time}',
   'chat.requestExpired': 'This request has expired.',
-  'chat.invalidExpiry':
-    'This request has an invalid expiry and cannot be answered.',
+  'chat.invalidExpiry': 'This request has an invalid expiry and cannot be answered.',
   'chat.selectOneOrMore': 'Select one or more options.',
   'chat.selectionLimit': 'Select up to {count} options.',
   'chat.confirmSelection': 'Confirm selection',
@@ -3338,8 +3266,7 @@ const enUS: Record<string, string> = {
   'chat.mcpAppInput': 'Tool input',
   'chat.mcpAppOutput': 'Tool output',
   'chat.mcpAppStructuredData': 'Structured data',
-  'chat.mcpAppSandboxNote':
-    'Interactive content opens in the isolated Apps canvas.',
+  'chat.mcpAppSandboxNote': 'Interactive content opens in the isolated Apps canvas.',
   'chat.elicitationRequest': 'MCP input request',
   'chat.elicitationResponse': 'MCP input received',
   'chat.memoryRecalled': 'Memory recalled',
@@ -3356,8 +3283,7 @@ const enUS: Record<string, string> = {
   'chat.memoryUnknownSource': 'unknown source',
   'chat.memoryUnknownCategory': 'uncategorized',
   'chat.aggregatedSources.title': 'Aggregated sources',
-  'chat.aggregatedSources.metrics':
-    '{sources} sources from {calls} calls · {groups} groups',
+  'chat.aggregatedSources.metrics': '{sources} sources from {calls} calls · {groups} groups',
   'chat.aggregatedSources.other': 'Other sources',
   'chat.aggregatedSources.group': 'Toggle source group {group}',
   'chat.aggregatedSources.open': 'Open source {title}',
@@ -3428,28 +3354,20 @@ const enUS: Record<string, string> = {
   'chat.templates.category.general': 'General',
   'chat.templates.visibleCount': 'Showing {count} of {total}',
   'chat.templates.resetFilters': 'Reset filters',
-  'chat.templates.authenticationRequired':
-    'Sign in again to load prompt templates.',
-  'chat.templates.permissionDenied':
-    'You do not have permission to change this template.',
-  'chat.templates.conflict':
-    'The template changed elsewhere. Refresh and try again.',
-  'chat.templates.validationFailed':
-    'The server rejected this template request.',
-  'chat.templates.loadFailed':
-    'Prompt templates could not be loaded. Try again.',
-  'chat.templates.unavailable':
-    'Prompt templates are unavailable for this runtime.',
+  'chat.templates.authenticationRequired': 'Sign in again to load prompt templates.',
+  'chat.templates.permissionDenied': 'You do not have permission to change this template.',
+  'chat.templates.conflict': 'The template changed elsewhere. Refresh and try again.',
+  'chat.templates.validationFailed': 'The server rejected this template request.',
+  'chat.templates.loadFailed': 'Prompt templates could not be loaded. Try again.',
+  'chat.templates.unavailable': 'Prompt templates are unavailable for this runtime.',
   'chat.templates.retry': 'Retry',
   'chat.templates.loading': 'Loading tenant templates…',
   'chat.templates.emptyTitle': 'No matching templates',
-  'chat.templates.emptyDescription':
-    'Change the search or category filter to see more.',
+  'chat.templates.emptyDescription': 'Change the search or category filter to see more.',
   'chat.templates.owner.builtin': 'MemStack built-in',
   'chat.templates.owner.custom': 'Tenant template',
   'chat.templates.deleteTemplate': 'Delete template: {title}',
-  'chat.templates.fillVariables':
-    'Fill in the template variables before inserting it.',
+  'chat.templates.fillVariables': 'Fill in the template variables before inserting it.',
   'chat.templates.preview': 'Preview',
   'chat.templates.variableRequired': '{name} is required.',
   'chat.templates.useTemplate': 'Use template',
@@ -3465,8 +3383,7 @@ const enUS: Record<string, string> = {
   'chat.templates.saveNamePlaceholder': 'Give this template a clear name',
   'chat.templates.saveCategory': 'Category',
   'chat.templates.saveTitleRequired': 'Enter a template name.',
-  'chat.templates.saveContentRequired':
-    'This Agent response has no content to save.',
+  'chat.templates.saveContentRequired': 'This Agent response has no content to save.',
   'chat.templates.saving': 'Saving template…',
   'chat.templates.saved': 'Template saved.',
   'chat.templates.saveFailed': 'The template could not be saved. Try again.',
@@ -3516,15 +3433,12 @@ const enUS: Record<string, string> = {
   'chat.composeAhead.status.steering': 'Steering…',
   'chat.composeAhead.intent.queue': 'Queue',
   'chat.composeAhead.intent.steer': 'Steer',
-  'chat.composeAhead.steerMessage':
-    'Steer the current run at the next turn boundary',
+  'chat.composeAhead.steerMessage': 'Steer the current run at the next turn boundary',
   'chat.composeAhead.steerNow': 'Steer at the next turn boundary: {prompt}',
-  'chat.composeAhead.dequeueToQueue':
-    'Wait in queue until the run ends: {prompt}',
+  'chat.composeAhead.dequeueToQueue': 'Wait in queue until the run ends: {prompt}',
   'chat.composeAhead.reorder': 'Drag to reorder queued prompt: {prompt}',
   'chat.composeAhead.sendOptions': 'Send options',
-  'chat.composeAhead.menu.queueDescription':
-    'Send after the current response finishes',
+  'chat.composeAhead.menu.queueDescription': 'Send after the current response finishes',
   'chat.composeAhead.menu.steerDescription': 'Inject at the next turn boundary',
   'chat.composeAhead.menu.stopAndSend': 'Stop and send',
   'chat.composeAhead.steerFallback':
@@ -3541,8 +3455,7 @@ const enUS: Record<string, string> = {
   'chat.subagentFailure': 'Failure',
   'chat.subagentControls': 'SubAgent controls',
   'chat.subagentSteerInstruction': 'Steering instruction',
-  'chat.subagentSteerPlaceholder':
-    'Give this SubAgent a revision-bound instruction',
+  'chat.subagentSteerPlaceholder': 'Give this SubAgent a revision-bound instruction',
   'chat.subagentSteer': 'Steer',
   'chat.subagentSteering': 'Steering…',
   'chat.subagentKill': 'Stop SubAgent',
@@ -3623,8 +3536,7 @@ const enUS: Record<string, string> = {
   'session.overviewPermission': 'Permission policy',
   'session.overviewRun': 'Run identity',
   'artifact.title': 'Artifacts',
-  'artifact.description':
-    'Immutable versions, review evidence, and delivery receipts',
+  'artifact.description': 'Immutable versions, review evidence, and delivery receipts',
   'artifact.liveCanvas': 'Live artifact canvas',
   'artifact.liveCanvasDescription': 'Streaming content from the Agent',
   'artifact.liveArtifactTabs': 'Open artifact tabs',
@@ -3635,8 +3547,7 @@ const enUS: Record<string, string> = {
   'artifact.closeTab': 'Close {title}',
   'artifact.pinnedCloseUnavailable': 'Unpin this artifact before closing it.',
   'artifact.unsavedTitle': 'Discard unsaved changes?',
-  'artifact.unsavedDescription':
-    '{title} has local changes that cannot be saved yet.',
+  'artifact.unsavedDescription': '{title} has local changes that cannot be saved yet.',
   'artifact.discardChanges': 'Discard changes',
   'artifact.viewModeGroup': 'Artifact view mode',
   'artifact.viewMode.code': 'Code',
@@ -3650,13 +3561,11 @@ const enUS: Record<string, string> = {
   'artifact.downloaded': 'Artifact download started.',
   'artifact.downloadFailed': 'Artifact could not be downloaded.',
   'artifact.save': 'Save',
-  'artifact.saveUnavailable':
-    'Saving is unavailable because no write authority was provided.',
+  'artifact.saveUnavailable': 'Saving is unavailable because no write authority was provided.',
   'artifact.saving': 'Saving…',
   'artifact.saved': 'Artifact saved.',
   'artifact.saveFailed': 'Artifact could not be saved.',
-  'artifact.saveConflict':
-    'The server has a newer revision. Your local draft has been preserved.',
+  'artifact.saveConflict': 'The server has a newer revision. Your local draft has been preserved.',
   'artifact.conflictTitle': 'Resolve save conflict',
   'artifact.conflictDescription':
     'Reload server authority, save the local draft as a file, or copy it before continuing.',
@@ -3687,8 +3596,7 @@ const enUS: Record<string, string> = {
   'mcpApp.closeTab': 'Close {title}',
   'mcpApp.loading': 'Loading plugin app…',
   'mcpApp.rendererError': 'Plugin app could not be rendered',
-  'mcpApp.rendererErrorDescription':
-    'The sandbox rejected or could not initialize this app.',
+  'mcpApp.rendererErrorDescription': 'The sandbox rejected or could not initialize this app.',
   'mcpApp.plugin': 'Plugin',
   'mcpApp.untitled': 'Untitled app',
   'artifact.currentCount': '{count} current',
@@ -3706,16 +3614,13 @@ const enUS: Record<string, string> = {
   'artifact.revision': 'Review revision',
   'artifact.created': 'Created',
   'artifact.sources': 'Sources',
-  'artifact.sourcesMissing':
-    'No source evidence was supplied for this version.',
+  'artifact.sourcesMissing': 'No source evidence was supplied for this version.',
   'artifact.checks': 'Checks',
-  'artifact.checksMissing':
-    'No structured checks were supplied for this version.',
+  'artifact.checksMissing': 'No structured checks were supplied for this version.',
   'artifact.changesRequested': 'Changes requested for this version',
   'artifact.deliveryReceipt': 'Delivery receipt',
   'artifact.feedbackLabel': 'Required artifact changes',
-  'artifact.feedbackPlaceholder':
-    'Describe the missing evidence or exact revision required…',
+  'artifact.feedbackPlaceholder': 'Describe the missing evidence or exact revision required…',
   'artifact.submitting': 'Submitting…',
   'artifact.sendChanges': 'Send change request',
   'artifact.requestChanges': 'Request changes',
@@ -3723,8 +3628,7 @@ const enUS: Record<string, string> = {
   'artifact.approving': 'Approving…',
   'artifact.deliverVersion': 'Deliver approved version',
   'artifact.delivering': 'Delivering…',
-  'artifact.versionIdentity':
-    'Version v{version} · review revision r{revision}',
+  'artifact.versionIdentity': 'Version v{version} · review revision r{revision}',
   'artifact.status.draft': 'Draft',
   'artifact.status.ready': 'Ready',
   'artifact.status.approved': 'Approved',
@@ -3753,14 +3657,11 @@ const enUS: Record<string, string> = {
   'approval.chooseAction': 'Choose an action',
   'approval.incomplete': 'Approval is disabled. Missing fields: {fields}',
   'approval.approve': 'Approve and continue',
-  'approval.approveDescription':
-    'Resume this same Run from its saved checkpoint.',
+  'approval.approveDescription': 'Resume this same Run from its saved checkpoint.',
   'approval.feedback': 'Change request feedback',
-  'approval.feedbackPlaceholder':
-    'Describe the required change or missing evidence…',
+  'approval.feedbackPlaceholder': 'Describe the required change or missing evidence…',
   'approval.requestChanges': 'Request changes',
-  'approval.requestChangesDescription':
-    'Return explicit feedback without approving the action.',
+  'approval.requestChangesDescription': 'Return explicit feedback without approving the action.',
   'approval.submitting': 'Submitting…',
   'approval.submitFailed': 'The decision could not be submitted.',
   'approval.authoritativeNotice':
@@ -3781,12 +3682,10 @@ const enUS: Record<string, string> = {
   'task.generalAgent': 'General Agent',
   'task.generalAgentDescription': 'Research, analysis, content, operations',
   'task.codeAgent': 'Code Agent',
-  'task.codeAgentDescription':
-    'Repository-aware implementation and verification',
+  'task.codeAgentDescription': 'Repository-aware implementation and verification',
   'task.workspace': 'Workspace',
   'task.noWorkspace': 'No workspace',
-  'task.noWorkspaceDescription':
-    'Start a project conversation without binding it to a workspace.',
+  'task.noWorkspaceDescription': 'Start a project conversation without binding it to a workspace.',
   'task.projectDefaultModel': 'Project default',
   'task.projectDefaultModelDescription':
     'Let the Agent runtime choose the configured project model.',
@@ -3830,8 +3729,7 @@ const enUS: Record<string, string> = {
   'task.planChangedDescription':
     'The authoritative task list changed. Review the refreshed steps before approval.',
   'task.reviewLatestPlan': 'I reviewed the refreshed plan',
-  'task.revisionNotAcknowledgedTitle':
-    'The revision request was not acknowledged',
+  'task.revisionNotAcknowledgedTitle': 'The revision request was not acknowledged',
   'task.revisionNotAcknowledgedDescription':
     'Approval remains blocked. You can retry, or stop waiting and recheck the current plan.',
   'task.stopWaitingForRevision': 'Stop waiting and recheck',
@@ -3843,8 +3741,7 @@ const enUS: Record<string, string> = {
   'task.priorityStatus': '{priority} priority · {status}',
   'task.notAuthorized': 'No implementation has been authorized yet.',
   'task.runPreview': 'RUN PREVIEW',
-  'task.runPreviewDescription':
-    'Choose the exact execution boundary for this plan version.',
+  'task.runPreviewDescription': 'Choose the exact execution boundary for this plan version.',
   'task.permissionProfile': 'Permission profile',
   'task.permissionReadOnly': 'Read only',
   'task.permissionReadOnlyDescription':
@@ -3863,8 +3760,7 @@ const enUS: Record<string, string> = {
   'task.startingBuild': 'Starting build…',
   'task.approveStart': 'Approve & start build',
   'task.approveStartVersion': 'Approve version {version} & start build',
-  'task.authorityTransition':
-    'Human approval is the only Plan → Build authority transition.',
+  'task.authorityTransition': 'Human approval is the only Plan → Build authority transition.',
   'task.generatePlan': 'Generate plan',
   'task.newThreadEyebrow': 'NEW THREAD',
   'task.newThreadTitle': 'What should the agent work on?',
@@ -3881,14 +3777,10 @@ const enUS: Record<string, string> = {
   'task.effortHigh': 'High',
   'task.effortLowDescription': 'Fast responses for simple, well-scoped work.',
   'task.effortMediumDescription': 'Balanced speed and reasoning depth.',
-  'task.effortHighDescription':
-    'Deeper reasoning for complex, multi-step work.',
-  'task.permissionAskDescription':
-    'Read-only tools run automatically; changes require approval.',
-  'task.permissionAutomaticDescription':
-    'Workspace-write tools may run automatically.',
-  'task.permissionModeFullAccessDescription':
-    'All available tools may run with an audit trail.',
+  'task.effortHighDescription': 'Deeper reasoning for complex, multi-step work.',
+  'task.permissionAskDescription': 'Read-only tools run automatically; changes require approval.',
+  'task.permissionAutomaticDescription': 'Workspace-write tools may run automatically.',
+  'task.permissionModeFullAccessDescription': 'All available tools may run with an audit trail.',
   'task.manageModels': 'Manage models in Settings',
   'task.contextWindowUnavailable': 'Context window unavailable',
   'task.modelRole.default': 'Default',
@@ -3915,10 +3807,8 @@ const enUS: Record<string, string> = {
   'composer.existingThreads': 'Existing threads',
   'composer.filesAndPhotos': 'Files & photos',
   'composer.filesAndPhotosDescription': 'Select from this device',
-  'composer.uploadingFiles':
-    'Uploading {count} file(s) to the project sandbox…',
-  'composer.fileUploadUnavailable':
-    'File upload is unavailable in this runtime.',
+  'composer.uploadingFiles': 'Uploading {count} file(s) to the project sandbox…',
+  'composer.fileUploadUnavailable': 'File upload is unavailable in this runtime.',
   'composer.fileUploadFailed': 'Could not upload {filename}: {error}',
   'composer.fileTooLarge': 'Files must be 16 MiB or smaller.',
   'composer.filePickerFailed': 'Could not select attachments: {error}',
@@ -3927,8 +3817,7 @@ const enUS: Record<string, string> = {
   'composer.attachmentOnlyMessage': 'Attached files: {filenames}',
   'composer.screenshot': 'Screenshot',
   'composer.screenshotDescription': 'Capture the display containing this app',
-  'composer.screenshotUnavailable':
-    'Screen capture is unavailable in this runtime',
+  'composer.screenshotUnavailable': 'Screen capture is unavailable in this runtime',
   'composer.screenshotFailed': 'Screen capture failed: {error}',
   'composer.screenshotPreviewTitle': 'Confirm screenshot',
   'composer.screenshotPreviewAlt': 'Screenshot preview',
@@ -3937,8 +3826,7 @@ const enUS: Record<string, string> = {
   'composer.screenshotConfirm': 'Attach screenshot',
   'composer.voice.start': 'Voice input',
   'composer.voice.stop': 'Stop voice input',
-  'composer.voice.unavailable.local_runtime':
-    'Voice input is available in cloud sessions.',
+  'composer.voice.unavailable.local_runtime': 'Voice input is available in cloud sessions.',
   'composer.voice.unavailable.authentication_required':
     'Sign in to a cloud session before using voice input.',
   'composer.voice.unavailable.conversation_required':
@@ -3949,12 +3837,10 @@ const enUS: Record<string, string> = {
     'Microphone capture is unavailable in this environment.',
   'composer.voice.error.connection_failed':
     'Voice transcription could not connect. Check the cloud connection and try again.',
-  'composer.voice.error.connection_closed':
-    'The voice transcription connection closed.',
+  'composer.voice.error.connection_closed': 'The voice transcription connection closed.',
   'composer.voice.error.capture_failed':
     'Voice capture stopped unexpectedly. Check the microphone and try again.',
-  'composer.voice.error.service_error':
-    'The voice transcription service returned an error.',
+  'composer.voice.error.service_error': 'The voice transcription service returned an error.',
   'composer.voiceCall.start': 'Start voice call',
   'composer.voiceCall.end': 'End voice call',
   'composer.voiceCall.title': 'Voice call',
@@ -3970,8 +3856,7 @@ const enUS: Record<string, string> = {
   'composer.voiceCall.minimize': 'Minimize voice call',
   'composer.voiceCall.expand': 'Expand voice call',
   'composer.voiceCall.duration': 'Call duration',
-  'composer.voiceCall.unavailable.local_runtime':
-    'Voice calls are available in cloud sessions.',
+  'composer.voiceCall.unavailable.local_runtime': 'Voice calls are available in cloud sessions.',
   'composer.voiceCall.unavailable.authentication_required':
     'Sign in to a cloud session before starting a voice call.',
   'composer.voiceCall.unavailable.conversation_required':
@@ -3982,51 +3867,39 @@ const enUS: Record<string, string> = {
     'This environment cannot capture microphone audio.',
   'composer.voiceCall.error.connection_failed':
     'The voice call could not connect. Check the cloud connection and try again.',
-  'composer.voiceCall.error.connection_closed':
-    'The voice call connection closed.',
+  'composer.voiceCall.error.connection_closed': 'The voice call connection closed.',
   'composer.voiceCall.error.capture_failed':
     'Voice capture stopped unexpectedly. Check the microphone and try again.',
-  'composer.voiceCall.error.playback_failed':
-    'The synthesized response could not be played.',
-  'composer.voiceCall.error.service_error':
-    'The voice call service returned an error.',
+  'composer.voiceCall.error.playback_failed': 'The synthesized response could not be played.',
+  'composer.voiceCall.error.service_error': 'The voice call service returned an error.',
   'composer.noResources': 'No enabled resources',
   'composer.loadingResources': 'Loading available resources…',
   'composer.commandPlanDescription': 'Draft or revise the plan before acting',
-  'composer.commandReviewDescription':
-    'Run an independent review of current work',
-  'composer.commandVerifyDescription':
-    'Re-run verification and attach evidence',
-  'composer.commandSummarizeDescription':
-    'Summarize progress and open questions',
+  'composer.commandReviewDescription': 'Run an independent review of current work',
+  'composer.commandVerifyDescription': 'Re-run verification and attach evidence',
+  'composer.commandSummarizeDescription': 'Summarize progress and open questions',
   'task.policyUpgradeRequired':
     'This runtime uses the legacy routing policy. Upgrade it to persist effort and permission settings.',
-  'task.policyUnavailable':
-    'Workspace policy is unavailable. Refresh the runtime and try again.',
+  'task.policyUnavailable': 'Workspace policy is unavailable. Refresh the runtime and try again.',
   'task.noModelsAvailable': 'No configured model is available for this mode.',
-  'task.creationContextUnavailable':
-    'The current workspace or policy context is unavailable.',
+  'task.creationContextUnavailable': 'The current workspace or policy context is unavailable.',
   'task.suggestions': 'Suggestions',
   'task.recentThreads': 'RECENT THREADS',
   'task.planFirstStatus': 'Plan-first thread',
   'task.suggestionBriefTitle': 'Draft a decision brief',
-  'task.suggestionBriefPrompt':
-    'Synthesize the available context into a concise decision brief.',
+  'task.suggestionBriefPrompt': 'Synthesize the available context into a concise decision brief.',
   'task.suggestionResearchTitle': 'Compare current options',
   'task.suggestionResearchPrompt':
     'Compare the available options, tradeoffs, and supporting evidence.',
   'task.suggestionDigestTitle': 'Prepare a weekly digest',
-  'task.suggestionDigestPrompt':
-    'Summarize decisions, risks, progress, and next actions.',
+  'task.suggestionDigestPrompt': 'Summarize decisions, risks, progress, and next actions.',
   'task.suggestionFixTitle': 'Fix a failing test',
-  'task.suggestionFixPrompt':
-    'Reproduce the failing test and implement the smallest verified fix.',
+  'task.suggestionFixPrompt': 'Reproduce the failing test and implement the smallest verified fix.',
   'task.suggestionBuildTitle': 'Build the next feature',
   'task.suggestionBuildPrompt':
     'Implement the requested feature with focused tests and verification.',
   'task.suggestionUpgradeTitle': 'Plan an SDK upgrade',
-  'task.suggestionUpgradePrompt':
-    'Map breaking changes and propose a staged, testable upgrade.',
+  'task.suggestionUpgradePrompt': 'Map breaking changes and propose a staged, testable upgrade.',
   'task.continueBackground': 'Continue in background',
   'task.createTask': 'Create task',
   'task.createSubtitle': 'Plan-first Agent workflow',
@@ -4041,33 +3914,25 @@ const enUS: Record<string, string> = {
   'task.contextTitle': 'Suggest where the Agent should start',
   'task.availableContext': 'Requested planning context',
   'task.contextProjectMemory': 'Project memory',
-  'task.contextProjectMemoryDescription':
-    'Shared decisions and durable project context',
+  'task.contextProjectMemoryDescription': 'Shared decisions and durable project context',
   'task.contextProjectFiles': 'Project files',
-  'task.contextProjectFilesDescription':
-    'Documents and artifacts in the selected workspace',
+  'task.contextProjectFilesDescription': 'Documents and artifacts in the selected workspace',
   'task.contextWebResearch': 'Web research',
-  'task.contextWebResearchDescription':
-    'Request verified external sources during planning',
+  'task.contextWebResearchDescription': 'Request verified external sources during planning',
   'task.planFirstTitle': 'Plan-first protection',
-  'task.generatePlanHint':
-    'The Agent will generate a reviewable plan from this brief.',
+  'task.generatePlanHint': 'The Agent will generate a reviewable plan from this brief.',
   'task.agentPlanning': 'AGENT IS PLANNING',
   'task.planningFor': 'Building a plan for “{title}”',
   'task.planningSafety':
     'The Agent has Plan-only authority. No execution environment or write permission is granted while this review is pending.',
   'task.planningOutcomeTitle': 'Understand the outcome',
-  'task.planningOutcomeDescription':
-    'The task brief and definition of done were recorded.',
+  'task.planningOutcomeDescription': 'The task brief and definition of done were recorded.',
   'task.planningContextTitle': 'Request planning context',
-  'task.planningContextDescription':
-    '{count} human-selected context sources were requested.',
+  'task.planningContextDescription': '{count} human-selected context sources were requested.',
   'task.planningPathTitle': 'Wait for the structured plan',
-  'task.planningPathDescription':
-    'The client advances only after persisted plan tasks arrive.',
+  'task.planningPathDescription': 'The client advances only after persisted plan tasks arrive.',
   'task.planningPacketTitle': 'Prepare human review',
-  'task.planningPacketDescription':
-    'Plan authority and task identity remain pending.',
+  'task.planningPacketDescription': 'Plan authority and task identity remain pending.',
   'task.planDelayedTitle': 'No structured plan has arrived yet',
   'task.planDelayedDescription':
     'The Agent may still be working. You can ask it to publish the plan again.',
@@ -4078,8 +3943,7 @@ const enUS: Record<string, string> = {
   'task.planOnly': 'Plan only',
   'task.reviewEyebrow': 'HUMAN REVIEW REQUIRED',
   'task.reviewTitle': 'Review the Agent’s plan',
-  'task.reviewDescription':
-    'Enable, edit, or add steps before granting execution authority.',
+  'task.reviewDescription': 'Enable, edit, or add steps before granting execution authority.',
   'task.reviewReadyAnnouncement': 'Agent plan ready for review.',
   'task.planReady': 'Plan ready',
   'task.workTask': 'WORK TASK',
@@ -4102,13 +3966,10 @@ const enUS: Record<string, string> = {
   'task.estimatedUsage': 'Estimated usage',
   'task.executionBoundaries': 'Execution boundaries',
   'task.atomicApprovalBoundary': 'Approval binds this immutable plan version',
-  'task.legacyApprovalBoundary':
-    'Exact task list is rechecked before switching mode',
-  'task.selectedStepBoundary':
-    'The approved plan contains {count} reviewed steps',
+  'task.legacyApprovalBoundary': 'Exact task list is rechecked before switching mode',
+  'task.selectedStepBoundary': 'The approved plan contains {count} reviewed steps',
   'task.contextAgentUse': 'Requested planning context',
-  'task.executionEnvironmentUnavailable':
-    'Execution environment is not bound by this backend',
+  'task.executionEnvironmentUnavailable': 'Execution environment is not bound by this backend',
   'task.legacyApprovalTitle': 'Legacy Plan → Build transition',
   'task.legacyApprovalDescription':
     'This backend cannot bind an atomic plan version. Permission and environment controls stay unavailable.',
@@ -4130,12 +3991,9 @@ const enUS: Record<string, string> = {
   'task.liveConnectionRequired':
     'A live Agent connection is required to start this cloud planning turn.',
   'task.disabledSignIn': 'Sign in before creating an Agent task.',
-  'task.disabledAuthRequired':
-    'An authenticated session is required before creating a task.',
-  'task.disabledProjectRequired':
-    'Select an account and project before creating a task.',
-  'task.agentTurnAckTimeout':
-    'The Agent did not acknowledge this request in time.',
+  'task.disabledAuthRequired': 'An authenticated session is required before creating a task.',
+  'task.disabledProjectRequired': 'Select an account and project before creating a task.',
+  'task.agentTurnAckTimeout': 'The Agent did not acknowledge this request in time.',
   'task.agentTurnOutcomeUnknown':
     'Delivery outcome is unknown. Checking the authoritative plan before offering a safe retry.',
   'task.legacyRollbackFailed':
@@ -4207,8 +4065,7 @@ const zhCN: Record<string, string> = {
   'login.agentWorkspace': '智能体工作区',
   'login.eyebrow': '持续推进的工作',
   'login.headline': '让智能体、项目与决策汇聚在可信工作区。',
-  'login.description':
-    '一次登录即可继续任务、评审计划、切换项目上下文并治理智能体资源。',
+  'login.description': '一次登录即可继续任务、评审计划、切换项目上下文并治理智能体资源。',
   'login.kernelTitle': '统一任务内核',
   'login.kernelDescription': '在通用工作与编程之间切换，不丢失上下文。',
   'login.reviewTitle': '行动前评审',
@@ -4228,11 +4085,9 @@ const zhCN: Record<string, string> = {
   'login.workspaceSsoUnavailable': '当前运行环境尚未配置工作区 SSO。',
   'login.deviceEyebrow': '安全工作区登录',
   'login.deviceTitle': '在浏览器中继续',
-  'login.deviceDescription':
-    '请在组织会话中批准此桌面客户端，完成后本窗口会自动继续。',
+  'login.deviceDescription': '请在组织会话中批准此桌面客户端，完成后本窗口会自动继续。',
   'login.deviceExpiredTitle': '本次登录代码已过期',
-  'login.deviceExpiredDescription':
-    '请重新开始工作区 SSO，以生成新的一次性代码。',
+  'login.deviceExpiredDescription': '请重新开始工作区 SSO，以生成新的一次性代码。',
   'login.deviceCode': '一次性代码',
   'login.deviceVerificationAddress': '验证地址',
   'login.deviceWaiting': '正在等待授权…',
@@ -4254,17 +4109,14 @@ const zhCN: Record<string, string> = {
   'login.password': '密码',
   'login.passwordPlaceholder': '输入密码',
   'login.invalidCredentials': '请输入有效的工作邮箱，密码至少 6 个字符。',
-  'login.passwordChangeRequired':
-    '组织要求先修改密码，完成后才能继续使用桌面客户端。',
+  'login.passwordChangeRequired': '组织要求先修改密码，完成后才能继续使用桌面客户端。',
   'forcePassword.eyebrow': '账号安全',
   'forcePassword.title': '修改密码',
-  'forcePassword.subtitle':
-    '组织要求先设置新密码，完成后桌面客户端才能打开工作区。',
+  'forcePassword.subtitle': '组织要求先设置新密码，完成后桌面客户端才能打开工作区。',
   'forcePassword.currentPassword': '当前密码',
   'forcePassword.newPassword': '新密码',
   'forcePassword.confirmPassword': '确认新密码',
-  'forcePassword.passwordHint':
-    '至少使用 8 个字符，并选择与当前密码不同的新密码。',
+  'forcePassword.passwordHint': '至少使用 8 个字符，并选择与当前密码不同的新密码。',
   'forcePassword.currentRequired': '请输入当前密码。',
   'forcePassword.newRequired': '请输入新密码。',
   'forcePassword.confirmRequired': '请再次输入新密码。',
@@ -4277,26 +4129,21 @@ const zhCN: Record<string, string> = {
   'forcePassword.submitting': '正在修改密码…',
   'forcePassword.signOut': '退出并使用其他账号',
   'forcePassword.securityNote': '此步骤成功前，临时登录凭据仅保留在内存中。',
-  'forcePassword.changedSignInFailed':
-    '密码已修改，但无法打开工作区。请使用新密码重新登录。',
+  'forcePassword.changedSignInFailed': '密码已修改，但无法打开工作区。请使用新密码重新登录。',
   'login.persistenceUnavailable': '已登录当前会话，但应用加密凭据库暂不可用。',
   'login.credentialStoreUnavailable':
     '应用加密凭据库不可用，请检查桌面应用数据访问权限后再切换账号。',
-  'login.authenticatedTenantUnavailable':
-    '登录返回的工作空间租户对当前用户不可用。',
+  'login.authenticatedTenantUnavailable': '登录返回的工作空间租户对当前用户不可用。',
   'login.authoritativeProjectUnavailable': '权威工作空间中的项目已不可用。',
-  'login.authenticatedContextMismatch':
-    '登录返回的工作空间上下文与所选项目不匹配。',
+  'login.authenticatedContextMismatch': '登录返回的工作空间上下文与所选项目不匹配。',
   'login.localContextMissing': '本地会话未返回权威工作空间上下文。',
   'login.localTenantUnavailable': '当前本地租户对该用户不可用。',
   'login.localProjectUnavailable': '当前本地项目对该用户不可用。',
   'login.localRuntimeNotReady': '受信任的本地运行时尚未就绪。',
-  'login.manualApiKeyRequiresValidation':
-    '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
+  'login.manualApiKeyRequiresValidation': '必须先由服务端验证手动 API 密钥，才能打开工作空间。',
   'login.restoreFailed': '无法恢复已保存的登录状态，请重新登录。',
   'login.signOutPersistenceFailed': '无法撤销当前会话，请重试后再关闭应用。',
-  'login.signOutPersistenceWarning':
-    '已退出登录，但无法从应用加密凭据库中移除已撤销的凭据。',
+  'login.signOutPersistenceWarning': '已退出登录，但无法从应用加密凭据库中移除已撤销的凭据。',
   'login.hidePassword': '隐藏密码',
   'login.showPassword': '显示密码',
   'login.keepSignedIn': '在此设备上保持登录',
@@ -4310,19 +4157,138 @@ const zhCN: Record<string, string> = {
   'nav.myWork': '我的工作',
   'nav.automations': '自动化',
   'nav.search': '搜索',
+  'nav.agentWorkspace': '智能体工作区',
+  'nav.overview': '概览',
   'nav.projects': '项目',
+  'nav.workspaces': '工作空间',
+  'nav.tasks': '任务',
+  'nav.analytics': '分析',
+  'nav.agentConfiguration': '智能体配置',
+  'nav.agentDefinitions': '智能体定义',
+  'nav.agentBindings': '智能体绑定',
+  'nav.skills': '技能',
+  'nav.evolution': '演进',
+  'nav.patterns': '模式',
+  'nav.plugins': '插件',
+  'nav.mcpServers': 'MCP 服务',
+  'nav.acp': 'ACP',
+  'nav.templates': '模板',
+  'nav.providers': '模型供应商',
+  'nav.webhooks': 'Webhook',
+  'nav.runtimes': '运行时',
+  'nav.pool': '运行时资源池',
+  'nav.instances': '运行时实例',
+  'nav.clusters': '集群',
+  'nav.deploy': '部署',
+  'nav.instanceTemplates': '实例模板',
+  'nav.genes': '基因市场',
+  'nav.users': '用户',
+  'nav.auditLogs': '审计日志',
+  'nav.events': '事件',
+  'nav.deadLetterQueue': '死信队列',
+  'nav.trustPolicies': '信任策略',
+  'nav.decisionRecords': '决策记录',
+  'nav.billing': '账单',
+  'nav.orgSettings': '组织设置',
+  'nav.settings': '设置',
+  'nav.blackboard': '黑板',
+  'nav.team': '团队',
+  'nav.memories': '记忆',
+  'nav.entities': '实体',
+  'nav.communities': '社区',
+  'nav.knowledgeGraph': '知识图谱',
+  'nav.deepSearch': '高级搜索',
+  'nav.schema': '知识架构',
+  'nav.channels': '频道',
+  'nav.maintenance': '维护',
+  'nav.cronJobs': '定时任务',
+  Dashboard: '智能体仪表盘',
+  'Activity Logs': '智能体活动日志',
+  Patterns: '智能体模式',
+  'featureDirectory.open': '全部功能',
+  'featureDirectory.routeDescription': '打开“{label}”',
+  'featureDirectory.group.desktopShell': '桌面端',
+  'featureDirectory.group.auxiliary': '桌面工具',
+  'featureDirectory.group.tenantCore': '租户核心操作',
+  'featureDirectory.group.agentBuilding': '智能体构建',
+  'featureDirectory.group.extensions': '扩展与集成',
+  'featureDirectory.group.runtime': '运行时基础设施',
+  'featureDirectory.group.governance': '治理与管理',
+  'featureDirectory.group.projectWorkspace': '项目工作区',
+  'featureDirectory.group.knowledge': '项目知识库',
+  'featureDirectory.group.discovery': '项目发现',
+  'featureDirectory.group.projectConfiguration': '项目配置',
+  'featureDirectory.disabled.desktop_navigation_authentication_required':
+    '请先登录，再打开此功能。',
+  'featureDirectory.disabled.desktop_route_context_missing': '请先选择{scope}，再打开此功能。',
+  'featureDirectory.disabled.desktop_route_context_invalid':
+    '请先选择有效的{scope}，再打开此功能。',
+  'featureDirectory.disabled.requiredContext': '请先选择{scope}，再打开此功能。',
+  'featureDirectory.scope.global': '全局上下文',
+  'featureDirectory.scope.tenant': '租户',
+  'featureDirectory.scope.project': '项目',
+  'featureDirectory.scope.workspace': '工作空间',
+  'featureDirectory.scope.instance': '运行时实例',
+  'backendStores.title': '后端存储',
+  'backendStores.subtitle': '管理租户的图存储与检索存储后端。',
+  'backendStores.planeLabel': '存储后端类型',
+  'backendStores.plane.graph': '图存储',
+  'backendStores.plane.retrieval': '检索存储',
+  'backendStores.createTitle': '创建后端存储',
+  'backendStores.editTitle': '编辑后端存储',
+  'backendStores.name': '名称',
+  'backendStores.engine': '引擎',
+  'backendStores.connectionConfig': '连接配置（JSON）',
+  'backendStores.indexConfig': '索引配置（JSON）',
+  'backendStores.testDraft': '测试配置',
+  'backendStores.create': '创建存储',
+  'backendStores.created': '后端存储已创建。',
+  'backendStores.updated': '后端存储已更新。',
+  'backendStores.empty': '此存储类型尚未配置后端。',
+  'backendStores.version': '检测到的版本',
+  'backendStores.test': '测试',
+  'backendStores.testSucceeded': '连接成功。',
+  'backendStores.testFailed': '连接测试失败。',
+  'backendStores.reason.backend_stores_authority_unavailable':
+    '后端存储服务暂不可用，请在云连接恢复后重试。',
+  'backendStores.reason.backend_stores_admin_required': '修改后端存储需要租户管理员权限。',
+  'backendStores.reason.backend_stores_scope_conflict': '当前租户已变化，请刷新后继续。',
+  'backendStores.reason.cloud_request_broker_missing': '当前桌面版本不支持由保险库保护的云请求。',
+  'projectPlaybooks.title': '项目 Playbook',
+  'projectPlaybooks.subtitle': '查看该项目沉淀的复用流程与反思结论。',
+  'projectPlaybooks.empty': '暂无 Playbook 或反思结论。',
+  'projectPlaybooks.playbooks': 'Playbook',
+  'projectPlaybooks.verdicts': '反思结论',
+  'projectPlaybooks.noPlaybooks': '该项目尚未沉淀 Playbook。',
+  'projectPlaybooks.noVerdicts': '尚未记录反思结论。',
+  'projectPlaybooks.hits': '使用次数',
+  'projectPlaybooks.trigger': '触发条件',
+  'projectPlaybooks.step': '步骤',
+  'projectPlaybooks.noRationale': '未提供判断依据。',
+  'projectPlaybooks.verdict.create': '创建',
+  'projectPlaybooks.verdict.reinforce': '强化',
+  'projectPlaybooks.verdict.deprecate': '弃用',
+  'projectPlaybooks.verdict.noop': '不变更',
+  'projectPlaybooks.reason.project_playbooks_authority_unavailable': '项目 Playbook 服务暂不可用。',
+  'projectPlaybooks.reason.project_playbooks_scope_unavailable':
+    '请先选择项目，再打开项目 Playbook。',
+  'projectPlaybooks.reason.project_playbooks_scope_conflict': '当前项目已变化，请刷新后继续。',
+  'projectPlaybooks.reason.project_playbooks_request_failed': '项目 Playbook 加载失败。',
+  'projectPlaybooks.reason.project_playbooks_route_context_unavailable':
+    '请先选择租户和项目，再打开 Playbook。',
+  'projectPlaybooks.reason.project_playbooks_route_binding_scope_mismatch':
+    '项目范围已变化，请从当前项目重新打开此功能。',
+  'projectPlaybooks.reason.cloud_request_broker_missing':
+    '当前桌面版本不支持由保险库保护的云请求。',
+  'common.loading': '加载中…',
   'auxiliary.eyebrow': 'MEMSTACK',
   'auxiliary.homeTitle': '下午好，{name}',
-  'auxiliary.homeDescription':
-    '{running} 个任务正在运行，{ready} 个产物等待评审。',
-  'auxiliary.automationsDescription':
-    '通过明确的输入、审批边界与交付目标，调度周期性智能体任务。',
-  'auxiliary.searchDescription':
-    '在当前项目中使用语义、图遍历、时间、分面或社区检索。',
+  'auxiliary.homeDescription': '{running} 个任务正在运行，{ready} 个产物等待评审。',
+  'auxiliary.automationsDescription': '通过明确的输入、审批边界与交付目标，调度周期性智能体任务。',
+  'auxiliary.searchDescription': '在当前项目中使用语义、图遍历、时间、分面或社区检索。',
   'auxiliary.summary': '工作空间任务概况',
   'auxiliary.heroTitle': '一个工作空间承载所有智能体任务',
-  'auxiliary.heroDescription':
-    '从研究推进到代码实现，同时保留上下文、审批、来源与最终产物。',
+  'auxiliary.heroDescription': '从研究推进到代码实现，同时保留上下文、审批、来源与最终产物。',
   'auxiliary.running': '运行中',
   'auxiliary.runningDescription': '覆盖通用工作与编程',
   'auxiliary.needsInput': '需要输入',
@@ -4379,14 +4345,12 @@ const zhCN: Record<string, string> = {
   'search.capability.loading.title': '正在检查搜索能力',
   'search.capability.loading.description': '正在等待运行时声明结构化搜索契约。',
   'search.capability.unavailable.title': '搜索不可用',
-  'search.capability.unavailable.description':
-    '当前运行时未声明有效的搜索能力契约。',
+  'search.capability.unavailable.description': '当前运行时未声明有效的搜索能力契约。',
   'search.retry': '重试搜索',
   'search.copy.success': '已复制结果 UUID。',
   'search.copy.unavailable': '剪贴板不可用。',
   'search.noProject.title': '请选择要搜索的项目',
-  'search.noProject.description':
-    '搜索结果严格限定在所选租户与项目中，请先选择工作区上下文。',
+  'search.noProject.description': '搜索结果严格限定在所选租户与项目中，请先选择工作区上下文。',
   'search.noProject.action': '打开工作区设置',
   'search.start.title': '可以开始搜索',
   'search.start.description': '选择检索模式，填写所需输入，然后搜索当前项目。',
@@ -4404,13 +4368,11 @@ const zhCN: Record<string, string> = {
   'commandPalette.homeDescription': '打开首页。',
   'commandPalette.useApiKey': '手动使用 API Key',
   'commandPalette.settingsDescription': '编辑连接、账户、项目与工作空间设置。',
-  'commandPalette.apiKeyDescription':
-    '切换到手动 API Key 备用方式，且不保存密钥。',
+  'commandPalette.apiKeyDescription': '切换到手动 API Key 备用方式，且不保存密钥。',
   'commandPalette.accountDescription': '查看当前登录账户。',
   'commandPalette.signInDescription': '打开邮箱与密码登录对话框。',
   'commandPalette.refreshWorkspace': '刷新工作空间',
-  'commandPalette.refreshDescription':
-    '重新加载会话、工作项、当前计划与沙箱状态。',
+  'commandPalette.refreshDescription': '重新加载会话、工作项、当前计划与沙箱状态。',
   'commandPalette.showShortcuts': '键盘快捷键',
   'shortcuts.title': '键盘快捷键',
   'shortcuts.description': '查看全部键盘快捷键。',
@@ -4440,8 +4402,7 @@ const zhCN: Record<string, string> = {
   'workspaceTree.unavailableDescription': '尚未加载权威工作空间目录。',
   'workspaceTree.empty': '当前项目没有工作空间',
   'workspaceTree.emptyDescription': '为当前项目创建第一个工作空间。',
-  'workspaceTree.selectProjectDescription':
-    '请在设置中选择项目，以加载工作空间。',
+  'workspaceTree.selectProjectDescription': '请在设置中选择项目，以加载工作空间。',
   'workspaceTree.expand': '展开 {name}',
   'workspaceTree.collapse': '折叠 {name}',
   'workspaceTree.sessionCount': '{count} 个会话',
@@ -4462,8 +4423,7 @@ const zhCN: Record<string, string> = {
   'workspaceTree.noSessions': '此工作空间暂无会话',
   'workspaceTree.noSessionsDescription': '请从顶部主入口新建任务。',
   'workspaceTree.noTasks': '暂无未绑定工作空间的任务会话',
-  'workspaceTree.noTasksDescription':
-    '已绑定工作空间的会话会显示在对应工作空间下。',
+  'workspaceTree.noTasksDescription': '已绑定工作空间的会话会显示在对应工作空间下。',
   'workspaceTree.retry': '重试',
   'workspaceTree.conversationActions': '“{title}”的操作',
   'workspaceTree.renameConversation': '重命名会话',
@@ -4473,8 +4433,7 @@ const zhCN: Record<string, string> = {
   'workspaceTree.renameLabel': '会话标题',
   'workspaceTree.renaming': '正在重命名…',
   'workspaceTree.deleteTitle': '删除会话',
-  'workspaceTree.deleteDescription':
-    '永久删除“{title}”及其消息。此操作无法撤销。',
+  'workspaceTree.deleteDescription': '永久删除“{title}”及其消息。此操作无法撤销。',
   'workspaceTree.deleting': '正在删除…',
   'workspaceTree.lifecycleError': '无法更新此会话。请确认当前项目后重试。',
   'workspaceTree.online': '在线',
@@ -4497,14 +4456,12 @@ const zhCN: Record<string, string> = {
   'workspaceTree.unknown': '状态不可用',
   'workspaceCreate.open': '新建工作空间',
   'workspaceCreate.title': '新建工作空间',
-  'workspaceCreate.description':
-    '为“{project}”创建独立工作空间，创建后即可发起任务。',
+  'workspaceCreate.description': '为“{project}”创建独立工作空间，创建后即可发起任务。',
   'workspaceCreate.name': '工作空间名称',
   'workspaceCreate.namePlaceholder': '例如：产品发布',
   'workspaceCreate.objective': '目标',
   'workspaceCreate.objectiveProgress': '{count} 个字符 · 至少 {minimum} 个',
-  'workspaceCreate.objectivePlaceholder':
-    '描述此工作空间要帮助团队达成的结果。',
+  'workspaceCreate.objectivePlaceholder': '描述此工作空间要帮助团队达成的结果。',
   'workspaceCreate.useCase': '使用场景',
   'workspaceCreate.useCase.general': '通用',
   'workspaceCreate.useCase.generalDetail': '协调灵活的知识工作与执行。',
@@ -4522,22 +4479,17 @@ const zhCN: Record<string, string> = {
     '必须位于 /workspace 下。例如，“repository”将规范化为 /workspace/repository。',
   'workspaceCreate.collaboration': '协作模式',
   'workspaceCreate.collaboration.single': '单智能体',
-  'workspaceCreate.collaboration.singleDetail':
-    '由一个智能体独立维护工作空间上下文。',
+  'workspaceCreate.collaboration.singleDetail': '由一个智能体独立维护工作空间上下文。',
   'workspaceCreate.collaboration.shared': '多智能体共享',
-  'workspaceCreate.collaboration.sharedDetail':
-    '多个智能体在共享上下文中协作。',
+  'workspaceCreate.collaboration.sharedDetail': '多个智能体在共享上下文中协作。',
   'workspaceCreate.collaboration.isolated': '多智能体隔离',
-  'workspaceCreate.collaboration.isolatedDetail':
-    '多个智能体使用相互隔离的上下文工作。',
+  'workspaceCreate.collaboration.isolatedDetail': '多个智能体使用相互隔离的上下文工作。',
   'workspaceCreate.collaboration.autonomous': '自主协作',
-  'workspaceCreate.collaboration.autonomousDetail':
-    '智能体以最少干预规划并协调工作。',
+  'workspaceCreate.collaboration.autonomousDetail': '智能体以最少干预规划并协调工作。',
   'workspaceCreate.success': '工作空间已创建，正在打开…',
   'workspaceCreate.duplicateError': '当前项目中已存在同名工作空间。',
   'workspaceCreate.genericError': '无法创建工作空间。请检查填写内容后重试。',
-  'workspaceCreate.scopeChanged':
-    '创建完成前租户或项目已切换，当前目录未添加任何内容。',
+  'workspaceCreate.scopeChanged': '创建完成前租户或项目已切换，当前目录未添加任何内容。',
   'workspaceCreate.create': '创建工作空间',
   'workspaceCreate.creating': '正在创建…',
   'workspaceCreate.discardTitle': '放弃新建工作空间？',
@@ -4548,8 +4500,7 @@ const zhCN: Record<string, string> = {
   'workspaceCreate.disabledAuth': '请先配置身份认证，再创建工作空间。',
   'workspaceCreate.disabledProject': '请先选择项目，再创建工作空间。',
   'workspaceSettings.title': '工作空间设置',
-  'workspaceSettings.description':
-    '管理“{workspace}”的运行配置，无需离开当前项目。',
+  'workspaceSettings.description': '管理“{workspace}”的运行配置，无需离开当前项目。',
   'workspaceSettings.general': '基础设置',
   'workspaceSettings.generalDetail': '名称、目标与生命周期状态。',
   'workspaceSettings.name': '工作空间名称',
@@ -4558,34 +4509,28 @@ const zhCN: Record<string, string> = {
   'workspaceSettings.active': '活跃，可继续发起新工作',
   'workspaceSettings.archived': '已归档，保留用于查阅',
   'workspaceSettings.operatingModel': '运行模式',
-  'workspaceSettings.operatingModelDetail':
-    '保持使用场景和协作契约与 Web 一致。',
+  'workspaceSettings.operatingModelDetail': '保持使用场景和协作契约与 Web 一致。',
   'workspaceSettings.useCase': '使用场景',
   'workspaceSettings.collaboration': '协作模式',
   'workspaceSettings.codeContext': '代码上下文',
   'workspaceSettings.codeContextDetail': '编程工作需要使用隔离的沙箱目录。',
   'workspaceSettings.codeRoot': '沙箱代码根目录',
-  'workspaceSettings.codeRootHint':
-    '非编程工作可留空；否则请使用 /workspace/ 下的子路径。',
-  'workspaceSettings.codeRootInvalid':
-    '请使用隔离子路径，例如 /workspace/repository。',
+  'workspaceSettings.codeRootHint': '非编程工作可留空；否则请使用 /workspace/ 下的子路径。',
+  'workspaceSettings.codeRootInvalid': '请使用隔离子路径，例如 /workspace/repository。',
   'workspaceSettings.reset': '重置',
   'workspaceSettings.saving': '正在保存…',
   'workspaceSettings.success': '工作空间设置已保存。',
   'workspaceSettings.duplicateError': '当前项目中已有同名工作空间。',
   'workspaceSettings.genericError': '无法更新工作空间，已保留你的编辑内容。',
-  'workspaceSettings.scopeChanged':
-    '更新完成前租户、项目或工作空间已切换，本地状态未被修改。',
+  'workspaceSettings.scopeChanged': '更新完成前租户、项目或工作空间已切换，本地状态未被修改。',
   'workspaceSettings.resetTitle': '重置工作空间设置？',
-  'workspaceSettings.resetDescription':
-    '此对话框中的所有编辑将恢复为最新服务端数据。',
+  'workspaceSettings.resetDescription': '此对话框中的所有编辑将恢复为最新服务端数据。',
   'workspaceSettings.discardTitle': '放弃工作空间更改？',
   'workspaceSettings.discardDescription': '未保存的工作空间更改将丢失。',
   'workspaceSettings.keepEditing': '继续编辑',
   'workspaceSettings.discard': '放弃',
   'workspaceMembers.title': '工作空间成员',
-  'workspaceMembers.description':
-    '所有者可以添加项目成员并管理其工作空间角色。',
+  'workspaceMembers.description': '所有者可以添加项目成员并管理其工作空间角色。',
   'workspaceMembers.userId': '用户 ID',
   'workspaceMembers.userIdPlaceholder': '输入已有项目成员的用户 ID',
   'workspaceMembers.role': '角色',
@@ -4601,19 +4546,16 @@ const zhCN: Record<string, string> = {
   'workspaceMembers.loading': '正在加载权威成员列表…',
   'workspaceMembers.error': '无法加载成员列表。',
   'workspaceMembers.unavailable': '当前工作空间不支持成员管理。',
-  'workspaceMembers.readOnly':
-    '只有权威成员列表中的所有者才能管理工作空间访问权限。',
+  'workspaceMembers.readOnly': '只有权威成员列表中的所有者才能管理工作空间访问权限。',
   'workspaceMembers.removeMember': '移除 {member}',
   'workspaceMembers.removeTitle': '移除工作空间成员？',
-  'workspaceMembers.removeDescription':
-    '确定从此工作空间移除 {member}？其项目成员身份不会改变。',
+  'workspaceMembers.removeDescription': '确定从此工作空间移除 {member}？其项目成员身份不会改变。',
   'workspaceMembers.removeConfirm': '移除成员',
   'workspaceMembers.addSuccess': '已添加工作空间成员。',
   'workspaceMembers.updateSuccess': '已更新工作空间成员角色。',
   'workspaceMembers.removeSuccess': '已移除工作空间成员。',
   'workspaceMembers.permissionDenied': '只有工作空间所有者才能更改成员列表。',
-  'workspaceMembers.conflict':
-    '该用户已是工作空间成员，或请求的角色与当前权限冲突。',
+  'workspaceMembers.conflict': '该用户已是工作空间成员，或请求的角色与当前权限冲突。',
   'workspaceMembers.genericError': '无法保存成员变更，当前成员列表已保留。',
   'workspaceMembers.scopeChanged': '成员更新完成前租户、项目或工作空间已切换。',
   'workspaceAgents.title': '工作空间智能体',
@@ -4626,16 +4568,13 @@ const zhCN: Record<string, string> = {
   'workspaceAgents.loading': '正在加载权威智能体列表…',
   'workspaceAgents.error': '无法加载智能体列表。',
   'workspaceAgents.unavailable': '当前工作空间不支持智能体绑定管理。',
-  'workspaceAgents.readOnly':
-    '只有权威成员列表中的所有者或编辑者才能管理智能体绑定。',
+  'workspaceAgents.readOnly': '只有权威成员列表中的所有者或编辑者才能管理智能体绑定。',
   'workspaceAgents.removeAgent': '移除 {agent}',
   'workspaceAgents.removeTitle': '移除工作空间智能体？',
-  'workspaceAgents.removeDescription':
-    '确定从此工作空间解绑 {agent}？智能体定义不会改变。',
+  'workspaceAgents.removeDescription': '确定从此工作空间解绑 {agent}？智能体定义不会改变。',
   'workspaceAgents.removeConfirm': '移除智能体',
   'workspaceAgents.selectorTitle': '添加工作空间智能体',
-  'workspaceAgents.selectorDescription':
-    '从当前项目或租户目录选择已启用的智能体。',
+  'workspaceAgents.selectorDescription': '从当前项目或租户目录选择已启用的智能体。',
   'workspaceAgents.definition': '智能体定义',
   'workspaceAgents.definitionPlaceholder': '选择智能体',
   'workspaceAgents.noAvailable': '所有可用智能体均已绑定。',
@@ -4650,12 +4589,10 @@ const zhCN: Record<string, string> = {
   'workspaceAgents.binding': '正在添加…',
   'workspaceAgents.bindSuccess': '已添加工作空间智能体。',
   'workspaceAgents.unbindSuccess': '已移除工作空间智能体。',
-  'workspaceAgents.permissionDenied':
-    '只有工作空间所有者或编辑者才能更改智能体绑定。',
+  'workspaceAgents.permissionDenied': '只有工作空间所有者或编辑者才能更改智能体绑定。',
   'workspaceAgents.conflict': '该智能体已绑定，或与当前工作空间配置冲突。',
   'workspaceAgents.genericError': '无法保存智能体变更，当前列表已保留。',
-  'workspaceAgents.scopeChanged':
-    '智能体更新完成前租户、项目或工作空间已切换。',
+  'workspaceAgents.scopeChanged': '智能体更新完成前租户、项目或工作空间已切换。',
   'sidebar.primaryNavigation': '主导航',
   'layout.resizeSidebar': '调整侧栏宽度',
   'layout.resizeContextRail': '调整上下文面板宽度',
@@ -4774,8 +4711,7 @@ const zhCN: Record<string, string> = {
   'settings.skillEditor.createAction': '新建技能',
   'settings.skillEditor.createTitle': '新建技能包',
   'settings.skillEditor.editTitle': '编辑技能包',
-  'settings.skillEditor.description':
-    '以兼容 AgentSkills 的 SKILL.md 技能包编写可复用指令。',
+  'settings.skillEditor.description': '以兼容 AgentSkills 的 SKILL.md 技能包编写可复用指令。',
   'settings.skillEditor.tabs': '技能包分区',
   'settings.skillEditor.package': '技能包',
   'settings.skillEditor.content': '指令',
@@ -4795,8 +4731,7 @@ const zhCN: Record<string, string> = {
   'settings.skillEditor.deleteConfirmation': '确定删除此技能包？',
   'settings.skillEditor.confirmDelete': '永久删除',
   'settings.skillEditor.error.required': '此字段为必填项。',
-  'settings.skillEditor.error.invalid_name':
-    '请使用小写字母和数字，并以单个连字符分隔。',
+  'settings.skillEditor.error.invalid_name': '请使用小写字母和数字，并以单个连字符分隔。',
   'settings.skillEditor.error.invalid_metadata': '请输入有效的 JSON 对象。',
   'settings.skillEditor.error.too_long': '该值超过支持的长度。',
   'settings.skillPackages.importAction': '导入',
@@ -4805,11 +4740,9 @@ const zhCN: Record<string, string> = {
   'settings.skillPackages.importDescription':
     '通过 ZIP 压缩包或完整 SKILL.md 添加兼容 AgentSkills 的技能包。',
   'settings.skillPackages.zipPlaceholder': '选择技能 ZIP 压缩包',
-  'settings.skillPackages.zipDescription':
-    '压缩包中必须且只能包含一个 SKILL.md。',
+  'settings.skillPackages.zipDescription': '压缩包中必须且只能包含一个 SKILL.md。',
   'settings.skillPackages.chooseZip': '选择 ZIP',
-  'settings.skillPackages.filePickerFailed':
-    '无法打开技能 ZIP：{error}',
+  'settings.skillPackages.filePickerFailed': '无法打开技能 ZIP：{error}',
   'settings.skillPackages.orPaste': '或粘贴 SKILL.md',
   'settings.skillPackages.skillMd': '完整 SKILL.md',
   'settings.skillPackages.scope': '作用域',
@@ -4818,14 +4751,11 @@ const zhCN: Record<string, string> = {
   'settings.skillPackages.selectProject': '选择项目',
   'settings.skillPackages.changeSummary': '变更摘要',
   'settings.skillPackages.overwrite': '覆盖已有技能包',
-  'settings.skillPackages.overwriteDescription':
-    '存在同名技能包时更新其内容，并创建新的版本快照。',
-  'settings.skillPackages.contentRequired':
-    '请选择 ZIP 压缩包或粘贴 SKILL.md 内容。',
+  'settings.skillPackages.overwriteDescription': '存在同名技能包时更新其内容，并创建新的版本快照。',
+  'settings.skillPackages.contentRequired': '请选择 ZIP 压缩包或粘贴 SKILL.md 内容。',
   'settings.skillPackages.projectRequired': '项目作用域技能包必须选择项目。',
   'settings.skillPackages.versionsTitle': '{name} 的版本',
-  'settings.skillPackages.versionsDescription':
-    '查看权威技能包快照，并将早期版本恢复为新修订。',
+  'settings.skillPackages.versionsDescription': '查看权威技能包快照，并将早期版本恢复为新修订。',
   'settings.skillPackages.loadingVersions': '正在加载权威版本…',
   'settings.skillPackages.noVersions': '暂无版本快照。',
   'settings.skillPackages.noChangeSummary': '无变更摘要',
@@ -4840,11 +4770,9 @@ const zhCN: Record<string, string> = {
   'settings.skillPackages.resourceCount': '{count} 个随包资源',
   'settings.skillEvolution.action': '演进',
   'settings.skillEvolution.title': '{name} 的演进',
-  'settings.skillEvolution.description':
-    '查看采集证据、生成候选和权威演进路线。',
+  'settings.skillEvolution.description': '查看采集证据、生成候选和权威演进路线。',
   'settings.skillEvolution.route': '演进路线',
-  'settings.skillEvolution.routeDescription':
-    '按从新到旧顺序展示版本和生成候选。',
+  'settings.skillEvolution.routeDescription': '按从新到旧顺序展示版本和生成候选。',
   'settings.skillEvolution.run': '发起演进',
   'settings.skillEvolution.running': '正在发起演进…',
   'settings.skillEvolution.loading': '正在加载演进状态…',
@@ -4868,18 +4796,14 @@ const zhCN: Record<string, string> = {
   'settings.pluginsDescription': '连接与权限',
   'settings.pluginManager.install': '安装插件',
   'settings.pluginManager.installTitle': '安装运行时插件',
-  'settings.pluginManager.installDescription':
-    '将插件包安装到受治理的租户运行时。',
+  'settings.pluginManager.installDescription': '将插件包安装到受治理的租户运行时。',
   'settings.pluginManager.requirement': '软件包要求',
-  'settings.pluginManager.requirementPlaceholder':
-    'memstack-plugin-github>=2.0',
-  'settings.pluginManager.requirementHelp':
-    '请使用此部署已批准的精确软件包要求。',
+  'settings.pluginManager.requirementPlaceholder': 'memstack-plugin-github>=2.0',
+  'settings.pluginManager.requirementHelp': '请使用此部署已批准的精确软件包要求。',
   'settings.pluginManager.reload': '重载运行时',
   'settings.pluginManager.configure': '配置',
   'settings.pluginManager.configureTitle': '配置 {name}',
-  'settings.pluginManager.configureDescription':
-    '保存前会根据插件配置架构验证所有值。',
+  'settings.pluginManager.configureDescription': '保存前会根据插件配置架构验证所有值。',
   'settings.pluginManager.loadingConfig': '正在加载插件配置架构…',
   'settings.pluginManager.noFields': '此插件没有可配置字段。',
   'settings.pluginManager.unsupportedConfig': '此插件未发布受支持的配置架构。',
@@ -4895,8 +4819,7 @@ const zhCN: Record<string, string> = {
   'settings.pluginManager.error.invalid_option': '请选择受支持的选项。',
   'settings.pluginActivity.action': '运行时活动',
   'settings.pluginActivity.title': '插件运行时活动',
-  'settings.pluginActivity.description':
-    '检查控制面动作、运行时诊断、能力统计和频道重载计划。',
+  'settings.pluginActivity.description': '检查控制面动作、运行时诊断、能力统计和频道重载计划。',
   'settings.pluginActivity.sessionNote': '动作历史会在本次设置会话中保留。',
   'settings.pluginActivity.refresh': '刷新诊断',
   'settings.pluginActivity.loading': '正在加载运行时诊断…',
@@ -4916,8 +4839,7 @@ const zhCN: Record<string, string> = {
   'settings.pluginActivity.capability.providers': '提供商',
   'settings.channels.action': '通道连接',
   'settings.channels.title': '通道连接',
-  'settings.channels.description':
-    '通过租户已安装的插件连接当前项目的消息通道。',
+  'settings.channels.description': '通过租户已安装的插件连接当前项目的消息通道。',
   'settings.channels.add': '添加连接',
   'settings.channels.loading': '正在加载项目通道连接…',
   'settings.channels.empty': '当前项目尚未配置通道连接。',
@@ -4954,8 +4876,7 @@ const zhCN: Record<string, string> = {
   'settings.agentEditor.createAction': '新建智能体',
   'settings.agentEditor.createTitle': '新建智能体定义',
   'settings.agentEditor.editTitle': '编辑智能体定义',
-  'settings.agentEditor.description':
-    '配置身份、运行限制、能力与任务委派策略。',
+  'settings.agentEditor.description': '配置身份、运行限制、能力与任务委派策略。',
   'settings.agentEditor.tabs': '智能体定义分区',
   'settings.agentEditor.identity': '身份',
   'settings.agentEditor.runtime': '运行时',
@@ -5029,8 +4950,7 @@ const zhCN: Record<string, string> = {
   'settings.agentEditor.deleteConfirmation': '确定删除此智能体定义？',
   'settings.agentEditor.confirmDelete': '永久删除',
   'settings.agentEditor.error.required': '此字段为必填项。',
-  'settings.agentEditor.error.invalid_name':
-    '请使用小写字母、数字和下划线，并以字母开头。',
+  'settings.agentEditor.error.invalid_name': '请使用小写字母、数字和下划线，并以字母开头。',
   'settings.agentEditor.error.temperature_range': '温度必须在 0 到 2 之间。',
   'settings.agentEditor.error.positive_integer': '请输入正整数。',
   'settings.agentEditor.error.non_negative_integer': '请输入零或正整数。',
@@ -5038,8 +4958,7 @@ const zhCN: Record<string, string> = {
   'settings.subagents': '子智能体',
   'settings.subagentsDescription': '受委派的专业执行单元',
   'settings.subagentLibrary.action': '模板库',
-  'settings.subagentLibrary.description':
-    '将已发布的专业执行模板安装到当前租户。',
+  'settings.subagentLibrary.description': '将已发布的专业执行模板安装到当前租户。',
   'settings.subagentLibrary.loading': '正在加载子智能体模板…',
   'settings.subagentLibrary.empty': '暂无已发布的子智能体模板。',
   'settings.subagentLibrary.install': '安装',
@@ -5048,8 +4967,7 @@ const zhCN: Record<string, string> = {
   'settings.subagentEditor.createAction': '新建子智能体',
   'settings.subagentEditor.createTitle': '新建子智能体',
   'settings.subagentEditor.editTitle': '编辑子智能体',
-  'settings.subagentEditor.description':
-    '定义专业身份、触发条件、运行时和受治理的能力范围。',
+  'settings.subagentEditor.description': '定义专业身份、触发条件、运行时和受治理的能力范围。',
   'settings.subagentEditor.tabs': '子智能体编辑分区',
   'settings.subagentEditor.identity': '身份',
   'settings.subagentEditor.trigger': '触发条件',
@@ -5074,14 +4992,11 @@ const zhCN: Record<string, string> = {
   'settings.subagentEditor.delete': '删除',
   'settings.subagentEditor.deleteConfirm': '永久删除此子智能体？',
   'settings.subagentEditor.error.required': '此字段为必填项。',
-  'settings.subagentEditor.error.invalid_name':
-    '请以字母开头，仅使用小写字母、数字和下划线。',
-  'settings.subagentEditor.error.temperature_range':
-    '请输入 0 到 2 之间的数值。',
+  'settings.subagentEditor.error.invalid_name': '请以字母开头，仅使用小写字母、数字和下划线。',
+  'settings.subagentEditor.error.temperature_range': '请输入 0 到 2 之间的数值。',
   'settings.subagentEditor.error.positive_integer': '请输入正整数。',
   'settings.connectionRecovery': '连接恢复',
-  'settings.connectionRecoveryDescription':
-    '修复当前 Desktop 会话使用的服务端与认证运行时连接。',
+  'settings.connectionRecoveryDescription': '修复当前 Desktop 会话使用的服务端与认证运行时连接。',
   'settings.connectionRecoveryEyebrow': '恢复',
   'settings.language': '语言',
   'settings.languageDescription': '更改会立即应用到导航与设置。',
@@ -5120,8 +5035,7 @@ const zhCN: Record<string, string> = {
   'settings.notAvailable': '不可用',
   'settings.workspaceContextEyebrow': '工作空间上下文',
   'settings.webControlPlane': 'Web 控制台',
-  'settings.webControlPlaneDescription':
-    '在已配置的 Web 应用中打开企业项目管理。',
+  'settings.webControlPlaneDescription': '在已配置的 Web 应用中打开企业项目管理。',
   'settings.openWebControlPlane': '打开 Web 设置',
   'settings.tenantProject': '租户与项目',
   'settings.tenantProjectDescription': '先选择组织边界，再选择需要激活任务、记忆与权限的项目。',
@@ -5135,8 +5049,7 @@ const zhCN: Record<string, string> = {
   'settings.chooseProjectDescription': '仅显示你在所选租户中有权访问的项目。',
   'settings.noProjectSelected': '尚未选择项目',
   'settings.noProjects': '此租户下没有可用项目。',
-  'settings.noProjectsDescription':
-    '请联系管理员获取访问权限，或选择其他租户。',
+  'settings.noProjectsDescription': '请联系管理员获取访问权限，或选择其他租户。',
   'settings.noDescription': '暂无描述',
   'settings.memberCount': '{count} 位成员',
   'settings.memberCountOne': '{count} 位成员',
@@ -5145,8 +5058,7 @@ const zhCN: Record<string, string> = {
   'settings.privateProject': '私有项目',
   'settings.visibilityUnavailable': '可见性不可用',
   'settings.contextChange': '上下文变更',
-  'settings.contextChangeDescription':
-    '任务列表、记忆、智能体与权限将在所选项目内重新加载。',
+  'settings.contextChangeDescription': '任务列表、记忆、智能体与权限将在所选项目内重新加载。',
   'settings.selectedTenantUnavailable': '所选租户对当前用户不可用。',
   'settings.selectedProjectUnavailable': '所选项目在当前租户中不可用。',
   'settings.contextResponseMismatch': '工作空间上下文响应与所选项目不匹配。',
@@ -5157,21 +5069,18 @@ const zhCN: Record<string, string> = {
   'settings.generalTitle': '通用偏好',
   'settings.generalSubtitle': '选择 MemStack 在此设备上的语言与格式。',
   'settings.region': '区域与格式',
-  'settings.regionDescription':
-    '日期与数字遵循所选界面语言，时区来自当前操作系统。',
+  'settings.regionDescription': '日期与数字遵循所选界面语言，时区来自当前操作系统。',
   'settings.timezone': '时区',
   'settings.dateFormat': '日期格式',
   'settings.numberFormat': '数字格式',
-  'settings.agentResourcesDescription':
-    '打开当前上下文可用的模型、技能、插件与智能体。',
+  'settings.agentResourcesDescription': '打开当前上下文可用的模型、技能、插件与智能体。',
   'settings.open': '打开',
   'settings.appearanceTitle': '外观',
   'settings.appearanceSubtitle': '让高密度桌面布局在长任务中保持清晰。',
   'settings.notificationsTitle': '通知',
   'settings.notificationsSubtitle': '仅在需要人类决策时打断用户。',
   'settings.appearanceSummary': '桌面外观',
-  'settings.appearanceSummaryDescription':
-    '当前 MemStack Desktop 构建采用的有效呈现设置。',
+  'settings.appearanceSummaryDescription': '当前 MemStack Desktop 构建采用的有效呈现设置。',
   'settings.theme': '主题',
   'settings.themeValue': '深色',
   'settings.themeDescription': '选择桌面工作区的外观。',
@@ -5187,12 +5096,10 @@ const zhCN: Record<string, string> = {
   'settings.motion': '动效',
   'settings.motionValue': '跟随系统',
   'settings.notificationsSummary': '关注策略',
-  'settings.notificationsSummaryDescription':
-    '桌面通知聚焦于评审、审批和必需输入。',
+  'settings.notificationsSummaryDescription': '桌面通知聚焦于评审、审批和必需输入。',
   'settings.reviewAlerts': '评审提醒',
   'settings.reviewAlertsValue': '开启',
-  'settings.reviewAlertsDescription':
-    '当运行需要审批、输入或最终评审时发出提醒。',
+  'settings.reviewAlertsDescription': '当运行需要审批、输入或最终评审时发出提醒。',
   'settings.preferenceOn': '开启',
   'settings.preferenceOff': '关闭',
   'settings.delivery': '送达方式',
@@ -5208,8 +5115,7 @@ const zhCN: Record<string, string> = {
   'settings.quietHoursStart': '开始',
   'settings.quietHoursEnd': '结束',
   'settings.completionNotifications': '系统通知',
-  'settings.completionNotificationsDescription':
-    '当运行需要输入或待评审时发出系统通知。',
+  'settings.completionNotificationsDescription': '当运行需要输入或待评审时发出系统通知。',
   'settings.completionNotificationsGroupLabel': '系统通知时机',
   'settings.completionModeOff': '关闭',
   'settings.completionModeWindowNotFocused': '窗口未聚焦时',
@@ -5217,15 +5123,13 @@ const zhCN: Record<string, string> = {
   'settings.shortcutsTitle': '键盘快捷键',
   'settings.shortcutsSubtitle': '完整的桌面快捷键参考，支持按名称或按键搜索。',
   'settings.shortcutsCatalog': '快捷键目录',
-  'settings.shortcutsCatalogDescription':
-    '当前版本实现的全部快捷键，按功能分区。',
+  'settings.shortcutsCatalogDescription': '当前版本实现的全部快捷键，按功能分区。',
   'settings.shortcutSearchPlaceholder': '搜索快捷键，或直接按下组合键',
   'settings.shortcutSearchHint':
     '输入文字按名称过滤，或按下组合键（如 Ctrl K）按键位过滤；Esc 清除按键过滤。',
   'settings.shortcutComboClear': '清除按键过滤',
   'settings.noShortcutMatches': '没有匹配的快捷键。',
-  'settings.shortcutsReadOnlyNote':
-    '当前版本的键位为固定绑定，用户自定义改键将在后续版本提供。',
+  'settings.shortcutsReadOnlyNote': '当前版本的键位为固定绑定，用户自定义改键将在后续版本提供。',
   'notifications.needsInput': '需要输入',
   'notifications.readyForReview': '已完成，待评审',
   'settings.noSearchResults': '没有匹配的设置。',
@@ -5289,8 +5193,7 @@ const zhCN: Record<string, string> = {
   'settings.disable': '停用',
   'settings.reconnect': '刷新连接',
   'settings.localProvider': '本地 LLM Provider',
-  'settings.localProviderDescription':
-    '启动本地智能体前，请配置 OpenAI/Anthropic 兼容网关。',
+  'settings.localProviderDescription': '启动本地智能体前，请配置 OpenAI/Anthropic 兼容网关。',
   'settings.scope': '作用域',
   'settings.tools': '工具',
   'settings.toolCount': '{count} 个工具',
@@ -5309,25 +5212,20 @@ const zhCN: Record<string, string> = {
   'settings.providerDefault': 'Provider 默认地址',
   'settings.notChecked': '未检查',
   'settings.providerConnection': 'Provider 连接',
-  'settings.providerConnectionDescription':
-    '凭据归属于此 Provider；模型路由需在独立策略中配置。',
+  'settings.providerConnectionDescription': '凭据归属于此 Provider；模型路由需在独立策略中配置。',
   'settings.providerReadOnly': 'Provider 只读访问',
-  'settings.providerReadOnlyDescription':
-    '需要租户 Owner 或管理员权限才能修改或校验此连接。',
+  'settings.providerReadOnlyDescription': '需要租户 Owner 或管理员权限才能修改或校验此连接。',
   'settings.providerName': '连接名称',
   'settings.noAuthentication': '无需认证',
   'settings.primaryModel': '主模型 ID',
   'settings.apiKey': 'API Key',
   'settings.apiKeyPlaceholder': '留空将保留当前凭据',
-  'settings.apiKeyHelp':
-    '密钥仅提交一次，API 不会回传，保存后此表单会立即清空。',
+  'settings.apiKeyHelp': '密钥仅提交一次，API 不会回传，保存后此表单会立即清空。',
   'settings.allowedModels': '已启用模型 ID',
   'settings.allowedModelsPlaceholder': '每行填写一个精确模型 ID',
-  'settings.allowedModelsHelp':
-    '仅这些自动发现或手工录入的模型会进入 Agent 模型选择器。',
+  'settings.allowedModelsHelp': '仅这些自动发现或手工录入的模型会进入 Agent 模型选择器。',
   'settings.providerEnabled': '启用此 Provider',
-  'settings.providerEnabledDescription':
-    '停用当前本地 Provider 会立即移除其运行时凭据绑定。',
+  'settings.providerEnabledDescription': '停用当前本地 Provider 会立即移除其运行时凭据绑定。',
   'settings.revision': '修订版本',
   'settings.credentials': '凭据',
   'settings.configuredInMemory': '已为当前会话配置',
@@ -5372,8 +5270,7 @@ const zhCN: Record<string, string> = {
   'providers.noProviders': '尚未配置供应商',
   'providers.noProvidersDescription': '添加供应商以配置凭据、模型与路由。',
   'providers.modelProviderEyebrow': '模型供应商',
-  'providers.identityDescription':
-    '供应商凭据、端点健康、可用模型与工作区路由相互独立管理。',
+  'providers.identityDescription': '供应商凭据、端点健康、可用模型与工作区路由相互独立管理。',
   'providers.endpointEyebrow': '端点',
   'providers.providerDefaultEndpoint': '供应商默认地址',
   'providers.lastChecked': '最近验证 {time}',
@@ -5428,8 +5325,7 @@ const zhCN: Record<string, string> = {
   'providers.defaultRole': '默认',
   'providers.enabledRole': '已启用',
   'providers.noModelsEnabled': '尚未启用模型',
-  'providers.noModelsEnabledDescription':
-    '使用此供应商前，请添加模型 ID 或刷新模型发现。',
+  'providers.noModelsEnabledDescription': '使用此供应商前，请添加模型 ID 或刷新模型发现。',
   'providers.chooseModels': '选择模型',
   'providers.routingEyebrow': '工作区路由',
   'providers.currentModelRoles': '当前模型分工',
@@ -5445,8 +5341,7 @@ const zhCN: Record<string, string> = {
   'providers.editConnection': '编辑连接',
   'providers.cancelEdit': '取消编辑',
   'providers.readOnly': '只读',
-  'providers.readOnlyDescription':
-    '需要租户所有者或管理员权限才能修改此供应商。',
+  'providers.readOnlyDescription': '需要租户所有者或管理员权限才能修改此供应商。',
   'providers.authentication': '认证',
   'providers.authenticationDescription': '选择此供应商的请求认证方式。',
   'providers.authenticationMethod': '认证方式',
@@ -5461,25 +5356,19 @@ const zhCN: Record<string, string> = {
   'providers.environmentSecretUnknown': '需要检查',
   'providers.hideSecret': '隐藏密钥',
   'providers.showSecret': '显示密钥',
-  'providers.secretDescription.local':
-    '密钥保存在本机系统凭据库中，API 永不回传密钥。',
-  'providers.secretDescription.cloud':
-    '密钥由服务端加密保存，API 永不回传明文凭据。',
-  'providers.secretRequiredForEndpointChange':
-    '更改供应商端点后，请重新输入 API 密钥再测试。',
+  'providers.secretDescription.local': '密钥保存在本机系统凭据库中，API 永不回传密钥。',
+  'providers.secretDescription.cloud': '密钥由服务端加密保存，API 永不回传明文凭据。',
+  'providers.secretRequiredForEndpointChange': '更改供应商端点后，请重新输入 API 密钥再测试。',
   'providers.noAuthentication': '无需认证',
-  'providers.noAuthenticationDescription':
-    '请求不会携带凭据，仅用于可信的本地端点。',
+  'providers.noAuthenticationDescription': '请求不会携带凭据，仅用于可信的本地端点。',
   'providers.endpoint': '端点',
-  'providers.endpointDescription':
-    '除非使用网关或本地服务，否则请保留供应商默认端点。',
+  'providers.endpointDescription': '除非使用网关或本地服务，否则请保留供应商默认端点。',
   'providers.baseUrl': 'Base URL',
   'providers.advancedSettings': '高级请求设置',
   'providers.providerType': '供应商类型',
   'providers.connectionName': '连接名称',
   'providers.advancedUnavailable': '高级请求策略由服务端管理',
-  'providers.advancedUnavailableDescription':
-    '当前供应商契约未开放超时与自定义请求头配置。',
+  'providers.advancedUnavailableDescription': '当前供应商契约未开放超时与自定义请求头配置。',
   'providers.testingConnection': '正在测试供应商…',
   'providers.validatingConfiguration': '正在验证配置…',
   'providers.connectionVerified': '连接已验证',
@@ -5493,14 +5382,12 @@ const zhCN: Record<string, string> = {
   'providers.testBeforeSaving': '保存前测试',
   'providers.validateBeforeSaving': '保存前验证',
   'providers.connectionTestDescription': '检查认证、端点连通性与模型发现。',
-  'providers.configurationValidationDescription':
-    '仅检查必填字段与凭据状态，不会连接供应商。',
+  'providers.configurationValidationDescription': '仅检查必填字段与凭据状态，不会连接供应商。',
   'providers.testConnection': '测试连接',
   'providers.validateConfiguration': '验证配置',
   'providers.saveConnection': '保存连接',
   'providers.modelCatalogTitle': '选择此供应商的模型',
-  'providers.modelCatalogDescription':
-    '只有已启用模型会出现在智能体与路由选择器中。',
+  'providers.modelCatalogDescription': '只有已启用模型会出现在智能体与路由选择器中。',
   'providers.staticCatalogDescription': '模型来自内置静态目录，仅作为建议，并非实时发现。',
   'providers.savingModels': '正在保存模型…',
   'providers.saveModels': '保存模型',
@@ -5532,22 +5419,17 @@ const zhCN: Record<string, string> = {
   'providers.noSuggestedModels': '内置目录中没有建议模型',
   'providers.noSuggestedModelsDescription': '请手动添加精确模型 ID。',
   'providers.addManualModel': '手动添加模型 ID',
-  'providers.addManualModelDescription':
-    '模型发现不可用或供应商目录过大时使用。',
-  'providers.addManualModelStaticDescription':
-    '未列入内置建议时，请输入精确模型 ID。',
+  'providers.addManualModelDescription': '模型发现不可用或供应商目录过大时使用。',
+  'providers.addManualModelStaticDescription': '未列入内置建议时，请输入精确模型 ID。',
   'providers.addModel': '添加模型',
   'providers.routingTitle': '按工作负载分配模型',
-  'providers.routingDescription':
-    '路由与供应商凭据相互独立，无需重新连接即可修改。',
+  'providers.routingDescription': '路由与供应商凭据相互独立，无需重新连接即可修改。',
   'providers.savingRouting': '正在保存路由…',
   'providers.saveRouting': '保存路由',
   'providers.routingSaved': '工作区路由策略已保存。',
-  'providers.routingConflictReloaded':
-    '路由已在其他位置更新，现已重新载入最新策略。',
+  'providers.routingConflictReloaded': '路由已在其他位置更新，现已重新载入最新策略。',
   'providers.routingMutationUnavailable': '云模式下路由为只读',
-  'providers.routingMutationUnavailableDescription':
-    '当前服务端契约仅允许查看角色，尚不支持修改。',
+  'providers.routingMutationUnavailableDescription': '当前服务端契约仅允许查看角色，尚不支持修改。',
   'providers.defaultModel': '默认模型',
   'providers.defaultModelDescription': '规划、工具调用与复杂执行',
   'providers.fastModel': '快速模型',
@@ -5559,28 +5441,22 @@ const zhCN: Record<string, string> = {
   'providers.routeUnavailable': '不可用',
   'providers.loadingRouting': '正在加载路由策略…',
   'providers.routingUnavailable': '路由策略不可用',
-  'providers.routingUnavailableDescription':
-    '本地运行时未返回当前工作空间的权威路由策略。',
-  'providers.routingScopeRequired':
-    '请先选择租户、项目与工作空间，再配置模型路由。',
-  'providers.routingScopeMismatch':
-    '运行时返回的路由策略与当前工作空间不匹配。',
+  'providers.routingUnavailableDescription': '本地运行时未返回当前工作空间的权威路由策略。',
+  'providers.routingScopeRequired': '请先选择租户、项目与工作空间，再配置模型路由。',
+  'providers.routingScopeMismatch': '运行时返回的路由策略与当前工作空间不匹配。',
   'providers.noRoutingModels': '没有可用于路由的模型',
-  'providers.noRoutingModelsDescription':
-    '分配工作负载角色前，请先在供应商中启用至少一个模型。',
+  'providers.noRoutingModelsDescription': '分配工作负载角色前，请先在供应商中启用至少一个模型。',
   'providers.notExposedByServer': '服务端未提供',
   'providers.failoverEyebrow': '故障转移',
   'providers.fallbackOrder': '回退顺序',
-  'providers.fallbackReadOnlyDescription':
-    '用于认证错误、速率限制、超时与供应商故障。',
+  'providers.fallbackReadOnlyDescription': '用于认证错误、速率限制、超时与供应商故障。',
   'providers.noFallbacks': '尚未配置回退模型',
   'providers.remove': '移除',
   'providers.addFallback': '添加回退',
   'providers.removeFallback': '移除第 {count} 个回退模型',
   'providers.usageEyebrow': '用量',
   'providers.usageUnavailable': '用量数据不可用',
-  'providers.usageUnavailableDescription':
-    '当前运行时未提供供应商用量与成本数据。',
+  'providers.usageUnavailableDescription': '当前运行时未提供供应商用量与成本数据。',
   'providers.loadingUsage': '正在加载用量…',
   'providers.totalRequests': '请求总数',
   'providers.totalTokens': 'Token 总数',
@@ -5599,27 +5475,22 @@ const zhCN: Record<string, string> = {
   'providers.wizard.step2': '连接',
   'providers.wizard.step3': '模型',
   'providers.chooseProvider': '选择供应商',
-  'providers.chooseProviderDescription':
-    '连接云 API、企业平台或本地 OpenAI 兼容运行时。',
+  'providers.chooseProviderDescription': '连接云 API、企业平台或本地 OpenAI 兼容运行时。',
   'providers.loadingProviderTypes': '正在加载供应商类型…',
   'providers.localRuntime': '本地运行时',
   'providers.cloudApi': '云 API',
   'providers.connectProvider': '连接 {provider}',
-  'providers.connectProviderDescription':
-    '在供应商层级完成一次认证，验证后再选择模型。',
+  'providers.connectProviderDescription': '在供应商层级完成一次认证，验证后再选择模型。',
   'providers.authCapabilityUnavailable': '认证能力不可用',
-  'providers.authCapabilityUnavailableDescription':
-    '当前服务器未声明此供应商支持的认证方式。',
+  'providers.authCapabilityUnavailableDescription': '当前服务器未声明此供应商支持的认证方式。',
   'providers.probeUnsupported': '暂不支持连接测试',
-  'providers.probeUnsupportedDescription':
-    '此供应商需要专用连接流程，当前无法在此测试。',
+  'providers.probeUnsupportedDescription': '此供应商需要专用连接流程，当前无法在此测试。',
   'providers.configurationOnlyValidation': '仅验证配置',
   'providers.configurationOnlyValidationDescription':
     '在本地检查必填字段与凭据状态，不会向供应商发送请求。',
   'providers.testModelId': '测试模型 ID',
   'providers.enableModels': '启用已发现模型',
-  'providers.enableModelsDescription':
-    '启用后，模型会出现在智能体与工作空间路由中。',
+  'providers.enableModelsDescription': '启用后，模型会出现在智能体与工作空间路由中。',
   'providers.enableSuggestedModels': '启用建议模型',
   'providers.enableSuggestedModelsDescription':
     '这些模型来自内置建议，请只启用供应商实际支持的模型 ID。',
@@ -5628,8 +5499,7 @@ const zhCN: Record<string, string> = {
     '当前没有可用模型目录，请确认此连接使用的精确模型 ID。',
   'providers.manualModel': '手动模型 ID',
   'providers.addMoreModelsLater': '稍后添加更多模型',
-  'providers.addMoreModelsLaterDescription':
-    '可在“模型”页刷新发现或输入精确模型 ID。',
+  'providers.addMoreModelsLaterDescription': '可在“模型”页刷新发现或输入精确模型 ID。',
   'providers.addMoreSuggestedModelsLater': '稍后使用其他模型',
   'providers.addMoreSuggestedModelsLaterDescription':
     '可在“模型”页重新加载内置目录或输入精确模型 ID。',
@@ -5642,42 +5512,32 @@ const zhCN: Record<string, string> = {
   'providers.addingProvider': '正在添加供应商…',
   'overview.none': '未选择',
   'overview.noProjectTitle': '选择项目',
-  'overview.noProjectDescription':
-    '选择项目上下文后，才能打开工作空间、会话与任务。',
+  'overview.noProjectDescription': '选择项目上下文后，才能打开工作空间、会话与任务。',
   'overview.noProjectCardTitle': '尚未激活项目',
-  'overview.noProjectCardDescription':
-    '打开工作区设置，选择当前角色可访问的项目。',
+  'overview.noProjectCardDescription': '打开工作区设置，选择当前角色可访问的项目。',
   'overview.loadingWorkspacesTitle': '正在加载工作空间…',
   'overview.loadingWorkspacesDescription': '正在读取此项目的权威工作空间目录。',
   'overview.loadingWorkspacesCardTitle': '正在加载项目工作空间',
-  'overview.loadingWorkspacesCardDescription':
-    '确认当前项目范围后，将显示工作空间概况。',
+  'overview.loadingWorkspacesCardDescription': '确认当前项目范围后，将显示工作空间概况。',
   'overview.workspacesUnavailableTitle': '工作空间不可用',
-  'overview.workspacesUnavailableDescription':
-    '无法确认工作空间目录，因此不会显示旧指标。',
+  'overview.workspacesUnavailableDescription': '无法确认工作空间目录，因此不会显示旧指标。',
   'overview.workspaceCatalogErrorTitle': '无法加载工作空间目录',
-  'overview.workspaceCatalogErrorDescription':
-    '请先重试，再在此项目中创建或打开工作。',
+  'overview.workspaceCatalogErrorDescription': '请先重试，再在此项目中创建或打开工作。',
   'overview.workspaceCatalogUnavailableTitle': '工作空间目录不可用',
-  'overview.workspaceCatalogUnavailableDescription':
-    '尚未加载此项目的权威工作空间目录。',
+  'overview.workspaceCatalogUnavailableDescription': '尚未加载此项目的权威工作空间目录。',
   'overview.workspaceCatalogUnavailableCardTitle': '加载项目工作空间',
-  'overview.workspaceCatalogUnavailableCardDescription':
-    '刷新项目以确认可用的工作空间。',
+  'overview.workspaceCatalogUnavailableCardDescription': '刷新项目以确认可用的工作空间。',
   'overview.noWorkspacesTitle': '尚无工作空间',
   'overview.noWorkspacesDescription':
     '此项目还没有工作空间。新建任务会先创建一个，再由智能体生成计划供你预览。',
   'overview.firstTaskTitle': '从第一个任务开始',
-  'overview.firstTaskDescription':
-    '描述目标并选择通用或编程场景；计划经你确认后才会执行。',
+  'overview.firstTaskDescription': '描述目标并选择通用或编程场景；计划经你确认后才会执行。',
   'overview.workspaceSelectionUnavailableTitle': '所选工作空间不可用',
-  'overview.workspaceSelectionUnavailableDescription':
-    '当前选择与已确认的项目目录不再匹配。',
+  'overview.workspaceSelectionUnavailableDescription': '当前选择与已确认的项目目录不再匹配。',
   'overview.workspaceSelectionUnavailableCardTitle': '选择已确认的工作空间',
   'overview.workspaceSelectionUnavailableCardDescription': '刷新项目后再继续。',
   'overview.retryWorkspaces': '重试',
-  'overview.description':
-    '汇总此工作空间的权威计划、运行、人工关卡、任务与交付证据。',
+  'overview.description': '汇总此工作空间的权威计划、运行、人工关卡、任务与交付证据。',
   'overview.configure': '配置',
   'overview.newTask': '新建线程',
   'overview.rootGoal': '工作空间根目标',
@@ -5753,8 +5613,7 @@ const zhCN: Record<string, string> = {
   'overview.unavailable': '不可用',
   'overview.rootGoalMissing': '尚未声明工作空间根目标',
   'overview.rootGoalDescription': '此目标由工作空间计划契约提供。',
-  'overview.rootGoalMissingHelp':
-    '下方仍展示会话计划；客户端不会虚构工作空间级目标。',
+  'overview.rootGoalMissingHelp': '下方仍展示会话计划；客户端不会虚构工作空间级目标。',
   'overview.refresh': '刷新状态',
   'overview.activeRuns': '活跃运行',
   'overview.sessionsCount': '{count} 个投影会话',
@@ -5811,21 +5670,17 @@ const zhCN: Record<string, string> = {
   'workspaceCollaboration.tabs.topology': '拓扑',
   'workspaceCollaboration.tabs.settings': '设置',
   'workspaceCollaboration.state.loading.title': '正在加载工作空间权威状态',
-  'workspaceCollaboration.state.loading.description':
-    '正在获取此界面的服务端权威状态。',
+  'workspaceCollaboration.state.loading.description': '正在获取此界面的服务端权威状态。',
   'workspaceCollaboration.state.empty.title': '暂时没有内容',
   'workspaceCollaboration.state.empty.description': '服务端已返回权威空状态。',
   'workspaceCollaboration.state.stale.title': '正在刷新权威状态',
-  'workspaceCollaboration.state.stale.description':
-    '刷新权威版本期间会继续显示现有数据。',
+  'workspaceCollaboration.state.stale.description': '刷新权威版本期间会继续显示现有数据。',
   'workspaceCollaboration.state.error.title': '工作空间界面不可用',
-  'workspaceCollaboration.state.error.description':
-    '无法加载权威状态。请检查连接后重试。',
+  'workspaceCollaboration.state.error.description': '无法加载权威状态。请检查连接后重试。',
   'workspaceCollaboration.state.unavailable.title': '当前运行时不可用',
   'workspaceCollaboration.state.unavailable.description':
     '当前运行时未声明与所选界面兼容的权威实现。',
-  'workspaceCollaboration.mutation.error':
-    '更改未被接受，已保留权威工作空间状态。',
+  'workspaceCollaboration.mutation.error': '更改未被接受，已保留权威工作空间状态。',
   'workspaceCollaboration.empty': '暂无项目',
   'workspaceCollaboration.unknown': '未知',
   'workspaceCollaboration.goals.title': '目标与任务',
@@ -5865,8 +5720,7 @@ const zhCN: Record<string, string> = {
   'workspaceCollaboration.genes.disable': '停用',
   'workspaceCollaboration.files.title': '工作空间文件',
   'workspaceCollaboration.notes.title': '笔记',
-  'workspaceCollaboration.notes.derived':
-    '由工作空间详情、目标和置顶讨论派生的只读投影',
+  'workspaceCollaboration.notes.derived': '由工作空间详情、目标和置顶讨论派生的只读投影',
   'workspaceCollaboration.topology.title': '拓扑',
   'workspaceCollaboration.topology.nodes': '节点',
   'workspaceCollaboration.topology.edges': '边',
@@ -5883,8 +5737,7 @@ const zhCN: Record<string, string> = {
   'workspaceCollaboration.settings.save': '保存设置',
   'activity.eyebrow': '动态',
   'activity.title': '动态收件箱',
-  'activity.description':
-    '汇总本项目中需要输入、已完成待回顾以及需要关注的运行。',
+  'activity.description': '汇总本项目中需要输入、已完成待回顾以及需要关注的运行。',
   'activity.category.needs_input': '需要输入',
   'activity.category.ready_for_review': '待回顾',
   'activity.category.attention': '需要关注',
@@ -5892,15 +5745,13 @@ const zhCN: Record<string, string> = {
   'activity.markAllRead': '全部标为已读',
   'activity.unavailable': '当前运行时未提供权威动态数据。',
   'activity.empty': '暂无动态',
-  'activity.emptyDescription':
-    '当运行需要输入、完成或失败时,新条目会出现在这里。',
+  'activity.emptyDescription': '当运行需要输入、完成或失败时,新条目会出现在这里。',
   'activity.groupEmpty': '当前没有条目。',
   'myWork.eyebrow': '我的工作',
   'myWork.codeEyebrow': '编程会话',
   'myWork.title': '我的工作',
   'myWork.inboxTitle': '收件箱',
-  'myWork.inboxDescription':
-    '跨 Work 与 Code 汇总需要决策、正在运行或等待审查的线程。',
+  'myWork.inboxDescription': '跨 Work 与 Code 汇总需要决策、正在运行或等待审查的线程。',
   'myWork.description': '集中处理项目中需要输入、批准、监控或最终审查的工作。',
   'myWork.taskFilters': '重置任务筛选',
   'myWork.filterUnavailable': '该筛选需要后端提供明确的分配与时间元数据。',
@@ -5919,8 +5770,7 @@ const zhCN: Record<string, string> = {
   'myWork.loadingDescription': '正在读取项目权威关注队列。',
   'myWork.unavailable': '当前运行时未提供权威“我的工作”接口。',
   'myWork.empty': '目前没有需要关注的工作',
-  'myWork.emptyDescription':
-    '当持久化任务或请求需要关注时，新项目会出现在这里。',
+  'myWork.emptyDescription': '当持久化任务或请求需要关注时，新项目会出现在这里。',
   'myWork.noMatches': '没有匹配的工作',
   'myWork.noMatchesDescription': '当前模式、搜索与状态筛选下没有匹配的工作。',
   'myWork.clearFilters': '清除筛选',
@@ -5943,8 +5793,7 @@ const zhCN: Record<string, string> = {
     '此记录来自最近一次已持久化的工作空间任务执行尝试；该来源不提供桌面 Run 字段。',
   'myWork.authorityDescription.hitl_request':
     '此记录标识一个待处理的交互请求。打开对应会话可查看并响应后端授权的内容。',
-  'myWork.authorityDescription.unknown':
-    '后端返回了不受支持的权威来源；界面未推断任何运行时含义。',
+  'myWork.authorityDescription.unknown': '后端返回了不受支持的权威来源；界面未推断任何运行时含义。',
   'myWork.currentAuthority': '当前已持久化记录',
   'myWork.attemptNumber': '尝试次数',
   'myWork.recordStatus': '记录状态',
@@ -5958,8 +5807,7 @@ const zhCN: Record<string, string> = {
   'myWork.actionRequired': '需要你处理',
   'myWork.reviewAvailable': '结果已可审查',
   'myWork.openSession': '打开会话',
-  'myWork.openSessionDescription':
-    '进入会话，基于当前消息和后端授权操作继续处理。',
+  'myWork.openSessionDescription': '进入会话，基于当前消息和后端授权操作继续处理。',
   'myWork.sessionUnavailable': '所选记录已没有可加载的工作空间会话。',
   'myWork.group.needs_input': '需要输入',
   'myWork.group.needs_approval': '需要批准',
@@ -6001,8 +5849,7 @@ const zhCN: Record<string, string> = {
   'myWork.mode': '模式',
   'myWork.updating': '正在更新当前工作',
   'myWork.stagesUnavailable': '阶段数据不可用',
-  'myWork.stagesUnavailableDescription':
-    '打开会话可查看权威计划与当前执行阶段。',
+  'myWork.stagesUnavailableDescription': '打开会话可查看权威计划与当前执行阶段。',
   'myWork.steeringInSession': '打开会话后发送引导指令',
   'myWork.agent': '智能体',
   'myWork.action.provide_input': '提供请求的输入',
@@ -6103,11 +5950,9 @@ const zhCN: Record<string, string> = {
   'session.inspectArtifactsDescription': '审查当前不可变产物版本',
   'session.inspectActivityDescription': '检查结构化运行与工具活动',
   'session.needsInput': '需要你的输入',
-  'session.needsInputDescription':
-    '请处理会话流中的最新请求，智能体随后会继续执行。',
+  'session.needsInputDescription': '请处理会话流中的最新请求，智能体随后会继续执行。',
   'session.needsApproval': '需要你的批准',
-  'session.needsApprovalDescription':
-    '请审查会话流中的权限请求，批准后智能体才会继续执行。',
+  'session.needsApprovalDescription': '请审查会话流中的权限请求，批准后智能体才会继续执行。',
   'session.runFailed': '运行失败',
   'session.runFailedDescription': '请检查失败详情，并从最近的安全检查点重试。',
   'session.runInterrupted': '运行已中断',
@@ -6119,8 +5964,7 @@ const zhCN: Record<string, string> = {
   'session.runDisconnectedDescription':
     '当前无法确认实时执行状态。请先重新连接同一次运行，再执行其他操作。',
   'session.readyReview': '可以开始审查',
-  'session.readyReviewDescription':
-    '智能体已完成本次运行，请先审查结果与证据，再标记为完成。',
+  'session.readyReviewDescription': '智能体已完成本次运行，请先审查结果与证据，再标记为完成。',
   'session.pauseRun': '暂停',
   'session.pausing': '正在暂停…',
   'session.resumeRun': '恢复',
@@ -6132,13 +5976,10 @@ const zhCN: Record<string, string> = {
   'session.forkRecovery': '分叉恢复',
   'session.forkingRecovery': '正在创建恢复分支…',
   'session.forkRecoveryTitle': '启动隔离的恢复运行？',
-  'session.forkRecoveryDescription':
-    '分叉恢复会保留来源运行，并以新的隔离环境创建一个新运行。',
+  'session.forkRecoveryDescription': '分叉恢复会保留来源运行，并以新的隔离环境创建一个新运行。',
   'session.forkRecoveryNewRun': '将创建新的运行 ID 和隔离 Worktree。',
-  'session.forkRecoveryVerifiedHead':
-    '新 Worktree 从来源仓库最后验证的 Git HEAD 开始。',
-  'session.forkRecoveryLocalChanges':
-    '来源 Worktree 中未提交和未跟踪的文件不会被复制。',
+  'session.forkRecoveryVerifiedHead': '新 Worktree 从来源仓库最后验证的 Git HEAD 开始。',
+  'session.forkRecoveryLocalChanges': '来源 Worktree 中未提交和未跟踪的文件不会被复制。',
   'session.recoveryContext': '恢复上下文',
   'session.sourceRun': '来源运行',
   'session.sourceEnvironment': '来源环境',
@@ -6172,13 +6013,11 @@ const zhCN: Record<string, string> = {
   'session.terminalEmpty': '打开已授权的运行终端后，输出会显示在这里。',
   'session.terminalOutput': '运行终端输出',
   'session.openNewTerminal': '打开新 Shell',
-  'session.terminalAuthorityMismatch':
-    '终端回执与当前 Run、修订版本、会话或执行环境不一致。',
+  'session.terminalAuthorityMismatch': '终端回执与当前 Run、修订版本、会话或执行环境不一致。',
   'session.terminalCanonicalRunAuthorityUnavailable':
     '云端终端暂不可用：服务端尚不能校验权威 Run 与执行环境。',
   'session.terminalCapabilityUnavailable': '当前运行时能力契约不支持终端访问。',
-  'session.terminalStaleBody':
-    '此 Shell 属于另一组运行身份，现已解除绑定并清除旧输出。',
+  'session.terminalStaleBody': '此 Shell 属于另一组运行身份，现已解除绑定并清除旧输出。',
   'session.terminalClosedBody':
     '连接关闭时 Shell 进程已结束；如果当前运行仍获授权，请打开新的 Shell。',
   'session.terminalErrorBody': '连接或运行权限已失效，因此 Shell 已停止。',
@@ -6216,12 +6055,9 @@ const zhCN: Record<string, string> = {
   'sandbox.startTerminal': '启动沙盒终端',
   'sandbox.liveShell': 'Shell 状态',
   'sandbox.desktopFrameTitle': '沙盒桌面',
-  'sandbox.desktopUnavailableDescription':
-    '桌面服务未返回可连接的代理，请先启动生产沙盒运行时。',
-  'sandbox.desktopEmptyDescription':
-    '启动沙盒桌面后，可在这里查看工作空间环境。',
-  'sandbox.terminalUnavailableDescription':
-    '终端服务未返回可连接的代理，请先启动生产沙盒运行时。',
+  'sandbox.desktopUnavailableDescription': '桌面服务未返回可连接的代理，请先启动生产沙盒运行时。',
+  'sandbox.desktopEmptyDescription': '启动沙盒桌面后，可在这里查看工作空间环境。',
+  'sandbox.terminalUnavailableDescription': '终端服务未返回可连接的代理，请先启动生产沙盒运行时。',
   'sandbox.clearTerminalOutput': '清除终端输出',
   'sandbox.clear': '清除',
   'sandbox.terminalInput': '终端输入',
@@ -6229,8 +6065,7 @@ const zhCN: Record<string, string> = {
   'sandbox.send': '发送',
   'sandbox.filesTitle': '沙盒文件',
   'sandbox.filesUnavailable': '沙盒文件不可用',
-  'sandbox.filesUnavailableDescription':
-    '当前运行时尚未声明结构化沙盒文件契约。',
+  'sandbox.filesUnavailableDescription': '当前运行时尚未声明结构化沙盒文件契约。',
   'sandbox.filesRefresh': '刷新沙盒文件',
   'sandbox.filesParent': '上级文件夹',
   'sandbox.filesLoading': '正在加载沙盒文件…',
@@ -6240,12 +6075,10 @@ const zhCN: Record<string, string> = {
   'sandbox.filesDownload': '下载 {name}',
   'sandbox.runtimeToolsTitle': '沙盒运行时',
   'sandbox.runtimeCapabilitiesLoading': '正在加载运行时声明的能力…',
-  'sandbox.runtimeCapabilitiesUnavailable':
-    '运行时能力契约不可用，未探测任何沙盒路由。',
+  'sandbox.runtimeCapabilitiesUnavailable': '运行时能力契约不可用，未探测任何沙盒路由。',
   'sandbox.remoteDesktopTitle': '远程桌面',
   'sandbox.remoteDesktopUnavailable': '远程桌面不可用',
-  'sandbox.remoteDesktopUnavailableDescription':
-    '当前运行时未声明可用的 KasmVNC 代理契约。',
+  'sandbox.remoteDesktopUnavailableDescription': '当前运行时未声明可用的 KasmVNC 代理契约。',
   'sandbox.remoteDesktopConnected': '查看器已就绪',
   'sandbox.remoteDesktopConnecting': '正在连接…',
   'sandbox.remoteDesktopError': '远程桌面连接失败',
@@ -6267,8 +6100,7 @@ const zhCN: Record<string, string> = {
   'sandbox.disabled.projectRequired': '请先选择项目，再启动沙盒服务。',
   'automations.kicker': '项目自动化',
   'automations.title': '自动化',
-  'automations.description':
-    '创建并管理项目计划任务、执行上下文与权威运行历史。',
+  'automations.description': '创建并管理项目计划任务、执行上下文与权威运行历史。',
   'automations.commandDescription': '打开自动化概览。',
   'automations.refresh': '刷新',
   'automations.refreshing': '刷新中…',
@@ -6281,8 +6113,7 @@ const zhCN: Record<string, string> = {
   'automations.readOnly': '只读',
   'automations.guardedWrites': '修订版本保护写入',
   'automations.projectRequired': '请先选择项目',
-  'automations.projectRequiredBody':
-    '自动化始终归属于一个已认证项目，请在设置中选择工作上下文。',
+  'automations.projectRequiredBody': '自动化始终归属于一个已认证项目，请在设置中选择工作上下文。',
   'automations.openSettings': '打开工作空间设置',
   'automations.unavailable': '自动化服务不可用',
   'automations.unavailableBody':
@@ -6306,8 +6137,7 @@ const zhCN: Record<string, string> = {
   'automations.edit': '编辑',
   'automations.delete': '删除',
   'automations.deleteTitle': '删除自动化？',
-  'automations.deleteDescription':
-    '“{name}”将从此项目永久移除。现有运行记录仍由执行权威保留。',
+  'automations.deleteDescription': '“{name}”将从此项目永久移除。现有运行记录仍由执行权威保留。',
   'automations.deleteConfirm': '删除自动化',
   'automations.schedule': '计划',
   'automations.timezone': '时区',
@@ -6329,19 +6159,15 @@ const zhCN: Record<string, string> = {
     '当前服务端未声明修订版本、幂等与持久化执行能力，因此变更操作保持禁用。',
   'automations.capabilityReason.client_handler_unavailable':
     '当前客户端尚未实现此变更处理器，因此控件保持禁用。',
-  'automations.capabilityReason.revision_guard_required':
-    '此操作需要服务端提供修订版本保护。',
-  'automations.capabilityReason.idempotency_guard_required':
-    '此操作需要服务端提供幂等保护。',
-  'automations.capabilityReason.durable_execution_required':
-    '此操作需要持久化自动化执行运行时。',
+  'automations.capabilityReason.revision_guard_required': '此操作需要服务端提供修订版本保护。',
+  'automations.capabilityReason.idempotency_guard_required': '此操作需要服务端提供幂等保护。',
+  'automations.capabilityReason.durable_execution_required': '此操作需要持久化自动化执行运行时。',
   'automations.executionUnavailableTitle': '执行器尚未接通',
   'automations.executionUnavailableBody':
     '创建、编辑、启停和删除均受修订版本保护；“立即运行”继续禁用，桌面端不会伪造执行结果。',
   'automations.form.createTitle': '新建自动化',
   'automations.form.editTitle': '编辑自动化',
-  'automations.form.description':
-    '配置与 Web 工作空间一致的项目级计划任务字段。',
+  'automations.form.description': '配置与 Web 工作空间一致的项目级计划任务字段。',
   'automations.form.name': '名称',
   'automations.form.namePlaceholder': '每日项目简报',
   'automations.form.jobDescription': '说明',
@@ -6394,31 +6220,25 @@ const zhCN: Record<string, string> = {
   'session.liveUpdatesEnded': '更新已结束',
   'session.runControlUnavailable': '当前会话没有可控制的权威运行。',
   'session.authorityLoading': '正在加载会话权威状态…',
-  'session.authorityLoadingDescription':
-    '验证运行控制与审查操作期间，会话消息仍然可读。',
+  'session.authorityLoadingDescription': '验证运行控制与审查操作期间，会话消息仍然可读。',
   'session.authorityError': '无法验证会话控制状态。',
-  'session.authorityErrorDescription':
-    '会话历史仍然可读；批准、引导或交付前请重试。',
+  'session.authorityErrorDescription': '会话历史仍然可读；批准、引导或交付前请重试。',
   'session.authorityRetry': '重试控制状态',
   'session.authorityActionUnavailable': '当前会话权威状态不允许此操作。',
   'session.dataUnavailableTitle': '会话数据不可用',
-  'session.dataUnavailableDescription':
-    '权威产物与证据数据尚未加载，因此不会显示为空结果。',
+  'session.dataUnavailableDescription': '权威产物与证据数据尚未加载，因此不会显示为空结果。',
   'session.emptyTitle': '此会话还没有活动',
-  'session.emptyDescription':
-    '在下方发送指令开始规划；需要查看上下文或证据时再打开画布。',
+  'session.emptyDescription': '在下方发送指令开始规划；需要查看上下文或证据时再打开画布。',
   'session.loadingHistory': '正在加载会话历史…',
   'session.noPlan': '此会话尚未关联计划。',
-  'session.noPlanDescription':
-    '通过智能体计划创建任务，或等待持久化计划版本到达。',
+  'session.noPlanDescription': '通过智能体计划创建任务，或等待持久化计划版本到达。',
   'session.openCanvasTab': '打开“{label}”标签页',
   'session.openCanvasTabWithValue': '打开“{label}”标签页，{value}',
   'session.planReviewKicker': '人工审查关口',
   'session.planVersion': '计划版本 {version}',
   'session.planStatus.draft': '草稿 · 等待批准',
   'session.planStatus.approved': '已批准',
-  'session.planReviewDescription':
-    '授予执行环境与权限配置前，请审查每一个已持久化步骤。',
+  'session.planReviewDescription': '授予执行环境与权限配置前，请审查每一个已持久化步骤。',
   'session.planTaskList': '包含 {count} 个已持久化步骤的计划',
   'session.planStepFallback': '计划步骤 {index}',
   'session.planTaskPending': '待处理',
@@ -6437,10 +6257,8 @@ const zhCN: Record<string, string> = {
   'session.taskListReviewDescription':
     '当前服务端会持久化结构化任务列表，但不提供不可变的桌面计划版本。',
   'session.taskListResumeTitle': '恢复受保护的审查',
-  'session.taskListResumeAuthority':
-    '开始执行前，会再次对照权威任务列表逐项核验。',
-  'session.taskListResumeUnavailable':
-    '只有权威会话仍处于计划模式时才能恢复审查。',
+  'session.taskListResumeAuthority': '开始执行前，会再次对照权威任务列表逐项核验。',
+  'session.taskListResumeUnavailable': '只有权威会话仍处于计划模式时才能恢复审查。',
   'session.taskListResumeAction': '恢复受保护的审查',
   'session.planApprovalTitle': '批准此精确计划版本',
   'session.planApprovalDescription':
@@ -6449,19 +6267,16 @@ const zhCN: Record<string, string> = {
   'session.planApprovalStarting': '正在启动已批准运行…',
   'session.planApproveAndStart': '批准版本 {version} 并开始',
   'session.planApprovalAuthorityReady': '此操作仅对当前权威草稿快照开放。',
-  'session.planApprovalAuthorityUnavailable':
-    '快照仍可阅读，但当前会话权威状态不允许批准。',
+  'session.planApprovalAuthorityUnavailable': '快照仍可阅读，但当前会话权威状态不允许批准。',
   'session.planApprovedTitle': '计划已批准',
-  'session.planApprovedDescription':
-    '绑定的运行推进期间，已批准版本会继续在这里显示。',
+  'session.planApprovedDescription': '绑定的运行推进期间，已批准版本会继续在这里显示。',
   'session.planSnapshotTitle': '计划快照',
   'session.planSnapshotLoaded': '已加载',
   'session.planSnapshotFields': '计划包含 {count} 个快照字段',
   'session.planSnapshotWorkspace': '工作空间计划快照',
   'session.planSnapshotRaw': '原始快照',
   'session.noChanges': '此会话尚无变更',
-  'session.noChangesDescription':
-    '只有属于当前会话的文件变更和审查决策才会显示在这里。',
+  'session.noChangesDescription': '只有属于当前会话的文件变更和审查决策才会显示在这里。',
   'session.changesKicker': '权威运行证据',
   'session.changesTitle': '变更',
   'session.changesRefresh': '刷新',
@@ -6471,11 +6286,9 @@ const zhCN: Record<string, string> = {
   'session.changesScope.run': '当前运行',
   'session.changesScope.session': '整个会话',
   'session.changesSnapshotRevision': '快照 revision：{revision}',
-  'session.changesAttribution':
-    '归属：{attributed} 条已归属 · {unattributed} 条未归属',
+  'session.changesAttribution': '归属：{attributed} 条已归属 · {unattributed} 条未归属',
   'session.changesLoading': '正在加载运行变更',
-  'session.changesLoadingBody':
-    '正在通过固定参数、只读的 Git 命令读取已批准的执行环境。',
+  'session.changesLoadingBody': '正在通过固定参数、只读的 Git 命令读取已批准的执行环境。',
   'session.changesError': '无法加载变更',
   'session.changesUnavailable': '变更不可用',
   'session.changesUnavailableBody': '此运行未绑定到可读取的代码仓库环境。',
@@ -6487,17 +6300,13 @@ const zhCN: Record<string, string> = {
     '运行缺少持久化的基线版本，因此不能把现有文件变更归因给智能体。',
   'session.changesReason.run_environment_unavailable': '权威运行没有执行环境。',
   'session.changesReason.repository_unavailable': '运行环境未关联 Git 仓库。',
-  'session.changesReason.workspace_path_unavailable':
-    '运行工作区路径已不可用。',
-  'session.changesReason.git_repository_unavailable':
-    '运行工作区不是可读取的 Git 仓库。',
+  'session.changesReason.workspace_path_unavailable': '运行工作区路径已不可用。',
+  'session.changesReason.git_repository_unavailable': '运行工作区不是可读取的 Git 仓库。',
   'session.changesReason.repository_path_invalid': '无法验证仓库路径。',
   'session.changesReason.workspace_path_invalid': '无法验证工作区路径。',
-  'session.changesReason.worktree_identity_mismatch':
-    '持久化的 Worktree 标识已不再匹配当前运行。',
+  'session.changesReason.worktree_identity_mismatch': '持久化的 Worktree 标识已不再匹配当前运行。',
   'session.changesReason.git_diff_failed': 'Git 无法为此运行生成只读差异。',
-  'session.changesReason.change_attribution_not_recorded':
-    '此范围未记录权威的文件或代码块归属。',
+  'session.changesReason.change_attribution_not_recorded': '此范围未记录权威的文件或代码块归属。',
   'session.changesReason.unknown': '后端没有提供权威原因。',
   'session.branchUnavailable': '分支不可用',
   'session.changedFiles': '{count} 个变更文件',
@@ -6527,8 +6336,7 @@ const zhCN: Record<string, string> = {
   'session.sendShortcut': '按 Command 或 Control 加 Enter 发送',
   'session.stopResponse': '停止回复',
   'session.stoppingResponse': '正在停止回复…',
-  'session.stopResponseDisconnected':
-    '实时 Agent 连接不可用，无法停止当前回复。',
+  'session.stopResponseDisconnected': '实时 Agent 连接不可用，无法停止当前回复。',
   'session.stopResponseFailed': 'Agent 运行时无法停止当前回复，请重试。',
   'session.stopResponseNotRunning': '当前回复已不再运行。',
   'session.conversationSummaryTitle': '会话摘要',
@@ -6554,17 +6362,14 @@ const zhCN: Record<string, string> = {
   'session.queueHandoffReady': '可开始计划',
   'session.queueHandoffBlocked': '已阻塞',
   'session.queueHandoffPromoted': '计划已开始',
-  'session.queueHandoffWaitingBody':
-    '此任务会保持排队，直到来源运行完成审查并正式结束。',
-  'session.queueHandoffReadyBody':
-    '请先预览请求，再显式启动一轮独立的智能体计划。',
+  'session.queueHandoffWaitingBody': '此任务会保持排队，直到来源运行完成审查并正式结束。',
+  'session.queueHandoffReadyBody': '请先预览请求，再显式启动一轮独立的智能体计划。',
   'session.queueHandoffBlockedBody': '来源运行未正常完成，因此没有启动此任务。',
   'session.queueHandoffPromotedBody': '该请求已移交给一轮独立的智能体计划。',
   'session.queuePosition': '队列 {position}',
   'session.startPlanTurn': '开始计划',
   'session.startingPlanTurn': '正在启动…',
-  'session.queueSourceRunUnavailable':
-    '来源运行已变化，请刷新会话后再启动计划。',
+  'session.queueSourceRunUnavailable': '来源运行已变化，请刷新会话后再启动计划。',
   'session.canvasOverview': '概况',
   'session.canvasPlan': '计划',
   'session.canvasActivity': '活动',
@@ -6586,8 +6391,7 @@ const zhCN: Record<string, string> = {
   'session.agents.summary': '智能体状态概况',
   'session.agents.hierarchy': '智能体层级',
   'session.agents.emptyTitle': '尚未创建智能体',
-  'session.agents.emptyDescription':
-    '此会话创建的智能体及其会话状态将在这里显示。',
+  'session.agents.emptyDescription': '此会话创建的智能体及其会话状态将在这里显示。',
   'session.agents.status.running': '运行中',
   'session.agents.status.completed': '已完成',
   'session.agents.status.failed': '失败',
@@ -6600,8 +6404,7 @@ const zhCN: Record<string, string> = {
   'session.agents.openSessionFor': '打开 {agent} 的会话',
   'session.graph.title': '执行图',
   'session.graph.emptyTitle': '暂无活动执行图',
-  'session.graph.emptyDescription':
-    '多智能体执行图将在这里展示节点进度与智能体交接。',
+  'session.graph.emptyDescription': '多智能体执行图将在这里展示节点进度与智能体交接。',
   'session.graph.summary': '执行图节点状态概况',
   'session.graph.nodes': '执行图节点',
   'session.graph.layer': '执行图第 {count} 层',
@@ -6623,8 +6426,7 @@ const zhCN: Record<string, string> = {
   'session.insights.title': '执行洞察',
   'session.insights.kicker': '智能体决策',
   'session.insights.empty': '暂无执行诊断',
-  'session.insights.emptyDescription':
-    '路由、工具选择、策略过滤和工具集决策将在这里展示。',
+  'session.insights.emptyDescription': '路由、工具选择、策略过滤和工具集决策将在这里展示。',
   'session.insights.traces': '执行追踪',
   'session.insights.traceNumber': '追踪 {count}',
   'session.insights.standalone': '独立事件',
@@ -6660,8 +6462,7 @@ const zhCN: Record<string, string> = {
   'session.context.title': '上下文窗口',
   'session.context.kicker': '会话记忆',
   'session.context.empty': '暂无上下文状态',
-  'session.context.emptyDescription':
-    '上下文占用、令牌分布和压缩历史将在这里展示。',
+  'session.context.emptyDescription': '上下文占用、令牌分布和压缩历史将在这里展示。',
   'session.context.cached': '缓存摘要',
   'session.context.occupancy': '占用率',
   'session.context.occupancyValue': '上下文占用率 {value}',
@@ -6699,8 +6500,7 @@ const zhCN: Record<string, string> = {
   'session.runtime.title': '运行时基础设施',
   'session.runtime.kicker': '执行环境',
   'session.runtime.empty': '暂无运行时基础设施事件',
-  'session.runtime.emptyDescription':
-    '沙箱、桌面、终端和 HTTP 服务的生命周期证据将在这里展示。',
+  'session.runtime.emptyDescription': '沙箱、桌面、终端和 HTTP 服务的生命周期证据将在这里展示。',
   'session.runtime.activeSandbox': '当前沙箱',
   'session.runtime.summary': '运行时基础设施概况',
   'session.runtime.events': '事件',
@@ -6710,8 +6510,7 @@ const zhCN: Record<string, string> = {
   'session.runtime.topology': '运行时资源',
   'session.runtime.topologyDescription': '根据生命周期事件重建的当前状态。',
   'session.runtime.selectedEvidence': '所选证据',
-  'session.runtime.selectedEvidenceDescription':
-    '所选资源或事件最近一次上报的结构化字段。',
+  'session.runtime.selectedEvidenceDescription': '所选资源或事件最近一次上报的结构化字段。',
   'session.runtime.noEvidence': '请选择资源或事件以查看其证据。',
   'session.runtime.history': '生命周期历史',
   'session.runtime.historyDescription': '按时间从新到旧展示基础设施事件。',
@@ -6746,33 +6545,26 @@ const zhCN: Record<string, string> = {
   'session.runtime.disabled': '已禁用',
   'session.runtime.updated': '更新时间',
   'session.noChecks': '尚无检查结果',
-  'session.noChecksDescription':
-    '此编程会话的结构化测试与验证结果将在这里显示。',
+  'session.noChecksDescription': '此编程会话的结构化测试与验证结果将在这里显示。',
   'session.noSources': '尚无来源',
-  'session.noSourcesDescription':
-    '此通用会话的结构化引用与获准研究来源将在这里显示。',
+  'session.noSourcesDescription': '此通用会话的结构化引用与获准研究来源将在这里显示。',
   'session.noVerification': '尚无验证证据',
-  'session.noVerificationDescription':
-    '此通用会话的完成证据与审查决策将在这里显示。',
+  'session.noVerificationDescription': '此通用会话的完成证据与审查决策将在这里显示。',
   'session.evidence.sources.title': '权威来源',
-  'session.evidence.sources.description':
-    '展示此会话中每个当前产物版本显式声明的来源。',
+  'session.evidence.sources.description': '展示此会话中每个当前产物版本显式声明的来源。',
   'session.evidence.checks.title': '产物检查',
   'session.evidence.checks.description':
     '展示当前编程产物声明的结构化检查；工具活动仍保留在“活动”中。',
   'session.evidence.verification.title': '完成验证',
-  'session.evidence.verification.description':
-    '展示每个当前通用产物版本声明的结构化完成检查。',
+  'session.evidence.verification.description': '展示每个当前通用产物版本声明的结构化完成检查。',
   'session.evidence.recordCount': '{count} 条记录',
   'session.evidence.noArtifacts': '尚无版本化产物',
-  'session.evidence.noArtifactsDescription':
-    '后端持久化权威产物版本后，这里才会显示来源与检查。',
+  'session.evidence.noArtifactsDescription': '后端持久化权威产物版本后，这里才会显示来源与检查。',
   'session.evidence.unlabeled': '未命名证据',
   'session.evidence.statusUnknown': '未声明状态',
   'session.evidence.raw': '查看原始证据',
   'session.evidence.sources.missingDescription': '此产物版本未声明任何来源。',
-  'session.evidence.checks.missingDescription':
-    '此产物版本未声明任何检查，不能视为已通过。',
+  'session.evidence.checks.missingDescription': '此产物版本未声明任何检查，不能视为已通过。',
   'session.evidence.missing': '缺失',
   'session.evidence.currentArtifactCount': '{count} 个当前产物',
   'session.evidence.currentOnly': '仅显示当前版本 · 打开产物可查看历史版本',
@@ -6799,8 +6591,7 @@ const zhCN: Record<string, string> = {
   'session.currentActivity.hideDetails': '收起最近活动',
   'session.currentActivity.usage': '{tokens} tokens · 上下文 {percent}%',
   'session.currentActivity.stalled': '已 {minutes} 分钟没有新进展',
-  'session.currentActivity.stalledHint':
-    '可检查连接；若持续无响应可取消本次运行。',
+  'session.currentActivity.stalledHint': '可检查连接；若持续无响应可取消本次运行。',
   'session.latestActivity': '最近活动',
   'session.live': '实时',
   'session.recorded': '已记录',
@@ -6869,8 +6660,7 @@ const zhCN: Record<string, string> = {
   'chat.comparison.compare': '对比',
   'chat.comparison.exit': '退出会话对比',
   'chat.comparison.select': '选择要对比的会话',
-  'chat.comparison.selectDescription':
-    '选择当前项目中的另一个会话；此操作不会切换当前会话。',
+  'chat.comparison.selectDescription': '选择当前项目中的另一个会话；此操作不会切换当前会话。',
   'chat.comparison.change': '更换对比会话',
   'chat.comparison.search': '搜索会话…',
   'chat.comparison.loadingCatalog': '正在加载会话…',
@@ -6890,8 +6680,7 @@ const zhCN: Record<string, string> = {
   'chat.agentTaskStatus': '智能体任务状态',
   'chat.agentTask': '智能体任务',
   'chat.conversationReference': '会话 {conversationId}',
-  'chat.taskComposerPlaceholder':
-    '描述要自主执行的任务。输入 / 使用命令、@ 引用文件或 # 引用事项…',
+  'chat.taskComposerPlaceholder': '描述要自主执行的任务。输入 / 使用命令、@ 引用文件或 # 引用事项…',
   'chat.slashCommands': '斜杠命令',
   'chat.selectModel': '切换模型，当前模型：{model}',
   'chat.modelSwitcherTitle': '模型',
@@ -6935,12 +6724,10 @@ const zhCN: Record<string, string> = {
   'chat.canonicalStory.outOfScope': '范围外',
   'chat.canonicalStory.testable': '可测试',
   'chat.canonicalStory.untestable': '不可测试',
-  'chat.canonicalStory.invalidIssueCount':
-    'Canonical Story 有 {count} 项验证问题',
+  'chat.canonicalStory.invalidIssueCount': 'Canonical Story 有 {count} 项验证问题',
   'chat.canonicalStory.issue.parseError': '无法安全解析 YAML。',
   'chat.canonicalStory.issue.aliasesForbidden': '不允许使用 YAML 别名。',
-  'chat.canonicalStory.issue.sourceTooLong':
-    '内容超过 {limit} 字符的安全上限。',
+  'chat.canonicalStory.issue.sourceTooLong': '内容超过 {limit} 字符的安全上限。',
   'chat.canonicalStory.issue.valueLimit': '故事超过 {limit} 个值的安全上限。',
   'chat.canonicalStory.issue.depthLimit': '故事超过 {limit} 层嵌套的安全上限。',
   'chat.canonicalStory.issue.stringTooLong': '{path} 超过 {limit} 字符上限。',
@@ -6957,8 +6744,7 @@ const zhCN: Record<string, string> = {
   'chat.canonicalStory.issue.uniqueAcceptanceIds': '验收条件 ID 必须唯一。',
   'chat.canonicalStory.issue.objectRequired': '{path} 必须是对象。',
   'chat.canonicalStory.issue.passFailRequired': '{path} 必须为 pass 或 fail。',
-  'chat.canonicalStory.issue.storyStatusRequired':
-    '{path} 必须为 pass、warning 或 fail。',
+  'chat.canonicalStory.issue.storyStatusRequired': '{path} 必须为 pass、warning 或 fail。',
   'chat.canonicalStory.issue.invalid': 'Canonical Story 结构无效。',
   'chat.replyMessage': '引用回复',
   'chat.editMessage': '编辑消息',
@@ -6966,8 +6752,7 @@ const zhCN: Record<string, string> = {
   'chat.deleteMessageTitle': '删除这条消息？',
   'chat.deleteMessageBody': '将“{excerpt}”从当前会话视图中移除。',
   'chat.deleteMessageBodyEmpty': '将此消息从当前会话视图中移除。',
-  'chat.deleteMessageRestorationNote':
-    '此操作仅影响当前视图；重新加载会话后，这条消息可能会恢复。',
+  'chat.deleteMessageRestorationNote': '此操作仅影响当前视图；重新加载会话后，这条消息可能会恢复。',
   'chat.messageRemoved': '已从当前会话视图中移除该消息。',
   'chat.retryMessage': '重试回复',
   'chat.pinnedMessages': '置顶消息',
@@ -7021,8 +6806,7 @@ const zhCN: Record<string, string> = {
   'chat.permissionPreset.relaxed': '宽松',
   'chat.permissionPreset.full': '完全放行',
   'chat.permissionPreset.defaultDescription': '每次权限请求都需要手动确认。',
-  'chat.permissionPreset.relaxedDescription':
-    '自动允许低风险权限请求，其余仍需确认。',
+  'chat.permissionPreset.relaxedDescription': '自动允许低风险权限请求，其余仍需确认。',
   'chat.permissionPreset.fullDescription': '本会话内自动允许所有权限请求。',
   'chat.fullAccessWarning.title': '为本会话启用完全放行？',
   'chat.fullAccessWarning.body':
@@ -7044,8 +6828,7 @@ const zhCN: Record<string, string> = {
   'chat.estimatedCost': '预计成本',
   'chat.saveEnvironmentValues': '为后续会话保存这些值',
   'chat.optionalField': '可选',
-  'chat.a2uiOriginalSurfaceRequired':
-    '此 A2UI 交互请求需要在其原始界面中处理。',
+  'chat.a2uiOriginalSurfaceRequired': '此 A2UI 交互请求需要在其原始界面中处理。',
   'chat.openWebClientToRespond': '请打开 Web 客户端响应。',
   'chat.agentWaitingForInput': '智能体正在等待人工输入。',
   'chat.file': '文件',
@@ -7170,8 +6953,7 @@ const zhCN: Record<string, string> = {
   'chat.memoryUnknownSource': '未知来源',
   'chat.memoryUnknownCategory': '未分类',
   'chat.aggregatedSources.title': '聚合来源',
-  'chat.aggregatedSources.metrics':
-    '{calls} 次调用 · {sources} 条来源 · {groups} 个分组',
+  'chat.aggregatedSources.metrics': '{calls} 次调用 · {sources} 条来源 · {groups} 个分组',
   'chat.aggregatedSources.other': '其他来源',
   'chat.aggregatedSources.group': '切换来源分组 {group}',
   'chat.aggregatedSources.open': '打开来源 {title}',
@@ -7228,8 +7010,7 @@ const zhCN: Record<string, string> = {
   'chat.templates.open': '打开提示词模板',
   'chat.templates.trigger': '模板',
   'chat.templates.title': '提示词模板库',
-  'chat.templates.description':
-    '使用经过验证的提示词，或选择当前租户共享的自定义模板。',
+  'chat.templates.description': '使用经过验证的提示词，或选择当前租户共享的自定义模板。',
   'chat.templates.source.builtin': '内置',
   'chat.templates.source.custom': '自定义',
   'chat.templates.search': '搜索提示词模板',
@@ -7260,13 +7041,11 @@ const zhCN: Record<string, string> = {
   'chat.templates.variableRequired': '必须填写 {name}。',
   'chat.templates.useTemplate': '使用模板',
   'chat.templates.deleteConfirmTitle': '删除此模板？',
-  'chat.templates.deleteConfirmDescription':
-    '“{title}”将从当前租户中永久移除，且无法撤销。',
+  'chat.templates.deleteConfirmDescription': '“{title}”将从当前租户中永久移除，且无法撤销。',
   'chat.templates.delete': '删除模板',
   'chat.templates.deleting': '正在删除…',
   'chat.templates.saveAsTemplate': '保存为模板',
-  'chat.templates.saveDescription':
-    '将这条 Agent 回复原样保存为提示词，供后续会话复用。',
+  'chat.templates.saveDescription': '将这条 Agent 回复原样保存为提示词，供后续会话复用。',
   'chat.templates.saveName': '模板名称',
   'chat.templates.saveNamePlaceholder': '为模板输入清晰的名称',
   'chat.templates.saveCategory': '分类',
@@ -7294,8 +7073,7 @@ const zhCN: Record<string, string> = {
   'chat.templates.builtin.addFeaturePrompt':
     '我想添加一个新功能：[描述功能]。请规划实现方案、识别需要修改的文件，并逐步实现。',
   'chat.templates.builtin.fixError': '修复错误',
-  'chat.templates.builtin.fixErrorPrompt':
-    '我遇到了这个错误：[粘贴错误]。请诊断根因并修复。',
+  'chat.templates.builtin.fixErrorPrompt': '我遇到了这个错误：[粘贴错误]。请诊断根因并修复。',
   'chat.templates.builtin.writeDocs': '编写文档',
   'chat.templates.builtin.writeDocsPrompt':
     '为项目生成完整文档，包括 API 参考、安装指南和架构概览。',
@@ -7323,8 +7101,7 @@ const zhCN: Record<string, string> = {
   'chat.composeAhead.intent.steer': '引导',
   'chat.composeAhead.steerMessage': '在下一个回合边界注入，引导当前运行',
   'chat.composeAhead.steerNow': '在下一个回合边界注入引导：{prompt}',
-  'chat.composeAhead.dequeueToQueue':
-    '改为排队，等本轮运行结束后发送：{prompt}',
+  'chat.composeAhead.dequeueToQueue': '改为排队，等本轮运行结束后发送：{prompt}',
   'chat.composeAhead.reorder': '拖拽调整排队顺序：{prompt}',
   'chat.composeAhead.sendOptions': '发送选项',
   'chat.composeAhead.menu.queueDescription': '当前回复完成后发送',
@@ -7410,8 +7187,7 @@ const zhCN: Record<string, string> = {
   'chat.status.needsAttention': '需要处理',
   'session.overviewKicker': '会话概况',
   'session.workspaceOverview': '工作空间会话',
-  'session.overviewDescription':
-    '集中查看权威运行状态、当前证据，以及下一处需要关注的内容。',
+  'session.overviewDescription': '集中查看权威运行状态、当前证据，以及下一处需要关注的内容。',
   'session.overviewStatus': '运行状态',
   'session.overviewStage': '当前阶段',
   'session.overviewEvidence': '证据',
@@ -7460,8 +7236,7 @@ const zhCN: Record<string, string> = {
   'artifact.reloadServer': '重新加载服务端',
   'artifact.saveCopy': '另存副本',
   'artifact.copyDraft': '复制草稿',
-  'artifact.serverReloadedDraftPreserved':
-    '已重新加载服务端权威版本，本地草稿仍保留。',
+  'artifact.serverReloadedDraftPreserved': '已重新加载服务端权威版本，本地草稿仍保留。',
   'artifact.draftCopySaved': '已下载本地草稿副本。',
   'artifact.undo': '撤销',
   'artifact.redo': '重做',
@@ -7491,8 +7266,7 @@ const zhCN: Record<string, string> = {
   'artifact.currentVersions': '当前产物版本',
   'artifact.emptyTitle': '尚无已导出的产物',
   'artifact.emptyDescription': '智能体需要显式导出产物，产物才可被审查或交付。',
-  'artifact.unversionedEvidence':
-    '另有 {count} 个未版本化事件仍可在“活动”中查看，但不能被批准。',
+  'artifact.unversionedEvidence': '另有 {count} 个未版本化事件仍可在“活动”中查看，但不能被批准。',
   'artifact.immutableVersion': '不可变产物版本',
   'artifact.version': '版本',
   'artifact.lifecycle': '产物生命周期',
@@ -7562,8 +7336,7 @@ const zhCN: Record<string, string> = {
   'task.titleLabel': '任务标题',
   'task.titlePlaceholder': '希望智能体完成什么？',
   'task.objectiveLabel': '目标与成功标准',
-  'task.objectivePlaceholder':
-    '描述预期结果、约束，以及完成前需要提供的验证证据。',
+  'task.objectivePlaceholder': '描述预期结果、约束，以及完成前需要提供的验证证据。',
   'task.kind': '任务类型',
   'task.generalAgent': '通用智能体',
   'task.generalAgentDescription': '研究、分析、内容与运营任务',
@@ -7573,29 +7346,21 @@ const zhCN: Record<string, string> = {
   'task.noWorkspace': '无工作空间',
   'task.noWorkspaceDescription': '创建不绑定工作空间的项目会话。',
   'task.projectDefaultModel': '项目默认模型',
-  'task.projectDefaultModelDescription':
-    '由智能体运行时选择项目配置的默认模型。',
-  'task.unboundConversationScopeMismatch':
-    '服务端为“无工作空间”线程返回了已绑定工作空间的会话。',
+  'task.projectDefaultModelDescription': '由智能体运行时选择项目配置的默认模型。',
+  'task.unboundConversationScopeMismatch': '服务端为“无工作空间”线程返回了已绑定工作空间的会话。',
   'task.createWorkspace': '创建新工作空间',
-  'task.workspaceAuthorityLoading':
-    '工作空间选项仍在加载，请等待项目权威状态就绪后再创建任务。',
-  'task.workspaceAuthorityError':
-    '无法验证工作空间选项，请刷新项目后再创建任务。',
-  'task.workspaceSelectionStale':
-    '所选工作空间已不可用，请选择其他工作空间或创建新工作空间。',
+  'task.workspaceAuthorityLoading': '工作空间选项仍在加载，请等待项目权威状态就绪后再创建任务。',
+  'task.workspaceAuthorityError': '无法验证工作空间选项，请刷新项目后再创建任务。',
+  'task.workspaceSelectionStale': '所选工作空间已不可用，请选择其他工作空间或创建新工作空间。',
   'task.codeRoot': '代码工作区根目录',
   'task.environment': '执行环境',
   'task.isolatedWorktree': '隔离 Worktree',
   'task.isolatedWorktreeDescription':
     '计划批准后创建独立 Branch 与 Worktree，推荐用于并行编程任务。',
   'task.currentWorkspace': '当前工作区',
-  'task.currentWorkspaceDescription':
-    '直接在配置目录中运行，现有未提交文件仍在作用域内。',
-  'task.environmentCreatedAfterApproval':
-    '只有批准此计划后，客户端才会实际创建执行环境。',
-  'task.authorityNote':
-    '计划阶段为只读；获得你的批准前，智能体不能使用写入工具。',
+  'task.currentWorkspaceDescription': '直接在配置目录中运行，现有未提交文件仍在作用域内。',
+  'task.environmentCreatedAfterApproval': '只有批准此计划后，客户端才会实际创建执行环境。',
+  'task.authorityNote': '计划阶段为只读；获得你的批准前，智能体不能使用写入工具。',
   'task.planReadOnly': '计划模式 · 只读',
   'task.planningTitle': '智能体正在生成结构化计划',
   'task.planningDescription':
@@ -7605,23 +7370,19 @@ const zhCN: Record<string, string> = {
   'task.planId': '计划 ID',
   'task.version': '版本',
   'task.planIdentityPending': '正在等待权威计划标识',
-  'task.planApprovalUnavailable':
-    '服务端返回权威计划 ID 和版本前，批准操作保持禁用。',
+  'task.planApprovalUnavailable': '服务端返回权威计划 ID 和版本前，批准操作保持禁用。',
   'task.planUpdatedTitle': '已有更新的计划版本',
-  'task.planUpdatedDescription':
-    '预览已刷新为版本 {version}，批准前请重新审查更新后的步骤。',
+  'task.planUpdatedDescription': '预览已刷新为版本 {version}，批准前请重新审查更新后的步骤。',
   'task.reviewLatestVersion': '我已审查版本 {version}',
   'task.planChangedTitle': '权威计划已变化',
-  'task.planChangedDescription':
-    '权威任务列表已变化；批准前请重新审查刷新后的步骤。',
+  'task.planChangedDescription': '权威任务列表已变化；批准前请重新审查刷新后的步骤。',
   'task.reviewLatestPlan': '我已审查刷新后的计划',
   'task.revisionNotAcknowledgedTitle': '智能体未确认修改请求',
   'task.revisionNotAcknowledgedDescription':
     '批准仍被阻止；你可以重试，或停止等待并重新审查当前计划。',
   'task.stopWaitingForRevision': '停止等待并重新审查',
   'task.reviewCurrentPlanTitle': '再次审查当前计划',
-  'task.reviewCurrentPlanDescription':
-    '延迟到达的智能体响应仍可能在批准前刷新这些步骤。',
+  'task.reviewCurrentPlanDescription': '延迟到达的智能体响应仍可能在批准前刷新这些步骤。',
   'task.reviewCurrentPlanAction': '我已审查当前计划',
   'task.stepCount': '{count} 个步骤',
   'task.priorityStatus': '{priority} 优先级 · {status}',
@@ -7630,16 +7391,13 @@ const zhCN: Record<string, string> = {
   'task.runPreviewDescription': '为当前计划版本选择明确的执行权限边界。',
   'task.permissionProfile': '权限配置',
   'task.permissionReadOnly': '只读',
-  'task.permissionReadOnlyDescription':
-    '仅检查已批准的上下文，不修改文件或持久化工作空间状态。',
+  'task.permissionReadOnlyDescription': '仅检查已批准的上下文，不修改文件或持久化工作空间状态。',
   'task.permissionWorkspaceWrite': '工作空间写入',
-  'task.permissionWorkspaceWriteDescription':
-    '仅在所选工作空间或隔离 Worktree 内读取和写入。',
+  'task.permissionWorkspaceWriteDescription': '仅在所选工作空间或隔离 Worktree 内读取和写入。',
   'task.permissionModeFullAccess': '完整访问',
   'task.permissionFullAccessDescription':
     '使用当前工作空间授予的全部能力；外部不可逆操作仍受策略约束。',
-  'task.approvalBindsPlan':
-    '批准将绑定计划 {planId}、版本 {version} 与当前权限配置。',
+  'task.approvalBindsPlan': '批准将绑定计划 {planId}、版本 {version} 与当前权限配置。',
   'task.requestChanges': '要求修改',
   'task.revisionPlaceholder': '新增、删除、重新排序或澄清计划步骤。',
   'task.revisePlan': '修改计划',
@@ -7650,8 +7408,7 @@ const zhCN: Record<string, string> = {
   'task.generatePlan': '生成计划',
   'task.newThreadEyebrow': '新建线程',
   'task.newThreadTitle': '希望智能体处理什么？',
-  'task.newThreadDescription':
-    '描述预期结果；智能体会在开始任何执行前提出计划。',
+  'task.newThreadDescription': '描述预期结果；智能体会在开始任何执行前提出计划。',
   'task.newThreadPrompt': '新线程任务描述',
   'task.workPromptPlaceholder': '研究、撰写或分析…',
   'task.codePromptPlaceholder': '修复、构建或重构…',
@@ -7666,8 +7423,7 @@ const zhCN: Record<string, string> = {
   'task.effortHighDescription': '为复杂的多步骤任务提供更深入推理。',
   'task.permissionAskDescription': '只读工具自动运行，变更操作需要批准。',
   'task.permissionAutomaticDescription': '允许工作空间写入工具自动运行。',
-  'task.permissionModeFullAccessDescription':
-    '允许全部可用工具运行，并保留审计记录。',
+  'task.permissionModeFullAccessDescription': '允许全部可用工具运行，并保留审计记录。',
   'task.manageModels': '在设置中管理模型',
   'task.contextWindowUnavailable': '上下文窗口信息不可用',
   'task.modelRole.default': '默认',
@@ -7714,18 +7470,13 @@ const zhCN: Record<string, string> = {
   'composer.voice.start': '语音输入',
   'composer.voice.stop': '停止语音输入',
   'composer.voice.unavailable.local_runtime': '语音输入仅适用于云端会话。',
-  'composer.voice.unavailable.authentication_required':
-    '请先登录云端会话，再使用语音输入。',
-  'composer.voice.unavailable.conversation_required':
-    '请先打开云端会话，再使用语音输入。',
-  'composer.voice.error.permission_denied':
-    '麦克风权限被拒绝，请检查系统权限后重试。',
+  'composer.voice.unavailable.authentication_required': '请先登录云端会话，再使用语音输入。',
+  'composer.voice.unavailable.conversation_required': '请先打开云端会话，再使用语音输入。',
+  'composer.voice.error.permission_denied': '麦克风权限被拒绝，请检查系统权限后重试。',
   'composer.voice.error.capture_unsupported': '当前环境无法使用麦克风采集。',
-  'composer.voice.error.connection_failed':
-    '无法连接语音转写服务，请检查云端连接后重试。',
+  'composer.voice.error.connection_failed': '无法连接语音转写服务，请检查云端连接后重试。',
   'composer.voice.error.connection_closed': '语音转写连接已关闭。',
-  'composer.voice.error.capture_failed':
-    '语音采集意外停止，请检查麦克风后重试。',
+  'composer.voice.error.capture_failed': '语音采集意外停止，请检查麦克风后重试。',
   'composer.voice.error.service_error': '语音转写服务返回了错误。',
   'composer.voiceCall.start': '开始语音通话',
   'composer.voiceCall.end': '结束语音通话',
@@ -7743,19 +7494,13 @@ const zhCN: Record<string, string> = {
   'composer.voiceCall.expand': '展开语音通话',
   'composer.voiceCall.duration': '通话时长',
   'composer.voiceCall.unavailable.local_runtime': '语音通话仅适用于云端会话。',
-  'composer.voiceCall.unavailable.authentication_required':
-    '请先登录云端会话，再开始语音通话。',
-  'composer.voiceCall.unavailable.conversation_required':
-    '请先打开云端会话，再开始语音通话。',
-  'composer.voiceCall.error.permission_denied':
-    '麦克风权限被拒绝，请检查系统权限后重试。',
-  'composer.voiceCall.error.capture_unsupported':
-    '当前环境无法使用麦克风采集。',
-  'composer.voiceCall.error.connection_failed':
-    '无法连接语音通话服务，请检查云端连接后重试。',
+  'composer.voiceCall.unavailable.authentication_required': '请先登录云端会话，再开始语音通话。',
+  'composer.voiceCall.unavailable.conversation_required': '请先打开云端会话，再开始语音通话。',
+  'composer.voiceCall.error.permission_denied': '麦克风权限被拒绝，请检查系统权限后重试。',
+  'composer.voiceCall.error.capture_unsupported': '当前环境无法使用麦克风采集。',
+  'composer.voiceCall.error.connection_failed': '无法连接语音通话服务，请检查云端连接后重试。',
   'composer.voiceCall.error.connection_closed': '语音通话连接已关闭。',
-  'composer.voiceCall.error.capture_failed':
-    '语音采集意外停止，请检查麦克风后重试。',
+  'composer.voiceCall.error.capture_failed': '语音采集意外停止，请检查麦克风后重试。',
   'composer.voiceCall.error.playback_failed': '无法播放合成语音回复。',
   'composer.voiceCall.error.service_error': '语音通话服务返回了错误。',
   'composer.noResources': '没有已启用资源',
@@ -7764,8 +7509,7 @@ const zhCN: Record<string, string> = {
   'composer.commandReviewDescription': '独立审查当前工作',
   'composer.commandVerifyDescription': '重新验证并附上证据',
   'composer.commandSummarizeDescription': '总结进度和待解决问题',
-  'task.policyUpgradeRequired':
-    '当前运行时仍使用旧路由策略；升级后才能持久化推理强度与权限设置。',
+  'task.policyUpgradeRequired': '当前运行时仍使用旧路由策略；升级后才能持久化推理强度与权限设置。',
   'task.policyUnavailable': '工作空间策略不可用，请刷新运行时后重试。',
   'task.noModelsAvailable': '当前模式没有已配置且可用的模型。',
   'task.creationContextUnavailable': '当前工作空间或策略上下文不可用。',
@@ -7783,16 +7527,14 @@ const zhCN: Record<string, string> = {
   'task.suggestionBuildTitle': '构建下一个功能',
   'task.suggestionBuildPrompt': '实现所需功能，并补充聚焦的测试与验证。',
   'task.suggestionUpgradeTitle': '规划 SDK 升级',
-  'task.suggestionUpgradePrompt':
-    '梳理破坏性变更，提出分阶段、可测试的升级方案。',
+  'task.suggestionUpgradePrompt': '梳理破坏性变更，提出分阶段、可测试的升级方案。',
   'task.continueBackground': '在后台继续',
   'task.createTask': '创建任务',
   'task.createSubtitle': '计划优先的智能体工作流',
   'task.describeTask': '描述任务',
   'task.reviewPlan': '审查计划',
   'task.defineTitle': '希望智能体完成什么？',
-  'task.defineDescription':
-    '描述预期结果并建议有用的上下文；智能体会在开始工作前提出计划。',
+  'task.defineDescription': '描述预期结果并建议有用的上下文；智能体会在开始工作前提出计划。',
   'task.objectiveHelp': '请说明受众、决策、交付物或可证明完成的证据。',
   'task.contextBoundaries': '规划上下文',
   'task.contextTitle': '建议智能体从哪里开始',
@@ -7807,21 +7549,17 @@ const zhCN: Record<string, string> = {
   'task.generatePlanHint': '智能体会根据此任务说明生成可审查计划。',
   'task.agentPlanning': '智能体正在规划',
   'task.planningFor': '正在为“{title}”生成计划',
-  'task.planningSafety':
-    '当前仅授予计划权限；人工审查完成前不会授予执行环境或写入权限。',
+  'task.planningSafety': '当前仅授予计划权限；人工审查完成前不会授予执行环境或写入权限。',
   'task.planningOutcomeTitle': '理解目标',
   'task.planningOutcomeDescription': '任务说明与完成标准已记录。',
   'task.planningContextTitle': '请求规划上下文',
-  'task.planningContextDescription':
-    '已请求使用 {count} 个由人工选择的上下文来源。',
+  'task.planningContextDescription': '已请求使用 {count} 个由人工选择的上下文来源。',
   'task.planningPathTitle': '等待结构化计划',
-  'task.planningPathDescription':
-    '只有持久化计划任务到达后，客户端才会进入下一步。',
+  'task.planningPathDescription': '只有持久化计划任务到达后，客户端才会进入下一步。',
   'task.planningPacketTitle': '准备人工审查',
   'task.planningPacketDescription': '计划权限与任务标识仍在等待中。',
   'task.planDelayedTitle': '尚未收到结构化计划',
-  'task.planDelayedDescription':
-    '智能体可能仍在工作；你可以要求它重新发布计划。',
+  'task.planDelayedDescription': '智能体可能仍在工作；你可以要求它重新发布计划。',
   'task.retryPlan': '重试生成计划',
   'task.taskBrief': '任务说明',
   'task.mode': '模式',
@@ -7857,20 +7595,17 @@ const zhCN: Record<string, string> = {
   'task.contextAgentUse': '请求使用的规划上下文',
   'task.executionEnvironmentUnavailable': '该后端未绑定执行环境',
   'task.legacyApprovalTitle': '旧版计划→执行切换',
-  'task.legacyApprovalDescription':
-    '该后端无法原子绑定计划版本，因此权限和环境控制保持不可用。',
+  'task.legacyApprovalDescription': '该后端无法原子绑定计划版本，因此权限和环境控制保持不可用。',
   'task.limitedAuthorityTitle': '你正在授予有限权限',
   'task.limitedAuthorityDescription':
     '批准会启动 {count} 个已审查步骤；智能体仍必须在策略关口停止。',
   'task.legacyAuthorityTitle': '由后端定义执行权限',
-  'task.legacyAuthorityDescription':
-    '执行模式使用后端默认值；当前审查无法约束权限或环境。',
+  'task.legacyAuthorityDescription': '执行模式使用后端默认值；当前审查无法约束权限或环境。',
   'task.editBrief': '编辑任务说明',
   'task.selectedSteps': '已选择 {selected}/{total} 个步骤',
   'task.applyPlanEdits': '应用计划修改',
   'task.askAgentRevise': '要求智能体修改',
-  'task.planChangedBeforeApproval':
-    '批准前权威任务列表已变化，请重新审查刷新后的计划。',
+  'task.planChangedBeforeApproval': '批准前权威任务列表已变化，请重新审查刷新后的计划。',
   'task.planRuntimeUnsupported':
     '当前运行时无法创建计划优先任务。请打开“设置 > 连接恢复”，连接桌面本地运行时或支持 Agent Plan API 的服务，然后重试。',
   'task.openRuntimeSettings': '打开连接恢复',
@@ -7879,8 +7614,7 @@ const zhCN: Record<string, string> = {
   'task.disabledAuthRequired': '创建任务前需要有效的认证会话。',
   'task.disabledProjectRequired': '请先选择账号与项目，再创建任务。',
   'task.agentTurnAckTimeout': '智能体未能及时确认此请求。',
-  'task.agentTurnOutcomeUnknown':
-    '投递结果尚未确认。正在检查权威计划，确认安全后才会提供重试。',
+  'task.agentTurnOutcomeUnknown': '投递结果尚未确认。正在检查权威计划，确认安全后才会提供重试。',
   'task.legacyRollbackFailed': '旧版后端未确认执行，且无法恢复为计划模式。',
   'task.approvalRecoveryUnavailable':
     '无法保存批准恢复状态，因此尚未进入执行模式。请检查桌面存储权限后重试。',
@@ -7925,10 +7659,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key === STORAGE_KEY &&
-        (event.newValue === 'en' || event.newValue === 'zh-CN')
-      ) {
+      if (event.key === STORAGE_KEY && (event.newValue === 'en' || event.newValue === 'zh-CN')) {
         setLocaleState(event.newValue);
       }
     };
@@ -7941,10 +7672,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       locale,
       setLocale,
       t: (key, values) =>
-        interpolate(
-          (locale === 'zh-CN' ? zhCN : enUS)[key] ?? enUS[key] ?? key,
-          values,
-        ),
+        interpolate((locale === 'zh-CN' ? zhCN : enUS)[key] ?? enUS[key] ?? key, values),
     }),
     [locale],
   );
@@ -7969,8 +7697,7 @@ export function useI18n(): I18nContextValue {
 function interpolate(value: string, values?: TranslationValues): string {
   if (!values) return value;
   return Object.entries(values).reduce(
-    (result, [key, replacement]) =>
-      result.replaceAll(`{${key}}`, String(replacement)),
+    (result, [key, replacement]) => result.replaceAll(`{${key}}`, String(replacement)),
     value,
   );
 }

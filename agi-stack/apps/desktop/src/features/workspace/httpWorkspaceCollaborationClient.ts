@@ -1,8 +1,8 @@
 import {
-  absoluteUrl,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   WorkspaceCollaborationClient,
@@ -360,7 +360,7 @@ async function requestWorkspaceAuthority(
   if (options.body !== undefined && !formData) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
     headers,
     body:

@@ -230,7 +230,14 @@ test("only an empty hash retains legacy while every rejected deep link uses nati
     );
     assert.match(markup, /data-legacy="true"/u);
     assert.match(markup, new RegExp(expected, "u"));
-    assert.match(markup, new RegExp(state.reasonCode, "u"));
+    assert.match(
+      markup,
+      new RegExp(`data-reason-code="${state.reasonCode}"`, "u"),
+    );
+    assert.doesNotMatch(
+      markup,
+      new RegExp(`<code>${state.reasonCode}</code>`, "u"),
+    );
     assert.match(markup, /data-action="return-workbench"[^>]*autofocus=""/u);
     assert.doesNotMatch(markup, /unknown\?token=untrusted/u);
   }
@@ -256,7 +263,7 @@ test("loading, forbidden, unavailable, and error states expose structured bounda
       },
       [
         "Permission required",
-        "desktop_route_permission_denied",
+        "Your current role does not have access to this route.",
         "project_member",
       ],
     ],
@@ -269,7 +276,7 @@ test("loading, forbidden, unavailable, and error states expose structured bounda
       },
       [
         "Native route unavailable",
-        "project_overview_authority_unavailable",
+        "The required service or authority is currently unavailable.",
         "Retry",
       ],
     ],
@@ -280,7 +287,11 @@ test("loading, forbidden, unavailable, and error states expose structured bounda
         reasonCode: "desktop_route_module_load_failed",
         retryable: true,
       },
-      ["Native route failed", "desktop_route_module_load_failed", "Retry"],
+      [
+        "Native route failed",
+        "Desktop could not load this route. Retry when the action is available.",
+        "Retry",
+      ],
     ],
   ];
 
@@ -290,6 +301,30 @@ test("loading, forbidden, unavailable, and error states expose structured bounda
       assert.match(markup, new RegExp(expected, "u"));
     }
   }
+});
+
+test("local cloud-only boundaries keep protocol codes non-visible and explain the recovery", () => {
+  const markup = renderView({
+    state: {
+      status: "unavailable",
+      match,
+      reasonCode: "desktop_route_local_cloud_only",
+      capability: null,
+    },
+  });
+
+  assert.match(
+    markup,
+    /data-reason-code="desktop_route_local_cloud_only"/u,
+  );
+  assert.match(
+    markup,
+    /This feature requires the tenant cloud service. Switch to the Cloud workspace and retry./u,
+  );
+  assert.doesNotMatch(
+    markup,
+    /<code>desktop_route_local_cloud_only<\/code>/u,
+  );
 });
 
 test("authentication-required route can preserve its deep link behind the login surface", () => {

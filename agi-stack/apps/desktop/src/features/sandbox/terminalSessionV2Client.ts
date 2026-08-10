@@ -1,5 +1,9 @@
 import type { DesktopRuntimeConfig } from '../../types';
 import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
+import {
   parseTerminalSessionV2,
   type TerminalSessionV2,
 } from './terminalSessionV2';
@@ -93,17 +97,18 @@ async function postTerminalJson(
   body: Readonly<Record<string, number | string>>,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const apiKey = config.apiKey.trim();
-  if (!apiKey) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw new SandboxTerminalSessionError('terminal_session_v2_auth_unavailable');
   }
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const headers = new Headers({
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  });
+  const apiKey = config.apiKey.trim();
+  if (apiKey) headers.set('Authorization', `Bearer ${apiKey}`);
+  const response = await desktopApiFetch(config, path, {
     method: 'POST',
-    headers: new Headers({
-      Accept: 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    }),
+    headers,
     body: JSON.stringify(body),
     signal,
     credentials: 'same-origin',
@@ -206,8 +211,4 @@ function requireIdentifier(input: string, field: string): string {
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input);
-}
-
-function absoluteUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.trim().replace(/\/+$/u, '')}${path}`;
 }

@@ -13,6 +13,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, normalize, parse, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +25,31 @@ import {
   selectExactDisplaySource,
   type DesktopDisplayCapture,
 } from './displayCapturePolicy';
+import {
+  DesktopCloudAuthenticationAuthority,
+} from './cloudAuthenticationAuthority';
+import {
+  CloudRequestExecutionRegistry,
+  executeVaultBoundCloudRequest,
+  projectVaultBoundCloudSession,
+} from './cloudRequestPolicy';
+import {
+  DesktopCloudSocketBroker,
+  type CloudSocketBrokerEvent,
+  type CloudSocketLike,
+} from './cloudSocketBroker';
+import { authorizeVaultBoundCloudSocket } from './cloudSocketPolicy';
+import {
+  DesktopOAuthCallbackAuthority,
+  DesktopOAuthCallbackAuthorityError,
+} from './oauthCallbackAuthority';
+import {
+  OAUTH_CALLBACK_SCHEME,
+  OAuthDeepLinkPolicyError,
+  parseOAuthCallbackDeepLink,
+  selectOAuthDeepLinkFromArgv,
+  type OAuthCallbackDeepLink,
+} from './oauthDeepLinkPolicy';
 import {
   RENDERER_ENTRY_URL,
   RENDERER_PROTOCOL_HOST,
@@ -42,11 +68,8 @@ import {
   type NativeFileDialogAuthority,
   type NativeFileDialogFilter,
 } from './nativeFileDialogPolicy';
-import {
-  configureQaProfile,
-  resolveSidecarLegacyDataDirectories,
-} from './qaProfilePolicy';
-import { SidecarSupervisor } from './sidecarSupervisor';
+import { configureQaProfile, resolveSidecarLegacyDataDirectories } from './qaProfilePolicy';
+import { SidecarSupervisor, sidecarRendererEnvironment } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
 import {
   SIGNED_WEB_CONTROL_PLANE_ORIGIN,
@@ -62,10 +85,10 @@ const NATIVE_FILE_SAVE_CHANNEL = 'agistack:native-file-save';
 const NATIVE_FILE_OPEN_CHANNEL = 'agistack:native-file-open';
 const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
+const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
+const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
 const SIDECAR_COMMANDS = new Set([
-  'trusted_session_save',
-  'trusted_session_load',
   'trusted_session_clear',
   'local_trusted_session_save',
   'local_trusted_session_load',
@@ -77,6 +100,7 @@ const SIDECAR_COMMANDS = new Set([
   'browser_bridge_status',
 ]);
 const captureAuthorizationGate = new DisplayCaptureAuthorizationGate();
+const cloudRequestExecutions = new CloudRequestExecutionRegistry({ timeoutMs: 30_000 });
 const qaProfileDirectory = configureQaProfile({
   app,
   requestedPath: process.env.AGISTACK_DESKTOP_QA_PROFILE_DIR,
@@ -91,6 +115,11 @@ type DesktopCommandArgs = Record<string, unknown> | undefined;
 
 let mainWindow: BrowserWindow | null = null;
 let sidecarSupervisor: SidecarSupervisor | null = null;
+let cloudAuthenticationAuthority: DesktopCloudAuthenticationAuthority | null = null;
+let cloudSocketBroker: DesktopCloudSocketBroker | null = null;
+let oauthCallbackAuthority: DesktopOAuthCallbackAuthority | null = null;
+let pendingOAuthCallback: OAuthCallbackDeepLink | null = null;
+let oauthCallbackInFlight = false;
 let sidecarShutdownComplete = false;
 let stopAutomaticUpdates: (() => void) | null = null;
 
@@ -142,12 +171,136 @@ function parseSecureWebUrl(value: unknown, label: string): URL {
   return url;
 }
 
+function normalizeOAuthResumeRoute(value: string): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > 2048 ||
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    [...value].some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f;
+    })
+  ) {
+    return null;
+  }
+  try {
+    const route = new URL(value, 'https://desktop.invalid');
+    if (route.origin !== 'https://desktop.invalid' || route.hash) return null;
+    return `${route.pathname}${route.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function parseOAuthBeginArgs(args: DesktopCommandArgs): Readonly<{
+  apiBaseUrl: string;
+  provider: string;
+  resumeRoute: string;
+}> {
+  if (
+    !args ||
+    Object.keys(args).some(
+      (key) => key !== 'apiBaseUrl' && key !== 'provider' && key !== 'resumeRoute',
+    ) ||
+    typeof args.apiBaseUrl !== 'string' ||
+    typeof args.provider !== 'string' ||
+    typeof args.resumeRoute !== 'string'
+  ) {
+    throw new Error('oauth_authorization_contract_invalid');
+  }
+  return Object.freeze({
+    apiBaseUrl: args.apiBaseUrl,
+    provider: args.provider,
+    resumeRoute: args.resumeRoute,
+  });
+}
+
+function parseOAuthListProvidersArgs(args: DesktopCommandArgs): Readonly<{ apiBaseUrl: string }> {
+  if (
+    !args ||
+    Object.keys(args).some((key) => key !== 'apiBaseUrl') ||
+    typeof args.apiBaseUrl !== 'string'
+  ) {
+    throw new Error('oauth_authorization_contract_invalid');
+  }
+  return Object.freeze({ apiBaseUrl: args.apiBaseUrl });
+}
+
+function exactCommandArgs(
+  args: DesktopCommandArgs,
+  keys: readonly string[],
+): Record<string, unknown> {
+  if (!args || Object.keys(args).length !== keys.length || Object.keys(args).some((key) => !keys.includes(key))) {
+    throw new Error('cloud_auth_contract_invalid');
+  }
+  return args;
+}
+
+function parseCloudPasswordLoginArgs(args: DesktopCommandArgs) {
+  const input = exactCommandArgs(args, [
+    'apiBaseUrl',
+    'username',
+    'password',
+    'trustedDevice',
+  ]);
+  if (
+    typeof input.apiBaseUrl !== 'string' ||
+    typeof input.username !== 'string' ||
+    typeof input.password !== 'string' ||
+    typeof input.trustedDevice !== 'boolean'
+  ) {
+    throw new Error('cloud_auth_contract_invalid');
+  }
+  return Object.freeze({
+    apiBaseUrl: input.apiBaseUrl,
+    username: input.username,
+    password: input.password,
+    trustedDevice: input.trustedDevice,
+  });
+}
+
+function parseCloudPasswordChangeArgs(args: DesktopCommandArgs) {
+  const input = exactCommandArgs(args, ['currentPassword', 'newPassword']);
+  if (typeof input.currentPassword !== 'string' || typeof input.newPassword !== 'string') {
+    throw new Error('cloud_auth_contract_invalid');
+  }
+  return Object.freeze({
+    currentPassword: input.currentPassword,
+    newPassword: input.newPassword,
+  });
+}
+
+function parseCloudDeviceBeginArgs(args: DesktopCommandArgs) {
+  const input = exactCommandArgs(args, [
+    'apiBaseUrl',
+    'deviceAuthorizationBaseUrl',
+    'trustedDevice',
+  ]);
+  if (
+    typeof input.apiBaseUrl !== 'string' ||
+    typeof input.deviceAuthorizationBaseUrl !== 'string' ||
+    typeof input.trustedDevice !== 'boolean'
+  ) {
+    throw new Error('cloud_auth_contract_invalid');
+  }
+  return Object.freeze({
+    apiBaseUrl: input.apiBaseUrl,
+    deviceAuthorizationBaseUrl: input.deviceAuthorizationBaseUrl,
+    trustedDevice: input.trustedDevice,
+  });
+}
+
+function parseCloudDeviceAttemptArgs(args: DesktopCommandArgs): string {
+  const input = exactCommandArgs(args, ['attemptId']);
+  if (typeof input.attemptId !== 'string') throw new Error('cloud_auth_contract_invalid');
+  return input.attemptId;
+}
+
 function validateDeviceAuthorizationUrl(args: DesktopCommandArgs): string {
   const authorizationUrl = parseSecureWebUrl(args?.url, 'device authorization URL');
-  const baseUrl = parseSecureWebUrl(
-    args?.deviceAuthorizationBaseUrl,
-    'authorization portal URL',
-  );
+  const baseUrl = parseSecureWebUrl(args?.deviceAuthorizationBaseUrl, 'authorization portal URL');
   const expectedUserCode = args?.expectedUserCode;
   if (typeof expectedUserCode !== 'string' || !DEVICE_USER_CODE.test(expectedUserCode)) {
     throw new Error('device user code does not match the expected protocol shape');
@@ -176,8 +329,7 @@ async function captureCurrentDisplay(): Promise<DesktopDisplayCapture> {
       buttons: ['Capture display', 'Cancel'],
       cancelId: 1,
       defaultId: 1,
-      detail:
-        'The screenshot stays in a local preview until you explicitly attach it.',
+      detail: 'The screenshot stays in a local preview until you explicitly attach it.',
       message: 'Allow MemStack to capture the display containing this window?',
       noLink: true,
       title: 'Capture current display',
@@ -239,18 +391,14 @@ function desktopNativeCapabilities(): DesktopNativeCapabilitySnapshot {
   });
 }
 
-function electronDialogFilters(
-  filters: readonly NativeFileDialogFilter[],
-): Electron.FileFilter[] {
+function electronDialogFilters(filters: readonly NativeFileDialogFilter[]): Electron.FileFilter[] {
   return filters.map((filter) => ({
     name: filter.name,
     extensions: [...filter.extensions],
   }));
 }
 
-function nativeFileDialogAuthority(
-  event: IpcMainInvokeEvent,
-): NativeFileDialogAuthority {
+function nativeFileDialogAuthority(event: IpcMainInvokeEvent): NativeFileDialogAuthority {
   const ownerWindow = mainWindow;
   if (
     !ownerWindow ||
@@ -286,17 +434,11 @@ function nativeFileDialogAuthority(
   });
 }
 
-async function handleNativeFileSave(
-  event: IpcMainInvokeEvent,
-  request: unknown,
-): Promise<unknown> {
+async function handleNativeFileSave(event: IpcMainInvokeEvent, request: unknown): Promise<unknown> {
   return saveNativeFileWithDialog(request, nativeFileDialogAuthority(event));
 }
 
-async function handleNativeFileOpen(
-  event: IpcMainInvokeEvent,
-  request: unknown,
-): Promise<unknown> {
+async function handleNativeFileOpen(event: IpcMainInvokeEvent, request: unknown): Promise<unknown> {
   return openNativeFileWithDialog(request, nativeFileDialogAuthority(event));
 }
 
@@ -322,13 +464,118 @@ async function executeDesktopCommand(
     case 'get_desktop_capabilities':
       return desktopNativeCapabilities();
     case 'open_device_authorization_url':
-      await shell.openExternal(validateDeviceAuthorizationUrl(args), { activate: true });
+      await shell.openExternal(validateDeviceAuthorizationUrl(args), {
+        activate: true,
+      });
       return undefined;
     case 'capture_current_display':
       return captureCurrentDisplay();
     case 'open_web_control_plane':
       await openWebControlPlane(args);
       return undefined;
+    case 'cloud_request': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      const lease = cloudRequestExecutions.begin(ownerId, args?.requestId);
+      try {
+        return await executeVaultBoundCloudRequest(args?.request, {
+          loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+          fetch: (url, init) => net.fetch(url, init),
+          signal: lease.signal,
+        });
+      } finally {
+        lease.release();
+      }
+    }
+    case 'cloud_session_projection': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      const lease = cloudRequestExecutions.begin(ownerId, args?.requestId);
+      try {
+        return await projectVaultBoundCloudSession({
+          loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+          fetch: (url, init) => net.fetch(url, init),
+          signal: lease.signal,
+        });
+      } finally {
+        lease.release();
+      }
+    }
+    case 'cloud_socket_open': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      await cloudSocketBroker.open(ownerId, args);
+      return undefined;
+    }
+    case 'cloud_socket_send': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      await cloudSocketBroker.send(ownerId, args);
+      return undefined;
+    }
+    case 'cloud_socket_close': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!cloudSocketBroker) throw new Error('cloud socket broker is unavailable');
+      await cloudSocketBroker.close(ownerId, args);
+      return undefined;
+    }
+    case 'cloud_auth_password': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.loginWithPassword(parseCloudPasswordLoginArgs(args));
+    }
+    case 'cloud_auth_force_password_change': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.forceChangePassword(parseCloudPasswordChangeArgs(args));
+    }
+    case 'cloud_auth_device_begin': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.beginDeviceAuthorization(parseCloudDeviceBeginArgs(args));
+    }
+    case 'cloud_auth_device_poll': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.pollDeviceAuthorization(parseCloudDeviceAttemptArgs(args));
+    }
+    case 'cloud_auth_device_cancel': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.cancelDeviceAuthorization(parseCloudDeviceAttemptArgs(args));
+    }
+    case 'cloud_auth_signout': {
+      void authorizedCloudRequestOwner(event);
+      if (!cloudAuthenticationAuthority) throw new Error('cloud_auth_unavailable');
+      return cloudAuthenticationAuthority.signOut();
+    }
+    case 'oauth_list_providers': {
+      void authorizedCloudRequestOwner(event);
+      if (!oauthCallbackAuthority) throw new Error('oauth_authorization_unavailable');
+      return oauthCallbackAuthority.listProviders(parseOAuthListProvidersArgs(args));
+    }
+    case 'oauth_begin_authorization': {
+      void authorizedCloudRequestOwner(event);
+      if (!oauthCallbackAuthority) throw new Error('oauth_authorization_unavailable');
+      return oauthCallbackAuthority.begin(parseOAuthBeginArgs(args));
+    }
+    case 'oauth_restore_authorization': {
+      void authorizedCloudRequestOwner(event);
+      if (!oauthCallbackAuthority) throw new Error('oauth_authorization_unavailable');
+      return oauthCallbackAuthority.restore();
+    }
+    case 'oauth_cancel_authorization': {
+      void authorizedCloudRequestOwner(event);
+      if (!oauthCallbackAuthority) throw new Error('oauth_authorization_unavailable');
+      await oauthCallbackAuthority.cancel();
+      return undefined;
+    }
+    case 'cloud_request_cancel': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      return Object.freeze({
+        cancelled: cloudRequestExecutions.cancel(ownerId, args?.requestId),
+      });
+    }
     case 'request_microphone_access':
       return process.platform === 'darwin'
         ? systemPreferences.askForMediaAccess('microphone')
@@ -363,6 +610,33 @@ async function executeDesktopCommand(
   }
 }
 
+function authorizedCloudRequestOwner(event: IpcMainInvokeEvent): number {
+  const ownerWindow = mainWindow;
+  if (
+    !ownerWindow ||
+    ownerWindow.isDestroyed() ||
+    event.sender !== ownerWindow.webContents ||
+    event.senderFrame !== ownerWindow.webContents.mainFrame ||
+    !isTrustedNativeFileFrameUrl(event.senderFrame.url, rendererDevelopmentUrl())
+  ) {
+    throw new Error('cloud request is not authorized');
+  }
+  return event.sender.id;
+}
+
+function sendCloudSocketEvent(ownerId: number, event: CloudSocketBrokerEvent): void {
+  const ownerWindow = mainWindow;
+  if (
+    !ownerWindow ||
+    ownerWindow.isDestroyed() ||
+    ownerWindow.webContents.id !== ownerId ||
+    ownerWindow.webContents.isDestroyed()
+  ) {
+    throw new Error('cloud socket renderer owner is unavailable');
+  }
+  ownerWindow.webContents.send(CLOUD_SOCKET_EVENT_CHANNEL, event);
+}
+
 function sidecarBinaryPath(): string {
   const override = process.env.AGISTACK_SIDECAR_PATH;
   if (override) {
@@ -372,9 +646,7 @@ function sidecarBinaryPath(): string {
     return override;
   }
   const executable =
-    process.platform === 'win32'
-      ? 'agistack-desktop-sidecar.exe'
-      : 'agistack-desktop-sidecar';
+    process.platform === 'win32' ? 'agistack-desktop-sidecar.exe' : 'agistack-desktop-sidecar';
   if (app.isPackaged) {
     return join(process.resourcesPath, 'sidecar', executable);
   }
@@ -423,6 +695,7 @@ function createSidecarSupervisor(): SidecarSupervisor {
       qaProfileDirectory,
       resolveNormalCandidates: () => legacyTauriDataDirectories(dataDirectory),
     }),
+    environment: sidecarRendererEnvironment(rendererDevelopmentUrl()),
     onRecovered: () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(SIDECAR_RECOVERED_CHANNEL);
@@ -460,7 +733,9 @@ async function handleRendererRequest(request: Request): Promise<Response> {
     return response;
   } catch (error) {
     const status = error instanceof RendererProtocolError ? error.status : 500;
-    return new Response(status === 404 ? 'Not found' : 'Request denied', { status });
+    return new Response(status === 404 ? 'Not found' : 'Request denied', {
+      status,
+    });
   }
 }
 
@@ -568,15 +843,82 @@ async function createMainWindow(): Promise<void> {
     },
   });
   mainWindow = window;
+  const cloudRequestOwnerId = window.webContents.id;
   installNavigationPolicy(window, developmentUrl);
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {
+    cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
+    cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
     if (mainWindow === window) mainWindow = null;
+  });
+  window.webContents.on('render-process-gone', () => {
+    cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
+    cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
   });
   if (developmentUrl) {
     await window.loadURL(developmentUrl.toString());
   } else {
     await window.loadURL(RENDERER_ENTRY_URL);
+  }
+}
+
+function sendOAuthSessionChanged(payload: unknown): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(OAUTH_SESSION_CHANGED_CHANNEL, payload);
+}
+
+function enqueueOAuthCallback(callback: OAuthCallbackDeepLink): void {
+  if (pendingOAuthCallback === null) pendingOAuthCallback = callback;
+  void drainPendingOAuthCallback();
+}
+
+function enqueueOAuthCallbackUrl(raw: string): void {
+  try {
+    enqueueOAuthCallback(parseOAuthCallbackDeepLink(raw));
+  } catch (error) {
+    const reasonCode =
+      error instanceof OAuthDeepLinkPolicyError
+        ? error.reasonCode
+        : 'oauth_deep_link_invalid';
+    sendOAuthSessionChanged(Object.freeze({ status: 'failed', reasonCode }));
+  }
+}
+
+function enqueueOAuthCallbackArgv(argv: readonly string[]): void {
+  try {
+    const callback = selectOAuthDeepLinkFromArgv(argv);
+    if (callback) enqueueOAuthCallback(callback);
+  } catch (error) {
+    const reasonCode =
+      error instanceof OAuthDeepLinkPolicyError
+        ? error.reasonCode
+        : 'oauth_deep_link_invalid';
+    sendOAuthSessionChanged(Object.freeze({ status: 'failed', reasonCode }));
+  }
+}
+
+async function drainPendingOAuthCallback(): Promise<void> {
+  if (!oauthCallbackAuthority || !mainWindow || oauthCallbackInFlight || !pendingOAuthCallback) {
+    return;
+  }
+  const callback = pendingOAuthCallback;
+  pendingOAuthCallback = null;
+  oauthCallbackInFlight = true;
+  try {
+    const result = await oauthCallbackAuthority.complete(callback);
+    sendOAuthSessionChanged(result);
+  } catch (error) {
+    const reasonCode =
+      error instanceof DesktopOAuthCallbackAuthorityError
+        ? error.reasonCode
+        : 'oauth_callback_exchange_failed';
+    sendOAuthSessionChanged(Object.freeze({ status: 'failed', reasonCode }));
+  } finally {
+    oauthCallbackInFlight = false;
+    if (mainWindow?.isMinimized()) mainWindow.restore();
+    mainWindow?.show();
+    mainWindow?.focus();
+    if (pendingOAuthCallback) void drainPendingOAuthCallback();
   }
 }
 
@@ -596,11 +938,42 @@ async function bootstrapApplication(): Promise<void> {
   installMediaPermissionPolicy();
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
+  cloudSocketBroker = new DesktopCloudSocketBroker({
+    authorize: (input) =>
+      authorizeVaultBoundCloudSocket(input, {
+        loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+        fetch: (url, init) => net.fetch(url, init),
+      }),
+    createSocket: (url, protocols) =>
+      new WebSocket(url, [...protocols]) as unknown as CloudSocketLike,
+    emit: sendCloudSocketEvent,
+  });
+  cloudAuthenticationAuthority = new DesktopCloudAuthenticationAuthority({
+    now: () => Date.now(),
+    randomId: () => randomUUID(),
+    fetch: (url, init) => net.fetch(url, init),
+    loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
+    saveTrustedSession: (input) => sidecarSupervisor!.invoke('trusted_session_save', input),
+    clearTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_clear'),
+  });
+  oauthCallbackAuthority = new DesktopOAuthCallbackAuthority({
+    now: () => Date.now(),
+    fetch: (url, init) => net.fetch(url, init),
+    openExternal: async (url) => shell.openExternal(url, { activate: true }),
+    saveTrustedSession: (input) => sidecarSupervisor!.invoke('trusted_session_save', input),
+    normalizeResumeRoute: normalizeOAuthResumeRoute,
+    pendingAttemptPersistence: {
+      load: () => sidecarSupervisor!.invoke('oauth_pending_attempt_load'),
+      save: (input) => sidecarSupervisor!.invoke('oauth_pending_attempt_save', input),
+      clear: () => sidecarSupervisor!.invoke('oauth_pending_attempt_clear'),
+    },
+  });
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
   ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
   ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
   ipcMain.handle(NATIVE_FILE_INGEST_CHANNEL, handleNativeFileIngest);
   await createMainWindow();
+  await drainPendingOAuthCallback();
   stopAutomaticUpdates = startAutomaticUpdates();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -609,11 +982,24 @@ async function bootstrapApplication(): Promise<void> {
   });
 }
 
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  enqueueOAuthCallbackUrl(url);
+});
+
+if (app.isPackaged) {
+  app.setAsDefaultProtocolClient(OAUTH_CALLBACK_SCHEME);
+} else if (process.defaultApp && process.argv[1]) {
+  app.setAsDefaultProtocolClient(OAUTH_CALLBACK_SCHEME, process.execPath, [resolve(process.argv[1])]);
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  enqueueOAuthCallbackArgv(process.argv);
+  app.on('second-instance', (_event, commandLine) => {
+    enqueueOAuthCallbackArgv(commandLine);
     if (mainWindow?.isMinimized()) mainWindow.restore();
     mainWindow?.show();
     mainWindow?.focus();
@@ -623,15 +1009,23 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', (event) => {
+    cloudRequestExecutions.cancelAll();
+    cloudSocketBroker?.cancelAll();
+    cloudSocketBroker = null;
+    oauthCallbackAuthority = null;
     if (!sidecarSupervisor || sidecarShutdownComplete) return;
     event.preventDefault();
     stopAutomaticUpdates?.();
     stopAutomaticUpdates = null;
     const supervisor = sidecarSupervisor;
+    const cloudAuth = cloudAuthenticationAuthority;
     sidecarSupervisor = null;
-    void supervisor.stop().finally(() => {
-      sidecarShutdownComplete = true;
-      app.quit();
-    });
+    cloudAuthenticationAuthority = null;
+    void Promise.resolve(cloudAuth?.clearTransientSession())
+      .finally(() => supervisor.stop())
+      .finally(() => {
+        sidecarShutdownComplete = true;
+        app.quit();
+      });
   });
 }

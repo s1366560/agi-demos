@@ -1,9 +1,13 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import {
+  desktopApiFetch,
+  desktopVaultBoundCloudRequestBroker,
+  type VaultBoundCloudRequestBroker,
+} from '../../api/cloudRequestBroker';
 import type { DesktopAutomationApi } from '../automations/automationClient';
 import {
   automationActionAvailability,
@@ -112,6 +116,7 @@ import {
   DESKTOP_MINIMUM_CONTRACT_VERSION,
   parseDesktopCapabilitySnapshot,
   type DesktopCapabilityAvailability,
+  type DesktopCapabilityAuthoritySource,
   type DesktopCapabilityScope,
   type DesktopCapabilitySnapshot,
   type DesktopCapabilitySnapshotEntry,
@@ -124,6 +129,12 @@ import {
 export type DesktopWorkbenchCapabilityClient = {
   loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot>;
 };
+
+type AuxiliaryCloudCapabilities = Readonly<{
+  backendStores: DesktopCapabilityAvailability;
+  projectPlaybooks: DesktopCapabilityAvailability;
+  cloudAuthorityObserved: boolean;
+}>;
 
 type ManagementRouteCapabilityClients = Readonly<
   Record<ManagementRouteCapability, ManagementRouteClient>
@@ -149,6 +160,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   templatesRouteClient?: Pick<TemplatesRouteClient, 'observe'>;
   profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
   p2ThirdBatchCapabilityClient?: Pick<P2ThirdBatchCapabilityClient, 'load'>;
+  cloudRequestBroker?: VaultBoundCloudRequestBroker | null;
 }>;
 
 type AutomationCapabilityAuthority = Pick<DesktopAutomationApi, 'getAutomationCapabilities'>;
@@ -229,9 +241,7 @@ export function createDesktopWorkbenchCapabilityClient(
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
   const agentWorkspaceJourneyClient =
     options.agentWorkspaceJourneyClient ??
-    (injectedAgentWorkspaceClient
-      ? null
-      : createAgentWorkspaceJourneyClient(config));
+    (injectedAgentWorkspaceClient ? null : createAgentWorkspaceJourneyClient(config));
   const agentWorkspaceClient =
     injectedAgentWorkspaceClient ??
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
@@ -263,6 +273,10 @@ export function createDesktopWorkbenchCapabilityClient(
       templates: options.templatesRouteClient,
       profile: options.profileRouteClient,
     });
+  const cloudRequestBroker =
+    options.cloudRequestBroker === undefined
+      ? desktopVaultBoundCloudRequestBroker()
+      : options.cloudRequestBroker;
   return {
     async loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot> {
       const [
@@ -285,6 +299,7 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantAdminCapabilities,
         tenantRemainingCapabilities,
         p2ThirdBatchCapabilities,
+        auxiliaryCloudCapabilities,
       ] = await Promise.all([
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
@@ -310,15 +325,33 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantAdminCapabilityClient.load(signal),
         tenantRemainingCapabilityClient.load(signal),
         p2ThirdBatchCapabilityClient.load(signal),
+        loadAuxiliaryCloudCapabilities(config, cloudRequestBroker, signal),
       ]);
+      const tenantScope = tenantCapabilityScope(config);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
+      const primaryAuthoritySource = observedPrimaryAuthorityForMode(config.mode);
       const observed = (
         capability: DesktopCapabilityAvailability,
-      ): DesktopCapabilitySnapshotEntry => withObservedAuthority(capability, config.mode);
+      ): DesktopCapabilitySnapshotEntry =>
+        withObservedAuthority(capability, primaryAuthoritySource, []);
+      const observedCloudAuxiliary = (
+        capability: DesktopCapabilityAvailability,
+      ): DesktopCapabilitySnapshotEntry =>
+        withObservedAuthority(
+          capability,
+          'cloud_service',
+          capability.availability === 'available' || capability.availability === 'degraded'
+            ? ['sidecar', 'electron']
+            : [],
+        );
       const declared = (
         capability: DesktopCapabilityAvailability,
       ): DesktopCapabilitySnapshotEntry => withDeclaredAuthority(capability);
+      const auxiliaryAuthority =
+        config.mode === 'cloud' || auxiliaryCloudCapabilities.cloudAuthorityObserved
+          ? observedCloudAuxiliary
+          : declared;
       const snapshotP2ThirdBatchCapability = (
         projection: P2ThirdBatchCapabilityProjection,
       ): DesktopCapabilitySnapshotEntry =>
@@ -328,12 +361,13 @@ export function createDesktopWorkbenchCapabilityClient(
       const snapshotProjectedCapability = (
         capability: DesktopCapabilityAvailability,
       ): DesktopCapabilitySnapshotEntry =>
-        capability.provenance === 'observed'
-          ? observed(capability)
-          : declared(capability);
+        capability.provenance === 'observed' ? observed(capability) : declared(capability);
       const rawSnapshot = {
         version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
-        mode: config.mode,
+        runtime_state: runtimeStateForMode(
+          config.mode,
+          auxiliaryCloudCapabilities.cloudAuthorityObserved,
+        ),
         capabilities: {
           automation_run: observed(withCapabilityScope(automationCapabilities.run, projectScope)),
           'project-project-cron-jobs': observed(
@@ -354,6 +388,12 @@ export function createDesktopWorkbenchCapabilityClient(
           'device-approval': declared(deviceApprovalCapability(config)),
           'tenant-creation': declared(tenantCreationCapability(config)),
           'invitation-acceptance': declared(invitationAcceptanceCapability(config)),
+          'backend-stores': auxiliaryAuthority(
+            withCapabilityScope(auxiliaryCloudCapabilities.backendStores, tenantScope),
+          ),
+          'project-playbooks': auxiliaryAuthority(
+            withCapabilityScope(auxiliaryCloudCapabilities.projectPlaybooks, projectScope),
+          ),
           'agent-workspace-tenant-agent-workspace': observed(agentWorkspace),
           'project-project-overview': observed(withCapabilityScope(projectOverview, projectScope)),
           'project-project-search': observed(withCapabilityScope(search, projectScope)),
@@ -476,12 +516,140 @@ export function createDesktopWorkbenchCapabilityClient(
   };
 }
 
+async function loadAuxiliaryCloudCapabilities(
+  config: DesktopRuntimeConfig,
+  broker: VaultBoundCloudRequestBroker | null,
+  signal?: AbortSignal,
+): Promise<AuxiliaryCloudCapabilities> {
+  if (!broker) {
+    if (config.mode === 'local') {
+      return Object.freeze({
+        backendStores: auxiliaryCloudUnavailable(
+          'local_backend_stores_cloud_authority_unavailable',
+        ),
+        projectPlaybooks: auxiliaryCloudUnavailable(
+          'local_project_playbooks_cloud_authority_unavailable',
+        ),
+        cloudAuthorityObserved: false,
+      });
+    }
+    return Object.freeze({
+      backendStores: unavailable('cloud_request_broker_missing'),
+      projectPlaybooks: unavailable('cloud_request_broker_missing'),
+      cloudAuthorityObserved: false,
+    });
+  }
+  try {
+    const payload = await broker.requestJson({
+      path: '/api/v1/workspace-context',
+      signal,
+    });
+    if (!isRecord(payload) || !isRecord(payload.context)) {
+      throw new Error('workspace context is invalid');
+    }
+    const tenantId = scopeIdentifier(config.tenantId);
+    const projectId = scopeIdentifier(config.projectId);
+    const observedTenantId =
+      typeof payload.context.tenant_id === 'string'
+        ? scopeIdentifier(payload.context.tenant_id)
+        : null;
+    const observedProjectId =
+      payload.context.project_id === null
+        ? null
+        : typeof payload.context.project_id === 'string'
+          ? scopeIdentifier(payload.context.project_id)
+          : null;
+    const revision = payload.context.revision;
+    const membershipRole = payload.membership_role;
+    if (
+      observedTenantId === null ||
+      (payload.context.project_id !== null && observedProjectId === null) ||
+      typeof revision !== 'number' ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      (membershipRole !== 'owner' &&
+        membershipRole !== 'admin' &&
+        membershipRole !== 'member' &&
+        membershipRole !== 'editor' &&
+        membershipRole !== 'viewer')
+    ) {
+      throw new Error('workspace context is invalid');
+    }
+    const backendActions =
+      membershipRole === 'owner' || membershipRole === 'admin'
+        ? ['view', 'list', 'create', 'update', 'delete', 'test']
+        : ['view', 'list'];
+    const tenantScopeMatches = tenantId !== null && observedTenantId === tenantId;
+    const backendStores = tenantScopeMatches
+      ? auxiliaryCloudAvailable(backendActions, revision)
+      : auxiliaryCloudUnavailable(
+          config.mode === 'local'
+            ? 'local_backend_stores_cloud_scope_unavailable'
+            : 'backend_stores_scope_unavailable',
+        );
+    const projectPlaybooks =
+      tenantScopeMatches && projectId !== null && observedProjectId === projectId
+        ? auxiliaryCloudAvailable(['view', 'list', 'refresh', 'review-verdicts'], revision)
+        : auxiliaryCloudUnavailable(
+            config.mode === 'local'
+              ? 'local_project_playbooks_cloud_scope_unavailable'
+              : 'project_playbooks_scope_unavailable',
+          );
+    return Object.freeze({
+      backendStores,
+      projectPlaybooks,
+      cloudAuthorityObserved: true,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (config.mode === 'local') {
+      return Object.freeze({
+        backendStores: auxiliaryCloudUnavailable(
+          'local_backend_stores_cloud_authority_unavailable',
+        ),
+        projectPlaybooks: auxiliaryCloudUnavailable(
+          'local_project_playbooks_cloud_authority_unavailable',
+        ),
+        cloudAuthorityObserved: false,
+      });
+    }
+    return Object.freeze({
+      backendStores: auxiliaryCloudUnavailable('backend_stores_authority_unavailable'),
+      projectPlaybooks: auxiliaryCloudUnavailable('project_playbooks_authority_unavailable'),
+      cloudAuthorityObserved: false,
+    });
+  }
+}
+
+function auxiliaryCloudAvailable(
+  allowedActions: readonly string[],
+  authorityRevision: number,
+): DesktopCapabilityAvailability {
+  return {
+    availability: 'available',
+    reason_code: null,
+    service_version: '0.1.0',
+    contract_version: '4.0.0',
+    allowed_actions: [...allowedActions],
+    scope: emptyCapabilityScope(),
+    authority_revision: authorityRevision,
+    retryable: false,
+  };
+}
+
+function auxiliaryCloudUnavailable(reasonCode: string): DesktopCapabilityAvailability {
+  return {
+    ...unavailable(reasonCode),
+    retryable: true,
+  };
+}
+
 function projectP2ThirdBatchCapability(
   projection: P2ThirdBatchCapabilityProjection,
   mode: DesktopRuntimeConfig['mode'],
 ): DesktopCapabilitySnapshotEntry {
   return projection.provenance === 'observed'
-    ? withObservedAuthority(projection.capability, mode)
+    ? withObservedAuthority(projection.capability, observedPrimaryAuthorityForMode(mode), [])
     : withDeclaredAuthority(projection.capability);
 }
 
@@ -545,12 +713,9 @@ function agentWorkspaceJourneyObservedCapability(
   observation: AgentWorkspaceJourneySnapshot,
   scope: AgentWorkspaceAuthorityScope,
 ): DesktopCapabilityAvailability {
-  const expectedAuthoritySource =
-    scope.authority === 'local' ? 'sidecar' : 'cloud_service';
+  const expectedAuthoritySource = scope.authority === 'local' ? 'sidecar' : 'cloud_service';
   const observations = AGENT_WORKSPACE_JOURNEY_IDS.map((journeyId) =>
-    Object.hasOwn(observation.journeys, journeyId)
-      ? observation.journeys[journeyId]
-      : null,
+    Object.hasOwn(observation.journeys, journeyId) ? observation.journeys[journeyId] : null,
   );
   if (
     observation.authority !== scope.authority ||
@@ -559,9 +724,7 @@ function agentWorkspaceJourneyObservedCapability(
     observation.scope.tenantId !== scope.tenantId ||
     observation.scope.projectId !== scope.projectId ||
     observation.scope.workspaceId !== scope.workspaceId ||
-    observations.some(
-      (journey) => !isAgentWorkspaceJourneyObservation(journey),
-    )
+    observations.some((journey) => !isAgentWorkspaceJourneyObservation(journey))
   ) {
     return withCapabilityScope(
       unavailable('agent_workspace_authority_contract_invalid'),
@@ -579,11 +742,7 @@ function agentWorkspaceJourneyObservedCapability(
     );
   }
   const allowedActions = [
-    ...new Set(
-      observations.flatMap(
-        (journey) => journey?.observedActions ?? [],
-      ),
-    ),
+    ...new Set(observations.flatMap((journey) => journey?.observedActions ?? [])),
   ].sort();
   if (allowedActions.length === 0) {
     return {
@@ -617,10 +776,7 @@ function isAgentWorkspaceJourneyObservation(
     input.reasonCode.length > 0 &&
     Array.isArray(input.observedActions) &&
     input.observedActions.every(
-      (action) =>
-        typeof action === 'string' &&
-        action.trim() === action &&
-        action.length > 0,
+      (action) => typeof action === 'string' && action.trim() === action && action.length > 0,
     )
   );
 }
@@ -1274,8 +1430,9 @@ async function loadSearchCapability(
     if (credential) headers.set('Authorization', `Bearer ${credential}`);
     const launchCapability = desktopLaunchCapability(config);
     if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-    const response = await fetch(
-      absoluteUrl(config.apiBaseUrl, '/api/v1/search-enhanced/capabilities'),
+    const response = await desktopApiFetch(
+      config,
+      '/api/v1/search-enhanced/capabilities',
       { headers, signal },
     );
     if (!response.ok) return unavailable('search_capability_contract_unavailable');
@@ -1346,13 +1503,10 @@ async function loadWorkspaceCollaborationCapability(
       `/api/v1/tenants/${encodeURIComponent(scope.tenantId)}/projects/` +
       `${encodeURIComponent(scope.projectId)}/workspaces/` +
       `${encodeURIComponent(scope.workspaceId)}/collaboration`;
-    const response = await fetch(
-      absoluteUrl(config.apiBaseUrl, `${scopedPath}/capabilities`),
-      {
-        headers,
-        signal,
-      },
-    );
+    const response = await desktopApiFetch(config, `${scopedPath}/capabilities`, {
+      headers,
+      signal,
+    });
     if (!response.ok) {
       return unavailable('workspace_collaboration_capability_contract_unavailable');
     }
@@ -1362,15 +1516,13 @@ async function loadWorkspaceCollaborationCapability(
     }
     const payload = await response.json().catch(() => null);
     const capability = normalizeWorkspaceCollaborationCapabilityContract(payload, scope);
-    if (
-      capability.availability !== 'available' &&
-      capability.availability !== 'degraded'
-    ) {
+    if (capability.availability !== 'available' && capability.availability !== 'degraded') {
       return capability;
     }
 
-    const authorityResponse = await fetch(
-      absoluteUrl(config.apiBaseUrl, `${scopedPath}/authority`),
+    const authorityResponse = await desktopApiFetch(
+      config,
+      `${scopedPath}/authority`,
       {
         headers,
         signal,
@@ -1550,10 +1702,10 @@ type CapabilityAuthorityMetadata = {
 
 function withObservedAuthority(
   capability: DesktopCapabilityAvailability,
-  mode: DesktopRuntimeConfig['mode'],
+  primaryAuthoritySource: Exclude<DesktopCapabilityAuthoritySource, 'renderer' | 'electron'>,
+  supportingAuthoritySources: readonly Exclude<DesktopCapabilityAuthoritySource, 'renderer'>[],
 ): DesktopCapabilitySnapshotEntry {
-  const active =
-    capability.availability === 'available' || capability.availability === 'degraded';
+  const active = capability.availability === 'available' || capability.availability === 'degraded';
   const revisionBound =
     active && capability.authority_revision === null
       ? {
@@ -1565,7 +1717,9 @@ function withObservedAuthority(
       : capability;
   return {
     ...revisionBound,
-    authority_source: mode === 'local' ? 'sidecar' : 'cloud_service',
+    retryable: revisionBound.retryable ?? false,
+    authority_source: primaryAuthoritySource,
+    supporting_authority_sources: Object.freeze([...supportingAuthoritySources]),
     provenance: 'observed',
   };
 }
@@ -1585,9 +1739,25 @@ function withDeclaredAuthority(
     : capability;
   return {
     ...closed,
+    retryable: closed.retryable ?? false,
     authority_source: 'renderer',
+    supporting_authority_sources: Object.freeze([]),
     provenance: 'declared',
   };
+}
+
+function observedPrimaryAuthorityForMode(
+  mode: DesktopRuntimeConfig['mode'],
+): 'cloud_service' | 'sidecar' {
+  return mode === 'local' ? 'sidecar' : 'cloud_service';
+}
+
+function runtimeStateForMode(
+  mode: DesktopRuntimeConfig['mode'],
+  cloudAuthorityObserved: boolean,
+): 'cloud' | 'local_online' | 'local_offline' {
+  if (mode === 'cloud') return 'cloud';
+  return cloudAuthorityObserved ? 'local_online' : 'local_offline';
 }
 
 function withCapabilityScope(
@@ -1604,6 +1774,15 @@ function projectCapabilityScope(config: DesktopRuntimeConfig): DesktopCapability
   return {
     tenant_id: scopeIdentifier(config.tenantId),
     project_id: scopeIdentifier(config.projectId),
+    workspace_id: null,
+    instance_id: null,
+  };
+}
+
+function tenantCapabilityScope(config: DesktopRuntimeConfig): DesktopCapabilityScope {
+  return {
+    tenant_id: scopeIdentifier(config.tenantId),
+    project_id: null,
     workspace_id: null,
     instance_id: null,
   };

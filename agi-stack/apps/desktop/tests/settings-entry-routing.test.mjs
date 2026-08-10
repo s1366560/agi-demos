@@ -3,9 +3,9 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { settingsSectionForEntry } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/settings/settingsEntryRouting.js'
-);
+const {
+  settingsSectionForEntry,
+} = require('/tmp/agistack-desktop-test-dist/src/features/settings/settingsEntryRouting.js');
 
 test('sidebar Settings and Account settings open the account section', () => {
   assert.equal(settingsSectionForEntry('sidebar'), 'account');
@@ -25,4 +25,8 @@ test('profile Switch workspace opens workspace settings', () => {
 
 test('runtime recovery actions retain a hidden connection recovery surface', () => {
   assert.equal(settingsSectionForEntry('runtime_connection'), 'connection');
+});
+
+test('Browser Integration commands open the browser settings section', () => {
+  assert.equal(settingsSectionForEntry('browser_integration'), 'browser');
 });

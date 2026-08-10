@@ -213,6 +213,12 @@
   border-radius: 7px;
 }
 
+.desktop-login-oauth-providers {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .desktop-login-sso:hover {
   background: var(--desktop-surface-30);
   border-color: var(--desktop-border-cyan-10);

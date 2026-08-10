@@ -1,9 +1,12 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -43,7 +46,9 @@ export function createAgentWorkspaceAuthorityClient(
   const launchCapability = desktopLaunchCapability(runtimeConfig);
   const tenantId = identifier(runtimeConfig.tenantId);
   const projectId = identifier(runtimeConfig.projectId);
-  if (!credential) throw contractError('agent_workspace_trusted_session_required');
+  if (!desktopApiAuthenticationAvailable(runtimeConfig)) {
+    throw contractError('agent_workspace_trusted_session_required');
+  }
   if (!tenantId || !projectId) {
     throw contractError('agent_workspace_scope_unavailable');
   }
@@ -64,18 +69,14 @@ export function createAgentWorkspaceAuthorityClient(
         limit: '1',
         offset: '0',
       });
-      const headers = new Headers({
-        Accept: 'application/json',
-        Authorization: `Bearer ${credential}`,
-      });
+      const headers = new Headers({ Accept: 'application/json' });
+      if (credential) headers.set('Authorization', `Bearer ${credential}`);
       if (runtimeConfig.mode === 'local') {
         headers.set('X-Agistack-Launch', launchCapability);
       }
-      const response = await fetch(
-        absoluteUrl(
-          runtimeConfig.apiBaseUrl,
-          `/api/v1/agent/conversations?${parameters.toString()}`,
-        ),
+      const response = await desktopApiFetch(
+        runtimeConfig,
+        `/api/v1/agent/conversations?${parameters.toString()}`,
         { method: 'GET', headers, credentials: 'omit', signal },
       );
       const payload = await responsePayload(response);

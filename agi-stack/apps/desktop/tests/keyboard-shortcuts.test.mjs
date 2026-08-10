@@ -17,15 +17,14 @@ const {
   shortcutChordSegments,
   shortcutGroups,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/keyboardShortcutModel.js');
-const { KeyboardShortcutsPanel } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/navigation/KeyboardShortcutsDialog.js'
-);
-const { ShortcutSettingsPage } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/settings/ShortcutSettingsPage.js'
-);
+const {
+  KeyboardShortcutsPanel,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/KeyboardShortcutsDialog.js');
+const {
+  ShortcutSettingsPage,
+} = require('/tmp/agistack-desktop-test-dist/src/features/settings/ShortcutSettingsPage.js');
 
-const readSource = (path) =>
-  readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
+const readSource = (path) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
 const modelSource = readSource('features/navigation/keyboardShortcutModel.ts');
 const dialogSource = readSource('features/navigation/KeyboardShortcutsDialog.tsx');
@@ -62,17 +61,17 @@ function renderPanel(platform = 'other') {
     React.createElement(
       I18nProvider,
       null,
-      React.createElement(KeyboardShortcutsPanel, { platform, onClose: () => {} }),
+      React.createElement(KeyboardShortcutsPanel, {
+        platform,
+        onClose: () => {},
+      }),
     ),
   );
 }
 
 test('detectShortcutPlatform resolves mac from platform or user agent', () => {
   assert.equal(detectShortcutPlatform(undefined, 'MacIntel'), 'mac');
-  assert.equal(
-    detectShortcutPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'),
-    'mac',
-  );
+  assert.equal(detectShortcutPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'), 'mac');
   assert.equal(detectShortcutPlatform(undefined, 'Win32'), 'other');
   assert.equal(detectShortcutPlatform('Mozilla/5.0 (X11; Linux x86_64)'), 'other');
   assert.equal(detectShortcutPlatform(), 'other');
@@ -172,10 +171,13 @@ test('command palette renders a kbd hint for items with a shortcut', () => {
   assert.match(appSource, /shortcut: showShortcutsChord/);
   assert.match(
     commandPaletteSource,
-    /\{item\.shortcut \? <kbd className="command-shortcut">\{item\.shortcut\}<\/kbd> : null\}/,
+    /\{item\.shortcut \? \([\s\S]*?<kbd className="command-shortcut">\{item\.shortcut\}<\/kbd>[\s\S]*?\) : null\}/,
   );
   assert.match(stylesSource, /\.command-shortcut \{/);
-  assert.doesNotMatch(stylesSource.match(/\.command-shortcut \{[\s\S]*?\n\}/)?.[0] ?? '', /#[0-9a-fA-F]{3,8}\b/);
+  assert.doesNotMatch(
+    stylesSource.match(/\.command-shortcut \{[\s\S]*?\n\}/)?.[0] ?? '',
+    /#[0-9a-fA-F]{3,8}\b/,
+  );
 });
 
 test('shortcuts dialog source keeps user-visible strings behind t()', () => {

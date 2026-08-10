@@ -1,4 +1,8 @@
-import { absoluteUrl, DesktopApiError, desktopApiCredential } from '../../api/client';
+import { DesktopApiError, desktopApiCredential } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 export type ProjectAdministrationAuthority = 'cloud' | 'local';
@@ -46,7 +50,7 @@ export function requireProjectAdministrationScope(
   if (config.tenantId !== tenantId || config.projectId !== projectId) {
     throw projectAdministrationError('project_administration_configured_scope_mismatch', 409);
   }
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw projectAdministrationError('project_administration_trusted_session_required', 401);
   }
   return Object.freeze({ authority: 'cloud', tenantId, projectId });
@@ -127,7 +131,7 @@ async function request(
   path: string,
   options: RequestOptions,
 ): Promise<Response> {
-  const url = new URL(absoluteUrl(config.apiBaseUrl, path));
+  const url = new URL(path, 'https://desktop.invalid');
   for (const [name, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined) url.searchParams.set(name, String(value));
   }
@@ -135,7 +139,7 @@ async function request(
   const credential = desktopApiCredential(config);
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  return fetch(url, {
+  return desktopApiFetch(config, `${url.pathname}${url.search}`, {
     method: options.method ?? 'GET',
     headers,
     credentials: 'omit',

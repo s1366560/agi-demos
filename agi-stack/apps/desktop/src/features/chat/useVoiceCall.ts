@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  CLOUD_SOCKET_OPEN,
+  createCloudSocketBridge,
+  desktopCloudSocketTransport,
+} from '../../api/cloudSocketBridge';
+
+import {
   initialVoiceCallTranscript,
   reduceVoiceCallTranscript,
   type VoiceCallConnection,
@@ -55,7 +61,10 @@ export function useVoiceCall({
   activeScopeRef.current =
     connection.availability === 'available' ? connection.scopeKey : null;
 
-  const resolvedRuntime = useMemo(() => runtime ?? createBrowserVoiceCallRuntime(), [runtime]);
+  const resolvedRuntime = useMemo(
+    () => runtime ?? createVoiceCallRuntime(connection),
+    [connection, runtime],
+  );
   const controller = useMemo(
     () =>
       new VoiceCallController(resolvedRuntime, {
@@ -128,9 +137,23 @@ export function useVoiceCall({
   };
 }
 
-function createBrowserVoiceCallRuntime(): VoiceCallRuntime {
+function createVoiceCallRuntime(connection: VoiceCallConnection): VoiceCallRuntime {
+  const nativeTransport =
+    connection.availability === 'available' && connection.transport === 'electron'
+      ? desktopCloudSocketTransport()
+      : null;
   return {
-    createSocket: (url, protocols) => new WebSocket(url, protocols) as unknown as VoiceSocket,
+    createSocket: (url, protocols) =>
+      nativeTransport && connection.availability === 'available'
+        ? (createCloudSocketBridge(
+            {
+              kind: 'voice',
+              url,
+              scope: connection.scope,
+            },
+            nativeTransport,
+          ) as unknown as VoiceSocket)
+        : (new WebSocket(url, protocols) as unknown as VoiceSocket),
     createCaptureContext: () => new AudioContext() as unknown as VoiceAudioContext,
     createWorkletNode: (context) =>
       new AudioWorkletNode(
@@ -149,7 +172,7 @@ function createBrowserVoiceCallRuntime(): VoiceCallRuntime {
     createPlaybackContext: () =>
       new AudioContext() as unknown as VoicePlaybackContext,
     workletModuleUrl: new URL('audio-processor.js', document.baseURI).toString(),
-    socketOpenState: WebSocket.OPEN,
+    socketOpenState: CLOUD_SOCKET_OPEN,
   };
 }
 

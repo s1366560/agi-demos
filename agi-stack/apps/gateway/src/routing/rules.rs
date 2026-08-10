@@ -7,11 +7,11 @@ pub const STRANGLED_PREFIXES: &[&str] = &[
     "/api/v1/memories",
     "/api/v1/episodes",
     "/api/v1/recall",
-    // P2 login vertical (surgical — coarse prefix match, so only fully-covered
-    // paths are listed). `/auth/token` and `/auth/oauth/*` are complete in Rust;
-    // other `/auth/*` siblings (force-change-password, keys, ...) stay in Python.
+    // P2 password-login vertical. OAuth remains Python-owned because its Redis
+    // state, PKCE exchange, provider verification, account binding, and session
+    // minting must stay on one server-side authority until the whole flow moves.
+    // Other `/auth/*` siblings (force-change-password, keys, ...) stay in Python.
     "/api/v1/auth/token",
-    "/api/v1/auth/oauth",
 ];
 
 /// Method-scoped strangler rules for resources where the Rust backend only owns

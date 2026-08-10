@@ -4,8 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const compiledNavigationDirectory =
-  '/tmp/agistack-desktop-test-dist/src/features/navigation';
+const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
 mkdirSync(compiledNavigationDirectory, { recursive: true });
 writeFileSync(`${compiledNavigationDirectory}/NativeUnavailableRoute.css`, '');
 require.extensions['.css'] = () => {};
@@ -30,21 +29,16 @@ const {
   createDesktopRouteRegistry,
   matchDesktopRoute,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
-const {
-  DEFAULT_CONFIG,
-} = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const parityManifest = JSON.parse(
   readFileSync(
-    new URL(
-      '../contracts/desktop-web-parity/parity-manifest.v3.json',
-      import.meta.url,
-    ),
+    new URL('../contracts/desktop-web-parity/parity-manifest.v4.json', import.meta.url),
     'utf8',
   ),
 );
 
-test('Snapshot v4 capability catalog closes every parity-manifest capability exactly once', () => {
+test('Snapshot v5 capability catalog closes every parity-manifest v4 capability exactly once', () => {
   const manifestIds = parityManifest.capabilities.map(({ id }) => id);
   assert.equal(new Set(DESKTOP_CAPABILITY_NAMES).size, DESKTOP_CAPABILITY_NAMES.length);
   assert.deepEqual([...DESKTOP_PARITY_CAPABILITY_NAMES].sort(), manifestIds.sort());
@@ -62,17 +56,11 @@ test('Snapshot v4 capability catalog closes every parity-manifest capability exa
 
 const desktopRoot = new URL('../', import.meta.url);
 const v3Fixture = JSON.parse(
-  readFileSync(
-    new URL('tests/fixtures/desktop-capability-snapshot.v3.json', desktopRoot),
-    'utf8',
-  ),
+  readFileSync(new URL('tests/fixtures/desktop-capability-snapshot.v3.json', desktopRoot), 'utf8'),
 );
 const v2Fixture = JSON.parse(
   readFileSync(
-    new URL(
-      'contracts/desktop-web-parity/fixtures/capability-snapshot.v2.json',
-      desktopRoot,
-    ),
+    new URL('contracts/desktop-web-parity/fixtures/capability-snapshot.v2.json', desktopRoot),
     'utf8',
   ),
 ).input.snapshot;
@@ -124,8 +112,12 @@ test('DesktopCapabilitySnapshot v4 accepts only observed active authority from t
     capabilities: { search: v4Capability() },
   });
 
-  assert.equal(snapshot?.version, '4.0.0');
-  assert.deepEqual(snapshot?.capabilities.search, v4Capability());
+  assert.equal(snapshot?.version, '5.0.0');
+  assert.deepEqual(snapshot?.capabilities.search, {
+    ...v4Capability(),
+    retryable: false,
+    supporting_authority_sources: [],
+  });
   assert.deepEqual(snapshot?.capabilities.workspace_collaboration, {
     availability: 'unavailable',
     reason_code: 'capability_not_declared',
@@ -134,7 +126,9 @@ test('DesktopCapabilitySnapshot v4 accepts only observed active authority from t
     allowed_actions: [],
     scope: nullScope,
     authority_revision: null,
+    retryable: false,
     authority_source: 'renderer',
+    supporting_authority_sources: [],
     provenance: 'declared',
   });
 
@@ -191,8 +185,8 @@ test('v2 and v3 snapshots remain readable but normalize to declared, non-ready a
   const v3 = parseDesktopCapabilitySnapshot(v3Fixture);
   const v2 = parseDesktopCapabilitySnapshot(v2Fixture);
 
-  assert.equal(v3?.version, '4.0.0');
-  assert.equal(v2?.version, '4.0.0');
+  assert.equal(v3?.version, '5.0.0');
+  assert.equal(v2?.version, '5.0.0');
   assert.deepEqual(
     {
       authority_source: v3?.capabilities.search.authority_source,
@@ -334,7 +328,8 @@ test('workbench v4 marks transport authority observed and renderer declarations 
     );
     const snapshot = await client.loadSnapshot();
 
-    assert.equal(snapshot.version, '4.0.0');
+    assert.equal(snapshot.version, '5.0.0');
+    assert.equal(snapshot.runtime_state, 'local_offline');
     assert.deepEqual(
       {
         authority_source: snapshot.capabilities.search.authority_source,
@@ -349,13 +344,11 @@ test('workbench v4 marks transport authority observed and renderer declarations 
     );
     assert.deepEqual(
       {
-        authority_source:
-          snapshot.capabilities['tenant-tenant-tasks'].authority_source,
+        authority_source: snapshot.capabilities['tenant-tenant-tasks'].authority_source,
         provenance: snapshot.capabilities['tenant-tenant-tasks'].provenance,
         availability: snapshot.capabilities['tenant-tenant-tasks'].availability,
         reason_code: snapshot.capabilities['tenant-tenant-tasks'].reason_code,
-        allowed_actions:
-          snapshot.capabilities['tenant-tenant-tasks'].allowed_actions,
+        allowed_actions: snapshot.capabilities['tenant-tenant-tasks'].allowed_actions,
       },
       {
         authority_source: 'renderer',
@@ -381,9 +374,7 @@ test('v4 route readiness rejects callable placeholders before capability authori
   const implementedDefinitions = registry.definitions.filter(({ id }) =>
     implementedRouteIds.has(id),
   );
-  const plannedDefinitions = registry.definitions.filter(
-    ({ id }) => !implementedRouteIds.has(id),
-  );
+  const plannedDefinitions = registry.definitions.filter(({ id }) => !implementedRouteIds.has(id));
 
   assert.equal(implementedDefinitions.length, implementedRouteIds.size);
   assert.equal(plannedDefinitions.length, 0);

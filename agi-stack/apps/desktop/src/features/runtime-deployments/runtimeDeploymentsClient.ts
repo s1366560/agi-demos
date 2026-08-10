@@ -4,6 +4,8 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
+import type { DesktopApiFetchOptions } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import type {
   RuntimeDeployment,
@@ -15,6 +17,13 @@ import type {
 } from './runtimeDeploymentsTypes';
 
 type Fetch = typeof globalThis.fetch;
+type FetchPath = (
+  path: string,
+  init: RequestInit,
+  options?: DesktopApiFetchOptions,
+) => Promise<Response>;
+
+const MAX_DEPLOYMENT_PROGRESS_BYTES = 2 * 1024 * 1024;
 
 export type RuntimeDeploymentsClientDependencies = Readonly<{
   fetch?: Fetch;
@@ -35,7 +44,9 @@ export function createRuntimeDeploymentsClient(
   dependencies: RuntimeDeploymentsClientDependencies = {},
 ): RuntimeDeploymentsClient {
   const runtimeConfig = Object.freeze({ ...config });
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const fetchPath: FetchPath = dependencies.fetch
+    ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+    : (path, init, options) => desktopApiFetch(runtimeConfig, path, init, options);
   return Object.freeze({
     async list(scope, query = {}, options) {
       const instanceId = requireCloudScope(runtimeConfig, scope, true);
@@ -48,7 +59,7 @@ export function createRuntimeDeploymentsClient(
       const payload = await requestJson(
         runtimeConfig,
         `/api/v1/deploys/?${params.toString()}`,
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parsePage(payload, scope);
@@ -58,7 +69,7 @@ export function createRuntimeDeploymentsClient(
       const payload = await requestJson(
         runtimeConfig,
         `/api/v1/deploys/${encodeURIComponent(identifier(deploymentId))}`,
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parseDeployment(payload, scope);
@@ -68,7 +79,7 @@ export function createRuntimeDeploymentsClient(
       await requestProgress(
         runtimeConfig,
         `/api/v1/deploys/${encodeURIComponent(identifier(deploymentId))}/progress`,
-        fetchImpl,
+        fetchPath,
         onEvent,
         options?.signal,
       );
@@ -108,10 +119,10 @@ function requireCloudScope(
 async function requestJson(
   config: DesktopRuntimeConfig,
   path: string,
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await fetchPath(path, {
     method: 'GET',
     headers: requestHeaders(config, 'application/json'),
     signal,
@@ -135,17 +146,21 @@ async function requestJson(
 async function requestProgress(
   config: DesktopRuntimeConfig,
   path: string,
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   onEvent: (
     event: RuntimeDeploymentProgressEvent,
   ) => void | Promise<void>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
-    method: 'GET',
-    headers: requestHeaders(config, 'text/event-stream'),
-    signal,
-  });
+  const response = await fetchPath(
+    path,
+    {
+      method: 'GET',
+      headers: requestHeaders(config, 'text/event-stream'),
+      signal,
+    },
+    { responseType: 'event-stream', maxBytes: MAX_DEPLOYMENT_PROGRESS_BYTES },
+  );
   if (!response.ok) {
     const payload = await response.text().catch(() => '');
     throw new DesktopApiError(

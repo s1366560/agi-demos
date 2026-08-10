@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  CLOUD_SOCKET_OPEN,
+  createCloudSocketBridge,
+  desktopCloudSocketTransport,
+} from '../../api/cloudSocketBridge';
+
 import type {
   VoiceTranscriptionConnection,
   VoiceTranscriptionFailureCode,
@@ -43,8 +49,8 @@ export function useVoiceTranscription({
   );
   activeScopeRef.current = connection.availability === 'available' ? connection.scopeKey : null;
   const resolvedRuntime = useMemo(
-    () => runtime ?? createBrowserVoiceTranscriptionRuntime(),
-    [runtime],
+    () => runtime ?? createVoiceTranscriptionRuntime(connection),
+    [connection, runtime],
   );
   const controller = useMemo(
     () =>
@@ -88,9 +94,25 @@ export function useVoiceTranscription({
   return { state, errorCode, toggle, stop };
 }
 
-function createBrowserVoiceTranscriptionRuntime(): VoiceTranscriptionRuntime {
+function createVoiceTranscriptionRuntime(
+  connection: VoiceTranscriptionConnection,
+): VoiceTranscriptionRuntime {
+  const nativeTransport =
+    connection.availability === 'available' && connection.transport === 'electron'
+      ? desktopCloudSocketTransport()
+      : null;
   return {
-    createSocket: (url, protocols) => new WebSocket(url, protocols) as unknown as VoiceSocket,
+    createSocket: (url, protocols) =>
+      nativeTransport && connection.availability === 'available'
+        ? (createCloudSocketBridge(
+            {
+              kind: 'voice',
+              url,
+              scope: connection.scope,
+            },
+            nativeTransport,
+          ) as unknown as VoiceSocket)
+        : (new WebSocket(url, protocols) as unknown as VoiceSocket),
     createAudioContext: () => new AudioContext() as unknown as VoiceAudioContext,
     createWorkletNode: (context) =>
       new AudioWorkletNode(
@@ -107,7 +129,7 @@ function createBrowserVoiceTranscriptionRuntime(): VoiceTranscriptionRuntime {
       }) as unknown as Promise<VoiceMediaStream>,
     requestMicrophoneAccess: requestNativeMicrophoneAccess,
     workletModuleUrl: new URL('audio-processor.js', document.baseURI).toString(),
-    socketOpenState: WebSocket.OPEN,
+    socketOpenState: CLOUD_SOCKET_OPEN,
   };
 }
 

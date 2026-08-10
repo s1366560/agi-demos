@@ -8,20 +8,21 @@ import {
 } from './features/navigation/desktopProductionRouteRegistry';
 import type { SessionCanvasTabId } from './features/session/sessionCanvasModel';
 import { unavailableWorkspaceAuthority } from './utils/format';
-import type {
-  AgentConversation,
-  AuthState,
-  DesktopRuntimeConfig,
-  RuntimeDataset,
-} from './types';
+import type { AgentConversation, AuthState, DesktopRuntimeConfig, RuntimeDataset } from './types';
 
 export type CommandPaletteItem = {
   id: string;
+  kind: 'route' | 'settings' | 'action';
+  groupId: string;
+  groupLabel: string;
+  routeId?: string;
   label: string;
   description: string;
   icon: ReactNode;
   shortcut?: string;
   disabled?: boolean;
+  disabledReason?: string;
+  searchText: string;
   onSelect: () => void;
 };
 
@@ -45,12 +46,7 @@ export type ReviewTab =
   | 'insights'
   | 'context'
   | 'runtime';
-export type WorkspaceArtifactKind =
-  | 'Files'
-  | 'Patches'
-  | 'Reports'
-  | 'Logs'
-  | 'Events';
+export type WorkspaceArtifactKind = 'Files' | 'Patches' | 'Reports' | 'Logs' | 'Events';
 export type WorkspaceArtifact = {
   id: string;
   name: string;
@@ -89,12 +85,8 @@ export type AgentConversationSession = {
   conversation: AgentConversation;
 };
 
-export function agentConversationSelectionIdentity(
-  session: AgentConversationSession | null,
-) {
-  return session
-    ? { scopeKey: session.scopeKey, conversationId: session.conversation.id }
-    : null;
+export function agentConversationSelectionIdentity(session: AgentConversationSession | null) {
+  return session ? { scopeKey: session.scopeKey, conversationId: session.conversation.id } : null;
 }
 
 export type AgentTaskSignalPatch = Partial<Omit<AgentTaskSignal, 'id'>> & {
@@ -104,8 +96,7 @@ export type AgentTaskSignalPatch = Partial<Omit<AgentTaskSignal, 'id'>> & {
 export function detectNativeDesktopShell(): boolean {
   if (typeof window === 'undefined') return false;
   return Boolean(
-    runsInElectronShell() ||
-    document.documentElement.hasAttribute('data-desktop-window'),
+    runsInElectronShell() || document.documentElement.hasAttribute('data-desktop-window'),
   );
 }
 
@@ -118,28 +109,18 @@ export function localRuntimeSidecarConfig(config: DesktopRuntimeConfig) {
 export function isEditableEventTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"]'),
-  );
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
-export function agentConversationScopeKey(
-  config: DesktopRuntimeConfig,
-): string {
+export function agentConversationScopeKey(config: DesktopRuntimeConfig): string {
   return agentConversationScopeKeyFor(config.projectId, config.workspaceId);
 }
 
-export function agentConversationScopeKeyFor(
-  projectId: string,
-  workspaceId: string,
-): string {
+export function agentConversationScopeKeyFor(projectId: string, workspaceId: string): string {
   return `${projectId.trim()}::${workspaceId.trim()}`;
 }
 
-export type WorkspaceSsoFlowErrorCode =
-  | 'credential_store'
-  | 'invalid_url'
-  | 'expired';
+export type WorkspaceSsoFlowErrorCode = 'credential_store' | 'invalid_url' | 'expired';
 
 export class WorkspaceSsoFlowError extends Error {
   readonly code: WorkspaceSsoFlowErrorCode;
@@ -157,8 +138,10 @@ export const SIDEBAR_WIDTH_CONSTRAINTS = {
   max: 420,
   default: 220,
 } as const;
-export const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> =
-  new Set([DEVICE_APPROVAL_ROUTE_ID, INVITATION_ACCEPTANCE_ROUTE_ID]);
+export const AUTHENTICATION_PASSTHROUGH_ROUTE_IDS: ReadonlySet<string> = new Set([
+  DEVICE_APPROVAL_ROUTE_ID,
+  INVITATION_ACCEPTANCE_ROUTE_ID,
+]);
 
 export const emptyDataset: RuntimeDataset = {
   workspaces: [],

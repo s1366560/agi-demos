@@ -4,6 +4,10 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from "../../api/client";
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from "../../api/cloudRequestBroker";
 import type { DesktopRuntimeConfig } from "../../types";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -61,7 +65,7 @@ export function createAgentWorkspaceJourneyAuthorityClient(
   const tenantId = identifier(runtimeConfig.tenantId);
   const projectId = identifier(runtimeConfig.projectId);
   const workspaceId = identifier(runtimeConfig.workspaceId);
-  if (!credential)
+  if (!desktopApiAuthenticationAvailable(runtimeConfig))
     throw contractError("agent_workspace_journey_trusted_session_required");
   if (!tenantId || !projectId) {
     throw contractError("agent_workspace_journey_scope_unavailable");
@@ -237,19 +241,24 @@ function createJsonRequester(
   fetchImpl: typeof fetch,
 ): JsonRequester {
   return async (path, signal) => {
-    const headers = new Headers({
-      Accept: "application/json",
-      Authorization: `Bearer ${credential}`,
-    });
+    const headers = new Headers({ Accept: "application/json" });
+    if (credential) headers.set("Authorization", `Bearer ${credential}`);
     if (config.mode === "local" && launchCapability) {
       headers.set("X-Agistack-Launch", launchCapability);
     }
-    const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
-      method: "GET",
-      headers,
-      credentials: "omit",
-      signal,
-    });
+    const response = fetchImpl === fetch
+      ? await desktopApiFetch(config, path, {
+          method: "GET",
+          headers,
+          credentials: "omit",
+          signal,
+        })
+      : await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+          method: "GET",
+          headers,
+          credentials: "omit",
+          signal,
+        });
     const payload = await responsePayload(response);
     if (!response.ok) {
       throw new DesktopApiError(

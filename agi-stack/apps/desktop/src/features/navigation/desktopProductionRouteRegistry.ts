@@ -38,6 +38,8 @@ export const PROJECT_MAINTENANCE_ROUTE_ID = 'project-project-maintenance' as con
 export const PROJECT_SETTINGS_ROUTE_ID = 'project-project-settings' as const;
 export const PROJECT_CRON_JOBS_ROUTE_ID = 'project-project-cron-jobs' as const;
 export const PROJECT_SUPPORT_ROUTE_ID = 'project-support' as const;
+export const BACKEND_STORES_ROUTE_ID = 'backend-stores' as const;
+export const PROJECT_PLAYBOOKS_ROUTE_ID = 'project-playbooks' as const;
 export const TENANT_OVERVIEW_ROUTE_ID = 'tenant-tenant-overview' as const;
 export const TENANT_PROJECTS_ROUTE_ID = 'tenant-tenant-projects' as const;
 export const TENANT_WORKSPACES_ROUTE_ID = 'tenant-tenant-workspaces' as const;
@@ -76,6 +78,8 @@ export const PROJECT_CHANNELS_ROUTE_ID = 'project-project-channels' as const;
 export const DESKTOP_PRODUCTION_ROUTE_IDS = Object.freeze([
   ...CANONICAL_DESKTOP_ROUTE_IDS,
   PROJECT_SUPPORT_ROUTE_ID,
+  BACKEND_STORES_ROUTE_ID,
+  PROJECT_PLAYBOOKS_ROUTE_ID,
   DEVICE_APPROVAL_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
@@ -84,9 +88,7 @@ export const DESKTOP_PRODUCTION_ROUTE_IDS = Object.freeze([
 export const DESKTOP_IMPLEMENTED_ROUTE_IDS = DESKTOP_PRODUCTION_ROUTE_IDS;
 const IMPLEMENTED_ROUTE_IDS = new Set<string>(DESKTOP_IMPLEMENTED_ROUTE_IDS);
 const PRODUCTION_ROUTE_ID_SET = new Set<string>(DESKTOP_PRODUCTION_ROUTE_IDS);
-const DESKTOP_PRODUCTION_ROUTE_LOADER_IDENTITY = Symbol(
-  'desktop-production-route-loader-identity',
-);
+const DESKTOP_PRODUCTION_ROUTE_LOADER_IDENTITY = Symbol('desktop-production-route-loader-identity');
 
 type DesktopProductionRouteLoaderIdentity = Readonly<{
   kind: 'implemented-route-module';
@@ -199,12 +201,40 @@ export function createDesktopProductionRouteRegistry({
       requiredDefinition(registry, PROJECT_SUPPORT_ROUTE_ID),
     ),
   };
+  const backendStoresDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
+    id: BACKEND_STORES_ROUTE_ID,
+    path: '/tenant/:tenantId/backend-stores',
+    scope: ['tenant'],
+    navGroup: 'tenant-governance-management',
+    capability: BACKEND_STORES_ROUTE_ID,
+    requiredPermission: [['authenticated', 'tenant_admin']],
+    localPolicy: 'cloud_only',
+    structuralReadiness: structuralReadiness(BACKEND_STORES_ROUTE_ID, implementedLoaders),
+    loader: productionLoader(BACKEND_STORES_ROUTE_ID, implementedLoaders, () =>
+      requiredDefinition(registry, BACKEND_STORES_ROUTE_ID),
+    ),
+  };
+  const projectPlaybooksDefinition: DesktopRouteDefinition<DesktopRouteModule> = {
+    id: PROJECT_PLAYBOOKS_ROUTE_ID,
+    path: '/tenant/:tenantId/project/:projectId/playbooks',
+    scope: ['tenant', 'project'],
+    navGroup: 'project-operations',
+    capability: PROJECT_PLAYBOOKS_ROUTE_ID,
+    requiredPermission: [['authenticated', 'tenant_member']],
+    localPolicy: 'cloud_only',
+    structuralReadiness: structuralReadiness(PROJECT_PLAYBOOKS_ROUTE_ID, implementedLoaders),
+    loader: productionLoader(PROJECT_PLAYBOOKS_ROUTE_ID, implementedLoaders, () =>
+      requiredDefinition(registry, PROJECT_PLAYBOOKS_ROUTE_ID),
+    ),
+  };
   registry = createDesktopRouteRegistry([
     ...canonicalRegistry.definitions.map((definition) => ({
       ...definition,
       structuralReadiness: structuralReadiness(definition.id, implementedLoaders),
     })),
     projectSupportDefinition,
+    backendStoresDefinition,
+    projectPlaybooksDefinition,
     deviceApprovalDefinition,
     tenantCreationDefinition,
     invitationAcceptanceDefinition,

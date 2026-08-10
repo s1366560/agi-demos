@@ -4,6 +4,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   createRuntimePoolHttpClient,
@@ -21,6 +22,7 @@ import type {
 } from './unifiedRuntimesTypes';
 
 type Fetch = typeof globalThis.fetch;
+type FetchPath = (path: string, init: RequestInit) => Promise<Response>;
 type LocalRuntimeStatusReader = () => Promise<unknown>;
 
 export type UnifiedRuntimesClientDependencies = Readonly<{
@@ -44,7 +46,9 @@ export function createUnifiedRuntimesClient(
   dependencies: UnifiedRuntimesClientDependencies = {},
 ): UnifiedRuntimesClient {
   const runtimeConfig = Object.freeze({ ...config });
-  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const fetchPath: FetchPath = dependencies.fetch
+    ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
+    : (path, init) => desktopApiFetch(runtimeConfig, path, init);
   const poolClient =
     dependencies.poolClient ?? createRuntimePoolHttpClient(runtimeConfig);
   const readLocalRuntimeStatus =
@@ -68,7 +72,7 @@ export function createUnifiedRuntimesClient(
       const payload = await requestJson(
         runtimeConfig,
         '/api/v1/projects/sandboxes?limit=100&offset=0',
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       const sandboxes = parseSandboxList(payload);
@@ -89,7 +93,7 @@ export function createUnifiedRuntimesClient(
         const payload = await requestJson(
           runtimeConfig,
           `/api/v1/projects/${encodeURIComponent(resolvedProjectId)}/sandbox/stats`,
-          fetchImpl,
+          fetchPath,
           options?.signal,
         );
         const stats = parseSandboxStats(payload);
@@ -115,7 +119,7 @@ export function createUnifiedRuntimesClient(
       const payload = await requestJson(
         runtimeConfig,
         `/api/v1/projects/${encodeURIComponent(scope.projectId)}/sandbox/capabilities`,
-        fetchImpl,
+        fetchPath,
         options?.signal,
       );
       return parseSandboxCapabilities(payload);
@@ -158,7 +162,7 @@ function requireAuthority(
 async function requestJson(
   config: DesktopRuntimeConfig,
   path: string,
-  fetchImpl: Fetch,
+  fetchPath: FetchPath,
   signal?: AbortSignal,
 ): Promise<unknown> {
   const headers = new Headers({ Accept: 'application/json' });
@@ -166,7 +170,7 @@ async function requestJson(
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   const launchCapability = desktopLaunchCapability(config);
   if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-  const response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await fetchPath(path, {
     method: 'GET',
     headers,
     signal,

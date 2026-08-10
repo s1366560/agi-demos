@@ -1,8 +1,11 @@
 import {
-  absoluteUrl,
   DesktopApiError,
   desktopApiCredential,
 } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 export type TenantAdminAuthority = 'cloud' | 'local';
@@ -41,7 +44,7 @@ export function requireCloudTenantScope<TScope extends TenantAdminScope>(
   if (configuredTenantId !== tenantId) {
     throw tenantAdminError('tenant_admin_configured_tenant_scope_mismatch', 409);
   }
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw tenantAdminError('tenant_admin_trusted_session_required', 401);
   }
   return scope;
@@ -103,7 +106,7 @@ async function request(
   const credential = desktopApiCredential(config);
   if (credential) headers.set('Authorization', `Bearer ${credential}`);
   if (options.body) headers.set('Content-Type', 'application/json');
-  return fetch(absoluteUrl(config.apiBaseUrl, path), {
+  return desktopApiFetch(config, path, {
     method: options.method ?? 'GET',
     headers,
     credentials: 'omit',

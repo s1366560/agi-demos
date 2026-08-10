@@ -24,15 +24,16 @@ const cloudConfig = Object.freeze({
 
 test('Agent Workspace authority observes the scoped Cloud conversation catalog', async () => {
   const calls = [];
-  await withFetch(async (input, init) => {
-    calls.push({ input: String(input), init });
-    return pageResponse();
-  }, async () => {
-    const observation = await createAgentWorkspaceAuthorityClient(
-      cloudConfig,
-    ).probe();
-    assert.deepEqual(observation, expectedObservation('cloud'));
-  });
+  await withFetch(
+    async (input, init) => {
+      calls.push({ input: String(input), init });
+      return pageResponse();
+    },
+    async () => {
+      const observation = await createAgentWorkspaceAuthorityClient(cloudConfig).probe();
+      assert.deepEqual(observation, expectedObservation('cloud'));
+    },
+  );
 
   assert.equal(
     calls[0]?.input,
@@ -54,13 +55,16 @@ test('Agent Workspace authority keeps Local launch authority separate from the s
     mode: 'local',
   });
   let headers = null;
-  await withFetch(async (_input, init) => {
-    headers = new Headers(init?.headers);
-    return pageResponse();
-  }, async () => {
-    const observation = await createAgentWorkspaceAuthorityClient(config).probe();
-    assert.deepEqual(observation, expectedObservation('local'));
-  });
+  await withFetch(
+    async (_input, init) => {
+      headers = new Headers(init?.headers);
+      return pageResponse();
+    },
+    async () => {
+      const observation = await createAgentWorkspaceAuthorityClient(config).probe();
+      assert.deepEqual(observation, expectedObservation('local'));
+    },
+  );
   assert.equal(headers.get('Authorization'), 'Bearer local-session');
   assert.equal(headers.get('X-Agistack-Launch'), 'private-launch');
 });
@@ -94,25 +98,24 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         },
       );
       const snapshot = await client.loadSnapshot();
-      assert.deepEqual(
-        snapshot.capabilities['agent-workspace-tenant-agent-workspace'],
-        {
-          availability: 'unavailable',
-          reason_code: 'capability_authority_revision_unavailable',
-          service_version: '0.1.0',
-          contract_version: '4.0.0',
-          allowed_actions: [],
-          scope: {
-            tenant_id: 'tenant-1',
-            project_id: 'project-1',
-            workspace_id: 'workspace-1',
-            instance_id: null,
-          },
-          authority_revision: null,
-          authority_source: authoritySource,
-          provenance: 'observed',
+      assert.deepEqual(snapshot.capabilities['agent-workspace-tenant-agent-workspace'], {
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
+        service_version: '0.1.0',
+        contract_version: '4.0.0',
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          workspace_id: 'workspace-1',
+          instance_id: null,
         },
-      );
+        authority_revision: null,
+        retryable: false,
+        authority_source: authoritySource,
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -139,25 +142,24 @@ test('Workbench consumes the revision-bound journey authority in production', as
   globalThis.fetch = async () => new Response('{}', { status: 503 });
   try {
     const snapshot = await client.loadSnapshot();
-    assert.deepEqual(
-      snapshot.capabilities['agent-workspace-tenant-agent-workspace'],
-      {
-        availability: 'degraded',
-        reason_code: 'agent_workspace_journeys_partial',
-        service_version: '0.1.0',
-        contract_version: '4.0.0',
-        allowed_actions: ['list-conversations', 'restore-session'],
-        scope: {
-          tenant_id: 'tenant-1',
-          project_id: 'project-1',
-          workspace_id: 'workspace-1',
-          instance_id: null,
-        },
-        authority_revision: 7,
-        authority_source: 'cloud_service',
-        provenance: 'observed',
+    assert.deepEqual(snapshot.capabilities['agent-workspace-tenant-agent-workspace'], {
+      availability: 'degraded',
+      reason_code: 'agent_workspace_journeys_partial',
+      service_version: '0.1.0',
+      contract_version: '4.0.0',
+      allowed_actions: ['list-conversations', 'restore-session'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-1',
+        workspace_id: 'workspace-1',
+        instance_id: null,
       },
-    );
+      authority_revision: 7,
+      retryable: false,
+      authority_source: 'cloud_service',
+      supporting_authority_sources: [],
+      provenance: 'observed',
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -176,8 +178,7 @@ test('Workbench default production journey authority supports tenant-level scope
       config,
     );
     const snapshot = await client.loadSnapshot();
-    const capability =
-      snapshot.capabilities['agent-workspace-tenant-agent-workspace'];
+    const capability = snapshot.capabilities['agent-workspace-tenant-agent-workspace'];
 
     assert.equal(capability.availability, 'degraded');
     assert.equal(capability.reason_code, 'agent_workspace_journeys_partial');
@@ -233,25 +234,24 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
   try {
     const snapshot = await client.loadSnapshot();
     assert.equal(probeCount, 1);
-    assert.deepEqual(
-      snapshot.capabilities['agent-workspace-tenant-agent-workspace'],
-      {
-        availability: 'unavailable',
-        reason_code: 'agent_workspace_authority_unavailable',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'tenant-1',
-          project_id: 'project-1',
-          workspace_id: 'workspace-1',
-          instance_id: null,
-        },
-        authority_revision: null,
-        authority_source: 'cloud_service',
-        provenance: 'observed',
+    assert.deepEqual(snapshot.capabilities['agent-workspace-tenant-agent-workspace'], {
+      availability: 'unavailable',
+      reason_code: 'agent_workspace_authority_unavailable',
+      service_version: null,
+      contract_version: null,
+      allowed_actions: [],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-1',
+        workspace_id: 'workspace-1',
+        instance_id: null,
       },
-    );
+      authority_revision: null,
+      retryable: false,
+      authority_source: 'cloud_service',
+      supporting_authority_sources: [],
+      provenance: 'observed',
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -261,8 +261,7 @@ function expectedObservation(authority) {
   return {
     authority,
     availability: authority === 'cloud' ? 'available' : 'degraded',
-    reasonCode:
-      authority === 'cloud' ? null : 'local_cloud_agent_authority_unavailable',
+    reasonCode: authority === 'cloud' ? null : 'local_cloud_agent_authority_unavailable',
     serviceVersion: '0.1.0',
     contractVersion: '4.0.0',
     allowedActions: ['view', 'list-conversations'],
@@ -355,9 +354,7 @@ function productionJourneyFetch(calls) {
         page_size: 100,
       },
       '/api/v1/projects/': {
-        projects: [
-          { id: 'project-1', tenant_id: 'tenant-1', name: 'Project' },
-        ],
+        projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project' }],
         total: 1,
         page: 1,
         page_size: 100,

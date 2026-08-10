@@ -6,6 +6,7 @@ import {
   CubeIcon,
   DashboardIcon,
   GearIcon,
+  GridIcon,
   MagnifyingGlassIcon,
   PersonIcon,
   PlusIcon,
@@ -44,6 +45,7 @@ type DesktopSidebarProps = {
   newTaskDisabledReason: string | null;
   onModeChange?: (mode: 'work' | 'code') => void;
   onNavigate: (section: DesktopSidebarSection) => void;
+  onOpenFeatureDirectory?: (trigger: HTMLButtonElement) => void;
   onToggleWorkspace: (workspaceId: string) => void;
   onRetryProject: () => void;
   onRetryWorkspace: (workspaceId: string) => void;
@@ -97,6 +99,7 @@ export function DesktopSidebar({
   expandedWorkspaceIds,
   newTaskDisabledReason,
   onNavigate,
+  onOpenFeatureDirectory,
   onToggleWorkspace,
   onRetryProject,
   onRetryWorkspace,
@@ -160,9 +163,22 @@ export function DesktopSidebar({
             <Icon />
             <span>{t(labelKey)}</span>
             {id === 'my-work' && taskCount > 0 ? <small>{taskCount}</small> : null}
-            {id === 'activity' && activityUnreadCount > 0 ? <small>{activityUnreadCount}</small> : null}
+            {id === 'activity' && activityUnreadCount > 0 ? (
+              <small>{activityUnreadCount}</small>
+            ) : null}
           </button>
         ))}
+        {onOpenFeatureDirectory ? (
+          <button
+            className="desktop-design-feature-directory"
+            type="button"
+            aria-haspopup="dialog"
+            onClick={(event) => onOpenFeatureDirectory(event.currentTarget)}
+          >
+            <GridIcon aria-hidden="true" />
+            <span>{t('featureDirectory.open')}</span>
+          </button>
+        ) : null}
       </nav>
 
       {/* Header: the primary create action and the project/workspace heading. */}
@@ -213,9 +229,7 @@ export function DesktopSidebar({
           onSelectConversation={onSelectConversation}
           onRenameConversation={onRenameConversation}
           onDeleteConversation={onDeleteConversation}
-          onCreateWorkspace={
-            workspaceCreateDisabledReason ? undefined : onCreateWorkspace
-          }
+          onCreateWorkspace={workspaceCreateDisabledReason ? undefined : onCreateWorkspace}
         />
       </section>
 
@@ -294,7 +308,9 @@ export function DesktopSidebar({
             </span>
             <span>
               <strong>{user?.name || user?.email || t('sidebar.account')}</strong>
-              <small>{tenantName} · {projectName}</small>
+              <small>
+                {tenantName} · {projectName}
+              </small>
             </span>
             <ChevronUpIcon />
           </button>

@@ -9,7 +9,7 @@ import secrets
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -212,7 +212,13 @@ class OAuthLoginService:
             raise OAuthProviderUnavailableError
         return provider
 
-    def _redirect_uri(self, provider_id: str) -> str:
+    def _redirect_uri(
+        self,
+        provider_id: str,
+        callback_surface: Literal["web", "desktop"],
+    ) -> str:
+        if callback_surface == "desktop":
+            return f"agistack-auth://oauth/callback/{provider_id}"
         return f"{self._public_base_url}/login/callback/{provider_id}"
 
     async def begin_authorization(
@@ -221,14 +227,16 @@ class OAuthLoginService:
         *,
         provider_id: str,
         redirect_to: str,
+        callback_surface: Literal["web", "desktop"] = "web",
     ) -> OAuthAuthorization:
         provider = self._provider(provider_id)
         safe_redirect = _same_origin_redirect(redirect_to)
         state = secrets.token_urlsafe(32)
         code_verifier, code_challenge = _pkce_pair()
-        redirect_uri = self._redirect_uri(provider.provider_id)
+        redirect_uri = self._redirect_uri(provider.provider_id, callback_surface)
         state_payload = json.dumps(
             {
+                "callback_surface": callback_surface,
                 "provider_id": provider.provider_id,
                 "redirect_to": safe_redirect,
                 "redirect_uri": redirect_uri,
@@ -300,11 +308,17 @@ class OAuthLoginService:
 
         redirect_to = state_payload.get("redirect_to")
         redirect_uri = state_payload.get("redirect_uri")
+        callback_surface = state_payload.get("callback_surface", "web")
         code_verifier = state_payload.get("code_verifier")
         if (
             not isinstance(redirect_to, str)
             or not isinstance(redirect_uri, str)
-            or redirect_uri != self._redirect_uri(provider.provider_id)
+            or callback_surface not in {"web", "desktop"}
+            or redirect_uri
+            != self._redirect_uri(
+                provider.provider_id,
+                callback_surface,
+            )
             or not isinstance(code_verifier, str)
             or not code_verifier
         ):

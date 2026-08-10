@@ -98,7 +98,37 @@ class TestOAuthLoginRoutes:
             ANY,
             provider_id="google",
             redirect_to="/tenant/t-1/overview",
+            callback_surface="web",
         )
+
+    def test_begins_desktop_oauth_authorization_with_the_native_callback_surface(
+        self,
+        client: TestClient,
+        oauth_service: FakeOAuthService,
+    ) -> None:
+        response = client.post(
+            "/api/v1/auth/oauth/google/authorize",
+            json={
+                "redirect_to": "/tenant/t-1/overview",
+                "callback_surface": "desktop",
+            },
+        )
+
+        assert response.status_code == 200
+        oauth_service.begin_authorization.assert_awaited_once_with(
+            ANY,
+            provider_id="google",
+            redirect_to="/tenant/t-1/overview",
+            callback_surface="desktop",
+        )
+
+    def test_rejects_unknown_oauth_callback_surface(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/auth/oauth/google/authorize",
+            json={"redirect_to": "/", "callback_surface": "renderer"},
+        )
+
+        assert response.status_code == 422
 
     def test_callback_issues_memstack_session_for_preprovisioned_verified_identity(
         self,

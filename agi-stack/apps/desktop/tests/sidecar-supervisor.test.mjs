@@ -4,9 +4,18 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 
-const { SidecarSupervisor } = await import(
-  'file:///tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js'
-);
+const { SidecarSupervisor, sidecarRendererEnvironment } =
+  await import('file:///tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js');
+
+test('sidecar renderer environment binds the exact validated development origin', () => {
+  assert.deepEqual(
+    sidecarRendererEnvironment(new URL('http://localhost:5175/route?ignored=true')),
+    { AGISTACK_DESKTOP_RENDERER_ORIGIN: 'http://localhost:5175' },
+  );
+  assert.deepEqual(sidecarRendererEnvironment(null), {
+    AGISTACK_DESKTOP_RENDERER_ORIGIN: '',
+  });
+});
 
 const fakeSidecarSource = String.raw`#!/usr/bin/env node
 const { createHmac } = require('node:crypto');
@@ -106,10 +115,7 @@ test('sidecar initialization serializes explicit empty legacy migration candidat
 
   try {
     await supervisor.start();
-    assert.deepEqual(
-      JSON.parse((await readFile(legacyCandidatesPath, 'utf8')).trim()),
-      [],
-    );
+    assert.deepEqual(JSON.parse((await readFile(legacyCandidatesPath, 'utf8')).trim()), []);
   } finally {
     await supervisor.stop();
     await rm(root, { recursive: true, force: true });
@@ -137,10 +143,7 @@ test('sidecar handshake is authenticated and the supervisor recovers after a cra
   });
 
   try {
-    await assert.rejects(
-      supervisor.invoke('local_runtime_status'),
-      /sidecar exited unexpectedly/,
-    );
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
     const recoveredStatus = await supervisor.invoke('local_runtime_status');
     assert.equal(recoveredStatus.running, true);
     assert.equal(recoveredStatus.api_base_url, 'http://127.0.0.1:41002');
@@ -216,25 +219,13 @@ test('sidecar restart backoff grows across rapid crashes and remains capped', as
   });
 
   try {
-    await assert.rejects(
-      supervisor.invoke('local_runtime_status'),
-      /sidecar exited unexpectedly/,
-    );
-    await assert.rejects(
-      supervisor.invoke('local_runtime_status'),
-      /sidecar exited unexpectedly/,
-    );
-    await assert.rejects(
-      supervisor.invoke('local_runtime_status'),
-      /sidecar exited unexpectedly/,
-    );
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
     const recoveredStatus = await supervisor.invoke('local_runtime_status');
     assert.equal(recoveredStatus.running, true);
 
-    const starts = (await readFile(counterPath, 'utf8'))
-      .trim()
-      .split('\n')
-      .map(Number);
+    const starts = (await readFile(counterPath, 'utf8')).trim().split('\n').map(Number);
     assert.equal(starts.length, 4);
     assert.ok(starts[1] - starts[0] >= 20);
     assert.ok(starts[2] - starts[1] >= 40);

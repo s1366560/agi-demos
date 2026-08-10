@@ -3,6 +3,7 @@ import {
   DesktopApiError,
   desktopApiCredential,
 } from '../../api/client';
+import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   parseActivityReadState,
@@ -308,13 +309,15 @@ async function requestJson(
 
   let response: Response;
   try {
-    response = await fetchImpl(absoluteUrl(config.apiBaseUrl, path), {
+    const init: RequestInit = {
       method: options.method ?? 'GET',
       headers,
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: options.signal,
-    });
+    };
+    response = fetchImpl === fetch
+      ? await desktopApiFetch(config, path, init)
+      : await fetchImpl(absoluteUrl(config.apiBaseUrl, path), init);
   } catch (error) {
     if (options.signal?.aborted) throw error;
     throw new DesktopApiError('cloud_agent_authority_network_unavailable', 0, {

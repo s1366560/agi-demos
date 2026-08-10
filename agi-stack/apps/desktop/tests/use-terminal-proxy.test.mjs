@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -6,6 +7,13 @@ const require = createRequire(import.meta.url);
 const { appendTerminalLinesBounded, openTerminalSocket, terminalFrame } = require(
   '/tmp/agistack-desktop-test-dist/src/hooks/useTerminalProxy.js'
 );
+
+test('Electron Cloud terminal path is delegated to the vault-bound socket bridge', () => {
+  const source = readFileSync(new URL('../src/hooks/useTerminalProxy.ts', import.meta.url), 'utf8');
+  assert.match(source, /desktopCloudSocketTransport/u);
+  assert.match(source, /createCloudSocketBridge/u);
+  assert.match(source, /kind:\s*'terminal'/u);
+});
 
 test('terminal WebSocket keeps launch capability and user session in separate subprotocols', () => {
   let openedUrl = '';

@@ -36,6 +36,7 @@ test('voice transcription connection is cloud-only, scope-bound, and keeps auth 
     'wss://cloud.memstack.test/api/v1/voice/chat?project_id=project-1&conversation_id=conversation-1',
   );
   assert.deepEqual(connection.protocols, ['memstack.auth', 'ms_sk_test_credential']);
+  assert.equal(connection.transport, 'web');
   assert.equal(connection.scopeKey.includes('ms_sk_test_credential'), false);
   assert.equal(connection.scopeKey.includes('conversation-1'), true);
 
@@ -47,14 +48,26 @@ test('voice transcription connection is cloud-only, scope-bound, and keeps auth 
     ),
     { availability: 'local_runtime' },
   );
-  assert.deepEqual(
-    resolveVoiceTranscriptionConnection(
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: { invoke: async () => undefined },
+      events: { onCloudSocketEvent: () => () => undefined },
+    },
+  };
+  try {
+    const nativeConnection = resolveVoiceTranscriptionConnection(
       { ...cloudConfig, apiKey: '' },
       'project-1',
       'conversation-1',
-    ),
-    { availability: 'authentication_required' },
-  );
+    );
+    assert.equal(nativeConnection.availability, 'available');
+    assert.equal(nativeConnection.transport, 'electron');
+    assert.deepEqual(nativeConnection.protocols, []);
+    assert.equal(JSON.stringify(nativeConnection).includes('credential'), false);
+  } finally {
+    delete globalThis.window;
+  }
   assert.deepEqual(resolveVoiceTranscriptionConnection(cloudConfig, '', 'conversation-1'), {
     availability: 'conversation_required',
   });

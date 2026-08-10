@@ -83,7 +83,35 @@ class TestOAuthLoginService:
         stored_payload = json.loads(next(iter(redis.values.values())))
         assert stored_payload["redirect_to"] == "/tenant/t-1/overview"
         assert stored_payload["provider_id"] == "google"
+        assert stored_payload["callback_surface"] == "web"
         assert stored_payload["code_verifier"]
+
+    async def test_begin_authorization_uses_the_dedicated_desktop_callback_surface(
+        self,
+    ) -> None:
+        redis = FakeRedis()
+        service = OAuthLoginService(
+            public_base_url="https://app.memstack.example",
+            providers={"github": github_configuration()},
+        )
+
+        authorization = await service.begin_authorization(
+            redis,
+            provider_id="github",
+            redirect_to="/tenant/t-1/project/p-1/overview",
+            callback_surface="desktop",
+        )
+
+        query = parse_qs(urlparse(authorization.authorization_url).query)
+        assert query["redirect_uri"] == ["agistack-auth://oauth/callback/github"]
+        stored_payload = json.loads(next(iter(redis.values.values())))
+        assert stored_payload == {
+            "callback_surface": "desktop",
+            "code_verifier": stored_payload["code_verifier"],
+            "provider_id": "github",
+            "redirect_to": "/tenant/t-1/project/p-1/overview",
+            "redirect_uri": "agistack-auth://oauth/callback/github",
+        }
 
     async def test_exchange_callback_consumes_state_and_returns_verified_identity(self) -> None:
         redis = FakeRedis()

@@ -27,9 +27,7 @@ export type DesktopRouteCapabilityResolver = (
   context: DesktopRouteContext,
 ) => DesktopCapabilityAvailability | null;
 
-export type DesktopRoutePermissionResolver = (
-  context: DesktopRouteContext,
-) => ReadonlySet<string>;
+export type DesktopRoutePermissionResolver = (context: DesktopRouteContext) => ReadonlySet<string>;
 
 export type DesktopRouteScopeSwitcher = (
   context: DesktopRouteContext,
@@ -42,16 +40,14 @@ export type DesktopHashRouteHostOptions<TModule> = Readonly<{
   mode: DesktopRouteRuntimeMode;
   permissions: ReadonlySet<string>;
   resolvePermissions?: DesktopRoutePermissionResolver;
-  resolvePermissionSnapshot?: DesktopRoutePermissionSnapshotResolver;
+  resolvePermissionSnapshot?: DesktopRoutePermissionSnapshotResolver<TModule>;
   resolveCapability: DesktopRouteCapabilityResolver;
   switchScope: DesktopRouteScopeSwitcher;
 }>;
 
 export type DesktopHashRouteHost<TModule> = Readonly<{
   getState: () => DesktopRouteHostState<TModule>;
-  subscribe: (
-    listener: (state: DesktopRouteHostState<TModule>) => void,
-  ) => () => void;
+  subscribe: (listener: (state: DesktopRouteHostState<TModule>) => void) => () => void;
   start: () => Promise<void>;
   stop: () => void;
   retry: () => Promise<void>;
@@ -100,9 +96,7 @@ export function createDesktopHashRouteHost<TModule>(
   options: DesktopHashRouteHostOptions<TModule>,
 ): DesktopHashRouteHost<TModule> {
   let state: DesktopRouteHostState<TModule> = Object.freeze({ status: 'idle' });
-  const listeners = new Set<
-    (nextState: DesktopRouteHostState<TModule>) => void
-  >();
+  const listeners = new Set<(nextState: DesktopRouteHostState<TModule>) => void>();
   let unsubscribeLocation: (() => void) | null = null;
   let scopeController: AbortController | null = null;
   let transitionRevision = 0;
@@ -185,10 +179,7 @@ export function createDesktopHashRouteHost<TModule>(
       (options.resolvePermissionSnapshot
         ? permissionPreflight.missingPermissions.includes('authenticated')
         : permissionPreflight.missingPermissions.includes('authenticated') ||
-          !canDeferScopeMembershipPermissions(
-            match,
-            permissionPreflight.missingPermissions,
-          ))
+          !canDeferScopeMembershipPermissions(match, permissionPreflight.missingPermissions))
     ) {
       emit({
         status: 'forbidden',
@@ -198,9 +189,7 @@ export function createDesktopHashRouteHost<TModule>(
       });
       return;
     }
-    const structuralPermissions = new Set(
-      match.definition.requiredPermission.flat(),
-    );
+    const structuralPermissions = new Set(match.definition.requiredPermission.flat());
     const structuralPreflight = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
@@ -212,20 +201,13 @@ export function createDesktopHashRouteHost<TModule>(
       structuralPreflight.reasonCode !== 'desktop_route_capability_missing' &&
       structuralPreflight.reasonCode !== 'desktop_route_local_cloud_only'
     ) {
-      emitUnavailable(
-        match,
-        structuralPreflight.reasonCode,
-        structuralPreflight.capability,
-      );
+      emitUnavailable(match, structuralPreflight.reasonCode, structuralPreflight.capability);
       return;
     }
 
     let capability: DesktopCapabilityAvailability | null;
     try {
-      capability = options.resolveCapability(
-        match.definition.capability,
-        match.context,
-      );
+      capability = options.resolveCapability(match.definition.capability, match.context);
     } catch {
       emit({
         status: 'error',
@@ -238,9 +220,7 @@ export function createDesktopHashRouteHost<TModule>(
     const access = evaluateDesktopRouteAccess({
       match,
       mode: options.mode,
-      permissions: options.resolvePermissionSnapshot
-        ? structuralPermissions
-        : permissions,
+      permissions: options.resolvePermissionSnapshot ? structuralPermissions : permissions,
       capability,
     });
     const authorityAccess = evaluateDesktopRouteAccess({
@@ -272,15 +252,9 @@ export function createDesktopHashRouteHost<TModule>(
       return;
     }
     const transitionCapability =
-      authorityAccess.status === 'forbidden'
-        ? null
-        : authorityAccess.capability;
+      authorityAccess.status === 'forbidden' ? null : authorityAccess.capability;
     if (!transitionCapability) {
-      emitUnavailable(
-        match,
-        'desktop_route_capability_missing',
-        transitionCapability,
-      );
+      emitUnavailable(match, 'desktop_route_capability_missing', transitionCapability);
       return;
     }
 
@@ -312,28 +286,16 @@ export function createDesktopHashRouteHost<TModule>(
     try {
       if (options.resolvePermissionSnapshot) {
         const snapshot = parseDesktopRoutePermissionSnapshot(
-          await options.resolvePermissionSnapshot(
-            match.context,
-            controller.signal,
-          ),
+          await options.resolvePermissionSnapshot(match.context, controller.signal, match),
         );
         if (!currentTransition(revision, controller.signal)) return;
-        if (
-          !desktopRoutePermissionSnapshotMatchesContext(snapshot, match.context)
-        ) {
-          throw new DesktopRoutePermissionAuthorityError(
-            'desktop_route_permission_scope_mismatch',
-          );
+        if (!desktopRoutePermissionSnapshotMatchesContext(snapshot, match.context)) {
+          throw new DesktopRoutePermissionAuthorityError('desktop_route_permission_scope_mismatch');
         }
         const revisionKey = permissionRevisionKey(snapshot.scope);
         const previousRevision = permissionRevisions.get(revisionKey);
-        if (
-          previousRevision !== undefined &&
-          snapshot.authority_revision < previousRevision
-        ) {
-          throw new DesktopRoutePermissionAuthorityError(
-            'desktop_route_permission_revision_stale',
-          );
+        if (previousRevision !== undefined && snapshot.authority_revision < previousRevision) {
+          throw new DesktopRoutePermissionAuthorityError('desktop_route_permission_revision_stale');
         }
         permissionRevisions.set(revisionKey, snapshot.authority_revision);
         settledPermissions = new Set(snapshot.permissions);
@@ -360,10 +322,7 @@ export function createDesktopHashRouteHost<TModule>(
     }
     let settledCapability: DesktopCapabilityAvailability | null;
     try {
-      settledCapability = options.resolveCapability(
-        match.definition.capability,
-        match.context,
-      );
+      settledCapability = options.resolveCapability(match.definition.capability, match.context);
     } catch {
       if (!currentTransition(revision, controller.signal)) return;
       emit({
@@ -390,11 +349,7 @@ export function createDesktopHashRouteHost<TModule>(
       return;
     }
     if (settledAccess.status === 'unavailable') {
-      emitUnavailable(
-        match,
-        settledAccess.reasonCode,
-        settledAccess.capability,
-      );
+      emitUnavailable(match, settledAccess.reasonCode, settledAccess.capability);
       return;
     }
 

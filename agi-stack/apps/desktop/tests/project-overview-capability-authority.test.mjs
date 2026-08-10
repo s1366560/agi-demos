@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  createDesktopWorkbenchCapabilityClient,
-} from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
+import { createDesktopWorkbenchCapabilityClient } from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
 import { DEFAULT_CONFIG } from '/tmp/agistack-desktop-test-dist/src/types.js';
 
 const automationContract = {
@@ -202,52 +200,57 @@ const projectScope = {
 test('Cloud workbench keeps unversioned Overview probes unavailable', async () => {
   const signal = new AbortController().signal;
   const calls = [];
-  await withFetch(async (input, init) => {
-    calls.push({ input: String(input), init });
-    if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
-      return jsonResponse(cloudTenantOverview);
-    }
-    if (String(input).includes('/api/v1/projects/project-1?')) {
-      return jsonResponse(cloudProject);
-    }
-    if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
-      return jsonResponse(cloudProjectStats);
-    }
-    return jsonResponse({}, { status: 404 });
-  }, async () => {
-    const snapshot = await createClient(cloudConfig()).loadSnapshot(signal);
-    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
-      availability: 'unavailable',
-      reason_code: 'capability_authority_revision_unavailable',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [],
-      scope: projectScope,
-      authority_revision: null,
-      authority_source: 'cloud_service',
-      provenance: 'observed',
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
-      availability: 'unavailable',
-      reason_code: 'capability_authority_revision_unavailable',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: [],
-      scope: {
-        tenant_id: 'tenant-1',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: null,
-      authority_source: 'cloud_service',
-      provenance: 'observed',
-    });
-  });
-
-  const projectCall = calls.find(({ input }) =>
-    input.includes('/api/v1/projects/project-1?'),
+  await withFetch(
+    async (input, init) => {
+      calls.push({ input: String(input), init });
+      if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
+        return jsonResponse(cloudTenantOverview);
+      }
+      if (String(input).includes('/api/v1/projects/project-1?')) {
+        return jsonResponse(cloudProject);
+      }
+      if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
+        return jsonResponse(cloudProjectStats);
+      }
+      return jsonResponse({}, { status: 404 });
+    },
+    async () => {
+      const snapshot = await createClient(cloudConfig()).loadSnapshot(signal);
+      assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [],
+        scope: projectScope,
+        authority_revision: null,
+        retryable: false,
+        authority_source: 'cloud_service',
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
+      assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: [],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: null,
+        retryable: false,
+        authority_source: 'cloud_service',
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
+    },
   );
+
+  const projectCall = calls.find(({ input }) => input.includes('/api/v1/projects/project-1?'));
   assert.equal(
     projectCall?.input,
     'https://api.memstack.test/api/v1/projects/project-1?tenant_id=tenant-1',
@@ -257,58 +260,49 @@ test('Cloud workbench keeps unversioned Overview probes unavailable', async () =
     new Headers(projectCall?.init?.headers).get('Authorization'),
     'Bearer cloud-session',
   );
-  const statsCall = calls.find(({ input }) =>
-    input.endsWith('/api/v1/projects/project-1/stats'),
-  );
+  const statsCall = calls.find(({ input }) => input.endsWith('/api/v1/projects/project-1/stats'));
   assert.equal(statsCall?.init?.signal, signal);
-  assert.equal(
-    new Headers(statsCall?.init?.headers).get('Authorization'),
-    'Bearer cloud-session',
-  );
+  assert.equal(new Headers(statsCall?.init?.headers).get('Authorization'), 'Bearer cloud-session');
 });
 
 test('Cloud workbench does not advertise inspect-stats when stats authority fails', async () => {
-  await withFetch(async (input) => {
-    if (String(input).includes('/api/v1/projects/project-1?')) {
-      return jsonResponse(cloudProject);
-    }
-    if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
-      return jsonResponse(
-        { detail: 'project_stats_authority_unavailable' },
-        { status: 503 },
-      );
-    }
-    return jsonResponse({}, { status: 404 });
-  }, async () => {
-    const snapshot = await createClient(cloudConfig()).loadSnapshot();
-    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
-      availability: 'unavailable',
-      reason_code: 'project_overview_authority_unavailable',
-      service_version: null,
-      contract_version: null,
-      allowed_actions: [],
-      scope: projectScope,
-      authority_revision: null,
-      authority_source: 'cloud_service',
-      provenance: 'observed',
-    });
-  });
+  await withFetch(
+    async (input) => {
+      if (String(input).includes('/api/v1/projects/project-1?')) {
+        return jsonResponse(cloudProject);
+      }
+      if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
+        return jsonResponse({ detail: 'project_stats_authority_unavailable' }, { status: 503 });
+      }
+      return jsonResponse({}, { status: 404 });
+    },
+    async () => {
+      const snapshot = await createClient(cloudConfig()).loadSnapshot();
+      assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+        availability: 'unavailable',
+        reason_code: 'project_overview_authority_unavailable',
+        service_version: null,
+        contract_version: null,
+        allowed_actions: [],
+        scope: projectScope,
+        authority_revision: null,
+        retryable: false,
+        authority_source: 'cloud_service',
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
+    },
+  );
 });
 
 test('Cloud Project Overview failures stay structured and never infer reason from text', async () => {
   for (const [response, expectedReason] of [
     [
-      jsonResponse(
-        { detail: 'cloud_project_overview_project_scope_invalid' },
-        { status: 403 },
-      ),
+      jsonResponse({ detail: 'cloud_project_overview_project_scope_invalid' }, { status: 403 }),
       'project_overview_forbidden',
     ],
     [
-      jsonResponse(
-        { detail: 'cloud_project_overview_project_scope_invalid' },
-        { status: 503 },
-      ),
+      jsonResponse({ detail: 'cloud_project_overview_project_scope_invalid' }, { status: 503 }),
       'project_overview_authority_unavailable',
     ],
     [
@@ -316,68 +310,80 @@ test('Cloud Project Overview failures stay structured and never infer reason fro
       'project_overview_contract_invalid',
     ],
   ]) {
-    await withFetch(async (input) => {
-      if (String(input).includes('/api/v1/projects/project-1?')) return response;
-      return jsonResponse({}, { status: 404 });
-    }, async () => {
-      const snapshot = await createClient(cloudConfig()).loadSnapshot();
-      assert.deepEqual(snapshot.capabilities['project-project-overview'], {
-        availability: 'unavailable',
-        reason_code: expectedReason,
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: projectScope,
-        authority_revision: null,
-        authority_source: 'cloud_service',
-        provenance: 'observed',
-      });
-    });
+    await withFetch(
+      async (input) => {
+        if (String(input).includes('/api/v1/projects/project-1?')) return response;
+        return jsonResponse({}, { status: 404 });
+      },
+      async () => {
+        const snapshot = await createClient(cloudConfig()).loadSnapshot();
+        assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+          availability: 'unavailable',
+          reason_code: expectedReason,
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: projectScope,
+          authority_revision: null,
+          retryable: false,
+          authority_source: 'cloud_service',
+          supporting_authority_sources: [],
+          provenance: 'observed',
+        });
+      },
+    );
   }
 });
 
 test('Local workbench preserves degraded Project Overview authority metadata', async () => {
   const signal = new AbortController().signal;
   const calls = [];
-  await withFetch(async (input, init) => {
-    calls.push({ input: String(input), init });
-    if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
-      return jsonResponse(localTenantOverview);
-    }
-    if (String(input).endsWith('/api/v1/projects/project-1/overview')) {
-      return jsonResponse(localProjectOverview);
-    }
-    return jsonResponse({}, { status: 404 });
-  }, async () => {
-    const snapshot = await createClient(localConfig()).loadSnapshot(signal);
-    assert.deepEqual(snapshot.capabilities['project-project-overview'], {
-      availability: 'degraded',
-      reason_code: 'local_project_overview_timeline_projection_only',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: ['view'],
-      scope: projectScope,
-      authority_revision: 11,
-      authority_source: 'sidecar',
-      provenance: 'observed',
-    });
-    assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
-      availability: 'degraded',
-      reason_code: 'local_tenant_overview_memory_projection_unavailable',
-      service_version: '0.1.0',
-      contract_version: '3.0.0',
-      allowed_actions: ['view'],
-      scope: {
-        tenant_id: 'tenant-1',
-        project_id: null,
-        workspace_id: null,
-        instance_id: null,
-      },
-      authority_revision: 13,
-      authority_source: 'sidecar',
-      provenance: 'observed',
-    });
-  });
+  await withFetch(
+    async (input, init) => {
+      calls.push({ input: String(input), init });
+      if (String(input).endsWith('/api/v1/tenants/tenant-1/stats')) {
+        return jsonResponse(localTenantOverview);
+      }
+      if (String(input).endsWith('/api/v1/projects/project-1/overview')) {
+        return jsonResponse(localProjectOverview);
+      }
+      return jsonResponse({}, { status: 404 });
+    },
+    async () => {
+      const snapshot = await createClient(localConfig()).loadSnapshot(signal);
+      assert.deepEqual(snapshot.capabilities['project-project-overview'], {
+        availability: 'degraded',
+        reason_code: 'local_project_overview_timeline_projection_only',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view'],
+        scope: projectScope,
+        authority_revision: 11,
+        retryable: false,
+        authority_source: 'sidecar',
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
+      assert.deepEqual(snapshot.capabilities['tenant-tenant-overview'], {
+        availability: 'degraded',
+        reason_code: 'local_tenant_overview_memory_projection_unavailable',
+        service_version: '0.1.0',
+        contract_version: '3.0.0',
+        allowed_actions: ['view'],
+        scope: {
+          tenant_id: 'tenant-1',
+          project_id: null,
+          workspace_id: null,
+          instance_id: null,
+        },
+        authority_revision: 13,
+        retryable: false,
+        authority_source: 'sidecar',
+        supporting_authority_sources: [],
+        provenance: 'observed',
+      });
+    },
+  );
 
   const projectCall = calls.find(({ input }) =>
     input.endsWith('/api/v1/projects/project-1/overview'),
@@ -391,17 +397,20 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
 test('Cloud and Local Project Overview authority propagate AbortSignal cancellation', async () => {
   const controller = new AbortController();
   controller.abort();
-  await withFetch(async (_input, init) => {
-    if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    return jsonResponse({}, { status: 404 });
-  }, async () => {
-    for (const config of [cloudConfig(), localConfig()]) {
-      await assert.rejects(
-        createClient(config).loadSnapshot(controller.signal),
-        (error) => error instanceof DOMException && error.name === 'AbortError',
-      );
-    }
-  });
+  await withFetch(
+    async (_input, init) => {
+      if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return jsonResponse({}, { status: 404 });
+    },
+    async () => {
+      for (const config of [cloudConfig(), localConfig()]) {
+        await assert.rejects(
+          createClient(config).loadSnapshot(controller.signal),
+          (error) => error instanceof DOMException && error.name === 'AbortError',
+        );
+      }
+    },
+  );
 });
 
 function createClient(config) {

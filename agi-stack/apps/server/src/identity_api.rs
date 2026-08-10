@@ -4,8 +4,7 @@
 //!
 //! Routes split by authentication:
 //!   - [`router_public`] (unauthenticated — login must not sit behind the key
-//!     middleware): `POST /api/v1/auth/token`,
-//!     `POST /api/v1/auth/oauth/{provider}/callback`.
+//!     middleware): `POST /api/v1/auth/token`.
 //!   - [`router_authed`] (behind [`crate::auth::require_api_key`]):
 //!     `GET/POST /api/v1/tenants/`, `GET/PUT /api/v1/tenants/{id}`,
 //!     `GET/POST /api/v1/projects/`, `GET/PUT/DELETE /api/v1/projects/{id}`.
@@ -95,20 +94,6 @@ async fn revoke_authorization_key(
 ) -> Result<(), AuthRejection> {
     let raw_key = extract_raw_key(authorization)?;
     authenticator.revoke_api_key(&raw_key).await
-}
-
-// ---- POST /auth/oauth/{provider}/callback (501 stub) ----------------------
-
-/// `POST /api/v1/auth/oauth/{provider}/callback` — Python returns an explicit
-/// `501` until OAuth providers are configured; Rust owns the path with the same
-/// status + detail so the strangler can flip it. (Real OAuth authorization-code /
-/// PKCE flow is a documented future item.)
-async fn oauth_callback(Path(_provider): Path<String>) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "detail": "OAuth login is not configured" })),
-    )
-        .into_response()
 }
 
 // ---- GET /auth/me + /users/me --------------------------------------------
@@ -657,7 +642,7 @@ async fn accept_invitation(
 
 // ---- routers --------------------------------------------------------------
 
-/// Unauthenticated identity routes (login + oauth stub). These must **not** sit
+/// Unauthenticated identity routes. These must **not** sit
 /// behind the API-key middleware — you cannot present a key before you have one.
 pub fn router_public() -> Router<AppState> {
     Router::new()
@@ -666,10 +651,6 @@ pub fn router_public() -> Router<AppState> {
         .route("/api/v1/auth/device/code", post(device_code))
         .route("/api/v1/auth/device/token", post(device_token))
         .route("/api/v1/auth/device/cancel", post(cancel_device_code))
-        .route(
-            "/api/v1/auth/oauth/:provider/callback",
-            post(oauth_callback),
-        )
         .route("/api/v1/invitations/verify/:token", get(verify_invitation))
 }
 

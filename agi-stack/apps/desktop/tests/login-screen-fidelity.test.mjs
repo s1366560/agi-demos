@@ -23,6 +23,10 @@ const loginRuntimeSource = readFileSync(
   'utf8'
 );
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+const cloudAuthAuthoritySource = readFileSync(
+  new URL('../electron/main/cloudAuthenticationAuthority.ts', import.meta.url),
+  'utf8',
+);
 
 test('approved email path owns the trusted-device choice and inline alert', () => {
   assert.match(loginSource, /onEmailLogin: \(trustedDevice: boolean\) => void/);
@@ -175,13 +179,12 @@ test('workspace SSO polls by structured protocol state and is cancellable', () =
   assert.match(desktopAuthSource, /keepExpiredPresentation/);
   assert.doesNotMatch(appSource, /localStorage[\s\S]*device_code/);
 
-  const nativeSave = desktopAuthSource.indexOf('await saveNativeTrustedSession');
-  const staleAttemptCheck = desktopAuthSource.indexOf(
-    'if (!deviceAuthAttemptIsCurrent(attemptId, authRevision, controller))',
-    nativeSave,
-  );
-  const adoption = desktopAuthSource.indexOf('tokenAdopted = true', nativeSave);
-  assert.ok(nativeSave >= 0 && staleAttemptCheck > nativeSave && adoption > staleAttemptCheck);
+  assert.match(desktopAuthSource, /nativeAuthClient\.beginDeviceAuthorization/);
+  assert.match(desktopAuthSource, /nativeAuthClient\.pollDeviceAuthorization/);
+  assert.match(desktopAuthSource, /hydrateProjectedCloudSession\(authRevision\)/);
+  assert.doesNotMatch(desktopAuthSource, /saveNativeTrustedSession/);
+  assert.match(cloudAuthAuthoritySource, /#adoptToken/);
+  assert.match(cloudAuthAuthoritySource, /saveTrustedSession/);
 });
 
 test('device grant cleanup covers cancellation, expiry, retry, supersession, unmount and approval races', () => {
@@ -214,10 +217,10 @@ test('device grant cleanup covers cancellation, expiry, retry, supersession, unm
     desktopAuthSource,
     /deviceError\?\.code === 'authorization_pending'[\s\S]{0,180}?continue;/,
   );
-  assert.match(
-    desktopAuthSource,
-    /caught instanceof WorkspaceSsoFlowError && caught\.code === 'expired'[\s\S]{0,500}?return;[\s\S]{0,900}?issuedDeviceCode && !tokenAdopted/,
-  );
+  assert.match(desktopAuthSource, /caught instanceof WorkspaceSsoFlowError && caught\.code === 'expired'/);
+  assert.match(desktopAuthSource, /nativeSessionAdopted && !nativeFlowCompleted/);
+  assert.match(desktopAuthSource, /nativeDeviceAttemptId && !nativeSessionAdopted/);
+  assert.match(desktopAuthSource, /issuedDeviceCode && !tokenAdopted/);
 
   const attemptRefStart = appSource.indexOf('const deviceAuthAttemptRef = useRef');
   const attemptRefEnd = appSource.indexOf('const runInputRequestRef', attemptRefStart);
@@ -303,9 +306,22 @@ test('browser storage never receives a trusted session credential or recovery ca
   assert.doesNotMatch(appSource, /trustedLocalSessionReference/);
   assert.doesNotMatch(appSource, /writeTrustedLocalSessionReference/);
   assert.doesNotMatch(appSource, /readTrustedLocalSessionReference/);
-  assert.match(desktopAuthSource, /credential_kind: 'cloud_bearer'/);
+  assert.doesNotMatch(desktopAuthSource, /credential_kind: 'cloud_bearer'/);
+  assert.match(cloudAuthAuthoritySource, /credential_kind: 'cloud_bearer'/);
   assert.match(appSource, /credential_kind: 'local_session_reference'/);
-  assert.match(appSource, /loadNativeTrustedSession\(\)/);
+  assert.doesNotMatch(appSource, /loadNativeTrustedSession\(\)/);
+  assert.match(
+    appSource,
+    /const projection = await hydrateProjectedCloudSession\(authAttemptRevision\)/,
+  );
+  assert.match(
+    desktopAuthSource,
+    /const projectionClient = desktopCloudSessionProjectionClient\(\)/,
+  );
+  assert.match(
+    desktopAuthSource,
+    /createProjectedCloudSessionState\(projection, configRef\.current\)/,
+  );
   assert.match(appSource, /clearNativeTrustedSession\(\)/);
   assert.match(appSource, /const message = t\('login\.restoreFailed'\)/);
   assert.match(desktopAuthSource, /if \(outcome\.must_change_password\)/);

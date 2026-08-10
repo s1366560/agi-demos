@@ -1,11 +1,8 @@
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
-import type {
-  DesktopRouteContext,
-  DesktopRouteMatch,
-} from './desktopRouteRegistry';
+import type { DesktopRouteContext, DesktopRouteMatch } from './desktopRouteRegistry';
 import type { DesktopRoutePermissionAuthorityReasonCode } from './desktopRoutePermissionAuthority';
 
-export type DesktopRouteRuntimeMode = 'cloud' | 'local';
+export type DesktopRouteRuntimeMode = 'cloud' | 'local' | 'local_online' | 'local_offline';
 
 export type DesktopRouteAccessResult =
   | Readonly<{
@@ -102,15 +99,15 @@ export function evaluateDesktopRouteAccess<TModule>({
   permissions,
   capability,
 }: DesktopRouteAccessInput<TModule>): DesktopRouteAccessResult {
-  const missingByAlternative = match.definition.requiredPermission.map(
-    (alternative) =>
-      alternative.filter((permission) => !permissions.has(permission)),
+  const runtimeState = normalizeDesktopRouteRuntimeMode(mode);
+  const missingByAlternative = match.definition.requiredPermission.map((alternative) =>
+    alternative.filter((permission) => !permissions.has(permission)),
   );
   const allowed = missingByAlternative.some(
     (missingPermissions) => missingPermissions.length === 0,
   );
   if (
-    mode === 'local' &&
+    runtimeState === 'local_offline' &&
     match.definition.localPolicy === 'cloud_only' &&
     permissions.has('authenticated')
   ) {
@@ -136,10 +133,7 @@ export function evaluateDesktopRouteAccess<TModule>({
     });
   }
 
-  if (
-    mode === 'local' &&
-    match.definition.localPolicy === 'blocked_by_web_contract'
-  ) {
+  if (runtimeState !== 'cloud' && match.definition.localPolicy === 'blocked_by_web_contract') {
     return unavailable('desktop_route_local_blocked_by_web_contract', null);
   }
   if (match.definition.structuralReadiness?.status === 'unavailable') {
@@ -149,33 +143,19 @@ export function evaluateDesktopRouteAccess<TModule>({
     return unavailable('desktop_route_capability_missing', null);
   }
   if (isActiveCapability(capability) && capability.provenance !== 'observed') {
-    return unavailable(
-      'desktop_route_capability_authority_unobserved',
-      capability,
-    );
+    return unavailable('desktop_route_capability_authority_unobserved', capability);
   }
   if (
     isActiveCapability(capability) &&
-    capability.authority_source !== authoritySourceForMode(mode)
+    capability.authority_source !==
+      authoritySourceForRoute(runtimeState, match.definition.localPolicy)
   ) {
-    return unavailable(
-      'desktop_route_capability_authority_source_mismatch',
-      capability,
-    );
+    return unavailable('desktop_route_capability_authority_source_mismatch', capability);
   }
-  if (
-    isActiveCapability(capability) &&
-    !isActiveAuthorityRevision(capability.authority_revision)
-  ) {
-    return unavailable(
-      'desktop_route_capability_authority_revision_invalid',
-      capability,
-    );
+  if (isActiveCapability(capability) && !isActiveAuthorityRevision(capability.authority_revision)) {
+    return unavailable('desktop_route_capability_authority_revision_invalid', capability);
   }
-  if (
-    isActiveCapability(capability) &&
-    capability.allowed_actions.length === 0
-  ) {
+  if (isActiveCapability(capability) && capability.allowed_actions.length === 0) {
     return unavailable('desktop_route_capability_actions_missing', capability);
   }
   if (!capabilityScopeMatches(match.context, capability)) {
@@ -200,19 +180,25 @@ export function evaluateDesktopRouteAccess<TModule>({
   });
 }
 
-function isActiveCapability(
-  capability: DesktopCapabilityAvailability,
-): boolean {
-  return (
-    capability.availability === 'available' ||
-    capability.availability === 'degraded'
-  );
+function isActiveCapability(capability: DesktopCapabilityAvailability): boolean {
+  return capability.availability === 'available' || capability.availability === 'degraded';
 }
 
-function authoritySourceForMode(
+function normalizeDesktopRouteRuntimeMode(
   mode: DesktopRouteRuntimeMode,
+): 'cloud' | 'local_online' | 'local_offline' {
+  return mode === 'local' ? 'local_offline' : mode;
+}
+
+function authoritySourceForRoute(
+  runtimeState: 'cloud' | 'local_online' | 'local_offline',
+  localPolicy: DesktopRouteMatch['definition']['localPolicy'],
 ): 'cloud_service' | 'sidecar' {
-  return mode === 'local' ? 'sidecar' : 'cloud_service';
+  if (runtimeState === 'cloud') return 'cloud_service';
+  if (runtimeState === 'local_online' && localPolicy === 'cloud_only') {
+    return 'cloud_service';
+  }
+  return 'sidecar';
 }
 
 function isActiveAuthorityRevision(input: number | null): input is number {

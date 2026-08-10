@@ -9,6 +9,10 @@ directories:
   buildResources: build
 files:
   - out/**/*
+protocols:
+  - name: agi-stack Desktop OAuth callback
+    schemes:
+      - agistack-auth
 extraResources:
   - from: build/sidecar
     to: sidecar

@@ -9,9 +9,9 @@
 //!   `Token` shape (`{access_token, token_type, must_change_password}`) with **no
 //!   timestamp**, so it is exactly reproducible and **safe to flip at the
 //!   gateway**.
-//! - **`POST /auth/oauth/{provider}/callback`** — Python is a `501` stub; Rust
-//!   owns the path and returns the same `501 {"detail": "OAuth login is not
-//!   configured"}`. Also flippable.
+//! - **`/auth/oauth/*`** — remains Python-owned. Redis state consumption, PKCE
+//!   exchange, provider verification, account binding, and session minting are
+//!   one authority boundary and must not be split across the gateway.
 //! - **`GET /tenants/` + `GET /tenants/{id}`** — membership-scoped, structurally
 //!   parity-tested, and flipped through method-scoped gateway rules so write
 //!   routes/siblings remain in Python.

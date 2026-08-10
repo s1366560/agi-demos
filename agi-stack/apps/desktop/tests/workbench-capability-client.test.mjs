@@ -11,9 +11,7 @@ const {
   normalizeWorkspaceCollaborationAuthorityContract,
   normalizeWorkspaceCollaborationCapabilityContract,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
-const {
-  DEFAULT_CONFIG,
-} = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const searchContract = {
   service_version: '0.1.0',
@@ -140,10 +138,7 @@ const managementRouteCapabilityIds = [
 
 function managementRouteClients(observe) {
   return Object.fromEntries(
-    managementRouteCapabilityIds.map((capability) => [
-      capability,
-      Object.freeze({ observe }),
-    ]),
+    managementRouteCapabilityIds.map((capability) => [capability, Object.freeze({ observe })]),
   );
 }
 
@@ -159,11 +154,7 @@ function availableCapability(allowedActions = []) {
   };
 }
 
-function degradedCapability(
-  reasonCode,
-  allowedActions = [],
-  authorityRevision = null,
-) {
+function degradedCapability(reasonCode, allowedActions = [], authorityRevision = null) {
   return {
     availability: 'degraded',
     reason_code: reasonCode,
@@ -211,15 +202,22 @@ function withScope(capability, scope) {
 function withObservedAuthority(capability, authoritySource) {
   return {
     ...capability,
+    retryable: false,
     authority_source: authoritySource,
+    supporting_authority_sources: [],
     provenance: 'observed',
   };
 }
 
+function withObservedCompoundCloudAuthority(capability) {
+  return {
+    ...withObservedAuthority(capability, 'cloud_service'),
+    supporting_authority_sources: ['sidecar', 'electron'],
+  };
+}
+
 function withDeclaredAuthority(capability) {
-  const active =
-    capability.availability === 'available' ||
-    capability.availability === 'degraded';
+  const active = capability.availability === 'available' || capability.availability === 'degraded';
   return {
     ...(active
       ? {
@@ -230,7 +228,9 @@ function withDeclaredAuthority(capability) {
           authority_revision: null,
         }
       : capability),
+    retryable: capability.retryable ?? false,
     authority_source: 'renderer',
+    supporting_authority_sources: [],
     provenance: 'declared',
   };
 }
@@ -267,6 +267,22 @@ test('cloud client validates structured Search and Automation authorities', asyn
         mode: 'cloud',
         projectId: 'project/1',
       },
+      {
+        cloudRequestBroker: {
+          async requestJson(request) {
+            assert.equal(request.path, '/api/v1/workspace-context');
+            return {
+              context: {
+                tenant_id: 'default',
+                project_id: 'project/1',
+                revision: 23,
+              },
+              membership_role: 'admin',
+            };
+          },
+          async requestNoContent() {},
+        },
+      },
     );
     const snapshot = await client.loadSnapshot();
 
@@ -295,10 +311,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
         'cloud_service',
       ),
     );
-    assert.deepEqual(
-      snapshot.capabilities['project-project-search'],
-      snapshot.capabilities.search,
-    );
+    assert.deepEqual(snapshot.capabilities['project-project-search'], snapshot.capabilities.search);
     assert.deepEqual(
       snapshot.capabilities.automation_run,
       withObservedAuthority(
@@ -441,8 +454,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
       snapshot.capabilities['tenant-tenant-deploy'],
       withDeclaredAuthority({
         availability: 'degraded',
-        reason_code:
-          'runtime_deployments_mutations_and_instance_discovery_partial',
+        reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
         service_version: '0.1.0',
         contract_version: '3.0.0',
         allowed_actions: [
@@ -508,14 +520,49 @@ test('cloud client validates structured Search and Automation authorities', asyn
         authority_revision: null,
       }),
     );
-    assert.equal(
-      calls[0]?.input,
-      'https://api.memstack.test/api/v1/search-enhanced/capabilities',
+    assert.deepEqual(
+      snapshot.capabilities['backend-stores'],
+      withObservedCompoundCloudAuthority(
+        withScope(
+          {
+            availability: 'available',
+            reason_code: null,
+            service_version: '0.1.0',
+            contract_version: '4.0.0',
+            allowed_actions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+            scope: emptyScope,
+            authority_revision: 23,
+            retryable: false,
+          },
+          {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+        ),
+      ),
     );
-    assert.equal(
-      calls[0]?.init?.headers.get('Authorization'),
-      'Bearer session-credential',
+    assert.deepEqual(
+      snapshot.capabilities['project-playbooks'],
+      withObservedCompoundCloudAuthority(
+        withScope(
+          {
+            availability: 'available',
+            reason_code: null,
+            service_version: '0.1.0',
+            contract_version: '4.0.0',
+            allowed_actions: ['view', 'list', 'refresh', 'review-verdicts'],
+            scope: emptyScope,
+            authority_revision: 23,
+            retryable: false,
+          },
+          scope,
+        ),
+      ),
     );
+    assert.equal(calls[0]?.input, 'https://api.memstack.test/api/v1/search-enhanced/capabilities');
+    assert.equal(calls[0]?.init?.headers.get('Authorization'), 'Bearer session-credential');
     assert.equal(calls[0]?.init?.headers.has('X-Agistack-Launch'), false);
   } finally {
     globalThis.fetch = originalFetch;
@@ -570,7 +617,9 @@ test('management routes become observed only after their typed clients read curr
             instance_id: null,
           },
           authority_revision: null,
+          retryable: false,
           authority_source: authoritySource,
+          supporting_authority_sources: [],
           provenance: 'observed',
         });
       }
@@ -621,7 +670,9 @@ test('management route observation failures stay unavailable and never promote r
           instance_id: null,
         },
         authority_revision: null,
+        retryable: false,
         authority_source: 'cloud_service',
+        supporting_authority_sources: [],
         provenance: 'observed',
       });
     }
@@ -697,10 +748,7 @@ test('local workbench capability client consumes the scoped degraded Search cont
         'sidecar',
       ),
     );
-    assert.deepEqual(
-      snapshot.capabilities['project-project-search'],
-      snapshot.capabilities.search,
-    );
+    assert.deepEqual(snapshot.capabilities['project-project-search'], snapshot.capabilities.search);
     assert.deepEqual(
       snapshot.capabilities['project-support'],
       withDeclaredAuthority({
@@ -718,27 +766,31 @@ test('local workbench capability client consumes the scoped degraded Search cont
         authority_revision: null,
       }),
     );
-    const searchCall = calls.find(({ input }) =>
-      input.endsWith('/api/v1/search-enhanced/capabilities'),
-    );
-    assert.ok(searchCall);
-    assert.equal(
-      searchCall.input,
-      'http://127.0.0.1:4123/api/v1/search-enhanced/capabilities',
-    );
-    assert.equal(searchCall.init?.headers.get('Authorization'), null);
-    assert.equal(
-      searchCall.init?.headers.get('X-Agistack-Launch'),
-      'launch-capability',
+    assert.deepEqual(
+      snapshot.capabilities['backend-stores'],
+      withDeclaredAuthority(
+        withScope(
+          {
+            ...unavailableCapability('local_backend_stores_cloud_authority_unavailable'),
+            retryable: true,
+          },
+          {
+            tenant_id: 'local',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+        ),
+      ),
     );
     assert.deepEqual(
-      snapshot.capabilities.automation_run,
-      withObservedAuthority(
+      snapshot.capabilities['project-playbooks'],
+      withDeclaredAuthority(
         withScope(
-          unavailableCapability(
-            'durable_automation_execution_unavailable',
-            true,
-          ),
+          {
+            ...unavailableCapability('local_project_playbooks_cloud_authority_unavailable'),
+            retryable: true,
+          },
           {
             tenant_id: 'local',
             project_id: 'local-project',
@@ -746,6 +798,24 @@ test('local workbench capability client consumes the scoped degraded Search cont
             instance_id: null,
           },
         ),
+      ),
+    );
+    const searchCall = calls.find(({ input }) =>
+      input.endsWith('/api/v1/search-enhanced/capabilities'),
+    );
+    assert.ok(searchCall);
+    assert.equal(searchCall.input, 'http://127.0.0.1:4123/api/v1/search-enhanced/capabilities');
+    assert.equal(searchCall.init?.headers.get('Authorization'), null);
+    assert.equal(searchCall.init?.headers.get('X-Agistack-Launch'), 'launch-capability');
+    assert.deepEqual(
+      snapshot.capabilities.automation_run,
+      withObservedAuthority(
+        withScope(unavailableCapability('durable_automation_execution_unavailable', true), {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: null,
+          instance_id: null,
+        }),
         'sidecar',
       ),
     );
@@ -811,6 +881,103 @@ test('local workbench capability client consumes the scoped degraded Search cont
         }),
       ),
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('local-online snapshot requires observed cloud scope and preserves compound authority', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        service_version: '0.1.0',
+        contract_version: '2.0.0',
+        mode: 'keyword_degraded',
+        reason_code: 'local_embeddings_unavailable',
+        tenant_id: 'tenant-1',
+        project_id: 'project-1',
+        projection_revision: 7,
+        backfill_cursor: null,
+        supported_search_types: ['advanced', 'temporal', 'faceted'],
+        unavailable_search_types: ['graph_traversal', 'community'],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = createDesktopWorkbenchCapabilityClient(
+      {
+        getAutomationCapabilities: async () => ({
+          ...automationContract,
+          durable_execution: false,
+        }),
+      },
+      {
+        ...DEFAULT_CONFIG,
+        apiBaseUrl: 'http://127.0.0.1:4123',
+        localApiToken: 'launch-capability',
+        mode: 'local',
+        tenantId: 'tenant-1',
+        projectId: 'project-1',
+      },
+      {
+        cloudRequestBroker: {
+          async requestJson(request) {
+            assert.equal(request.path, '/api/v1/workspace-context');
+            return {
+              context: {
+                tenant_id: 'tenant-1',
+                project_id: 'project-1',
+                revision: 41,
+              },
+              membership_role: 'admin',
+            };
+          },
+          async requestNoContent() {},
+        },
+      },
+    );
+    const snapshot = await client.loadSnapshot();
+
+    assert.equal(snapshot.runtime_state, 'local_online');
+    assert.deepEqual(snapshot.capabilities['backend-stores'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '4.0.0',
+      allowed_actions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: 41,
+      retryable: false,
+      authority_source: 'cloud_service',
+      supporting_authority_sources: ['sidecar', 'electron'],
+      provenance: 'observed',
+    });
+    assert.deepEqual(snapshot.capabilities['project-playbooks'], {
+      availability: 'available',
+      reason_code: null,
+      service_version: '0.1.0',
+      contract_version: '4.0.0',
+      allowed_actions: ['view', 'list', 'refresh', 'review-verdicts'],
+      scope: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-1',
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: 41,
+      retryable: false,
+      authority_source: 'cloud_service',
+      supporting_authority_sources: ['sidecar', 'electron'],
+      provenance: 'observed',
+    });
+    assert.equal(snapshot.capabilities.search.authority_source, 'sidecar');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -901,20 +1068,14 @@ test('legacy capability authorities fail closed before payload inference', async
     assert.deepEqual(
       snapshot.capabilities.search,
       withObservedAuthority(
-        withScope(
-          unavailableCapability('search_capability_contract_unavailable'),
-          scope,
-        ),
+        withScope(unavailableCapability('search_capability_contract_unavailable'), scope),
         'cloud_service',
       ),
     );
     assert.deepEqual(
       snapshot.capabilities.automation_run,
       withObservedAuthority(
-        withScope(
-          unavailableCapability('automation_capability_contract_unavailable'),
-          scope,
-        ),
+        withScope(unavailableCapability('automation_capability_contract_unavailable'), scope),
         'cloud_service',
       ),
     );
@@ -1018,32 +1179,22 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
       ),
     );
 
-    const authorityCall = calls.find(({ input }) =>
-      input.endsWith('/collaboration/capabilities'),
-    );
+    const authorityCall = calls.find(({ input }) => input.endsWith('/collaboration/capabilities'));
     assert.equal(
       authorityCall?.input,
       'https://api.memstack.test/api/v1/tenants/tenant%20%2F%201/projects/' +
         'project%20%2F%201/workspaces/workspace%20%2F%201/collaboration/capabilities',
     );
-    assert.equal(
-      authorityCall?.init?.headers.get('Authorization'),
-      'Bearer session-credential',
-    );
+    assert.equal(authorityCall?.init?.headers.get('Authorization'), 'Bearer session-credential');
     assert.equal(authorityCall?.init?.headers.has('X-Agistack-Launch'), false);
 
-    const revisionCall = calls.find(({ input }) =>
-      input.endsWith('/collaboration/authority'),
-    );
+    const revisionCall = calls.find(({ input }) => input.endsWith('/collaboration/authority'));
     assert.equal(
       revisionCall?.input,
       'https://api.memstack.test/api/v1/tenants/tenant%20%2F%201/projects/' +
         'project%20%2F%201/workspaces/workspace%20%2F%201/collaboration/authority',
     );
-    assert.equal(
-      revisionCall?.init?.headers.get('Authorization'),
-      'Bearer session-credential',
-    );
+    assert.equal(revisionCall?.init?.headers.get('Authorization'), 'Bearer session-credential');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1056,37 +1207,22 @@ test('Workspace Collaboration capability normalization fails closed on contract 
     workspaceId: 'workspace / 1',
   };
   assert.deepEqual(
-    normalizeWorkspaceCollaborationCapabilityContract(
-      workspaceCollaborationContract,
-      scope,
-    ),
-    degradedCapability(
-      'workspace_collaboration_mutation_guards_unavailable',
-      workspaceReadActions,
-    ),
+    normalizeWorkspaceCollaborationCapabilityContract(workspaceCollaborationContract, scope),
+    degradedCapability('workspace_collaboration_mutation_guards_unavailable', workspaceReadActions),
   );
 
   const missingSurface = structuredClone(workspaceCollaborationContract);
   missingSurface.read_surfaces.pop();
   assert.deepEqual(
     normalizeWorkspaceCollaborationCapabilityContract(missingSurface, scope),
-    unavailableCapability(
-      'workspace_collaboration_capability_contract_invalid',
-      true,
-    ),
+    unavailableCapability('workspace_collaboration_capability_contract_invalid', true),
   );
 
   const unsafeMutationClaim = structuredClone(workspaceCollaborationContract);
   unsafeMutationClaim.mutations.revision_guarded = true;
   assert.deepEqual(
-    normalizeWorkspaceCollaborationCapabilityContract(
-      unsafeMutationClaim,
-      scope,
-    ),
-    unavailableCapability(
-      'workspace_collaboration_capability_contract_invalid',
-      true,
-    ),
+    normalizeWorkspaceCollaborationCapabilityContract(unsafeMutationClaim, scope),
+    unavailableCapability('workspace_collaboration_capability_contract_invalid', true),
   );
 
   assert.deepEqual(
@@ -1094,21 +1230,13 @@ test('Workspace Collaboration capability normalization fails closed on contract 
       { ...workspaceCollaborationContract, workspace_id: 'workspace-other' },
       scope,
     ),
-    unavailableCapability(
-      'workspace_collaboration_capability_scope_mismatch',
-      true,
-    ),
+    unavailableCapability('workspace_collaboration_capability_scope_mismatch', true),
   );
   const legacy = structuredClone(workspaceCollaborationContract);
   delete legacy.contract_version;
   assert.deepEqual(
     normalizeWorkspaceCollaborationCapabilityContract(legacy, scope),
-    unavailableCapability(
-      'capability_contract_version_missing',
-      false,
-      '0.1.0',
-      null,
-    ),
+    unavailableCapability('capability_contract_version_missing', false, '0.1.0', null),
   );
 });
 
@@ -1119,10 +1247,7 @@ test('Workspace Collaboration authority normalization requires exact scoped revi
     workspaceId: 'workspace / 1',
   };
   assert.equal(
-    normalizeWorkspaceCollaborationAuthorityContract(
-      workspaceCollaborationAuthority,
-      scope,
-    ),
+    normalizeWorkspaceCollaborationAuthorityContract(workspaceCollaborationAuthority, scope),
     7,
   );
   assert.equal(
@@ -1175,9 +1300,7 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
       cloud.capabilities.workspace_collaboration,
       withObservedAuthority(
         withScope(
-          unavailableCapability(
-            'workspace_collaboration_capability_contract_unavailable',
-          ),
+          unavailableCapability('workspace_collaboration_capability_contract_unavailable'),
           {
             tenant_id: 'tenant-1',
             project_id: 'project-1',
@@ -1204,15 +1327,12 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     assert.deepEqual(
       local.capabilities.workspace_collaboration,
       withDeclaredAuthority(
-        withScope(
-          unavailableCapability('local_workspace_collaboration_unavailable'),
-          {
-            tenant_id: 'local',
-            project_id: 'local-project',
-            workspace_id: 'local-workspace',
-            instance_id: null,
-          },
-        ),
+        withScope(unavailableCapability('local_workspace_collaboration_unavailable'), {
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: 'local-workspace',
+          instance_id: null,
+        }),
       ),
     );
     assert.deepEqual(

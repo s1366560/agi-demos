@@ -18,7 +18,7 @@ fn strangled_prefixes_route_to_rust() {
     assert!(is_strangled("/api/v1/recall/short"));
     // P2 login vertical.
     assert!(is_strangled("/api/v1/auth/token"));
-    assert!(is_strangled("/api/v1/auth/oauth/google/callback"));
+    assert!(!is_strangled("/api/v1/auth/oauth/google/callback"));
     assert!(is_strangled_request(&get, "/api/v1/tenants"));
     assert!(is_strangled_request(&get, "/api/v1/tenants/"));
     assert!(is_strangled_request(&get, "/api/v1/tenants/acme"));
@@ -411,7 +411,6 @@ fn strangled_prefixes_route_to_rust() {
         "/api/v1/episodes/",
         "/api/v1/recall/short",
         "/api/v1/auth/token",
-        "/api/v1/auth/oauth/github/callback",
     ] {
         assert_eq!(upstream_for(p, &ups()), "http://rust:8088");
     }
@@ -435,6 +434,9 @@ fn everything_else_routes_to_python() {
         "/api/v1/auth/force-change-password",
         "/api/v1/auth/keys",
         "/api/v1/auth/tokens", // not a segment boundary of `/auth/token`
+        "/api/v1/auth/oauth/providers",
+        "/api/v1/auth/oauth/github/authorize",
+        "/api/v1/auth/oauth/github/callback",
         "/api/v1/users",
         // Tenant reads are method-scoped; sibling routes stay in Python.
         "/api/v1/tenants/t1/members",

@@ -111,6 +111,7 @@ import {
   desktopSearchRequestContract,
   normalizeDesktopSearchResponse,
 } from './searchContract';
+import { desktopVaultBoundCloudRequestBroker } from './cloudRequestBroker';
 import { ManagedResourcesClient } from './managedResourcesClient';
 import type { DesktopSearchRequest, DesktopSearchResponse } from './searchContract';
 
@@ -2497,6 +2498,35 @@ export class DesktopApiClient {
       headers.set('Content-Type', options.contentType ?? 'application/json');
     }
     const credential = desktopApiCredential(this.config);
+    const vaultBoundBroker =
+      this.config.mode === 'cloud' &&
+      !options.skipAuth &&
+      !credential &&
+      !formDataBody &&
+      !(options.body instanceof URLSearchParams)
+        ? desktopVaultBoundCloudRequestBroker()
+        : null;
+    if (vaultBoundBroker) {
+      if (options.body !== undefined && !isRecord(options.body)) {
+        throw new DesktopApiError('Unsupported vault-bound Cloud request body', 400, {
+          detail: 'cloud_request_body_unsupported',
+        });
+      }
+      const response = await vaultBoundBroker.requestResponse({
+        path,
+        method: options.method ?? 'GET',
+        ...(options.body === undefined ? {} : { body: options.body }),
+        signal: options.signal,
+      });
+      if (response.status < 200 || response.status >= 300) {
+        const message =
+          isRecord(response.body) && 'detail' in response.body
+            ? String(response.body.detail)
+            : `HTTP ${response.status}`;
+        throw new DesktopApiError(message, response.status, response.body);
+      }
+      return response.body as T;
+    }
     if (!options.skipAuth && credential) {
       headers.set('Authorization', `Bearer ${credential}`);
     }

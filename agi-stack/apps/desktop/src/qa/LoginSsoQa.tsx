@@ -68,6 +68,9 @@ function LoginSsoQa() {
           setExpiresAt(Date.now() + 10 * 60 * 1000);
           setDeviceDialogOpen(true);
         }}
+        nativeOAuthProviders={[]}
+        nativeOAuthPendingProvider={null}
+        onNativeOAuth={() => undefined}
         workspaceSso={workspaceSso}
         onOpenWorkspaceSso={() => undefined}
         onCancelWorkspaceSso={() => setDeviceDialogOpen(false)}

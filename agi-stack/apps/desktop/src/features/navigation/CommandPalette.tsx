@@ -6,15 +6,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import {
-  MagnifyingGlassIcon,
-} from '@radix-ui/react-icons';
-import {
-  useI18n,
-} from '../../i18n';
-import {
-  type CommandPaletteItem,
-} from '../../appShellTypes';
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
+import { useI18n } from '../../i18n';
+import { type CommandPaletteItem } from '../../appShellTypes';
 
 export function CommandPalette({
   inputRef,
@@ -31,16 +25,25 @@ export function CommandPalette({
 }) {
   const { t } = useI18n();
   const paletteRef = useRef<HTMLElement>(null);
-  const enabledItems = useMemo(
-    () => items.filter((item) => !item.disabled),
-    [items],
-  );
+  const enabledItems = useMemo(() => items.filter((item) => !item.disabled), [items]);
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, { label: string; items: CommandPaletteItem[] }>();
+    for (const item of items) {
+      const group = groups.get(item.groupId);
+      if (group) {
+        group.items.push(item);
+      } else {
+        groups.set(item.groupId, {
+          label: item.groupLabel,
+          items: [item],
+        });
+      }
+    }
+    return [...groups.entries()];
+  }, [items]);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const activeItem =
-    enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
-  const activeOptionId = activeItem
-    ? `command-option-${activeItem.id}`
-    : undefined;
+  const activeItem = enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
+  const activeOptionId = activeItem ? `command-option-${activeItem.id}` : undefined;
 
   useEffect(() => {
     setActiveItemId((current) => {
@@ -53,9 +56,7 @@ export function CommandPalette({
 
   useEffect(() => {
     if (!activeOptionId) return;
-    document
-      .getElementById(activeOptionId)
-      ?.scrollIntoView({ block: 'nearest' });
+    document.getElementById(activeOptionId)?.scrollIntoView({ block: 'nearest' });
   }, [activeOptionId]);
 
   useEffect(() => {
@@ -79,22 +80,16 @@ export function CommandPalette({
   const moveActiveItem = (delta: number) => {
     setActiveItemId((current) => {
       if (enabledItems.length === 0) return null;
-      const currentIndex = enabledItems.findIndex(
-        (item) => item.id === current,
-      );
-      const startIndex =
-        currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
-      const nextIndex =
-        (startIndex + delta + enabledItems.length) % enabledItems.length;
+      const currentIndex = enabledItems.findIndex((item) => item.id === current);
+      const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
+      const nextIndex = (startIndex + delta + enabledItems.length) % enabledItems.length;
       return enabledItems[nextIndex].id;
     });
   };
 
   const containTabFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.key !== 'Tab') return;
-    const focusableElements = getCommandPaletteFocusableElements(
-      paletteRef.current,
-    );
+    const focusableElements = getCommandPaletteFocusableElements(paletteRef.current);
     if (!focusableElements.length) return;
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
@@ -127,8 +122,12 @@ export function CommandPalette({
           <input
             ref={inputRef}
             value={query}
+            role="combobox"
             aria-label={t('commandPalette.search')}
             placeholder={t('commandPalette.searchPlaceholder')}
+            aria-controls="command-palette-results"
+            aria-expanded="true"
+            aria-autocomplete="list"
             aria-activedescendant={activeOptionId}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
@@ -144,10 +143,7 @@ export function CommandPalette({
                 event.preventDefault();
                 setActiveItemId(enabledItems[0].id);
               }
-              if (
-                event.key === 'End' &&
-                enabledItems[enabledItems.length - 1]
-              ) {
+              if (event.key === 'End' && enabledItems[enabledItems.length - 1]) {
                 event.preventDefault();
                 setActiveItemId(enabledItems[enabledItems.length - 1].id);
               }
@@ -163,6 +159,7 @@ export function CommandPalette({
           />
         </label>
         <div
+          id="command-palette-results"
           className="command-list"
           role="listbox"
           aria-label={t('commandPalette.results')}
@@ -172,34 +169,51 @@ export function CommandPalette({
               {t('commandPalette.empty')}
             </div>
           ) : (
-            items.map((item) => (
-              <button
-                id={`command-option-${item.id}`}
-                className={`command-row ${item.disabled ? 'disabled' : ''} ${
-                  item.id === activeItem?.id ? 'selected' : ''
-                }`}
-                type="button"
-                role="option"
-                aria-selected={item.id === activeItem?.id}
-                key={item.id}
-                disabled={item.disabled}
-                onMouseEnter={() => {
-                  if (!item.disabled) {
-                    setActiveItemId(item.id);
-                  }
-                }}
-                onClick={() => runItem(item)}
-              >
-                <span className="command-icon" aria-hidden="true">
-                  {item.icon}
-                </span>
-                <span className="command-copy">
-                  <strong>{item.label}</strong>
-                  <em>{item.description}</em>
-                </span>
-                {item.shortcut ? <kbd className="command-shortcut">{item.shortcut}</kbd> : null}
-              </button>
-            ))
+            groupedItems.map(([groupId, group]) => {
+              const headingId = `command-group-${groupId}`;
+              return (
+                <section
+                  className="command-group"
+                  role="group"
+                  aria-labelledby={headingId}
+                  key={groupId}
+                >
+                  <h2 id={headingId}>{group.label}</h2>
+                  {group.items.map((item) => (
+                    <button
+                      id={`command-option-${item.id}`}
+                      className={`command-row ${item.disabled ? 'disabled' : ''} ${
+                        item.id === activeItem?.id ? 'selected' : ''
+                      }`}
+                      type="button"
+                      role="option"
+                      aria-selected={item.id === activeItem?.id}
+                      aria-disabled={item.disabled || undefined}
+                      key={item.id}
+                      disabled={item.disabled}
+                      title={item.disabledReason}
+                      onMouseEnter={() => {
+                        if (!item.disabled) {
+                          setActiveItemId(item.id);
+                        }
+                      }}
+                      onClick={() => runItem(item)}
+                    >
+                      <span className="command-icon" aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <span className="command-copy">
+                        <strong>{item.label}</strong>
+                        <em>{item.disabledReason ?? item.description}</em>
+                      </span>
+                      {item.shortcut ? (
+                        <kbd className="command-shortcut">{item.shortcut}</kbd>
+                      ) : null}
+                    </button>
+                  ))}
+                </section>
+              );
+            })
           )}
         </div>
       </section>
@@ -207,9 +221,7 @@ export function CommandPalette({
   );
 }
 
-export function getCommandPaletteFocusableElements(
-  container: HTMLElement | null,
-): HTMLElement[] {
+export function getCommandPaletteFocusableElements(container: HTMLElement | null): HTMLElement[] {
   if (!container) return [];
   const selectors = [
     'button:not(:disabled)',

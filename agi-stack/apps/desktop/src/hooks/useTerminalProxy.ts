@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import {
+  CLOUD_SOCKET_OPEN,
+  createCloudSocketBridge,
+  desktopCloudSocketTransport,
+} from '../api/cloudSocketBridge';
 
 import {
   acceptTerminalSequence,
@@ -23,6 +29,13 @@ type TerminalProxyState = {
 const TERMINAL_CLIENT_FRAME_BYTES = 128 * 1024;
 const TERMINAL_AGGREGATE_BYTES = 256 * 1024;
 
+type TerminalCloudSocketAuthority = Readonly<{
+  tenantId: string;
+  projectId: string;
+  workspaceId: string | null;
+  conversationId: string | null;
+}>;
+
 export function useTerminalProxy(
   url: string | null,
   credential: string,
@@ -31,6 +44,7 @@ export function useTerminalProxy(
     session: TerminalSessionV2 | null;
     onRefetchRun: (reasonCode: string) => void;
   },
+  cloudAuthority?: TerminalCloudSocketAuthority,
 ): TerminalProxyState {
   const socketRef = useRef<WebSocket | null>(null);
   const generationRef = useRef(0);
@@ -39,6 +53,15 @@ export function useTerminalProxy(
   const [status, setStatus] = useState<TerminalConnectionStatus>('idle');
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const cloudSocketTransport = useMemo(
+    () => (cloudAuthority ? desktopCloudSocketTransport() : null),
+    [
+      cloudAuthority?.conversationId,
+      cloudAuthority?.projectId,
+      cloudAuthority?.tenantId,
+      cloudAuthority?.workspaceId,
+    ],
+  );
 
   const flushPendingLines = useCallback(() => {
     linesFlushCancelRef.current = null;
@@ -66,9 +89,10 @@ export function useTerminalProxy(
     socketRef.current = null;
     setLines([]);
     setError(null);
-    if (!url || !credential) {
-      setStatus(url && !credential ? 'error' : 'idle');
-      setError(url && !credential ? 'terminal_credential_unavailable' : null);
+    const authenticationAvailable = Boolean(credential) || cloudSocketTransport !== null;
+    if (!url || !authenticationAvailable) {
+      setStatus(url && !authenticationAvailable ? 'error' : 'idle');
+      setError(url && !authenticationAvailable ? 'terminal_credential_unavailable' : null);
       return;
     }
 
@@ -82,14 +106,39 @@ export function useTerminalProxy(
     const connect = () => {
       if (disposed || generationRef.current !== generation) return;
       setStatus('connecting');
-      const socket = openTerminalSocket(
-        url,
-        credential,
-        launchCapability,
-        WebSocket,
-        recoveryConfig?.session?.resume_token ?? '',
-        lastSequence,
-      );
+      const target = new URL(url);
+      if (Number.isSafeInteger(lastSequence) && lastSequence > 0) {
+        target.searchParams.set('after_sequence', String(lastSequence));
+      }
+      const session = recoveryConfig?.session ?? null;
+      const sessionId = session?.session_id ?? target.searchParams.get('session_id') ?? '';
+      const socket =
+        cloudSocketTransport && cloudAuthority
+          ? (createCloudSocketBridge(
+              {
+                kind: 'terminal',
+                url: target.toString(),
+                scope: {
+                  tenant_id: cloudAuthority.tenantId,
+                  project_id: cloudAuthority.projectId,
+                  workspace_id: cloudAuthority.workspaceId,
+                  conversation_id: cloudAuthority.conversationId,
+                },
+                terminal: {
+                  session_id: sessionId,
+                  resume_token: session?.resume_token ?? null,
+                },
+              },
+              cloudSocketTransport,
+            ) as unknown as WebSocket)
+          : openTerminalSocket(
+              url,
+              credential,
+              launchCapability,
+              WebSocket,
+              session?.resume_token ?? '',
+              lastSequence,
+            );
       socketRef.current = socket;
       const isCurrent = () =>
         !disposed && generationRef.current === generation && socketRef.current === socket;
@@ -202,7 +251,15 @@ export function useTerminalProxy(
       pendingLinesRef.current = [];
       socket?.close();
     };
-  }, [credential, launchCapability, recovery, scheduleLinesFlush, url]);
+  }, [
+    cloudAuthority,
+    cloudSocketTransport,
+    credential,
+    launchCapability,
+    recovery,
+    scheduleLinesFlush,
+    url,
+  ]);
 
   return {
     status,
@@ -210,14 +267,14 @@ export function useTerminalProxy(
     lines,
     error,
     sendInput(data: string) {
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
+      if (socketRef.current?.readyState === CLOUD_SOCKET_OPEN) {
         socketRef.current.send(JSON.stringify({ type: 'input', data }));
         return true;
       }
       return false;
     },
     resize(cols: number, rows: number) {
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
+      if (socketRef.current?.readyState === CLOUD_SOCKET_OPEN) {
         socketRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     },

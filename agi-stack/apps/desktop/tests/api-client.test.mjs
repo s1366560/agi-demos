@@ -185,6 +185,106 @@ test('workspace creation sends an explicit project-scoped contract and validates
   }
 });
 
+test('vault-only Cloud sessions route DesktopApiClient JSON requests through Electron without exposing a bearer', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const commands = [];
+  globalThis.fetch = async () => {
+    throw new Error('vault-only Cloud requests must not use renderer fetch');
+  };
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command, args) {
+          commands.push({ command, args });
+          return {
+            status: 200,
+            body: {
+              context: {
+                tenant_id: 'tenant-1',
+                project_id: 'project-1',
+                workspace_id: null,
+                revision: 9,
+              },
+            },
+          };
+        },
+      },
+    },
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://cloud.memstack.test',
+      apiKey: '',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+    });
+    const context = await client.getWorkspaceContext();
+
+    assert.equal(context.context.revision, 9);
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0].command, 'cloud_request');
+    assert.deepEqual(commands[0].args.request, {
+      path: '/api/v1/workspace-context',
+      method: 'GET',
+    });
+    assert.equal(JSON.stringify(commands).includes('Bearer'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
+test('DesktopApiClient keeps unauthenticated Cloud and Local requests off the vault broker', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return new Response(
+      JSON.stringify({
+        device_code: 'device-1',
+        user_code: 'ABCD2345',
+        verification_uri: '/device',
+        verification_uri_complete: 'https://cloud.memstack.test/device?user_code=ABCD2345',
+        expires_in: 600,
+        interval: 5,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke() {
+          throw new Error('skipAuth requests must not reach the vault broker');
+        },
+      },
+    },
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://cloud.memstack.test',
+      apiKey: '',
+    });
+    await client.createDeviceCode();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://cloud.memstack.test/api/v1/auth/device/code');
+    assert.equal(new Headers(calls[0].init.headers).has('Authorization'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
 test('workspace update sends a strict scoped PATCH and validates the returned projection', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

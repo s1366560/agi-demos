@@ -10,9 +10,7 @@ const {
   decodeNativeTrustedSession,
   hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
-  loadNativeTrustedSession,
   saveLocalTrustedSession,
-  saveNativeTrustedSession,
 } = require('/tmp/agistack-desktop-test-dist/src/api/trustedSession.js');
 
 const cloudRecord = {
@@ -53,29 +51,17 @@ test('native trusted session decoder accepts only the versioned broker contract'
   );
 });
 
-test('native trusted session commands preserve the strict desktop broker contract', async () => {
+test('renderer can clear but cannot load or save the native Cloud bearer', async () => {
   const commands = [];
   globalThis.window = {
     __MEMSTACK_DESKTOP__: {
       runtime: 'electron',
-      core: {
-        invoke: async (command, args) => {
-          commands.push({ command, args });
-          return command === 'trusted_session_load' ? cloudRecord : null;
-        },
-      },
+      core: { invoke: async (command, args) => commands.push({ command, args }) },
     },
   };
 
-  assert.deepEqual(await loadNativeTrustedSession(), cloudRecord);
-  await saveNativeTrustedSession(cloudRecord);
   await clearNativeTrustedSession();
-
-  assert.deepEqual(commands, [
-    { command: 'trusted_session_load', args: undefined },
-    { command: 'trusted_session_save', args: { input: cloudRecord } },
-    { command: 'trusted_session_clear', args: undefined },
-  ]);
+  assert.deepEqual(commands, [{ command: 'trusted_session_clear', args: undefined }]);
   delete globalThis.window;
 });
 
@@ -89,7 +75,7 @@ test('legacy Tauri globals cannot impersonate the dedicated desktop bridge', asy
   };
 
   assert.equal(hasNativeTrustedSessionBroker(), false);
-  await assert.rejects(loadNativeTrustedSession(), /supported desktop shell/);
+  await assert.rejects(clearNativeTrustedSession(), /supported desktop shell/);
   delete globalThis.window;
 });
 
@@ -133,23 +119,8 @@ test('local login never invokes the native credential broker', () => {
   assert.doesNotMatch(localLogin, /saveNativeTrustedSession/);
 });
 
-test('malformed native records are cleared before a redacted error is returned', async () => {
-  const commands = [];
-  globalThis.window = {
-    __MEMSTACK_DESKTOP__: {
-      runtime: 'electron',
-      core: {
-        invoke: async (command) => {
-          commands.push(command);
-          return command === 'trusted_session_load' ? { ...cloudRecord, unexpected: true } : null;
-        },
-      },
-    },
-  };
-
-  await assert.rejects(loadNativeTrustedSession(), {
-    message: 'The trusted desktop session record is invalid.',
-  });
-  assert.deepEqual(commands, ['trusted_session_load', 'trusted_session_clear']);
-  delete globalThis.window;
+test('renderer source does not expose Cloud vault load or save helpers', () => {
+  const source = readFileSync(new URL('../src/api/trustedSession.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /loadNativeTrustedSession/u);
+  assert.doesNotMatch(source, /saveNativeTrustedSession/u);
 });

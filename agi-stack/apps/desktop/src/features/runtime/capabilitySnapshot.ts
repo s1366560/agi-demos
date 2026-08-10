@@ -1,22 +1,18 @@
-import {
-  isCapabilityVersion,
-  negotiateCapabilityContract,
-} from './capabilityVersion';
+import { isCapabilityVersion, negotiateCapabilityContract } from './capabilityVersion';
 
-export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '4.0.0' as const;
-export const DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION = '3.0.0' as const;
+export const DESKTOP_CAPABILITY_SNAPSHOT_VERSION = '5.0.0' as const;
+export const DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION = '4.0.0' as const;
+export const DESKTOP_COMPATIBILITY_CAPABILITY_SNAPSHOT_VERSION = '3.0.0' as const;
 export const DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION = '2.0.0' as const;
 export const DESKTOP_MINIMUM_CONTRACT_VERSION = '2.0.0' as const;
 
 export type DesktopCapabilityMode = 'cloud' | 'local' | 'native';
-export type DesktopCapabilityStatus =
-  | 'available'
-  | 'degraded'
-  | 'unavailable'
-  | 'not_applicable';
+export type DesktopCapabilityRuntimeState = 'cloud' | 'local_online' | 'local_offline' | 'native';
+export type DesktopCapabilityStatus = 'available' | 'degraded' | 'unavailable' | 'not_applicable';
 export type DesktopCapabilityAuthoritySource =
   | 'cloud_service'
   | 'sidecar'
+  | 'electron'
   | 'native_runtime'
   | 'renderer';
 export type DesktopCapabilityProvenance = 'observed' | 'declared';
@@ -33,6 +29,7 @@ export const DESKTOP_PARITY_CAPABILITY_NAMES = Object.freeze([
   'application-encrypted-vault',
   'authentication-and-account-entry',
   'backend-stores',
+  'browser-integration-browser-bridge',
   'device-approval',
   'electron-security-boundary',
   'forced-password-change',
@@ -119,13 +116,18 @@ export type DesktopCapabilityAvailability = {
   allowed_actions: readonly string[];
   scope: DesktopCapabilityScope;
   authority_revision: number | null;
+  retryable?: boolean;
   authority_source?: DesktopCapabilityAuthoritySource;
+  supporting_authority_sources?: readonly DesktopCapabilityAuthoritySource[];
   provenance?: DesktopCapabilityProvenance;
 };
 
 export type DesktopCapabilitySnapshotEntry = DesktopCapabilityAvailability &
   Required<
-    Pick<DesktopCapabilityAvailability, 'authority_source' | 'provenance'>
+    Pick<
+      DesktopCapabilityAvailability,
+      'retryable' | 'authority_source' | 'supporting_authority_sources' | 'provenance'
+    >
   >;
 
 type DesktopCapabilityV4View = DesktopCapabilityAvailability & {
@@ -142,18 +144,17 @@ type DesktopCapabilityLegacyView = {
   minimum_contract_version: typeof DESKTOP_MINIMUM_CONTRACT_VERSION;
 };
 
-export type DesktopCapabilityView =
-  | DesktopCapabilityV4View
-  | DesktopCapabilityLegacyView;
+export type DesktopCapabilityView = DesktopCapabilityV4View | DesktopCapabilityLegacyView;
 
 export type DesktopCapabilitySnapshot = {
   version: typeof DESKTOP_CAPABILITY_SNAPSHOT_VERSION;
-  mode: DesktopCapabilityMode;
+  runtime_state: DesktopCapabilityRuntimeState;
   capabilities: Record<DesktopCapabilityName, DesktopCapabilitySnapshotEntry>;
 };
 
 const CURRENT_CAPABILITY_CONTRACT_MINIMUMS = [
   DESKTOP_MINIMUM_CONTRACT_VERSION,
+  DESKTOP_COMPATIBILITY_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
 ] as const;
@@ -166,11 +167,25 @@ const CAPABILITY_ENTRY_KEYS = [
   'allowed_actions',
   'scope',
   'authority_revision',
+  'retryable',
+  'authority_source',
+  'supporting_authority_sources',
+  'provenance',
+] as const;
+
+const V4_CAPABILITY_ENTRY_KEYS = [
+  'availability',
+  'reason_code',
+  'service_version',
+  'contract_version',
+  'allowed_actions',
+  'scope',
+  'authority_revision',
   'authority_source',
   'provenance',
 ] as const;
 
-const PREVIOUS_CAPABILITY_ENTRY_KEYS = [
+const V3_CAPABILITY_ENTRY_KEYS = [
   'availability',
   'reason_code',
   'service_version',
@@ -188,43 +203,41 @@ const LEGACY_CAPABILITY_ENTRY_KEYS = [
   'minimum_contract_version',
 ] as const;
 
-const CAPABILITY_SCOPE_KEYS = [
-  'tenant_id',
-  'project_id',
-  'workspace_id',
-  'instance_id',
-] as const;
+const CAPABILITY_SCOPE_KEYS = ['tenant_id', 'project_id', 'workspace_id', 'instance_id'] as const;
 
 const STABLE_ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/;
 
-export function parseDesktopCapabilitySnapshot(
-  input: unknown,
-): DesktopCapabilitySnapshot | null {
+export function parseDesktopCapabilitySnapshot(input: unknown): DesktopCapabilitySnapshot | null {
   if (
-    !isExactRecord(input, ['version', 'mode', 'capabilities']) ||
-    !isCapabilityMode(input.mode) ||
+    !isRecord(input) ||
     !isCapabilityRecord(input.capabilities) ||
     (input.version !== DESKTOP_CAPABILITY_SNAPSHOT_VERSION &&
       input.version !== DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION &&
+      input.version !== DESKTOP_COMPATIBILITY_CAPABILITY_SNAPSHOT_VERSION &&
       input.version !== DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION)
   ) {
     return null;
   }
+  const runtimeState =
+    input.version === DESKTOP_CAPABILITY_SNAPSHOT_VERSION
+      ? isExactRecord(input, ['version', 'runtime_state', 'capabilities']) &&
+        isCapabilityRuntimeState(input.runtime_state)
+        ? input.runtime_state
+        : null
+      : isExactRecord(input, ['version', 'mode', 'capabilities']) && isCapabilityMode(input.mode)
+        ? normalizeLegacyRuntimeState(input.mode)
+        : null;
+  if (runtimeState === null) return null;
 
-  const capabilities = {} as Record<
-    DesktopCapabilityName,
-    DesktopCapabilitySnapshotEntry
-  >;
+  const capabilities = {} as Record<DesktopCapabilityName, DesktopCapabilitySnapshotEntry>;
   for (const capabilityName of DESKTOP_CAPABILITY_NAMES) {
     if (!Object.hasOwn(input.capabilities, capabilityName)) {
-      capabilities[capabilityName] = unavailableCapability(
-        'capability_not_declared',
-      );
+      capabilities[capabilityName] = unavailableCapability('capability_not_declared');
       continue;
     }
     const availability = readSnapshotAvailability(
       input.version,
-      input.mode,
+      runtimeState,
       input.capabilities[capabilityName],
     );
     if (!availability) return null;
@@ -232,7 +245,7 @@ export function parseDesktopCapabilitySnapshot(
   }
   return {
     version: DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
-    mode: input.mode,
+    runtime_state: runtimeState,
     capabilities,
   };
 }
@@ -251,8 +264,7 @@ export function desktopCapability(
     status: capability.availability,
     available:
       capability.provenance === 'observed' &&
-      (capability.availability === 'available' ||
-        capability.availability === 'degraded'),
+      (capability.availability === 'available' || capability.availability === 'degraded'),
   };
 }
 
@@ -260,18 +272,19 @@ function readSnapshotAvailability(
   version:
     | typeof DESKTOP_CAPABILITY_SNAPSHOT_VERSION
     | typeof DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION
+    | typeof DESKTOP_COMPATIBILITY_CAPABILITY_SNAPSHOT_VERSION
     | typeof DESKTOP_LEGACY_CAPABILITY_SNAPSHOT_VERSION,
-  mode: DesktopCapabilityMode,
+  runtimeState: DesktopCapabilityRuntimeState,
   input: unknown,
 ): DesktopCapabilitySnapshotEntry | null {
   if (version === DESKTOP_CAPABILITY_SNAPSHOT_VERSION) {
-    return readAvailability(input, mode);
+    return readAvailability(input, runtimeState);
   }
   if (version === DESKTOP_PREVIOUS_CAPABILITY_SNAPSHOT_VERSION) {
-    const availability = readStructuredAvailability(
-      input,
-      PREVIOUS_CAPABILITY_ENTRY_KEYS,
-    );
+    return readV4Availability(input, runtimeState);
+  }
+  if (version === DESKTOP_COMPATIBILITY_CAPABILITY_SNAPSHOT_VERSION) {
+    const availability = readStructuredAvailability(input, V3_CAPABILITY_ENTRY_KEYS);
     return availability ? declaredAvailability(availability) : null;
   }
   return readLegacyAvailability(input);
@@ -279,11 +292,13 @@ function readSnapshotAvailability(
 
 function readAvailability(
   input: unknown,
-  mode: DesktopCapabilityMode,
+  runtimeState: DesktopCapabilityRuntimeState,
 ): DesktopCapabilitySnapshotEntry | null {
   if (
     !isExactRecord(input, CAPABILITY_ENTRY_KEYS) ||
+    typeof input.retryable !== 'boolean' ||
     !isCapabilityAuthoritySource(input.authority_source) ||
+    !isSupportingAuthoritySources(input.supporting_authority_sources, input.authority_source) ||
     !isCapabilityProvenance(input.provenance)
   ) {
     return null;
@@ -291,15 +306,16 @@ function readAvailability(
 
   const availability = readStructuredAvailability(input, CAPABILITY_ENTRY_KEYS);
   const active =
-    availability?.availability === 'available' ||
-    availability?.availability === 'degraded';
+    availability?.availability === 'available' || availability?.availability === 'degraded';
   if (
     !availability ||
     (active && availability.authority_revision === null) ||
+    (availability.availability === 'not_applicable' && input.retryable) ||
     !isAuthorityStateValid(
-      mode,
+      runtimeState,
       availability.availability,
       input.authority_source,
+      input.supporting_authority_sources,
       input.provenance,
     )
   ) {
@@ -307,7 +323,45 @@ function readAvailability(
   }
   return {
     ...availability,
+    retryable: input.retryable,
     authority_source: input.authority_source,
+    supporting_authority_sources: Object.freeze([...input.supporting_authority_sources]),
+    provenance: input.provenance,
+  };
+}
+
+function readV4Availability(
+  input: unknown,
+  runtimeState: DesktopCapabilityRuntimeState,
+): DesktopCapabilitySnapshotEntry | null {
+  if (
+    !isExactRecord(input, V4_CAPABILITY_ENTRY_KEYS) ||
+    !isCapabilityAuthoritySource(input.authority_source) ||
+    !isCapabilityProvenance(input.provenance)
+  ) {
+    return null;
+  }
+  const availability = readStructuredAvailability(input, V4_CAPABILITY_ENTRY_KEYS);
+  const active =
+    availability?.availability === 'available' || availability?.availability === 'degraded';
+  if (
+    !availability ||
+    (active && availability.authority_revision === null) ||
+    !isAuthorityStateValid(
+      runtimeState,
+      availability.availability,
+      input.authority_source,
+      [],
+      input.provenance,
+    )
+  ) {
+    return null;
+  }
+  return {
+    ...availability,
+    retryable: false,
+    authority_source: input.authority_source,
+    supporting_authority_sources: Object.freeze([]),
     provenance: input.provenance,
   };
 }
@@ -327,8 +381,7 @@ function readStructuredAvailability(
     return null;
   }
   const allowedActions = readAllowedActions(input.allowed_actions);
-  const active =
-    input.availability === 'available' || input.availability === 'degraded';
+  const active = input.availability === 'available' || input.availability === 'degraded';
   if (
     allowedActions === null ||
     (active && allowedActions.length === 0) ||
@@ -343,16 +396,12 @@ function readStructuredAvailability(
     return null;
   }
   if (
-    (input.availability === 'unavailable' ||
-      input.availability === 'not_applicable') &&
+    (input.availability === 'unavailable' || input.availability === 'not_applicable') &&
     allowedActions.length > 0
   ) {
     return null;
   }
-  if (
-    input.availability === 'not_applicable' &&
-    input.authority_revision !== null
-  ) {
+  if (input.availability === 'not_applicable' && input.authority_revision !== null) {
     return null;
   }
   return {
@@ -366,9 +415,7 @@ function readStructuredAvailability(
   };
 }
 
-function readLegacyAvailability(
-  input: unknown,
-): DesktopCapabilitySnapshotEntry | null {
+function readLegacyAvailability(input: unknown): DesktopCapabilitySnapshotEntry | null {
   if (
     !isExactRecord(input, LEGACY_CAPABILITY_ENTRY_KEYS) ||
     !isCapabilityStatus(input.status) ||
@@ -409,22 +456,16 @@ function isAvailabilityStateValid(
     };
     const compatible = compatibleMinimums.some(
       (minimumContractVersion) =>
-        negotiateCapabilityContract(contract, minimumContractVersion)
-          .compatible,
+        negotiateCapabilityContract(contract, minimumContractVersion).compatible,
     );
     if (!compatible) return false;
   }
   if (availability === 'available') return reasonCode === null;
   if (!isStableReasonCode(reasonCode)) return false;
-  return (
-    availability !== 'not_applicable' ||
-    (serviceVersion === null && contractVersion === null)
-  );
+  return availability !== 'not_applicable' || (serviceVersion === null && contractVersion === null);
 }
 
-function unavailableCapability(
-  reasonCode: string,
-): DesktopCapabilitySnapshotEntry {
+function unavailableCapability(reasonCode: string): DesktopCapabilitySnapshotEntry {
   return {
     availability: 'unavailable',
     reason_code: reasonCode,
@@ -433,7 +474,9 @@ function unavailableCapability(
     allowed_actions: [],
     scope: emptyCapabilityScope(),
     authority_revision: null,
+    retryable: false,
     authority_source: 'renderer',
+    supporting_authority_sources: Object.freeze([]),
     provenance: 'declared',
   };
 }
@@ -443,7 +486,9 @@ function declaredAvailability(
 ): DesktopCapabilitySnapshotEntry {
   return {
     ...availability,
+    retryable: false,
     authority_source: 'renderer',
+    supporting_authority_sources: Object.freeze([]),
     provenance: 'declared',
   };
 }
@@ -461,6 +506,16 @@ function isCapabilityMode(input: unknown): input is DesktopCapabilityMode {
   return input === 'cloud' || input === 'local' || input === 'native';
 }
 
+function normalizeLegacyRuntimeState(mode: DesktopCapabilityMode): DesktopCapabilityRuntimeState {
+  return mode === 'local' ? 'local_offline' : mode;
+}
+
+function isCapabilityRuntimeState(input: unknown): input is DesktopCapabilityRuntimeState {
+  return (
+    input === 'cloud' || input === 'local_online' || input === 'local_offline' || input === 'native'
+  );
+}
+
 function isCapabilityStatus(input: unknown): input is DesktopCapabilityStatus {
   return (
     input === 'available' ||
@@ -470,40 +525,64 @@ function isCapabilityStatus(input: unknown): input is DesktopCapabilityStatus {
   );
 }
 
-function isCapabilityAuthoritySource(
-  input: unknown,
-): input is DesktopCapabilityAuthoritySource {
+function isCapabilityAuthoritySource(input: unknown): input is DesktopCapabilityAuthoritySource {
   return (
     input === 'cloud_service' ||
     input === 'sidecar' ||
+    input === 'electron' ||
     input === 'native_runtime' ||
     input === 'renderer'
   );
 }
 
-function isCapabilityProvenance(
-  input: unknown,
-): input is DesktopCapabilityProvenance {
+function isCapabilityProvenance(input: unknown): input is DesktopCapabilityProvenance {
   return input === 'observed' || input === 'declared';
 }
 
 function isAuthorityStateValid(
-  mode: DesktopCapabilityMode,
+  runtimeState: DesktopCapabilityRuntimeState,
   availability: DesktopCapabilityStatus,
   source: DesktopCapabilityAuthoritySource,
+  supportingSources: readonly DesktopCapabilityAuthoritySource[],
   provenance: DesktopCapabilityProvenance,
 ): boolean {
   const active = availability === 'available' || availability === 'degraded';
-  if (provenance === 'declared') return source === 'renderer' && !active;
-  return source === authoritySourceForMode(mode);
+  if (provenance === 'declared') {
+    return source === 'renderer' && supportingSources.length === 0 && !active;
+  }
+  if (!active && supportingSources.length > 0) return false;
+  return authoritySourcesForRuntimeState(runtimeState).includes(
+    source as Exclude<DesktopCapabilityAuthoritySource, 'renderer' | 'electron'>,
+  );
 }
 
-function authoritySourceForMode(
-  mode: DesktopCapabilityMode,
-): Exclude<DesktopCapabilityAuthoritySource, 'renderer'> {
-  if (mode === 'cloud') return 'cloud_service';
-  if (mode === 'local') return 'sidecar';
-  return 'native_runtime';
+function authoritySourcesForRuntimeState(
+  runtimeState: DesktopCapabilityRuntimeState,
+): readonly Exclude<DesktopCapabilityAuthoritySource, 'renderer' | 'electron'>[] {
+  if (runtimeState === 'cloud') return ['cloud_service'];
+  if (runtimeState === 'local_online') return ['cloud_service', 'sidecar'];
+  if (runtimeState === 'local_offline') return ['sidecar'];
+  return ['native_runtime'];
+}
+
+function isSupportingAuthoritySources(
+  input: unknown,
+  primarySource: DesktopCapabilityAuthoritySource,
+): input is DesktopCapabilityAuthoritySource[] {
+  if (!Array.isArray(input)) return false;
+  const seen = new Set<DesktopCapabilityAuthoritySource>();
+  for (const source of input) {
+    if (
+      !isCapabilityAuthoritySource(source) ||
+      source === 'renderer' ||
+      source === primarySource ||
+      seen.has(source)
+    ) {
+      return false;
+    }
+    seen.add(source);
+  }
+  return true;
 }
 
 function isNullableCapabilityVersion(input: unknown): input is string | null {
@@ -515,11 +594,7 @@ function readAllowedActions(input: unknown): string[] | null {
   const actions: string[] = [];
   const seen = new Set<string>();
   for (const action of input) {
-    if (
-      typeof action !== 'string' ||
-      !STABLE_ACTION_ID_PATTERN.test(action) ||
-      seen.has(action)
-    ) {
+    if (typeof action !== 'string' || !STABLE_ACTION_ID_PATTERN.test(action) || seen.has(action)) {
       return null;
     }
     actions.push(action);
@@ -529,10 +604,7 @@ function readAllowedActions(input: unknown): string[] | null {
 }
 
 function isAuthorityRevision(input: unknown): input is number | null {
-  return (
-    input === null ||
-    (typeof input === 'number' && Number.isSafeInteger(input) && input >= 0)
-  );
+  return input === null || (typeof input === 'number' && Number.isSafeInteger(input) && input >= 0);
 }
 
 function isCapabilityScope(input: unknown): input is DesktopCapabilityScope {
@@ -542,9 +614,7 @@ function isCapabilityScope(input: unknown): input is DesktopCapabilityScope {
   );
 }
 
-function copyCapabilityScope(
-  scope: DesktopCapabilityScope,
-): DesktopCapabilityScope {
+function copyCapabilityScope(scope: DesktopCapabilityScope): DesktopCapabilityScope {
   return {
     tenant_id: scope.tenant_id,
     project_id: scope.project_id,
@@ -555,15 +625,12 @@ function copyCapabilityScope(
 
 function isNullableScopeIdentifier(input: unknown): input is string | null {
   return (
-    input === null ||
-    (typeof input === 'string' && input.length > 0 && input === input.trim())
+    input === null || (typeof input === 'string' && input.length > 0 && input === input.trim())
   );
 }
 
 function isStableReasonCode(input: unknown): input is string {
-  return (
-    typeof input === 'string' && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(input)
-  );
+  return typeof input === 'string' && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(input);
 }
 
 function isCapabilityRecord(
@@ -579,16 +646,16 @@ function isCapabilityRecord(
   );
 }
 
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
 function isExactRecord(
   input: unknown,
   expectedKeys: readonly string[],
 ): input is Record<string, unknown> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input))
-    return false;
+  if (!isRecord(input)) return false;
   const keys = Object.keys(input).sort();
   const expected = [...expectedKeys].sort();
-  return (
-    keys.length === expected.length &&
-    keys.every((key, index) => key === expected[index])
-  );
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }

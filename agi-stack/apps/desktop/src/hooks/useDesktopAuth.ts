@@ -7,6 +7,7 @@ import {
 import {
   DesktopApiClient,
 } from '../api/client';
+import type { CloudSessionProjection } from '../api/cloudSessionProjectionClient';
 import type { WorkspaceSsoPresentation } from '../features/auth/LoginScreen';
 import type { SettingsSection } from '../features/settings/SettingsWindow';
 import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
@@ -65,6 +66,7 @@ export type DesktopAuthParams = {
   deviceAuthAttemptIdRef: RefObject<number>;
   deviceAuthAttemptRef: RefObject<{
     attemptId: number;
+    nativeAttemptId?: string;
     authRevision: number;
     controller: AbortController;
     authorizationUrl: string;
@@ -72,6 +74,11 @@ export type DesktopAuthParams = {
     openInFlight: boolean;
   } | null>;
   commitRuntimeConfig: (nextConfig: DesktopRuntimeConfig) => void;
+  nativeOAuthResumeRoute: () => string;
+  onNativeOAuthAuthenticated: (
+    resumeRoute: string,
+    projection: CloudSessionProjection,
+  ) => void;
   resetConversationTimeline: () => void;
   resetProjectScopedState: () => void;
   refreshRuntime: (
@@ -84,8 +91,12 @@ export type DesktopAuthParams = {
 export function useDesktopAuth(params: DesktopAuthParams) {
   const {
     cancelWorkspaceSso,
+    beginNativeOAuth,
     hydrateCloudSession,
+    hydrateProjectedCloudSession,
     loginWithWorkspaceSso,
+    nativeOAuthPendingProvider,
+    nativeOAuthProviders,
     openCurrentWorkspaceSso,
     revokeUnadoptedDeviceToken,
     supersedeWorkspaceSsoAttempt,
@@ -102,19 +113,24 @@ export function useDesktopAuth(params: DesktopAuthParams) {
     useApiKeyManually,
   } = useLocalCredentialAuth(params, {
     hydrateCloudSession,
+    hydrateProjectedCloudSession,
     revokeUnadoptedDeviceToken,
     supersedeWorkspaceSsoAttempt,
   });
   return {
     cancelForcedPasswordChange,
     cancelWorkspaceSso,
+    beginNativeOAuth,
     changeLoginMode,
     handleConfigChange,
     hydrateCloudSession,
+    hydrateProjectedCloudSession,
     hydrateLocalSession,
     login,
     loginLocalSession,
     loginWithWorkspaceSso,
+    nativeOAuthPendingProvider,
+    nativeOAuthProviders,
     logout,
     openCurrentWorkspaceSso,
     submitForcedPasswordChange,

@@ -2999,13 +2999,45 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .with_state(state)
 }
 
+fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
+    let mut origins = vec![
+        HeaderValue::from_static("agistack://app"),
+        HeaderValue::from_static("http://localhost:5173"),
+        HeaderValue::from_static("http://127.0.0.1:5173"),
+    ];
+    let Some(renderer_origin) = renderer_origin.filter(|value| !value.is_empty()) else {
+        return origins;
+    };
+    let Some(origin) = Url::parse(renderer_origin).ok().and_then(|url| {
+        let normalized = url.origin().ascii_serialization();
+        (url.scheme() == "http"
+            && local_provider_host(&url)
+            && url.port().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == "/"
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && renderer_origin == normalized)
+            .then_some(normalized)
+    }) else {
+        return origins;
+    };
+    let Ok(origin) = HeaderValue::from_str(&origin) else {
+        return origins;
+    };
+    if !origins.contains(&origin) {
+        origins.push(origin);
+    }
+    origins
+}
+
 fn local_cors_layer() -> CorsLayer {
+    let renderer_origin = std::env::var("AGISTACK_DESKTOP_RENDERER_ORIGIN").ok();
     CorsLayer::new()
-        .allow_origin(AllowOrigin::list([
-            HeaderValue::from_static("agistack://app"),
-            HeaderValue::from_static("http://localhost:5173"),
-            HeaderValue::from_static("http://127.0.0.1:5173"),
-        ]))
+        .allow_origin(AllowOrigin::list(local_cors_origins(
+            renderer_origin.as_deref(),
+        )))
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT])
         .allow_headers([
             AUTHORIZATION,
@@ -14079,6 +14111,29 @@ mod tests {
                 .and_then(|v| v.to_str().ok()),
             Some("http://127.0.0.1:5173")
         );
+    }
+
+    #[test]
+    fn cors_origins_bind_only_the_exact_validated_renderer_origin() {
+        let origins = local_cors_origins(Some("http://localhost:5175"));
+        let values = origins
+            .iter()
+            .filter_map(|origin| origin.to_str().ok())
+            .collect::<Vec<_>>();
+        assert!(values.contains(&"agistack://app"));
+        assert!(values.contains(&"http://localhost:5173"));
+        assert!(values.contains(&"http://127.0.0.1:5173"));
+        assert!(values.contains(&"http://localhost:5175"));
+
+        for rejected in [
+            "https://localhost:5175",
+            "http://attacker.example:5175",
+            "http://127.0.0.1:5175/path",
+            "http://user@127.0.0.1:5175",
+            "http://127.0.0.1",
+        ] {
+            assert_eq!(local_cors_origins(Some(rejected)).len(), 3, "{rejected}");
+        }
     }
 
     #[tokio::test]

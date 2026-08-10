@@ -1,4 +1,8 @@
-import { absoluteUrl, desktopApiCredential, desktopLaunchCapability } from '../../api/client';
+import { desktopApiCredential, desktopLaunchCapability } from '../../api/client';
+import {
+  desktopApiAuthenticationAvailable,
+  desktopApiFetch,
+} from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -29,13 +33,11 @@ export async function requestNativeRouteJson(
   request: NativeRouteRequest = {},
 ): Promise<unknown> {
   const credential = desktopApiCredential(config);
-  if (!credential) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw new NativeRouteClientError('desktop_trusted_session_required', 401);
   }
-  const headers = new Headers({
-    Accept: 'application/json',
-    Authorization: `Bearer ${credential}`,
-  });
+  const headers = new Headers({ Accept: 'application/json' });
+  if (credential) headers.set('Authorization', `Bearer ${credential}`);
   const launchCapability = desktopLaunchCapability(config);
   if (config.mode === 'local') {
     if (!launchCapability) {
@@ -45,7 +47,7 @@ export async function requestNativeRouteJson(
   }
   const body = request.body === undefined ? undefined : JSON.stringify(request.body);
   if (body !== undefined) headers.set('Content-Type', 'application/json');
-  const response = await fetch(absoluteUrl(config.apiBaseUrl, path), {
+  const response = await desktopApiFetch(config, path, {
     method: request.method ?? 'GET',
     headers,
     credentials: 'omit',

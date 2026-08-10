@@ -4,6 +4,7 @@ import {
   desktopApiCredential,
   desktopLaunchCapability,
 } from '../../api/client';
+import { desktopApiAuthenticationAvailable } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import { createHttpWorkspaceCollaborationClient } from '../workspace/httpWorkspaceCollaborationClient';
 import type {
@@ -288,7 +289,7 @@ function requireRuntimeWorkspace(config: DesktopRuntimeConfig, workspaceId: stri
 }
 
 function requireCredential(config: DesktopRuntimeConfig): void {
-  if (!desktopApiCredential(config)) {
+  if (!desktopApiAuthenticationAvailable(config)) {
     throw contractError('project_blackboard_trusted_session_required');
   }
 }

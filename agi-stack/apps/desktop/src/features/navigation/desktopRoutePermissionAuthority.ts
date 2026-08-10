@@ -1,5 +1,5 @@
 import type { CurrentUser, WorkspaceContextResponse, WorkspaceMemberSummary } from '../../types';
-import type { DesktopRouteContext } from './desktopRouteRegistry';
+import type { DesktopRouteContext, DesktopRouteMatch } from './desktopRouteRegistry';
 
 export const DESKTOP_ROUTE_PERMISSION_CONTRACT_VERSION = '3.0.0';
 
@@ -74,9 +74,10 @@ export type DesktopRoutePermissionResolverOptions = Readonly<{
   client: DesktopRoutePermissionAuthorityClient;
 }>;
 
-export type DesktopRoutePermissionSnapshotResolver = (
+export type DesktopRoutePermissionSnapshotResolver<TModule = unknown> = (
   context: DesktopRouteContext,
   signal: AbortSignal,
+  match: DesktopRouteMatch<TModule>,
 ) => Promise<DesktopRoutePermissionSnapshot>;
 
 export function createCloudDesktopRoutePermissionResolver(
