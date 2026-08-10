@@ -5147,3 +5147,279 @@ test('browser origin grant responses reject malformed payloads', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('browser capability grants list and revoke follow the sidecar contract', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const grants = [
+    {
+      id: 'cap-1',
+      host: 'example.com',
+      capability: 'full_cdp',
+      decision: 'site',
+      source_hitl_request_id: 'hitl-1',
+      created_at: '2026-08-01T00:00:00Z',
+    },
+    {
+      id: 'cap-2',
+      host: 'admin.internal',
+      capability: 'full_cdp',
+      decision: 'decline',
+      source_hitl_request_id: 'hitl-2',
+      created_at: '2026-08-02T00:00:00Z',
+    },
+  ];
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ grants }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ success: true, grant: grants[1] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    const listed = await client.listBrowserCapabilityGrants();
+    assert.deepEqual(listed, grants);
+    const revoked = await client.revokeBrowserCapabilityGrant('cap-2');
+    assert.equal(revoked.id, 'cap-2');
+    assert.equal(revoked.capability, 'full_cdp');
+
+    assert.equal(calls.length, 2);
+    assert.equal(
+      calls[0].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/capability-grants',
+    );
+    assert.equal(calls[0].init.method, 'GET');
+    assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer local-session');
+    assert.equal(
+      calls[1].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/capability-grants/cap-2',
+    );
+    assert.equal(calls[1].init.method, 'DELETE');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser capability grant responses reject malformed payloads', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        grants: [{ id: 'cap-1', host: 'example.com', capability: 'read_only', decision: 'site' }],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    await assert.rejects(
+      () => client.listBrowserCapabilityGrants(),
+      (error) => error instanceof DesktopApiError && error.status === 502,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser site credentials upsert, list, and delete follow the sidecar contract', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const credential = {
+    id: 'cred-1',
+    origin: 'https://example.com',
+    username: 'agent-user',
+    created_at: '2026-08-01T00:00:00Z',
+  };
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init, body: init?.body });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ credential }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (calls.length === 2) {
+      return new Response(JSON.stringify({ credentials: [credential] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ success: true, credential }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    const saved = await client.upsertBrowserSiteCredential({
+      origin: 'https://example.com',
+      username: 'agent-user',
+      password: 's3cret',
+    });
+    assert.deepEqual(saved, credential);
+    const listed = await client.listBrowserSiteCredentials();
+    assert.deepEqual(listed, [credential]);
+    const deleted = await client.deleteBrowserSiteCredential('cred-1');
+    assert.equal(deleted.id, 'cred-1');
+
+    assert.equal(calls.length, 3);
+    assert.equal(
+      calls[0].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/site-credentials',
+    );
+    assert.equal(calls[0].init.method, 'PUT');
+    assert.deepEqual(JSON.parse(calls[0].body), {
+      origin: 'https://example.com',
+      username: 'agent-user',
+      password: 's3cret',
+    });
+    assert.equal(
+      calls[1].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/site-credentials',
+    );
+    assert.equal(calls[1].init.method, 'GET');
+    assert.equal(
+      calls[2].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/site-credentials/cred-1',
+    );
+    assert.equal(calls[2].init.method, 'DELETE');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser site credential responses reject malformed payloads', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({ credentials: [{ id: 'cred-1', origin: '', username: 'u' }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    await assert.rejects(
+      () => client.listBrowserSiteCredentials(),
+      (error) => error instanceof DesktopApiError && error.status === 502,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser audit entries list follows the sidecar contract with filters', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const entries = [
+    {
+      id: 'audit-1',
+      run_id: 'run-1',
+      tool_name: 'browser_click',
+      origin: 'https://example.com',
+      target_summary: 'button#submit',
+      outcome: 'ok',
+      latency_ms: 42,
+      created_at: '2026-08-02T00:00:00Z',
+    },
+    {
+      id: 'audit-2',
+      run_id: 'run-1',
+      tool_name: 'browser_cdp_evaluate',
+      origin: 'https://example.com',
+      target_summary: 'document.title',
+      outcome: 'consent',
+      latency_ms: 7,
+      created_at: '2026-08-01T00:00:00Z',
+    },
+  ];
+  globalThis.fetch = async (request, init) => {
+    calls.push({ request: String(request), init });
+    return new Response(JSON.stringify({ entries }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    const unfiltered = await client.listBrowserAuditEntries({ limit: 200 });
+    assert.deepEqual(unfiltered, entries);
+    await client.listBrowserAuditEntries({ limit: 200, origin: 'https://example.com' });
+
+    assert.equal(calls.length, 2);
+    assert.equal(
+      calls[0].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/audit?limit=200',
+    );
+    assert.equal(calls[0].init.method, 'GET');
+    assert.equal(
+      calls[1].request,
+      'http://127.0.0.1:47832/api/v1/browser-bridge/audit?limit=200&origin=https%3A%2F%2Fexample.com',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('browser audit entry responses reject malformed payloads', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        entries: [{ id: 'audit-1', tool_name: 'browser_click', outcome: 'surprise' }],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:47832',
+      apiKey: 'local-session',
+      localApiToken: 'launch-token',
+    });
+    await assert.rejects(
+      () => client.listBrowserAuditEntries(),
+      (error) => error instanceof DesktopApiError && error.status === 502,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

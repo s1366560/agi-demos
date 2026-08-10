@@ -15,7 +15,8 @@
 //! - [`framing`] — length-prefixed frame codec for the broker's stdio side.
 //! - [`ws_client`] — [`BridgeWsClient`]: reconnecting WebSocket client with
 //!   request/response correlation and a notification broadcast.
-//! - [`cdp_policy`] — M1-conservative CDP method allow-policy.
+//! - [`cdp_policy`] — CDP method allow-policy (Conservative default; M3 added
+//!   the FullAccess mode used by `browser_cdp_raw`).
 //! - [`snapshot`] — the accessibility-snapshot CDP call sequence (the JS
 //!   asset itself is embedded but opaque to this crate).
 //! - [`host`] — [`BrowserToolHost`]: the [`ToolHost`] implementation exposing

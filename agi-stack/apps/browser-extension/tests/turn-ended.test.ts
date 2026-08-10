@@ -73,7 +73,7 @@ describe('turnEnded cleanup matrix', () => {
     chrome.tabs.remove.mockImplementation(async (tabId: number) => {
       if (tabId === 31) throw new Error('No tab with id: 31');
     });
-    chrome.tabs.ungroup.mockImplementation(async (tabIds: number) => {
+    chrome.tabs.ungroup.mockImplementation(async (tabIds: number | number[]) => {
       if (tabIds === 33) throw new Error('No tab with id: 33');
     });
     const response = await dispatchTurnEnded(bridge, [
@@ -99,8 +99,8 @@ describe('turnEnded cleanup matrix', () => {
     const states = chrome.tabs.sendMessage.mock.calls
       .map(([, message]) => message as { type: string; state?: { visible: boolean } })
       .filter((m) => m.type === 'AGENT_CURSOR_STATE');
-    expect(states[0].state).toMatchObject({ visible: true });
-    expect(states[states.length - 1].state).toMatchObject({ visible: false });
+    expect(states[0]?.state).toMatchObject({ visible: true });
+    expect(states[states.length - 1]?.state).toMatchObject({ visible: false });
   });
 
   it('validates the leases shape', async () => {

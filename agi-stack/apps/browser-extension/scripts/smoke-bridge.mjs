@@ -201,6 +201,21 @@ async function main() {
   if (!connected) return fail('broker never connected (45s)');
   log('broker connected ✔');
 
+  // M3: the broker must prefer the unix socket transport (0600, 0700 dir).
+  {
+    const { homedir } = await import('node:os');
+    const { statSync } = await import('node:fs');
+    const sock = join(homedir(), '.memstack/browser-bridge/bridge.sock');
+    try {
+      const st = statSync(sock);
+      const mode = (st.mode & 0o777).toString(8);
+      log(`bridge socket present, mode ${mode}`);
+      if (mode !== '600') return fail(`bridge.sock mode ${mode}, expected 600`);
+    } catch {
+      log('bridge socket absent — broker is on TCP fallback (acceptable on Windows only)');
+    }
+  }
+
   // /mcp/tools/list sits behind require_user_session: mint a local session
   // first (empty body), then present both the launch capability and the
   // session credential like the renderer does.
@@ -230,8 +245,8 @@ async function main() {
   const names = (body.tools ?? []).map((t) => t.name);
   const browserTools = names.filter((n) => n.startsWith('browser_'));
   log('browser tools visible:', JSON.stringify(browserTools));
-  if (browserTools.length !== 11)
-    return fail(`expected 11 browser tools (4 read + 7 mutating), got ${browserTools.length}`);
+  if (browserTools.length !== 13)
+    return fail(`expected 13 browser tools (4 read + 9 mutating), got ${browserTools.length}`);
 
   // ── M2: exercise the new bridge methods against the real extension ──
   const fixture = await startFixtureServer();

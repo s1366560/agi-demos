@@ -1,6 +1,6 @@
 import type { ChromeApi, NativePort } from './chrome-api';
 import type { Bridge } from './handlers';
-import { notification } from './protocol';
+import { ErrorCodes, RpcError, isJsonRpcResponse, notification, request } from './protocol';
 
 export const NATIVE_HOST_NAME = 'com.memstack.browserbridge';
 export const RECONNECT_ALARM = 'native-reconnect';
@@ -17,13 +17,31 @@ export interface NativeStatus {
   updatedAt: string;
 }
 
+export interface NativeTransport {
+  /**
+   * SW→native request (broker-initiated-request support in reverse).
+   * Resolves with the broker's `result`, rejects with an RpcError carrying
+   * the broker's error code/message, and rejects immediately when the
+   * native port is down. All pending requests are rejected on disconnect.
+   */
+  sendRequest(method: string, params?: unknown): Promise<unknown>;
+}
+
+interface PendingRequest {
+  resolve: (result: unknown) => void;
+  reject: (error: Error) => void;
+}
+
 /**
  * Native-port state machine. Owns the port lifecycle, the disconnect
- * kill-switch, alarm-based reconnect, and debugger-event relay.
+ * kill-switch, alarm-based reconnect, debugger-event relay, and the
+ * SW→broker request path (`sendRequest`).
  */
-export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): void {
+export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): NativeTransport {
   let port: NativePort | null = null;
   let lastConnectedAt: string | null = null;
+  let nextRequestId = 1;
+  const pending = new Map<string | number, PendingRequest>();
 
   function setStatus(status: NativeStatus): void {
     void chrome.storage.local.set({ [STATUS_STORAGE_KEY]: status });
@@ -36,6 +54,46 @@ export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): void {
     } catch {
       /* port went away mid-send */
     }
+  }
+
+  function rejectAllPending(error: Error): void {
+    if (pending.size === 0) return;
+    const entries = [...pending.values()];
+    pending.clear();
+    for (const entry of entries) entry.reject(error);
+  }
+
+  function sendRequest(method: string, params?: unknown): Promise<unknown> {
+    const activePort = port;
+    if (!activePort) {
+      return Promise.reject(
+        new RpcError(ErrorCodes.internalError, `native port not connected; cannot send ${method}`),
+      );
+    }
+    const id = `sw-${nextRequestId++}`;
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      try {
+        activePort.postMessage(request(id, method, params));
+      } catch {
+        pending.delete(id);
+        reject(new RpcError(ErrorCodes.internalError, 'native port went away mid-send'));
+      }
+    });
+  }
+
+  /** True when the message was a broker response correlated to a pending request. */
+  function handleResponse(message: unknown): boolean {
+    if (!isJsonRpcResponse(message)) return false;
+    const entry = pending.get(message.id);
+    if (!entry) return true; // stale/unknown id: swallow, do not feed the bridge
+    pending.delete(message.id);
+    if ('error' in message) {
+      entry.reject(new RpcError(message.error.code, message.error.message));
+    } else {
+      entry.resolve(message.result);
+    }
+    return true;
   }
 
   function scheduleReconnect(): void {
@@ -61,6 +119,7 @@ export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): void {
     bridge.clearAttachState();
 
     connectedPort.onMessage.addListener((message: unknown) => {
+      if (handleResponse(message)) return; // answer to a sendRequest call
       void bridge.dispatch(message).then((response) => {
         if (!response) return;
         try {
@@ -79,6 +138,9 @@ export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): void {
       void bridge.detachAll();
       // Also drop every virtual cursor: states, waiters, on-page overlays.
       bridge.clearCursorStates();
+      rejectAllPending(
+        new RpcError(ErrorCodes.internalError, lastError ?? 'native port disconnected'),
+      );
       setStatus({ connected: false, lastError, lastConnectedAt, updatedAt: new Date().toISOString() });
       scheduleReconnect();
     });
@@ -106,4 +168,6 @@ export function startNativeTransport(chrome: ChromeApi, bridge: Bridge): void {
   chrome.runtime.onInstalled.addListener(connect);
 
   connect();
+
+  return { sendRequest };
 }

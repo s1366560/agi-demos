@@ -25,6 +25,8 @@ import {
   selectExactDisplaySource,
   type DesktopDisplayCapture,
 } from './displayCapturePolicy';
+import { IabBackend } from './iab/backend';
+import { IabViewPool, installIabSessionPermissionPolicy } from './iab/viewPool';
 import {
   DesktopCloudAuthenticationAuthority,
 } from './cloudAuthenticationAuthority';
@@ -87,6 +89,7 @@ const NATIVE_FILE_INGEST_CHANNEL = 'agistack:native-file-ingest';
 const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
+const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
 const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
 const SIDECAR_COMMANDS = new Set([
   'trusted_session_clear',
@@ -122,6 +125,8 @@ let pendingOAuthCallback: OAuthCallbackDeepLink | null = null;
 let oauthCallbackInFlight = false;
 let sidecarShutdownComplete = false;
 let stopAutomaticUpdates: (() => void) | null = null;
+let iabPool: IabViewPool | null = null;
+let iabBackend: IabBackend | null = null;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -450,6 +455,96 @@ async function handleNativeFileIngest(
   return ingestNativeFiles(request);
 }
 
+function iabCursorScriptPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'iab', 'iab-cursor.js');
+  }
+  return join(currentDirectory, '../../electron/resources/iab-cursor.js');
+}
+
+function iabTabIdArg(args: DesktopCommandArgs): number {
+  const tabId = args?.tabId;
+  if (typeof tabId !== 'number' || !Number.isSafeInteger(tabId) || tabId <= 0) {
+    throw new Error('iab command requires a positive integer tabId');
+  }
+  return tabId;
+}
+
+function iabBoundsArg(args: DesktopCommandArgs): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const bounds = { x: args?.x, y: args?.y, width: args?.width, height: args?.height };
+  for (const [field, value] of Object.entries(bounds)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`iab pane bounds require a finite number ${field}`);
+    }
+  }
+  return bounds as { x: number; y: number; width: number; height: number };
+}
+
+async function executeIabCommand(
+  command: string,
+  args: DesktopCommandArgs,
+): Promise<unknown> {
+  const pool = iabPool;
+  const backend = iabBackend;
+  if (!pool || !backend) throw new Error('in-app browser is unavailable');
+  switch (command) {
+    case 'iab_status':
+      return { status: backend.status };
+    case 'iab_list_tabs':
+      return { tabs: pool.getTabs(), activeTabId: pool.activeTabId };
+    case 'iab_create_tab': {
+      const url = typeof args?.url === 'string' ? args.url : null;
+      return { tabId: await pool.createTab(url) };
+    }
+    case 'iab_close_tab':
+      pool.closeTab(iabTabIdArg(args));
+      return undefined;
+    case 'iab_focus_tab':
+      pool.focusTab(iabTabIdArg(args));
+      return undefined;
+    case 'iab_show_pane':
+      pool.showPane(iabBoundsArg(args));
+      return undefined;
+    case 'iab_set_bounds':
+      pool.setPaneBounds(iabBoundsArg(args));
+      return undefined;
+    case 'iab_hide_pane':
+      pool.hidePane();
+      return undefined;
+    default:
+      throw new Error('desktop command is not supported');
+  }
+}
+
+function createIabRuntime(): void {
+  installIabSessionPermissionPolicy();
+  const pool = new IabViewPool({
+    preloadPath: join(currentDirectory, '../preload/iab.cjs'),
+    cursorScriptPath: iabCursorScriptPath,
+    onTabsChanged: () => {
+      if (mainWindow && !mainWindow.isDestroyed() && iabPool) {
+        mainWindow.webContents.send(IAB_TABS_CHANGED_CHANNEL, {
+          tabs: iabPool.getTabs(),
+          activeTabId: iabPool.activeTabId,
+        });
+      }
+    },
+    onCdpEvent: (tabId, method, params) => iabBackend?.notifyCdpEvent(tabId, method, params),
+    onCdpDetach: (tabId, reason) => iabBackend?.notifyCdpDetach(tabId, reason),
+  });
+  iabPool = pool;
+  iabBackend = new IabBackend({
+    pool,
+    log: (message) => console.warn(`[iab] ${message}`),
+  });
+  iabBackend.start();
+}
+
 async function executeDesktopCommand(
   event: IpcMainInvokeEvent,
   command: unknown,
@@ -457,6 +552,9 @@ async function executeDesktopCommand(
 ): Promise<unknown> {
   if (event.sender !== mainWindow?.webContents || typeof command !== 'string') {
     throw new Error('desktop command is not authorized');
+  }
+  if (command.startsWith('iab_')) {
+    return executeIabCommand(command, args);
   }
   switch (command) {
     case 'frontend_ready':
@@ -845,10 +943,12 @@ async function createMainWindow(): Promise<void> {
   mainWindow = window;
   const cloudRequestOwnerId = window.webContents.id;
   installNavigationPolicy(window, developmentUrl);
+  iabPool?.setHostWindow(window);
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {
     cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
     cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
+    iabPool?.setHostWindow(null);
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.on('render-process-gone', () => {
@@ -968,6 +1068,7 @@ async function bootstrapApplication(): Promise<void> {
       clear: () => sidecarSupervisor!.invoke('oauth_pending_attempt_clear'),
     },
   });
+  createIabRuntime();
   ipcMain.handle(DESKTOP_COMMAND_CHANNEL, executeDesktopCommand);
   ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
   ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
@@ -1013,6 +1114,13 @@ if (!hasSingleInstanceLock) {
     cloudSocketBroker?.cancelAll();
     cloudSocketBroker = null;
     oauthCallbackAuthority = null;
+    if (iabBackend || iabPool) {
+      const backend = iabBackend;
+      iabBackend = null;
+      void backend?.stop();
+      iabPool?.destroyAll();
+      iabPool = null;
+    }
     if (!sidecarSupervisor || sidecarShutdownComplete) return;
     event.preventDefault();
     stopAutomaticUpdates?.();

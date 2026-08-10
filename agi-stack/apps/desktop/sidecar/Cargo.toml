@@ -48,6 +48,14 @@ agistack-adapters-mem = { path = "../../../crates/adapters-mem" }
 tokio = { version = "1", features = ["test-util"] }
 tower = { version = "0.5", features = ["util"] }
 
+[target.'cfg(unix)'.dependencies]
+# Unix bridge transport (M3): the axum WS router is served on a unix socket
+# via hyper's HTTP/1 driver (axum 0.7 `serve` is TCP-only), and the peer-UID
+# check uses libc::getpeereid.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",

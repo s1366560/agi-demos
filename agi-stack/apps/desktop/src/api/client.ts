@@ -20,6 +20,10 @@ import type {
   AutomationToggleInput,
   AutomationUpdateInput,
   BrowserOriginGrant,
+  BrowserCapabilityGrant,
+  BrowserSiteCredentialInput,
+  BrowserSiteCredentialMeta,
+  BrowserAuditEntry,
   ConversationMessagesResponse,
   ComposerContextItem,
   ChangeSnapshot,
@@ -816,6 +820,76 @@ export class DesktopApiClient {
     );
     const grant = isRecord(payload) && isRecord(payload.grant) ? payload.grant : payload;
     return normalizeBrowserOriginGrant(grant);
+  }
+
+  async listBrowserCapabilityGrants(signal?: AbortSignal): Promise<BrowserCapabilityGrant[]> {
+    const payload = await this.request<unknown>('/api/v1/browser-bridge/capability-grants', {
+      signal,
+    });
+    return readArray<unknown>(payload, ['grants']).map(normalizeBrowserCapabilityGrant);
+  }
+
+  async revokeBrowserCapabilityGrant(grantId: string): Promise<BrowserCapabilityGrant> {
+    const payload = await this.request<unknown>(
+      `/api/v1/browser-bridge/capability-grants/${encodeURIComponent(
+        requireValue(grantId, 'grant id'),
+      )}`,
+      { method: 'DELETE' },
+    );
+    const grant = isRecord(payload) && isRecord(payload.grant) ? payload.grant : payload;
+    return normalizeBrowserCapabilityGrant(grant);
+  }
+
+  async listBrowserSiteCredentials(signal?: AbortSignal): Promise<BrowserSiteCredentialMeta[]> {
+    const payload = await this.request<unknown>('/api/v1/browser-bridge/site-credentials', {
+      signal,
+    });
+    return readArray<unknown>(payload, ['credentials']).map(normalizeBrowserSiteCredentialMeta);
+  }
+
+  async upsertBrowserSiteCredential(
+    input: BrowserSiteCredentialInput,
+  ): Promise<BrowserSiteCredentialMeta> {
+    const payload = await this.request<unknown>('/api/v1/browser-bridge/site-credentials', {
+      method: 'PUT',
+      body: {
+        origin: requireValue(input.origin, 'credential origin'),
+        username: requireValue(input.username, 'credential username'),
+        password: requireValue(input.password, 'credential password'),
+      },
+    });
+    const credential =
+      isRecord(payload) && isRecord(payload.credential) ? payload.credential : payload;
+    return normalizeBrowserSiteCredentialMeta(credential);
+  }
+
+  async deleteBrowserSiteCredential(credentialId: string): Promise<BrowserSiteCredentialMeta> {
+    const payload = await this.request<unknown>(
+      `/api/v1/browser-bridge/site-credentials/${encodeURIComponent(
+        requireValue(credentialId, 'credential id'),
+      )}`,
+      { method: 'DELETE' },
+    );
+    const credential =
+      isRecord(payload) && isRecord(payload.credential) ? payload.credential : payload;
+    return normalizeBrowserSiteCredentialMeta(credential);
+  }
+
+  async listBrowserAuditEntries(
+    options: { limit?: number; origin?: string } = {},
+    signal?: AbortSignal,
+  ): Promise<BrowserAuditEntry[]> {
+    const params = new URLSearchParams();
+    if (typeof options.limit === 'number' && Number.isFinite(options.limit)) {
+      params.set('limit', String(Math.max(1, Math.min(500, Math.trunc(options.limit)))));
+    }
+    const origin = options.origin?.trim() ?? '';
+    if (origin) params.set('origin', origin);
+    const query = params.size ? `?${params.toString()}` : '';
+    const payload = await this.request<unknown>(`/api/v1/browser-bridge/audit${query}`, {
+      signal,
+    });
+    return readArray<unknown>(payload, ['entries']).map(normalizeBrowserAuditEntry);
   }
 
   async createWorkspaceForProject(
@@ -3696,6 +3770,82 @@ function normalizeBrowserOriginGrant(payload: unknown): BrowserOriginGrant {
       'source_hitl_request_id',
       'sourceHitlRequestId',
     ),
+    created_at: createdAt,
+  };
+}
+
+function normalizeBrowserCapabilityGrant(payload: unknown): BrowserCapabilityGrant {
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid browser capability grant response', 502, payload);
+  }
+  const id = readCompatString(payload, 'id');
+  const host = readCompatString(payload, 'host');
+  const capability = readCompatString(payload, 'capability');
+  const decision = readCompatString(payload, 'decision');
+  const createdAt = readCompatString(payload, 'created_at', 'createdAt');
+  if (
+    !id ||
+    !host ||
+    capability !== 'full_cdp' ||
+    (decision !== 'site' && decision !== 'decline') ||
+    !createdAt
+  ) {
+    throw new DesktopApiError('Invalid browser capability grant response', 502, payload);
+  }
+  return {
+    id,
+    host,
+    capability,
+    decision,
+    source_hitl_request_id: readCompatString(
+      payload,
+      'source_hitl_request_id',
+      'sourceHitlRequestId',
+    ),
+    created_at: createdAt,
+  };
+}
+
+function normalizeBrowserSiteCredentialMeta(payload: unknown): BrowserSiteCredentialMeta {
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid browser site credential response', 502, payload);
+  }
+  const id = readCompatString(payload, 'id');
+  const origin = readCompatString(payload, 'origin');
+  const username = readCompatString(payload, 'username');
+  const createdAt = readCompatString(payload, 'created_at', 'createdAt');
+  if (!id || !origin || !username || !createdAt) {
+    throw new DesktopApiError('Invalid browser site credential response', 502, payload);
+  }
+  return { id, origin, username, created_at: createdAt };
+}
+
+function normalizeBrowserAuditEntry(payload: unknown): BrowserAuditEntry {
+  if (!isRecord(payload)) {
+    throw new DesktopApiError('Invalid browser audit entry response', 502, payload);
+  }
+  const id = readCompatString(payload, 'id');
+  const toolName = readCompatString(payload, 'tool_name', 'toolName');
+  const outcome = readCompatString(payload, 'outcome');
+  const createdAt = readCompatString(payload, 'created_at', 'createdAt');
+  const latencyMs = payload.latency_ms ?? payload.latencyMs;
+  if (
+    !id ||
+    !toolName ||
+    !createdAt ||
+    (outcome !== 'ok' && outcome !== 'consent' && outcome !== 'error') ||
+    !isUnsignedSafeInteger(latencyMs)
+  ) {
+    throw new DesktopApiError('Invalid browser audit entry response', 502, payload);
+  }
+  return {
+    id,
+    run_id: readCompatString(payload, 'run_id', 'runId'),
+    tool_name: toolName,
+    origin: readCompatString(payload, 'origin'),
+    target_summary: readCompatString(payload, 'target_summary', 'targetSummary'),
+    outcome,
+    latency_ms: latencyMs,
     created_at: createdAt,
   };
 }

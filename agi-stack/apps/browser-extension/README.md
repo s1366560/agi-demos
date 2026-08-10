@@ -34,6 +34,12 @@ read-only status view.
     ungrouped but kept, `handoff` tabs stay in their group, user tabs are
     untouched. Per-tab failures are tolerated; only successes are counted.
 - Notifications (extension → host): `onCDPEvent`, `onCDPDetach`.
+- Requests (extension → host, `transport.sendRequest`, ids `sw-N`, pending
+  requests rejected on disconnect):
+  - `getSidePanelSession {} → {apiBaseUrl, launchCapability, credential}` —
+    mints the side panel chat session (cached in `chrome.storage.session`,
+    re-minted on HTTP 401).
+- `hello` result includes `"backend": "chrome-extension"`.
 - Errors: JSON-RPC `{code, message}`; `-32601` unknown method, `-32602`
   invalid params.
 - Kill-switch: when the native port disconnects, every attached debugger is
@@ -152,6 +158,13 @@ After changing code, reload the extension in `chrome://extensions` (or let
   neutralizer (injected into leased tabs, all frames).
 - `entrypoints/options/` — read-only status page (connection state from
   `chrome.storage.local`).
+- `entrypoints/sidepanel/` — chat side panel (dumb UI; opened via the toolbar
+  action). All HTTP/WS to the desktop agent API runs in the service worker
+  (`src/sidepanel-chat.ts`); the page proxies over `chrome.runtime` messages
+  (`sidepanel.*` methods) and renders text items, degrading HITL/approval
+  items to a "Continue in the desktop app" note.
+- `scripts/generate-icons.mjs` — dependency-free PNG icon generator
+  (`public/icons/icon-{16,48,128}.png`).
 - `src/protocol.ts` — JSON-RPC 2.0 types, error codes, param validation.
 - `src/handlers.ts` — method handlers + `attachedTabs` bookkeeping.
 - `src/tab-groups.ts` — `key → groupId` registry (storage-persisted).

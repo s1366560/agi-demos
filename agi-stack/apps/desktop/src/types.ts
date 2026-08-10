@@ -54,6 +54,7 @@ export type BrowserBridgeConfig = {
   enabled: boolean;
   port: number;
   extension_ids: string[];
+  full_cdp_access_enabled?: boolean;
 };
 
 export type BrowserBridgeRuntimeStatus = {
@@ -61,6 +62,7 @@ export type BrowserBridgeRuntimeStatus = {
   port: number;
   broker_connected: boolean;
   extension_ids: string[];
+  full_cdp_access_enabled?: boolean;
 };
 
 export type BrowserBridgeStatus = {
@@ -1018,6 +1020,45 @@ export type BrowserOriginGrant = {
   host: string;
   decision: BrowserOriginGrantDecision;
   source_hitl_request_id: string;
+  created_at: string;
+};
+
+export type BrowserCapabilityGrantCapability = 'full_cdp';
+
+export type BrowserCapabilityGrantDecision = 'site' | 'decline';
+
+export type BrowserCapabilityGrant = {
+  id: string;
+  host: string;
+  capability: BrowserCapabilityGrantCapability;
+  decision: BrowserCapabilityGrantDecision;
+  source_hitl_request_id: string;
+  created_at: string;
+};
+
+export type BrowserSiteCredentialMeta = {
+  id: string;
+  origin: string;
+  username: string;
+  created_at: string;
+};
+
+export type BrowserSiteCredentialInput = {
+  origin: string;
+  username: string;
+  password: string;
+};
+
+export type BrowserAuditOutcome = 'ok' | 'consent' | 'error';
+
+export type BrowserAuditEntry = {
+  id: string;
+  run_id: string;
+  tool_name: string;
+  origin: string;
+  target_summary: string;
+  outcome: BrowserAuditOutcome;
+  latency_ms: number;
   created_at: string;
 };
 

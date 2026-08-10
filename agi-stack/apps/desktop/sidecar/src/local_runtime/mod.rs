@@ -122,10 +122,13 @@ use auth_context::{
     TrustedSessionResumeRequest,
 };
 use authority_store::{
-    BrowserOriginDecision, BrowserOriginGrant, DesktopArtifactStatus, DesktopArtifactVersion,
-    DesktopAuthorityError, DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind,
-    DesktopHitlRequest, DesktopHitlStatus, DesktopPermissionProfile, DesktopRun, DesktopRunStatus,
-    WorkspaceToolGrant, BROWSER_ORIGIN_TARGET_KIND, HITL_PENDING_AUTHORITY_REVISION,
+    credential_fill_once_key, full_cdp_once_key, BrowserCapabilityDecision, BrowserCapabilityGrant,
+    BrowserOriginDecision, BrowserOriginGrant, BrowserSiteCredential, DesktopArtifactStatus,
+    DesktopArtifactVersion, DesktopAuthorityError, DesktopExecutionEnvironment,
+    DesktopExecutionEnvironmentKind, DesktopHitlRequest, DesktopHitlStatus,
+    DesktopPermissionProfile, DesktopRun, DesktopRunStatus, WorkspaceToolGrant,
+    BROWSER_CREDENTIAL_FILL_TARGET_KIND, BROWSER_FULL_CDP_TARGET_KIND, BROWSER_ORIGIN_TARGET_KIND,
+    FULL_CDP_CAPABILITY, HITL_PENDING_AUTHORITY_REVISION,
 };
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
@@ -172,18 +175,27 @@ impl LocalRuntimeService {
         let tool_host = LocalToolHost::new(&workspace_root).map_err(|error| error.to_string())?;
         let api_token = generate_capability_token();
         let session_store = DesktopSessionStore::open(&session_store_path)?;
+        // Browser action audit retention: one sweep on startup drops rows
+        // older than 30 days. Best-effort — a sweep failure never blocks
+        // startup.
+        let audit_cutoff = Utc::now().timestamp_millis() - 30 * 24 * 60 * 60 * 1_000;
+        if let Err(error) = session_store.delete_browser_action_audit_older_than(audit_cutoff) {
+            eprintln!("failed to sweep expired browser action audit rows: {error}");
+        }
         let mcp_credential_vault = credential_vault.clone();
         let provider_credentials =
             ProviderCredentialBroker::native(credential_vault, session_store.installation_id())
                 .map_err(|error| error.to_string())?;
-        let state = Arc::new(LocalRuntimeState::new_with_provider_credentials(
+        let mut state = LocalRuntimeState::new_with_provider_credentials(
             workspace_root,
             tool_host,
             checkpoints,
             api_token,
             session_store,
             provider_credentials,
-        )?);
+        )?;
+        state.app_data_dir = Some(app_data_dir.clone());
+        let state = Arc::new(state);
         state
             .mcp_supervisor
             .install_credential_vault(mcp_credential_vault)
@@ -325,13 +337,13 @@ impl LocalRuntimeService {
     }
 
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {
-        self.state.configure(config)?;
+        self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
     }
 }
 
 impl LocalRuntimeState {
-    fn configure(&self, mut config: LocalRuntimeConfig) -> Result<(), String> {
+    fn configure(&self, mut config: LocalRuntimeConfig, api_base_url: &str) -> Result<(), String> {
         if !config.workspace_root.trim().is_empty() {
             let root = PathBuf::from(config.workspace_root.trim());
             std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
@@ -341,7 +353,7 @@ impl LocalRuntimeState {
             *self.workspace_root.lock().expect("local workspace root") = root;
             *self.tool_host.lock().expect("local tool host") = host;
         }
-        self.reconcile_browser_bridge(&config.browser_bridge)?;
+        self.reconcile_browser_bridge(&config.browser_bridge, api_base_url)?;
         let mut current = self.config.lock().expect("local runtime config");
         *current = config;
         Ok(())
@@ -349,10 +361,20 @@ impl LocalRuntimeState {
 
     /// Start/stop the browser bridge so the running service matches `config`.
     /// Every (re)start regenerates the token and rewrites the registry file.
+    /// The side-panel session minter rides along so the bridge can answer
+    /// broker-initiated `getSidePanelSession` requests.
     fn reconcile_browser_bridge(
         &self,
         config: &browser_bridge::BrowserBridgeConfig,
+        api_base_url: &str,
     ) -> Result<(), String> {
+        let minter = || {
+            browser_bridge::SidePanelSessionMinter::new(
+                api_base_url.to_string(),
+                self.api_token.clone(),
+                self.session_store.clone(),
+            )
+        };
         let mut slot = self.browser_bridge.lock().expect("browser bridge runtime");
         match (config.enabled, slot.take()) {
             (true, Some(current)) => {
@@ -360,11 +382,17 @@ impl LocalRuntimeState {
                     *slot = Some(current);
                 } else {
                     current.stop();
-                    *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+                    *slot = Some(browser_bridge::BrowserBridgeRuntime::start(
+                        config,
+                        Some(minter()),
+                    )?);
                 }
             }
             (true, None) => {
-                *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+                *slot = Some(browser_bridge::BrowserBridgeRuntime::start(
+                    config,
+                    Some(minter()),
+                )?);
             }
             (false, Some(runtime)) => runtime.stop(),
             (false, None) => {}
@@ -396,6 +424,10 @@ impl LocalRuntimeState {
             broker_connected: runtime
                 .as_ref()
                 .is_some_and(|runtime| runtime.broker_connected()),
+            connected_backends: runtime
+                .as_ref()
+                .map(|runtime| runtime.connected_backends())
+                .unwrap_or_default(),
             extension_ids: config.extension_ids.clone(),
         }
     }
@@ -994,6 +1026,10 @@ struct LocalRuntimeState {
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
+    site_credentials: provider_credentials::SiteCredentialBroker,
+    /// Application data directory (set by `LocalRuntimeService::start`;
+    /// `None` in tests). Backs browser screenshot artifact files.
+    app_data_dir: Option<PathBuf>,
     #[cfg(test)]
     agent_run_claim_attempts: AtomicU64,
     #[cfg(test)]
@@ -1294,6 +1330,7 @@ impl LocalRuntimeState {
             None,
             SupervisorLimits::default(),
         )?);
+        let site_credentials = provider_credentials.site_credential_broker();
         Ok(Self {
             api_token,
             workspace_root: Mutex::new(workspace_root),
@@ -1318,6 +1355,8 @@ impl LocalRuntimeState {
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
+            site_credentials,
+            app_data_dir: None,
             #[cfg(test)]
             agent_run_claim_attempts: AtomicU64::new(0),
             #[cfg(test)]
@@ -2238,6 +2277,15 @@ impl LocalRuntimeState {
                     self.session_store.clone(),
                     run.cloned(),
                     Arc::clone(&self.browser_once_consents),
+                    self.config
+                        .lock()
+                        .expect("local runtime config")
+                        .browser_bridge
+                        .full_cdp_access_enabled,
+                    self.site_credentials.clone(),
+                    self.app_data_dir
+                        .as_ref()
+                        .map(|dir| dir.join("browser-screenshots")),
                 )),
             ])),
             None => local_tool_host,
@@ -2793,6 +2841,26 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/browser-bridge/origin-grants/:grant_id",
             delete(revoke_browser_origin_grant),
+        )
+        .route(
+            "/api/v1/browser-bridge/capability-grants",
+            get(list_browser_capability_grants),
+        )
+        .route(
+            "/api/v1/browser-bridge/capability-grants/:grant_id",
+            delete(revoke_browser_capability_grant),
+        )
+        .route(
+            "/api/v1/browser-bridge/site-credentials",
+            get(list_browser_site_credentials).put(upsert_browser_site_credential),
+        )
+        .route(
+            "/api/v1/browser-bridge/site-credentials/:credential_id",
+            delete(revoke_browser_site_credential),
+        )
+        .route(
+            "/api/v1/browser-bridge/audit",
+            get(list_browser_action_audit_entries),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/runtime-selection",
@@ -4112,6 +4180,228 @@ async fn revoke_browser_origin_grant(
         "success": true,
         "grant": browser_origin_grant_json(&grant),
     })))
+}
+
+fn browser_capability_grant_json(grant: &BrowserCapabilityGrant) -> Value {
+    json!({
+        "id": grant.id,
+        "host": grant.host,
+        "capability": grant.capability,
+        "decision": grant.decision.as_str(),
+        "source_hitl_request_id": grant.source_hitl_request_id,
+        "created_at": grant.created_at,
+    })
+}
+
+async fn list_browser_capability_grants(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+) -> LocalJsonResult {
+    let grants = state
+        .session_store
+        .list_active_browser_capability_grants()
+        .map_err(local_store_error)?;
+    let grants: Vec<Value> = grants.iter().map(browser_capability_grant_json).collect();
+    Ok(Json(json!({ "grants": grants })))
+}
+
+async fn revoke_browser_capability_grant(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    Path(grant_id): Path<String>,
+) -> LocalJsonResult {
+    let grant = state
+        .session_store
+        .revoke_browser_capability_grant(&grant_id, &now_iso())
+        .map_err(local_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "browser capability grant not found" })),
+            )
+        })?;
+    Ok(Json(json!({
+        "success": true,
+        "grant": browser_capability_grant_json(&grant),
+    })))
+}
+
+/// Metadata-only projection of a site credential — the password is brokered
+/// by the vault and is never served over HTTP.
+fn browser_site_credential_json(credential: &BrowserSiteCredential) -> Value {
+    json!({
+        "id": credential.id,
+        "origin": credential.origin,
+        "username": credential.username,
+        "created_at": credential.created_at,
+    })
+}
+
+/// A bare consent host: lowercase, no scheme, credentials, port, or path.
+fn normalized_bare_host(value: &str) -> Option<String> {
+    let host = value.trim().to_lowercase();
+    if host.is_empty() || host.len() > 253 {
+        return None;
+    }
+    let parsed = Url::parse(&format!("https://{host}")).ok()?;
+    if parsed.host_str() != Some(host.as_str())
+        || parsed.port().is_some()
+        || parsed.path() != "/"
+        || !parsed.username().is_empty()
+    {
+        return None;
+    }
+    Some(host)
+}
+
+#[derive(Deserialize)]
+struct UpsertBrowserSiteCredentialBody {
+    origin: String,
+    username: String,
+    password: String,
+}
+
+async fn upsert_browser_site_credential(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    Json(body): Json<UpsertBrowserSiteCredentialBody>,
+) -> LocalJsonResult {
+    let Some(origin) = normalized_bare_host(&body.origin) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "detail": "origin must be a bare host (no scheme, port, path, or credentials)",
+                "reason_code": "browser_site_credential_origin_invalid",
+            })),
+        ));
+    };
+    let username = body.username.trim();
+    if username.is_empty() || username.len() > 254 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "username must contain 1 to 254 characters" })),
+        ));
+    }
+    if body.password.is_empty() || body.password.len() > 4096 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "password must contain 1 to 4096 characters" })),
+        ));
+    }
+    let created_at = now_iso();
+    let credential_ref = state
+        .site_credentials
+        .save(&origin, username, &body.password, &created_at)
+        .map_err(|error| {
+            eprintln!("failed to store browser site credential in the vault: {error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "detail": "site credential vault is unavailable",
+                    "reason_code": "browser_site_credential_vault_unavailable",
+                })),
+            )
+        })?;
+    let credential = BrowserSiteCredential {
+        id: format!("local-browser-site-credential-{}", Uuid::new_v4()),
+        origin,
+        username: username.to_string(),
+        credential_ref,
+        created_at,
+        revoked_at: None,
+    };
+    state
+        .session_store
+        .upsert_browser_site_credential(&credential)
+        .map_err(local_store_error)?;
+    Ok(Json(json!({
+        "success": true,
+        "credential": browser_site_credential_json(&credential),
+    })))
+}
+
+async fn list_browser_site_credentials(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+) -> LocalJsonResult {
+    let credentials = state
+        .session_store
+        .list_active_browser_site_credentials()
+        .map_err(local_store_error)?;
+    let credentials: Vec<Value> = credentials
+        .iter()
+        .map(browser_site_credential_json)
+        .collect();
+    Ok(Json(json!({ "credentials": credentials })))
+}
+
+async fn revoke_browser_site_credential(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    Path(credential_id): Path<String>,
+) -> LocalJsonResult {
+    let credential = state
+        .session_store
+        .revoke_browser_site_credential(&credential_id, &now_iso())
+        .map_err(local_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "browser site credential not found" })),
+            )
+        })?;
+    if let Err(error) = state.site_credentials.clear(&credential.credential_ref) {
+        eprintln!("failed to clear browser site credential from the vault: {error}");
+    }
+    Ok(Json(json!({
+        "success": true,
+        "credential": browser_site_credential_json(&credential),
+    })))
+}
+
+const DEFAULT_BROWSER_AUDIT_LIMIT: u32 = 100;
+const MAX_BROWSER_AUDIT_LIMIT: u32 = 500;
+
+#[derive(Deserialize)]
+struct BrowserActionAuditQuery {
+    limit: Option<u32>,
+    origin: Option<String>,
+}
+
+async fn list_browser_action_audit_entries(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(_authenticated): Extension<AuthenticatedContext>,
+    Query(query): Query<BrowserActionAuditQuery>,
+) -> LocalJsonResult {
+    let limit = query
+        .limit
+        .unwrap_or(DEFAULT_BROWSER_AUDIT_LIMIT)
+        .min(MAX_BROWSER_AUDIT_LIMIT);
+    let origin = query
+        .origin
+        .as_deref()
+        .map(|origin| origin.trim().to_lowercase())
+        .filter(|origin| !origin.is_empty());
+    let entries = state
+        .session_store
+        .list_browser_action_audit(limit, origin.as_deref())
+        .map_err(local_store_error)?;
+    let entries: Vec<Value> = entries
+        .iter()
+        .map(|entry| {
+            json!({
+                "id": entry.id,
+                "run_id": entry.run_id,
+                "tool_name": entry.tool_name,
+                "origin": entry.origin,
+                "target_summary": entry.target_summary,
+                "outcome": entry.outcome,
+                "latency_ms": entry.latency_ms,
+                "created_at": entry.created_at,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "entries": entries })))
 }
 
 fn normalized_routing_policy(
@@ -7104,7 +7394,7 @@ async fn create_run_input(
     let (input, created) = match outcome {
         Ok(value) => value,
         Err(error) if error.contains("conflict") || error.contains("not accepting") => {
-            return Err((StatusCode::CONFLICT, Json(json!({ "detail": error }))))
+            return Err((StatusCode::CONFLICT, Json(json!({ "detail": error }))));
         }
         Err(error) => return Err(local_store_error(error)),
     };
@@ -7794,7 +8084,7 @@ async fn respond_to_hitl(
                         "detail": "automation HITL authority is unavailable",
                         "reason_code": "local_automation_hitl_authority_unavailable",
                     })),
-                ))
+                ));
             }
         };
     if request.status == DesktopHitlStatus::Responded {
@@ -8009,6 +8299,8 @@ async fn respond_to_hitl(
         &body.response_data,
     )?;
     let browser_origin_consent = browser_origin_grant_from_hitl(&request, &body.response_data)?;
+    let browser_capability_consent =
+        browser_capability_grant_from_hitl(&request, &body.response_data)?;
     let engine = state
         .agent_engine(&conversation, engine_run.as_ref())
         .map_err(execution_environment_error)?;
@@ -8080,6 +8372,25 @@ async fn respond_to_hitl(
                     .lock()
                     .expect("browser once consents")
                     .insert((run_id, host));
+            }
+        }
+    }
+    // Same application rules for the M3 capability consents (full-CDP
+    // site/decline rows, run-scoped once keys for full CDP and credential
+    // fills).
+    if let Some(consent) = browser_capability_consent {
+        match consent {
+            BrowserCapabilityConsent::Persist(grant) => {
+                if let Err(error) = state.session_store.insert_browser_capability_grant(&grant) {
+                    eprintln!("failed to persist browser capability grant: {error}");
+                }
+            }
+            BrowserCapabilityConsent::Once { run_id, key } => {
+                state
+                    .browser_once_consents
+                    .lock()
+                    .expect("browser once consents")
+                    .insert((run_id, key));
             }
         }
     }
@@ -8360,6 +8671,23 @@ fn valid_permission_response(request: &DesktopHitlRequest, response_data: &Value
             ("allow", true, Some("once" | "site" | "all")) | ("deny", false, Some("once"))
         );
     }
+    if is_browser_full_cdp_permission(request) {
+        // Full-CDP consent: allow with once/site scopes; deny maps to a
+        // persisted capability decline. There is deliberately no `all`
+        // scope for this capability.
+        return matches!(
+            (action, granted, scope),
+            ("allow", true, Some("once" | "site")) | ("deny", false, Some("once"))
+        );
+    }
+    if is_browser_credential_fill_permission(request) {
+        // Credential-fill consent is run-scoped only: allow with `once`;
+        // deny refuses this run and persists nothing.
+        return matches!(
+            (action, granted, scope),
+            ("allow", true, Some("once")) | ("deny", false, Some("once"))
+        );
+    }
     matches!(
         (action, granted, scope),
         ("allow", true, Some("once"))
@@ -8374,6 +8702,22 @@ fn is_browser_origin_permission(request: &DesktopHitlRequest) -> bool {
             .decision
             .as_ref()
             .is_some_and(|decision| decision.target.kind == BROWSER_ORIGIN_TARGET_KIND)
+}
+
+fn is_browser_full_cdp_permission(request: &DesktopHitlRequest) -> bool {
+    request.kind == HitlKind::Permission
+        && request
+            .decision
+            .as_ref()
+            .is_some_and(|decision| decision.target.kind == BROWSER_FULL_CDP_TARGET_KIND)
+}
+
+fn is_browser_credential_fill_permission(request: &DesktopHitlRequest) -> bool {
+    request.kind == HitlKind::Permission
+        && request
+            .decision
+            .as_ref()
+            .is_some_and(|decision| decision.target.kind == BROWSER_CREDENTIAL_FILL_TARGET_KIND)
 }
 
 fn validate_a2ui_action_response(
@@ -8623,6 +8967,72 @@ fn browser_origin_grant_from_hitl(
             })?;
             Ok(Some(BrowserOriginConsent::Once { run_id, host }))
         }
+        _ => Ok(None),
+    }
+}
+
+/// The browser capability consent derived from a permission HITL response
+/// targeting `browser_full_cdp` or `browser_credential_fill` (M3). For full
+/// CDP, `site` persists a grant row and deny persists a decline row; `once`
+/// stays in the run-scoped in-memory cache. Credential-fill consent is
+/// `once`-only and never persisted — a deny simply refuses this run.
+enum BrowserCapabilityConsent {
+    Persist(BrowserCapabilityGrant),
+    Once { run_id: String, key: String },
+}
+
+fn browser_capability_grant_from_hitl(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+) -> Result<Option<BrowserCapabilityConsent>, (StatusCode, Json<Value>)> {
+    let full_cdp = is_browser_full_cdp_permission(request);
+    let credential_fill = is_browser_credential_fill_permission(request);
+    if !full_cdp && !credential_fill {
+        return Ok(None);
+    }
+    let Some(decision) = request.decision.as_ref() else {
+        return Ok(None);
+    };
+    let host = decision.target.id.trim().to_lowercase();
+    if host.is_empty() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "detail": "browser capability permission context has no origin host" })),
+        ));
+    }
+    let action = response_data.get("action").and_then(Value::as_str);
+    let scope = response_data.get("scope").and_then(Value::as_str);
+    let grant = |host: String, decision: BrowserCapabilityDecision| {
+        BrowserCapabilityConsent::Persist(BrowserCapabilityGrant {
+            id: format!("local-browser-capability-grant-{}", Uuid::new_v4()),
+            host,
+            capability: FULL_CDP_CAPABILITY.to_string(),
+            decision,
+            source_hitl_request_id: request.id.clone(),
+            created_at: now_iso(),
+            revoked_at: None,
+        })
+    };
+    match (action, scope) {
+        (Some("allow"), Some("site")) if full_cdp => {
+            Ok(Some(grant(host, BrowserCapabilityDecision::Site)))
+        }
+        (Some("deny"), _) if full_cdp => Ok(Some(grant(host, BrowserCapabilityDecision::Decline))),
+        (Some("allow"), Some("once")) => {
+            let run_id = request.run_id.clone().ok_or_else(|| {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(json!({ "detail": "browser capability once consent requires an active run" })),
+                )
+            })?;
+            let key = if full_cdp {
+                full_cdp_once_key(&host)
+            } else {
+                credential_fill_once_key(&host)
+            };
+            Ok(Some(BrowserCapabilityConsent::Once { run_id, key }))
+        }
+        // Credential-fill deny refuses this run only; nothing is persisted.
         _ => Ok(None),
     }
 }
@@ -9307,6 +9717,9 @@ async fn mcp_tools_list(State(state): State<Arc<LocalRuntimeState>>) -> Json<Val
     if state.connected_browser_tool_host().is_some() {
         if let Some(tools) = result.get_mut("tools").and_then(Value::as_array_mut) {
             tools.extend(agistack_adapters_browser::list_tool_metadata());
+            // Wrapper-composed tools (not part of the browser crate) advertise
+            // their schemas here too.
+            tools.push(browser_run_tool_host::fill_credentials_tool_metadata());
         }
     }
     Json(result)
@@ -10415,6 +10828,137 @@ mod tests {
         .is_none());
     }
 
+    fn browser_capability_hitl_request(kind: &str, run_id: Option<&str>) -> DesktopHitlRequest {
+        let mut request = browser_origin_hitl_request(run_id);
+        request.decision.as_mut().unwrap().target.kind = kind.to_string();
+        request
+    }
+
+    #[test]
+    fn browser_full_cdp_permission_response_accepts_once_site_and_deny_only() {
+        let request = browser_capability_hitl_request(BROWSER_FULL_CDP_TARGET_KIND, Some("run-1"));
+        for response in [
+            json!({"action": "allow", "granted": true, "scope": "once"}),
+            json!({"action": "allow", "granted": true, "scope": "site"}),
+            json!({"action": "deny", "granted": false, "scope": "once"}),
+        ] {
+            assert!(
+                valid_permission_response(&request, &response),
+                "response must be valid: {response}"
+            );
+        }
+        for response in [
+            // No all-sites scope exists for full CDP.
+            json!({"action": "allow", "granted": true, "scope": "all"}),
+            json!({"action": "allow_always", "granted": true, "scope": "workspace_tool"}),
+            json!({"action": "deny", "granted": false, "scope": "site"}),
+            json!({"action": "allow", "granted": true}),
+        ] {
+            assert!(
+                !valid_permission_response(&request, &response),
+                "response must be rejected: {response}"
+            );
+        }
+    }
+
+    #[test]
+    fn browser_credential_fill_permission_response_accepts_once_and_deny_only() {
+        let request =
+            browser_capability_hitl_request(BROWSER_CREDENTIAL_FILL_TARGET_KIND, Some("run-1"));
+        for response in [
+            json!({"action": "allow", "granted": true, "scope": "once"}),
+            json!({"action": "deny", "granted": false, "scope": "once"}),
+        ] {
+            assert!(
+                valid_permission_response(&request, &response),
+                "response must be valid: {response}"
+            );
+        }
+        for response in [
+            // Credential-fill consent is never persisted.
+            json!({"action": "allow", "granted": true, "scope": "site"}),
+            json!({"action": "allow", "granted": true, "scope": "all"}),
+            json!({"action": "deny", "granted": false, "scope": "site"}),
+        ] {
+            assert!(
+                !valid_permission_response(&request, &response),
+                "response must be rejected: {response}"
+            );
+        }
+    }
+
+    #[test]
+    fn browser_capability_grant_from_hitl_maps_each_scope() {
+        let request = browser_capability_hitl_request(BROWSER_FULL_CDP_TARGET_KIND, Some("run-1"));
+
+        let Some(BrowserCapabilityConsent::Persist(grant)) = browser_capability_grant_from_hitl(
+            &request,
+            &json!({"action": "allow", "granted": true, "scope": "site"}),
+        )
+        .expect("site consent") else {
+            panic!("site scope must persist a capability grant");
+        };
+        assert_eq!(grant.host, "example.com");
+        assert_eq!(grant.capability, FULL_CDP_CAPABILITY);
+        assert_eq!(grant.decision, BrowserCapabilityDecision::Site);
+        assert_eq!(grant.source_hitl_request_id, request.id);
+
+        let Some(BrowserCapabilityConsent::Persist(grant)) = browser_capability_grant_from_hitl(
+            &request,
+            &json!({"action": "deny", "granted": false, "scope": "once"}),
+        )
+        .expect("deny consent") else {
+            panic!("deny must persist a capability decline");
+        };
+        assert_eq!(grant.decision, BrowserCapabilityDecision::Decline);
+
+        // `once` is run-scoped only and never becomes a grant row.
+        let Some(BrowserCapabilityConsent::Once { run_id, key }) =
+            browser_capability_grant_from_hitl(
+                &request,
+                &json!({"action": "allow", "granted": true, "scope": "once"}),
+            )
+            .expect("once consent")
+        else {
+            panic!("once scope must stay in the run-scoped cache");
+        };
+        assert_eq!(run_id, "run-1");
+        assert_eq!(key, full_cdp_once_key("example.com"));
+
+        // Credential fill: once maps to its own cache key; deny persists
+        // nothing.
+        let fill =
+            browser_capability_hitl_request(BROWSER_CREDENTIAL_FILL_TARGET_KIND, Some("run-1"));
+        let Some(BrowserCapabilityConsent::Once { run_id, key }) =
+            browser_capability_grant_from_hitl(
+                &fill,
+                &json!({"action": "allow", "granted": true, "scope": "once"}),
+            )
+            .expect("fill once consent")
+        else {
+            panic!("credential-fill once consent must stay in the run-scoped cache");
+        };
+        assert_eq!(run_id, "run-1");
+        assert_eq!(key, credential_fill_once_key("example.com"));
+        assert!(browser_capability_grant_from_hitl(
+            &fill,
+            &json!({"action": "deny", "granted": false, "scope": "once"}),
+        )
+        .expect("fill deny")
+        .is_none());
+
+        // Non-capability permission requests produce no capability consent.
+        let mut other =
+            browser_capability_hitl_request(BROWSER_FULL_CDP_TARGET_KIND, Some("run-1"));
+        other.decision.as_mut().unwrap().target.kind = "worktree".to_string();
+        assert!(browser_capability_grant_from_hitl(
+            &other,
+            &json!({"action": "allow", "granted": true, "scope": "site"}),
+        )
+        .expect("non-capability request")
+        .is_none());
+    }
+
     #[tokio::test]
     async fn browser_run_cleanup_clears_once_consents_only_on_terminal_status() {
         let state = test_state("browser-cleanup-secret");
@@ -10598,6 +11142,331 @@ mod tests {
             .await
             .expect("revoke response");
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn browser_capability_grant_routes_list_and_revoke() {
+        let state = test_state("browser-capability-secret");
+        for (host, decision) in [
+            ("example.com", BrowserCapabilityDecision::Site),
+            ("foo.test", BrowserCapabilityDecision::Decline),
+        ] {
+            state
+                .session_store
+                .insert_browser_capability_grant(&BrowserCapabilityGrant {
+                    id: format!("capability-{host}"),
+                    host: host.to_string(),
+                    capability: FULL_CDP_CAPABILITY.to_string(),
+                    decision,
+                    source_hitl_request_id: "hitl-1".to_string(),
+                    created_at: now_iso(),
+                    revoked_at: None,
+                })
+                .expect("insert capability grant");
+        }
+        let app = local_router(Arc::clone(&state));
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/capability-grants")
+                    .header("authorization", "Bearer browser-capability-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list.status(), StatusCode::OK);
+        let body = response_json(list).await;
+        let grants = body["grants"].as_array().expect("grants array");
+        assert_eq!(grants.len(), 2);
+        assert!(grants.iter().all(|grant| grant["id"].is_string()
+            && grant["host"].is_string()
+            && grant["capability"] == FULL_CDP_CAPABILITY
+            && grant["decision"].is_string()
+            && grant["source_hitl_request_id"].is_string()
+            && grant["created_at"].is_string()));
+
+        let revoke = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/browser-bridge/capability-grants/capability-example.com")
+                    .header("authorization", "Bearer browser-capability-secret")
+                    .body(Body::empty())
+                    .expect("revoke request"),
+            )
+            .await
+            .expect("revoke response");
+        assert_eq!(revoke.status(), StatusCode::OK);
+        let body = response_json(revoke).await;
+        assert_eq!(body["success"], true);
+        assert_eq!(body["grant"]["host"], "example.com");
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/capability-grants")
+                    .header("authorization", "Bearer browser-capability-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        let body = response_json(list).await;
+        let grants = body["grants"].as_array().expect("grants array");
+        assert_eq!(grants.len(), 1);
+        assert_eq!(grants[0]["host"], "foo.test");
+
+        let missing = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/browser-bridge/capability-grants/capability-unknown")
+                    .header("authorization", "Bearer browser-capability-secret")
+                    .body(Body::empty())
+                    .expect("revoke request"),
+            )
+            .await
+            .expect("revoke response");
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn browser_site_credential_routes_round_trip_without_password_exposure() {
+        let state = test_state("browser-credential-secret");
+        let app = local_router(Arc::clone(&state));
+
+        let put = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/browser-bridge/site-credentials",
+                "browser-credential-secret",
+                json!({
+                    "origin": "Example.COM",
+                    "username": "alice",
+                    "password": "s3cret-value",
+                }),
+            ))
+            .await
+            .expect("put response");
+        assert_eq!(put.status(), StatusCode::OK);
+        let body = response_json(put).await;
+        assert_eq!(body["success"], true);
+        assert_eq!(body["credential"]["origin"], "example.com");
+        assert_eq!(body["credential"]["username"], "alice");
+        let credential_id = body["credential"]["id"].as_str().expect("id").to_string();
+        assert!(
+            !body.to_string().contains("s3cret-value"),
+            "the PUT response must never carry the password: {body}"
+        );
+
+        // The vault holds the password under the metadata row's reference.
+        let stored = state
+            .session_store
+            .list_active_browser_site_credentials()
+            .expect("stored credentials");
+        assert_eq!(stored.len(), 1);
+        let secret = state
+            .site_credentials
+            .load(&stored[0].credential_ref, "example.com", Some("alice"))
+            .expect("vault load")
+            .expect("vault record");
+        assert_eq!(secret.password, "s3cret-value");
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/site-credentials")
+                    .header("authorization", "Bearer browser-credential-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list.status(), StatusCode::OK);
+        let body = response_json(list).await;
+        let credentials = body["credentials"].as_array().expect("credentials array");
+        assert_eq!(credentials.len(), 1);
+        assert!(
+            !body.to_string().contains("s3cret-value"),
+            "the GET response must never carry the password: {body}"
+        );
+        assert!(credentials[0].get("credential_ref").is_none());
+
+        // Upsert supersedes the previous row.
+        let put = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/browser-bridge/site-credentials",
+                "browser-credential-secret",
+                json!({
+                    "origin": "example.com",
+                    "username": "alice",
+                    "password": "n3w-secret",
+                }),
+            ))
+            .await
+            .expect("upsert response");
+        assert_eq!(put.status(), StatusCode::OK);
+        let stored = state
+            .session_store
+            .list_active_browser_site_credentials()
+            .expect("stored after upsert");
+        assert_eq!(stored.len(), 1);
+        let secret = state
+            .site_credentials
+            .load(&stored[0].credential_ref, "example.com", Some("alice"))
+            .expect("vault load after upsert")
+            .expect("vault record after upsert");
+        assert_eq!(secret.password, "n3w-secret");
+
+        // Non-bare-host origins are rejected.
+        for bad_origin in ["https://foo.test", "foo.test/path", "foo.test:8080", ""] {
+            let put = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "PUT",
+                    "/api/v1/browser-bridge/site-credentials",
+                    "browser-credential-secret",
+                    json!({
+                        "origin": bad_origin,
+                        "username": "alice",
+                        "password": "x",
+                    }),
+                ))
+                .await
+                .expect("invalid origin response");
+            assert_eq!(
+                put.status(),
+                StatusCode::BAD_REQUEST,
+                "origin must be rejected: {bad_origin:?}"
+            );
+        }
+
+        // Delete revokes the metadata row and clears the vault record.
+        let delete = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!(
+                        "/api/v1/browser-bridge/site-credentials/{}",
+                        stored[0].id
+                    ))
+                    .header("authorization", "Bearer browser-credential-secret")
+                    .body(Body::empty())
+                    .expect("delete request"),
+            )
+            .await
+            .expect("delete response");
+        assert_eq!(delete.status(), StatusCode::OK);
+        assert!(state
+            .session_store
+            .list_active_browser_site_credentials()
+            .expect("stored after delete")
+            .is_empty());
+        assert!(state
+            .site_credentials
+            .load(&stored[0].credential_ref, "example.com", Some("alice"))
+            .expect("vault load after delete")
+            .is_none());
+
+        let missing = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!(
+                        "/api/v1/browser-bridge/site-credentials/{credential_id}"
+                    ))
+                    .header("authorization", "Bearer browser-credential-secret")
+                    .body(Body::empty())
+                    .expect("delete request"),
+            )
+            .await
+            .expect("delete response");
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn browser_action_audit_route_lists_newest_first_with_filters() {
+        let state = test_state("browser-audit-secret");
+        for (tool, origin, outcome, created_at) in [
+            ("browser_navigate", Some("example.com"), "ok", 1_000_i64),
+            ("browser_click", Some("foo.test"), "consent_required", 2_000),
+            ("browser_cdp_raw", Some("example.com"), "error", 3_000),
+        ] {
+            state
+                .session_store
+                .insert_browser_action_audit(
+                    Some("run-1"),
+                    tool,
+                    origin,
+                    "target",
+                    outcome,
+                    7,
+                    created_at,
+                )
+                .expect("insert audit row");
+        }
+        let app = local_router(Arc::clone(&state));
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/audit")
+                    .header("authorization", "Bearer browser-audit-secret")
+                    .body(Body::empty())
+                    .expect("list request"),
+            )
+            .await
+            .expect("list response");
+        assert_eq!(list.status(), StatusCode::OK);
+        let body = response_json(list).await;
+        let entries = body["entries"].as_array().expect("entries array");
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["tool_name"], "browser_cdp_raw");
+        assert_eq!(entries[0]["outcome"], "error");
+        assert_eq!(entries[0]["latency_ms"], 7);
+        assert_eq!(entries[2]["tool_name"], "browser_navigate");
+
+        let filtered = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/audit?origin=example.com")
+                    .header("authorization", "Bearer browser-audit-secret")
+                    .body(Body::empty())
+                    .expect("filtered request"),
+            )
+            .await
+            .expect("filtered response");
+        let body = response_json(filtered).await;
+        let entries = body["entries"].as_array().expect("entries array");
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|entry| entry["origin"] == "example.com"));
+
+        let limited = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/browser-bridge/audit?limit=1")
+                    .header("authorization", "Bearer browser-audit-secret")
+                    .body(Body::empty())
+                    .expect("limited request"),
+            )
+            .await
+            .expect("limited response");
+        let body = response_json(limited).await;
+        let entries = body["entries"].as_array().expect("entries array");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["tool_name"], "browser_cdp_raw");
     }
 
     #[tokio::test]
@@ -13334,7 +14203,9 @@ mod tests {
             "workspace_root": workspace_root
         }))
         .expect("workspace-only runtime config");
-        state.configure(config).expect("reconfigure workspace");
+        state
+            .configure(config, "http://127.0.0.1:1")
+            .expect("reconfigure workspace");
         let after = {
             let runtime = state.provider_runtime.lock().expect("provider runtime");
             let binding = runtime.bindings.get(&key).expect("provider binding");
@@ -13622,7 +14493,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 22);
+        assert_eq!(version, 23);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -13711,13 +14582,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 23;")
+                .execute_batch("PRAGMA user_version = 24;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 22"));
+        assert!(error.contains("newer than supported schema version 23"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -14566,7 +15437,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 22);
+        assert_eq!(schema_version, 23);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }

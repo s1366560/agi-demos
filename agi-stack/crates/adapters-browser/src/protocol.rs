@@ -254,6 +254,10 @@ pub struct OnCdpEventParams {
     pub method: String,
     #[serde(default)]
     pub params: Value,
+    /// Backend that emitted the event (`"iab"`); absent means the default
+    /// chrome-extension backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 }
 
 /// `onCDPDetach` params: the debugger detached from a tab.
@@ -262,6 +266,9 @@ pub struct OnCdpEventParams {
 pub struct OnCdpDetachParams {
     pub tab_id: u64,
     pub reason: String,
+    /// Backend that emitted the notification (`"iab"`); absent means chrome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 }
 
 #[cfg(test)]

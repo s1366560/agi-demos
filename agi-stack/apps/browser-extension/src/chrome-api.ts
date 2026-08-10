@@ -105,6 +105,16 @@ export interface ChromeApi {
       set(items: Record<string, unknown>): Promise<void> | void;
       get(keys: string): Promise<Record<string, unknown>>;
     };
+    /** SW-lifetime session store (side panel session cache). */
+    session?: {
+      set(items: Record<string, unknown>): Promise<void> | void;
+      get(keys: string): Promise<Record<string, unknown>>;
+      remove(keys: string): Promise<void> | void;
+    };
     onChanged: ChromeEvent<[Record<string, { newValue?: unknown }>, string]>;
+  };
+  /** Present in Chrome 114+; the SW enables openPanelOnActionClick. */
+  sidePanel?: {
+    setPanelBehavior(options: { openPanelOnActionClick: boolean }): Promise<void>;
   };
 }

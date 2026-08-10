@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
-import type { ChromeApi, ChromeEvent, NativePort, TabLike } from '../src/chrome-api';
+import { vi, type Mock } from 'vitest';
+import type { ChromeApi, ChromeEvent, NativePort } from '../src/chrome-api';
 
 export interface MockEvent<T extends unknown[]> extends ChromeEvent<T> {
   fire(...args: T): void;
@@ -20,64 +20,75 @@ export function createMockEvent<T extends unknown[]>(): MockEvent<T> {
 }
 
 export interface MockPort extends NativePort {
-  postMessage: ReturnType<typeof vi.fn>;
+  postMessage: Mock<NativePort['postMessage']>;
   onMessage: MockEvent<[unknown]>;
   onDisconnect: MockEvent<[]>;
 }
 
 export interface ChromeMock extends ChromeApi {
-  runtime: ChromeApi['runtime'] & {
-    connectNative: ReturnType<typeof vi.fn>;
-    sendMessage: ReturnType<typeof vi.fn>;
+  runtime: Omit<
+    ChromeApi['runtime'],
+    'connectNative' | 'sendMessage' | 'lastError' | 'onStartup' | 'onInstalled' | 'onMessage'
+  > & {
+    connectNative: Mock<ChromeApi['runtime']['connectNative']>;
+    sendMessage: Mock<ChromeApi['runtime']['sendMessage']>;
     lastError: { message?: string } | null;
     onStartup: MockEvent<[]>;
     onInstalled: MockEvent<[]>;
     onMessage: MockEvent<[unknown, { tab?: { id?: number } }, (response?: unknown) => void]>;
   };
-  debugger: ChromeApi['debugger'] & {
-    attach: ReturnType<typeof vi.fn>;
-    detach: ReturnType<typeof vi.fn>;
-    sendCommand: ReturnType<typeof vi.fn>;
+  debugger: Omit<ChromeApi['debugger'], 'attach' | 'detach' | 'sendCommand' | 'onEvent' | 'onDetach'> & {
+    attach: Mock<ChromeApi['debugger']['attach']>;
+    detach: Mock<ChromeApi['debugger']['detach']>;
+    sendCommand: Mock<ChromeApi['debugger']['sendCommand']>;
     onEvent: MockEvent<[{ tabId?: number }, string, unknown]>;
     onDetach: MockEvent<[{ tabId?: number }, string]>;
   };
   tabs: {
-    query: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    get: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    remove: ReturnType<typeof vi.fn>;
-    group: ReturnType<typeof vi.fn>;
-    ungroup: ReturnType<typeof vi.fn>;
-    sendMessage: ReturnType<typeof vi.fn>;
+    query: Mock<ChromeApi['tabs']['query']>;
+    create: Mock<ChromeApi['tabs']['create']>;
+    get: Mock<ChromeApi['tabs']['get']>;
+    update: Mock<ChromeApi['tabs']['update']>;
+    remove: Mock<ChromeApi['tabs']['remove']>;
+    group: Mock<ChromeApi['tabs']['group']>;
+    ungroup: Mock<ChromeApi['tabs']['ungroup']>;
+    sendMessage: Mock<ChromeApi['tabs']['sendMessage']>;
   };
   windows: {
-    get: ReturnType<typeof vi.fn>;
+    get: Mock<ChromeApi['windows']['get']>;
   };
   tabGroups: {
-    get: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
+    get: Mock<ChromeApi['tabGroups']['get']>;
+    update: Mock<ChromeApi['tabGroups']['update']>;
   };
   scripting: {
-    executeScript: ReturnType<typeof vi.fn>;
+    executeScript: Mock<ChromeApi['scripting']['executeScript']>;
   };
   alarms: {
-    create: ReturnType<typeof vi.fn>;
-    clear: ReturnType<typeof vi.fn>;
+    create: Mock<ChromeApi['alarms']['create']>;
+    clear: Mock<ChromeApi['alarms']['clear']>;
     onAlarm: MockEvent<[{ name: string }]>;
   };
   storage: {
     local: {
-      set: ReturnType<typeof vi.fn>;
-      get: ReturnType<typeof vi.fn>;
+      set: Mock<ChromeApi['storage']['local']['set']>;
+      get: Mock<ChromeApi['storage']['local']['get']>;
+    };
+    session: {
+      set: Mock<NonNullable<ChromeApi['storage']['session']>['set']>;
+      get: Mock<NonNullable<ChromeApi['storage']['session']>['get']>;
+      remove: Mock<NonNullable<ChromeApi['storage']['session']>['remove']>;
     };
     onChanged: MockEvent<[Record<string, { newValue?: unknown }>, string]>;
+  };
+  sidePanel: {
+    setPanelBehavior: Mock<NonNullable<ChromeApi['sidePanel']>['setPanelBehavior']>;
   };
 }
 
 export function createChromeMock(): { chrome: ChromeMock; port: MockPort } {
   const port: MockPort = {
-    postMessage: vi.fn(),
+    postMessage: vi.fn<NativePort['postMessage']>(),
     onMessage: createMockEvent<[unknown]>(),
     onDisconnect: createMockEvent<[]>(),
   };
@@ -86,50 +97,58 @@ export function createChromeMock(): { chrome: ChromeMock; port: MockPort } {
     runtime: {
       id: 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
       lastError: null,
-      connectNative: vi.fn(() => port),
-      sendMessage: vi.fn(async () => undefined),
+      connectNative: vi.fn<ChromeApi['runtime']['connectNative']>(() => port),
+      sendMessage: vi.fn<ChromeApi['runtime']['sendMessage']>(async () => undefined),
       onStartup: createMockEvent<[]>(),
       onInstalled: createMockEvent<[]>(),
       onMessage: createMockEvent<[unknown, { tab?: { id?: number } }, (response?: unknown) => void]>(),
     },
     debugger: {
-      attach: vi.fn(async () => undefined),
-      detach: vi.fn(async () => undefined),
-      sendCommand: vi.fn(async () => ({})),
+      attach: vi.fn<ChromeApi['debugger']['attach']>(async () => undefined),
+      detach: vi.fn<ChromeApi['debugger']['detach']>(async () => undefined),
+      sendCommand: vi.fn<ChromeApi['debugger']['sendCommand']>(async () => ({})),
       onEvent: createMockEvent<[{ tabId?: number }, string, unknown]>(),
       onDetach: createMockEvent<[{ tabId?: number }, string]>(),
     },
     tabs: {
-      query: vi.fn(async (): Promise<TabLike[]> => []),
-      create: vi.fn(async (): Promise<TabLike> => ({ id: 99, windowId: 1 })),
-      get: vi.fn(async (): Promise<TabLike> => ({ id: 99, windowId: 1, active: true })),
-      update: vi.fn(async () => ({})),
-      remove: vi.fn(async () => undefined),
-      group: vi.fn(async () => 555),
-      ungroup: vi.fn(async () => undefined),
-      sendMessage: vi.fn(async () => undefined),
+      query: vi.fn<ChromeApi['tabs']['query']>(async () => []),
+      create: vi.fn<ChromeApi['tabs']['create']>(async () => ({ id: 99, windowId: 1 })),
+      get: vi.fn<ChromeApi['tabs']['get']>(async () => ({ id: 99, windowId: 1, active: true })),
+      update: vi.fn<ChromeApi['tabs']['update']>(async () => ({})),
+      remove: vi.fn<ChromeApi['tabs']['remove']>(async () => undefined),
+      group: vi.fn<ChromeApi['tabs']['group']>(async () => 555),
+      ungroup: vi.fn<ChromeApi['tabs']['ungroup']>(async () => undefined),
+      sendMessage: vi.fn<ChromeApi['tabs']['sendMessage']>(async () => undefined),
     },
     windows: {
-      get: vi.fn(async () => ({ id: 1, type: 'normal', state: 'normal' })),
+      get: vi.fn<ChromeApi['windows']['get']>(async () => ({ id: 1, type: 'normal', state: 'normal' })),
     },
     tabGroups: {
-      get: vi.fn(async () => ({ id: 555 })),
-      update: vi.fn(async () => ({})),
+      get: vi.fn<ChromeApi['tabGroups']['get']>(async () => ({ id: 555 })),
+      update: vi.fn<ChromeApi['tabGroups']['update']>(async () => ({})),
     },
     scripting: {
-      executeScript: vi.fn(async () => []),
+      executeScript: vi.fn<ChromeApi['scripting']['executeScript']>(async () => []),
     },
     alarms: {
-      create: vi.fn(),
-      clear: vi.fn(),
+      create: vi.fn<ChromeApi['alarms']['create']>(),
+      clear: vi.fn<ChromeApi['alarms']['clear']>(),
       onAlarm: createMockEvent<[{ name: string }]>(),
     },
     storage: {
       local: {
-        set: vi.fn(),
-        get: vi.fn(async () => ({})),
+        set: vi.fn<ChromeApi['storage']['local']['set']>(),
+        get: vi.fn<ChromeApi['storage']['local']['get']>(async () => ({})),
+      },
+      session: {
+        set: vi.fn<NonNullable<ChromeApi['storage']['session']>['set']>(),
+        get: vi.fn<NonNullable<ChromeApi['storage']['session']>['get']>(async () => ({})),
+        remove: vi.fn<NonNullable<ChromeApi['storage']['session']>['remove']>(),
       },
       onChanged: createMockEvent<[Record<string, { newValue?: unknown }>, string]>(),
+    },
+    sidePanel: {
+      setPanelBehavior: vi.fn<NonNullable<ChromeApi['sidePanel']>['setPanelBehavior']>(async () => {}),
     },
   };
 

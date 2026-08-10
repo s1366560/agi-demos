@@ -6,13 +6,14 @@ import {
   parseExtensionId,
   scanAndNeutralize,
   type DomNodeLike,
+  type FrameElementLike,
 } from '../src/monitor';
 import { createChromeMock, flush } from './chrome-mock';
 
 const OWN_ID = 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl';
 const FOREIGN_ID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-function frame(src: string, extra: Record<string, unknown> = {}): DomNodeLike {
+function frame(src: string, extra: Record<string, unknown> = {}): DomNodeLike & FrameElementLike {
   return { tagName: 'IFRAME', src, srcdoc: '<p>payload</p>', children: [], ...extra };
 }
 

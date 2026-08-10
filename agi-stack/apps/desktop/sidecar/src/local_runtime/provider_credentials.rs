@@ -110,6 +110,17 @@ impl ProviderCredentialBroker {
         &self.installation_id
     }
 
+    /// The site-credential broker sharing this broker's vault store and
+    /// installation binding (M3 browser credential brokering: site passwords
+    /// live in the same application vault, keyed under their own prefix).
+    pub(super) fn site_credential_broker(&self) -> SiteCredentialBroker {
+        SiteCredentialBroker {
+            store: Arc::clone(&self.store),
+            installation_id: Arc::clone(&self.installation_id),
+            operations: Arc::clone(&self.operations),
+        }
+    }
+
     pub(super) fn save(
         &self,
         tenant_id: &str,
@@ -169,7 +180,7 @@ impl ProviderCredentialBroker {
         let record = match serde_json::from_str::<ProviderCredentialRecord>(&serialized) {
             Ok(record) => record,
             Err(_) => {
-                return self.discard_invalid(&account, ProviderCredentialStoreError::CorruptRecord)
+                return self.discard_invalid(&account, ProviderCredentialStoreError::CorruptRecord);
             }
         };
         if let Err(error) = validate_record(
@@ -298,6 +309,187 @@ fn map_application_vault_error(error: ApplicationVaultError) -> ProviderCredenti
         ApplicationVaultError::CorruptRecord => ProviderCredentialStoreError::CorruptRecord,
         ApplicationVaultError::Unavailable => ProviderCredentialStoreError::Unavailable,
     }
+}
+
+const SITE_CREDENTIAL_RECORD_VERSION: u16 = 1;
+const SITE_CREDENTIAL_VAULT_KEY_PREFIX: &str = "site-credential.v1";
+
+/// The vault record for one brokered site credential. Serialized as
+/// `{version: 1, origin, username, password, created_at}`; the password
+/// never leaves the sidecar (tool results carry metadata only).
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SiteCredentialRecord {
+    version: u16,
+    origin: String,
+    username: String,
+    password: String,
+    created_at: String,
+}
+
+impl fmt::Debug for SiteCredentialRecord {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SiteCredentialRecord")
+            .field("version", &self.version)
+            .field("origin", &self.origin)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .field("created_at", &self.created_at)
+            .finish()
+    }
+}
+
+/// A decrypted site credential loaded from the vault for a fill. `Debug`
+/// redacts the password so it cannot leak into logs.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct SiteCredentialSecret {
+    pub origin: String,
+    pub username: String,
+    pub password: String,
+}
+
+impl fmt::Debug for SiteCredentialSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SiteCredentialSecret")
+            .field("origin", &self.origin)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Broker for browser site credentials (M3): the session store keeps only
+/// metadata rows (`desktop_browser_site_credentials`); the password lives in
+/// the application vault under a deterministic, installation-bound key.
+#[derive(Clone)]
+pub(super) struct SiteCredentialBroker {
+    store: Arc<dyn ProviderCredentialStore>,
+    installation_id: Arc<str>,
+    operations: Arc<Mutex<()>>,
+}
+
+impl SiteCredentialBroker {
+    /// Persist (upsert) the password for (origin, username), returning the
+    /// credential reference the metadata row stores. The key is deterministic
+    /// per (installation, origin, username), so an upsert overwrites the same
+    /// vault record.
+    pub(super) fn save(
+        &self,
+        origin: &str,
+        username: &str,
+        password: &str,
+        created_at: &str,
+    ) -> Result<String, ProviderCredentialStoreError> {
+        let _operation = self.lock_operations()?;
+        let credential_ref = site_credential_ref(&self.installation_id, origin, username)?;
+        let record = SiteCredentialRecord {
+            version: SITE_CREDENTIAL_RECORD_VERSION,
+            origin: origin.to_string(),
+            username: username.to_string(),
+            password: password.to_string(),
+            created_at: created_at.to_string(),
+        };
+        validate_site_credential_record(&record, origin, username)?;
+        let serialized = serde_json::to_string(&record)
+            .map_err(|_| ProviderCredentialStoreError::InvalidRecord)?;
+        self.store.save(&credential_ref, &serialized)?;
+        Ok(credential_ref)
+    }
+
+    /// Load the credential behind `credential_ref`, verifying the record is
+    /// bound to the expected origin (and username, when given). Corrupt or
+    /// mismatched records are discarded, mirroring the provider broker.
+    pub(super) fn load(
+        &self,
+        credential_ref: &str,
+        origin: &str,
+        username: Option<&str>,
+    ) -> Result<Option<SiteCredentialSecret>, ProviderCredentialStoreError> {
+        let _operation = self.lock_operations()?;
+        let Some(serialized) = self.store.load(credential_ref)? else {
+            return Ok(None);
+        };
+        let record = match serde_json::from_str::<SiteCredentialRecord>(&serialized) {
+            Ok(record) => record,
+            Err(_) => {
+                self.store.clear(credential_ref)?;
+                return Err(ProviderCredentialStoreError::CorruptRecord);
+            }
+        };
+        if let Err(error) = validate_site_credential_record(&record, origin, &record.username) {
+            self.store.clear(credential_ref)?;
+            return Err(error);
+        }
+        if !username.map_or(true, |username| username == record.username) {
+            self.store.clear(credential_ref)?;
+            return Err(ProviderCredentialStoreError::InvalidRecord);
+        }
+        Ok(Some(SiteCredentialSecret {
+            origin: record.origin,
+            username: record.username,
+            password: record.password,
+        }))
+    }
+
+    pub(super) fn clear(&self, credential_ref: &str) -> Result<(), ProviderCredentialStoreError> {
+        let _operation = self.lock_operations()?;
+        if credential_ref.trim().is_empty() {
+            return Err(ProviderCredentialStoreError::InvalidKey);
+        }
+        self.store.clear(credential_ref)
+    }
+
+    fn lock_operations(&self) -> Result<MutexGuard<'_, ()>, ProviderCredentialStoreError> {
+        self.operations
+            .lock()
+            .map_err(|_| ProviderCredentialStoreError::Unavailable)
+    }
+}
+
+/// The vault record key for one site credential:
+/// `site-credential.v1.<sha256(installation_id ‖ origin ‖ username)>`.
+pub(super) fn site_credential_ref(
+    installation_id: &str,
+    origin: &str,
+    username: &str,
+) -> Result<String, ProviderCredentialStoreError> {
+    if uuid::Uuid::parse_str(installation_id).is_err()
+        || origin.trim().is_empty()
+        || username.trim().is_empty()
+    {
+        return Err(ProviderCredentialStoreError::InvalidKey);
+    }
+    let mut digest = Sha256::new();
+    digest.update(b"memstack-browser-site-credential-v1\0");
+    digest.update(installation_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(origin.as_bytes());
+    digest.update(b"\0");
+    digest.update(username.as_bytes());
+    Ok(format!(
+        "{SITE_CREDENTIAL_VAULT_KEY_PREFIX}.{:x}",
+        digest.finalize()
+    ))
+}
+
+fn validate_site_credential_record(
+    record: &SiteCredentialRecord,
+    origin: &str,
+    username: &str,
+) -> Result<(), ProviderCredentialStoreError> {
+    if record.version != SITE_CREDENTIAL_RECORD_VERSION {
+        return Err(ProviderCredentialStoreError::UnsupportedVersion);
+    }
+    if record.origin != origin
+        || record.username != username
+        || record.password.is_empty()
+        || record.created_at.trim().is_empty()
+    {
+        return Err(ProviderCredentialStoreError::InvalidRecord);
+    }
+    Ok(())
 }
 
 impl ProviderCredentialStore for ApplicationCredentialVault {
@@ -570,5 +762,128 @@ mod tests {
         assert!(!debug.contains("sensitive-provider"));
         assert!(!debug.contains("sensitive-digest"));
         assert!(!debug.contains("sensitive-secret"));
+    }
+
+    #[test]
+    fn site_credentials_round_trip_and_upsert_under_one_vault_key() {
+        let broker = ProviderCredentialBroker::in_memory(INSTALLATION_A)
+            .expect("provider broker")
+            .site_credential_broker();
+        let first_ref = broker
+            .save(
+                "example.com",
+                "alice",
+                "first-secret",
+                "2026-08-09T00:00:01Z",
+            )
+            .expect("save credential");
+        assert!(first_ref.starts_with(SITE_CREDENTIAL_VAULT_KEY_PREFIX));
+        assert!(!first_ref.contains("example.com"));
+        assert!(!first_ref.contains("alice"));
+
+        let secret = broker
+            .load(&first_ref, "example.com", Some("alice"))
+            .expect("load credential")
+            .expect("credential present");
+        assert_eq!(secret.origin, "example.com");
+        assert_eq!(secret.username, "alice");
+        assert_eq!(secret.password, "first-secret");
+
+        // Upsert: same (origin, username) reuses the deterministic vault key
+        // and overwrites the password.
+        let second_ref = broker
+            .save(
+                "example.com",
+                "alice",
+                "second-secret",
+                "2026-08-09T00:00:02Z",
+            )
+            .expect("upsert credential");
+        assert_eq!(first_ref, second_ref);
+        let secret = broker
+            .load(&first_ref, "example.com", Some("alice"))
+            .expect("load upserted credential")
+            .expect("credential present");
+        assert_eq!(secret.password, "second-secret");
+
+        broker.clear(&first_ref).expect("clear credential");
+        assert!(broker
+            .load(&first_ref, "example.com", Some("alice"))
+            .expect("load cleared credential")
+            .is_none());
+    }
+
+    #[test]
+    fn site_credential_load_revalidates_scope_and_discards_mismatches() {
+        let store = Arc::new(InMemoryProviderCredentialStore::default());
+        let broker = ProviderCredentialBroker::new(store.clone(), INSTALLATION_A)
+            .expect("provider broker")
+            .site_credential_broker();
+        let credential_ref = broker
+            .save("example.com", "alice", "secret-a", "2026-08-09T00:00:01Z")
+            .expect("save credential");
+
+        // Wrong origin / username scopes fail and discard the record.
+        assert_eq!(
+            broker.load(&credential_ref, "other.test", Some("alice")),
+            Err(ProviderCredentialStoreError::InvalidRecord)
+        );
+        assert!(store
+            .values
+            .lock()
+            .expect("credential test store")
+            .get(&credential_ref)
+            .is_none());
+
+        let credential_ref = broker
+            .save("example.com", "alice", "secret-a", "2026-08-09T00:00:02Z")
+            .expect("resave credential");
+        assert_eq!(
+            broker.load(&credential_ref, "example.com", Some("bob")),
+            Err(ProviderCredentialStoreError::InvalidRecord)
+        );
+
+        // A corrupt record is reported and discarded.
+        let credential_ref = broker
+            .save("example.com", "alice", "secret-a", "2026-08-09T00:00:03Z")
+            .expect("resave credential");
+        store
+            .values
+            .lock()
+            .expect("credential test store")
+            .insert(credential_ref.clone(), "not-json".to_string());
+        assert_eq!(
+            broker.load(&credential_ref, "example.com", Some("alice")),
+            Err(ProviderCredentialStoreError::CorruptRecord)
+        );
+
+        // Empty secrets and scopes are rejected outright.
+        assert_eq!(
+            broker.save("example.com", "alice", "", "2026-08-09T00:00:04Z"),
+            Err(ProviderCredentialStoreError::InvalidRecord)
+        );
+        assert_eq!(
+            broker.save("", "alice", "secret", "2026-08-09T00:00:04Z"),
+            Err(ProviderCredentialStoreError::InvalidKey)
+        );
+    }
+
+    #[test]
+    fn site_credential_debug_output_redacts_password() {
+        let record = SiteCredentialRecord {
+            version: SITE_CREDENTIAL_RECORD_VERSION,
+            origin: "example.com".to_string(),
+            username: "alice".to_string(),
+            password: "sensitive-password".to_string(),
+            created_at: "2026-08-09T00:00:01Z".to_string(),
+        };
+        let debug = format!("{record:?}");
+        assert!(!debug.contains("sensitive-password"));
+        let secret = SiteCredentialSecret {
+            origin: "example.com".to_string(),
+            username: "alice".to_string(),
+            password: "sensitive-password".to_string(),
+        };
+        assert!(!format!("{secret:?}").contains("sensitive-password"));
     }
 }

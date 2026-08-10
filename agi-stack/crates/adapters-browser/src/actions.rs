@@ -28,7 +28,9 @@ use tokio::sync::broadcast;
 
 use agistack_core::ports::CoreResult;
 
-use crate::host::{required_tab_id, tool_err, BridgeEndpoint, BrowserToolHost};
+use crate::host::{
+    backend_of, required_tab_id, tool_err, Backend, BridgeEndpoint, BrowserToolHost,
+};
 use crate::protocol::{
     BridgeNotification, LeaseOrigin, OnCdpEventParams, TabMark, METHOD_ASSIGN_TAB,
     METHOD_CREATE_TAB, METHOD_ENSURE_TAB_GROUP, NOTIFY_ON_CDP_EVENT,
@@ -71,21 +73,24 @@ const CLEAR_FN: &str = "function () {\
 impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// `browser_navigate {tabId, url} → {url, title}`.
     pub(crate) async fn navigate(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let url = required_str(input, "url")?;
         validate_navigable_url(url)?;
 
-        self.ensure_attached(tab_id).await?;
-        self.ensure_page_enabled(tab_id).await?;
+        self.ensure_attached(backend, tab_id).await?;
+        self.ensure_page_enabled(backend, tab_id).await?;
         // Subscribe *before* navigating so a fast load event cannot be missed.
         let mut load_events = self.endpoint.subscribe_notifications();
-        self.execute_cdp(tab_id, "Page.navigate", json!({ "url": url }))
+        self.execute_cdp(backend, tab_id, "Page.navigate", json!({ "url": url }))
             .await?;
-        self.wait_for_load_event(tab_id, &mut load_events).await;
+        self.wait_for_load_event(backend, tab_id, &mut load_events)
+            .await;
 
-        let (_frame_id, context_id) = self.world_context(tab_id).await?;
+        let (_frame_id, context_id) = self.world_context(backend, tab_id).await?;
         let cdp = self
             .execute_cdp(
+                backend,
                 tab_id,
                 "Runtime.evaluate",
                 json!({
@@ -99,7 +104,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .pointer("/result/value")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        self.set_tab_url(tab_id, url);
+        self.set_tab_url(backend, tab_id, url);
         Ok(json!({
             "url": clip(url, MAX_FIELD_CHARS),
             "title": clip(title, MAX_FIELD_CHARS),
@@ -108,53 +113,79 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
 
     /// `browser_click {tabId, ref} → {clicked, x, y}`.
     pub(crate) async fn click(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let ref_ = required_ref(input)?;
-        let Some(object_id) = self.resolve_ref_object(tab_id, ref_).await? else {
+        let Some(object_id) = self.resolve_ref_object(backend, tab_id, ref_).await? else {
             return Ok(stale_ref_output(ref_));
         };
-        let (x, y) = self.element_center(tab_id, &object_id).await?;
+        let (x, y) = self.element_center(backend, tab_id, &object_id).await?;
 
         // Cursor first (errors swallowed inside), then the real click.
-        self.move_mouse(tab_id, x, y, true).await;
+        self.move_mouse_on(backend, tab_id, x, y, true).await;
         let sequence = [
             json!({ "type": "mouseMoved", "x": x, "y": y }),
             json!({ "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1 }),
             json!({ "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1 }),
         ];
         for params in sequence {
-            self.execute_cdp(tab_id, "Input.dispatchMouseEvent", params)
+            self.execute_cdp(backend, tab_id, "Input.dispatchMouseEvent", params)
                 .await?;
         }
         Ok(json!({ "clicked": true, "x": x, "y": y }))
     }
 
-    /// `browser_type {tabId, ref, text, clear?, pressEnter?} → {typed}`.
+    /// `browser_type {tabId, ref, text, mode?, clear?, pressEnter?} → {typed}`.
     pub(crate) async fn type_text(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let ref_ = required_ref(input)?;
         let text = input
             .get("text")
             .and_then(Value::as_str)
             .ok_or_else(|| tool_err("missing or invalid 'text' (expected a string)"))?;
+        let mode = match input.get("mode").and_then(Value::as_str) {
+            None | Some("insert") => TypeMode::Insert,
+            Some("keys") => TypeMode::Keys,
+            Some(other) => {
+                return Err(tool_err(format!(
+                    "invalid 'mode': {other:?} (expected \"insert\" or \"keys\")"
+                )))
+            }
+        };
         let clear = input.get("clear").and_then(Value::as_bool).unwrap_or(false);
         let press_enter = input
             .get("pressEnter")
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
-        let Some(object_id) = self.resolve_ref_object(tab_id, ref_).await? else {
+        let Some(object_id) = self.resolve_ref_object(backend, tab_id, ref_).await? else {
             return Ok(stale_ref_output(ref_));
         };
-        self.call_on_element(tab_id, &object_id, FOCUS_FN).await?;
-        if clear {
-            self.call_on_element(tab_id, &object_id, CLEAR_FN).await?;
-        }
-        self.execute_cdp(tab_id, "Input.insertText", json!({ "text": text }))
+        self.call_on_element(backend, tab_id, &object_id, FOCUS_FN)
             .await?;
+        if clear {
+            self.call_on_element(backend, tab_id, &object_id, CLEAR_FN)
+                .await?;
+        }
+        match mode {
+            TypeMode::Insert => {
+                self.execute_cdp(backend, tab_id, "Input.insertText", json!({ "text": text }))
+                    .await?;
+            }
+            TypeMode::Keys => {
+                // Resolved up front so an unmappable char fails before any
+                // key event is dispatched.
+                for params in key_events_for_text(text)? {
+                    self.execute_cdp(backend, tab_id, "Input.dispatchKeyEvent", params)
+                        .await?;
+                }
+            }
+        }
         if press_enter {
             for event_type in ["rawKeyDown", "keyUp"] {
                 self.execute_cdp(
+                    backend,
                     tab_id,
                     "Input.dispatchKeyEvent",
                     json!({
@@ -172,6 +203,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
 
     /// `browser_scroll {tabId, ref?, deltaY} → {scrolled: deltaY}`.
     pub(crate) async fn scroll(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let delta_y = input
             .get("deltaY")
@@ -183,14 +215,15 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                 if !valid_ref(ref_) {
                     return Err(bad_ref_err(ref_));
                 }
-                match self.resolve_ref_object(tab_id, ref_).await? {
-                    Some(object_id) => self.element_center(tab_id, &object_id).await?,
+                match self.resolve_ref_object(backend, tab_id, ref_).await? {
+                    Some(object_id) => self.element_center(backend, tab_id, &object_id).await?,
                     None => return Ok(stale_ref_output(ref_)),
                 }
             }
-            None => self.viewport_center(tab_id).await?,
+            None => self.viewport_center(backend, tab_id).await?,
         };
         self.execute_cdp(
+            backend,
             tab_id,
             "Input.dispatchMouseEvent",
             json!({ "type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": delta_y }),
@@ -201,6 +234,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
 
     /// `browser_new_tab {url?, activate?=false} → {tabId, groupId}`.
     pub(crate) async fn new_tab(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let url = input.get("url").and_then(Value::as_str);
         if let Some(url) = url {
             validate_navigable_url(url)?;
@@ -215,15 +249,17 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         if let Some(url) = url {
             params["url"] = json!(url);
         }
-        let created = self.endpoint.request(METHOD_CREATE_TAB, params).await?;
+        let created = self
+            .backend_request(backend, METHOD_CREATE_TAB, params)
+            .await?;
         let tab_id = created
             .get("tabId")
             .and_then(Value::as_u64)
             .ok_or_else(|| tool_err("createTab returned no tabId"))?;
 
         let group = self
-            .endpoint
-            .request(
+            .backend_request(
+                backend,
                 METHOD_ENSURE_TAB_GROUP,
                 json!({ "key": run_id, "title": AGENT_GROUP_TITLE }),
             )
@@ -232,36 +268,38 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
             .get("groupId")
             .and_then(Value::as_u64)
             .ok_or_else(|| tool_err("ensureTabGroup returned no groupId"))?;
-        self.endpoint
-            .request(
-                METHOD_ASSIGN_TAB,
-                json!({ "tabId": tab_id, "groupId": group_id }),
-            )
-            .await?;
+        self.backend_request(
+            backend,
+            METHOD_ASSIGN_TAB,
+            json!({ "tabId": tab_id, "groupId": group_id }),
+        )
+        .await?;
 
-        self.record_lease(run_id, tab_id, LeaseOrigin::Agent);
+        self.record_lease(run_id, backend, tab_id, LeaseOrigin::Agent);
         if let Some(url) = url {
-            self.set_tab_url(tab_id, url);
+            self.set_tab_url(backend, tab_id, url);
         }
         Ok(json!({ "tabId": tab_id, "groupId": group_id }))
     }
 
     /// `browser_claim_tab {tabId} → {tabId}` — user-origin lease, no grouping.
     pub(crate) async fn claim_tab(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
-        let url = self.current_url(tab_id as i64).await?;
+        let url = self.current_url_on(backend, tab_id as i64).await?;
         if is_browser_internal_url(&url) {
             return Err(tool_err(format!(
                 "refusing to claim browser-internal tab {tab_id} ({url})"
             )));
         }
         let run_id = run_id_of(input).unwrap_or(DEFAULT_GROUP_KEY);
-        self.record_lease(run_id, tab_id, LeaseOrigin::User);
+        self.record_lease(run_id, backend, tab_id, LeaseOrigin::User);
         Ok(json!({ "tabId": tab_id }))
     }
 
     /// `browser_mark_tab {tabId, mark} → {tabId, mark}`.
     pub(crate) async fn mark_tab(&self, input: &Value) -> CoreResult<Value> {
+        let backend = backend_of(input)?;
         let tab_id = required_tab_id(input)?;
         let mark = match required_str(input, "mark")? {
             "handoff" => TabMark::Handoff,
@@ -272,7 +310,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                 )))
             }
         };
-        if !self.mark_lease(run_id_of(input), tab_id, mark) {
+        if !self.mark_lease(run_id_of(input), backend, tab_id, mark) {
             return Err(tool_err(format!(
                 "no lease for tab {tab_id}; call browser_new_tab or browser_claim_tab first"
             )));
@@ -281,12 +319,23 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     }
 
     /// Send `Page.enable` once per tab (load/navigation events).
-    async fn ensure_page_enabled(&self, tab_id: u64) -> CoreResult<()> {
-        if self.state.page_enabled.lock().unwrap().contains(&tab_id) {
+    async fn ensure_page_enabled(&self, backend: Backend, tab_id: u64) -> CoreResult<()> {
+        if self
+            .state
+            .page_enabled
+            .lock()
+            .unwrap()
+            .contains(&(backend, tab_id))
+        {
             return Ok(());
         }
-        self.execute_cdp(tab_id, "Page.enable", json!({})).await?;
-        self.state.page_enabled.lock().unwrap().insert(tab_id);
+        self.execute_cdp(backend, tab_id, "Page.enable", json!({}))
+            .await?;
+        self.state
+            .page_enabled
+            .lock()
+            .unwrap()
+            .insert((backend, tab_id));
         Ok(())
     }
 
@@ -295,6 +344,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// (some navigations never fire a load event).
     async fn wait_for_load_event(
         &self,
+        backend: Backend,
         tab_id: u64,
         events: &mut broadcast::Receiver<BridgeNotification>,
     ) {
@@ -310,7 +360,10 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
                         else {
                             continue;
                         };
-                        if event.tab_id == tab_id && event.method == "Page.loadEventFired" {
+                        if crate::host::Backend::from_wire(event.backend.as_deref()) == backend
+                            && event.tab_id == tab_id
+                            && event.method == "Page.loadEventFired"
+                        {
                             return;
                         }
                     }
@@ -331,8 +384,13 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// isolated world. `Ok(None)` means the stash is gone or the WeakRef
     /// deref'd to null — the caller turns that into a `stale_ref` tool
     /// *result* (recoverable by re-snapshotting), not an exception.
-    async fn resolve_ref_object(&self, tab_id: u64, ref_: &str) -> CoreResult<Option<String>> {
-        let (_frame_id, context_id) = self.world_context(tab_id).await?;
+    async fn resolve_ref_object(
+        &self,
+        backend: Backend,
+        tab_id: u64,
+        ref_: &str,
+    ) -> CoreResult<Option<String>> {
+        let (_frame_id, context_id) = self.world_context(backend, tab_id).await?;
         let ref_literal = serde_json::to_string(ref_).unwrap_or_else(|_| "\"\"".to_string());
         let expression = format!(
             "(function () {{\
@@ -346,6 +404,7 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
         );
         let cdp = self
             .execute_cdp(
+                backend,
                 tab_id,
                 "Runtime.evaluate",
                 json!({
@@ -372,12 +431,14 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     /// Run a `Runtime.callFunctionOn` against a resolved element object.
     async fn call_on_element(
         &self,
+        backend: Backend,
         tab_id: u64,
         object_id: &str,
         function_declaration: &str,
     ) -> CoreResult<Value> {
         let cdp = self
             .execute_cdp(
+                backend,
                 tab_id,
                 "Runtime.callFunctionOn",
                 json!({
@@ -400,9 +461,14 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
 
     /// Scroll the element into view and return its center point in viewport
     /// CSS px (the coordinate system of both `Input.*` and the cursor).
-    async fn element_center(&self, tab_id: u64, object_id: &str) -> CoreResult<(f64, f64)> {
+    async fn element_center(
+        &self,
+        backend: Backend,
+        tab_id: u64,
+        object_id: &str,
+    ) -> CoreResult<(f64, f64)> {
         let cdp = self
-            .call_on_element(tab_id, object_id, SCROLL_INTO_VIEW_RECT_FN)
+            .call_on_element(backend, tab_id, object_id, SCROLL_INTO_VIEW_RECT_FN)
             .await?;
         let rect = cdp.pointer("/result/value").cloned().unwrap_or(Value::Null);
         let get = |key: &str| {
@@ -417,10 +483,10 @@ impl<E: BridgeEndpoint> BrowserToolHost<E> {
     }
 
     /// Center of the layout viewport in CSS px.
-    async fn viewport_center(&self, tab_id: u64) -> CoreResult<(f64, f64)> {
-        self.ensure_attached(tab_id).await?;
+    async fn viewport_center(&self, backend: Backend, tab_id: u64) -> CoreResult<(f64, f64)> {
+        self.ensure_attached(backend, tab_id).await?;
         let metrics = self
-            .execute_cdp(tab_id, "Page.getLayoutMetrics", json!({}))
+            .execute_cdp(backend, tab_id, "Page.getLayoutMetrics", json!({}))
             .await?;
         let viewport = metrics
             .get("cssLayoutViewport")
@@ -445,6 +511,274 @@ fn run_id_of(input: &Value) -> Option<&str> {
         .get("_run_id")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
+}
+
+/// `browser_type` insertion mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TypeMode {
+    /// `Input.insertText` (default; fast, full Unicode).
+    Insert,
+    /// Per-key `Input.dispatchKeyEvent` rawKeyDown/keyUp pairs.
+    Keys,
+}
+
+/// Shifted digit-row symbols in digit order (Shift+0 … Shift+9, US layout).
+const SHIFTED_DIGIT_SYMBOLS: &str = ")!@#$%^&*(";
+
+/// One row of the `keys`-mode key-descriptor table. Letters, digits, and
+/// shifted digit symbols are derived arithmetically in
+/// [`KeyCoords::for_char`]; this table covers the remaining punctuation
+/// (chars shifted and unshifted on the same physical key share a row), the
+/// control keys reachable from text, and the named navigation keys — arrows,
+/// Home/End, PageUp/PageDown have no char representation yet, but pinning
+/// their coordinates here keeps the table the single source of truth.
+struct KeyRow {
+    /// Chars that produce this key (empty when no char reaches it).
+    chars: &'static str,
+    /// `key` value reported for non-printable chars; printable chars report
+    /// themselves as `key`/`text`.
+    key: &'static str,
+    code: &'static str,
+    vk: u32,
+}
+
+const KEY_TABLE: &[KeyRow] = &[
+    KeyRow {
+        chars: " ",
+        key: " ",
+        code: "Space",
+        vk: 32,
+    },
+    KeyRow {
+        chars: "-_",
+        key: "-",
+        code: "Minus",
+        vk: 189,
+    },
+    KeyRow {
+        chars: "=+",
+        key: "=",
+        code: "Equal",
+        vk: 187,
+    },
+    KeyRow {
+        chars: "[{",
+        key: "[",
+        code: "BracketLeft",
+        vk: 219,
+    },
+    KeyRow {
+        chars: "]}",
+        key: "]",
+        code: "BracketRight",
+        vk: 221,
+    },
+    KeyRow {
+        chars: "\\|",
+        key: "\\",
+        code: "Backslash",
+        vk: 220,
+    },
+    KeyRow {
+        chars: ";:",
+        key: ";",
+        code: "Semicolon",
+        vk: 186,
+    },
+    KeyRow {
+        chars: "'\"",
+        key: "'",
+        code: "Quote",
+        vk: 222,
+    },
+    KeyRow {
+        chars: "`~",
+        key: "`",
+        code: "Backquote",
+        vk: 192,
+    },
+    KeyRow {
+        chars: ",<",
+        key: ",",
+        code: "Comma",
+        vk: 188,
+    },
+    KeyRow {
+        chars: ".>",
+        key: ".",
+        code: "Period",
+        vk: 190,
+    },
+    KeyRow {
+        chars: "/?",
+        key: "/",
+        code: "Slash",
+        vk: 191,
+    },
+    KeyRow {
+        chars: "\n",
+        key: "Enter",
+        code: "Enter",
+        vk: 13,
+    },
+    KeyRow {
+        chars: "\t",
+        key: "Tab",
+        code: "Tab",
+        vk: 9,
+    },
+    KeyRow {
+        chars: "\u{1b}",
+        key: "Escape",
+        code: "Escape",
+        vk: 27,
+    },
+    KeyRow {
+        chars: "\u{8}",
+        key: "Backspace",
+        code: "Backspace",
+        vk: 8,
+    },
+    KeyRow {
+        chars: "\u{7f}",
+        key: "Delete",
+        code: "Delete",
+        vk: 46,
+    },
+    KeyRow {
+        chars: "",
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+        vk: 37,
+    },
+    KeyRow {
+        chars: "",
+        key: "ArrowUp",
+        code: "ArrowUp",
+        vk: 38,
+    },
+    KeyRow {
+        chars: "",
+        key: "ArrowRight",
+        code: "ArrowRight",
+        vk: 39,
+    },
+    KeyRow {
+        chars: "",
+        key: "ArrowDown",
+        code: "ArrowDown",
+        vk: 40,
+    },
+    KeyRow {
+        chars: "",
+        key: "Home",
+        code: "Home",
+        vk: 36,
+    },
+    KeyRow {
+        chars: "",
+        key: "End",
+        code: "End",
+        vk: 35,
+    },
+    KeyRow {
+        chars: "",
+        key: "PageUp",
+        code: "PageUp",
+        vk: 33,
+    },
+    KeyRow {
+        chars: "",
+        key: "PageDown",
+        code: "PageDown",
+        vk: 34,
+    },
+];
+
+/// CDP coordinates of one key (`Input.dispatchKeyEvent`).
+struct KeyCoords {
+    key: String,
+    code: String,
+    vk: u32,
+    /// Printable chars carry `text` on the rawKeyDown event.
+    printable: bool,
+}
+
+impl KeyCoords {
+    /// Map one char to its key coordinates (US layout); `None` when the char
+    /// has no table entry.
+    fn for_char(c: char) -> Option<Self> {
+        if c.is_ascii_alphabetic() {
+            return Some(Self {
+                key: c.to_string(),
+                code: format!("Key{}", c.to_ascii_uppercase()),
+                vk: c.to_ascii_uppercase() as u32,
+                printable: true,
+            });
+        }
+        if c.is_ascii_digit() {
+            return Some(Self {
+                key: c.to_string(),
+                code: format!("Digit{c}"),
+                vk: c as u32,
+                printable: true,
+            });
+        }
+        if let Some(digit) = SHIFTED_DIGIT_SYMBOLS.find(c) {
+            let digit = digit as u32;
+            return Some(Self {
+                key: c.to_string(),
+                code: format!("Digit{digit}"),
+                vk: 48 + digit,
+                printable: true,
+            });
+        }
+        let row = KEY_TABLE.iter().find(|row| row.chars.contains(c))?;
+        let printable = !c.is_control();
+        Some(Self {
+            key: if printable {
+                c.to_string()
+            } else {
+                row.key.to_string()
+            },
+            code: row.code.to_string(),
+            vk: row.vk,
+            printable,
+        })
+    }
+}
+
+/// Expand text into the ordered `Input.dispatchKeyEvent` params of `keys`
+/// mode (rawKeyDown + keyUp per char; printable chars carry `text` on the
+/// down event only). An unmappable char is a tool error naming the gap.
+fn key_events_for_text(text: &str) -> CoreResult<Vec<Value>> {
+    let mut events = Vec::with_capacity(text.len() * 2);
+    for c in text.chars() {
+        let Some(coords) = KeyCoords::for_char(c) else {
+            return Err(tool_err(format!(
+                "keys mode cannot type {c:?} (U+{:04X}): no key-descriptor table entry; \
+                 use mode \"insert\" for this text",
+                c as u32
+            )));
+        };
+        let mut down = json!({
+            "type": "rawKeyDown",
+            "key": coords.key,
+            "code": coords.code,
+            "windowsVirtualKeyCode": coords.vk,
+        });
+        if coords.printable {
+            down["text"] = json!(c.to_string());
+        }
+        events.push(down);
+        events.push(json!({
+            "type": "keyUp",
+            "key": coords.key,
+            "code": coords.code,
+            "windowsVirtualKeyCode": coords.vk,
+        }));
+    }
+    Ok(events)
 }
 
 fn required_str<'a>(input: &'a Value, key: &str) -> CoreResult<&'a str> {
@@ -936,6 +1270,171 @@ mod tests {
         }
     }
 
+    // --------------------------------------------------- type: keys mode
+
+    /// Script the shared type-tool prefix: attach, world, ref hit, focus.
+    fn script_type_prefix(endpoint: MockEndpoint) -> MockEndpoint {
+        endpoint
+            .script(METHOD_ATTACH, vec![ok(json!({}))])
+            .script("cdp:Page.getFrameTree", vec![ok(frame_tree())])
+            .script("cdp:Page.createIsolatedWorld", vec![ok(world(11))])
+            .script("cdp:Runtime.evaluate", vec![ok(ref_hit())])
+            .script("cdp:Runtime.callFunctionOn", vec![ok(undefined_result())])
+    }
+
+    #[tokio::test]
+    async fn type_keys_mode_dispatches_ordered_key_events() {
+        let endpoint = script_type_prefix(MockEndpoint::new()).script(
+            "cdp:Input.dispatchKeyEvent",
+            (0..6).map(|_| ok(cdp_ok())).collect(),
+        );
+        let host = BrowserToolHost::new(endpoint);
+        let out = host
+            .call(
+                TOOL_TYPE,
+                r#"{"tabId": 7, "ref": "e3", "text": "aB!", "mode": "keys"}"#,
+            )
+            .await
+            .unwrap();
+        let out: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(out, json!({"typed": 3}));
+        assert_eq!(cdp_count(&host, "Input.insertText"), 0);
+
+        let keys = cdp_params_of(&host, "Input.dispatchKeyEvent");
+        assert_eq!(keys.len(), 6);
+        // 'a': rawKeyDown carries text; keyUp does not.
+        assert_eq!(
+            keys[0],
+            json!({"type": "rawKeyDown", "key": "a", "code": "KeyA",
+                   "windowsVirtualKeyCode": 65, "text": "a"})
+        );
+        assert_eq!(
+            keys[1],
+            json!({"type": "keyUp", "key": "a", "code": "KeyA",
+                   "windowsVirtualKeyCode": 65})
+        );
+        // Shifted letter keeps the letter code but reports the shifted key.
+        assert_eq!(keys[2]["type"], "rawKeyDown");
+        assert_eq!(keys[2]["key"], "B");
+        assert_eq!(keys[2]["code"], "KeyB");
+        assert_eq!(keys[2]["windowsVirtualKeyCode"], 66);
+        assert_eq!(keys[2]["text"], "B");
+        assert_eq!(keys[3]["type"], "keyUp");
+        // Shifted digit symbol maps onto the digit key.
+        assert_eq!(keys[4]["key"], "!");
+        assert_eq!(keys[4]["code"], "Digit1");
+        assert_eq!(keys[4]["windowsVirtualKeyCode"], 49);
+        assert_eq!(keys[4]["text"], "!");
+        assert_eq!(keys[5]["type"], "keyUp");
+        assert_eq!(keys[5]["key"], "!");
+    }
+
+    #[test]
+    fn keys_mode_maps_shifted_symbols_and_control_chars() {
+        let events = key_events_for_text("?+\t\n ").unwrap();
+        assert_eq!(events.len(), 10);
+        let down = |i: usize| events[i * 2].clone();
+        assert_eq!(
+            down(0),
+            json!({"type": "rawKeyDown", "key": "?", "code": "Slash",
+                   "windowsVirtualKeyCode": 191, "text": "?"})
+        );
+        assert_eq!(
+            down(1),
+            json!({"type": "rawKeyDown", "key": "+", "code": "Equal",
+                   "windowsVirtualKeyCode": 187, "text": "+"})
+        );
+        // Control chars report the named key and carry no text.
+        assert_eq!(
+            down(2),
+            json!({"type": "rawKeyDown", "key": "Tab", "code": "Tab",
+                   "windowsVirtualKeyCode": 9})
+        );
+        assert_eq!(
+            down(3),
+            json!({"type": "rawKeyDown", "key": "Enter", "code": "Enter",
+                   "windowsVirtualKeyCode": 13})
+        );
+        assert_eq!(
+            down(4),
+            json!({"type": "rawKeyDown", "key": " ", "code": "Space",
+                   "windowsVirtualKeyCode": 32, "text": " "})
+        );
+    }
+
+    #[tokio::test]
+    async fn type_keys_mode_rejects_unmapped_char_before_dispatching() {
+        let endpoint = script_type_prefix(MockEndpoint::new());
+        let host = BrowserToolHost::new(endpoint);
+        let err = host
+            .call(
+                TOOL_TYPE,
+                r#"{"tabId": 7, "ref": "e3", "text": "héllo", "mode": "keys"}"#,
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("keys mode"), "{err}");
+        assert!(err.to_string().contains('é'), "{err}");
+        // Nothing typed: the whole string is validated before dispatch.
+        assert_eq!(cdp_count(&host, "Input.dispatchKeyEvent"), 0);
+        assert_eq!(cdp_count(&host, "Input.insertText"), 0);
+    }
+
+    #[tokio::test]
+    async fn type_keys_mode_press_enter_appends_enter() {
+        let endpoint = script_type_prefix(MockEndpoint::new()).script(
+            "cdp:Input.dispatchKeyEvent",
+            (0..6).map(|_| ok(cdp_ok())).collect(), // h, i, Enter
+        );
+        let host = BrowserToolHost::new(endpoint);
+        host.call(
+            TOOL_TYPE,
+            r#"{"tabId": 7, "ref": "e3", "text": "hi", "mode": "keys", "pressEnter": true}"#,
+        )
+        .await
+        .unwrap();
+        let keys = cdp_params_of(&host, "Input.dispatchKeyEvent");
+        assert_eq!(keys.len(), 6);
+        assert_eq!(keys[4]["type"], "rawKeyDown");
+        assert_eq!(keys[4]["key"], "Enter");
+        assert_eq!(keys[4]["code"], "Enter");
+        assert_eq!(keys[4]["windowsVirtualKeyCode"], 13);
+        assert_eq!(keys[5]["type"], "keyUp");
+        assert_eq!(keys[5]["key"], "Enter");
+    }
+
+    #[tokio::test]
+    async fn type_explicit_insert_mode_matches_default_behavior() {
+        let endpoint = script_type_prefix(MockEndpoint::new())
+            .script("cdp:Input.insertText", vec![ok(cdp_ok())]);
+        let host = BrowserToolHost::new(endpoint);
+        let out = host
+            .call(
+                TOOL_TYPE,
+                r#"{"tabId": 7, "ref": "e3", "text": "héllo", "mode": "insert"}"#,
+            )
+            .await
+            .unwrap();
+        let out: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(out, json!({"typed": 5}));
+        assert_eq!(cdp_params_of(&host, "Input.insertText")[0]["text"], "héllo");
+        assert_eq!(cdp_count(&host, "Input.dispatchKeyEvent"), 0);
+    }
+
+    #[tokio::test]
+    async fn type_rejects_unknown_mode() {
+        let host = BrowserToolHost::new(MockEndpoint::new());
+        let err = host
+            .call(
+                TOOL_TYPE,
+                r#"{"tabId": 7, "ref": "e3", "text": "hi", "mode": "peck"}"#,
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("mode"), "{err}");
+        assert!(host.endpoint.requests.lock().unwrap().is_empty());
+    }
+
     #[tokio::test]
     async fn scroll_without_ref_uses_viewport_center() {
         let endpoint = MockEndpoint::new()
@@ -1123,6 +1622,57 @@ mod tests {
             host.endpoint.params_of(METHOD_TURN_ENDED),
             vec![json!({"leases": [{"tabId": 42, "origin": "agent", "mark": "deliverable"}]})]
         );
+        assert!(host.state.leases.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn turn_ended_sends_one_payload_per_backend() {
+        // Same tab id leased on both backends under one run.
+        let endpoint = MockEndpoint::new()
+            .script(
+                METHOD_CREATE_TAB,
+                vec![ok(json!({"tabId": 7})), ok(json!({"tabId": 7}))],
+            )
+            .script(
+                METHOD_ENSURE_TAB_GROUP,
+                vec![ok(json!({"groupId": 3})), ok(json!({"groupId": 3}))],
+            )
+            .script(METHOD_ASSIGN_TAB, vec![ok(json!({})), ok(json!({}))])
+            .script(
+                METHOD_TURN_ENDED,
+                vec![
+                    ok(json!({"closed": 1, "ungrouped": 0})),
+                    ok(json!({"closed": 1, "ungrouped": 0})),
+                ],
+            );
+        let host = BrowserToolHost::new(endpoint);
+        host.call(TOOL_NEW_TAB, r#"{"_run_id": "run-1"}"#)
+            .await
+            .unwrap();
+        host.call(TOOL_NEW_TAB, r#"{"_run_id": "run-1", "backend": "iab"}"#)
+            .await
+            .unwrap();
+        // The iab tab's bridge calls went through request_on.
+        assert_eq!(
+            host.endpoint
+                .backend_params_of("iab", METHOD_CREATE_TAB)
+                .len(),
+            1
+        );
+
+        host.turn_ended("run-1").await;
+
+        // Two turnEnded calls, one per backend, each with only its own lease.
+        assert_eq!(host.endpoint.count(METHOD_TURN_ENDED), 2);
+        assert_eq!(
+            host.endpoint.backend_params_of("iab", METHOD_TURN_ENDED),
+            vec![json!({"leases": [{"tabId": 7, "origin": "agent"}]})]
+        );
+        let all = host.endpoint.params_of(METHOD_TURN_ENDED);
+        assert_eq!(all.len(), 2);
+        assert!(all
+            .iter()
+            .all(|p| p == &json!({"leases": [{"tabId": 7, "origin": "agent"}]})));
         assert!(host.state.leases.lock().unwrap().is_empty());
     }
 

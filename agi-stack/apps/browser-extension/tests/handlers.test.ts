@@ -17,6 +17,7 @@ describe('dispatcher', () => {
       id: 1,
       result: {
         protocolVersion: 1,
+        backend: 'chrome-extension',
         extensionId: 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
         capabilities: ['cdp', 'tabs', 'events'],
       },

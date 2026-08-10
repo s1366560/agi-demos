@@ -2,7 +2,7 @@
 
 > 创建日期: 2026-08-07
 > 作者: AI Assistant
-> 状态: **M1 已实现并通过实机冒烟验证**(桥接 + 只读工具;动作/同意模型/虚拟光标属 M2+)
+> 状态: **M1-M3 已实现并通过实机冒烟验证**(桥接+只读+动作+同意+光标+硬化;side panel/iab 属 M4)
 > 依据: 本机 Codex/ChatGPT 应用逆向(扩展 v1.2.27236.6274 + 插件包 26.803.41515 + ChatGPT.app asar)+ MemStack agi-stack 代码调研
 
 ## 1. 概述
@@ -249,3 +249,48 @@ browser-client ui.moveMouse(tabId,x,y)  (JSON-RPC request,吞所有错误)
 - **光标注入用隔离世界而非 MAIN 世界**: MV3 MAIN 世界无 `chrome.runtime` 通道,握手协议依赖之;闭 shadow root 已提供隔离。
 - **ensureTabGroup 需要锚定 tab**: `chrome.tabs.group` 必须有 tabId,建组时先开后台 about:blank 锚定 tab。
 - **run 取消/评审通过/崩溃恢复路径同样触发租约清理**(不限于两个正常终态钩子)。
+
+## 11. M3 实现记录( 2026-08-10 )
+
+实现组件:
+
+| 组件 | 位置 | 验证 |
+|---|---|---|
+| CDP 政策双模式 | `adapters-browser/src/cdp_policy.rs`( Conservative/FullAccess;硬禁域与契约方法两模式同拒) | 83+2 测试 |
+| `browser_cdp_raw` 工具 | `adapters-browser/src/host.rs`( FullAccess 政策 + 4k 截断) | 同上 |
+| 完整 CDP 三重门 | `BrowserBridgeConfig.full_cdp_access_enabled`(默认关)+ `desktop_browser_capability_grants` 表 + HITL kind `browser_full_cdp`(仅 once/site,无 all) | sidecar 433 测试 |
+| 传输硬化 | bridge.sock unix socket(0700/0600)+ accept 时 getpeereid(macOS)/SO_PEERCRED(Linux) 同 UID 校验;TCP 回退(Windows);broker `pick_transport` 每轮重估 | 实机冒烟( socket mode 600 断言 ) |
+| 凭证代理 | vault 记录 `site-credential.v1.<sha256>`( ProviderCredentialBroker 模式)+ 元数据表 + `browser_fill_credentials`( origin 门控 + per-run once HITL + 值不出 sidecar) | 433 测试(断言密文不出现在结果/审计) |
+| 动作审计 | `desktop_browser_action_audit` 表 + `BrowserRunToolHost.call` 统一包裹(全工具、含失败、fire-and-forget)+ `GET /audit` 路由 + 30 天保留 | 同上 |
+| 截图工件化 | base64 解码 → `record_artifact_version` 落盘 → 返回 `{artifact_id, width, height}`;无 run 绑定时降级 `{path}` | 同上 |
+| 桌面 UI | full-CDP 开关 + 能力授权列表、站点凭证管理、审计查看器;`browser_full_cdp`/`browser_credential_fill` 同意卡片 | 桌面 2307 测试 |
+| 扩展 tsc 清偿 | mock 类型改从 `ChromeApi` 接口派生;新增 `chrome` 全局类型声明 | tsc 33→0 |
+
+关键设计落地事实:
+
+- **HMAC 首帧握手被有意省略**: bearer token 已证明 0600 注册表读取权,getpeereid 在内核层证明同 UID;对同一秘密再做 HMAC 是对同一事实的重复证明,无新增防御面。
+- **axum 0.7 不支持 UnixListener**: 经 `hyper_util::service::TowerToHyperService` + `hyper::server::conn::http1` per-connection 服务(两个 crate 均已在锁树,仅新增直接依赖边)。
+- **完整 CDP 无 all 选项**: 高危能力(scope `all` 被 `valid_permission_response` 拒绝),与 Codex 的 history/CDP 策略一致。
+- **sun_path 限制**: macOS 每用户临时目录长度接近 104 字节 socket 路径上限,测试夹具需短路径根。
+- **browser_* 工具的审计独立于工作区账本**(M2 起绕过幂等账本),审计表是浏览器动作的完整取证记录。
+
+## 12. M4 实现记录( 2026-08-10 )
+
+实现组件:
+
+| 组件 | 位置 | 验证 |
+|---|---|---|
+| 多后端桥接注册表 | sidecar `browser_bridge.rs`(服务器主动 hello 识别后端、per-backend 会话/心跳/路由、`request_on`) | sidecar 440 测试 |
+| side panel 会话铸造 | `getSidePanelSession`(仅 unix 传输 + chrome-extension 后端,双门 + 审计) | 铸造凭证 `/auth/me` 端到端验证 |
+| 扩展 side panel 聊天 | `apps/browser-extension/entrypoints/sidepanel/` + `src/sidepanel-chat.ts`(SW 内 HTTP/WS,绕 CORS;HITL 项降级引导桌面端) | 扩展 115 测试 |
+| 多后端 crate 维度 | `BridgeEndpoint.request_on`、HostState 全量 `(backend, tabId)` 键、聚合 `list_tabs`(离线后端容错)、逐键键盘模式 | crate 97+2 测试 |
+| iab 内嵌浏览器 | `electron/main/iab/`(WebContentsView 池、专属导航策略、手写 RFC6455 WS 客户端、JS 合成输入保焦点、光标注入 + chrome.runtime shim)、渲染器 Browser 面板 | 33 单测(含真 WS-over-unix 握手) |
+| 上架准备 | 零依赖自绘图标(16/48/128)+ `docs/design/browser-extension-store-listing.md` | 构建 manifest 校验 |
+
+关键设计落地事实:
+
+- **side panel 认证路径**: 全部 HTTP/WS 在扩展 SW 内发起(`host_permissions: <all_urls>` 覆盖 loopback,天然绕过 CORS);面板页面是哑 UI;launch token 只在 UID 校验后的 unix socket 上传输。
+- **iab 输入不抢焦点**: `Input.*` 翻译成页内合成事件(Codex iab 同构),跨域 iframe 不支持。
+- **iab 光标通道**: 复用扩展编译产物 + 页内 chrome.runtime shim + console.log 前缀桥接回主进程。
+- **registry  freshness**: 冒烟/崩溃会留下失效 registry+socket;broker/iab 的 stale 容错依赖重试循环(见下条修复)。
+- **实机验证发现的缺陷(已修复)**: iab 重连循环在桥离线时使主进程停摆。根因: `backend.ts` 的 `onClose` 闭包引用 `await` 返回前的 `const socket`(TDZ),连接失败时同步抛出 `ReferenceError`,未捕获异常触发 Electron 模态 `NSAlert` 停泵(定时器饿死、窗口不出、DevTools 无响应、0% CPU)。修复: 握手完成前不发 `onClose`、TDZ 安全持有者、error 路径显式 `destroy()`、日志节流(每 12 次一条)。教训: **Electron 主进程的未捕获异常会变成模态对话框,异步闭包捕获 await 绑定的 const 是定时炸弹**。实机终验: 窗口正常、循环健康、iab 后端连接应用 sidecar(`connected_backends: ["iab"]`)、建 tab 成功。

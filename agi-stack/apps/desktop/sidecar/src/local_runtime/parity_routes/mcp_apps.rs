@@ -872,7 +872,7 @@ fn direct_command(config: &TransportConfigBody) -> Result<Vec<String>, (StatusCo
             return Err(malformed(
                 "local_mcp_command_invalid",
                 "MCP stdio command is required",
-            ))
+            ));
         }
     };
     command.extend(config.args.iter().cloned());

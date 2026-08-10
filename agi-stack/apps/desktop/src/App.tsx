@@ -120,6 +120,7 @@ import {
 import { useToast } from './features/feedback/ToastCenter';
 import { DesktopStatusBar } from './features/chrome/DesktopStatusBar';
 import { DesktopRightSidebar } from './features/chrome/DesktopRightSidebar';
+import type { DesktopRightPanel } from './features/chrome/DesktopRightSidebar';
 import { DesktopTitlebar } from './features/chrome/DesktopTitlebar';
 import { WorkbenchTabBar } from './features/chrome/WorkbenchTabBar';
 import {
@@ -576,7 +577,7 @@ export function App() {
   ]);
   // Right sidebar: which panel is active, and whether the sidebar was opened
   // only to reveal the canvas (closing such a canvas closes the sidebar too).
-  const [activeRightPanel, setActiveRightPanel] = useState<'context' | 'canvas'>('context');
+  const [activeRightPanel, setActiveRightPanel] = useState<DesktopRightPanel>('context');
   const [rightSidebarOpenedForCanvas, setRightSidebarOpenedForCanvas] = useState(false);
   const openRightCanvasPanel = useCallback(() => {
     setRightSidebarOpen(true);
@@ -5239,8 +5240,10 @@ export function App() {
     switchSection('workspace');
   };
 
-  // The right sidebar hosts the session context rail and the review canvas.
-  const rightSidebarAvailable = activeSection === 'chat' && sessionDetailViewModel !== null;
+  // The right sidebar hosts the session context rail, the review canvas, and
+  // the in-app browser panel. The browser panel is not session-scoped, so the
+  // sidebar stays available in the chat section even without a session.
+  const rightSidebarAvailable = activeSection === 'chat';
 
   const handleOpenCanvas = (tab?: SessionCanvasTabId) => {
     setReviewTab(
@@ -5261,7 +5264,7 @@ export function App() {
     closeRightCanvasPanel();
   };
 
-  const handleSelectRightPanel = (panel: 'context' | 'canvas') => {
+  const handleSelectRightPanel = (panel: DesktopRightPanel) => {
     setActiveRightPanel(panel);
     setRightSidebarOpenedForCanvas(false);
     if (panel === 'canvas') setRightSidebarOpen(true);
@@ -6548,7 +6551,7 @@ export function App() {
             </div>
           </main>
 
-          {rightSidebarAvailable && rightSidebarOpen && sessionDetailViewModel ? (
+          {rightSidebarAvailable && rightSidebarOpen ? (
             <DesktopRightSidebar
               activePanel={activeRightPanel}
               canvasAvailable={showReviewPanel}

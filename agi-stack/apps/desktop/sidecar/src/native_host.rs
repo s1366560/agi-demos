@@ -24,13 +24,18 @@ use agistack_adapters_browser::jsonrpc::{self, JsonRpcMessage};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use tokio::{
+    io::{AsyncRead, AsyncWrite},
     net::TcpStream,
     sync::{mpsc, Notify},
 };
+#[cfg(unix)]
+use tokio_tungstenite::client_async;
 use tokio_tungstenite::{
     connect_async,
-    tungstenite::{client::IntoClientRequest, Message},
+    tungstenite::{client::IntoClientRequest, handshake::client::Request, Message},
     MaybeTlsStream, WebSocketStream,
 };
 
@@ -54,6 +59,24 @@ const BACKOFF_STEPS: [Duration; 4] = [
 ];
 
 const STDIO_BUFFER: usize = 32;
+
+/// How the broker reaches the sidecar's bridge endpoint. The unix socket is
+/// preferred whenever the registry advertises it and the file exists: it is
+/// peer-UID-checked by the sidecar and never touches the loopback network.
+/// TCP stays for Windows, dev, and stale-registry fallback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum BridgeTransport {
+    Unix(String),
+    Tcp(String),
+}
+
+/// Pure transport decision, re-evaluated on every reconnect attempt.
+fn pick_transport(registry: &BridgeRegistry, socket_exists: bool) -> BridgeTransport {
+    match &registry.socket_path {
+        Some(path) if socket_exists => BridgeTransport::Unix(path.clone()),
+        _ => BridgeTransport::Tcp(registry.ws_url.clone()),
+    }
+}
 
 /// Broker entry point (`--native-host`). Returns on stdin EOF; any registry
 /// problem fails closed with a non-zero exit.
@@ -136,22 +159,24 @@ async fn relay(registry: BridgeRegistry) -> Result<(), String> {
         if done.load(Ordering::SeqCst) {
             break;
         }
-        match establish(&registry.ws_url, &registry.token).await {
-            Ok(ws) => {
-                failures = 0;
-                connected.store(true, Ordering::SeqCst);
-                serve_connection(ws, &mut outbound_rx, &stdout_tx, &notify_done).await;
-                connected.store(false, Ordering::SeqCst);
-                // Frames queued while the connection died must not be buffered
-                // into the next session: answer them with the same error.
-                while let Ok(stale) = outbound_rx.try_recv() {
-                    if let Some(response) = sidecar_unavailable_response(stale.as_bytes()) {
-                        if stdout_tx.send(response.into_bytes()).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
+        // Re-evaluated every attempt: a restarted sidecar may add or remove
+        // the unix socket while the broker is backing off.
+        let socket_exists = registry
+            .socket_path
+            .as_deref()
+            .is_some_and(|path| Path::new(path).is_file());
+        let transport = pick_transport(&registry, socket_exists);
+        match connect_and_serve(
+            &transport,
+            &registry,
+            &connected,
+            &mut outbound_rx,
+            &stdout_tx,
+            &notify_done,
+        )
+        .await
+        {
+            Ok(()) => failures = 0,
             Err(error) => {
                 tracing::warn!(%error, "browser bridge broker connect failed");
                 let delay = BACKOFF_STEPS[failures.min(BACKOFF_STEPS.len() - 1)];
@@ -173,12 +198,14 @@ async fn relay(registry: BridgeRegistry) -> Result<(), String> {
 
 /// Serve one WebSocket session until it fails, the pipe closes, or stdin hits
 /// EOF (`notify_done`).
-async fn serve_connection(
-    ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
+async fn serve_connection<S>(
+    ws: WebSocketStream<S>,
     outbound_rx: &mut mpsc::Receiver<String>,
     stdout_tx: &mpsc::Sender<Vec<u8>>,
     notify_done: &Arc<Notify>,
-) {
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let (mut sink, mut stream) = ws.split();
     loop {
         tokio::select! {
@@ -218,11 +245,68 @@ async fn serve_connection(
     }
 }
 
-/// Connect to the sidecar's bridge endpoint presenting the registry token.
-async fn establish(
-    url: &str,
-    token: &str,
-) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, String> {
+/// Connect over the chosen transport and serve the session. `Err` means the
+/// connection never came up (the caller backs off and retries); a served
+/// session that later dropped is `Ok`.
+async fn connect_and_serve(
+    transport: &BridgeTransport,
+    registry: &BridgeRegistry,
+    connected: &AtomicBool,
+    outbound_rx: &mut mpsc::Receiver<String>,
+    stdout_tx: &mpsc::Sender<Vec<u8>>,
+    notify_done: &Arc<Notify>,
+) -> Result<(), String> {
+    match transport {
+        BridgeTransport::Tcp(url) => {
+            tracing::info!(transport = "tcp", url = %url, "browser bridge broker transport");
+            let ws = establish_tcp(url, &registry.token).await?;
+            run_session(ws, connected, outbound_rx, stdout_tx, notify_done).await;
+            Ok(())
+        }
+        BridgeTransport::Unix(path) => {
+            #[cfg(unix)]
+            {
+                tracing::info!(transport = "unix", path = %path, "browser bridge broker transport");
+                let ws = establish_unix(path, &registry.ws_url, &registry.token).await?;
+                run_session(ws, connected, outbound_rx, stdout_tx, notify_done).await;
+                Ok(())
+            }
+            #[cfg(not(unix))]
+            {
+                Err(format!(
+                    "browser bridge unix transport {path} is unsupported on this platform"
+                ))
+            }
+        }
+    }
+}
+
+/// Serve one established session, then fail any frames that were queued while
+/// it died instead of buffering them into the next session.
+async fn run_session<S>(
+    ws: WebSocketStream<S>,
+    connected: &AtomicBool,
+    outbound_rx: &mut mpsc::Receiver<String>,
+    stdout_tx: &mpsc::Sender<Vec<u8>>,
+    notify_done: &Arc<Notify>,
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    connected.store(true, Ordering::SeqCst);
+    serve_connection(ws, outbound_rx, stdout_tx, notify_done).await;
+    connected.store(false, Ordering::SeqCst);
+    while let Ok(stale) = outbound_rx.try_recv() {
+        if let Some(response) = sidecar_unavailable_response(stale.as_bytes()) {
+            if stdout_tx.send(response.into_bytes()).await.is_err() {
+                break;
+            }
+        }
+    }
+}
+
+/// Build the WS upgrade request shared by both transports: the registry
+/// `wsUrl` supplies path and Host, the bearer token authenticates.
+fn bridge_request(url: &str, token: &str) -> Result<Request, String> {
     let mut request = url
         .into_client_request()
         .map_err(|error| format!("invalid bridge url {url}: {error}"))?;
@@ -233,9 +317,35 @@ async fn establish(
         tokio_tungstenite::tungstenite::http::header::AUTHORIZATION,
         authorization,
     );
-    let (ws, _) = connect_async(request)
+    Ok(request)
+}
+
+/// Connect over loopback TCP presenting the registry token.
+async fn establish_tcp(
+    url: &str,
+    token: &str,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, String> {
+    let (ws, _) = connect_async(bridge_request(url, token)?)
         .await
         .map_err(|error| format!("browser bridge connect failed: {error}"))?;
+    Ok(ws)
+}
+
+/// Connect over the bridge unix socket presenting the registry token. The
+/// HTTP request line still uses the registry `wsUrl` (only its path matters;
+/// the Host header is never routed on).
+#[cfg(unix)]
+async fn establish_unix(
+    socket_path: &str,
+    url: &str,
+    token: &str,
+) -> Result<WebSocketStream<UnixStream>, String> {
+    let stream = UnixStream::connect(socket_path)
+        .await
+        .map_err(|error| format!("browser bridge unix connect failed: {error}"))?;
+    let (ws, _) = client_async(bridge_request(url, token)?, stream)
+        .await
+        .map_err(|error| format!("browser bridge unix handshake failed: {error}"))?;
     Ok(ws)
 }
 
@@ -759,4 +869,85 @@ fn manifest_statuses_for_targets(
 
 #[cfg(test)]
 #[path = "native_host/manifest_tests.rs"]
-mod tests;
+mod manifest_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry(socket_path: Option<&str>) -> BridgeRegistry {
+        BridgeRegistry {
+            schema_version: browser_bridge::REGISTRY_SCHEMA_VERSION,
+            ws_url: "ws://127.0.0.1:9765/api/v1/browser-bridge/ws".to_string(),
+            token: "a".repeat(64),
+            extension_ids: vec![DEFAULT_EXTENSION_ID.to_string()],
+            sidecar_path: PathBuf::from("/opt/memstack/sidecar"),
+            updated_at: "2026-08-10T00:00:00Z".to_string(),
+            socket_path: socket_path.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn pick_transport_prefers_the_unix_socket_when_present() {
+        let registry = registry(Some("/home/dev/.memstack/browser-bridge/bridge.sock"));
+        assert_eq!(
+            pick_transport(&registry, true),
+            BridgeTransport::Unix("/home/dev/.memstack/browser-bridge/bridge.sock".to_string())
+        );
+        // Socket advertised but missing on disk (stale registry): TCP.
+        assert_eq!(
+            pick_transport(&registry, false),
+            BridgeTransport::Tcp(registry.ws_url.clone())
+        );
+    }
+
+    #[test]
+    fn pick_transport_falls_back_to_tcp_without_a_socket() {
+        let registry = registry(None);
+        assert_eq!(
+            pick_transport(&registry, true),
+            BridgeTransport::Tcp(registry.ws_url.clone())
+        );
+        assert_eq!(
+            pick_transport(&registry, false),
+            BridgeTransport::Tcp(registry.ws_url.clone())
+        );
+    }
+
+    #[test]
+    fn unavailable_response_echoes_the_request_id() {
+        let response = sidecar_unavailable_response(
+            br#"{"jsonrpc":"2.0","id":42,"method":"getTabs","params":{}}"#,
+        )
+        .expect("a request gets an error response");
+        let value: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(value["id"], 42);
+        assert_eq!(value["error"]["code"], 1);
+        assert_eq!(value["error"]["message"], "sidecar unavailable");
+    }
+
+    #[test]
+    fn notifications_and_garbage_get_no_error_response() {
+        assert!(sidecar_unavailable_response(
+            br#"{"jsonrpc":"2.0","method":"onCDPEvent","params":{}}"#
+        )
+        .is_none());
+        assert!(sidecar_unavailable_response(b"not json").is_none());
+    }
+
+    #[test]
+    fn manifest_matches_the_frozen_contract() {
+        let value = serde_json::to_value(manifest(Path::new("/opt/memstack/sidecar"))).unwrap();
+        assert_eq!(value["name"], HOST_NAME);
+        assert_eq!(
+            value["description"],
+            "MemStack browser bridge native messaging host"
+        );
+        assert_eq!(value["path"], "/opt/memstack/sidecar");
+        assert_eq!(value["type"], "stdio");
+        assert_eq!(
+            value["allowed_origins"],
+            json!([format!("chrome-extension://{DEFAULT_EXTENSION_ID}/")])
+        );
+    }
+}
