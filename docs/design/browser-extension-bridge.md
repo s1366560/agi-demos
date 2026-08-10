@@ -2,7 +2,7 @@
 
 > 创建日期: 2026-08-07
 > 作者: AI Assistant
-> 状态: **M1 已实现并通过实机冒烟验证**(桥接 + 只读工具;动作/同意模型/虚拟光标属 M2+)
+> 状态: **M1-M3 已实现并通过实机冒烟验证**(桥接+只读+动作+同意+光标+硬化;side panel/iab 属 M4)
 > 依据: 本机 Codex/ChatGPT 应用逆向(扩展 v1.2.27236.6274 + 插件包 26.803.41515 + ChatGPT.app asar)+ MemStack agi-stack 代码调研
 
 ## 1. 概述
@@ -249,3 +249,27 @@ browser-client ui.moveMouse(tabId,x,y)  (JSON-RPC request,吞所有错误)
 - **光标注入用隔离世界而非 MAIN 世界**: MV3 MAIN 世界无 `chrome.runtime` 通道,握手协议依赖之;闭 shadow root 已提供隔离。
 - **ensureTabGroup 需要锚定 tab**: `chrome.tabs.group` 必须有 tabId,建组时先开后台 about:blank 锚定 tab。
 - **run 取消/评审通过/崩溃恢复路径同样触发租约清理**(不限于两个正常终态钩子)。
+
+## 11. M3 实现记录( 2026-08-10 )
+
+实现组件:
+
+| 组件 | 位置 | 验证 |
+|---|---|---|
+| CDP 政策双模式 | `adapters-browser/src/cdp_policy.rs`( Conservative/FullAccess;硬禁域与契约方法两模式同拒) | 83+2 测试 |
+| `browser_cdp_raw` 工具 | `adapters-browser/src/host.rs`( FullAccess 政策 + 4k 截断) | 同上 |
+| 完整 CDP 三重门 | `BrowserBridgeConfig.full_cdp_access_enabled`(默认关)+ `desktop_browser_capability_grants` 表 + HITL kind `browser_full_cdp`(仅 once/site,无 all) | sidecar 433 测试 |
+| 传输硬化 | bridge.sock unix socket(0700/0600)+ accept 时 getpeereid(macOS)/SO_PEERCRED(Linux) 同 UID 校验;TCP 回退(Windows);broker `pick_transport` 每轮重估 | 实机冒烟( socket mode 600 断言 ) |
+| 凭证代理 | vault 记录 `site-credential.v1.<sha256>`( ProviderCredentialBroker 模式)+ 元数据表 + `browser_fill_credentials`( origin 门控 + per-run once HITL + 值不出 sidecar) | 433 测试(断言密文不出现在结果/审计) |
+| 动作审计 | `desktop_browser_action_audit` 表 + `BrowserRunToolHost.call` 统一包裹(全工具、含失败、fire-and-forget)+ `GET /audit` 路由 + 30 天保留 | 同上 |
+| 截图工件化 | base64 解码 → `record_artifact_version` 落盘 → 返回 `{artifact_id, width, height}`;无 run 绑定时降级 `{path}` | 同上 |
+| 桌面 UI | full-CDP 开关 + 能力授权列表、站点凭证管理、审计查看器;`browser_full_cdp`/`browser_credential_fill` 同意卡片 | 桌面 2307 测试 |
+| 扩展 tsc 清偿 | mock 类型改从 `ChromeApi` 接口派生;新增 `chrome` 全局类型声明 | tsc 33→0 |
+
+关键设计落地事实:
+
+- **HMAC 首帧握手被有意省略**: bearer token 已证明 0600 注册表读取权,getpeereid 在内核层证明同 UID;对同一秘密再做 HMAC 是对同一事实的重复证明,无新增防御面。
+- **axum 0.7 不支持 UnixListener**: 经 `hyper_util::service::TowerToHyperService` + `hyper::server::conn::http1` per-connection 服务(两个 crate 均已在锁树,仅新增直接依赖边)。
+- **完整 CDP 无 all 选项**: 高危能力(scope `all` 被 `valid_permission_response` 拒绝),与 Codex 的 history/CDP 策略一致。
+- **sun_path 限制**: macOS 每用户临时目录长度接近 104 字节 socket 路径上限,测试夹具需短路径根。
+- **browser_* 工具的审计独立于工作区账本**(M2 起绕过幂等账本),审计表是浏览器动作的完整取证记录。
