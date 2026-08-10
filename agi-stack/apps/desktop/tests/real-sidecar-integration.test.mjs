@@ -51,6 +51,7 @@ test(
         runtime_mode: record.runtime_mode,
         credential_kind: record.credential_kind,
         credential: record.credential,
+        expires_at: record.expires_at,
       });
       await supervisor.invoke('trusted_session_clear');
       assert.equal(await supervisor.invoke('trusted_session_load'), null);
@@ -114,6 +115,7 @@ test(
         runtime_mode: cloudRecord.runtime_mode,
         credential_kind: cloudRecord.credential_kind,
         credential: cloudRecord.credential,
+        expires_at: cloudRecord.expires_at,
       });
       assert.deepEqual(await migratedSupervisor.invoke('local_trusted_session_load'), {
         version: localRecord.version,
@@ -121,6 +123,7 @@ test(
         runtime_mode: localRecord.runtime_mode,
         credential_kind: localRecord.credential_kind,
         credential: localRecord.credential,
+        expires_at: localRecord.expires_at,
       });
       const marker = JSON.parse(
         await readFile(
