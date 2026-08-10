@@ -74,7 +74,15 @@ export interface ChromeMock extends ChromeApi {
       set: Mock<ChromeApi['storage']['local']['set']>;
       get: Mock<ChromeApi['storage']['local']['get']>;
     };
+    session: {
+      set: Mock<NonNullable<ChromeApi['storage']['session']>['set']>;
+      get: Mock<NonNullable<ChromeApi['storage']['session']>['get']>;
+      remove: Mock<NonNullable<ChromeApi['storage']['session']>['remove']>;
+    };
     onChanged: MockEvent<[Record<string, { newValue?: unknown }>, string]>;
+  };
+  sidePanel: {
+    setPanelBehavior: Mock<NonNullable<ChromeApi['sidePanel']>['setPanelBehavior']>;
   };
 }
 
@@ -132,7 +140,15 @@ export function createChromeMock(): { chrome: ChromeMock; port: MockPort } {
         set: vi.fn<ChromeApi['storage']['local']['set']>(),
         get: vi.fn<ChromeApi['storage']['local']['get']>(async () => ({})),
       },
+      session: {
+        set: vi.fn<NonNullable<ChromeApi['storage']['session']>['set']>(),
+        get: vi.fn<NonNullable<ChromeApi['storage']['session']>['get']>(async () => ({})),
+        remove: vi.fn<NonNullable<ChromeApi['storage']['session']>['remove']>(),
+      },
       onChanged: createMockEvent<[Record<string, { newValue?: unknown }>, string]>(),
+    },
+    sidePanel: {
+      setPanelBehavior: vi.fn<NonNullable<ChromeApi['sidePanel']>['setPanelBehavior']>(async () => {}),
     },
   };
 

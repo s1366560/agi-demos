@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MemStack</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <select id="conversation-picker" class="picker" aria-label="Conversation"></select>
+      <button id="new-conversation" class="icon-button" title="New conversation" aria-label="New conversation">+</button>
+    </header>
+    <div id="status" class="status" hidden></div>
+    <main id="timeline" class="timeline" aria-live="polite"></main>
+    <form id="composer" class="composer">
+      <textarea
+        id="composer-input"
+        rows="2"
+        placeholder="Message MemStack…"
+        aria-label="Message"
+      ></textarea>
+      <button id="composer-send" type="submit" class="send-button" disabled>Send</button>
+    </form>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

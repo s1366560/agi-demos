@@ -239,6 +239,7 @@ export function createBridge(chrome: ChromeApi): Bridge {
   const handlers: Record<string, Handler> = {
     hello: () => ({
       protocolVersion: 1,
+      backend: 'chrome-extension',
       extensionId: chrome.runtime.id,
       capabilities: ['cdp', 'tabs', 'events'],
     }),

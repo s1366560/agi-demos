@@ -74,6 +74,22 @@ export function notification(method: string, params: unknown): JsonRpcNotificati
   return { jsonrpc: JSON_RPC_VERSION, method, params };
 }
 
+export function request(id: JsonRpcId, method: string, params?: unknown): JsonRpcRequest {
+  return { jsonrpc: JSON_RPC_VERSION, id, method, params };
+}
+
+/**
+ * True for broker→SW responses (id + result/error, no method). Requests also
+ * carry `method`, so the two never collide on the wire.
+ */
+export function isJsonRpcResponse(message: unknown): message is JsonRpcResponse {
+  if (typeof message !== 'object' || message === null) return false;
+  const m = message as Record<string, unknown>;
+  if (m.jsonrpc !== JSON_RPC_VERSION) return false;
+  if (typeof m.id !== 'string' && typeof m.id !== 'number') return false;
+  return 'result' in m || 'error' in m;
+}
+
 const CDP_METHOD_PATTERN = /^[A-Z][A-Za-z]+\.[a-zA-Z]+$/;
 
 function requireParamsObject(params: unknown): Record<string, unknown> {
