@@ -74,8 +74,16 @@ export function ProfileRoutePage({
         </div>
       </header>
 
-      {model.reasonCode ? <code role="status">{model.reasonCode}</code> : null}
-      {action.reasonCode ? <code role="alert">{action.reasonCode}</code> : null}
+      {model.reasonCode ? (
+        <p role="status" data-reason-code={model.reasonCode}>
+          {t('desktopProductionRouter.reason.authorityUnavailable')}
+        </p>
+      ) : null}
+      {action.reasonCode ? (
+        <p role="alert" data-reason-code={action.reasonCode}>
+          {t('desktopProductionRouter.reason.authorityUnavailable')}
+        </p>
+      ) : null}
 
       <section className="settings-panel">
         <header>

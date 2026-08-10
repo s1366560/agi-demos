@@ -611,7 +611,18 @@ test('native Content pages render controls for their safely declared actions', a
       controller: localProfile,
     }),
   );
-  assert.match(localMarkup, /local_profile_mutation_authority_unavailable/u);
+  assert.match(
+    localMarkup,
+    /data-reason-code="local_profile_mutation_authority_unavailable"/u,
+  );
+  assert.match(
+    localMarkup,
+    /The required service or authority is currently unavailable\./u,
+  );
+  assert.doesNotMatch(
+    localMarkup,
+    /<code[^>]*>local_profile_mutation_authority_unavailable<\/code>/u,
+  );
   assert.match(localMarkup, /data-action="change-password"[\s\S]*disabled=""/u);
 });
 
