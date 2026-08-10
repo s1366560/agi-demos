@@ -59,10 +59,14 @@ test('reconnect loop keeps cycling against an unreachable bridge', async (t) => 
     await backend.stop();
   });
   backend.start();
-  // ~5ms per attempt; 250ms must see many iterations or the loop is wedged.
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  // ~5ms per attempt; poll until several iterations have run (generous
+  // deadline for loaded CI machines) — a wedged loop never advances.
+  const deadline = Date.now() + 3_000;
+  while (attempts < 5 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   const firstSample = attempts;
-  assert.ok(firstSample >= 5, `expected >= 5 attempts after 250ms, got ${firstSample}`);
+  assert.ok(firstSample >= 5, `expected >= 5 attempts, got ${firstSample} (loop wedged)`);
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.ok(attempts > firstSample, 'loop must keep cycling');
   assert.equal(backend.status, 'connecting');
