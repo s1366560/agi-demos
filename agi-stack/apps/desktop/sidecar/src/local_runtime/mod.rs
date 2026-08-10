@@ -337,13 +337,13 @@ impl LocalRuntimeService {
     }
 
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {
-        self.state.configure(config)?;
+        self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
     }
 }
 
 impl LocalRuntimeState {
-    fn configure(&self, mut config: LocalRuntimeConfig) -> Result<(), String> {
+    fn configure(&self, mut config: LocalRuntimeConfig, api_base_url: &str) -> Result<(), String> {
         if !config.workspace_root.trim().is_empty() {
             let root = PathBuf::from(config.workspace_root.trim());
             std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
@@ -353,7 +353,7 @@ impl LocalRuntimeState {
             *self.workspace_root.lock().expect("local workspace root") = root;
             *self.tool_host.lock().expect("local tool host") = host;
         }
-        self.reconcile_browser_bridge(&config.browser_bridge)?;
+        self.reconcile_browser_bridge(&config.browser_bridge, api_base_url)?;
         let mut current = self.config.lock().expect("local runtime config");
         *current = config;
         Ok(())
@@ -361,10 +361,20 @@ impl LocalRuntimeState {
 
     /// Start/stop the browser bridge so the running service matches `config`.
     /// Every (re)start regenerates the token and rewrites the registry file.
+    /// The side-panel session minter rides along so the bridge can answer
+    /// broker-initiated `getSidePanelSession` requests.
     fn reconcile_browser_bridge(
         &self,
         config: &browser_bridge::BrowserBridgeConfig,
+        api_base_url: &str,
     ) -> Result<(), String> {
+        let minter = || {
+            browser_bridge::SidePanelSessionMinter::new(
+                api_base_url.to_string(),
+                self.api_token.clone(),
+                self.session_store.clone(),
+            )
+        };
         let mut slot = self.browser_bridge.lock().expect("browser bridge runtime");
         match (config.enabled, slot.take()) {
             (true, Some(current)) => {
@@ -372,11 +382,17 @@ impl LocalRuntimeState {
                     *slot = Some(current);
                 } else {
                     current.stop();
-                    *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+                    *slot = Some(browser_bridge::BrowserBridgeRuntime::start(
+                        config,
+                        Some(minter()),
+                    )?);
                 }
             }
             (true, None) => {
-                *slot = Some(browser_bridge::BrowserBridgeRuntime::start(config)?);
+                *slot = Some(browser_bridge::BrowserBridgeRuntime::start(
+                    config,
+                    Some(minter()),
+                )?);
             }
             (false, Some(runtime)) => runtime.stop(),
             (false, None) => {}
@@ -408,6 +424,10 @@ impl LocalRuntimeState {
             broker_connected: runtime
                 .as_ref()
                 .is_some_and(|runtime| runtime.broker_connected()),
+            connected_backends: runtime
+                .as_ref()
+                .map(|runtime| runtime.connected_backends())
+                .unwrap_or_default(),
             extension_ids: config.extension_ids.clone(),
         }
     }
@@ -14151,7 +14171,9 @@ mod tests {
             "workspace_root": workspace_root
         }))
         .expect("workspace-only runtime config");
-        state.configure(config).expect("reconfigure workspace");
+        state
+            .configure(config, "http://127.0.0.1:1")
+            .expect("reconfigure workspace");
         let after = {
             let runtime = state.provider_runtime.lock().expect("provider runtime");
             let binding = runtime.bindings.get(&key).expect("provider binding");

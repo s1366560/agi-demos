@@ -896,7 +896,7 @@ mod tests {
             .expect("insert decline");
         let output = fixture
             .host
-            .call("browser_list_tabs", "{}")
+            .call("browser_list_tabs", r#"{"backend": "chrome"}"#)
             .await
             .expect("read tool result");
         let output: Value = serde_json::from_str(&output).unwrap();
@@ -1660,7 +1660,7 @@ mod tests {
         // ok
         fixture
             .host
-            .call("browser_list_tabs", "{}")
+            .call("browser_list_tabs", r#"{"backend": "chrome"}"#)
             .await
             .expect("list tabs");
         // consent_required
@@ -1719,7 +1719,7 @@ mod tests {
             .expect("drop audit table");
         let output = fixture
             .host
-            .call("browser_list_tabs", "{}")
+            .call("browser_list_tabs", r#"{"backend": "chrome"}"#)
             .await
             .expect("audit failure must not fail the tool call");
         assert_eq!(

@@ -10,6 +10,15 @@
 //! accepted socket. The connection credentials live in a registry file the
 //! sidecar rewrites on every bridge start (`~/.memstack/browser-bridge/
 //! registry.json`, directory 0700, file 0600).
+//!
+//! Multi-backend (M4): after auth the sidecar sends `hello {}` and the
+//! broker's response names its backend (`"chrome-extension"`, `"iab"`;
+//! absent/unknown defaults to `"chrome-extension"`). One live session per
+//! backend — a same-backend reconnect replaces the incumbent, other backends
+//! are untouched, and heartbeat/offline accounting is per session. Brokers
+//! may also call back into the sidecar: `getSidePanelSession {}` mints a
+//! side-panel credential, gated to the chrome-extension backend on the
+//! peer-UID-checked unix socket; anything else gets JSON-RPC `-32601`.
 
 use std::{
     collections::HashMap,
@@ -18,6 +27,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
+    time::{Duration, Instant},
 };
 
 use agistack_adapters_browser::{
@@ -31,23 +41,26 @@ use async_trait::async_trait;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Extension, State,
     },
     http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::Response,
     routing::get,
     Router,
 };
+use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::{
     net::TcpListener,
     sync::{broadcast, mpsc, oneshot, Notify},
     task::JoinHandle,
 };
 use url::Url;
+use uuid::Uuid;
 
+use super::session_store::DesktopSessionStore;
 use crate::private_file_permissions::{
     set_private_directory_permissions, set_private_file_permissions,
 };
@@ -65,11 +78,24 @@ const OUTBOUND_BUFFER: usize = 32;
 const NOTIFICATION_BUFFER: usize = 256;
 /// Filename of the unix-domain bridge socket inside the bridge directory.
 const BRIDGE_SOCKET_FILE_NAME: &str = "bridge.sock";
-/// Server-side liveness probe for the broker socket (§6 M2 心跳熔断): a WS
-/// ping every interval; the broker is declared offline after this many
-/// consecutive intervals without any inbound frame.
-const BROKER_HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+/// Server-side liveness probe for a broker socket (§6 M2 心跳熔断): a WS
+/// ping every interval; the session is declared offline after this many
+/// consecutive intervals without any inbound frame. Heartbeat accounting is
+/// per backend session (M4): one backend going silent never takes the
+/// others offline.
+const BROKER_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const BROKER_HEARTBEAT_MISS_LIMIT: u8 = 2;
+/// Upper bound on the post-auth `hello` exchange that identifies the
+/// connecting backend. A broker that never answers is dropped.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Backend id of the Chrome extension broker.
+pub(crate) const BACKEND_CHROME_EXTENSION: &str = "chrome-extension";
+/// Backend id of the in-app browser connecting from the Electron main
+/// process.
+pub(crate) const BACKEND_IAB: &str = "iab";
+/// Broker-initiated method minting a side-panel session (M4).
+const BROKER_METHOD_GET_SIDE_PANEL_SESSION: &str = "getSidePanelSession";
 
 fn default_bridge_port() -> u16 {
     DEFAULT_BROWSER_BRIDGE_PORT
@@ -112,6 +138,8 @@ pub struct BrowserBridgeStatus {
     pub enabled: bool,
     pub port: u16,
     pub broker_connected: bool,
+    /// Backend ids with a live broker session (sorted; empty when offline).
+    pub connected_backends: Vec<String>,
     pub extension_ids: Vec<String>,
 }
 
@@ -274,9 +302,86 @@ pub(crate) fn token_matches(expected: &str, presented: &str) -> bool {
     difference == 0
 }
 
-/// One live broker connection. The server holds at most one of these; a new
-/// authenticated connection replaces the previous one.
+/// The transport one broker connection arrived on. Recorded per session
+/// because broker-initiated privilege gates (`getSidePanelSession`) depend on
+/// it: the unix socket is peer-UID checked, TCP is not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BridgeTransport {
+    Tcp,
+    #[cfg_attr(not(unix), allow(dead_code))] // only constructible on unix
+    Unix,
+}
+
+impl BridgeTransport {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Tcp => "tcp",
+            Self::Unix => "unix",
+        }
+    }
+}
+
+/// Everything the bridge needs to answer a broker's `getSidePanelSession`
+/// request: the runtime's bound address, the launch capability, and the
+/// session store that mints and audits local session credentials. Created by
+/// the local runtime when the bridge (re)starts.
+#[derive(Clone)]
+pub(crate) struct SidePanelSessionMinter {
+    api_base_url: String,
+    launch_capability: String,
+    session_store: DesktopSessionStore,
+}
+
+impl SidePanelSessionMinter {
+    pub(super) fn new(
+        api_base_url: String,
+        launch_capability: String,
+        session_store: DesktopSessionStore,
+    ) -> Self {
+        Self {
+            api_base_url,
+            launch_capability,
+            session_store,
+        }
+    }
+
+    /// Mint a fresh, non-trusted local session credential for the side panel.
+    fn mint_credential(&self) -> Result<String, String> {
+        let credential = format!(
+            "local-session-{}.{}",
+            Uuid::new_v4(),
+            super::generate_capability_token()
+        );
+        let outcome = self
+            .session_store
+            .create_local_session(credential, false, Utc::now().timestamp_millis())
+            .map_err(|error| error.to_string())?;
+        Ok(outcome.access_token)
+    }
+
+    /// Fire-and-forget audit row for one `getSidePanelSession` call; a write
+    /// failure is logged, never propagated.
+    fn audit(&self, outcome: &str, target_summary: &str, latency_ms: i64) {
+        if let Err(error) = self.session_store.insert_browser_action_audit(
+            None,
+            BROKER_METHOD_GET_SIDE_PANEL_SESSION,
+            None,
+            target_summary,
+            outcome,
+            latency_ms,
+            Utc::now().timestamp_millis(),
+        ) {
+            tracing::warn!(%error, "failed to record browser action audit for getSidePanelSession");
+        }
+    }
+}
+
+/// One live broker connection. The server holds at most one of these per
+/// backend id; a new authenticated connection for the same backend replaces
+/// the previous one.
 struct BrokerSession {
+    backend: String,
+    transport: BridgeTransport,
     outbound: mpsc::Sender<String>,
     waiters: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     closed: AtomicBool,
@@ -298,26 +403,61 @@ impl BrokerSession {
     }
 }
 
+/// Error payload for a broker-initiated request. `audit_outcome` is the
+/// `desktop_browser_action_audit.outcome` value the call records.
+struct BrokerRequestError {
+    code: i64,
+    message: String,
+    audit_outcome: &'static str,
+}
+
+impl BrokerRequestError {
+    fn denied(message: impl Into<String>) -> Self {
+        Self {
+            code: 1,
+            message: message.into(),
+            audit_outcome: "denied",
+        }
+    }
+
+    fn failed(message: impl Into<String>) -> Self {
+        Self {
+            code: 1,
+            message: message.into(),
+            audit_outcome: "error",
+        }
+    }
+}
+
 /// Shared state behind the bridge WebSocket route and the agent-facing
 /// endpoint. One instance per bridge start; the token is fixed for its
 /// lifetime (a start regenerates token *and* server).
 pub(crate) struct BrowserBridgeServer {
     token: String,
     port: u16,
-    active: Mutex<Option<Arc<BrokerSession>>>,
+    backends: Mutex<HashMap<String, Arc<BrokerSession>>>,
     notifications: broadcast::Sender<BridgeNotification>,
     next_id: AtomicU64,
+    minter: Option<SidePanelSessionMinter>,
+    heartbeat_interval: Duration,
 }
 
 impl BrowserBridgeServer {
-    fn new(token: String, port: u16) -> Self {
+    fn with_heartbeat_interval(
+        token: String,
+        port: u16,
+        minter: Option<SidePanelSessionMinter>,
+        heartbeat_interval: Duration,
+    ) -> Self {
         let (notifications, _) = broadcast::channel(NOTIFICATION_BUFFER);
         Self {
             token,
             port,
-            active: Mutex::new(None),
+            backends: Mutex::new(HashMap::new()),
             notifications,
             next_id: AtomicU64::new(1),
+            minter,
+            heartbeat_interval,
         }
     }
 
@@ -325,19 +465,54 @@ impl BrowserBridgeServer {
         self.port
     }
 
+    /// The agent-facing surface key on the Chrome extension: true while a
+    /// `chrome-extension` backend session is live.
     pub(crate) fn broker_connected(&self) -> bool {
-        self.active.lock().expect("browser bridge broker").is_some()
+        self.backends
+            .lock()
+            .expect("browser bridge backends")
+            .contains_key(BACKEND_CHROME_EXTENSION)
     }
 
-    /// Issue one bridge request to the connected broker, awaiting the
-    /// correlated response. Fails immediately when no broker is connected.
-    pub(crate) async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
-        let session = self
-            .active
+    /// Backend ids with a live session, sorted for a stable status payload.
+    pub(crate) fn connected_backends(&self) -> Vec<String> {
+        let mut backends: Vec<String> = self
+            .backends
             .lock()
-            .expect("browser bridge broker")
-            .clone()
-            .ok_or_else(|| CoreError::Tool("browser bridge broker is not connected".to_string()))?;
+            .expect("browser bridge backends")
+            .keys()
+            .cloned()
+            .collect();
+        backends.sort();
+        backends
+    }
+
+    /// Issue one bridge request to the connected Chrome-extension broker,
+    /// awaiting the correlated response. Fails immediately when that backend
+    /// is not connected.
+    pub(crate) async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
+        self.request_on(BACKEND_CHROME_EXTENSION, method, params)
+            .await
+    }
+
+    /// Issue one bridge request to the session of one specific backend.
+    pub(crate) async fn request_on(
+        &self,
+        backend: &str,
+        method: &str,
+        params: Value,
+    ) -> CoreResult<Value> {
+        let session = self
+            .backends
+            .lock()
+            .expect("browser bridge backends")
+            .get(backend)
+            .cloned()
+            .ok_or_else(|| {
+                CoreError::Tool(format!(
+                    "browser bridge backend '{backend}' is not connected"
+                ))
+            })?;
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         session
@@ -365,7 +540,7 @@ impl BrowserBridgeServer {
         }
     }
 
-    fn dispatch_inbound(&self, session: &BrokerSession, payload: &str) {
+    async fn dispatch_inbound(&self, session: &Arc<BrokerSession>, payload: &str) {
         match jsonrpc::decode(payload) {
             Ok(JsonRpcMessage::Response { id, result }) => {
                 let waiter = session
@@ -383,18 +558,92 @@ impl BrowserBridgeServer {
                     .notifications
                     .send(BridgeNotification { method, params });
             }
-            Ok(JsonRpcMessage::Request { method, .. }) => {
-                tracing::debug!(method, "ignoring broker-initiated bridge request");
+            Ok(JsonRpcMessage::Request { id, method, .. }) => {
+                self.dispatch_broker_request(session, id, &method).await;
             }
             Err(error) => {
                 tracing::warn!(%error, "dropping malformed broker frame");
             }
         }
     }
+
+    /// Answer a broker-originated request and route the reply frame to that
+    /// session's outbound queue. Unknown methods get a JSON-RPC `-32601`.
+    async fn dispatch_broker_request(&self, session: &Arc<BrokerSession>, id: u64, method: &str) {
+        let frame = match method {
+            BROKER_METHOD_GET_SIDE_PANEL_SESSION => {
+                let started = Instant::now();
+                let result = self.side_panel_session(session);
+                if let Some(minter) = &self.minter {
+                    let outcome = match &result {
+                        Ok(_) => "ok",
+                        Err(error) => error.audit_outcome,
+                    };
+                    let summary = format!(
+                        "backend:{} transport:{}",
+                        session.backend,
+                        session.transport.label()
+                    );
+                    minter.audit(outcome, &summary, started.elapsed().as_millis() as i64);
+                }
+                match result {
+                    Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+                    Err(error) => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": error.code, "message": error.message },
+                    }),
+                }
+            }
+            _ => json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32601,
+                    "message": format!("unknown broker method: {method}"),
+                },
+            }),
+        };
+        if session.outbound.send(frame.to_string()).await.is_err() {
+            tracing::debug!(
+                method,
+                "broker session closed before the bridge reply could be sent"
+            );
+        }
+    }
+
+    /// `getSidePanelSession {}` → `{apiBaseUrl, launchCapability, credential}`.
+    /// Gated twice: the session must have arrived over the peer-UID-checked
+    /// unix socket, and only the Chrome-extension backend may mint.
+    fn side_panel_session(&self, session: &BrokerSession) -> Result<Value, BrokerRequestError> {
+        if session.transport != BridgeTransport::Unix {
+            return Err(BrokerRequestError::denied(
+                "side panel session requires the unix socket transport",
+            ));
+        }
+        if session.backend != BACKEND_CHROME_EXTENSION {
+            return Err(BrokerRequestError::denied(
+                "side panel session requires the chrome-extension backend",
+            ));
+        }
+        let minter = self
+            .minter
+            .as_ref()
+            .ok_or_else(|| BrokerRequestError::failed("side panel sessions are unavailable"))?;
+        let credential = minter
+            .mint_credential()
+            .map_err(BrokerRequestError::failed)?;
+        Ok(json!({
+            "apiBaseUrl": minter.api_base_url,
+            "launchCapability": minter.launch_capability,
+            "credential": credential,
+        }))
+    }
 }
 
 async fn browser_bridge_ws(
     State(server): State<Arc<BrowserBridgeServer>>,
+    transport: Option<Extension<BridgeTransport>>,
     headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, StatusCode> {
@@ -408,31 +657,117 @@ async fn browser_bridge_ws(
     if !token_matches(&server.token, presented) {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    Ok(upgrade.on_upgrade(move |socket| serve_broker(server, socket)))
+    // The unix listener serves the same router with this extension layered
+    // on; its absence means the connection arrived over TCP.
+    let transport = transport.map_or(BridgeTransport::Tcp, |Extension(transport)| transport);
+    Ok(upgrade.on_upgrade(move |socket| serve_broker(server, socket, transport)))
 }
 
-async fn serve_broker(server: Arc<BrowserBridgeServer>, socket: WebSocket) {
+/// Post-auth handshake: the sidecar sends `hello {}` and the broker's
+/// response carries the backend id (`"backend": "chrome-extension" | "iab"`).
+/// An absent or unknown value defaults to `chrome-extension` so broker builds
+/// predating the field keep working. Returns `None` (drop the connection)
+/// when the broker closes, errors, or never answers.
+async fn broker_hello(
+    server: &BrowserBridgeServer,
+    sink: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    stream: &mut futures_util::stream::SplitStream<WebSocket>,
+) -> Option<String> {
+    let hello_id = server.next_id.fetch_add(1, Ordering::SeqCst);
+    sink.send(Message::Text(jsonrpc::encode_request(
+        hello_id,
+        "hello",
+        json!({}),
+    )))
+    .await
+    .ok()?;
+    let timeout = tokio::time::sleep(HELLO_TIMEOUT);
+    tokio::pin!(timeout);
+    loop {
+        tokio::select! {
+            _ = &mut timeout => {
+                tracing::warn!("browser bridge broker hello timed out; dropping connection");
+                return None;
+            }
+            message = stream.next() => {
+                match message {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Some(backend) = hello_backend(&text, hello_id) {
+                            return Some(backend);
+                        }
+                    }
+                    Some(Ok(Message::Binary(bytes))) => {
+                        if let Some(backend) = hello_backend(&String::from_utf8_lossy(&bytes), hello_id) {
+                            return Some(backend);
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => return None,
+                    Some(Ok(_)) => {} // Ping/Pong carry no payload.
+                    Some(Err(error)) => {
+                        tracing::warn!(%error, "browser bridge broker hello failed");
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The backend id out of the hello response correlated to `hello_id`;
+/// `None` for any other frame.
+fn hello_backend(payload: &str, hello_id: u64) -> Option<String> {
+    let Ok(JsonRpcMessage::Response { id, result }) = jsonrpc::decode(payload) else {
+        return None;
+    };
+    if id != hello_id {
+        return None;
+    }
+    let backend = result.ok().and_then(|result| {
+        result
+            .get("backend")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    Some(match backend.as_deref() {
+        Some(BACKEND_IAB) => BACKEND_IAB.to_string(),
+        // Absent/unknown → the current extension build's implicit identity.
+        _ => BACKEND_CHROME_EXTENSION.to_string(),
+    })
+}
+
+async fn serve_broker(
+    server: Arc<BrowserBridgeServer>,
+    socket: WebSocket,
+    transport: BridgeTransport,
+) {
     let (mut sink, mut stream) = socket.split();
+    let Some(backend) = broker_hello(&server, &mut sink, &mut stream).await else {
+        let _ = sink.close().await;
+        return;
+    };
     let (outbound, mut outbound_rx) = mpsc::channel::<String>(OUTBOUND_BUFFER);
-    let mut heartbeat = tokio::time::interval(BROKER_HEARTBEAT_INTERVAL);
+    let mut heartbeat = tokio::time::interval(server.heartbeat_interval);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // Discard the immediate first tick so the first probe fires after one
     // full interval.
     heartbeat.tick().await;
     let mut unanswered_heartbeats: u8 = 0;
     let session = Arc::new(BrokerSession {
+        backend: backend.clone(),
+        transport,
         outbound,
         waiters: Mutex::new(HashMap::new()),
         closed: AtomicBool::new(false),
         notify_closed: Notify::new(),
     });
 
-    // Single active broker: an authenticated newcomer replaces the incumbent.
+    // One active session per backend: an authenticated newcomer for the same
+    // backend replaces the incumbent; other backends are untouched.
     let previous = server
-        .active
+        .backends
         .lock()
-        .expect("browser bridge broker")
-        .replace(Arc::clone(&session));
+        .expect("browser bridge backends")
+        .insert(backend.clone(), Arc::clone(&session));
     if let Some(previous) = previous {
         previous.closed.store(true, Ordering::SeqCst);
         previous.notify_closed.notify_waiters();
@@ -457,9 +792,12 @@ async fn serve_broker(server: Arc<BrowserBridgeServer>, socket: WebSocket) {
             }
             message = stream.next() => {
                 match message {
-                    Some(Ok(Message::Text(text))) => server.dispatch_inbound(&session, &text),
+                    Some(Ok(Message::Text(text))) => {
+                        server.dispatch_inbound(&session, &text).await;
+                    }
                     Some(Ok(Message::Binary(bytes))) => {
-                        server.dispatch_inbound(&session, &String::from_utf8_lossy(&bytes));
+                        let payload = String::from_utf8_lossy(&bytes);
+                        server.dispatch_inbound(&session, &payload).await;
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(_)) => {} // Ping/Pong carry no payload.
@@ -474,12 +812,13 @@ async fn serve_broker(server: Arc<BrowserBridgeServer>, socket: WebSocket) {
             _ = heartbeat.tick() => {
                 if unanswered_heartbeats >= BROKER_HEARTBEAT_MISS_LIMIT {
                     tracing::warn!(
-                        "browser bridge broker missed {BROKER_HEARTBEAT_MISS_LIMIT} heartbeats; marking offline"
+                        backend,
+                        "browser bridge backend missed {BROKER_HEARTBEAT_MISS_LIMIT} heartbeats; marking offline"
                     );
                     break;
                 }
                 if sink.send(Message::Ping(Vec::new())).await.is_err() {
-                    tracing::warn!("browser bridge broker heartbeat send failed");
+                    tracing::warn!(backend, "browser bridge broker heartbeat send failed");
                     break;
                 }
                 unanswered_heartbeats += 1;
@@ -489,20 +828,20 @@ async fn serve_broker(server: Arc<BrowserBridgeServer>, socket: WebSocket) {
     }
     let _ = sink.close().await;
 
-    // Clear the active slot only if it still points at this session.
-    let mut active = server.active.lock().expect("browser bridge broker");
-    if active
-        .as_ref()
+    // Clear the backend slot only if it still points at this session.
+    let mut backends = server.backends.lock().expect("browser bridge backends");
+    if backends
+        .get(&backend)
         .is_some_and(|current| Arc::ptr_eq(current, &session))
     {
-        active.take();
+        backends.remove(&backend);
     }
-    drop(active);
+    drop(backends);
     session.fail_waiters("browser bridge broker disconnected");
 }
 
 /// Clone-cheap endpoint handed to [`BrowserToolHost`]; delegates to the
-/// server's active broker session.
+/// server's per-backend broker sessions.
 #[derive(Clone)]
 pub(crate) struct BrowserBridgeEndpoint {
     server: Arc<BrowserBridgeServer>,
@@ -512,6 +851,11 @@ pub(crate) struct BrowserBridgeEndpoint {
 impl BridgeEndpoint for BrowserBridgeEndpoint {
     async fn request(&self, method: &str, params: Value) -> CoreResult<Value> {
         self.server.request(method, params).await
+    }
+
+    /// Multi-backend override of the trait's single-backend default.
+    async fn request_on(&self, backend: &str, method: &str, params: Value) -> CoreResult<Value> {
+        self.server.request_on(backend, method, params).await
     }
 
     fn subscribe_notifications(&self) -> broadcast::Receiver<BridgeNotification> {
@@ -549,9 +893,22 @@ impl BrowserBridgeRuntime {
     /// alongside the TCP listener and advertised as `socketPath`; when the
     /// unix bind fails the bridge stays TCP-only (the broker then never sees
     /// a `socketPath` and keeps using `wsUrl`).
+    ///
+    /// `minter` answers the broker-initiated `getSidePanelSession` request;
+    /// `None` (dev/test bridges) makes that method fail closed.
     pub(crate) fn start_with_registry_path(
         config: &BrowserBridgeConfig,
         registry_path: PathBuf,
+        minter: Option<SidePanelSessionMinter>,
+    ) -> Result<Self, String> {
+        Self::start_with_heartbeat(config, registry_path, minter, BROKER_HEARTBEAT_INTERVAL)
+    }
+
+    fn start_with_heartbeat(
+        config: &BrowserBridgeConfig,
+        registry_path: PathBuf,
+        minter: Option<SidePanelSessionMinter>,
+        heartbeat_interval: Duration,
     ) -> Result<Self, String> {
         let (listener, port) = bind_bridge_listener(config.port)?;
         let token = super::generate_capability_token();
@@ -584,7 +941,12 @@ impl BrowserBridgeRuntime {
         };
         write_registry(&registry_path, &registry)?;
 
-        let server = Arc::new(BrowserBridgeServer::new(token, port));
+        let server = Arc::new(BrowserBridgeServer::with_heartbeat_interval(
+            token,
+            port,
+            minter,
+            heartbeat_interval,
+        ));
         let tool_host = Arc::new(BrowserToolHost::new(BrowserBridgeEndpoint {
             server: Arc::clone(&server),
         }));
@@ -601,7 +963,10 @@ impl BrowserBridgeRuntime {
         });
         #[cfg(unix)]
         let unix_listener = unix_socket.map(|(unix_listener, socket_path)| UnixBridgeListener {
-            task: tokio::spawn(serve_unix_bridge(unix_listener, app)),
+            task: tokio::spawn(serve_unix_bridge(
+                unix_listener,
+                app.layer(Extension(BridgeTransport::Unix)),
+            )),
             socket_path,
         });
         Ok(Self {
@@ -615,8 +980,11 @@ impl BrowserBridgeRuntime {
         })
     }
 
-    pub(crate) fn start(config: &BrowserBridgeConfig) -> Result<Self, String> {
-        Self::start_with_registry_path(config, registry_path()?)
+    pub(crate) fn start(
+        config: &BrowserBridgeConfig,
+        minter: Option<SidePanelSessionMinter>,
+    ) -> Result<Self, String> {
+        Self::start_with_registry_path(config, registry_path()?, minter)
     }
 
     pub(crate) fn matches(&self, config: &BrowserBridgeConfig) -> bool {
@@ -629,6 +997,10 @@ impl BrowserBridgeRuntime {
 
     pub(crate) fn broker_connected(&self) -> bool {
         self.server.broker_connected()
+    }
+
+    pub(crate) fn connected_backends(&self) -> Vec<String> {
+        self.server.connected_backends()
     }
 
     #[cfg_attr(not(test), allow(dead_code))] // exercised by bridge tests
@@ -1034,6 +1406,13 @@ mod tests {
     }
 
     async fn start_test_bridge() -> TestBridge {
+        start_test_bridge_full(None, BROKER_HEARTBEAT_INTERVAL).await
+    }
+
+    async fn start_test_bridge_full(
+        minter: Option<SidePanelSessionMinter>,
+        heartbeat_interval: Duration,
+    ) -> TestBridge {
         let root = short_temp_root("srv");
         let bridge_dir = root.join(".memstack").join("browser-bridge");
         std::fs::create_dir_all(&bridge_dir).unwrap();
@@ -1043,9 +1422,11 @@ mod tests {
             extension_ids: default_extension_ids(),
             full_cdp_access_enabled: false,
         };
-        let runtime = BrowserBridgeRuntime::start_with_registry_path(
+        let runtime = BrowserBridgeRuntime::start_with_heartbeat(
             &config,
             bridge_dir.join("registry.json"),
+            minter,
+            heartbeat_interval,
         )
         .expect("bridge starts on an ephemeral port");
         let registry =
@@ -1131,13 +1512,14 @@ mod tests {
         // A same-UID peer with the bearer token completes the WS handshake
         // (the foreign-UID reject branch is covered by the pure
         // peer_uid_matches_self test: only the local user can exist here).
-        let _ws = connect_broker_unix(
+        let mut ws = connect_broker_unix(
             &socket_path,
             &bridge.registry.ws_url,
             Some(&bridge.registry.token),
         )
         .await
         .expect("unix ws handshake with the valid token");
+        broker_answer_hello(&mut ws, Some(BACKEND_CHROME_EXTENSION)).await;
         for _ in 0..50 {
             if bridge.runtime.broker_connected() {
                 break;
@@ -1183,6 +1565,7 @@ mod tests {
         let runtime = BrowserBridgeRuntime::start_with_registry_path(
             &config,
             bridge_dir.join("registry.json"),
+            None,
         )
         .expect("bridge starts despite the stale socket file");
         let registry = read_registry(&bridge_dir.join("registry.json")).unwrap();
@@ -1195,11 +1578,12 @@ mod tests {
     }
 
     /// Read one text frame from the broker side and decode it.
-    async fn broker_next_request(
-        ws: &mut tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-    ) -> (u64, String, Value) {
+    async fn broker_next_request<S>(
+        ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    ) -> (u64, String, Value)
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
         let message = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
             .await
             .expect("broker receive timed out")
@@ -1214,13 +1598,13 @@ mod tests {
         }
     }
 
-    async fn broker_respond(
-        ws: &mut tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
+    async fn broker_respond<S>(
+        ws: &mut tokio_tungstenite::WebSocketStream<S>,
         id: u64,
         result: Value,
-    ) {
+    ) where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
         ws.send(ClientMessage::Text(
             json!({ "jsonrpc": "2.0", "id": id, "result": result })
                 .to_string()
@@ -1228,6 +1612,78 @@ mod tests {
         ))
         .await
         .expect("broker respond");
+    }
+
+    /// Read one response frame addressed to a broker-initiated request.
+    async fn broker_next_response<S>(
+        ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    ) -> (u64, Result<Value, (i64, String)>)
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+            .await
+            .expect("broker receive timed out")
+            .expect("broker stream ended")
+            .expect("broker frame");
+        let ClientMessage::Text(text) = message else {
+            panic!("expected a text frame, got {message:?}");
+        };
+        match jsonrpc::decode(&text).expect("valid bridge response") {
+            JsonRpcMessage::Response { id, result } => {
+                (id, result.map_err(|error| (error.code, error.message)))
+            }
+            other => panic!("expected a response frame, got {other:?}"),
+        }
+    }
+
+    /// Send one broker-initiated request frame.
+    async fn broker_send_request<S>(
+        ws: &mut tokio_tungstenite::WebSocketStream<S>,
+        id: u64,
+        method: &str,
+    ) where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
+        ws.send(ClientMessage::Text(
+            json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": {} })
+                .to_string()
+                .into(),
+        ))
+        .await
+        .expect("broker request");
+    }
+
+    /// Answer the server's post-auth `hello`. `Some(backend)` tags the
+    /// session with that backend id; `None` answers without a `backend`
+    /// field (the pre-M4 extension shape, defaulting to chrome-extension).
+    async fn broker_answer_hello<S>(
+        ws: &mut tokio_tungstenite::WebSocketStream<S>,
+        backend: Option<&str>,
+    ) where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
+        let (id, method, _) = broker_next_request(ws).await;
+        assert_eq!(method, "hello");
+        let result = match backend {
+            Some(backend) => json!({"ready": true, "backend": backend}),
+            None => json!({"ready": true}),
+        };
+        broker_respond(ws, id, result).await;
+    }
+
+    /// Poll until the server reports exactly these connected backends.
+    async fn wait_for_backends(runtime: &BrowserBridgeRuntime, expected: &[&str]) {
+        for _ in 0..250 {
+            if runtime.connected_backends() == expected {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!(
+            "backends never settled to {expected:?}; saw {:?}",
+            runtime.connected_backends()
+        );
     }
 
     #[tokio::test]
@@ -1254,6 +1710,9 @@ mod tests {
         let mut first = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
             .await
             .expect("first broker connects");
+        // No `backend` field: the pre-M4 extension shape defaults to
+        // chrome-extension.
+        broker_answer_hello(&mut first, None).await;
         // Wait until the server registered the first session.
         for _ in 0..50 {
             if bridge.runtime.broker_connected() {
@@ -1263,9 +1722,10 @@ mod tests {
         }
         assert!(bridge.runtime.broker_connected());
 
-        let _second = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+        let mut second = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
             .await
             .expect("replacement broker connects");
+        broker_answer_hello(&mut second, Some(BACKEND_CHROME_EXTENSION)).await;
 
         // The incumbent's socket must close promptly.
         let closed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -1281,6 +1741,10 @@ mod tests {
         .expect("incumbent socket did not close");
         assert!(closed);
         assert!(bridge.runtime.broker_connected());
+        assert_eq!(
+            bridge.runtime.connected_backends(),
+            vec![BACKEND_CHROME_EXTENSION.to_string()]
+        );
         bridge.runtime.stop();
         std::fs::remove_dir_all(&bridge.root).unwrap();
     }
@@ -1292,12 +1756,11 @@ mod tests {
             .await
             .expect("broker connects");
 
-        // Scripted broker: answer hello + getTabs, then hand the socket back.
+        // Scripted broker: answer the server-driven hello + getTabs, then
+        // hand the socket back.
         let script = tokio::spawn(async move {
             let mut broker = broker;
-            let (id, method, _) = broker_next_request(&mut broker).await;
-            assert_eq!(method, "hello");
-            broker_respond(&mut broker, id, json!({"ready": true})).await;
+            broker_answer_hello(&mut broker, Some(BACKEND_CHROME_EXTENSION)).await;
 
             let (id, method, _) = broker_next_request(&mut broker).await;
             assert_eq!(method, METHOD_GET_TABS);
@@ -1317,23 +1780,15 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
-        assert!(bridge.runtime.broker_connected());
-
-        // The in-process endpoint is what BrowserToolHost drives.
-        let hello = bridge
-            .runtime
-            .server
-            .request("hello", json!({}))
-            .await
-            .expect("hello round trip");
-        assert_eq!(hello["ready"], true);
-
+        // The in-process endpoint is what BrowserToolHost drives. Without an
+        // explicit `backend` input the host fans list_tabs out to every
+        // backend (only chrome-extension is connected here), so pin chrome.
         let tool_host = bridge.runtime.tool_host();
         assert!(tool_host
             .list_tools()
             .contains(&agistack_adapters_browser::host::TOOL_LIST_TABS.to_string()));
         let output = tool_host
-            .call("browser_list_tabs", "{}")
+            .call("browser_list_tabs", r#"{"backend": "chrome"}"#)
             .await
             .expect("browser_list_tabs round trip");
         let output: Value = serde_json::from_str(&output).unwrap();
@@ -1403,9 +1858,10 @@ mod tests {
     #[tokio::test]
     async fn broker_disconnect_marks_the_bridge_offline() {
         let bridge = start_test_bridge().await;
-        let broker = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+        let mut broker = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
             .await
             .expect("broker connects");
+        broker_answer_hello(&mut broker, Some(BACKEND_CHROME_EXTENSION)).await;
         for _ in 0..50 {
             if bridge.runtime.broker_connected() {
                 break;
@@ -1415,8 +1871,8 @@ mod tests {
         assert!(bridge.runtime.broker_connected());
 
         // Dropping the socket closes the WS; the server must promptly clear
-        // the active slot so `connected_browser_tool_host()` returns None and
-        // the browser tools vanish from the engine surface.
+        // the backend slot so `connected_browser_tool_host()` returns None
+        // and the browser tools vanish from the engine surface.
         drop(broker);
         let mut offline = false;
         for _ in 0..100 {
@@ -1429,5 +1885,317 @@ mod tests {
         assert!(offline, "broker disconnect must mark the bridge offline");
         bridge.runtime.stop();
         std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn two_backends_coexist_and_request_on_routes_to_the_right_session() {
+        let bridge = start_test_bridge().await;
+
+        let mut chrome = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("chrome broker connects");
+        broker_answer_hello(&mut chrome, Some(BACKEND_CHROME_EXTENSION)).await;
+        let mut iab = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("iab broker connects");
+        broker_answer_hello(&mut iab, Some(BACKEND_IAB)).await;
+
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION, BACKEND_IAB]).await;
+        assert!(bridge.runtime.broker_connected());
+
+        // request_on("iab") reaches the iab session only.
+        let iab_script = tokio::spawn(async move {
+            let (id, method, _) = broker_next_request(&mut iab).await;
+            assert_eq!(method, "iabMethod");
+            broker_respond(&mut iab, id, json!({"via": "iab"})).await;
+        });
+        let result = bridge
+            .runtime
+            .server
+            .request_on(BACKEND_IAB, "iabMethod", json!({}))
+            .await
+            .expect("iab round trip");
+        assert_eq!(result["via"], "iab");
+        iab_script.await.expect("iab script");
+
+        // request() keeps addressing the chrome-extension backend.
+        let chrome_script = tokio::spawn(async move {
+            let (id, method, _) = broker_next_request(&mut chrome).await;
+            assert_eq!(method, "chromeMethod");
+            broker_respond(&mut chrome, id, json!({"via": "chrome"})).await;
+        });
+        let result = bridge
+            .runtime
+            .server
+            .request("chromeMethod", json!({}))
+            .await
+            .expect("chrome round trip");
+        assert_eq!(result["via"], "chrome");
+        chrome_script.await.expect("chrome script");
+
+        // Unknown backends fail closed.
+        let error = bridge
+            .runtime
+            .server
+            .request_on("unknown", "noop", json!({}))
+            .await
+            .expect_err("unknown backend must fail");
+        assert!(error.to_string().contains("not connected"));
+
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn same_backend_replacement_leaves_other_backends_connected() {
+        let bridge = start_test_bridge().await;
+        let mut chrome = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("chrome broker connects");
+        broker_answer_hello(&mut chrome, Some(BACKEND_CHROME_EXTENSION)).await;
+        let mut iab = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("iab broker connects");
+        broker_answer_hello(&mut iab, Some(BACKEND_IAB)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION, BACKEND_IAB]).await;
+
+        let mut replacement = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("replacement chrome broker connects");
+        broker_answer_hello(&mut replacement, Some(BACKEND_CHROME_EXTENSION)).await;
+
+        // The replaced chrome session closes; the iab session is untouched.
+        let closed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                match chrome.next().await {
+                    Some(Ok(ClientMessage::Close(_))) | None => break true,
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => break true,
+                }
+            }
+        })
+        .await
+        .expect("incumbent chrome socket did not close");
+        assert!(closed);
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION, BACKEND_IAB]).await;
+
+        let iab_script = tokio::spawn(async move {
+            let (id, method, _) = broker_next_request(&mut iab).await;
+            assert_eq!(method, "ping");
+            broker_respond(&mut iab, id, json!({"still": "here"})).await;
+        });
+        let result = bridge
+            .runtime
+            .server
+            .request_on(BACKEND_IAB, "ping", json!({}))
+            .await
+            .expect("iab still routable after chrome replacement");
+        assert_eq!(result["still"], "here");
+        iab_script.await.expect("iab script");
+
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn heartbeat_offline_detection_is_per_backend() {
+        let bridge = start_test_bridge_full(None, std::time::Duration::from_millis(50)).await;
+        let mut chrome = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("chrome broker connects");
+        broker_answer_hello(&mut chrome, Some(BACKEND_CHROME_EXTENSION)).await;
+        let mut iab = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("iab broker connects");
+        broker_answer_hello(&mut iab, Some(BACKEND_IAB)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION, BACKEND_IAB]).await;
+
+        // Keep chrome alive by polling (tungstenite auto-answers the server
+        // pings); starve iab by holding the socket without ever polling it,
+        // so no pong ever leaves the client.
+        let keepalive = tokio::spawn(async move { while chrome.next().await.is_some() {} });
+        let _starved = iab;
+
+        // iab misses the probes and drops out; chrome stays online.
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION]).await;
+        assert!(bridge.runtime.broker_connected());
+
+        keepalive.abort();
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn unknown_broker_methods_get_method_not_found() {
+        let bridge = start_test_bridge().await;
+        let mut broker = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("broker connects");
+        broker_answer_hello(&mut broker, Some(BACKEND_CHROME_EXTENSION)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION]).await;
+
+        broker_send_request(&mut broker, 9, "bogusMethod").await;
+        let (id, result) = broker_next_response(&mut broker).await;
+        assert_eq!(id, 9);
+        let (code, message) = result.expect_err("unknown method must error");
+        assert_eq!(code, -32601);
+        assert!(message.contains("bogusMethod"));
+
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    /// A local runtime state on an in-memory session store plus the minter
+    /// the bridge would be started with. The returned root keeps the state's
+    /// workspace directory alive.
+    fn side_panel_fixture() -> (
+        Arc<super::super::LocalRuntimeState>,
+        SidePanelSessionMinter,
+        PathBuf,
+    ) {
+        let root = short_temp_root("state");
+        std::fs::create_dir_all(&root).unwrap();
+        let tool_host =
+            agistack_adapters_local_tools::LocalToolHost::new(&root).expect("tool host");
+        let checkpoints: Arc<dyn agistack_core::ports::CheckpointStore> = Arc::new(
+            agistack_adapters_device::SqliteCheckpointStore::in_memory().expect("checkpoints"),
+        );
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        let state = Arc::new(
+            super::super::LocalRuntimeState::new(
+                root.clone(),
+                tool_host,
+                checkpoints,
+                super::super::generate_capability_token(),
+                session_store,
+            )
+            .expect("local runtime state"),
+        );
+        let minter = SidePanelSessionMinter::new(
+            "http://127.0.0.1:4789".to_string(),
+            state.api_token.clone(),
+            state.session_store.clone(),
+        );
+        (state, minter, root)
+    }
+
+    fn side_panel_audit_outcome(state: &super::super::LocalRuntimeState) -> String {
+        state
+            .session_store
+            .list_browser_action_audit(10, None)
+            .expect("audit rows")
+            .into_iter()
+            .find(|row| row.tool_name == BROKER_METHOD_GET_SIDE_PANEL_SESSION)
+            .expect("getSidePanelSession audit row")
+            .outcome
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn side_panel_session_over_unix_mints_a_working_credential() {
+        use tower::ServiceExt;
+
+        let (state, minter, state_root) = side_panel_fixture();
+        let bridge = start_test_bridge_full(Some(minter), BROKER_HEARTBEAT_INTERVAL).await;
+        let mut ws = connect_broker_unix(
+            &bridge.socket_path(),
+            &bridge.registry.ws_url,
+            Some(&bridge.registry.token),
+        )
+        .await
+        .expect("unix ws connects");
+        broker_answer_hello(&mut ws, Some(BACKEND_CHROME_EXTENSION)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION]).await;
+
+        broker_send_request(&mut ws, 42, BROKER_METHOD_GET_SIDE_PANEL_SESSION).await;
+        let (id, result) = broker_next_response(&mut ws).await;
+        assert_eq!(id, 42);
+        let result = result.expect("side panel session minted");
+        assert_eq!(result["apiBaseUrl"], "http://127.0.0.1:4789");
+        assert_eq!(result["launchCapability"], json!(state.api_token));
+        let credential = result["credential"]
+            .as_str()
+            .expect("credential string")
+            .to_string();
+        assert!(credential.starts_with("local-session-"));
+
+        assert_eq!(side_panel_audit_outcome(&state), "ok");
+
+        // The minted credential + launch capability authenticate against a
+        // protected route exactly as the side panel will present them.
+        let app = super::super::local_router(Arc::clone(&state));
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("x-agistack-launch", &state.api_token)
+                    .header("authorization", format!("Bearer {credential}"))
+                    .body(axum::body::Body::empty())
+                    .expect("auth_me request"),
+            )
+            .await
+            .expect("auth_me response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        drop(ws);
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+        std::fs::remove_dir_all(&state_root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn side_panel_session_over_tcp_is_refused() {
+        let (state, minter, state_root) = side_panel_fixture();
+        let bridge = start_test_bridge_full(Some(minter), BROKER_HEARTBEAT_INTERVAL).await;
+        let mut ws = connect_broker(&bridge.registry.ws_url, Some(&bridge.registry.token))
+            .await
+            .expect("tcp broker connects");
+        broker_answer_hello(&mut ws, Some(BACKEND_CHROME_EXTENSION)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_CHROME_EXTENSION]).await;
+
+        broker_send_request(&mut ws, 7, BROKER_METHOD_GET_SIDE_PANEL_SESSION).await;
+        let (id, result) = broker_next_response(&mut ws).await;
+        assert_eq!(id, 7);
+        let (code, message) = result.expect_err("tcp transport must be refused");
+        assert_eq!(code, 1);
+        assert_eq!(
+            message,
+            "side panel session requires the unix socket transport"
+        );
+
+        assert_eq!(side_panel_audit_outcome(&state), "denied");
+
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+        std::fs::remove_dir_all(&state_root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn side_panel_session_for_the_iab_backend_is_refused() {
+        let (state, minter, state_root) = side_panel_fixture();
+        let bridge = start_test_bridge_full(Some(minter), BROKER_HEARTBEAT_INTERVAL).await;
+        let mut ws = connect_broker_unix(
+            &bridge.socket_path(),
+            &bridge.registry.ws_url,
+            Some(&bridge.registry.token),
+        )
+        .await
+        .expect("unix ws connects");
+        broker_answer_hello(&mut ws, Some(BACKEND_IAB)).await;
+        wait_for_backends(&bridge.runtime, &[BACKEND_IAB]).await;
+
+        broker_send_request(&mut ws, 8, BROKER_METHOD_GET_SIDE_PANEL_SESSION).await;
+        let (id, result) = broker_next_response(&mut ws).await;
+        assert_eq!(id, 8);
+        let (code, message) = result.expect_err("iab backend must be refused");
+        assert_eq!(code, 1);
+        assert!(message.contains(BACKEND_CHROME_EXTENSION));
+
+        assert_eq!(side_panel_audit_outcome(&state), "denied");
+
+        bridge.runtime.stop();
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+        std::fs::remove_dir_all(&state_root).unwrap();
     }
 }
