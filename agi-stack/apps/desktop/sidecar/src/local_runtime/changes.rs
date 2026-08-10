@@ -136,7 +136,7 @@ impl GitChangesInspector {
                     captured_at,
                     ChangeSnapshotStatus::Failed,
                     "git_diff_failed",
-                )
+                );
             }
         };
         let truncated = diff_output.len() > MAX_DIFF_BYTES;

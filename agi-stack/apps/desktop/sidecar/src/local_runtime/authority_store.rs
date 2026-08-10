@@ -278,6 +278,97 @@ impl BrowserOriginDecision {
 /// The target id is the origin host the agent asked about.
 pub(super) const BROWSER_ORIGIN_TARGET_KIND: &str = "browser_origin";
 
+/// The HITL permission target kind carrying a full-CDP capability consent
+/// request (M3, `browser_cdp_raw`). The target id is the origin host. There
+/// is deliberately no all-sites scope for full CDP: scopes are `once`
+/// (run-scoped cache) and `site` (persisted grant) only.
+pub(super) const BROWSER_FULL_CDP_TARGET_KIND: &str = "browser_full_cdp";
+
+/// The HITL permission target kind carrying a credential-fill consent request
+/// (M3, `browser_fill_credentials`). The target id is the origin host. Only
+/// the `once` scope exists; consent is never persisted for credential fills.
+pub(super) const BROWSER_CREDENTIAL_FILL_TARGET_KIND: &str = "browser_credential_fill";
+
+/// The only browser capability grant currently issued: unrestricted CDP
+/// access for one origin via `browser_cdp_raw`.
+pub(super) const FULL_CDP_CAPABILITY: &str = "full_cdp";
+
+/// Run-scoped once-consent cache key for full-CDP consent on `host`.
+pub(super) fn full_cdp_once_key(host: &str) -> String {
+    format!("full_cdp:{host}")
+}
+
+/// Run-scoped once-consent cache key for credential-fill consent on `origin`.
+pub(super) fn credential_fill_once_key(origin: &str) -> String {
+    format!("credential_fill:{origin}")
+}
+
+/// Persisted capability consent for the browser bridge (M3). Unlike origin
+/// grants there is no global (`*`) row: a capability is granted per host, or
+/// declined per host.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct BrowserCapabilityGrant {
+    pub id: String,
+    pub host: String,
+    pub capability: String,
+    pub decision: BrowserCapabilityDecision,
+    pub source_hitl_request_id: String,
+    pub created_at: String,
+    pub revoked_at: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum BrowserCapabilityDecision {
+    Site,
+    Decline,
+}
+
+impl BrowserCapabilityDecision {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Site => "site",
+            Self::Decline => "decline",
+        }
+    }
+
+    pub(super) fn from_str(value: &str) -> Result<Self, String> {
+        match value {
+            "site" => Ok(Self::Site),
+            "decline" => Ok(Self::Decline),
+            other => Err(format!("unknown browser capability decision: {other}")),
+        }
+    }
+}
+
+/// Metadata row for a brokered site credential (M3). The password itself
+/// never touches the session store — it lives in the application vault under
+/// `credential_ref`; this row carries only lookup metadata.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct BrowserSiteCredential {
+    pub id: String,
+    pub origin: String,
+    pub username: String,
+    pub credential_ref: String,
+    pub created_at: String,
+    pub revoked_at: Option<String>,
+}
+
+/// One browser action audit row (M3). `target_summary` is a compact,
+/// sanitized description of the call target (CDP method, snapshot ref, host)
+/// and never carries input values. `created_at` is epoch milliseconds.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct BrowserActionAudit {
+    pub id: i64,
+    pub run_id: Option<String>,
+    pub tool_name: String,
+    pub origin: Option<String>,
+    pub target_summary: String,
+    pub outcome: String,
+    pub latency_ms: i64,
+    pub created_at: i64,
+}
+
 #[derive(Debug)]
 pub(super) enum DesktopAuthorityError {
     ConversationNotFound,

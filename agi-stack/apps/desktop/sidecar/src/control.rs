@@ -304,10 +304,7 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                     .and_then(|object| object.get("params"))
                     .cloned()
                     .unwrap_or(Value::Null);
-                state
-                    .runtime
-                    .browser_bridge_dev_call(&method, params)
-                    .await
+                state.runtime.browser_bridge_dev_call(&method, params).await
             }
             Err(error) => Err(error),
         },

@@ -93,13 +93,13 @@ pub(super) async fn respond_to_request(
         AutomationHitlClaimOutcome::Expired => {
             return Ok(AutomationHitlResponse::Expired {
                 run_id: authority.run_id,
-            })
+            });
         }
         AutomationHitlClaimOutcome::AlreadyResumed => {
             return Ok(AutomationHitlResponse::Queued {
                 authority: Box::new(authority),
                 duplicate: true,
-            })
+            });
         }
         AutomationHitlClaimOutcome::Claimed | AutomationHitlClaimOutcome::DuplicatePending => {}
     }
@@ -214,7 +214,7 @@ fn claim_response(
         DesktopHitlStatus::Pending => {
             return Err(invalid_authority(
                 "pending automation HITL response requires a waiting run and operation",
-            ))
+            ));
         }
         DesktopHitlStatus::Responded => {
             if current.response_data.as_ref() != Some(response_data)
@@ -242,7 +242,7 @@ fn claim_response(
                 _ => {
                     return Err(invalid_authority(
                         "automation HITL run and operation statuses disagree",
-                    ))
+                    ));
                 }
             }
         }
@@ -494,19 +494,19 @@ fn requeue_answered_wait(
     ) {
         ("waiting_human", "waiting_human") => {}
         ("queued", "queued") | ("running", "running") => {
-            return Ok(AutomationHitlResumeOutcome::AlreadyResumed)
+            return Ok(AutomationHitlResumeOutcome::AlreadyResumed);
         }
         ("timeout", "timeout") => return Ok(AutomationHitlResumeOutcome::Expired),
         (run_status, operation_status)
             if run_status == operation_status
                 && matches!(run_status, "success" | "failed" | "cancelled") =>
         {
-            return Ok(AutomationHitlResumeOutcome::AlreadyResumed)
+            return Ok(AutomationHitlResumeOutcome::AlreadyResumed);
         }
         _ => {
             return Err(invalid_authority(
                 "automation HITL run and operation statuses disagree",
-            ))
+            ));
         }
     }
     let now_text = now.to_rfc3339();

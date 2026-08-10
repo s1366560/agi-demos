@@ -16,7 +16,8 @@ use super::{
         is_recovered_unstarted_run, query_conversation, query_latest_draft_plan,
         query_plan_version, query_run, query_run_by_idempotency, recover_interrupted_runs,
         typed_rows, update_conversation_in_transaction, update_plan_version, update_run,
-        ApprovePlanOutcome, BrowserOriginDecision, BrowserOriginGrant, DesktopArtifactDelivery,
+        ApprovePlanOutcome, BrowserActionAudit, BrowserCapabilityDecision, BrowserCapabilityGrant,
+        BrowserOriginDecision, BrowserOriginGrant, BrowserSiteCredential, DesktopArtifactDelivery,
         DesktopArtifactStatus, DesktopArtifactVersion, DesktopAuthorityError,
         DesktopExecutionEnvironment, DesktopHitlRequest, DesktopHitlStatus,
         DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
@@ -36,7 +37,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 22;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 23;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -595,6 +596,33 @@ impl DesktopSessionStore {
                    created_at TEXT NOT NULL,
                    revoked_at TEXT
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_browser_capability_grants (
+                   id TEXT PRIMARY KEY,
+                   host TEXT NOT NULL,
+                   capability TEXT NOT NULL,
+                   decision TEXT NOT NULL CHECK (decision IN ('site', 'decline')),
+                   source_hitl_request_id TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   revoked_at TEXT
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_browser_site_credentials (
+                   id TEXT PRIMARY KEY,
+                   origin TEXT NOT NULL,
+                   username TEXT NOT NULL,
+                   credential_ref TEXT NOT NULL UNIQUE,
+                   created_at TEXT NOT NULL,
+                   revoked_at TEXT
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_browser_action_audit (
+                   id INTEGER PRIMARY KEY,
+                   run_id TEXT,
+                   tool_name TEXT NOT NULL,
+                   origin TEXT,
+                   target_summary TEXT NOT NULL,
+                   outcome TEXT NOT NULL,
+                   latency_ms INTEGER NOT NULL,
+                   created_at INTEGER NOT NULL
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_tool_invocations (
                    id TEXT PRIMARY KEY,
                    run_id TEXT NOT NULL,
@@ -654,6 +682,14 @@ impl DesktopSessionStore {
                    );
                  CREATE INDEX IF NOT EXISTS idx_desktop_browser_origin_grants_host
                    ON desktop_browser_origin_grants(host, revoked_at, created_at DESC);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_browser_capability_grants_host
+                   ON desktop_browser_capability_grants(
+                     host, capability, revoked_at, created_at DESC
+                   );
+                 CREATE INDEX IF NOT EXISTS idx_desktop_browser_site_credentials_origin
+                   ON desktop_browser_site_credentials(origin, revoked_at, created_at DESC);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_browser_action_audit_created
+                   ON desktop_browser_action_audit(created_at);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_run
                    ON desktop_tool_invocations(run_id, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
@@ -4141,6 +4177,321 @@ impl DesktopSessionStore {
         Ok(Some(grant))
     }
 
+    /// Insert a browser capability grant, superseding (revoking) any active
+    /// row for the same host+capability in the same transaction so a pair has
+    /// at most one active decision.
+    pub(super) fn insert_browser_capability_grant(
+        &self,
+        grant: &BrowserCapabilityGrant,
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "UPDATE desktop_browser_capability_grants
+                 SET revoked_at = ?3
+                 WHERE host = ?1 AND capability = ?2 AND revoked_at IS NULL",
+                params![grant.host, grant.capability, grant.created_at],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_browser_capability_grants(
+                   id, host, capability, decision, source_hitl_request_id, created_at, revoked_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)",
+                params![
+                    grant.id,
+                    grant.host,
+                    grant.capability,
+                    grant.decision.as_str(),
+                    grant.source_hitl_request_id,
+                    grant.created_at,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn list_active_browser_capability_grants(
+        &self,
+    ) -> Result<Vec<BrowserCapabilityGrant>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, host, capability, decision, source_hitl_request_id, created_at,
+                        revoked_at
+                 FROM desktop_browser_capability_grants
+                 WHERE revoked_at IS NULL
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], browser_capability_grant_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Active decisions for (host, capability). The caller applies the
+    /// decision matrix (decline beats site).
+    pub(super) fn active_browser_capability_decisions(
+        &self,
+        host: &str,
+        capability: &str,
+    ) -> Result<Vec<BrowserCapabilityGrant>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, host, capability, decision, source_hitl_request_id, created_at,
+                        revoked_at
+                 FROM desktop_browser_capability_grants
+                 WHERE revoked_at IS NULL AND host = ?1 AND capability = ?2
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(params![host, capability], browser_capability_grant_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn revoke_browser_capability_grant(
+        &self,
+        grant_id: &str,
+        revoked_at: &str,
+    ) -> Result<Option<BrowserCapabilityGrant>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let grant = transaction
+            .query_row(
+                "SELECT id, host, capability, decision, source_hitl_request_id, created_at,
+                        revoked_at
+                 FROM desktop_browser_capability_grants
+                 WHERE id = ?1 AND revoked_at IS NULL",
+                [grant_id],
+                browser_capability_grant_from_row,
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let Some(mut grant) = grant else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(None);
+        };
+        grant.revoked_at = Some(revoked_at.to_string());
+        transaction
+            .execute(
+                "UPDATE desktop_browser_capability_grants
+                 SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+                params![grant_id, revoked_at],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(Some(grant))
+    }
+
+    /// Upsert a site-credential metadata row: any active row for the same
+    /// origin+username is superseded in the same transaction. The row carries
+    /// no secret material — the password lives in the application vault under
+    /// `credential_ref`. The reference is deterministic per (origin,
+    /// username), so the insert revives the conflicting historical row with
+    /// the new identity instead of violating its UNIQUE constraint.
+    pub(super) fn upsert_browser_site_credential(
+        &self,
+        credential: &BrowserSiteCredential,
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "UPDATE desktop_browser_site_credentials
+                 SET revoked_at = ?3
+                 WHERE origin = ?1 AND username = ?2 AND revoked_at IS NULL",
+                params![
+                    credential.origin,
+                    credential.username,
+                    credential.created_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_browser_site_credentials(
+                   id, origin, username, credential_ref, created_at, revoked_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, NULL)
+                 ON CONFLICT(credential_ref) DO UPDATE SET
+                   id = excluded.id,
+                   origin = excluded.origin,
+                   username = excluded.username,
+                   created_at = excluded.created_at,
+                   revoked_at = NULL",
+                params![
+                    credential.id,
+                    credential.origin,
+                    credential.username,
+                    credential.credential_ref,
+                    credential.created_at,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn list_active_browser_site_credentials(
+        &self,
+    ) -> Result<Vec<BrowserSiteCredential>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, origin, username, credential_ref, created_at, revoked_at
+                 FROM desktop_browser_site_credentials
+                 WHERE revoked_at IS NULL
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], browser_site_credential_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// The active site-credential metadata for `origin` (and `username` when
+    /// given). With no username filter the newest active row wins.
+    pub(super) fn active_browser_site_credential(
+        &self,
+        origin: &str,
+        username: Option<&str>,
+    ) -> Result<Option<BrowserSiteCredential>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, origin, username, credential_ref, created_at, revoked_at
+                 FROM desktop_browser_site_credentials
+                 WHERE revoked_at IS NULL AND origin = ?1
+                   AND (?2 IS NULL OR username = ?2)
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 1",
+            )
+            .map_err(|error| error.to_string())?;
+        statement
+            .query_row(params![origin, username], browser_site_credential_from_row)
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn revoke_browser_site_credential(
+        &self,
+        credential_id: &str,
+        revoked_at: &str,
+    ) -> Result<Option<BrowserSiteCredential>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let credential = transaction
+            .query_row(
+                "SELECT id, origin, username, credential_ref, created_at, revoked_at
+                 FROM desktop_browser_site_credentials
+                 WHERE id = ?1 AND revoked_at IS NULL",
+                [credential_id],
+                browser_site_credential_from_row,
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let Some(mut credential) = credential else {
+            transaction.commit().map_err(|error| error.to_string())?;
+            return Ok(None);
+        };
+        credential.revoked_at = Some(revoked_at.to_string());
+        transaction
+            .execute(
+                "UPDATE desktop_browser_site_credentials
+                 SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+                params![credential_id, revoked_at],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(Some(credential))
+    }
+
+    /// Fire-and-forget audit sink for browser tool calls. The caller logs and
+    /// swallows failures — auditing must never fail a tool call.
+    pub(super) fn insert_browser_action_audit(
+        &self,
+        run_id: Option<&str>,
+        tool_name: &str,
+        origin: Option<&str>,
+        target_summary: &str,
+        outcome: &str,
+        latency_ms: i64,
+        created_at: i64,
+    ) -> Result<(), String> {
+        self.connection()?
+            .execute(
+                "INSERT INTO desktop_browser_action_audit(
+                   run_id, tool_name, origin, target_summary, outcome, latency_ms, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    run_id,
+                    tool_name,
+                    origin,
+                    target_summary,
+                    outcome,
+                    latency_ms,
+                    created_at,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    /// Newest-first audit entries, capped by `limit` and optionally filtered
+    /// to one origin.
+    pub(super) fn list_browser_action_audit(
+        &self,
+        limit: u32,
+        origin: Option<&str>,
+    ) -> Result<Vec<BrowserActionAudit>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, run_id, tool_name, origin, target_summary, outcome, latency_ms,
+                        created_at
+                 FROM desktop_browser_action_audit
+                 WHERE (?1 IS NULL OR origin = ?1)
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?2",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(params![origin, limit], browser_action_audit_from_row)
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Retention sweep: drop audit rows older than `cutoff` (epoch ms).
+    pub(super) fn delete_browser_action_audit_older_than(
+        &self,
+        cutoff: i64,
+    ) -> Result<usize, String> {
+        self.connection()?
+            .execute(
+                "DELETE FROM desktop_browser_action_audit WHERE created_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|error| error.to_string())
+    }
+
     pub(super) fn authorize_and_prepare_tool_invocation(
         &self,
         invocation_id: &str,
@@ -4287,7 +4638,7 @@ impl DesktopSessionStore {
             InvocationStatus::Failed => invocation.mark_failed(now_ms),
             InvocationStatus::UnknownOutcome => invocation.mark_unknown_outcome(now_ms),
             InvocationStatus::Prepared => {
-                return Err("cannot transition an invocation back to prepared".to_string())
+                return Err("cannot transition an invocation back to prepared".to_string());
             }
         }
         .map_err(|error| error.to_string())?;
@@ -5290,6 +5641,53 @@ fn browser_origin_grant_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Br
     })
 }
 
+fn browser_capability_grant_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<BrowserCapabilityGrant> {
+    let decision: String = row.get(3)?;
+    Ok(BrowserCapabilityGrant {
+        id: row.get(0)?,
+        host: row.get(1)?,
+        capability: row.get(2)?,
+        decision: BrowserCapabilityDecision::from_str(&decision).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                decision.len(),
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
+            )
+        })?,
+        source_hitl_request_id: row.get(4)?,
+        created_at: row.get(5)?,
+        revoked_at: row.get(6)?,
+    })
+}
+
+fn browser_site_credential_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<BrowserSiteCredential> {
+    Ok(BrowserSiteCredential {
+        id: row.get(0)?,
+        origin: row.get(1)?,
+        username: row.get(2)?,
+        credential_ref: row.get(3)?,
+        created_at: row.get(4)?,
+        revoked_at: row.get(5)?,
+    })
+}
+
+fn browser_action_audit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BrowserActionAudit> {
+    Ok(BrowserActionAudit {
+        id: row.get(0)?,
+        run_id: row.get(1)?,
+        tool_name: row.get(2)?,
+        origin: row.get(3)?,
+        target_summary: row.get(4)?,
+        outcome: row.get(5)?,
+        latency_ms: row.get(6)?,
+        created_at: row.get(7)?,
+    })
+}
+
 fn optional_string(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
@@ -6201,5 +6599,240 @@ mod tests {
             assert_eq!(decisions[0].host, "*");
         }
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn browser_capability_grants_supersede_revoke_and_survive_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-browser-capability-grant-{}.db",
+            Uuid::new_v4()
+        ));
+        let grant = |id: &str,
+                     host: &str,
+                     capability: &str,
+                     decision: BrowserCapabilityDecision,
+                     created_at: &str| {
+            BrowserCapabilityGrant {
+                id: id.to_string(),
+                host: host.to_string(),
+                capability: capability.to_string(),
+                decision,
+                source_hitl_request_id: "hitl-1".to_string(),
+                created_at: created_at.to_string(),
+                revoked_at: None,
+            }
+        };
+        {
+            let store = DesktopSessionStore::open(&path).expect("session store");
+            store
+                .insert_browser_capability_grant(&grant(
+                    "cap-1",
+                    "example.com",
+                    "full_cdp",
+                    BrowserCapabilityDecision::Site,
+                    "2026-08-09T00:00:01Z",
+                ))
+                .expect("insert site grant");
+            store
+                .insert_browser_capability_grant(&grant(
+                    "cap-2",
+                    "other.test",
+                    "full_cdp",
+                    BrowserCapabilityDecision::Decline,
+                    "2026-08-09T00:00:02Z",
+                ))
+                .expect("insert decline");
+            let decisions = store
+                .active_browser_capability_decisions("example.com", "full_cdp")
+                .expect("decisions for host");
+            assert_eq!(decisions.len(), 1);
+            assert_eq!(decisions[0].decision, BrowserCapabilityDecision::Site);
+            // Capability scoping is exact: other hosts/capabilities do not leak.
+            assert!(store
+                .active_browser_capability_decisions("example.com", "other_capability")
+                .expect("decisions for other capability")
+                .is_empty());
+
+            // A newer decision for the same host+capability supersedes the
+            // active one.
+            store
+                .insert_browser_capability_grant(&grant(
+                    "cap-3",
+                    "example.com",
+                    "full_cdp",
+                    BrowserCapabilityDecision::Decline,
+                    "2026-08-09T00:00:03Z",
+                ))
+                .expect("supersede site grant");
+            let decisions = store
+                .active_browser_capability_decisions("example.com", "full_cdp")
+                .expect("decisions after supersede");
+            assert_eq!(decisions.len(), 1);
+            assert_eq!(decisions[0].id, "cap-3");
+            assert_eq!(decisions[0].decision, BrowserCapabilityDecision::Decline);
+        }
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen session store");
+            let active = store
+                .list_active_browser_capability_grants()
+                .expect("list active grants");
+            assert_eq!(active.len(), 2);
+            assert!(active.iter().all(|grant| grant.revoked_at.is_none()));
+            let revoked = store
+                .revoke_browser_capability_grant("cap-3", "2026-08-09T00:00:04Z")
+                .expect("revoke grant")
+                .expect("active grant");
+            assert_eq!(revoked.revoked_at.as_deref(), Some("2026-08-09T00:00:04Z"));
+            assert!(store
+                .revoke_browser_capability_grant("cap-3", "2026-08-09T00:00:05Z")
+                .expect("second revoke")
+                .is_none());
+            assert!(store
+                .active_browser_capability_decisions("example.com", "full_cdp")
+                .expect("decisions after revoke")
+                .is_empty());
+        }
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn browser_site_credentials_upsert_lookup_and_revoke() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let credential =
+            |id: &str, origin: &str, username: &str, created_at: &str| BrowserSiteCredential {
+                id: id.to_string(),
+                origin: origin.to_string(),
+                username: username.to_string(),
+                credential_ref: format!("site-credential.v1.{id}"),
+                created_at: created_at.to_string(),
+                revoked_at: None,
+            };
+        store
+            .upsert_browser_site_credential(&credential(
+                "cred-1",
+                "example.com",
+                "alice",
+                "2026-08-09T00:00:01Z",
+            ))
+            .expect("insert credential");
+        store
+            .upsert_browser_site_credential(&credential(
+                "cred-2",
+                "example.com",
+                "bob",
+                "2026-08-09T00:00:02Z",
+            ))
+            .expect("insert second credential");
+        assert_eq!(
+            store
+                .list_active_browser_site_credentials()
+                .expect("list credentials")
+                .len(),
+            2
+        );
+
+        // Upserting the same origin+username supersedes the previous row.
+        store
+            .upsert_browser_site_credential(&credential(
+                "cred-3",
+                "example.com",
+                "alice",
+                "2026-08-09T00:00:03Z",
+            ))
+            .expect("upsert credential");
+        let active = store
+            .list_active_browser_site_credentials()
+            .expect("list after upsert");
+        assert_eq!(active.len(), 2);
+        let lookup = store
+            .active_browser_site_credential("example.com", Some("alice"))
+            .expect("lookup alice")
+            .expect("active alice credential");
+        assert_eq!(lookup.id, "cred-3");
+        // No username filter: newest active row for the origin wins.
+        let lookup = store
+            .active_browser_site_credential("example.com", None)
+            .expect("lookup latest")
+            .expect("active credential");
+        assert_eq!(lookup.id, "cred-3");
+        assert!(store
+            .active_browser_site_credential("unknown.test", None)
+            .expect("lookup unknown")
+            .is_none());
+
+        let revoked = store
+            .revoke_browser_site_credential("cred-3", "2026-08-09T00:00:04Z")
+            .expect("revoke credential")
+            .expect("active credential");
+        assert_eq!(revoked.revoked_at.as_deref(), Some("2026-08-09T00:00:04Z"));
+        assert!(store
+            .active_browser_site_credential("example.com", Some("alice"))
+            .expect("lookup revoked")
+            .is_none());
+        assert!(store
+            .revoke_browser_site_credential("cred-3", "2026-08-09T00:00:05Z")
+            .expect("second revoke")
+            .is_none());
+    }
+
+    #[test]
+    fn browser_action_audit_records_filters_and_sweeps_retention() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        for (tool, origin, outcome, created_at) in [
+            ("browser_navigate", Some("example.com"), "ok", 1_000_i64),
+            (
+                "browser_click",
+                Some("example.com"),
+                "consent_required",
+                2_000,
+            ),
+            ("browser_list_tabs", None, "ok", 3_000),
+            ("browser_cdp_raw", Some("other.test"), "error", 4_000),
+        ] {
+            store
+                .insert_browser_action_audit(
+                    Some("run-1"),
+                    tool,
+                    origin,
+                    "target",
+                    outcome,
+                    12,
+                    created_at,
+                )
+                .expect("insert audit");
+        }
+        let entries = store
+            .list_browser_action_audit(500, None)
+            .expect("list audit");
+        assert_eq!(entries.len(), 4);
+        // Newest first.
+        assert_eq!(entries[0].tool_name, "browser_cdp_raw");
+        assert_eq!(entries[0].outcome, "error");
+        assert_eq!(entries[0].latency_ms, 12);
+        assert_eq!(entries[3].tool_name, "browser_navigate");
+
+        let filtered = store
+            .list_browser_action_audit(500, Some("example.com"))
+            .expect("filtered audit");
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|entry| entry.origin.as_deref() == Some("example.com")));
+
+        let limited = store
+            .list_browser_action_audit(1, None)
+            .expect("limited audit");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].tool_name, "browser_cdp_raw");
+
+        let deleted = store
+            .delete_browser_action_audit_older_than(2_500)
+            .expect("retention sweep");
+        assert_eq!(deleted, 2);
+        let remaining = store
+            .list_browser_action_audit(500, None)
+            .expect("list after sweep");
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.iter().all(|entry| entry.created_at >= 2_500));
     }
 }

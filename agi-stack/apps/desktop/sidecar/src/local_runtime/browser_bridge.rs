@@ -63,6 +63,8 @@ pub const REGISTRY_SCHEMA_VERSION: u32 = 1;
 
 const OUTBOUND_BUFFER: usize = 32;
 const NOTIFICATION_BUFFER: usize = 256;
+/// Filename of the unix-domain bridge socket inside the bridge directory.
+const BRIDGE_SOCKET_FILE_NAME: &str = "bridge.sock";
 /// Server-side liveness probe for the broker socket (§6 M2 心跳熔断): a WS
 /// ping every interval; the broker is declared offline after this many
 /// consecutive intervals without any inbound frame.
@@ -87,6 +89,10 @@ pub struct BrowserBridgeConfig {
     pub port: u16,
     #[serde(default = "default_extension_ids")]
     pub extension_ids: Vec<String>,
+    /// Gate for the full-CDP-access workstream; this milestone only carries
+    /// the flag, it does not consume it.
+    #[serde(default)]
+    pub full_cdp_access_enabled: bool,
 }
 
 impl Default for BrowserBridgeConfig {
@@ -95,6 +101,7 @@ impl Default for BrowserBridgeConfig {
             enabled: false,
             port: DEFAULT_BROWSER_BRIDGE_PORT,
             extension_ids: default_extension_ids(),
+            full_cdp_access_enabled: false,
         }
     }
 }
@@ -120,6 +127,10 @@ pub struct BridgeRegistry {
     pub extension_ids: Vec<String>,
     pub sidecar_path: PathBuf,
     pub updated_at: String,
+    /// Unix-domain socket the broker prefers over TCP. Written by unix
+    /// sidecars only (`None` on Windows, where TCP remains the transport).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub socket_path: Option<String>,
 }
 
 /// The user's home directory (`$HOME` on unix, `%USERPROFILE%` on Windows).
@@ -140,6 +151,16 @@ pub(crate) fn registry_path() -> Result<PathBuf, String> {
         .join(".memstack")
         .join("browser-bridge")
         .join("registry.json"))
+}
+
+/// The unix bridge socket always sits next to the registry file as
+/// `bridge.sock` (in production `~/.memstack/browser-bridge/bridge.sock`).
+#[cfg(unix)]
+pub(crate) fn bridge_socket_path(registry_path: &FsPath) -> Result<PathBuf, String> {
+    let directory = registry_path
+        .parent()
+        .ok_or_else(|| "browser bridge registry path has no parent directory".to_string())?;
+    Ok(directory.join(BRIDGE_SOCKET_FILE_NAME))
 }
 
 /// Write the registry file, enforcing 0700 on its directory and 0600 on the
@@ -179,6 +200,42 @@ pub(crate) fn validate_registry(registry: &BridgeRegistry) -> Result<(), String>
     }
     if registry.token.len() != 64 || !registry.token.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("browser bridge registry token is invalid".to_string());
+    }
+    if let Some(socket_path) = &registry.socket_path {
+        validate_socket_path(socket_path)?;
+    }
+    Ok(())
+}
+
+/// Validate the advertised `socketPath`. The socket must be an absolute path
+/// named `bridge.sock` directly inside the `.memstack/browser-bridge`
+/// directory — the shape the sidecar itself writes. This is a shape check,
+/// not a `$HOME` equality check, so it stays valid for relocated homes and
+/// test fixtures; a rogue registry writer gains nothing from it either way
+/// (the same 0600 file already hands them the bearer token).
+fn validate_socket_path(socket_path: &str) -> Result<(), String> {
+    let path = FsPath::new(socket_path);
+    if !path.is_absolute() {
+        return Err("browser bridge registry socketPath must be absolute".to_string());
+    }
+    if path.file_name() != Some(std::ffi::OsStr::new(BRIDGE_SOCKET_FILE_NAME)) {
+        return Err(format!(
+            "browser bridge registry socketPath must be named {BRIDGE_SOCKET_FILE_NAME}"
+        ));
+    }
+    let parent = path.parent();
+    let grandparent = parent.and_then(FsPath::parent);
+    let in_bridge_dir = matches!(
+        (
+            grandparent.and_then(FsPath::file_name),
+            parent.and_then(FsPath::file_name),
+        ),
+        (Some(base), Some(dir)) if base == ".memstack" && dir == "browser-bridge"
+    );
+    if !in_bridge_dir {
+        return Err(
+            "browser bridge registry socketPath must live in .memstack/browser-bridge".to_string(),
+        );
     }
     Ok(())
 }
@@ -470,6 +527,16 @@ pub(crate) struct BrowserBridgeRuntime {
     config: BrowserBridgeConfig,
     registry_path: PathBuf,
     server_task: JoinHandle<()>,
+    #[cfg(unix)]
+    unix_listener: Option<UnixBridgeListener>,
+}
+
+/// Unix half of the bridge: the accept task plus the socket path so stop can
+/// unlink it.
+#[cfg(unix)]
+struct UnixBridgeListener {
+    socket_path: PathBuf,
+    task: JoinHandle<()>,
 }
 
 impl BrowserBridgeRuntime {
@@ -477,12 +544,35 @@ impl BrowserBridgeRuntime {
     /// conflicts), generate a fresh token, write the registry, and spawn the
     /// WebSocket server. `registry_path` is a parameter so tests stay out of
     /// the real home directory.
+    ///
+    /// On unix a peer-UID-checked unix socket next to the registry is served
+    /// alongside the TCP listener and advertised as `socketPath`; when the
+    /// unix bind fails the bridge stays TCP-only (the broker then never sees
+    /// a `socketPath` and keeps using `wsUrl`).
     pub(crate) fn start_with_registry_path(
         config: &BrowserBridgeConfig,
         registry_path: PathBuf,
     ) -> Result<Self, String> {
         let (listener, port) = bind_bridge_listener(config.port)?;
         let token = super::generate_capability_token();
+
+        #[cfg(unix)]
+        let unix_socket = match bridge_socket_path(&registry_path)
+            .and_then(|path| bind_unix_bridge_listener(&path).map(|listener| (listener, path)))
+        {
+            Ok(bound) => Some(bound),
+            Err(error) => {
+                tracing::warn!(%error, "browser bridge unix socket unavailable; serving TCP only");
+                None
+            }
+        };
+        #[cfg(unix)]
+        let socket_path = unix_socket
+            .as_ref()
+            .map(|(_, path)| path.to_string_lossy().into_owned());
+        #[cfg(not(unix))]
+        let socket_path = None;
+
         let registry = BridgeRegistry {
             schema_version: REGISTRY_SCHEMA_VERSION,
             ws_url: bridge_ws_url(port),
@@ -490,6 +580,7 @@ impl BrowserBridgeRuntime {
             extension_ids: config.extension_ids.clone(),
             sidecar_path: std::env::current_exe().map_err(|error| error.to_string())?,
             updated_at: super::now_iso(),
+            socket_path,
         };
         write_registry(&registry_path, &registry)?;
 
@@ -500,10 +591,18 @@ impl BrowserBridgeRuntime {
         let app = Router::new()
             .route("/api/v1/browser-bridge/ws", get(browser_bridge_ws))
             .with_state(Arc::clone(&server));
-        let server_task = tokio::spawn(async move {
-            if let Err(error) = axum::serve(listener, app).await {
-                tracing::warn!(%error, "browser bridge server stopped");
+        let server_task = tokio::spawn({
+            let app = app.clone();
+            async move {
+                if let Err(error) = axum::serve(listener, app).await {
+                    tracing::warn!(%error, "browser bridge server stopped");
+                }
             }
+        });
+        #[cfg(unix)]
+        let unix_listener = unix_socket.map(|(unix_listener, socket_path)| UnixBridgeListener {
+            task: tokio::spawn(serve_unix_bridge(unix_listener, app)),
+            socket_path,
         });
         Ok(Self {
             server,
@@ -511,6 +610,8 @@ impl BrowserBridgeRuntime {
             config: config.clone(),
             registry_path,
             server_task,
+            #[cfg(unix)]
+            unix_listener,
         })
     }
 
@@ -550,6 +651,15 @@ impl BrowserBridgeRuntime {
 
     pub(crate) fn stop(self) {
         self.server_task.abort();
+        #[cfg(unix)]
+        if let Some(unix_listener) = &self.unix_listener {
+            unix_listener.task.abort();
+            if let Err(error) = std::fs::remove_file(&unix_listener.socket_path) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    tracing::warn!(%error, "failed to remove browser bridge unix socket");
+                }
+            }
+        }
         if let Err(error) = std::fs::remove_file(&self.registry_path) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 tracing::warn!(%error, "failed to remove browser bridge registry");
@@ -595,6 +705,101 @@ fn into_tokio(listener: std::net::TcpListener) -> Result<(TcpListener, u16), Str
     Ok((listener, port))
 }
 
+/// Bind the unix bridge socket. A stale socket file left behind by a crashed
+/// sidecar is unlinked first; the fresh socket is forced to 0600 inside its
+/// 0700 bridge directory.
+#[cfg(unix)]
+fn bind_unix_bridge_listener(socket_path: &FsPath) -> Result<tokio::net::UnixListener, String> {
+    match std::fs::remove_file(socket_path) {
+        Ok(()) => {
+            tracing::info!(
+                path = %socket_path.display(),
+                "removed stale browser bridge unix socket"
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.to_string()),
+    }
+    let listener =
+        tokio::net::UnixListener::bind(socket_path).map_err(|error| error.to_string())?;
+    set_private_file_permissions(socket_path).map_err(|error| error.to_string())?;
+    Ok(listener)
+}
+
+/// Accept loop for the unix listener: every accepted connection must belong
+/// to this same user, then is served by the same axum router as the TCP
+/// listener. axum 0.7's `serve` is TCP-only, so the connection is handed to
+/// hyper's HTTP/1 driver (with WS upgrades) via `hyper-util` adapters.
+#[cfg(unix)]
+async fn serve_unix_bridge(listener: tokio::net::UnixListener, app: Router) {
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(accepted) => accepted,
+            Err(error) => {
+                tracing::warn!(%error, "browser bridge unix accept failed");
+                continue;
+            }
+        };
+        match unix_peer_uid(&stream) {
+            Ok(peer_uid) if peer_uid_matches_self(peer_uid, self_uid()) => {}
+            Ok(peer_uid) => {
+                tracing::warn!(
+                    peer_uid,
+                    "browser bridge unix peer rejected: belongs to a different user"
+                );
+                continue;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "browser bridge unix peer identity check failed");
+                continue;
+            }
+        }
+        let service = hyper_util::service::TowerToHyperService::new(app.clone());
+        tokio::spawn(async move {
+            let connection = hyper::server::conn::http1::Builder::new()
+                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                .with_upgrades();
+            if let Err(error) = connection.await {
+                tracing::debug!(%error, "browser bridge unix connection ended");
+            }
+        });
+    }
+}
+
+/// Pure decision behind the unix peer check, extracted for testing: the
+/// accepted peer must be the same user as this process.
+#[cfg(unix)]
+fn peer_uid_matches_self(peer_uid: u32, self_uid: u32) -> bool {
+    peer_uid == self_uid
+}
+
+#[cfg(unix)]
+fn self_uid() -> u32 {
+    // SAFETY: getuid cannot fail.
+    unsafe { libc::getuid() }
+}
+
+/// Effective uid of the process on the other end of an accepted unix socket.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn unix_peer_uid(stream: &tokio::net::UnixStream) -> std::io::Result<u32> {
+    use std::os::unix::io::AsRawFd;
+    let mut uid: libc::uid_t = 0;
+    let mut gid: libc::gid_t = 0;
+    // SAFETY: the fd belongs to the live accepted socket and uid/gid are
+    // valid out-pointers for the duration of the call.
+    if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(uid)
+}
+
+/// glibc exposes no `getpeereid` through the libc crate; the equivalent
+/// kernel check is `SO_PEERCRED`, which tokio wraps.
+#[cfg(target_os = "linux")]
+fn unix_peer_uid(stream: &tokio::net::UnixStream) -> std::io::Result<u32> {
+    stream.peer_cred().map(|credential| credential.uid())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -612,6 +817,7 @@ mod tests {
             extension_ids: default_extension_ids(),
             sidecar_path: PathBuf::from("/usr/local/bin/agistack-desktop-sidecar"),
             updated_at: "2026-08-07T00:00:00Z".to_string(),
+            socket_path: None,
         }
     }
 
@@ -632,6 +838,59 @@ mod tests {
         let round_trip: BridgeRegistry =
             serde_json::from_value(value).expect("deserialize registry");
         assert_eq!(round_trip, sample_registry());
+    }
+
+    #[test]
+    fn registry_socket_path_round_trips_and_is_omitted_when_absent() {
+        let mut registry = sample_registry();
+        registry.socket_path = Some("/home/dev/.memstack/browser-bridge/bridge.sock".to_string());
+        let value = serde_json::to_value(&registry).expect("serialize registry");
+        assert_eq!(
+            value.get("socketPath").expect("camelCase socketPath key"),
+            "/home/dev/.memstack/browser-bridge/bridge.sock"
+        );
+        assert!(value.get("socket_path").is_none());
+        let round_trip: BridgeRegistry =
+            serde_json::from_value(value).expect("deserialize registry");
+        assert_eq!(round_trip, registry);
+
+        // Windows shape: the key is absent entirely, not null.
+        let value = serde_json::to_value(sample_registry()).expect("serialize registry");
+        assert!(value.get("socketPath").is_none());
+        let round_trip: BridgeRegistry =
+            serde_json::from_value(value).expect("absent socketPath parses");
+        assert_eq!(round_trip, sample_registry());
+    }
+
+    #[test]
+    fn registry_validation_checks_the_socket_path_shape() {
+        let mut registry = sample_registry();
+        registry.socket_path = Some("/home/dev/.memstack/browser-bridge/bridge.sock".to_string());
+        validate_registry(&registry).expect("well-formed socketPath validates");
+
+        // Relative path.
+        registry.socket_path = Some(".memstack/browser-bridge/bridge.sock".to_string());
+        assert!(validate_registry(&registry).is_err());
+
+        // Wrong parent directory.
+        registry.socket_path = Some("/home/dev/.memstack/other/bridge.sock".to_string());
+        assert!(validate_registry(&registry).is_err());
+        registry.socket_path = Some("/home/dev/browser-bridge/bridge.sock".to_string());
+        assert!(validate_registry(&registry).is_err());
+
+        // Wrong filename.
+        registry.socket_path = Some("/home/dev/.memstack/browser-bridge/other.sock".to_string());
+        assert!(validate_registry(&registry).is_err());
+        registry.socket_path = Some("/home/dev/.memstack/browser-bridge".to_string());
+        assert!(validate_registry(&registry).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn peer_uid_matches_self_only_for_the_same_uid() {
+        assert!(peer_uid_matches_self(501, 501));
+        assert!(!peer_uid_matches_self(0, 501));
+        assert!(!peer_uid_matches_self(501, 0));
     }
 
     #[test]
@@ -685,12 +944,20 @@ mod tests {
         assert!(!config.enabled);
         assert_eq!(config.port, DEFAULT_BROWSER_BRIDGE_PORT);
         assert_eq!(config.extension_ids, vec![DEFAULT_EXTENSION_ID.to_string()]);
+        assert!(!config.full_cdp_access_enabled);
         assert_eq!(BrowserBridgeConfig::default(), config);
 
         let config: BrowserBridgeConfig =
             serde_json::from_str(r#"{"enabled": true}"#).expect("partial config parses");
         assert!(config.enabled);
         assert_eq!(config.port, DEFAULT_BROWSER_BRIDGE_PORT);
+        assert!(!config.full_cdp_access_enabled);
+
+        let config: BrowserBridgeConfig =
+            serde_json::from_str(r#"{"full_cdp_access_enabled": true}"#)
+                .expect("full cdp flag parses");
+        assert!(config.full_cdp_access_enabled);
+        assert!(!config.enabled);
 
         assert!(serde_json::from_str::<BrowserBridgeConfig>(r#"{"bogus": 1}"#).is_err());
     }
@@ -715,6 +982,7 @@ mod tests {
             config.browser_bridge.extension_ids,
             vec![DEFAULT_EXTENSION_ID.to_string()]
         );
+        assert!(!config.browser_bridge.full_cdp_access_enabled);
 
         let config: LocalRuntimeConfig = serde_json::from_str(
             r#"{"workspace_root": "/tmp/ws", "browser_bridge": {"enabled": true, "port": 9900}}"#,
@@ -735,29 +1003,53 @@ mod tests {
         .is_err());
     }
 
-    /// Test runtime on an ephemeral port with the registry in a temp dir.
+    /// Test runtime on an ephemeral port with the registry in a temp dir. The
+    /// registry lives under `<root>/.memstack/browser-bridge/` so the written
+    /// `socketPath` satisfies registry validation on unix.
     struct TestBridge {
         runtime: BrowserBridgeRuntime,
         registry: BridgeRegistry,
         root: PathBuf,
     }
 
+    impl TestBridge {
+        fn bridge_dir(&self) -> PathBuf {
+            self.root.join(".memstack").join("browser-bridge")
+        }
+
+        fn socket_path(&self) -> PathBuf {
+            self.bridge_dir().join(BRIDGE_SOCKET_FILE_NAME)
+        }
+    }
+
+    /// Short temp root for bridge fixtures: unix socket paths cap at ~104
+    /// bytes, and the macOS per-user temp dir alone nearly fills that.
+    fn short_temp_root(tag: &str) -> PathBuf {
+        #[cfg(unix)]
+        let base = PathBuf::from("/tmp");
+        #[cfg(not(unix))]
+        let base = std::env::temp_dir();
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        base.join(format!("ag-bb-{tag}-{}", &id[..8]))
+    }
+
     async fn start_test_bridge() -> TestBridge {
-        let root = std::env::temp_dir().join(format!(
-            "agistack-bridge-server-test-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
+        let root = short_temp_root("srv");
+        let bridge_dir = root.join(".memstack").join("browser-bridge");
+        std::fs::create_dir_all(&bridge_dir).unwrap();
         let config = BrowserBridgeConfig {
             enabled: true,
             port: 0,
             extension_ids: default_extension_ids(),
+            full_cdp_access_enabled: false,
         };
-        let runtime =
-            BrowserBridgeRuntime::start_with_registry_path(&config, root.join("registry.json"))
-                .expect("bridge starts on an ephemeral port");
+        let runtime = BrowserBridgeRuntime::start_with_registry_path(
+            &config,
+            bridge_dir.join("registry.json"),
+        )
+        .expect("bridge starts on an ephemeral port");
         let registry =
-            read_registry(&root.join("registry.json")).expect("registry written on start");
+            read_registry(&bridge_dir.join("registry.json")).expect("registry written on start");
         validate_registry(&registry).expect("written registry validates");
         assert_eq!(registry.ws_url, bridge_ws_url(runtime.server.port()));
         TestBridge {
@@ -789,6 +1081,117 @@ mod tests {
             .await
             .map_err(|error| error.to_string())?;
         Ok(ws)
+    }
+
+    /// Connect over the unix socket. HTTP-layer failures (401) surface the
+    /// status so auth tests can assert on it.
+    #[cfg(unix)]
+    async fn connect_broker_unix(
+        socket_path: &FsPath,
+        url: &str,
+        token: Option<&str>,
+    ) -> Result<tokio_tungstenite::WebSocketStream<tokio::net::UnixStream>, String> {
+        let mut request = url
+            .into_client_request()
+            .map_err(|error| error.to_string())?;
+        if let Some(token) = token {
+            request.headers_mut().insert(
+                tokio_tungstenite::tungstenite::http::header::AUTHORIZATION,
+                format!("Bearer {token}").parse().unwrap(),
+            );
+        }
+        let stream = tokio::net::UnixStream::connect(socket_path)
+            .await
+            .map_err(|error| error.to_string())?;
+        match tokio_tungstenite::client_async(request, stream).await {
+            Ok((ws, _)) => Ok(ws),
+            Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+                Err(format!("http status {}", response.status()))
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_socket_serves_the_authenticated_ws_endpoint() {
+        use std::os::unix::fs::PermissionsExt;
+        let bridge = start_test_bridge().await;
+
+        // The registry advertises the socket and the file is owner-only.
+        let socket_path = bridge.socket_path();
+        assert_eq!(bridge.registry.socket_path.as_deref(), socket_path.to_str());
+        let mode = std::fs::metadata(&socket_path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+
+        // A same-UID peer with the bearer token completes the WS handshake
+        // (the foreign-UID reject branch is covered by the pure
+        // peer_uid_matches_self test: only the local user can exist here).
+        let _ws = connect_broker_unix(
+            &socket_path,
+            &bridge.registry.ws_url,
+            Some(&bridge.registry.token),
+        )
+        .await
+        .expect("unix ws handshake with the valid token");
+        for _ in 0..50 {
+            if bridge.runtime.broker_connected() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(
+            bridge.runtime.broker_connected(),
+            "unix broker session must register"
+        );
+
+        // Missing and wrong tokens are rejected exactly like the TCP path.
+        let missing = connect_broker_unix(&socket_path, &bridge.registry.ws_url, None)
+            .await
+            .expect_err("missing token is rejected");
+        assert!(missing.contains("401"), "unexpected error: {missing}");
+        let wrong =
+            connect_broker_unix(&socket_path, &bridge.registry.ws_url, Some(&"f".repeat(64)))
+                .await
+                .expect_err("wrong token is rejected");
+        assert!(wrong.contains("401"), "unexpected error: {wrong}");
+
+        bridge.runtime.stop();
+        assert!(!socket_path.exists(), "stop removes the socket file");
+        std::fs::remove_dir_all(&bridge.root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_listener_replaces_a_stale_socket_file() {
+        let root = short_temp_root("stale");
+        let bridge_dir = root.join(".memstack").join("browser-bridge");
+        std::fs::create_dir_all(&bridge_dir).unwrap();
+        let socket_path = bridge_dir.join(BRIDGE_SOCKET_FILE_NAME);
+        std::fs::write(&socket_path, b"stale socket from a crashed sidecar").unwrap();
+
+        let config = BrowserBridgeConfig {
+            enabled: true,
+            port: 0,
+            extension_ids: default_extension_ids(),
+            full_cdp_access_enabled: false,
+        };
+        let runtime = BrowserBridgeRuntime::start_with_registry_path(
+            &config,
+            bridge_dir.join("registry.json"),
+        )
+        .expect("bridge starts despite the stale socket file");
+        let registry = read_registry(&bridge_dir.join("registry.json")).unwrap();
+        assert_eq!(registry.socket_path.as_deref(), socket_path.to_str());
+        connect_broker_unix(&socket_path, &registry.ws_url, Some(&registry.token))
+            .await
+            .expect("fresh unix socket serves the ws endpoint");
+        runtime.stop();
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// Read one text frame from the broker side and decode it.

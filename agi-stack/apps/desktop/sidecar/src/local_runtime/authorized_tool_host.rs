@@ -342,6 +342,8 @@ const MUTATING_TOOLS: &[&str] = &[
     "browser_new_tab",
     "browser_claim_tab",
     "browser_mark_tab",
+    "browser_cdp_raw",
+    "browser_fill_credentials",
 ];
 
 #[cfg(test)]
@@ -470,6 +472,8 @@ mod tests {
             "browser_new_tab",
             "browser_claim_tab",
             "browser_mark_tab",
+            "browser_cdp_raw",
+            "browser_fill_credentials",
         ] {
             assert_eq!(tool_effect(tool), Some(ToolEffect::Mutate), "tool {tool}");
             assert!(
