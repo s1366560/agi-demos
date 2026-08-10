@@ -84,7 +84,10 @@ export async function observeProjectAdministrationScope(
   ) {
     throw projectAdministrationError('project_administration_scope_contract_invalid');
   }
-  const userId = requireIdentifier(userPayload.id, 'project_administration_scope_contract_invalid');
+  const userId = requireIdentifier(
+    userPayload.user_id,
+    'project_administration_scope_contract_invalid',
+  );
   const member = members.find((value: unknown) => isRecord(value) && value.user_id === userId);
   if (
     !isRecord(member) ||

@@ -131,6 +131,30 @@ test('three project administration clients use trusted-session authority and rol
   }
 });
 
+test('project administration rejects the legacy id-only auth identity contract', async () => {
+  await withFetch(
+    async (url, init = {}) => {
+      if (new URL(String(url)).pathname === '/api/v1/auth/me') {
+        return json({ id: 'user-1', email: 'owner@example.test', name: 'Owner' });
+      }
+      return authorityResponse(String(url), init);
+    },
+    async () => {
+      for (const client of [
+        createProjectSchemaClient(cloudConfig),
+        createProjectMaintenanceClient(cloudConfig),
+        createProjectSettingsClient(cloudConfig),
+      ]) {
+        await assert.rejects(client.load(cloudScope), (error) => {
+          assert.equal(error instanceof DesktopApiError, true);
+          assert.equal(reasonCode(error), 'project_administration_scope_contract_invalid');
+          return true;
+        });
+      }
+    },
+  );
+});
+
 test('three Local project administration clients fail closed before network access', async () => {
   let fetchCalls = 0;
   await withFetch(
@@ -386,7 +410,7 @@ function authorityResponse(url, init = {}) {
     });
   }
   if (path === '/api/v1/auth/me') {
-    return json({ id: 'user-1', email: 'owner@example.test', name: 'Owner' });
+    return json({ user_id: 'user-1', email: 'owner@example.test', name: 'Owner' });
   }
   if (path === '/api/v1/projects/project-1/members') {
     return json({ members: [memberPayload()], total: 1 });
