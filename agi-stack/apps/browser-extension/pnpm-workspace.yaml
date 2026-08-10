@@ -1,0 +1,3 @@
+# Standalone package: the repo root pnpm-workspace.yaml does not list this
+# directory as a member, so declare this package its own workspace root.
+packages: []

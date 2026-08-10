@@ -1,0 +1,23 @@
+{
+  "name": "@memstack/browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MemStack Browser Bridge \u2014 MV3 extension relaying CDP to the MemStack desktop sidecar.",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "postinstall": "wxt prepare",
+    "test": "vitest run",
+    "test:snapshot": "node scripts/test-snapshot.mjs",
+    "test:bridge": "node scripts/smoke-bridge.mjs"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "wxt": "^0.21.3"
+  },
+  "devDependencies": {
+    "playwright": "1.57.0"
+  }
+}

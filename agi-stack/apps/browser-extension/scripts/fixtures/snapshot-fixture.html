@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Snapshot Fixture</title>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/home">Home</a>
+        <a href="/about">About</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Fixture Page</h1>
+      <p>Some static paragraph text.</p>
+      <form id="login">
+        <label for="q">Search</label>
+        <input id="q" type="search" placeholder="Search the docs" value="abc" />
+        <input id="agree" type="checkbox" checked />
+        <label for="agree">Agree to terms</label>
+        <input id="submit" type="submit" value="Save" />
+        <button id="disabled-btn" disabled>Disabled Action</button>
+        <select id="sel" aria-label="Choice">
+          <option value="a">Alpha</option>
+          <option value="b" selected>Beta</option>
+        </select>
+        <textarea id="notes" placeholder="Notes"></textarea>
+      </form>
+      <img src="missing.png" alt="Logo image" width="40" height="40" />
+      <button id="hidden-display" style="display: none">Hidden Display</button>
+      <button id="hidden-visibility" style="visibility: hidden">Hidden Visibility</button>
+      <div aria-hidden="true">
+        <button id="hidden-aria">Hidden Aria</button>
+      </div>
+      <div style="width: 0; height: 0; overflow: hidden">
+        <button id="hidden-zero">Hidden Zero Box</button>
+      </div>
+      <x-widget></x-widget>
+      <iframe
+        title="Inner frame"
+        srcdoc="<!doctype html><html><body><h2>Frame Heading</h2><button>Frame Button</button><a href='/in-frame'>Frame Link</a></body></html>"
+      ></iframe>
+    </main>
+    <footer>Footer text</footer>
+    <script>
+      customElements.define(
+        'x-widget',
+        class extends HTMLElement {
+          connectedCallback() {
+            const root = this.attachShadow({ mode: 'open' });
+            root.innerHTML = '<button id="shadow-btn">Shadow Action</button>';
+          }
+        },
+      );
+    </script>
+  </body>
+</html>

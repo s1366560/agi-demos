@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MemStack Browser Bridge</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <h1>MemStack Browser Bridge</h1>
+      <p class="note">
+        This extension is paired automatically by the MemStack desktop app. There is nothing to
+        configure here.
+      </p>
+      <dl class="status">
+        <dt>Extension ID</dt>
+        <dd><code id="extension-id">…</code></dd>
+        <dt>Native connection</dt>
+        <dd><span id="connection-state" class="pill">…</span></dd>
+        <dt>Last connected at</dt>
+        <dd id="last-connected-at">—</dd>
+        <dt>Last error</dt>
+        <dd id="last-error">—</dd>
+      </dl>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
