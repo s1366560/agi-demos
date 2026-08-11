@@ -9,9 +9,12 @@
     "dev": "wxt",
     "build": "wxt build",
     "postinstall": "wxt prepare",
-    "test": "vitest run",
+    "test": "vitest run --exclude scripts/browser-release-contract.test.mjs && node --test scripts/browser-release-contract.test.mjs",
     "test:snapshot": "node scripts/test-snapshot.mjs",
-    "test:bridge": "node scripts/smoke-bridge.mjs"
+    "test:bridge": "node scripts/smoke-bridge.mjs",
+    "release:verify": "node scripts/browser-release-contract.mjs verify",
+    "release:update-manifest": "node scripts/browser-release-contract.mjs generate-update-manifest",
+    "enterprise:generate": "node scripts/browser-release-contract.mjs generate-policy"
   },
   "dependencies": {
     "typescript": "^5.9.3",

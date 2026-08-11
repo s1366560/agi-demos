@@ -34,7 +34,9 @@ use agistack_adapters_browser::{
     bridge_ws_url,
     host::{BridgeEndpoint, BrowserToolHost},
     jsonrpc::{self, JsonRpcMessage},
-    protocol::BridgeNotification,
+    protocol::{
+        protocol_ranges_overlap, BridgeNotification, PROTOCOL_MAX, PROTOCOL_MIN, PROTOCOL_VERSION,
+    },
 };
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use async_trait::async_trait;
@@ -141,6 +143,8 @@ pub struct BrowserBridgeStatus {
     /// Backend ids with a live broker session (sorted; empty when offline).
     pub connected_backends: Vec<String>,
     pub extension_ids: Vec<String>,
+    pub extension_id: Option<String>,
+    pub extension_version: Option<String>,
 }
 
 /// Registry file written by the sidecar and consumed by the broker. Serialized
@@ -390,11 +394,43 @@ impl SidePanelSessionMinter {
 /// the previous one.
 struct BrokerSession {
     backend: String,
+    hello: BrokerHelloIdentity,
     transport: BridgeTransport,
     outbound: mpsc::Sender<String>,
     waiters: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     closed: AtomicBool,
     notify_closed: Notify,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BrokerHelloIdentity {
+    backend: String,
+    extension_id: Option<String>,
+    extension_version: Option<String>,
+    protocol_version: u32,
+    protocol_min: u32,
+    protocol_max: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrokerHelloWire {
+    #[serde(default = "default_protocol_version")]
+    protocol_version: u32,
+    #[serde(default)]
+    protocol_min: Option<u32>,
+    #[serde(default)]
+    protocol_max: Option<u32>,
+    #[serde(default)]
+    backend: Option<String>,
+    #[serde(default)]
+    extension_id: Option<String>,
+    #[serde(default)]
+    extension_version: Option<String>,
+}
+
+fn default_protocol_version() -> u32 {
+    PROTOCOL_VERSION
 }
 
 impl BrokerSession {
@@ -494,6 +530,14 @@ impl BrowserBridgeServer {
             .collect();
         backends.sort();
         backends
+    }
+
+    fn chrome_extension_identity(&self) -> Option<BrokerHelloIdentity> {
+        self.backends
+            .lock()
+            .expect("browser bridge backends")
+            .get(BACKEND_CHROME_EXTENSION)
+            .map(|session| session.hello.clone())
     }
 
     /// Issue one bridge request to the connected Chrome-extension broker,
@@ -681,7 +725,7 @@ async fn broker_hello(
     server: &BrowserBridgeServer,
     sink: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     stream: &mut futures_util::stream::SplitStream<WebSocket>,
-) -> Option<String> {
+) -> Option<BrokerHelloIdentity> {
     let hello_id = server.next_id.fetch_add(1, Ordering::SeqCst);
     sink.send(Message::Text(jsonrpc::encode_request(
         hello_id,
@@ -701,13 +745,13 @@ async fn broker_hello(
             message = stream.next() => {
                 match message {
                     Some(Ok(Message::Text(text))) => {
-                        if let Some(backend) = hello_backend(&text, hello_id) {
-                            return Some(backend);
+                        if let Some(identity) = hello_identity(&text, hello_id) {
+                            return Some(identity);
                         }
                     }
                     Some(Ok(Message::Binary(bytes))) => {
-                        if let Some(backend) = hello_backend(&String::from_utf8_lossy(&bytes), hello_id) {
-                            return Some(backend);
+                        if let Some(identity) = hello_identity(&String::from_utf8_lossy(&bytes), hello_id) {
+                            return Some(identity);
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => return None,
@@ -724,23 +768,34 @@ async fn broker_hello(
 
 /// The backend id out of the hello response correlated to `hello_id`;
 /// `None` for any other frame.
-fn hello_backend(payload: &str, hello_id: u64) -> Option<String> {
+fn hello_identity(payload: &str, hello_id: u64) -> Option<BrokerHelloIdentity> {
     let Ok(JsonRpcMessage::Response { id, result }) = jsonrpc::decode(payload) else {
         return None;
     };
     if id != hello_id {
         return None;
     }
-    let backend = result.ok().and_then(|result| {
-        result
-            .get("backend")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    });
-    Some(match backend.as_deref() {
+    let wire: BrokerHelloWire = serde_json::from_value(result.ok()?).ok()?;
+    let protocol_min = wire.protocol_min.unwrap_or(wire.protocol_version);
+    let protocol_max = wire.protocol_max.unwrap_or(wire.protocol_version);
+    if wire.protocol_version < protocol_min
+        || wire.protocol_version > protocol_max
+        || !protocol_ranges_overlap(PROTOCOL_MIN, PROTOCOL_MAX, protocol_min, protocol_max)
+    {
+        return None;
+    }
+    let backend = match wire.backend.as_deref() {
         Some(BACKEND_IAB) => BACKEND_IAB.to_string(),
         // Absent/unknown → the current extension build's implicit identity.
         _ => BACKEND_CHROME_EXTENSION.to_string(),
+    };
+    Some(BrokerHelloIdentity {
+        backend,
+        extension_id: wire.extension_id,
+        extension_version: wire.extension_version,
+        protocol_version: wire.protocol_version,
+        protocol_min,
+        protocol_max,
     })
 }
 
@@ -750,10 +805,11 @@ async fn serve_broker(
     transport: BridgeTransport,
 ) {
     let (mut sink, mut stream) = socket.split();
-    let Some(backend) = broker_hello(&server, &mut sink, &mut stream).await else {
+    let Some(hello) = broker_hello(&server, &mut sink, &mut stream).await else {
         let _ = sink.close().await;
         return;
     };
+    let backend = hello.backend.clone();
     let (outbound, mut outbound_rx) = mpsc::channel::<String>(OUTBOUND_BUFFER);
     let mut heartbeat = tokio::time::interval(server.heartbeat_interval);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -763,6 +819,7 @@ async fn serve_broker(
     let mut unanswered_heartbeats: u8 = 0;
     let session = Arc::new(BrokerSession {
         backend: backend.clone(),
+        hello,
         transport,
         outbound,
         waiters: Mutex::new(HashMap::new()),
@@ -1012,6 +1069,16 @@ impl BrowserBridgeRuntime {
         self.server.connected_backends()
     }
 
+    pub(crate) fn extension_identity(&self) -> Option<(String, Option<String>)> {
+        self.server
+            .chrome_extension_identity()
+            .and_then(|identity| {
+                identity
+                    .extension_id
+                    .map(|extension_id| (extension_id, identity.extension_version))
+            })
+    }
+
     #[cfg_attr(not(test), allow(dead_code))] // exercised by bridge tests
     pub(crate) fn tool_host(&self) -> Arc<dyn ToolHost> {
         Arc::clone(&self.tool_host) as Arc<dyn ToolHost>
@@ -1221,6 +1288,36 @@ mod tests {
             updated_at: "2026-08-07T00:00:00Z".to_string(),
             socket_path: None,
         }
+    }
+
+    #[test]
+    fn hello_protocol_contract_accepts_legacy_current_and_next_only() {
+        let legacy = hello_identity(
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":1}}"#,
+            7,
+        )
+        .expect("legacy N hello remains compatible");
+        assert_eq!((legacy.protocol_min, legacy.protocol_max), (1, 1));
+
+        let current = hello_identity(
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":1,"protocolMin":1,"protocolMax":2,"extensionId":"extension","extensionVersion":"0.1.0"}}"#,
+            7,
+        )
+        .expect("current N hello is compatible");
+        assert_eq!((current.protocol_min, current.protocol_max), (1, 2));
+
+        let next = hello_identity(
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":2,"protocolMin":1,"protocolMax":2}}"#,
+            7,
+        )
+        .expect("N+1 hello is compatible during the rollout window");
+        assert_eq!(next.protocol_version, 2);
+
+        assert!(hello_identity(
+            r#"{"jsonrpc":"2.0","id":7,"result":{"protocolVersion":3,"protocolMin":3,"protocolMax":3}}"#,
+            7,
+        )
+        .is_none());
     }
 
     #[test]

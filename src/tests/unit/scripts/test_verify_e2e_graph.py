@@ -3,10 +3,14 @@
 import pytest
 
 from scripts.verify_e2e_graph import (
+    verify_backend_capability,
+    verify_communities,
+    verify_community_search,
     verify_entities,
     verify_episode,
     verify_fixture_usage,
     verify_graph,
+    verify_graph_traversal,
     verify_relationships,
     verify_search,
 )
@@ -157,3 +161,93 @@ def test_verify_fixture_usage_requires_chat_and_embedding_calls() -> None:
             {"chat_requests": 2, "embedding_requests": 3},
             {"chat_requests": 5, "embedding_requests": 3},
         )
+
+
+def test_verify_community_surfaces_accept_scoped_members_and_episode() -> None:
+    community_id = verify_communities(
+        {
+            "communities": [
+                {
+                    "uuid": "community-e2e",
+                    "project_id": PROJECT_ID,
+                    "member_count": 2,
+                }
+            ]
+        },
+        project_id=PROJECT_ID,
+    )
+    verify_graph_traversal(
+        {
+            "search_type": "graph_traversal",
+            "results": [{"uuid": ORG_ID, "name": "Deterministic Graph Labs"}],
+        },
+        expected_entity_id=ORG_ID,
+    )
+    verify_community_search(
+        {
+            "search_type": "community",
+            "results": [
+                {"uuid": PERSON_ID, "type": "entity"},
+                {"uuid": EPISODE_ID, "type": "episode"},
+            ],
+        },
+        person_id=PERSON_ID,
+        episode_id=EPISODE_ID,
+    )
+    assert community_id == "community-e2e"
+
+
+def test_verify_community_surfaces_reject_missing_or_cross_project_results() -> None:
+    with pytest.raises(RuntimeError, match="community"):
+        verify_communities(
+            {
+                "communities": [
+                    {
+                        "uuid": "community-e2e",
+                        "project_id": "other-project",
+                        "member_count": 2,
+                    }
+                ]
+            },
+            project_id=PROJECT_ID,
+        )
+
+    with pytest.raises(RuntimeError, match="traversal"):
+        verify_graph_traversal(
+            {"search_type": "graph_traversal", "results": []},
+            expected_entity_id=ORG_ID,
+        )
+
+
+@pytest.mark.parametrize(
+    ("available", "payload"),
+    [
+        (
+            True,
+            {
+                "graph_backend": {
+                    "status": "available",
+                    "reason_code": None,
+                    "retryable": False,
+                    "allowed_actions": ["search", "traverse", "rebuild_communities"],
+                }
+            },
+        ),
+        (
+            False,
+            {
+                "graph_backend": {
+                    "status": "degraded",
+                    "reason_code": "graph_backend_unavailable",
+                    "retryable": True,
+                    "allowed_actions": ["retry"],
+                }
+            },
+        ),
+    ],
+)
+def test_verify_backend_capability_accepts_stable_available_and_degraded_contracts(
+    available: bool,
+    payload: object,
+) -> None:
+    verify_backend_capability(payload, available=available)

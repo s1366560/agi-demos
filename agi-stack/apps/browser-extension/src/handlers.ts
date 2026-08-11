@@ -20,6 +20,9 @@ import { createTabGroupRegistry } from './tab-groups';
 
 export const CDP_PROTOCOL_VERSION = '1.3';
 export const CDP_COMMAND_TIMEOUT_MS = 10_000;
+export const BRIDGE_PROTOCOL_VERSION = 1;
+export const BRIDGE_PROTOCOL_MIN = BRIDGE_PROTOCOL_VERSION;
+export const BRIDGE_PROTOCOL_MAX = BRIDGE_PROTOCOL_VERSION + 1;
 
 const EXCLUDED_TAB_URL_PREFIXES = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
 
@@ -238,9 +241,12 @@ export function createBridge(chrome: ChromeApi): Bridge {
 
   const handlers: Record<string, Handler> = {
     hello: () => ({
-      protocolVersion: 1,
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      protocolMin: BRIDGE_PROTOCOL_MIN,
+      protocolMax: BRIDGE_PROTOCOL_MAX,
       backend: 'chrome-extension',
       extensionId: chrome.runtime.id,
+      extensionVersion: chrome.runtime.getManifest().version,
       capabilities: ['cdp', 'tabs', 'events'],
     }),
     ping: () => ({}),

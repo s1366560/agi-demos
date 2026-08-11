@@ -191,12 +191,12 @@ fn manifest_status_distinguishes_all_ownership_states() {
     let collision = root.target("Google Chrome");
     let invalid = root.target("Brave");
     let missing = root.target("Microsoft Edge");
-    let host_path = Path::new("/opt/memstack/current-sidecar");
-    write_manifest(&valid, &manifest(host_path));
-    write_manifest(
-        &owned_stale,
-        &manifest(Path::new("/opt/memstack/old-sidecar")),
-    );
+    let host_path = root.path.join("current-sidecar");
+    std::fs::write(&host_path, b"current-broker").expect("write current broker fixture");
+    write_manifest(&valid, &manifest(&host_path));
+    let stale_host_path = root.path.join("old-sidecar");
+    std::fs::write(&stale_host_path, b"stale-broker").expect("write stale broker fixture");
+    write_manifest(&owned_stale, &manifest(&stale_host_path));
     std::fs::create_dir_all(&collision.hosts_dir).expect("create collision directory");
     std::fs::write(
         collision.manifest_path(),
@@ -208,9 +208,9 @@ fn manifest_status_distinguishes_all_ownership_states() {
 
     let statuses = manifest_statuses_for_targets(
         vec![valid, owned_stale, collision, invalid, missing],
-        host_path,
+        &host_path,
     );
-    let states: Vec<_> = statuses.into_iter().map(|status| status.state).collect();
+    let states: Vec<_> = statuses.iter().map(|status| status.state).collect();
     assert_eq!(
         states,
         vec![
@@ -221,6 +221,33 @@ fn manifest_status_distinguishes_all_ownership_states() {
             ManifestState::Missing,
         ]
     );
+    assert_eq!(statuses[0].reason_code, "registration_valid");
+    assert_eq!(
+        statuses[0].allowed_actions,
+        vec![RegistrationAction::Uninstall]
+    );
+    assert!(statuses[0].broker_digest.is_some());
+    assert_eq!(statuses[1].reason_code, "owned_registration_stale");
+    assert_eq!(
+        statuses[1].allowed_actions,
+        vec![RegistrationAction::Repair, RegistrationAction::Uninstall]
+    );
+    assert!(statuses[1].broker_digest.is_some());
+    assert_eq!(statuses[2].reason_code, "foreign_registration_collision");
+    assert!(statuses[2].allowed_actions.is_empty());
+    assert_eq!(statuses[3].reason_code, "registration_invalid");
+    assert!(statuses[3].allowed_actions.is_empty());
+    assert_eq!(statuses[4].reason_code, "registration_missing");
+    assert_eq!(
+        statuses[4].allowed_actions,
+        vec![RegistrationAction::Install]
+    );
+    assert!(statuses
+        .iter()
+        .all(|status| !status.registration_location.is_empty()));
+    let serialized = serde_json::to_value(&statuses[1]).expect("serialize status");
+    assert_eq!(serialized["state"], "owned_stale");
+    assert_eq!(serialized["allowedActions"], json!(["repair", "uninstall"]));
 }
 
 #[cfg(unix)]

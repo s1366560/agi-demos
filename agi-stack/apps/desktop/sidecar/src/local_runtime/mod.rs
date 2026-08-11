@@ -416,6 +416,9 @@ impl LocalRuntimeState {
         config: &browser_bridge::BrowserBridgeConfig,
     ) -> browser_bridge::BrowserBridgeStatus {
         let runtime = self.browser_bridge.lock().expect("browser bridge runtime");
+        let connected_extension = runtime
+            .as_ref()
+            .and_then(|runtime| runtime.extension_identity());
         browser_bridge::BrowserBridgeStatus {
             enabled: config.enabled,
             port: runtime
@@ -429,6 +432,11 @@ impl LocalRuntimeState {
                 .map(|runtime| runtime.connected_backends())
                 .unwrap_or_default(),
             extension_ids: config.extension_ids.clone(),
+            extension_id: connected_extension
+                .as_ref()
+                .map(|(extension_id, _)| extension_id.clone())
+                .or_else(|| config.extension_ids.first().cloned()),
+            extension_version: connected_extension.and_then(|(_, version)| version),
         }
     }
 

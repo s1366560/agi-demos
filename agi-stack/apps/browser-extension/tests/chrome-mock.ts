@@ -96,6 +96,7 @@ export function createChromeMock(): { chrome: ChromeMock; port: MockPort } {
   const chrome: ChromeMock = {
     runtime: {
       id: 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
+      getManifest: () => ({ version: '0.1.0' }),
       lastError: null,
       connectNative: vi.fn<ChromeApi['runtime']['connectNative']>(() => port),
       sendMessage: vi.fn<ChromeApi['runtime']['sendMessage']>(async () => undefined),

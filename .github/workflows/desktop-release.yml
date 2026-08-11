@@ -11,17 +11,17 @@ concurrency:
   group: desktop-release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  AGISTACK_RELEASE_VERSION: '0.1.0'
-
 jobs:
   authorize:
     name: Authorize protected desktop release tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
     steps:
       - name: Authorize immutable release identity
+        id: identity
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,11 +60,6 @@ jobs:
           }
           NODE
 
-          expected_tag="v${AGISTACK_RELEASE_VERSION}"
-          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
-            echo "Release tag must exactly match $expected_tag" >&2
-            exit 1
-          fi
           resolved_tag_commit="$(
             gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq '.sha'
           )"
@@ -86,20 +81,17 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/contents/agi-stack/apps/desktop/package.json?ref=${GITHUB_SHA}" \
             --jq '.content' | tr -d '\n' | base64 --decode > "$authorized_package"
           AUTHORIZED_PACKAGE="$authorized_package" node <<'NODE'
-          const { readFileSync } = require('node:fs');
+          const { appendFileSync, readFileSync } = require('node:fs');
           const packageJson = JSON.parse(
             readFileSync(process.env.AUTHORIZED_PACKAGE, 'utf8'),
           );
-          const expectedVersion = process.env.AGISTACK_RELEASE_VERSION;
-          if (packageJson.version !== expectedVersion) {
-            throw new Error(
-              `authorized desktop package version must be ${expectedVersion}; ` +
-                `found ${packageJson.version}`,
-            );
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
+            throw new Error('authorized desktop package version is invalid');
           }
           if (process.env.GITHUB_REF_NAME !== `v${packageJson.version}`) {
             throw new Error('release tag must exactly match the authorized package version');
           }
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${packageJson.version}\n`, 'utf8');
           NODE
 
   parity-preflight:
@@ -108,6 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      AGISTACK_RELEASE_VERSION: ${{ needs.authorize.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -129,7 +123,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: agi-stack/apps/desktop/pnpm-lock.yaml
 
-      - name: Validate fixed release version and tag
+      - name: Validate dynamically authorized release version and tag
         shell: node {0}
         working-directory: agi-stack/apps/desktop
         run: |
@@ -172,6 +166,8 @@ jobs:
     environment: desktop-release-signing
     permissions:
       contents: read
+    env:
+      AGISTACK_RELEASE_VERSION: ${{ needs.authorize.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -210,9 +206,15 @@ jobs:
             'APPLE_TEAM_ID',
           ];
           const missing = required.filter((name) => !process.env[name]);
-          if (missing.length) throw new Error(`missing release secrets: ${missing.join(', ')}`);
+          if (missing.length) {
+            throw new Error(
+              `release_status=blocked reason=release_signing_credentials_missing missing=${missing.join(',')}`,
+            );
+          }
           if (!/^[A-Z0-9]{10}$/.test(process.env.APPLE_TEAM_ID)) {
-            throw new Error('APPLE_TEAM_ID must be a 10-character team identifier');
+            throw new Error(
+              'release_status=blocked reason=release_signing_certificate_invalid field=APPLE_TEAM_ID',
+            );
           }
 
       - name: Validate Windows signing credentials
@@ -225,10 +227,16 @@ jobs:
         run: |
           const required = ['WIN_CSC_LINK', 'WIN_CSC_KEY_PASSWORD', 'WIN_CSC_SHA1'];
           const missing = required.filter((name) => !process.env[name]);
-          if (missing.length) throw new Error(`missing release secrets: ${missing.join(', ')}`);
+          if (missing.length) {
+            throw new Error(
+              `release_status=blocked reason=release_signing_credentials_missing missing=${missing.join(',')}`,
+            );
+          }
           const thumbprint = process.env.WIN_CSC_SHA1.replace(/\s/g, '').toUpperCase();
           if (!/^[A-F0-9]{40}$/.test(thumbprint)) {
-            throw new Error('WIN_CSC_SHA1 must be a 40-character certificate thumbprint');
+            throw new Error(
+              'release_status=blocked reason=release_signing_certificate_invalid field=WIN_CSC_SHA1',
+            );
           }
 
       - name: Checkout code
@@ -304,6 +312,9 @@ jobs:
 
       - name: Stage native sidecar
         run: corepack pnpm run stage:sidecar
+
+      - name: Smoke update recovery helper protocol
+        run: corepack pnpm run smoke:update-recovery
 
       - name: Materialize App Store Connect API key
         if: runner.os == 'macOS'
@@ -414,8 +425,8 @@ jobs:
           if-no-files-found: error
 
   stage-draft:
-    name: Stage verified desktop release draft
-    needs: build
+    name: Stage verified desktop prerelease
+    needs: [authorize, build]
     runs-on: ubuntu-latest
     concurrency:
       group: desktop-release-draft-${{ github.ref }}
@@ -423,6 +434,8 @@ jobs:
     permissions:
       actions: read
       contents: write
+    env:
+      AGISTACK_RELEASE_VERSION: ${{ needs.authorize.outputs.version }}
     steps:
       - name: Checkout immutable draft validator
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -603,19 +616,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Assert the release remains a draft
+      - name: Publish verified assets as a prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Assert the release is prerelease-only
         shell: bash
         run: |
           set -euo pipefail
           release_json="$(
             gh release view "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
-              --json isDraft,tagName
+              --json isDraft,isPrerelease,tagName
           )"
           is_draft="$(jq -r '.isDraft' <<<"$release_json")"
+          is_prerelease="$(jq -r '.isPrerelease' <<<"$release_json")"
           release_tag="$(jq -r '.tagName' <<<"$release_json")"
-          if [[ "$is_draft" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
-            echo "Release must remain a draft for the exact tag" >&2
+          if [[ "$is_draft" != "false" || "$is_prerelease" != "true" || "$release_tag" != "$GITHUB_REF_NAME" ]]; then
+            echo "Release must be prerelease-only for the exact tag" >&2
             exit 1
           fi
         env:

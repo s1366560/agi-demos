@@ -24,10 +24,12 @@ export default defineConfig(({ command }) => ({
       // production build would leave Rollup in watch mode forever.
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
-        input: resolve(desktopRoot, 'electron/main/index.ts'),
+        input: {
+          index: resolve(desktopRoot, 'electron/main/index.ts'),
+        },
         output: {
           format: 'es',
-          entryFileNames: 'index.js',
+          entryFileNames: '[name].js',
         },
       },
     },

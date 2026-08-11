@@ -2,6 +2,9 @@
 
 use std::{path::PathBuf, process};
 
+use agistack_adapters_browser::protocol::{
+    PROTOCOL_MAX as BRIDGE_PROTOCOL_MAX, PROTOCOL_MIN as BRIDGE_PROTOCOL_MIN,
+};
 use base64::{
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
     Engine as _,
@@ -368,6 +371,11 @@ fn browser_bridge_status_payload(runtime: &LocalRuntimeService) -> Result<Value,
         "enabled": status.browser_bridge.enabled,
         "port": status.browser_bridge.port,
         "brokerConnected": status.browser_bridge.broker_connected,
+        "extensionId": status.browser_bridge.extension_id,
+        "extensionVersion": status.browser_bridge.extension_version,
+        "hostVersion": env!("CARGO_PKG_VERSION"),
+        "protocolMin": BRIDGE_PROTOCOL_MIN,
+        "protocolMax": BRIDGE_PROTOCOL_MAX,
         "manifests": native_host::manifest_statuses(),
         "registryPath": registry_path,
         "extensionIds": status.browser_bridge.extension_ids,

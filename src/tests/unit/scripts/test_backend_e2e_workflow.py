@@ -4,6 +4,7 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "e2e.yml"
+NEO4J_RUNTIME_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "neo4j-runtime.yml"
 FULL_SANDBOX_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "sandbox-full-runtime.yml"
 COMPOSE_PATH = REPOSITORY_ROOT / "docker-compose.yml"
 DOCKERIGNORE_PATH = REPOSITORY_ROOT / ".dockerignore"
@@ -54,6 +55,37 @@ def test_backend_e2e_job_provisions_real_dependencies_and_runs_smoke() -> None:
     assert environment["SANDBOX_DOCKER_SOCKET_ENABLED"] is False
     assert environment["SANDBOX_PIP_CACHE_ENABLED"] is False
     assert environment["SANDBOX_HOST_MEMSTACK_PATH"] == "/tmp/memstack-e2e-meta"
+
+
+def test_neo4j_runtime_job_is_dedicated_pinned_and_restartable() -> None:
+    workflow = yaml.safe_load(NEO4J_RUNTIME_WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+    job = workflow["jobs"]["neo4j-runtime"]
+    assert job["runs-on"] == "ubuntu-latest"
+    assert "if" not in job
+    assert job.get("continue-on-error") is not True
+
+    commands = "\n".join(str(step.get("run", "")) for step in job["steps"])
+    pinned_image = (
+        "neo4j:5.26-community@"
+        "sha256:d9dd3dc7d1c78fa959191ff02dbdcbefadceaf83eee23428fb92a58cac8ad3fe"
+    )
+    assert pinned_image in commands
+    assert "docker volume create memstack-neo4j-runtime-data" in commands
+    assert "--name memstack-neo4j-runtime" in commands
+    assert "docker stop memstack-neo4j-runtime" in commands
+    assert "docker start memstack-neo4j-runtime" in commands
+    assert "scripts.verify_e2e_graph" in commands
+    assert "scripts.verify_neo4j_runtime --expect degraded" in commands
+    assert "scripts.verify_neo4j_runtime --expect available" in commands
+    assert "CALL db.awaitIndexes" in commands
+    assert "SHOW INDEXES" in commands
+    assert "RuntimeSentinel" in commands
+
+    cleanup = next(step for step in job["steps"] if step.get("name") == "Clean Neo4j runtime")
+    assert cleanup["if"] == "always()"
+    assert "docker rm --force memstack-neo4j-runtime" in cleanup["run"]
+    assert "docker volume rm memstack-neo4j-runtime-data" in cleanup["run"]
 
 
 def test_compose_api_uses_service_hostnames_for_python_dependencies() -> None:

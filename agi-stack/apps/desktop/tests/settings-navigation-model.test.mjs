@@ -13,6 +13,7 @@ const labels = {
   account: ['Account', 'Identity and sign-in'],
   workspace: ['Workspace', 'Tenant and project context'],
   general: ['General', 'Language and region'],
+  updates: ['Updates', 'Release status and recovery'],
   appearance: ['Appearance', 'Theme and density'],
   notifications: ['Notifications', 'Review alerts'],
   shortcuts: ['Keyboard shortcuts', 'Search by name or keypress'],
@@ -28,7 +29,10 @@ const labels = {
 test('settings information architecture matches the approved prototype order', () => {
   assert.deepEqual(SETTINGS_GROUPS, [
     { id: 'account_context', sections: ['account', 'workspace'] },
-    { id: 'preferences', sections: ['general', 'appearance', 'notifications', 'shortcuts', 'browser'] },
+    {
+      id: 'preferences',
+      sections: ['general', 'updates', 'appearance', 'notifications', 'shortcuts', 'browser'],
+    },
     {
       id: 'ai_resources',
       sections: ['models', 'mcp', 'skills', 'plugins', 'agents', 'subagents'],
@@ -49,6 +53,7 @@ test('empty settings search preserves the full section order', () => {
     'account',
     'workspace',
     'general',
+    'updates',
     'appearance',
     'notifications',
     'shortcuts',

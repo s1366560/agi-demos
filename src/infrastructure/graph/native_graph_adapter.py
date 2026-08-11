@@ -3418,7 +3418,7 @@ class NativeGraphAdapter(GraphStorePort):
     async def health_probe(self) -> bool:
         """Return True iff the backend responds to a trivial query."""
         try:
-            result = await self._neo4j_client.execute_query("RETURN 1 AS ok")
+            result = await self._neo4j_client.execute_query("RETURN 1 AS ok", timeout=2.0)
             return bool(result.records) and result.records[0].get("ok", 0) == 1
         except Exception:
             logger.warning("Graph backend health probe failed", exc_info=True)

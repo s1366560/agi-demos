@@ -124,7 +124,8 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.match(updatePolicySource, /owner:\s*'s1366560'/u);
   assert.match(updatePolicySource, /repo:\s*'agi-demos'/u);
   assert.match(automaticUpdateLoopSource, /autoDownload\s*=\s*true/u);
-  assert.match(automaticUpdateLoopSource, /autoInstallOnAppQuit\s*=\s*true/u);
+  assert.match(automaticUpdateLoopSource, /autoInstallOnAppQuit\s*=\s*false/u);
+  assert.match(automaticUpdateLoopSource, /quitAndInstall\(false,\s*true\)/u);
   assert.match(
     packageJson.scripts['package:electron'],
     /^corepack pnpm run build:electron && corepack pnpm run build:sidecar/u,
@@ -142,7 +143,7 @@ test('packaging stages an integrity digest and enables signed auto-updates', () 
   assert.equal(packageJson.dependencies.yaml, '2.8.1');
 });
 
-test('tag releases fail closed and stage only a draft after package verification', () => {
+test('tag releases fail closed and publish only a prerelease after package verification', () => {
   assert.match(releaseWorkflow, /tags:\s*\n\s*-\s*["']v\*["']/u);
   assert.match(releaseWorkflow, /macos-latest/u);
   assert.match(releaseWorkflow, /windows-latest/u);
@@ -175,7 +176,8 @@ test('tag releases fail closed and stage only a draft after package verification
   assert.match(releaseWorkflow, /make -C agi-stack desktop-parity-check/u);
   assert.match(releaseWorkflow, /playwright install --with-deps chromium/u);
   assert.match(releaseWorkflow, /needs:\s*\[authorize,\s*parity-preflight\]/u);
-  assert.match(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*["']0\.1\.0["']/u);
+  assert.doesNotMatch(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*["']0\.1\.0["']/u);
+  assert.match(releaseWorkflow, /AGISTACK_RELEASE_VERSION:\s*\$\{\{\s*needs\.authorize\.outputs\.version\s*\}\}/u);
   assert.match(releaseWorkflow, /packageJson\.version\s*!==\s*expectedVersion/u);
   assert.match(releaseWorkflow, /builder-args:\s*--mac --universal/u);
   assert.match(releaseWorkflow, /x86_64-apple-darwin/u);
@@ -227,7 +229,8 @@ test('tag releases fail closed and stage only a draft after package verification
   const exactRemoteIndex = releaseWorkflow.indexOf(
     'Download and verify the exact remote asset bytes',
   );
-  const assertDraftIndex = releaseWorkflow.indexOf('Assert the release remains a draft');
+  const publishPrereleaseIndex = releaseWorkflow.indexOf('Publish verified assets as a prerelease');
+  const assertPrereleaseIndex = releaseWorkflow.indexOf('Assert the release is prerelease-only');
   assert.ok(stageIndex >= 0 && stageIndex < materializeIndex);
   assert.ok(materializeIndex < macBuildIndex);
   assert.ok(macBuildIndex < dmgNotarizeIndex);
@@ -244,14 +247,15 @@ test('tag releases fail closed and stage only a draft after package verification
   assert.ok(validateAssetsIndex < createDraftIndex);
   assert.ok(createDraftIndex < releaseUploadIndex);
   assert.ok(releaseUploadIndex < exactRemoteIndex);
-  assert.ok(exactRemoteIndex < assertDraftIndex);
+  assert.ok(exactRemoteIndex < publishPrereleaseIndex);
+  assert.ok(publishPrereleaseIndex < assertPrereleaseIndex);
   assert.equal(releaseWorkflow.match(/gh release create/gu)?.length, 1);
   assert.equal(releaseWorkflow.match(/actions\/download-artifact@\S+/gu)?.length, 3);
   assert.doesNotMatch(releaseWorkflow, /uses:\s+\S+@v\d+/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-macOS/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-Windows/u);
   assert.match(releaseWorkflow, /name:\s*agistack-desktop-Linux/u);
-  assert.match(releaseWorkflow, /needs:\s*build/u);
+  assert.match(releaseWorkflow, /needs:\s*\[authorize,\s*build\]/u);
   assert.match(releaseWorkflow, /Validate the combined release asset set/u);
   assert.match(
     releaseWorkflow,
@@ -303,11 +307,15 @@ test('tag releases fail closed and stage only a draft after package verification
   }
   assert.doesNotMatch(releaseWorkflow, /release\/builder-(?:debug|effective)/u);
   assert.doesNotMatch(releaseWorkflow, /release\/\*\*/u);
-  assert.doesNotMatch(releaseWorkflow, /gh release edit/u);
-  assert.doesNotMatch(releaseWorkflow, /--draft=false/u);
+  assert.match(releaseWorkflow, /gh release edit/u);
+  assert.match(releaseWorkflow, /--draft=false/u);
+  assert.match(releaseWorkflow, /--prerelease/u);
   assert.doesNotMatch(releaseWorkflow, /\bnative verification\b/iu);
-  assert.match(releaseWorkflow, /name:\s*Stage verified desktop release draft/u);
-  assert.match(releaseWorkflow, /Assert the release remains a draft[\s\S]*--json isDraft,tagName/u);
+  assert.match(releaseWorkflow, /name:\s*Stage verified desktop prerelease/u);
+  assert.match(
+    releaseWorkflow,
+    /Assert the release is prerelease-only[\s\S]*--json isDraft,isPrerelease,tagName/u,
+  );
   assert.match(releaseWorkflow, /permissions:\s*\{\}/u);
   assert.match(releaseWorkflow, /build:[\s\S]*permissions:\s*\n\s*contents:\s*read/u);
   assert.match(
@@ -351,12 +359,14 @@ test('tag releases fail closed and stage only a draft after package verification
   assert.match(releaseVerification, /dpkg-deb/u);
   assert.match(releaseVerification, /--appimage-extract/u);
   assert.match(releaseVerification, /Desktop Entry/u);
-  assert.match(releaseArtifactContract, /desktop-release-evidence-v2/u);
-  assert.match(releaseArtifactContract, /package_artifacts_only/u);
+  assert.match(releaseArtifactContract, /desktop-release-package-evidence-v1/u);
+  assert.match(releaseArtifactContract, /package_artifacts_and_promotion_requirements/u);
   assert.match(releaseArtifactContract, /blockmap_structure_and_coverage_only/u);
   assert.match(releaseWorkflow, /blockmap_structure_and_coverage_only/u);
   assert.match(releaseArtifactContract, /artifact_verification_status/u);
   assert.match(releaseArtifactContract, /release_disposition/u);
+  assert.match(releaseArtifactContract, /stable_promotion_native_evidence_required/u);
+  assert.match(releaseArtifactContract, /verification_checks/u);
   assert.match(releaseArtifactContract, /package_verification/u);
   assert.doesNotMatch(releaseArtifactContract, /native_verification/u);
   assert.doesNotMatch(releaseArtifactContract, /(?:^|\n)\s*verification_status:/u);

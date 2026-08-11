@@ -13,6 +13,29 @@ use serde_json::Value;
 
 /// The bridge protocol revision this client implements.
 pub const PROTOCOL_VERSION: u32 = 1;
+/// Oldest bridge protocol revision accepted by this host.
+pub const PROTOCOL_MIN: u32 = PROTOCOL_VERSION;
+/// Newest bridge protocol revision accepted by this host (N+1 rollout window).
+pub const PROTOCOL_MAX: u32 = PROTOCOL_VERSION + 1;
+
+fn default_protocol_version() -> u32 {
+    PROTOCOL_VERSION
+}
+
+/// Whether two validated inclusive protocol ranges share at least one revision.
+pub fn protocol_ranges_overlap(
+    left_min: u32,
+    left_max: u32,
+    right_min: u32,
+    right_max: u32,
+) -> bool {
+    left_min > 0
+        && right_min > 0
+        && left_min <= left_max
+        && right_min <= right_max
+        && left_min <= right_max
+        && right_min <= left_max
+}
 
 /// Request method names (sidecar → extension).
 pub const METHOD_HELLO: &str = "hello";
@@ -109,7 +132,13 @@ pub struct BridgeNotification {
 #[serde(rename_all = "camelCase")]
 pub struct HelloResult {
     pub protocol_version: u32,
+    #[serde(default = "default_protocol_version")]
+    pub protocol_min: u32,
+    #[serde(default = "default_protocol_version")]
+    pub protocol_max: u32,
     pub extension_id: String,
+    #[serde(default)]
+    pub extension_version: String,
     pub capabilities: Vec<String>,
 }
 
@@ -280,12 +309,52 @@ mod tests {
     fn hello_result_uses_camel_case_wire_names() {
         let hello: HelloResult = serde_json::from_value(json!({
             "protocolVersion": 1,
+            "protocolMin": 1,
+            "protocolMax": 2,
             "extensionId": "ext-abc",
+            "extensionVersion": "0.1.0",
             "capabilities": ["cdp"]
         }))
         .unwrap();
         assert_eq!(hello.protocol_version, PROTOCOL_VERSION);
+        assert_eq!(hello.protocol_min, PROTOCOL_MIN);
+        assert_eq!(hello.protocol_max, PROTOCOL_MAX);
         assert_eq!(hello.extension_id, "ext-abc");
+        assert_eq!(hello.extension_version, "0.1.0");
+    }
+
+    #[test]
+    fn hello_result_preserves_legacy_protocol_version_only_wire_shape() {
+        let hello: HelloResult = serde_json::from_value(json!({
+            "protocolVersion": 1,
+            "extensionId": "ext-abc",
+            "capabilities": ["cdp"]
+        }))
+        .expect("legacy hello remains readable");
+        assert_eq!((hello.protocol_min, hello.protocol_max), (1, 1));
+        assert!(hello.extension_version.is_empty());
+    }
+
+    #[test]
+    fn protocol_window_accepts_current_and_next_but_rejects_future_only() {
+        assert!(protocol_ranges_overlap(
+            PROTOCOL_MIN,
+            PROTOCOL_MAX,
+            PROTOCOL_VERSION,
+            PROTOCOL_VERSION
+        ));
+        assert!(protocol_ranges_overlap(
+            PROTOCOL_MIN,
+            PROTOCOL_MAX,
+            PROTOCOL_VERSION + 1,
+            PROTOCOL_VERSION + 1
+        ));
+        assert!(!protocol_ranges_overlap(
+            PROTOCOL_MIN,
+            PROTOCOL_MAX,
+            PROTOCOL_MAX + 1,
+            PROTOCOL_MAX + 1
+        ));
     }
 
     #[test]

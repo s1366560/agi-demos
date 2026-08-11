@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Desktop external platform release evidence v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "release_identity",
+    "artifact_identity",
+    "platform",
+    "checks",
+    "judgment_revision"
+  ],
+  "properties": {
+    "contract_version": { "const": "desktop-release-evidence-v3" },
+    "release_identity": { "$ref": "#/$defs/releaseIdentity" },
+    "artifact_identity": { "$ref": "#/$defs/artifactIdentity" },
+    "platform": { "$ref": "#/$defs/platform" },
+    "checks": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "judgment_revision": { "$ref": "#/$defs/sha" }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sha512": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?Z$"
+    },
+    "safeName": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,240}$" },
+    "githubUrl": { "type": "string", "pattern": "^https://github\\.com/" },
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attempt", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "$ref": "#/$defs/githubUrl" }
+      }
+    },
+    "releaseIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "tag", "commit_sha", "channel", "workflow_run"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "tag": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "commit_sha": { "$ref": "#/$defs/sha" },
+        "channel": { "enum": ["prerelease", "stable"] },
+        "workflow_run": { "$ref": "#/$defs/workflowRun" }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "url"],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeName" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "url": { "$ref": "#/$defs/githubUrl" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "reason_code",
+        "timestamp",
+        "retryable",
+        "log_refs",
+        "artifact_refs"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+        "status": { "enum": ["passed", "failed", "blocked", "not_run"] },
+        "reason_code": { "type": ["string", "null"] },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "retryable": { "type": "boolean" },
+        "log_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        },
+        "artifact_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github_asset_id",
+        "name",
+        "size",
+        "sha256",
+        "sha512",
+        "signature",
+        "attestation"
+      ],
+      "properties": {
+        "github_asset_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "$ref": "#/$defs/safeName" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sha512": { "$ref": "#/$defs/sha512" },
+        "signature": { "$ref": "#/$defs/check" },
+        "attestation": { "$ref": "#/$defs/check" }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "os_version",
+        "os_build",
+        "architecture",
+        "environment",
+        "package_type",
+        "anonymous_host_id"
+      ],
+      "properties": {
+        "os": { "enum": ["macos", "windows", "linux"] },
+        "os_version": { "type": "string", "minLength": 1 },
+        "os_build": { "type": "string", "minLength": 1 },
+        "architecture": { "enum": ["x64", "arm64"] },
+        "environment": { "const": "physical" },
+        "package_type": { "enum": ["dmg", "nsis", "appimage", "deb"] },
+        "anonymous_host_id": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

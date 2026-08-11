@@ -8,6 +8,8 @@ mod native_host;
 mod oauth_pending_attempt;
 mod private_file_permissions;
 mod trusted_session;
+mod update_recovery;
+mod update_recovery_snapshot;
 
 fn main() {
     tracing_subscriber::fmt()
@@ -18,6 +20,17 @@ fn main() {
         .with_writer(std::io::stderr)
         .without_time()
         .init();
+
+    if matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("--update-recovery-prepare" | "--update-recovery-helper")
+    ) {
+        if let Err(error) = update_recovery::run_from_environment() {
+            tracing::error!(error = %error, "update recovery helper failed");
+            std::process::exit(2);
+        }
+        return;
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()

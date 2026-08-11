@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Desktop package-only release evidence v2 (read-only compatibility)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "evidence_scope",
+    "blockmap_verification_scope",
+    "artifact_verification_status",
+    "release_disposition",
+    "release_blocker_reason_code",
+    "required_native_checks",
+    "platform",
+    "version",
+    "tag",
+    "commit_sha",
+    "workflow_run",
+    "package_verification",
+    "assets"
+  ],
+  "properties": {
+    "contract_version": { "const": "desktop-release-evidence-v2" },
+    "evidence_scope": { "const": "package_artifacts_only" },
+    "blockmap_verification_scope": { "const": "blockmap_structure_and_coverage_only" },
+    "artifact_verification_status": { "const": "verified_by_tag_ci" },
+    "release_disposition": { "const": "draft_only" },
+    "release_blocker_reason_code": { "const": "native_release_evidence_required" },
+    "required_native_checks": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "enum": ["install", "launch", "updater_apply", "updater_failure_rollback"] }
+    },
+    "platform": { "enum": ["macos", "windows", "linux"] },
+    "version": { "$ref": "#/$defs/version" },
+    "tag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "workflow_run": { "$ref": "#/$defs/workflowRun" },
+    "package_verification": { "type": "object", "minProperties": 1 },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/asset" }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attempt", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size", "sha512"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,240}$" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha512": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" }
+      }
+    }
+  }
+}

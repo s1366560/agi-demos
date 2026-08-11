@@ -119,6 +119,79 @@ def verify_search(payload: object) -> None:
     raise RuntimeError("Graph E2E search did not return the deterministic entity")
 
 
+def verify_backend_capability(payload: object, *, available: bool) -> None:
+    """Fail unless graph runtime availability uses the stable degradation contract."""
+    capabilities = _require_mapping(payload, "search capabilities")
+    backend = _require_mapping(capabilities.get("graph_backend"), "graph backend capability")
+    expected = (
+        {
+            "status": "available",
+            "reason_code": None,
+            "retryable": False,
+            "allowed_actions": ["search", "traverse", "rebuild_communities"],
+        }
+        if available
+        else {
+            "status": "degraded",
+            "reason_code": "graph_backend_unavailable",
+            "retryable": True,
+            "allowed_actions": ["retry"],
+        }
+    )
+    if any(backend.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("Graph E2E backend capability did not preserve the stable contract")
+
+
+def verify_communities(payload: object, *, project_id: str) -> str:
+    """Return the rebuilt community ID after validating scope and membership."""
+    page = _require_mapping(payload, "a communities page")
+    raw_communities = page.get("communities")
+    if not isinstance(raw_communities, list):
+        raise RuntimeError("Graph E2E communities response did not contain a list")
+    for raw_community in cast("list[object]", raw_communities):
+        if not isinstance(raw_community, Mapping):
+            continue
+        community = cast("Mapping[str, object]", raw_community)
+        member_count = community.get("member_count")
+        if community.get("project_id") == project_id and isinstance(member_count, int):
+            if member_count < 2:
+                raise RuntimeError("Graph E2E community did not preserve its entity membership")
+            return _require_string(community, "uuid", "a community id")
+    raise RuntimeError("Graph E2E community did not preserve project scope")
+
+
+def verify_graph_traversal(payload: object, *, expected_entity_id: str) -> None:
+    """Fail unless traversal reaches the deterministic related entity."""
+    page = _require_mapping(payload, "a graph traversal page")
+    if page.get("search_type") != "graph_traversal":
+        raise RuntimeError("Graph E2E traversal did not preserve its search type")
+    raw_results = page.get("results")
+    if not isinstance(raw_results, list):
+        raise RuntimeError("Graph E2E traversal response did not contain results")
+    if not any(
+        isinstance(raw_result, Mapping) and raw_result.get("uuid") == expected_entity_id
+        for raw_result in cast("list[object]", raw_results)
+    ):
+        raise RuntimeError("Graph E2E traversal did not return the related entity")
+
+
+def verify_community_search(payload: object, *, person_id: str, episode_id: str) -> None:
+    """Fail unless community search returns both its entity and source episode."""
+    page = _require_mapping(payload, "a community search page")
+    if page.get("search_type") != "community":
+        raise RuntimeError("Graph E2E community search did not preserve its search type")
+    raw_results = page.get("results")
+    if not isinstance(raw_results, list):
+        raise RuntimeError("Graph E2E community search response did not contain results")
+    result_pairs = {
+        (raw_result.get("uuid"), raw_result.get("type"))
+        for raw_result in cast("list[object]", raw_results)
+        if isinstance(raw_result, Mapping)
+    }
+    if not {(person_id, "entity"), (episode_id, "episode")} <= result_pairs:
+        raise RuntimeError("Graph E2E community search did not return entity and episode results")
+
+
 def verify_graph(
     payload: object,
     *,
@@ -192,16 +265,56 @@ def verify_fixture_usage(before: object, after: object) -> None:
         raise RuntimeError("Graph E2E did not exercise deterministic embedding generation")
 
 
-def _authenticate_and_create_project(client: httpx.Client, api_base: str) -> tuple[str, str]:
+def _authenticate(
+    client: httpx.Client,
+    api_base: str,
+    *,
+    username: str,
+    password: str,
+) -> str:
     auth = client.post(
         f"{api_base}/api/v1/auth/token",
-        data={"username": "admin@memstack.ai", "password": "adminpassword"},
+        data={"username": username, "password": password},
     )
     _ = auth.raise_for_status()
-    token = _require_string(
+    return _require_string(
         _require_mapping(cast("object", auth.json()), "an authentication object"),
         "access_token",
         "an access token",
+    )
+
+
+def _create_project(
+    client: httpx.Client,
+    api_base: str,
+    headers: Mapping[str, str],
+    tenant_id: str,
+    *,
+    description: str,
+) -> str:
+    project = client.post(
+        f"{api_base}/api/v1/projects/",
+        headers=headers,
+        json={
+            "name": f"Graph E2E {uuid.uuid4().hex[:8]}",
+            "description": description,
+            "tenant_id": tenant_id,
+        },
+    )
+    _ = project.raise_for_status()
+    return _require_string(
+        _require_mapping(cast("object", project.json()), "a project object"),
+        "id",
+        "a project id",
+    )
+
+
+def _authenticate_and_create_project(client: httpx.Client, api_base: str) -> tuple[str, str, str]:
+    token = _authenticate(
+        client,
+        api_base,
+        username="admin@memstack.ai",
+        password="adminpassword",
     )
     headers = {"Authorization": f"Bearer {token}"}
     tenants = client.get(f"{api_base}/api/v1/tenants/", headers=headers)
@@ -216,22 +329,14 @@ def _authenticate_and_create_project(client: httpx.Client, api_base: str) -> tup
         "id",
         "a tenant id",
     )
-    project = client.post(
-        f"{api_base}/api/v1/projects/",
-        headers=headers,
-        json={
-            "name": f"Graph E2E {uuid.uuid4().hex[:8]}",
-            "description": "Deterministic FastAPI-to-Neo4j E2E fixture",
-            "tenant_id": tenant_id,
-        },
+    project_id = _create_project(
+        client,
+        api_base,
+        headers,
+        tenant_id,
+        description="Deterministic FastAPI-to-Neo4j E2E fixture",
     )
-    _ = project.raise_for_status()
-    project_id = _require_string(
-        _require_mapping(cast("object", project.json()), "a project object"),
-        "id",
-        "a project id",
-    )
-    return token, project_id
+    return token, tenant_id, project_id
 
 
 def _wait_for_synced_episode(
@@ -260,16 +365,134 @@ def _wait_for_synced_episode(
     return last_episode
 
 
+def _verify_community_and_traversal(
+    client: httpx.Client,
+    base: str,
+    headers: Mapping[str, str],
+    *,
+    project_id: str,
+    episode_id: str,
+    entity_ids: Mapping[str, str],
+) -> None:
+    rebuild_response = client.post(
+        f"{base}/api/v1/graph/communities/rebuild",
+        headers=headers,
+        params={"project_id": project_id, "background": "false"},
+    )
+    _ = rebuild_response.raise_for_status()
+    rebuild = _require_mapping(
+        cast("object", rebuild_response.json()), "a community rebuild result"
+    )
+    if (
+        rebuild.get("status") != "success"
+        or rebuild.get("entities_processed") != 2
+        or not isinstance(rebuild.get("communities_count"), int)
+        or cast("int", rebuild["communities_count"]) < 1
+    ):
+        raise RuntimeError("Graph E2E community rebuild did not process the fixture")
+
+    communities_response = client.get(
+        f"{base}/api/v1/graph/communities/",
+        headers=headers,
+        params={"project_id": project_id, "limit": 20},
+    )
+    _ = communities_response.raise_for_status()
+    community_id = verify_communities(
+        cast("object", communities_response.json()), project_id=project_id
+    )
+
+    traversal_response = client.post(
+        f"{base}/api/v1/search-enhanced/graph-traversal",
+        headers=headers,
+        json={
+            "start_entity_uuid": entity_ids[E2E_PERSON],
+            "max_depth": 2,
+            "relationship_types": ["FOUNDED"],
+            "limit": 20,
+            "project_id": project_id,
+        },
+    )
+    _ = traversal_response.raise_for_status()
+    verify_graph_traversal(
+        cast("object", traversal_response.json()),
+        expected_entity_id=entity_ids[E2E_ORGANIZATION],
+    )
+
+    community_search_response = client.post(
+        f"{base}/api/v1/search-enhanced/community",
+        headers=headers,
+        json={
+            "community_uuid": community_id,
+            "limit": 20,
+            "include_episodes": True,
+            "project_id": project_id,
+        },
+    )
+    _ = community_search_response.raise_for_status()
+    verify_community_search(
+        cast("object", community_search_response.json()),
+        person_id=entity_ids[E2E_PERSON],
+        episode_id=episode_id,
+    )
+
+
+def _verify_project_and_member_isolation(
+    client: httpx.Client,
+    base: str,
+    admin_headers: Mapping[str, str],
+    *,
+    project_id: str,
+    isolation_project_id: str,
+) -> None:
+    isolated = client.get(
+        f"{base}/api/v1/graph/entities/",
+        headers=admin_headers,
+        params={"project_id": isolation_project_id, "limit": 20},
+    )
+    _ = isolated.raise_for_status()
+    isolated_page = _require_mapping(cast("object", isolated.json()), "an isolated entities page")
+    if isolated_page.get("entities") != [] or isolated_page.get("total") != 0:
+        raise RuntimeError("Graph E2E leaked entities across project scope")
+
+    member_token = _authenticate(
+        client,
+        base,
+        username="user@memstack.ai",
+        password="userpassword",
+    )
+    denied = client.get(
+        f"{base}/api/v1/graph/entities/",
+        headers={"Authorization": f"Bearer {member_token}"},
+        params={"project_id": project_id, "limit": 20},
+    )
+    if denied.status_code != 403:
+        raise RuntimeError("Graph E2E member without project scope was not denied")
+
+
 def verify_e2e_graph(api_base: str, fixture_base: str) -> None:
     """Create, query, and clean up one authenticated deterministic graph fixture."""
     base = api_base.rstrip("/")
     fixture = fixture_base.rstrip("/")
     with httpx.Client(timeout=30.0) as client:
-        token, project_id = _authenticate_and_create_project(client, base)
+        token, tenant_id, project_id = _authenticate_and_create_project(client, base)
         headers = {"Authorization": f"Bearer {token}"}
+        isolation_project_id = _create_project(
+            client,
+            base,
+            headers,
+            tenant_id,
+            description="Graph E2E project-isolation fixture",
+        )
         episode_name = f"graph-e2e-{uuid.uuid4().hex}"
         episode_id: str | None = None
         try:
+            capability_response = client.get(
+                f"{base}/api/v1/search-enhanced/capabilities",
+                headers=headers,
+            )
+            _ = capability_response.raise_for_status()
+            verify_backend_capability(cast("object", capability_response.json()), available=True)
+
             before_stats_response = client.get(f"{fixture}/_e2e/stats")
             _ = before_stats_response.raise_for_status()
             before_stats = cast("object", before_stats_response.json())
@@ -341,6 +564,23 @@ def verify_e2e_graph(api_base: str, fixture_base: str) -> None:
                 person_id=entity_ids[E2E_PERSON],
                 organization_id=entity_ids[E2E_ORGANIZATION],
             )
+
+            _verify_community_and_traversal(
+                client,
+                base,
+                headers,
+                project_id=project_id,
+                episode_id=episode_id,
+                entity_ids=entity_ids,
+            )
+            _verify_project_and_member_isolation(
+                client,
+                base,
+                headers,
+                project_id=project_id,
+                isolation_project_id=isolation_project_id,
+            )
+
             after_stats_response = client.get(f"{fixture}/_e2e/stats")
             _ = after_stats_response.raise_for_status()
             after_stats = cast("object", after_stats_response.json())
@@ -352,6 +592,7 @@ def verify_e2e_graph(api_base: str, fixture_base: str) -> None:
                     headers=headers,
                 )
             _ = client.delete(f"{base}/api/v1/projects/{project_id}", headers=headers)
+            _ = client.delete(f"{base}/api/v1/projects/{isolation_project_id}", headers=headers)
 
 
 if __name__ == "__main__":
