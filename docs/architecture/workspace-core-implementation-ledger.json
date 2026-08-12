@@ -1,0 +1,2664 @@
+{
+  "ledgerVersion": 1,
+  "sourceManifest": "docs/architecture/workspace-core-route-manifest.json",
+  "sourceCapabilities": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/capabilities.rs",
+  "requiredContractSha256": "a20b3f3a5065b9ff4fad23310b4fa6c4eb6cc4f666be7957ec6c4b1ad65a9623",
+  "requiredRouteCount": 92,
+  "implementedRouteCount": 92,
+  "pendingRouteCount": 0,
+  "implementedRouteKeysSha256": "e4fea0501bbf438e30f55e0937246fda5709fdf4e3b7831c85147c6303bb3f07",
+  "complete": true,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/llm-providers/routing-policy",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy",
+      "handler": "get_legacy_workspace_routing_policy_api_v1_llm_providers_routing_policy_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentPolicyResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/llm-providers/routing-policy",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy",
+      "handler": "put_legacy_workspace_routing_policy_api_v1_llm_providers_routing_policy_put",
+      "contract": {
+        "requestSchemas": [
+          "LegacyRoutingPolicyMutation"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentPolicyResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "list_workspaces_api_v1_tenants__tenant_id__projects__project_id__workspaces_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "create_workspace_api_v1_tenants__tenant_id__projects__project_id__workspaces_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceCreateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "delete_workspace_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "get_workspace_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "update_workspace_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceUpdateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy",
+      "handler": "get_workspace_agent_policy_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agent_policy_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentPolicyResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy",
+      "handler": "patch_workspace_agent_policy_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agent_policy_patch",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceAgentPolicyPatch"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentPolicyResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "list_workspace_agents_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agents_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "bind_workspace_agent_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agents_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceAgentCreateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "delete_workspace_agent_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agents__workspace_agent_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agents/{workspace_agent_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "update_workspace_agent_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__agents__workspace_agent_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceAgentUpdateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceAgentResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "get_execution_diagnostics_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_execution_diagnostics_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceExecutionDiagnosticsResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "list_files_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardFileListResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/mkdir",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "create_directory_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files_mkdir_post",
+      "contract": {
+        "requestSchemas": [
+          "MkdirRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardFileResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/upload",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "upload_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files_upload_post",
+      "contract": {
+        "requestSchemas": [
+          "Body_upload_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files_upload_post"
+        ],
+        "responseSchemas": [
+          "BlackboardFileResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/{file_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "delete_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files__file_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/{file_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "rename_or_move_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files__file_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "RenameOrMoveFileRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardFileResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/{file_id}/copy",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "copy_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files__file_id__copy_post",
+      "contract": {
+        "requestSchemas": [
+          "CopyFileRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardFileResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/files/{file_id}/download",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "download_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_files__file_id__download_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "list_posts_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardPostListResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "create_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts_post",
+      "contract": {
+        "requestSchemas": [
+          "BlackboardPostCreateRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardPostResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "delete_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "get_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardPostResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "update_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "BlackboardPostUpdateRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardPostResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/pin",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "pin_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__pin_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardPostResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "list_replies_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__replies_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardReplyListResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "create_reply_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__replies_post",
+      "contract": {
+        "requestSchemas": [
+          "BlackboardReplyCreateRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardReplyResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies/{reply_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "delete_reply_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__replies__reply_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/replies/{reply_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "update_reply_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__replies__reply_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "BlackboardReplyUpdateRequest"
+        ],
+        "responseSchemas": [
+          "BlackboardReplyResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/posts/{post_id}/unpin",
+      "module": "src.infrastructure.adapters.primary.web.routers.blackboard",
+      "handler": "unpin_post_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__blackboard_posts__post_id__unpin_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "BlackboardPostResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations",
+      "handler": "get_workspace_collaboration_authority_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__collaboration_authority_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceCollaborationAuthorityResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "get_workspace_collaboration_capabilities_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__collaboration_capabilities_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceCollaborationCapabilitiesResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations",
+      "handler": "mutate_workspace_collaboration_surface_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__collaboration_mutations_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceCollaborationMutationRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceCollaborationMutationReceiptResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations/files/upload",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations",
+      "handler": "upload_workspace_collaboration_file_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__collaboration_mutations_files_upload_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceCollaborationMutationReceiptResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_genes",
+      "handler": "list_genes_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__genes_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "CyberGeneListResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_genes",
+      "handler": "create_gene_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__genes_post",
+      "contract": {
+        "requestSchemas": [
+          "CyberGeneCreate"
+        ],
+        "responseSchemas": [
+          "CyberGeneResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes/{gene_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_genes",
+      "handler": "delete_gene_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__genes__gene_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes/{gene_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_genes",
+      "handler": "get_gene_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__genes__gene_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "CyberGeneResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes/{gene_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_genes",
+      "handler": "update_gene_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__genes__gene_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "CyberGeneUpdate"
+        ],
+        "responseSchemas": [
+          "CyberGeneResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "list_workspace_members_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__members_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceMemberResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "add_workspace_member_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__members_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceMemberCreateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceMemberResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "remove_workspace_member_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__members__user_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/members/{user_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspaces",
+      "handler": "update_workspace_member_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__members__user_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceMemberUpdateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceMemberResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_chat",
+      "handler": "list_messages_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__messages_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "MessageListResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_chat",
+      "handler": "send_message_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__messages_post",
+      "contract": {
+        "requestSchemas": [
+          "SendMessageRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "MessageResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages/mentions/{target_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_chat",
+      "handler": "get_mentions_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__messages_mentions__target_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "MessageListResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "list_objectives_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "CyberObjectiveListResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "create_objective_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives_post",
+      "contract": {
+        "requestSchemas": [
+          "CyberObjectiveCreate"
+        ],
+        "responseSchemas": [
+          "CyberObjectiveResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives/{objective_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "delete_objective_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives__objective_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives/{objective_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "get_objective_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives__objective_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "CyberObjectiveResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives/{objective_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "update_objective_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives__objective_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "CyberObjectiveUpdate"
+        ],
+        "responseSchemas": [
+          "CyberObjectiveResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives/{objective_id}/project-to-task",
+      "module": "src.infrastructure.adapters.primary.web.routers.cyber_objectives",
+      "handler": "project_objective_to_task_api_v1_tenants__tenant_id__projects__project_id__workspaces__workspace_id__objectives__objective_id__project_to_task_post",
+      "contract": {
+        "requestSchemas": [
+          "ProjectObjectiveToTaskRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspace-context",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_context",
+      "handler": "get_workspace_context_api_v1_workspace_context_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceContextResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspace-context/switch",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_context",
+      "handler": "switch_workspace_context_api_v1_workspace_context_switch_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceContextSwitchRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceContextSwitchResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/autonomy/tick",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_autonomy",
+      "handler": "trigger_workspace_autonomy_tick_api_v1_workspaces__workspace_id__autonomy_tick_post",
+      "contract": {
+        "requestSchemas": [
+          "AutonomyTickRequest"
+        ],
+        "responseSchemas": [
+          "AutonomyTickResponse",
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/plan",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "get_workspace_plan_snapshot_api_v1_workspaces__workspace_id__plan_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanSnapshotResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/delivery/regenerate-contract",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "request_workspace_plan_delivery_contract_regeneration_api_v1_workspaces__workspace_id__plan_delivery_regenerate_contract_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/delivery/run-pipeline",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "request_workspace_plan_pipeline_run_api_v1_workspaces__workspace_id__plan_delivery_run_pipeline_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanPipelineRunRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/pause",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "pause_workspace_plan_iteration_loop_api_v1_workspaces__workspace_id__plan_iteration_pause_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/resume",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "resume_workspace_plan_iteration_loop_api_v1_workspaces__workspace_id__plan_iteration_resume_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/iteration/trigger-next",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "trigger_workspace_plan_next_iteration_api_v1_workspaces__workspace_id__plan_iteration_trigger_next_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/accept-review",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "accept_review_workspace_plan_node_api_v1_workspaces__workspace_id__plan_nodes__node_id__accept_review_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/reopen",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "reopen_blocked_workspace_plan_node_api_v1_workspaces__workspace_id__plan_nodes__node_id__reopen_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/nodes/{node_id}/request-replan",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "request_workspace_plan_node_replan_api_v1_workspaces__workspace_id__plan_nodes__node_id__request_replan_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/outbox/{outbox_id}/retry",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "retry_workspace_plan_outbox_item_api_v1_workspaces__workspace_id__plan_outbox__outbox_id__retry_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/plan/recover-stale-attempts",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_plans",
+      "handler": "recover_workspace_plan_stale_attempts_api_v1_workspaces__workspace_id__plan_recover_stale_attempts_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspacePlanActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspacePlanActionResultResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "list_workspace_tasks_api_v1_workspaces__workspace_id__tasks_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "create_workspace_task_api_v1_workspaces__workspace_id__tasks_post",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceTaskCreateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "delete_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "get_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "update_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "WorkspaceTaskUpdateRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/assign-agent",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "assign_workspace_task_to_agent_api_v1_workspaces__workspace_id__tasks__task_id__assign_agent_post",
+      "contract": {
+        "requestSchemas": [
+          "AssignAgentRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/block",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "block_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__block_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/claim",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "claim_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__claim_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/complete",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "complete_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__complete_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/execution-session",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "get_workspace_task_execution_session_api_v1_workspaces__workspace_id__tasks__task_id__execution_session_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TaskExecutionSessionResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/experience",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "get_workspace_task_experience_api_v1_workspaces__workspace_id__tasks__task_id__experience_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskExperienceResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/recovery-actions",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "apply_workspace_task_recovery_action_api_v1_workspaces__workspace_id__tasks__task_id__recovery_actions_post",
+      "contract": {
+        "requestSchemas": [
+          "TaskRecoveryActionRequest"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TaskRecoveryActionResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/start",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "start_workspace_task_api_v1_workspaces__workspace_id__tasks__task_id__start_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/tasks/{task_id}/unassign-agent",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_tasks",
+      "handler": "unassign_workspace_task_from_agent_api_v1_workspaces__workspace_id__tasks__task_id__unassign_agent_post",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "WorkspaceTaskResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/edges",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "list_edges_api_v1_workspaces__workspace_id__topology_edges_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyEdgeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/edges",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "create_edge_api_v1_workspaces__workspace_id__topology_edges_post",
+      "contract": {
+        "requestSchemas": [
+          "TopologyEdgeCreate"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyEdgeResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/edges/{edge_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "delete_edge_api_v1_workspaces__workspace_id__topology_edges__edge_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/edges/{edge_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "get_edge_api_v1_workspaces__workspace_id__topology_edges__edge_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyEdgeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/edges/{edge_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "update_edge_api_v1_workspaces__workspace_id__topology_edges__edge_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "TopologyEdgeUpdate"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyEdgeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/nodes",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "list_nodes_api_v1_workspaces__workspace_id__topology_nodes_get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyNodeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/nodes",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "create_node_api_v1_workspaces__workspace_id__topology_nodes_post",
+      "contract": {
+        "requestSchemas": [
+          "TopologyNodeCreate"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyNodeResponse"
+        ],
+        "responseStatusCodes": [
+          "201",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/nodes/{node_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "delete_node_api_v1_workspaces__workspace_id__topology_nodes__node_id__delete",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError"
+        ],
+        "responseStatusCodes": [
+          "204",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/nodes/{node_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "get_node_api_v1_workspaces__workspace_id__topology_nodes__node_id__get",
+      "contract": {
+        "requestSchemas": [],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyNodeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "not_applicable",
+        "idempotency": "not_applicable",
+        "events": "not_applicable",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/workspaces/{workspace_id}/topology/nodes/{node_id}",
+      "module": "src.infrastructure.adapters.primary.web.routers.topology",
+      "handler": "update_node_api_v1_workspaces__workspace_id__topology_nodes__node_id__patch",
+      "contract": {
+        "requestSchemas": [
+          "TopologyNodeUpdate"
+        ],
+        "responseSchemas": [
+          "HTTPValidationError",
+          "TopologyNodeResponse"
+        ],
+        "responseStatusCodes": [
+          "200",
+          "422"
+        ],
+        "authorizationParameter": true,
+        "security": []
+      },
+      "implementation": {
+        "status": "golden_passed",
+        "permission": "golden_passed",
+        "cas": "covered_by_route_golden",
+        "idempotency": "covered_by_route_golden",
+        "events": "covered_by_route_golden",
+        "cloudPostgres": "golden_passed",
+        "desktopSqlite": "golden_passed"
+      }
+    }
+  ],
+  "ledgerSha256": "fe735b0353942814d497f834c4424c70ee98174d9609b28785cf92b1f3631fa1"
+}

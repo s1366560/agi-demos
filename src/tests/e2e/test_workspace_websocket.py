@@ -13,15 +13,27 @@ from src.domain.ports.services.unified_event_bus_port import (
     EventWithMetadata,
     SubscriptionOptions,
 )
+from src.domain.ports.services.workspace_access_verifier_port import WorkspaceAccessRequest
 from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
     SubscribeWorkspaceHandler,
     UnsubscribeWorkspaceHandler,
     WorkspaceHeartbeatHandler,
+    configure_workspace_access_verifier,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.primary.web.websocket.topics import TopicManager
 
 _HANDLER_MODULE = "src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler"
+
+
+class _StaticWorkspaceAccessVerifier:
+    def __init__(self, *, allowed: bool) -> None:
+        self.allowed = allowed
+        self.requests: list[WorkspaceAccessRequest] = []
+
+    async def has_access(self, request: WorkspaceAccessRequest) -> bool:
+        self.requests.append(request)
+        return self.allowed
 
 
 @pytest.fixture()
@@ -89,6 +101,37 @@ def context(
 
 @pytest.mark.integration
 class TestWorkspaceWebSocket:
+    async def test_subscribe_uses_configured_workspace_access_verifier(
+        self,
+        context: MessageContext,
+        topic_manager: TopicManager,
+        mock_container: MagicMock,
+    ) -> None:
+        verifier = _StaticWorkspaceAccessVerifier(allowed=False)
+        configure_workspace_access_verifier(verifier)
+        try:
+            with patch(
+                f"{_HANDLER_MODULE}.get_topic_manager",
+                return_value=topic_manager,
+            ):
+                await SubscribeWorkspaceHandler().handle(
+                    context,
+                    {"workspace_id": "ws-avernet-denied"},
+                )
+        finally:
+            configure_workspace_access_verifier(None)
+
+        assert verifier.requests == [
+            WorkspaceAccessRequest(
+                tenant_id="test-tenant-id",
+                user_id="test-user-id",
+                workspace_id="ws-avernet-denied",
+            )
+        ]
+        mock_container.mock_member_repo.find_by_workspace_and_user.assert_not_awaited()
+        sent = context.websocket.send_json.call_args[0][0]
+        assert sent["data"]["code"] == "workspace_access_denied"
+
     async def test_subscribe_registers_workspace(
         self,
         context: MessageContext,

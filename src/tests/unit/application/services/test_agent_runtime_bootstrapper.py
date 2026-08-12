@@ -9,6 +9,7 @@ import pytest
 
 from src.application.services.agent.runtime_bootstrapper import (
     AgentRuntimeBootstrapper,
+    _merge_workspace_context_from_conversation,
     _workspace_context_from_conversation,
 )
 from src.domain.llm_providers.models import ProviderCredentialRequiredError, ProviderType
@@ -128,6 +129,28 @@ def test_workspace_context_does_not_grant_task_authority_from_catalog_membership
     )
 
     assert _workspace_context_from_conversation(conversation) is None
+
+
+@pytest.mark.unit
+def test_explicit_workspace_collaboration_context_is_not_promoted_to_worker() -> None:
+    conversation = SimpleNamespace(
+        workspace_id="workspace-1",
+        linked_workspace_task_id=None,
+        metadata={
+            "workspace_id": "workspace-1",
+            "source": "avernet_workspace_message",
+        },
+    )
+    collaboration_context = {
+        "context_type": "workspace_collaboration_runtime",
+        "workspace_session_role": "leader",
+        "workspace_scope": {"workspace_id": "workspace-1"},
+    }
+
+    merged = _merge_workspace_context_from_conversation(conversation, collaboration_context)
+
+    assert merged == collaboration_context
+    assert "workspace_binding" not in merged
 
 
 @pytest.mark.unit

@@ -238,7 +238,11 @@ class FakeConversationRepository:
 
     async def find_by_id(self, conversation_id: str) -> Any:
         assert conversation_id == "conv-1"
-        return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
+        return SimpleNamespace(
+            id=conversation_id,
+            tenant_id="tenant-1",
+            project_id="project-1",
+        )
 
 
 class FakeCancelMethod:

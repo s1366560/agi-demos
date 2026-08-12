@@ -91,14 +91,6 @@ async def _validated_client_message_controls(
     return client_message_id, permission_mode
 
 
-class _RayCancelMethod(Protocol):
-    def remote(self, conversation_id: str) -> object: ...
-
-
-class _RayActorLike(Protocol):
-    cancel: _RayCancelMethod
-
-
 class _ExternalACPSessionResult(Protocol):
     session_id: str
 
@@ -198,44 +190,6 @@ def _sanitize_client_app_model_context(value: object) -> dict[str, Any] | None:
         if isinstance(key, str) and key not in _CLIENT_APP_MODEL_CONTEXT_DENYLIST
     }
     return sanitized or None
-
-
-async def _cancel_ray_actor_chat(
-    actor: _RayActorLike, conversation_id: str
-) -> tuple[bool, Exception | None]:
-    from src.infrastructure.adapters.secondary.ray.client import await_ray
-
-    try:
-        cancelled = bool(await await_ray(actor.cancel.remote(conversation_id)))
-    except Exception as exc:
-        logger.error(
-            "[WS] Failed to cancel Ray actor for conversation %s: %s",
-            conversation_id,
-            exc,
-            exc_info=True,
-        )
-        return False, exc
-
-    if cancelled:
-        logger.info(
-            "[WS] Cancelled Ray actor execution for conversation %s",
-            conversation_id,
-        )
-    return cancelled, None
-
-
-async def _cancel_local_chat(conversation_id: str) -> bool:
-    from src.application.services.agent.runtime_bootstrapper import (
-        AgentRuntimeBootstrapper,
-    )
-
-    cancelled = await AgentRuntimeBootstrapper.cancel_local_chat(conversation_id)
-    if cancelled:
-        logger.info(
-            "[WS] Cancelled local execution for conversation %s",
-            conversation_id,
-        )
-    return cancelled
 
 
 class SendMessageHandler(WebSocketMessageHandler):
@@ -454,10 +408,12 @@ class StopSessionHandler(WebSocketMessageHandler):
                 cancelled = True
                 logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
 
+            from src.application.services.agent.runtime_cancellation import (
+                cancel_conversation_runtime,
+            )
             from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
                 SqlConversationRepository,
             )
-            from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
             conv_repo = SqlConversationRepository(context.db)
             conversation = await conv_repo.find_by_id(conversation_id)
@@ -468,21 +424,10 @@ class StopSessionHandler(WebSocketMessageHandler):
                 await context.send_error("Access denied", conversation_id=conversation_id)
                 return
 
-            actor = await get_actor_if_exists(
-                tenant_id=conversation.tenant_id,
-                project_id=conversation.project_id,
-                agent_mode="default",
-            )
+            runtime_cancellation = await cancel_conversation_runtime(conversation)
+            cancelled = cancelled or runtime_cancellation.cancelled
 
-            actor_error: Exception | None = None
-            if actor:
-                actor_cancelled, actor_error = await _cancel_ray_actor_chat(actor, conversation_id)
-                cancelled = cancelled or actor_cancelled
-
-            local_cancelled = await _cancel_local_chat(conversation_id)
-            cancelled = cancelled or local_cancelled
-
-            if actor_error is not None and not cancelled:
+            if runtime_cancellation.ray_error is not None and not cancelled:
                 await context.send_error(
                     "Failed to stop session",
                     code="STOP_SESSION_FAILED",

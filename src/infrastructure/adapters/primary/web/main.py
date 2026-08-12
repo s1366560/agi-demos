@@ -28,6 +28,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
+from src.configuration.workspace_core import get_workspace_core_settings
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -42,12 +43,9 @@ from src.infrastructure.adapters.primary.web.routers import (
     auth,
     background_tasks,
     billing,
-    blackboard,
     channels,
     clusters,
     cron,
-    cyber_genes,
-    cyber_objectives,
     data_export,
     deploy,
     engines,
@@ -89,17 +87,9 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenant_webhooks,
     tenants,
     terminal,
-    topology,
     trust,
     tunnel,
     webhooks,
-    workspace_agent_policy,
-    workspace_autonomy,
-    workspace_chat,
-    workspace_context,
-    workspace_plans,
-    workspace_tasks,
-    workspaces,
 )
 from src.infrastructure.adapters.primary.web.routers.agent import (
     router as agent_router,
@@ -139,6 +129,15 @@ from src.infrastructure.adapters.primary.web.startup.graph import (
 )
 from src.infrastructure.adapters.primary.web.websocket import (
     router as websocket_router,
+)
+from src.infrastructure.adapters.primary.web.workspace_core_routes import (
+    register_workspace_core_routes,
+    register_workspace_core_static_routes,
+)
+from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
+    install_workspace_core_runtime,
+    shutdown_workspace_core_runtime,
+    start_workspace_core_runtime,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -297,6 +296,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         redis_client=cast(Redis | None, redis_client),
     )
 
+    # Start Avernet recovery only after DB-backed DI services are ready.
+    await start_workspace_core_runtime(app)
+
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
     if channel_manager:
@@ -415,6 +417,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Failed to wire reflection runtime -- loop disabled")
 
     yield
+
+    # Stop new recovery claims and drain all persisted Provider callbacks
+    # before their DB, Redis, and Agent Runtime dependencies are torn down.
+    await shutdown_workspace_core_runtime(app)
 
     # Stop cron job scheduler
     try:
@@ -718,8 +724,11 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
     # Register Routers
+    workspace_core_settings = get_workspace_core_settings()
+    app.state.workspace_core_settings = workspace_core_settings
+
     app.include_router(auth.router, prefix="/api/v1")
-    app.include_router(workspace_context.router)
+    register_workspace_core_static_routes(app, workspace_core_settings.backend)
     app.include_router(tenants.router)
     # Register project sandbox routes before the generic project routes so
     # /api/v1/projects/sandboxes is not captured as a project id.
@@ -735,8 +744,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(graph_stores.router)
     app.include_router(retrieval_stores.router)
     app.include_router(schema.router)
-    # Static compatibility routes must precede the dynamic /{provider_id} routes.
-    app.include_router(workspace_agent_policy.legacy_router)
+    # The Workspace static group above includes routing-policy compatibility;
+    # it must precede these dynamic /{provider_id} routes.
     app.include_router(llm_providers.router)  # LiteLLM provider management
 
     # New routers - feature parity with server/
@@ -748,12 +757,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(data_export.router)
     app.include_router(maintenance.router)
     app.include_router(tasks.router)
-    app.include_router(workspace_autonomy.router)
-    app.include_router(workspace_tasks.router)
-    app.include_router(workspace_plans.router)
-    app.include_router(workspace_agent_policy.router)
+    register_workspace_core_routes(app, workspace_core_settings.backend)
+    install_workspace_core_runtime(app, workspace_core_settings)
     app.include_router(task_sessions.router)
-    app.include_router(workspaces.router)
     app.include_router(cron.router)
     app.include_router(ai_tools.router)
     app.include_router(background_tasks.router)
@@ -761,10 +767,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(notifications.router)
     app.include_router(support.router, prefix="/api/v1")
     app.include_router(support.router)
-    app.include_router(blackboard.router)
-
-    # Workspace Chat (group messages + @mention routing)
-    app.include_router(workspace_chat.router)
 
     # Agent Capability System (L2 Skill + L3 SubAgent)
     app.include_router(skills.router)
@@ -788,15 +790,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Channel Configuration (IM integrations: Feishu, DingTalk, WeCom)
     app.include_router(channels.router, prefix="/api/v1")
-
-    # Workspace topology (nodes + edges)
-    app.include_router(topology.router)
-
-    # CyberOffice objectives (OKR-style objectives per workspace)
-    app.include_router(cyber_objectives.router)
-
-    # CyberOffice genes (skill packages per workspace)
-    app.include_router(cyber_genes.router)
 
     # Instance / Deploy / Cluster / Gene Marketplace / Template Marketplace
     app.include_router(instances.router)

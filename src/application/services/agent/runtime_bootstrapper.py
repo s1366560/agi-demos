@@ -40,6 +40,7 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 _LOCAL_SUBPROCESS_REQUEST_DIR = "MEMSTACK_LOCAL_AGENT_REQUEST_DIR"
 _LOCAL_CHAT_WORKER_MODULE = "src.infrastructure.agent.actor.local_chat_worker"
 _WORKSPACE_RUNTIME_CONTEXT_TYPE = "workspace_worker_runtime"
+_WORKSPACE_COLLABORATION_CONTEXT_TYPE = "workspace_collaboration_runtime"
 _WORKSPACE_CONTRACT_STAGES = frozenset(
     {
         "planner",
@@ -154,7 +155,10 @@ def _merge_workspace_context_from_conversation(
 ) -> dict[str, Any] | None:
     """Preserve explicit request context, else restore workspace context from the session."""
     if isinstance(app_model_context, dict):
-        if app_model_context.get("context_type") == _WORKSPACE_RUNTIME_CONTEXT_TYPE:
+        if app_model_context.get("context_type") in {
+            _WORKSPACE_RUNTIME_CONTEXT_TYPE,
+            _WORKSPACE_COLLABORATION_CONTEXT_TYPE,
+        }:
             return dict(app_model_context)
         base_context = dict(app_model_context)
     else:
