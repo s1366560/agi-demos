@@ -1,0 +1,390 @@
+{
+  "manifestVersion": "workspace-events-v1",
+  "contractSha256": "1c3afd58b335467de1a76c82dada3cd02f005bde4a003eb5e3fa9760f387a0b6",
+  "scope": "all legacy Workspace projection and execution events",
+  "envelopeRequiredFields": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "timestamp",
+    "source",
+    "correlation_id",
+    "payload",
+    "metadata"
+  ],
+  "deliveryContract": {
+    "sequenceField": "event_sequence",
+    "idempotencyField": "outbox_id",
+    "streamIdentityFields": [
+      "workspace_id",
+      "stream_name"
+    ],
+    "ordered": true,
+    "idempotent": true,
+    "replayable": true
+  },
+  "terminalMappings": [
+    {
+      "providerState": "final",
+      "executionStatus": "complete",
+      "correlationStatus": "completed",
+      "timelineEvent": "complete",
+      "outboxEvent": "workspace.execution.completed",
+      "pipelineStatus": "completed"
+    },
+    {
+      "providerState": "error",
+      "executionStatus": "error",
+      "correlationStatus": "failed",
+      "timelineEvent": "error",
+      "outboxEvent": "workspace.execution.failed",
+      "pipelineStatus": "failed"
+    },
+    {
+      "providerState": "aborted",
+      "executionStatus": "aborted",
+      "correlationStatus": "aborted",
+      "timelineEvent": "cancelled",
+      "outboxEvent": "workspace.execution.aborted",
+      "pipelineStatus": "aborted"
+    }
+  ],
+  "terminalSurfaces": [
+    "execution_status",
+    "timeline_history",
+    "durable_outbox",
+    "pipeline_progression"
+  ],
+  "fullEventAudit": {
+    "pythonEnumSource": "src/domain/events/types.py",
+    "generatedWebTypeSource": "web/src/types/generated/eventTypes.ts",
+    "webAgentRouterSource": "web/src/services/agent/messageRouter.ts",
+    "webWorkspaceRouterSource": "web/src/components/blackboard/blackboardSurfaceContract.ts",
+    "canonicalTimelineSource": "web/src/types/agent/eventParity.ts",
+    "replayProjectionSource": "src/infrastructure/adapters/primary/web/routers/agent/messages.py",
+    "internalEvents": [
+      "compact_needed",
+      "retry"
+    ],
+    "deltaEvents": [
+      "act_delta",
+      "text_delta",
+      "text_end",
+      "text_start",
+      "thought_delta",
+      "thought_start"
+    ],
+    "terminalEvents": [
+      "cancelled",
+      "complete",
+      "error"
+    ],
+    "hitlEvents": [
+      "a2ui_action_asked",
+      "clarification_asked",
+      "decision_asked",
+      "elicitation_asked",
+      "env_var_requested",
+      "permission_asked"
+    ],
+    "webWorkspaceRoutes": [
+      "blackboard_directory_deleted",
+      "blackboard_file_created",
+      "blackboard_file_deleted",
+      "blackboard_file_updated",
+      "blackboard_post_created",
+      "blackboard_post_deleted",
+      "blackboard_post_updated",
+      "blackboard_reply_created",
+      "blackboard_reply_deleted",
+      "blackboard_reply_updated",
+      "topology_updated",
+      "workspace_agent_bound",
+      "workspace_agent_unbound",
+      "workspace_deleted",
+      "workspace_member_joined",
+      "workspace_member_left",
+      "workspace_member_updated",
+      "workspace_message_created",
+      "workspace_plan_updated",
+      "workspace_task_assigned",
+      "workspace_task_created",
+      "workspace_task_deleted",
+      "workspace_task_status_changed",
+      "workspace_task_updated",
+      "workspace_updated"
+    ],
+    "canonicalTimelineRoutes": [
+      "a2ui_action_answered",
+      "agent_conflict_marked",
+      "agent_decision_logged",
+      "agent_escalated",
+      "agent_human_input_requested",
+      "agent_progress_declared",
+      "agent_supervisor_verdict",
+      "agent_task_assigned",
+      "agent_task_refused",
+      "cancelled",
+      "context_compacted",
+      "context_summary_generated",
+      "conversation_participant_joined",
+      "conversation_participant_left",
+      "desktop_status",
+      "elicitation_answered",
+      "elicitation_asked",
+      "http_service_error",
+      "http_service_started",
+      "http_service_stopped",
+      "http_service_updated",
+      "progress",
+      "run_input_applied",
+      "session_forked",
+      "session_merged",
+      "start",
+      "status",
+      "subagent_announce_expired",
+      "subagent_announce_received",
+      "subagent_announce_sent",
+      "subagent_delegation",
+      "subagent_doom_loop",
+      "subagent_orphan_detected",
+      "subagent_retry",
+      "subagent_spawn_rejected",
+      "subagent_spawning",
+      "task_execution_incident_opened",
+      "task_execution_session_updated",
+      "task_recovery_action_completed",
+      "task_recovery_action_started",
+      "terminal_status",
+      "tools_updated",
+      "workspace_adjudication_complete",
+      "workspace_decomposition_complete",
+      "workspace_goal_completed",
+      "workspace_goal_materialized",
+      "workspace_worker_dispatched",
+      "workspace_worker_report_submitted"
+    ],
+    "liveOnlyCanonicalRoutes": [
+      "cancelled",
+      "context_summary_generated",
+      "progress",
+      "run_input_applied",
+      "start",
+      "status",
+      "tools_updated"
+    ],
+    "genericDefaultRoutes": []
+  },
+  "events": [
+    {
+      "legacyName": "blackboard_directory_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "file_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_files.rs", "contains": "blackboard_directory_deleted"}
+    },
+    {
+      "legacyName": "blackboard_file_created",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "file_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_files.rs", "contains": "blackboard_file_created"}
+    },
+    {
+      "legacyName": "blackboard_file_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "file_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_files.rs", "contains": "blackboard_file_deleted"}
+    },
+    {
+      "legacyName": "blackboard_file_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "file_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_files.rs", "contains": "blackboard_file_updated"}
+    },
+    {
+      "legacyName": "blackboard_post_created",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_post_created"}
+    },
+    {
+      "legacyName": "blackboard_post_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_post_deleted"}
+    },
+    {
+      "legacyName": "blackboard_post_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_post_updated"}
+    },
+    {
+      "legacyName": "blackboard_reply_created",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id", "reply_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_reply_created"}
+    },
+    {
+      "legacyName": "blackboard_reply_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id", "reply_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_reply_deleted"}
+    },
+    {
+      "legacyName": "blackboard_reply_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "post_id", "reply_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_blackboard.rs", "contains": "blackboard_reply_updated"}
+    },
+    {
+      "legacyName": "task_execution_incident_opened",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "incident"],
+      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_EXECUTION_INCIDENT_OPENED"}
+    },
+    {
+      "legacyName": "task_execution_session_updated",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "session"],
+      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_EXECUTION_SESSION_UPDATED"}
+    },
+    {
+      "legacyName": "task_recovery_action_completed",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "action"],
+      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_RECOVERY_ACTION_COMPLETED"}
+    },
+    {
+      "legacyName": "task_recovery_action_started",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "task_id", "action"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "task_recovery_action_started"}
+    },
+    {
+      "legacyName": "topology_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "operation"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/topology_mutation.rs", "contains": "topology_updated"}
+    },
+    {
+      "legacyName": "workspace_adjudication_complete",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "verdict"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceAdjudicationCompleteEvent"}
+    },
+    {
+      "legacyName": "workspace_agent_bound",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "agent_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_agent_bound"}
+    },
+    {
+      "legacyName": "workspace_agent_unbound",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "agent_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_agent_unbound"}
+    },
+    {
+      "legacyName": "workspace_decomposition_complete",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "goal_id", "subtask_ids"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceDecompositionCompleteEvent"}
+    },
+    {
+      "legacyName": "workspace_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_deleted"}
+    },
+    {
+      "legacyName": "workspace_goal_completed",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "goal_id", "final_status"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceGoalCompletedEvent"}
+    },
+    {
+      "legacyName": "workspace_goal_materialized",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "goal_id"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceGoalMaterializedEvent"}
+    },
+    {
+      "legacyName": "workspace_member_joined",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "member_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_member_joined"}
+    },
+    {
+      "legacyName": "workspace_member_left",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "member_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_member_left"}
+    },
+    {
+      "legacyName": "workspace_member_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "member_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_member_updated"}
+    },
+    {
+      "legacyName": "workspace_message_created",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "message_id", "sender_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/message.rs", "contains": "workspace_message_created"}
+    },
+    {
+      "legacyName": "workspace_plan_updated",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "plan"],
+      "evidence": {"path": "src/infrastructure/adapters/primary/web/routers/workspace_plans.py", "contains": "WORKSPACE_PLAN_UPDATED"}
+    },
+    {
+      "legacyName": "workspace_task_assigned",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "task_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "workspace_task_assigned"}
+    },
+    {
+      "legacyName": "workspace_task_created",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "task_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "workspace_task_created"}
+    },
+    {
+      "legacyName": "workspace_task_deleted",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "task_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "workspace_task_deleted"}
+    },
+    {
+      "legacyName": "workspace_task_status_changed",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "new_status"],
+      "evidence": {"path": "src/application/services/workspace_task_command_service.py", "contains": "WORKSPACE_TASK_STATUS_CHANGED"}
+    },
+    {
+      "legacyName": "workspace_task_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "task_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "workspace_task_updated"}
+    },
+    {
+      "legacyName": "workspace_updated",
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id"],
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/event.rs", "contains": "workspace_updated"}
+    },
+    {
+      "legacyName": "workspace_worker_dispatched",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "worker_agent_id"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceWorkerDispatchedEvent"}
+    },
+    {
+      "legacyName": "workspace_worker_report_submitted",
+      "authority": "memstack-agent-runtime",
+      "requiredPayload": ["workspace_id", "task_id", "status"],
+      "evidence": {"path": "src/domain/events/agent_events.py", "contains": "WorkspaceWorkerReportSubmittedEvent"}
+    }
+  ]
+}

@@ -91,6 +91,7 @@ export type AgentEventType =
   | 'subagent_announce_expired'
   | 'tool_policy_denied'
   | 'cancelled'
+  | 'run_input_applied'
   | 'task_list_updated'
   | 'task_updated'
   | 'task_start'
@@ -293,6 +294,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   subagent_announce_expired: 'agent',
   tool_policy_denied: 'agent',
   cancelled: 'agent',
+  run_input_applied: 'agent',
   task_list_updated: 'agent',
   task_updated: 'agent',
   task_start: 'agent',
@@ -464,6 +466,7 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'subagent_announce_expired',
   'tool_policy_denied',
   'cancelled',
+  'run_input_applied',
   'task_list_updated',
   'task_updated',
   'task_start',

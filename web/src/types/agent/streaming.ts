@@ -103,6 +103,8 @@ import type {
  * Agent SSE stream handler (extended for multi-level thinking and typewriter effect)
  */
 export interface AgentStreamHandler {
+  /** Preserve explicitly classified canonical events that have no specialized state handler. */
+  onCanonicalEvent?: ((event: AgentEvent) => void) | undefined;
   onMessage?: ((event: AgentEvent<MessageEventData>) => void) | undefined;
   onThoughtStart?: ((event: AgentEvent<ThoughtStartEventData>) => void) | undefined;
   onThought?: ((event: AgentEvent<ThoughtEventData>) => void) | undefined;

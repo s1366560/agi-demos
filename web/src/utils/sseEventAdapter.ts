@@ -16,6 +16,7 @@
  * @module utils/sseEventAdapter
  */
 
+import { isCanonicalTimelineEventType } from '../types/agent/eventParity';
 import { isEventEnvelope } from '../types/generated/eventEnvelope';
 
 import { normalizeExecutionSummary } from './executionSummary';
@@ -189,7 +190,10 @@ function isMcpResult(value: unknown): value is McpResult {
 function extractContentText(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
-    const text = value.map((item) => extractContentText(item)).filter(Boolean).join('');
+    const text = value
+      .map((item) => extractContentText(item))
+      .filter(Boolean)
+      .join('');
     return text || undefined;
   }
   if (!value || typeof value !== 'object') return undefined;
@@ -1097,8 +1101,6 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     // Unsupported event types - return null
-    case 'start':
-    case 'status':
     case 'cost_update':
     case 'retry':
     case 'compact_needed':
@@ -1146,7 +1148,6 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'pattern_match':
     case 'context_compressed':
     case 'context_status':
-    case 'context_summary_generated':
     case 'title_generated':
     case 'thought_start':
     case 'thought_delta':
@@ -1254,7 +1255,21 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     default:
-      // Unknown event type - return null for type safety
+      if (isCanonicalTimelineEventType(event.type)) {
+        const payload =
+          event.data && typeof event.data === 'object' && !Array.isArray(event.data)
+            ? (event.data as Record<string, unknown>)
+            : { value: event.data };
+        return {
+          id: generateTimelineEventId(event.type),
+          type: event.type,
+          eventTimeUs,
+          eventCounter,
+          timestamp,
+          payload,
+        } as TimelineEvent;
+      }
+      // Unknown or intentionally unsupported event type.
       return null;
   }
 }
@@ -1337,6 +1352,9 @@ export function appendSSEEventToTimeline(
  * @returns true if the event type can be converted
  */
 export function isSupportedEventType(eventType: string): boolean {
+  if (isCanonicalTimelineEventType(eventType)) {
+    return true;
+  }
   const supportedTypes = [
     'message',
     'thought',

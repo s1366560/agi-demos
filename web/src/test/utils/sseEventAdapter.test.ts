@@ -32,6 +32,30 @@ import type {
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
+  describe('Canonical event parity', () => {
+    it('preserves explicitly routed canonical events as replayable timeline records', () => {
+      const event = {
+        type: 'workspace_goal_materialized',
+        data: {
+          workspace_id: 'workspace-1',
+          goal_id: 'goal-1',
+          event_time_us: 1234567890000,
+          event_counter: 9,
+        },
+      } as AgentEvent<Record<string, unknown>>;
+
+      const result = sseEventToTimeline(event);
+
+      expect(isSupportedEventType('workspace_goal_materialized')).toBe(true);
+      expect(result).toMatchObject({
+        type: 'workspace_goal_materialized',
+        eventTimeUs: 1234567890000,
+        eventCounter: 9,
+        payload: event.data,
+      });
+    });
+  });
+
   describe('Artifact events', () => {
     it('should preserve sourcePath on artifact_created events', () => {
       const event: AgentEvent<ArtifactCreatedEventData> = {
@@ -520,12 +544,11 @@ describe('SSE Event Adapter', () => {
 
     it('should return null for unsupported event types', () => {
       const unsupportedEvents = [
-        { type: 'start', data: {} },
-        { type: 'status', data: {} },
         { type: 'cost_update', data: {} },
         { type: 'error', data: { message: 'Error occurred' } },
         { type: 'title_generated', data: { title: 'New Title' } },
         { type: 'thought_start', data: { thought_level: 'reasoning' } },
+        { type: 'unknown_event', data: {} },
       ] as const;
 
       unsupportedEvents.forEach((event) => {
@@ -604,7 +627,7 @@ describe('SSE Event Adapter', () => {
           data: { role: 'user', content: 'Hello', id: 'm1' },
         },
         {
-          type: 'status', // Unsupported, will be null
+          type: 'status', // Explicit canonical live timeline event
           data: { status: 'processing' },
         },
         {
@@ -619,9 +642,10 @@ describe('SSE Event Adapter', () => {
 
       const timelineEvents = batchConvertSSEEvents(sseEvents);
 
-      expect(timelineEvents).toHaveLength(2); // Only 2 valid events
+      expect(timelineEvents).toHaveLength(3);
       expect(timelineEvents[0].type).toBe('user_message');
-      expect(timelineEvents[1].type).toBe('assistant_message');
+      expect(timelineEvents[1].type).toBe('status');
+      expect(timelineEvents[2].type).toBe('assistant_message');
     });
   });
 

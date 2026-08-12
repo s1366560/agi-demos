@@ -1,5 +1,6 @@
 import type { ArtifactCategory } from './config';
 import type { ArtifactReference } from './core';
+import type { CanonicalTimelineEventType } from './eventParity';
 import type {
   ClarificationType,
   ClarificationOption,
@@ -142,7 +143,7 @@ export type TimelineEventType =
  */
 export interface BaseTimelineEvent {
   id: string;
-  type: TimelineEventType;
+  type: TimelineEventType | CanonicalTimelineEventType;
   eventTimeUs: number;
   eventCounter: number;
   timestamp: number; // Unix timestamp in milliseconds (derived from eventTimeUs / 1000)
@@ -436,6 +437,12 @@ export interface A2UIActionAskedTimelineEvent extends BaseTimelineEvent {
   timeout_seconds?: number | undefined;
 }
 
+/** Raw but structured representation for explicitly classified canonical events. */
+export interface CanonicalTimelineEvent extends Omit<BaseTimelineEvent, 'type'> {
+  type: Exclude<CanonicalTimelineEventType, TimelineEventType>;
+  payload: Record<string, unknown>;
+}
+
 /**
  * Union type for all timeline events
  */
@@ -512,7 +519,8 @@ export type TimelineEvent =
   | AgentCompletedTimelineEvent
   | AgentStoppedTimelineEvent
   | AgentMessageSentTimelineEvent
-  | AgentMessageReceivedTimelineEvent;
+  | AgentMessageReceivedTimelineEvent
+  | CanonicalTimelineEvent;
 
 // ============================================
 // SubAgent Timeline Event Interfaces (L3 layer)

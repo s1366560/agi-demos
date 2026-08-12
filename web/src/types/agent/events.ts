@@ -7,6 +7,7 @@ import type {
   ReflectionAssessment,
   StepAdjustment,
 } from './workflow';
+import type { AgentEventType as CanonicalAgentEventType } from '../generated/eventTypes';
 
 export interface TaskListUpdatedEventData {
   conversation_id: string;
@@ -127,7 +128,7 @@ export interface ExecutionNarrativeEntry {
 /**
  * SSE event types from agent (extended for multi-level thinking and typewriter effect)
  */
-export type AgentEventType =
+export type LegacyAgentEventType =
   | 'message' // User/assistant message
   | 'thought_start' // Thought streaming started
   | 'thought' // Agent's reasoning (work or task level)
@@ -305,6 +306,9 @@ export type AgentEventType =
   // Conversation terminal events (3-gate termination + goal completion)
   | 'agent_goal_completed' // Goal evaluator confirmed user goal is met
   | 'agent_conversation_finished'; // Conversation reached terminal state (3-gate)
+
+/** Canonical backend events plus explicitly retained legacy compatibility events. */
+export type AgentEventType = CanonicalAgentEventType | LegacyAgentEventType;
 
 /**
  * Base SSE event from agent

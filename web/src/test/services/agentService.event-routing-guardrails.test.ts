@@ -112,6 +112,27 @@ describe('agentService event routing guardrails', () => {
     expect(onAgentMessageReceived).toHaveBeenCalledTimes(1);
   });
 
+  it('routes every explicitly declared canonical timeline event without using default', () => {
+    const onCanonicalEvent = vi.fn();
+    const handler: AgentStreamHandler = { onCanonicalEvent };
+
+    route(
+      'workspace_goal_materialized',
+      { workspace_id: 'workspace-1', goal_id: 'goal-1' },
+      handler
+    );
+    route('run_input_applied', { run_id: 'run-1', revision: 2 }, handler);
+
+    expect(onCanonicalEvent).toHaveBeenNthCalledWith(1, {
+      type: 'workspace_goal_materialized',
+      data: { workspace_id: 'workspace-1', goal_id: 'goal-1' },
+    });
+    expect(onCanonicalEvent).toHaveBeenNthCalledWith(2, {
+      type: 'run_input_applied',
+      data: { run_id: 'run-1', revision: 2 },
+    });
+  });
+
   it('ignores unknown event types without throwing', () => {
     const handler: AgentStreamHandler = {};
     expect(() => route('unknown_event_type', {}, handler)).not.toThrow();

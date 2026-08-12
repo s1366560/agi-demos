@@ -211,6 +211,22 @@ export function routeToHandler(
       case 'message':
         handler.onMessage?.(event as AgentEvent<MessageEventData>);
         break;
+      case 'user_message':
+      case 'assistant_message': {
+        const messageData =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? (data as Record<string, unknown>)
+            : {};
+        handler.onMessage?.({
+          type: 'message',
+          data: {
+            ...messageData,
+            role: eventType === 'user_message' ? 'user' : 'assistant',
+            content: typeof messageData.content === 'string' ? messageData.content : '',
+          },
+        } as AgentEvent<MessageEventData>);
+        break;
+      }
       case 'thought':
         handler.onThought?.(event as AgentEvent<ThoughtEventData>);
         break;
@@ -637,6 +653,63 @@ export function routeToHandler(
       case 'agent_conversation_finished':
         handler.onAgentConversationFinished?.(event as AgentEvent);
         break;
+      // Canonical events with an explicit timeline-preservation contract.
+      // Keep every case listed so default routing can never imply parity.
+      case 'a2ui_action_answered':
+      case 'agent_conflict_marked':
+      case 'agent_decision_logged':
+      case 'agent_escalated':
+      case 'agent_human_input_requested':
+      case 'agent_progress_declared':
+      case 'agent_supervisor_verdict':
+      case 'agent_task_assigned':
+      case 'agent_task_refused':
+      case 'cancelled':
+      case 'context_compacted':
+      case 'context_summary_generated':
+      case 'conversation_participant_joined':
+      case 'conversation_participant_left':
+      case 'desktop_status':
+      case 'elicitation_answered':
+      case 'elicitation_asked':
+      case 'http_service_error':
+      case 'http_service_started':
+      case 'http_service_stopped':
+      case 'http_service_updated':
+      case 'progress':
+      case 'run_input_applied':
+      case 'session_forked':
+      case 'session_merged':
+      case 'start':
+      case 'status':
+      case 'subagent_announce_expired':
+      case 'subagent_announce_received':
+      case 'subagent_announce_sent':
+      case 'subagent_delegation':
+      case 'subagent_doom_loop':
+      case 'subagent_orphan_detected':
+      case 'subagent_retry':
+      case 'subagent_spawn_rejected':
+      case 'subagent_spawning':
+      case 'task_execution_incident_opened':
+      case 'task_execution_session_updated':
+      case 'task_recovery_action_completed':
+      case 'task_recovery_action_started':
+      case 'terminal_status':
+      case 'tools_updated':
+      case 'workspace_adjudication_complete':
+      case 'workspace_decomposition_complete':
+      case 'workspace_goal_completed':
+      case 'workspace_goal_materialized':
+      case 'workspace_worker_dispatched':
+      case 'workspace_worker_report_submitted': {
+        const canonicalData =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? (data as Record<string, unknown>)
+            : { value: data };
+        handler.onCanonicalEvent?.({ type: eventType, data: canonicalData });
+        break;
+      }
       default:
         // Defect #12: surface unhandled event types in dev so new backend events
         // never silently disappear at the routing layer. In production we stay

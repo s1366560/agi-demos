@@ -356,6 +356,20 @@ export function createStreamEventHandlers(
   };
 
   return {
+    onCanonicalEvent: (event) => {
+      const stateUpdates: Partial<ConversationState> =
+        event.type === 'cancelled'
+          ? {
+              isStreaming: false,
+              streamStatus: 'idle',
+              agentState: 'idle',
+              isThinkingStreaming: false,
+            }
+          : {};
+      queueTimelineEvent(event, stateUpdates);
+      flushTimelineBufferSync();
+    },
+
     onMessage: (event) => {
       const messageData = event.data as MessageEventData & {
         metadata?: { source?: string | undefined } | undefined;
