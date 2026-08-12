@@ -45,6 +45,7 @@ type AutomaticUpdateLoopOptions = {
   intervalMs?: number;
   now?: () => Date;
   randomNonce?: () => string;
+  candidateProcessId?: () => number;
   recoveryWindowMs?: number;
   launchRecoveryHelper?: (record: UpdateRecoveryRecord) => void;
   prepareRecoverySnapshot?: (input: Readonly<{
@@ -131,6 +132,7 @@ export function startAutomaticUpdateLoop(
     ? createUpdateRecoveryCoordinator(options.journal, {
         now,
         randomNonce: options.randomNonce,
+        candidateProcessId: options.candidateProcessId,
         recoveryWindowMs: options.recoveryWindowMs,
         launchRecoveryHelper: options.launchRecoveryHelper,
       })

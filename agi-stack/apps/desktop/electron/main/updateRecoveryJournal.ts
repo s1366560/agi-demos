@@ -34,6 +34,7 @@ const recordKeys = Object.freeze([
   'nonce',
   'deadlineAt',
   'launchAttempts',
+  'candidateProcessId',
   'payloads',
   'snapshot',
   'recordedAt',
@@ -70,6 +71,7 @@ export type UpdateRecoveryRecord = Readonly<{
   nonce: string;
   deadlineAt: string;
   launchAttempts: number;
+  candidateProcessId: number | null;
   payloads: readonly UpdateRecoveryPayload[];
   snapshot: UpdateRecoverySnapshot;
   recordedAt: string;
@@ -171,8 +173,14 @@ function parseRecord(value: unknown): UpdateRecoveryRecord {
     !Number.isSafeInteger(record.launchAttempts) ||
     (record.launchAttempts as number) < 0 ||
     (record.launchAttempts as number) > MAX_LAUNCH_ATTEMPTS ||
+    !(
+      record.candidateProcessId === null ||
+      (Number.isSafeInteger(record.candidateProcessId) &&
+        (record.candidateProcessId as number) > 0 &&
+        (record.candidateProcessId as number) <= 0xffff_ffff)
+    ) ||
     !validIsoTimestamp(record.recordedAt) ||
-    (phase !== 'failed' &&
+    ((phase === 'downloaded' || phase === 'applying') &&
       new Date(record.deadlineAt as string).getTime() <=
         new Date(record.recordedAt as string).getTime()) ||
     !(record.reasonCode === null || validUpdateReasonCode(record.reasonCode)) ||
@@ -187,21 +195,31 @@ function parseRecord(value: unknown): UpdateRecoveryRecord {
   if (
     (phase === 'downloaded' &&
       (record.launchAttempts !== 0 ||
+        record.candidateProcessId !== null ||
         record.reasonCode !== null ||
         record.retryable !== false ||
         JSON.stringify(allowedActions) !== JSON.stringify(['restart_to_apply']))) ||
-    ((phase === 'applying' || phase === 'verifying') &&
+    (phase === 'applying' &&
       ((record.launchAttempts as number) < 1 ||
+        record.candidateProcessId !== null ||
+        record.reasonCode !== null ||
+        record.retryable !== false ||
+        allowedActions.length !== 0)) ||
+    (phase === 'verifying' &&
+      ((record.launchAttempts as number) < 1 ||
+        !Number.isSafeInteger(record.candidateProcessId) ||
         record.reasonCode !== null ||
         record.retryable !== false ||
         allowedActions.length !== 0)) ||
     (phase === 'recovered' &&
       ((record.launchAttempts as number) < 1 ||
+        record.candidateProcessId !== null ||
         record.reasonCode !== null ||
         record.retryable !== false ||
         JSON.stringify(allowedActions) !== JSON.stringify(['check']))) ||
     (phase === 'failed' &&
-      (!validUpdateReasonCode(record.reasonCode) ||
+      (record.candidateProcessId !== null ||
+        !validUpdateReasonCode(record.reasonCode) ||
         (record.retryable
           ? JSON.stringify(allowedActions) !== JSON.stringify(['restart_to_apply'])
           : allowedActions.length !== 0)))
@@ -217,6 +235,7 @@ function parseRecord(value: unknown): UpdateRecoveryRecord {
     nonce: record.nonce,
     deadlineAt: record.deadlineAt as string,
     launchAttempts: record.launchAttempts as number,
+    candidateProcessId: record.candidateProcessId as number | null,
     payloads: parsePayloads(record.payloads),
     snapshot: parseSnapshot(record.snapshot),
     recordedAt: record.recordedAt as string,

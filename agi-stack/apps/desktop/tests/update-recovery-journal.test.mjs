@@ -29,6 +29,7 @@ function recoveryRecord(overrides = {}) {
     nonce: 'a'.repeat(64),
     deadlineAt: '2026-08-11T00:05:00.000Z',
     launchAttempts: 0,
+    candidateProcessId: null,
     payloads,
     snapshot,
     recordedAt: '2026-08-11T00:00:00.000Z',
@@ -111,6 +112,28 @@ test('update recovery journal rejects foreign ownership and mutable payload cont
     const journal = createUpdateRecoveryJournal(path);
     assert.throws(
       () => journal.write(recoveryRecord({ payloads: [] })),
+      /update recovery journal is invalid/u,
+    );
+  });
+});
+
+test('update recovery journal binds a candidate PID only while verifying', () => {
+  withJournal(({ path }) => {
+    const journal = createUpdateRecoveryJournal(path);
+    const verifying = recoveryRecord({
+      phase: 'verifying',
+      launchAttempts: 1,
+      candidateProcessId: 4242,
+      allowedActions: [],
+    });
+    journal.write(verifying);
+    assert.equal(journal.load().candidateProcessId, 4242);
+    assert.throws(
+      () => journal.write({ ...verifying, candidateProcessId: null }),
+      /update recovery journal is invalid/u,
+    );
+    assert.throws(
+      () => journal.write(recoveryRecord({ candidateProcessId: 4242 })),
       /update recovery journal is invalid/u,
     );
   });

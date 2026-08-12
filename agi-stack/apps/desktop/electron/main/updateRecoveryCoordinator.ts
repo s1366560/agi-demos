@@ -13,6 +13,7 @@ const MAX_LAUNCH_ATTEMPTS = 3;
 type UpdateRecoveryCoordinatorOptions = Readonly<{
   now?: () => Date;
   randomNonce?: () => string;
+  candidateProcessId?: () => number;
   recoveryWindowMs?: number;
   launchRecoveryHelper?: (record: UpdateRecoveryRecord) => void;
 }>;
@@ -52,6 +53,7 @@ function failedRecord(
   return freezeRecord({
     ...record,
     phase: 'failed',
+    candidateProcessId: null,
     recordedAt,
     reasonCode,
     retryable,
@@ -65,6 +67,7 @@ export function createUpdateRecoveryCoordinator(
 ): UpdateRecoveryCoordinator {
   const now = options.now ?? (() => new Date());
   const randomNonce = options.randomNonce ?? (() => randomBytes(32).toString('hex'));
+  const candidateProcessId = options.candidateProcessId ?? (() => process.pid);
   const recoveryWindowMs = options.recoveryWindowMs ?? DEFAULT_RECOVERY_WINDOW_MS;
   if (!Number.isSafeInteger(recoveryWindowMs) || recoveryWindowMs < 10_000 || recoveryWindowMs > 3_600_000) {
     throw new Error('update recovery window is invalid');
@@ -91,23 +94,28 @@ export function createUpdateRecoveryCoordinator(
           ? record
           : fail(record, 'update_recovered_version_mismatch', false);
       }
+      if (currentVersion === record.candidateVersion) {
+        const processId = candidateProcessId();
+        if (!Number.isSafeInteger(processId) || processId <= 0 || processId > 0xffff_ffff) {
+          throw new Error('update recovery candidate process identity is invalid');
+        }
+        return write({
+          ...record,
+          phase: 'verifying',
+          currentVersion,
+          candidateProcessId: processId,
+          recordedAt: now().toISOString(),
+          reasonCode: null,
+          retryable: false,
+          allowedActions: [],
+        });
+      }
       if (now().getTime() > new Date(record.deadlineAt).getTime()) {
         return fail(
           record,
           'update_recovery_deadline_expired',
           record.launchAttempts < MAX_LAUNCH_ATTEMPTS,
         );
-      }
-      if (currentVersion === record.candidateVersion) {
-        return write({
-          ...record,
-          phase: 'verifying',
-          currentVersion,
-          recordedAt: now().toISOString(),
-          reasonCode: null,
-          retryable: false,
-          allowedActions: [],
-        });
       }
       if (currentVersion === record.recoveryVersion) {
         return fail(
@@ -129,6 +137,7 @@ export function createUpdateRecoveryCoordinator(
         nonce: randomNonce(),
         deadlineAt: new Date(recordedAt.getTime() + recoveryWindowMs).toISOString(),
         launchAttempts: 0,
+        candidateProcessId: null,
         payloads,
         snapshot,
         recordedAt: recordedAt.toISOString(),
@@ -156,6 +165,7 @@ export function createUpdateRecoveryCoordinator(
         nonce: randomNonce(),
         deadlineAt: new Date(recordedAt.getTime() + recoveryWindowMs).toISOString(),
         launchAttempts: record.launchAttempts + 1,
+        candidateProcessId: null,
         recordedAt: recordedAt.toISOString(),
         reasonCode: null,
         retryable: false,
@@ -176,11 +186,6 @@ export function createUpdateRecoveryCoordinator(
       }
       if (record.nonce !== nonce) throw new Error('update recovery health nonce mismatch');
       if (now().getTime() > new Date(record.deadlineAt).getTime()) {
-        fail(
-          record,
-          'update_recovery_deadline_expired',
-          record.launchAttempts < MAX_LAUNCH_ATTEMPTS,
-        );
         throw new Error('update recovery health deadline expired');
       }
       if (currentVersion !== record.candidateVersion) {
@@ -191,6 +196,7 @@ export function createUpdateRecoveryCoordinator(
         ...record,
         phase: 'recovered',
         currentVersion,
+        candidateProcessId: null,
         recordedAt: now().toISOString(),
         reasonCode: null,
         retryable: false,

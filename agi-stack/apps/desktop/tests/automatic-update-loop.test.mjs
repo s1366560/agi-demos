@@ -167,6 +167,7 @@ test('a restarted candidate verifies nonce-bound health before claiming recovere
     nonce: 'b'.repeat(64),
     deadlineAt: '2026-08-11T00:05:00.000Z',
     launchAttempts: 1,
+    candidateProcessId: null,
     payloads,
     snapshot,
     recordedAt: '2026-08-11T00:00:00.000Z',
@@ -178,6 +179,7 @@ test('a restarted candidate verifies nonce-bound health before claiming recovere
   let cleanupCalls = 0;
   const controller = startAutomaticUpdateLoop(updateClient, {
     currentVersion: '0.2.0',
+    candidateProcessId: () => 6262,
     now: () => new Date('2026-08-11T00:00:01.000Z'),
     journal: {
       path: '/tmp/agistack-update-recovery-test.json',
@@ -200,6 +202,7 @@ test('a restarted candidate verifies nonce-bound health before claiming recovere
   assert.equal(controller.getState().phase, 'verifying');
   assert.equal(controller.getState().currentVersion, '0.2.0');
   assert.equal(controller.getState().candidateVersion, '0.2.0');
+  assert.equal(journalRecords.at(-1).candidateProcessId, 6262);
   controller.confirmHealthy();
   assert.equal(controller.getState().phase, 'recovered');
   assert.equal(journalRecords.at(-1).phase, 'recovered');

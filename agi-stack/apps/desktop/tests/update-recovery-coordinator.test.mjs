@@ -51,8 +51,9 @@ test('recovery coordinator freezes payload evidence and requires a nonce health 
 
   const restarted = createUpdateRecoveryCoordinator(journal, {
     now: () => new Date('2026-08-11T00:00:01.000Z'),
+    candidateProcessId: () => 4242,
   });
-  assert.equal(restarted.loadForStartup('0.2.0').phase, 'verifying');
+  assert.equal(restarted.loadForStartup('0.2.0').candidateProcessId, 4242);
   assert.throws(
     () => restarted.confirmHealthy({ currentVersion: '0.2.0', nonce: 'd'.repeat(64) }),
     /health nonce mismatch/u,
@@ -74,6 +75,7 @@ test('recovery coordinator fails closed on deadline without claiming OS rollback
     nonce: 'e'.repeat(64),
     deadlineAt: '2026-08-11T00:00:01.000Z',
     launchAttempts: 1,
+    candidateProcessId: null,
     payloads,
     snapshot,
     recordedAt: '2026-08-11T00:00:00.000Z',
@@ -110,6 +112,7 @@ test('recovery coordinator accepts an actual restored N record without claiming 
     nonce: 'f'.repeat(64),
     deadlineAt: '2026-08-11T00:05:00.000Z',
     launchAttempts: 1,
+    candidateProcessId: null,
     payloads,
     snapshot,
     recordedAt: '2026-08-11T00:01:00.000Z',
@@ -124,4 +127,46 @@ test('recovery coordinator accepts an actual restored N record without claiming 
     clear: () => undefined,
   });
   assert.equal(coordinator.loadForStartup('0.1.0').currentVersion, '0.1.0');
+});
+
+test('an expired candidate preserves helper authority instead of overwriting the journal', () => {
+  let stored = {
+    schemaVersion: 2,
+    phase: 'applying',
+    currentVersion: '0.1.0',
+    candidateVersion: '0.2.0',
+    recoveryVersion: '0.1.0',
+    nonce: '9'.repeat(64),
+    deadlineAt: '2026-08-11T00:00:01.000Z',
+    launchAttempts: 1,
+    candidateProcessId: null,
+    payloads,
+    snapshot,
+    recordedAt: '2026-08-11T00:00:00.000Z',
+    reasonCode: null,
+    retryable: false,
+    allowedActions: [],
+  };
+  const coordinator = createUpdateRecoveryCoordinator(
+    {
+      path: '/tmp/agistack-update-recovery-test.json',
+      load: () => stored,
+      write: (record) => {
+        stored = record;
+      },
+      clear: () => undefined,
+    },
+    {
+      now: () => new Date('2026-08-11T00:00:02.000Z'),
+      candidateProcessId: () => 5151,
+    },
+  );
+
+  assert.equal(coordinator.loadForStartup('0.2.0').candidateProcessId, 5151);
+  assert.throws(
+    () => coordinator.confirmHealthy({ currentVersion: '0.2.0', nonce: '9'.repeat(64) }),
+    /health deadline expired/u,
+  );
+  assert.equal(stored.phase, 'verifying');
+  assert.equal(stored.candidateProcessId, 5151);
 });

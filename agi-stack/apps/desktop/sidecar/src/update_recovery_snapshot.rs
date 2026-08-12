@@ -11,8 +11,11 @@ use uuid::Uuid;
 
 use crate::private_file_permissions;
 
-const MANIFEST_SCHEMA_VERSION: u8 = 1;
+const MANIFEST_SCHEMA_VERSION: u8 = 2;
 const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_XATTR_COUNT: usize = 64;
+const MAX_XATTR_NAME_BYTES: usize = 255;
+const MAX_XATTR_VALUE_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug)]
 pub(crate) struct RecoveryError(String);
@@ -54,6 +57,14 @@ enum SnapshotEntryKind {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct SnapshotXattr {
+    name: String,
+    size: u64,
+    sha512: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct SnapshotEntry {
     path: String,
     kind: SnapshotEntryKind,
@@ -61,6 +72,7 @@ struct SnapshotEntry {
     sha512: Option<String>,
     link_target: Option<String>,
     mode: u32,
+    xattrs: Vec<SnapshotXattr>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -68,6 +80,8 @@ struct SnapshotEntry {
 struct SnapshotManifest {
     schema_version: u8,
     target_kind: SnapshotTargetKind,
+    root_mode: u32,
+    root_xattrs: Vec<SnapshotXattr>,
     entries: Vec<SnapshotEntry>,
 }
 
@@ -106,6 +120,167 @@ fn file_sha512(path: &Path) -> RecoveryResult<(String, u64)> {
         base64::engine::general_purpose::STANDARD.encode(digest.finalize()),
         size,
     ))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_path(path: &Path) -> RecoveryResult<std::ffi::CString> {
+    use std::os::unix::ffi::OsStrExt as _;
+
+    std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| RecoveryError::new("snapshot xattr path is invalid"))
+}
+
+#[cfg(target_os = "macos")]
+fn read_snapshot_xattr_values(
+    path: &Path,
+    no_follow: bool,
+) -> RecoveryResult<Vec<(String, Vec<u8>)>> {
+    let path = macos_path(path)?;
+    let flags = if no_follow { libc::XATTR_NOFOLLOW } else { 0 };
+    // SAFETY: path is NUL-terminated and the null list requests only the required byte count.
+    let list_size = unsafe { libc::listxattr(path.as_ptr(), std::ptr::null_mut(), 0, flags) };
+    if list_size < 0 {
+        return Err(RecoveryError::new(format!(
+            "list snapshot xattrs: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    let list_size = usize::try_from(list_size)
+        .map_err(|_| RecoveryError::new("snapshot xattr list is invalid"))?;
+    if list_size == 0 {
+        return Ok(Vec::new());
+    }
+    if list_size > MAX_XATTR_COUNT * (MAX_XATTR_NAME_BYTES + 1) {
+        return Err(RecoveryError::new("snapshot xattr list is too large"));
+    }
+    let mut list = vec![0_u8; list_size];
+    // SAFETY: list is writable for list_size bytes and path remains live for the call.
+    let listed =
+        unsafe { libc::listxattr(path.as_ptr(), list.as_mut_ptr().cast(), list.len(), flags) };
+    if listed < 0 || listed as usize != list_size {
+        return Err(RecoveryError::new("snapshot xattr list changed"));
+    }
+    let mut values = Vec::new();
+    for raw_name in list
+        .split(|byte| *byte == 0)
+        .filter(|name| !name.is_empty())
+    {
+        if values.len() >= MAX_XATTR_COUNT || raw_name.len() > MAX_XATTR_NAME_BYTES {
+            return Err(RecoveryError::new("snapshot xattr identity is invalid"));
+        }
+        let name = std::str::from_utf8(raw_name)
+            .map_err(|_| RecoveryError::new("snapshot xattr name must be UTF-8"))?
+            .to_owned();
+        let name_c = std::ffi::CString::new(raw_name)
+            .map_err(|_| RecoveryError::new("snapshot xattr name is invalid"))?;
+        // SAFETY: path and name are NUL-terminated; the null value requests the required size.
+        let value_size = unsafe {
+            libc::getxattr(
+                path.as_ptr(),
+                name_c.as_ptr(),
+                std::ptr::null_mut(),
+                0,
+                0,
+                flags,
+            )
+        };
+        if value_size < 0 {
+            return Err(RecoveryError::new(format!(
+                "read snapshot xattr size: {}",
+                std::io::Error::last_os_error()
+            )));
+        }
+        let value_size = usize::try_from(value_size)
+            .map_err(|_| RecoveryError::new("snapshot xattr size is invalid"))?;
+        if value_size > MAX_XATTR_VALUE_BYTES {
+            return Err(RecoveryError::new("snapshot xattr value is too large"));
+        }
+        let mut value = vec![0_u8; value_size];
+        // SAFETY: value is writable for value_size bytes; zero-sized values use a null pointer.
+        let read = unsafe {
+            libc::getxattr(
+                path.as_ptr(),
+                name_c.as_ptr(),
+                if value.is_empty() {
+                    std::ptr::null_mut()
+                } else {
+                    value.as_mut_ptr().cast()
+                },
+                value.len(),
+                0,
+                flags,
+            )
+        };
+        if read < 0 || read as usize != value_size {
+            return Err(RecoveryError::new("snapshot xattr value changed"));
+        }
+        values.push((name, value));
+    }
+    values.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(values)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_snapshot_xattr_values(
+    _path: &Path,
+    _no_follow: bool,
+) -> RecoveryResult<Vec<(String, Vec<u8>)>> {
+    Ok(Vec::new())
+}
+
+fn snapshot_xattrs(path: &Path, no_follow: bool) -> RecoveryResult<Vec<SnapshotXattr>> {
+    read_snapshot_xattr_values(path, no_follow)?
+        .into_iter()
+        .map(|(name, value)| {
+            Ok(SnapshotXattr {
+                name,
+                size: u64::try_from(value.len())
+                    .map_err(|_| RecoveryError::new("snapshot xattr size is invalid"))?,
+                sha512: canonical_sha512(&value),
+            })
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn copy_snapshot_xattrs(source: &Path, destination: &Path, no_follow: bool) -> RecoveryResult<()> {
+    let destination = macos_path(destination)?;
+    let flags = if no_follow { libc::XATTR_NOFOLLOW } else { 0 };
+    for (name, value) in read_snapshot_xattr_values(source, no_follow)? {
+        let name = std::ffi::CString::new(name)
+            .map_err(|_| RecoveryError::new("snapshot xattr name is invalid"))?;
+        // SAFETY: destination/name are NUL-terminated and value is readable for its exact length.
+        if unsafe {
+            libc::setxattr(
+                destination.as_ptr(),
+                name.as_ptr(),
+                if value.is_empty() {
+                    std::ptr::null()
+                } else {
+                    value.as_ptr().cast()
+                },
+                value.len(),
+                0,
+                flags,
+            )
+        } != 0
+        {
+            return Err(RecoveryError::new(format!(
+                "write snapshot xattr: {}",
+                std::io::Error::last_os_error()
+            )));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn copy_snapshot_xattrs(
+    _source: &Path,
+    _destination: &Path,
+    _no_follow: bool,
+) -> RecoveryResult<()> {
+    Ok(())
 }
 
 fn is_safe_relative(path: &Path) -> bool {
@@ -235,6 +410,7 @@ fn copy_entry(
             .map_err(|error| RecoveryError::io("read snapshot symlink", error))?;
         validate_symlink(source_root, source, &target)?;
         create_symlink(&target, destination)?;
+        copy_snapshot_xattrs(source, destination, true)?;
         entries.push(SnapshotEntry {
             path,
             kind: SnapshotEntryKind::Symlink,
@@ -247,12 +423,14 @@ fn copy_entry(
                     .replace('\\', "/"),
             ),
             mode: 0,
+            xattrs: snapshot_xattrs(destination, true)?,
         });
         return Ok(());
     }
     if metadata.is_dir() {
         fs::create_dir(destination)
             .map_err(|error| RecoveryError::io("create snapshot directory", error))?;
+        copy_snapshot_xattrs(source, destination, false)?;
         entries.push(SnapshotEntry {
             path,
             kind: SnapshotEntryKind::Directory,
@@ -260,6 +438,7 @@ fn copy_entry(
             sha512: None,
             link_target: None,
             mode: permission_mode(&metadata),
+            xattrs: snapshot_xattrs(destination, false)?,
         });
         for child in sorted_children(source)? {
             let name = child
@@ -283,6 +462,7 @@ fn copy_entry(
     }
     fs::copy(source, destination)
         .map_err(|error| RecoveryError::io("copy snapshot file", error))?;
+    copy_snapshot_xattrs(source, destination, false)?;
     set_permission_mode(destination, permission_mode(&metadata))?;
     let (sha512, size) = file_sha512(destination)?;
     entries.push(SnapshotEntry {
@@ -292,6 +472,7 @@ fn copy_entry(
         sha512: Some(sha512),
         link_target: None,
         mode: permission_mode(&metadata),
+        xattrs: snapshot_xattrs(destination, false)?,
     });
     Ok(())
 }
@@ -321,6 +502,7 @@ fn inspect_entry(
                     .replace('\\', "/"),
             ),
             mode: 0,
+            xattrs: snapshot_xattrs(source, true)?,
         });
     } else if metadata.is_dir() {
         entries.push(SnapshotEntry {
@@ -330,6 +512,7 @@ fn inspect_entry(
             sha512: None,
             link_target: None,
             mode: permission_mode(&metadata),
+            xattrs: snapshot_xattrs(source, false)?,
         });
         for child in sorted_children(source)? {
             let name = child
@@ -346,6 +529,7 @@ fn inspect_entry(
             sha512: Some(sha512),
             link_target: None,
             mode: permission_mode(&metadata),
+            xattrs: snapshot_xattrs(source, false)?,
         });
     } else {
         return Err(RecoveryError::new(
@@ -377,9 +561,33 @@ fn manifest_for_payload(
         }
     }
     entries.sort_by(|left, right| left.path.cmp(&right.path));
+    let (root_mode, root_xattrs) = if target_kind == SnapshotTargetKind::Directory {
+        let metadata = fs::symlink_metadata(payload)
+            .map_err(|error| RecoveryError::io("read snapshot root metadata", error))?;
+        (permission_mode(&metadata), snapshot_xattrs(payload, false)?)
+    } else {
+        (0, Vec::new())
+    };
     Ok(SnapshotManifest {
         schema_version: MANIFEST_SCHEMA_VERSION,
         target_kind,
+        root_mode,
+        root_xattrs,
+        entries,
+    })
+}
+
+fn manifest_for_single_file(path: &Path) -> RecoveryResult<SnapshotManifest> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| RecoveryError::new("snapshot file parent is invalid"))?;
+    let mut entries = Vec::new();
+    inspect_entry(parent, path, Path::new("item"), &mut entries)?;
+    Ok(SnapshotManifest {
+        schema_version: MANIFEST_SCHEMA_VERSION,
+        target_kind: SnapshotTargetKind::File,
+        root_mode: 0,
+        root_xattrs: Vec::new(),
         entries,
     })
 }
@@ -506,6 +714,8 @@ pub(crate) fn prepare_snapshot(
         )?;
         SnapshotTargetKind::File
     } else {
+        copy_snapshot_xattrs(target, &payload, false)?;
+        set_permission_mode(&payload, permission_mode(&metadata))?;
         for child in sorted_children(target)? {
             let name = child
                 .file_name()
@@ -524,6 +734,16 @@ pub(crate) fn prepare_snapshot(
     let manifest = SnapshotManifest {
         schema_version: MANIFEST_SCHEMA_VERSION,
         target_kind,
+        root_mode: if target_kind == SnapshotTargetKind::Directory {
+            permission_mode(&metadata)
+        } else {
+            0
+        },
+        root_xattrs: if target_kind == SnapshotTargetKind::Directory {
+            snapshot_xattrs(&payload, false)?
+        } else {
+            Vec::new()
+        },
         entries,
     };
     let bytes = serde_json::to_vec(&manifest)
@@ -571,9 +791,35 @@ fn load_verified_manifest(
     if manifest.schema_version != MANIFEST_SCHEMA_VERSION {
         return Err(RecoveryError::new("snapshot manifest version is invalid"));
     }
+    let valid_xattrs = |xattrs: &[SnapshotXattr]| {
+        let mut names = HashSet::with_capacity(xattrs.len());
+        xattrs.len() <= MAX_XATTR_COUNT
+            && xattrs.iter().all(|xattr| {
+                !xattr.name.is_empty()
+                    && xattr.name.len() <= MAX_XATTR_NAME_BYTES
+                    && names.insert(xattr.name.as_str())
+                    && xattr.size <= MAX_XATTR_VALUE_BYTES as u64
+                    && base64::engine::general_purpose::STANDARD
+                        .decode(&xattr.sha512)
+                        .is_ok_and(|digest| digest.len() == 64)
+            })
+    };
+    if manifest.root_mode > 0o777
+        || !valid_xattrs(&manifest.root_xattrs)
+        || (manifest.target_kind == SnapshotTargetKind::File
+            && (manifest.root_mode != 0 || !manifest.root_xattrs.is_empty()))
+    {
+        return Err(RecoveryError::new(
+            "snapshot manifest root contract is invalid",
+        ));
+    }
     let mut paths = HashSet::with_capacity(manifest.entries.len());
     for entry in &manifest.entries {
-        if !paths.insert(entry.path.as_str()) || path_from_relative(&entry.path).is_err() {
+        if !paths.insert(entry.path.as_str())
+            || path_from_relative(&entry.path).is_err()
+            || entry.mode > 0o777
+            || !valid_xattrs(&entry.xattrs)
+        {
             return Err(RecoveryError::new("snapshot manifest entry is invalid"));
         }
         match entry.kind {
@@ -616,6 +862,9 @@ fn copy_payload_to_staging(
         SnapshotTargetKind::Directory => {
             fs::create_dir(staging)
                 .map_err(|error| RecoveryError::io("create recovery staging directory", error))?;
+            let payload_metadata = fs::symlink_metadata(&payload)
+                .map_err(|error| RecoveryError::io("read recovery payload root", error))?;
+            copy_snapshot_xattrs(&payload, staging, false)?;
             for child in sorted_children(&payload)? {
                 let name = child
                     .file_name()
@@ -628,6 +877,7 @@ fn copy_payload_to_staging(
                     &mut ignored_entries,
                 )?;
             }
+            set_permission_mode(staging, permission_mode(&payload_metadata))?;
             Ok(())
         }
     }
@@ -672,31 +922,15 @@ pub(crate) fn restore_snapshot(
         ));
     }
     copy_payload_to_staging(snapshot_root, &staging, manifest.target_kind)?;
-    let staged_manifest = manifest_for_payload(
-        if manifest.target_kind == SnapshotTargetKind::File {
-            staging
-                .parent()
-                .ok_or_else(|| RecoveryError::new("recovery staging parent is invalid"))?
-        } else {
-            &staging
-        },
-        manifest.target_kind,
-    );
-    if manifest.target_kind == SnapshotTargetKind::Directory {
-        if staged_manifest? != manifest {
-            let _ = remove_path(&staging);
-            return Err(RecoveryError::new("recovery staging verification failed"));
+    let staged_manifest = match manifest.target_kind {
+        SnapshotTargetKind::File => manifest_for_single_file(&staging),
+        SnapshotTargetKind::Directory => {
+            manifest_for_payload(&staging, SnapshotTargetKind::Directory)
         }
-    } else {
-        let (sha512, size) = file_sha512(&staging)?;
-        let entry = manifest
-            .entries
-            .first()
-            .ok_or_else(|| RecoveryError::new("recovery file manifest is empty"))?;
-        if entry.sha512.as_deref() != Some(sha512.as_str()) || entry.size != size {
-            let _ = remove_path(&staging);
-            return Err(RecoveryError::new("recovery staging verification failed"));
-        }
+    };
+    if staged_manifest? != manifest {
+        let _ = remove_path(&staging);
+        return Err(RecoveryError::new("recovery staging verification failed"));
     }
     if target.exists() {
         let target_metadata = fs::symlink_metadata(target)
@@ -744,6 +978,33 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn write_test_xattr(path: &Path, name: &str, value: &[u8]) {
+        let path = macos_path(path).expect("encode xattr path");
+        let name = std::ffi::CString::new(name).expect("encode xattr name");
+        // SAFETY: path/name are NUL-terminated and value is readable for its exact length.
+        let result = unsafe {
+            libc::setxattr(
+                path.as_ptr(),
+                name.as_ptr(),
+                value.as_ptr().cast(),
+                value.len(),
+                0,
+                0,
+            )
+        };
+        assert_eq!(result, 0, "write test xattr");
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_test_xattr(path: &Path, name: &str) -> Vec<u8> {
+        read_snapshot_xattr_values(path, false)
+            .expect("read test xattrs")
+            .into_iter()
+            .find_map(|(candidate, value)| (candidate == name).then_some(value))
+            .expect("test xattr exists")
     }
 
     #[test]
@@ -804,6 +1065,58 @@ mod tests {
             fs::read_to_string(target).expect("read restored version"),
             "0.1.0"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn snapshot_restore_preserves_root_and_file_extended_attributes() {
+        const XATTR: &str = "com.memstack.recovery-test";
+        let root = TestRoot::new();
+        let target = root.0.join("MemStack.app");
+        let executable = target.join("Contents/MacOS/MemStack");
+        let owned = root.0.join("owned");
+        let snapshot = owned.join("snapshot");
+        let manifest = snapshot.join("manifest.json");
+        fs::create_dir_all(executable.parent().expect("executable parent"))
+            .expect("create application bundle");
+        fs::write(&executable, "0.1.0").expect("write executable");
+        write_test_xattr(&target, XATTR, b"root-v1");
+        write_test_xattr(&executable, XATTR, b"file-v1");
+        let evidence =
+            prepare_snapshot(&target, &owned, &snapshot, &manifest).expect("prepare snapshot");
+
+        write_test_xattr(&target, XATTR, b"root-v2");
+        write_test_xattr(&executable, XATTR, b"file-v2");
+        restore_snapshot(&target, &snapshot, &manifest, &evidence, &"d".repeat(64))
+            .expect("restore snapshot");
+
+        assert_eq!(read_test_xattr(&target, XATTR), b"root-v1");
+        assert_eq!(read_test_xattr(&executable, XATTR), b"file-v1");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn snapshot_restore_rejects_extended_attribute_tampering() {
+        const XATTR: &str = "com.memstack.recovery-test";
+        let root = TestRoot::new();
+        let target = root.0.join("MemStack.app");
+        let owned = root.0.join("owned");
+        let snapshot = owned.join("snapshot");
+        let manifest = snapshot.join("manifest.json");
+        fs::create_dir(&target).expect("create application bundle");
+        fs::write(target.join("version.txt"), "0.1.0").expect("write version");
+        write_test_xattr(target.join("version.txt").as_path(), XATTR, b"signed-v1");
+        let evidence =
+            prepare_snapshot(&target, &owned, &snapshot, &manifest).expect("prepare snapshot");
+
+        write_test_xattr(
+            snapshot.join("payload/version.txt").as_path(),
+            XATTR,
+            b"tampered",
+        );
+        let error = restore_snapshot(&target, &snapshot, &manifest, &evidence, &"e".repeat(64))
+            .expect_err("tampered xattr must fail");
+        assert!(error.to_string().contains("does not match"));
     }
 
     #[cfg(unix)]
