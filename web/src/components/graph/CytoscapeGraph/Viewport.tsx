@@ -126,6 +126,13 @@ interface ViewportProps {
   onNodeSelect?: ((node: NodeData | null) => void) | undefined;
 }
 
+type AccessibleGraphEdge = Readonly<{
+  id: string;
+  sourceName: string;
+  targetName: string;
+  label: string;
+}>;
+
 // ========================================
 // Main Viewport Component
 // ========================================
@@ -153,6 +160,8 @@ export function CytoscapeGraphViewport({
   const [error, setError] = useState<string | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
+  const [accessibleNodes, setAccessibleNodes] = useState<readonly NodeData[]>([]);
+  const [accessibleEdges, setAccessibleEdges] = useState<readonly AccessibleGraphEdge[]>([]);
   const onNodeClickRef = useRef(onNodeClick);
 
   useEffect(() => {
@@ -291,6 +300,30 @@ export function CytoscapeGraphViewport({
       cy.elements().remove();
       cy.add(elements);
 
+      const nextAccessibleNodes = elements
+        .filter((element) => element.group === 'nodes')
+        .map((element) => element.data as NodeData);
+      const nodeNames = new Map(nextAccessibleNodes.map((node) => [node.id, node.name]));
+      const nextAccessibleEdges = elements
+        .filter((element) => element.group === 'edges')
+        .map((element) => element.data)
+        .filter(
+          (edge) =>
+            typeof edge.id === 'string' &&
+            typeof edge.source === 'string' &&
+            typeof edge.target === 'string' &&
+            nodeNames.has(edge.source) &&
+            nodeNames.has(edge.target)
+        )
+        .map((edge) => ({
+          id: edge.id as string,
+          sourceName: nodeNames.get(edge.source as string)!,
+          targetName: nodeNames.get(edge.target as string)!,
+          label: typeof edge.label === 'string' && edge.label ? edge.label : 'RELATED_TO',
+        }));
+      setAccessibleNodes(nextAccessibleNodes);
+      setAccessibleEdges(nextAccessibleEdges);
+
       const layoutOpts = {
         ...toCytoscapeLayoutOptions(config.layout),
         animate: false,
@@ -311,6 +344,8 @@ export function CytoscapeGraphViewport({
         defaultValue: 'Failed to load graph data',
       });
       if (isMountedRef.current) {
+        setAccessibleNodes([]);
+        setAccessibleEdges([]);
         setError(getErrorMessage(err, fallbackMessage));
       }
     } finally {
@@ -450,9 +485,75 @@ export function CytoscapeGraphViewport({
 
       <div
         ref={containerRef}
+        aria-hidden="true"
         className="h-full min-h-0 w-full"
         style={{ backgroundColor: currentTheme.background }}
       />
+      <section
+        role="region"
+        aria-label={t('graph.cytoscapeViewport.accessibleGraph', {
+          defaultValue: 'Accessible graph data',
+        })}
+        className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:inset-4 focus-within:z-20 focus-within:overflow-auto focus-within:rounded-lg focus-within:bg-white focus-within:p-4 focus-within:shadow-lg dark:focus-within:bg-slate-900"
+      >
+        <p>
+          {t('graph.cytoscapeViewport.accessibleSummary', {
+            defaultValue:
+              '{{nodes}} nodes and {{edges}} relationships. Use the table controls to choose graph nodes.',
+            nodes: accessibleNodes.length,
+            edges: accessibleEdges.length,
+          })}
+        </p>
+        <table>
+          <caption>
+            {t('graph.cytoscapeViewport.accessibleNodes', { defaultValue: 'Graph nodes' })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t('common.forms.name')}</th>
+              <th scope="col">{t('common.forms.type')}</th>
+              <th scope="col">
+                {t('project.graph.node_detail.connections', { defaultValue: 'Connections' })}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {accessibleNodes.map((node) => (
+              <tr key={node.id}>
+                <th scope="row">
+                  <button
+                    type="button"
+                    aria-label={t('graph.cytoscapeViewport.selectNode', {
+                      defaultValue: 'Select {{name}}',
+                      name: node.name,
+                    })}
+                    onClick={() => {
+                      onNodeClickRef.current?.(node);
+                      onNodeSelect?.(node);
+                    }}
+                  >
+                    {node.name}
+                  </button>
+                </th>
+                <td>{node.entity_type ?? node.type}</td>
+                <td>{node.connection_count ?? 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <h3>
+          {t('graph.cytoscapeViewport.accessibleRelationships', {
+            defaultValue: 'Graph relationships',
+          })}
+        </h3>
+        <ul>
+          {accessibleEdges.map((edge) => (
+            <li key={edge.id}>
+              {edge.sourceName} {edge.label} {edge.targetName}
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

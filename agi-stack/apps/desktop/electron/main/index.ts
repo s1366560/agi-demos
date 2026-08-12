@@ -73,6 +73,8 @@ import {
 import { configureQaProfile, resolveSidecarLegacyDataDirectories } from './qaProfilePolicy';
 import { SidecarSupervisor, sidecarRendererEnvironment } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
+import type { AutomaticUpdateController } from './automaticUpdateLoop';
+import { createUpdateRecoveryJournal } from './updateRecoveryJournal';
 import {
   SIGNED_WEB_CONTROL_PLANE_ORIGIN,
   buildWebControlPlaneUrl,
@@ -90,6 +92,10 @@ const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
+const UPDATE_STATE_CHANNEL = 'agistack:update-state';
+const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
+const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
+const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
 const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
 const SIDECAR_COMMANDS = new Set([
   'trusted_session_clear',
@@ -125,7 +131,8 @@ let oauthCallbackAuthority: DesktopOAuthCallbackAuthority | null = null;
 let pendingOAuthCallback: OAuthCallbackDeepLink | null = null;
 let oauthCallbackInFlight = false;
 let sidecarShutdownComplete = false;
-let stopAutomaticUpdates: (() => void) | null = null;
+let automaticUpdates: AutomaticUpdateController | null = null;
+let unsubscribeUpdateState: (() => void) | null = null;
 let iabPool: IabViewPool | null = null;
 let iabBackend: IabBackend | null = null;
 
@@ -709,6 +716,30 @@ async function executeDesktopCommand(
   }
 }
 
+function authorizeUpdateRenderer(event: IpcMainInvokeEvent): void {
+  void authorizedCloudRequestOwner(event);
+}
+
+function handleUpdateState(event: IpcMainInvokeEvent): unknown {
+  authorizeUpdateRenderer(event);
+  if (!automaticUpdates) throw new Error('automatic updates are unavailable');
+  return automaticUpdates.getState();
+}
+
+async function handleUpdateCheck(event: IpcMainInvokeEvent): Promise<unknown> {
+  authorizeUpdateRenderer(event);
+  if (!automaticUpdates) throw new Error('automatic updates are unavailable');
+  await automaticUpdates.check();
+  return automaticUpdates.getState();
+}
+
+function handleUpdateInstall(event: IpcMainInvokeEvent): unknown {
+  authorizeUpdateRenderer(event);
+  if (!automaticUpdates) throw new Error('automatic updates are unavailable');
+  automaticUpdates.restartToApply();
+  return automaticUpdates.getState();
+}
+
 function authorizedCloudRequestOwner(event: IpcMainInvokeEvent): number {
   const ownerWindow = mainWindow;
   if (
@@ -1096,9 +1127,24 @@ async function bootstrapApplication(): Promise<void> {
   ipcMain.handle(NATIVE_FILE_SAVE_CHANNEL, handleNativeFileSave);
   ipcMain.handle(NATIVE_FILE_OPEN_CHANNEL, handleNativeFileOpen);
   ipcMain.handle(NATIVE_FILE_INGEST_CHANNEL, handleNativeFileIngest);
+  ipcMain.handle(UPDATE_STATE_CHANNEL, handleUpdateState);
+  ipcMain.handle(UPDATE_CHECK_CHANNEL, handleUpdateCheck);
+  ipcMain.handle(UPDATE_RESTART_TO_APPLY_CHANNEL, handleUpdateInstall);
   await createMainWindow();
   await drainPendingOAuthCallback();
-  stopAutomaticUpdates = startAutomaticUpdates();
+  automaticUpdates = startAutomaticUpdates({
+    journal: createUpdateRecoveryJournal(
+      join(app.getPath('userData'), 'updates', 'recovery-journal.v2.json'),
+    ),
+    recoveryHelperBinaryPath: sidecarBinaryPath(),
+    recoveryRoot: join(app.getPath('userData'), 'updates', 'recovery'),
+  });
+  unsubscribeUpdateState = automaticUpdates.subscribe((state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(UPDATE_STATE_CHANGED_CHANNEL, state);
+    }
+  });
+  automaticUpdates.confirmHealthy();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       void createMainWindow().catch(handleFatalStartup);
@@ -1144,10 +1190,12 @@ if (!hasSingleInstanceLock) {
       iabPool?.destroyAll();
       iabPool = null;
     }
+    unsubscribeUpdateState?.();
+    unsubscribeUpdateState = null;
+    automaticUpdates?.stop();
+    automaticUpdates = null;
     if (!sidecarSupervisor || sidecarShutdownComplete) return;
     event.preventDefault();
-    stopAutomaticUpdates?.();
-    stopAutomaticUpdates = null;
     const supervisor = sidecarSupervisor;
     const cloudAuth = cloudAuthenticationAuthority;
     sidecarSupervisor = null;

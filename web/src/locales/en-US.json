@@ -10,6 +10,7 @@
     "search": "Search",
     "loading": "Loading…",
     "skipToContent": "Skip to main content",
+    "pageContent": "Page content",
     "success": "Success",
     "error": "Error",
     "required": "Required",
@@ -319,6 +320,7 @@
     },
     "patterns": {
       "title": "Agent patterns",
+      "empty": "No tenant-shared Agent patterns are available to this project.",
       "degradedBadge": "Tenant-shared authority",
       "sharedBadge": "Shared across this tenant",
       "sharedDescription": "Read-only workflow patterns available to this project through its tenant membership. These patterns remain tenant-owned and are shared across projects.",
@@ -431,7 +433,12 @@
       "loadingVisualization": "Loading graph visualization…",
       "initializeFailed": "Failed to initialize graph visualization",
       "loadDataFailed": "Failed to load graph data",
-      "loadingGraph": "Loading graph…"
+      "loadingGraph": "Loading graph…",
+      "accessibleGraph": "Accessible graph data",
+      "accessibleSummary": "{{nodes}} nodes and {{edges}} relationships. Use the table controls to choose graph nodes.",
+      "accessibleNodes": "Graph nodes",
+      "selectNode": "Select {{name}}",
+      "accessibleRelationships": "Graph relationships"
     }
   },
   "search": {
@@ -1641,6 +1648,8 @@
       "openProject": "Open project {{name}}",
       "openProjectActions": "Open actions for {{name}}",
       "loading": "Loading tenant information…",
+      "forbidden": "You don't have permission to view this tenant overview.",
+      "conflict": "Tenant data changed while loading. Try again to refresh it.",
       "loadFailed": "Failed to load tenant data",
       "noProjects": "No projects yet"
     },
@@ -2710,6 +2719,7 @@
       "memory_growth": "Memory Growth Trend",
       "project_storage": "Project Storage Distribution",
       "no_data": "No data available",
+      "empty": "No analytics activity has been recorded yet.",
       "creation_trend": "Creation trend",
       "storage_distribution": "Storage distribution",
       "chart_memories": "Memories",
@@ -3432,6 +3442,7 @@
     },
     "deploy": {
       "listTitle": "Deploy Records",
+      "loading": "Loading deployment history",
       "detailTitle": "Deploy Details",
       "notFound": "Deploy record not found",
       "defaultDescription": "New deployment",
@@ -3577,6 +3588,8 @@
     "clusters": {
       "title": "Cluster Management",
       "subtitle": "Manage your Kubernetes clusters",
+      "emptyText": "No clusters found",
+      "loadFailed": "Failed to load clusters",
       "createButton": "Add Cluster",
       "deletedSuccess": "Cluster deleted successfully",
       "updatedSuccess": "Cluster updated successfully",
@@ -4633,6 +4646,7 @@
         "pending_tasks": "Pending tasks",
         "queue_depth": "Queue depth",
         "queue_desc": "Queued task volume over time.",
+        "queueAriaLabel": "Queue depth history chart",
         "status_dist": "Status distribution",
         "loadFailed": "Failed to load charts"
       },
@@ -4640,6 +4654,7 @@
       "resumeSubmitted": "Submitted {{count}} pending tasks",
       "resumeFailed": "Failed to resume pending tasks",
       "loadFailed": "Failed to load task data",
+      "empty": "No tasks have been recorded yet.",
       "stats": {
         "failed": "Failed",
         "pending": "Pending",
@@ -4739,6 +4754,13 @@
       "title": "Project Settings",
       "close": "Close project settings",
       "noProject": "No project selected",
+      "loading": "Loading project settings…",
+      "states": {
+        "empty": "This project is no longer available.",
+        "forbidden": "You do not have permission to view these project settings.",
+        "conflict": "The project changed while its settings were loading. Retry to refresh it.",
+        "error": "Failed to load project settings."
+      },
       "saved": "Settings saved successfully",
       "failed": "Failed to save settings",
       "basicTitle": "Basic Settings",
@@ -6750,7 +6772,8 @@
       },
       "deletePattern": "Delete pattern",
       "deleteAria": "Delete {{name}}",
-      "empty": "No patterns found"
+      "empty": "No patterns found",
+      "tableLabel": "Pattern table"
     },
     "chatHistory": {
       "newConversationAria": "New conversation",
@@ -8947,7 +8970,8 @@
         "total": "Total {{count}} instances"
       },
       "emptyInstances": "No instances match the current filters. The pool scales instances up on demand.",
-      "searchInstances": "Search by instance key"
+      "searchInstances": "Search by instance key",
+      "instancesTableScrollRegion": "Active instances table"
     },
     "deadLetterQueue": {
       "title": "Dead Letter Queue",
@@ -9372,6 +9396,7 @@
       "reconcileFailed": "Failed to reconcile MCP runtime",
       "errorBanner": "{{count}} servers have sync errors. Please check server card details.",
       "loadingServers": "Loading servers…",
+      "loadErrorTitle": "Unable to load MCP servers",
       "emptyTitle": "No MCP Servers",
       "emptyHint": "Create your first MCP server to enable powerful tools and capabilities",
       "emptyCreateButton": "Create Server",

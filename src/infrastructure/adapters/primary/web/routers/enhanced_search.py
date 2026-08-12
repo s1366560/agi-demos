@@ -373,9 +373,10 @@ async def search_by_community(
             include_episodes=include_episodes,
             limit=limit,
         )
+        serialized_items = [_sanitize_graph_value(item) for item in items[:limit]]
 
         return {
-            "results": items[:limit],
+            "results": serialized_items,
             "total": len(items),
             "search_type": "community",
         }
@@ -546,15 +547,42 @@ async def search_with_facets(
 
 
 @router.get("/capabilities")
-async def get_search_capabilities(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def get_search_capabilities(
+    current_user: User = Depends(get_current_user),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
+) -> dict[str, Any]:
     """
     Get available search capabilities and configuration.
 
     Returns information about available search types and their parameters.
     """
+    graph_backend_available = False
+    if graph_store is not None:
+        try:
+            graph_backend_available = await graph_store.health_probe()
+        except Exception:
+            logger.warning("Graph capability health probe failed", exc_info=True)
+
+    graph_backend = (
+        {
+            "status": "available",
+            "reason_code": None,
+            "retryable": False,
+            "allowed_actions": ["search", "traverse", "rebuild_communities"],
+        }
+        if graph_backend_available
+        else {
+            "status": "degraded",
+            "reason_code": "graph_backend_unavailable",
+            "retryable": True,
+            "allowed_actions": ["retry"],
+        }
+    )
+
     return {
         "service_version": "0.1.0",
-        "contract_version": "2.0.0",
+        "contract_version": "2.1.0",
+        "graph_backend": graph_backend,
         "search_types": {
             "semantic": {
                 "description": "Semantic search using embeddings and hybrid retrieval",

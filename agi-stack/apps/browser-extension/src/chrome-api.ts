@@ -58,6 +58,7 @@ export interface AlarmLike {
 export interface ChromeApi {
   runtime: {
     id: string;
+    getManifest(): { version: string };
     lastError?: { message?: string } | null;
     connectNative(name: string): NativePort;
     sendMessage(message: unknown): Promise<unknown>;

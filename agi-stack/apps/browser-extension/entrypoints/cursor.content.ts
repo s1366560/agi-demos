@@ -2,6 +2,10 @@ import { defineContentScript } from 'wxt/utils/define-content-script';
 import type { CursorState } from '../src/cursor/cursor-manager';
 import { CURSOR_MESSAGE_TYPES } from '../src/cursor/cursor-manager';
 import { CursorAnimator } from '../src/cursor/engine';
+import {
+  CURSOR_REDUCED_MOTION_QUERY,
+  shouldAnimateCursor,
+} from '../src/cursor/motion-preference';
 import { createCursorOverlay } from '../src/cursor/overlay';
 
 const LOADED_MARKER = '__memstackAgentCursorLoaded';
@@ -25,11 +29,13 @@ export default defineContentScript({
 
     const overlay = createCursorOverlay(document);
     const animator = new CursorAnimator({ width: window.innerWidth, height: window.innerHeight });
+    const reducedMotion = window.matchMedia(CURSOR_REDUCED_MOTION_QUERY);
     window.addEventListener('resize', () => {
       animator.setViewport({ width: window.innerWidth, height: window.innerHeight });
     });
 
     let lastSequence = 0;
+    let lastState: CursorState | null = null;
     let rafId: number | null = null;
     let lastTime = 0;
 
@@ -45,7 +51,7 @@ export default defineContentScript({
             /* SW went away */
           });
       }
-      rafId = animator.needsRender || pose.visible ? requestAnimationFrame(tick) : null;
+      rafId = animator.needsRender ? requestAnimationFrame(tick) : null;
     };
 
     const ensureLoop = () => {
@@ -56,15 +62,26 @@ export default defineContentScript({
     };
 
     const applyState = (state: CursorState) => {
+      lastState = state;
       if (!state.visible) {
         animator.hide();
         ensureLoop();
         return;
       }
       lastSequence = state.moveSequence;
-      animator.moveTo({ x: state.x, y: state.y }, state.animateMovement);
+      animator.moveTo(
+        { x: state.x, y: state.y },
+        shouldAnimateCursor(state.animateMovement, reducedMotion.matches),
+      );
       ensureLoop();
     };
+
+    reducedMotion.addEventListener('change', (event) => {
+      if (event.matches && lastState?.visible) {
+        animator.moveTo({ x: lastState.x, y: lastState.y }, false);
+        ensureLoop();
+      }
+    });
 
     chrome.runtime.onMessage.addListener(
       (message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {

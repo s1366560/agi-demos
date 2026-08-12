@@ -389,6 +389,12 @@ use targets::manifest_targets;
 #[cfg(test)]
 use targets::manifest_targets_from_override;
 
+#[path = "native_host/broker.rs"]
+mod broker;
+#[cfg(any(windows, test))]
+#[path = "native_host/windows_registry.rs"]
+mod windows_registry;
+
 // Chrome's manifest format itself is snake_case (`allowed_origins`); only the
 // sidecar↔Electron result payloads are camelCase.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -423,7 +429,7 @@ impl NativeMessagingManifest {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum ManifestState {
     Missing,
     Valid,
@@ -435,6 +441,7 @@ pub(crate) enum ManifestState {
 struct ManifestInspection {
     state: ManifestState,
     original: Option<Vec<u8>>,
+    broker_digest: Option<String>,
     error: Option<String>,
 }
 
@@ -445,6 +452,7 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
             return ManifestInspection {
                 state: ManifestState::Missing,
                 original: None,
+                broker_digest: None,
                 error: None,
             };
         }
@@ -452,6 +460,7 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
             return ManifestInspection {
                 state: ManifestState::Invalid,
                 original: None,
+                broker_digest: None,
                 error: Some(format!("manifest metadata is unreadable: {error}")),
             };
         }
@@ -460,6 +469,7 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
         return ManifestInspection {
             state: ManifestState::Invalid,
             original: None,
+            broker_digest: None,
             error: Some("manifest is not a regular file".to_string()),
         };
     }
@@ -469,6 +479,7 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
             return ManifestInspection {
                 state: ManifestState::Invalid,
                 original: None,
+                broker_digest: None,
                 error: Some(format!("manifest is unreadable: {error}")),
             };
         }
@@ -479,13 +490,19 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
             return ManifestInspection {
                 state: ManifestState::Invalid,
                 original: Some(original),
+                broker_digest: None,
                 error: Some(format!("manifest JSON is invalid: {error}")),
             };
         }
     };
+    let owned = parsed.is_owned();
+    let broker_digest = owned
+        .then(|| std::fs::read(&parsed.path).ok())
+        .flatten()
+        .map(|bytes| broker::sha256_hex(&bytes));
     let state = if parsed == *expected {
         ManifestState::Valid
-    } else if parsed.is_owned() {
+    } else if owned {
         ManifestState::OwnedStale
     } else {
         ManifestState::Collision
@@ -493,6 +510,7 @@ fn inspect_manifest(path: &Path, expected: &NativeMessagingManifest) -> Manifest
     ManifestInspection {
         state,
         original: Some(original),
+        broker_digest,
         error: None,
     }
 }
@@ -592,23 +610,88 @@ pub(crate) struct UninstallResult {
 pub(crate) struct ManifestStatus {
     pub browser: String,
     pub path: PathBuf,
+    pub registration_location: String,
     pub present: bool,
     pub state: ManifestState,
+    pub reason_code: &'static str,
+    pub allowed_actions: Vec<RegistrationAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub broker_digest: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
-/// Write the native-messaging manifest into every detected browser. Windows
-/// registration is registry-based and explicitly out of M1 scope.
-pub(crate) fn install_manifests() -> Result<InstallResult, String> {
-    if cfg!(windows) {
-        return Err("windows native messaging registration is not supported in M1".to_string());
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RegistrationAction {
+    Install,
+    Repair,
+    Uninstall,
+}
+
+impl ManifestStatus {
+    fn from_inspection(
+        browser: String,
+        path: PathBuf,
+        registration_location: String,
+        inspection: ManifestInspection,
+    ) -> Self {
+        let (reason_code, allowed_actions) = match inspection.state {
+            ManifestState::Missing => ("registration_missing", vec![RegistrationAction::Install]),
+            ManifestState::Valid => ("registration_valid", vec![RegistrationAction::Uninstall]),
+            ManifestState::OwnedStale => (
+                "owned_registration_stale",
+                vec![RegistrationAction::Repair, RegistrationAction::Uninstall],
+            ),
+            ManifestState::Collision => ("foreign_registration_collision", Vec::new()),
+            ManifestState::Invalid => ("registration_invalid", Vec::new()),
+        };
+        Self {
+            browser,
+            path,
+            registration_location,
+            present: inspection.state != ManifestState::Missing,
+            state: inspection.state,
+            reason_code,
+            allowed_actions,
+            broker_digest: inspection.broker_digest,
+            error: inspection.error,
+        }
     }
-    let host_path = std::env::current_exe().map_err(|error| error.to_string())?;
-    let host_path = host_path.canonicalize().unwrap_or(host_path);
-    let targets = manifest_targets()?;
-    let mut commit = |source: &Path, destination: &Path| std::fs::rename(source, destination);
-    install_manifests_for_targets(&host_path, targets, &mut commit)
+}
+
+/// Write the native-messaging manifest into every detected browser.
+pub(crate) fn install_manifests() -> Result<InstallResult, String> {
+    #[cfg(windows)]
+    {
+        return windows_registry::install();
+    }
+    #[cfg(not(windows))]
+    {
+        let host_path = std::env::current_exe().map_err(|error| error.to_string())?;
+        let host_path = host_path.canonicalize().unwrap_or(host_path);
+        let broker = broker::install_versioned_broker(
+            &host_path,
+            &broker::broker_root()?,
+            env!("CARGO_PKG_VERSION"),
+        )?;
+        let targets = manifest_targets()?;
+        let mut commit = |source: &Path, destination: &Path| std::fs::rename(source, destination);
+        match install_manifests_for_targets(broker.broker_path(), targets, &mut commit) {
+            Ok(result) => {
+                broker.commit();
+                Ok(result)
+            }
+            Err(error) => {
+                let rollback = broker.rollback();
+                if let Err(rollback) = rollback {
+                    Err(format!("{error}; broker rollback failed: {rollback}"))
+                } else {
+                    Err(error)
+                }
+            }
+        }
+    }
 }
 
 fn install_manifests_for_targets<F>(
@@ -716,10 +799,14 @@ where
 
 /// Remove the manifest from every browser location.
 pub(crate) fn uninstall_manifests() -> Result<UninstallResult, String> {
-    if cfg!(windows) {
-        return Err("windows native messaging registration is not supported in M1".to_string());
+    #[cfg(windows)]
+    {
+        return windows_registry::uninstall();
     }
-    uninstall_manifests_for_targets(manifest_targets()?)
+    #[cfg(not(windows))]
+    {
+        uninstall_manifests_for_targets(manifest_targets()?)
+    }
 }
 
 struct UninstallPlan {
@@ -827,20 +914,38 @@ fn uninstall_manifests_for_targets(
 
 /// Probe every known manifest location for `browser_bridge_status`.
 pub(crate) fn manifest_statuses() -> Vec<ManifestStatus> {
-    let host_path = std::env::current_exe()
-        .map(|path| path.canonicalize().unwrap_or(path))
-        .unwrap_or_default();
-    match manifest_targets() {
-        Ok(targets) => manifest_statuses_for_targets(targets, &host_path),
-        Err(error) => vec![ManifestStatus {
-            browser: "QA Chromium".to_string(),
-            path: std::env::var_os(MANIFEST_DIR_OVERRIDE_ENV)
-                .map(PathBuf::from)
-                .unwrap_or_default(),
-            present: false,
-            state: ManifestState::Invalid,
-            error: Some(error),
-        }],
+    #[cfg(windows)]
+    {
+        return windows_registry::statuses();
+    }
+    #[cfg(not(windows))]
+    {
+        let host_path = std::env::current_exe()
+            .map(|path| path.canonicalize().unwrap_or(path))
+            .unwrap_or_default();
+        let host_path = broker::broker_root()
+            .and_then(|root| broker::current_broker_path(&root))
+            .unwrap_or(host_path);
+        match manifest_targets() {
+            Ok(targets) => manifest_statuses_for_targets(targets, &host_path),
+            Err(error) => vec![ManifestStatus {
+                browser: "QA Chromium".to_string(),
+                path: std::env::var_os(MANIFEST_DIR_OVERRIDE_ENV)
+                    .map(PathBuf::from)
+                    .unwrap_or_default(),
+                registration_location: std::env::var_os(MANIFEST_DIR_OVERRIDE_ENV)
+                    .map(PathBuf::from)
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                present: false,
+                state: ManifestState::Invalid,
+                reason_code: "registration_target_invalid",
+                allowed_actions: Vec::new(),
+                broker_digest: None,
+                error: Some(error),
+            }],
+        }
     }
 }
 
@@ -854,13 +959,12 @@ fn manifest_statuses_for_targets(
         .map(|target| {
             let path = target.manifest_path();
             let inspection = inspect_manifest(&path, &expected);
-            ManifestStatus {
-                browser: target.browser.to_string(),
-                present: inspection.state != ManifestState::Missing,
-                path,
-                state: inspection.state,
-                error: inspection.error,
-            }
+            ManifestStatus::from_inspection(
+                target.browser.to_string(),
+                path.clone(),
+                path.to_string_lossy().into_owned(),
+                inspection,
+            )
         })
         .collect()
 }
@@ -868,6 +972,14 @@ fn manifest_statuses_for_targets(
 #[cfg(test)]
 #[path = "native_host/manifest_tests.rs"]
 mod manifest_tests;
+
+#[cfg(test)]
+#[path = "native_host/broker_tests.rs"]
+mod broker_tests;
+
+#[cfg(test)]
+#[path = "native_host/windows_registry_tests.rs"]
+mod windows_registry_tests;
 
 #[cfg(test)]
 mod tests {

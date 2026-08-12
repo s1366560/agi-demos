@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Desktop prerelease package evidence index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "version",
+    "tag",
+    "commit_sha",
+    "workflow_run",
+    "release_channel",
+    "promotion_status",
+    "promotion_blockers",
+    "required_promotion_checks",
+    "platform_evidence",
+    "assets"
+  ],
+  "properties": {
+    "contract_version": { "const": "desktop-release-package-evidence-index-v1" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "tag": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "workflow_run": { "$ref": "#/$defs/workflowRun" },
+    "release_channel": { "const": "prerelease" },
+    "promotion_status": { "const": "blocked" },
+    "promotion_blockers": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "required_promotion_checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "platform_evidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/platformEvidence" }
+    },
+    "assets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/asset" } }
+  },
+  "$defs": {
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attempt", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/" }
+      }
+    },
+    "platformEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "name", "sha256", "package_status", "promotion_status"],
+      "properties": {
+        "platform": { "enum": ["macos", "windows", "linux"] },
+        "name": { "type": "string", "pattern": "^release-evidence-(?:macos|windows|linux)\\.json$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "package_status": { "const": "passed" },
+        "promotion_status": { "const": "blocked" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

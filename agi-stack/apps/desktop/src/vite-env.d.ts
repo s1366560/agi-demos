@@ -101,6 +101,29 @@ type DesktopIabPaneBounds = Readonly<{
   height: number;
 }>;
 
+type DesktopUpdateLifecycleState = Readonly<{
+  schemaVersion: 2;
+  phase:
+    | 'disabled'
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not_available'
+    | 'downloading'
+    | 'downloaded'
+    | 'applying'
+    | 'verifying'
+    | 'recovered'
+    | 'failed';
+  currentVersion: string;
+  candidateVersion: string | null;
+  recoveryVersion: string | null;
+  progress: number | null;
+  reasonCode: string | null;
+  retryable: boolean;
+  allowedActions: readonly ('check' | 'restart_to_apply')[];
+}>;
+
 interface Window {
   __MEMSTACK_DESKTOP__?: {
     runtime: 'electron';
@@ -121,6 +144,14 @@ interface Window {
       save(request: DesktopFileSaveRequest): Promise<DesktopFileSaveResult>;
       open(request: DesktopFileOpenRequest): Promise<DesktopFileOpenResult>;
       ingest(request: DesktopFileIngestRequest): Promise<DesktopFileIngestResult>;
+    }>;
+    updates?: Readonly<{
+      getState(): Promise<DesktopUpdateLifecycleState>;
+      check(): Promise<DesktopUpdateLifecycleState>;
+      restartToApply(): Promise<DesktopUpdateLifecycleState>;
+      subscribe(listener: (state: DesktopUpdateLifecycleState) => void): () => void;
+      /** @deprecated Use subscribe. */
+      onStateChanged(listener: (state: DesktopUpdateLifecycleState) => void): () => void;
     }>;
     iab?: Readonly<{
       status(): Promise<{ status: string }>;

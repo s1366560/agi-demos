@@ -15,10 +15,14 @@
     "build:workspace-core": "node scripts/build-workspace-core.mjs release",
     "build:workspace-core:debug": "node scripts/build-workspace-core.mjs debug",
     "stage:workspace-core": "node scripts/stage-workspace-core.mjs",
+    "smoke:update-recovery": "node scripts/smoke-update-recovery.mjs",
     "test": "node tests/run.mjs",
     "build": "tsc --noEmit && vite build",
     "build:electron": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && electron-vite build",
     "qa:browser": "playwright test --config browser-qa/playwright.config.mjs",
+    "qa:accessibility": "playwright test --config browser-qa/accessibility.playwright.config.mjs",
+    "qa:accessibility:extension": "pnpm --dir ../browser-extension build && playwright test --config browser-qa/browser-extension-accessibility.playwright.config.mjs",
+    "qa:neo4j-matched-state": "playwright test --config browser-qa/neo4j-matched-state.playwright.config.mjs",
     "qa:paired-production": "node browser-qa/run-paired-production.mjs",
     "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --config electron-builder.local.yml --publish never",
     "release:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run build:workspace-core && corepack pnpm run stage:sidecar && corepack pnpm run stage:workspace-core && corepack pnpm exec electron-builder --publish never",
@@ -50,6 +54,7 @@
     "yaml": "2.8.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
     "@playwright/test": "1.57.0",
     "@types/node": "^22.19.15",
     "@types/react": "^19.2.17",

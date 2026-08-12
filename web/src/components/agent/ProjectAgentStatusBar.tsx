@@ -139,7 +139,7 @@ const lifecycleConfig: Record<
   uninitialized: {
     label: 'agent.lifecycle.states.uninitialized',
     icon: Power,
-    color: 'text-slate-500',
+    color: 'text-slate-600 dark:text-slate-300',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
     description: 'agent.lifecycle.descriptions.uninitialized',
   },
@@ -1191,7 +1191,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             ) : status.connection.websocket ? (
               <>
                 <Wifi size={12} className="text-emerald-500" />
-                <span className="hidden sm:inline text-emerald-500">
+                <span className="hidden sm:inline text-emerald-700 dark:text-emerald-400">
                   {t('agent.statusBar.connection.online', 'Online')}
                 </span>
               </>

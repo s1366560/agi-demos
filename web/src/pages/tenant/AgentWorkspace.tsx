@@ -55,7 +55,7 @@ function WorkspacePanelFallback() {
       role="status"
       aria-label={t('agent.workspace.loading')}
     >
-      <div className="mb-3 text-slate-500 dark:text-slate-400">{t('agent.workspace.loading')}</div>
+      <div className="mb-3 text-slate-600 dark:text-slate-300">{t('agent.workspace.loading')}</div>
       <Skeleton active title={{ width: '30%' }} paragraph={{ rows: 8 }} />
     </div>
   );
@@ -463,7 +463,7 @@ export const AgentWorkspace: FC = () => {
         role="status"
         aria-label={t('agent.workspace.loading')}
       >
-        <div className="mb-3 text-slate-500 dark:text-slate-400">
+        <div className="mb-3 text-slate-600 dark:text-slate-300">
           {t('agent.workspace.loading')}
         </div>
         <Skeleton active title={{ width: '30%' }} paragraph={{ rows: 8 }} />

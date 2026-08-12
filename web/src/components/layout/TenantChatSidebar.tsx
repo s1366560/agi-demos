@@ -1651,7 +1651,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
               {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
             </div>
-            <p className="text-xs text-slate-500">{conversationCountText}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {conversationCountText}
+            </p>
           </div>
         </div>
       </div>
@@ -1671,7 +1673,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               }
             }}
             disabled={projectSwitcherDisabled}
-            className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
+            className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-[border-color,box-shadow] hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
           >
             {selectableProjects.length === 0 ? (
               <option value="">{emptyProjectOptionLabel}</option>
@@ -1873,7 +1875,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   </button>
                 </div>
               ) : filteredConversations.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
+                  <div className="text-center py-8 text-slate-600 dark:text-slate-300">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">
                     {conversationFilter.trim()

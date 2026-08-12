@@ -186,7 +186,12 @@ export function PatternList({
   };
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-border-dark dark:bg-surface-dark">
+    <div
+      role="region"
+      aria-label={t('agent.patternList.tableLabel', { defaultValue: 'Pattern table' })}
+      tabIndex={0}
+      className="overflow-x-auto rounded-xl border border-slate-200 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark"
+    >
       <div className="min-w-[40rem]">
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold text-slate-500 uppercase tracking-wider">

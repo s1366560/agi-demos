@@ -397,7 +397,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
             </button>
           </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="text-center py-8">
+          <div className="text-center py-8" data-state="empty" role="status">
             <Users className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               {t('tenant.users.empty.title')}

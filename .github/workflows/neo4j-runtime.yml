@@ -1,0 +1,255 @@
+name: Neo4j Runtime Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neo4j-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  neo4j-runtime:
+    name: Neo4j ingest, isolation, restart, and recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: memstack
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d memstack"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: memstack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword
+      REDIS_URL: redis://localhost:6379
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef # gitleaks:allow -- isolated CI fixture
+      LLM_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef # gitleaks:allow -- isolated CI fixture
+      LLM_PROVIDER: lmstudio
+      OPENAI_API_KEY: memstack-e2e-fixture
+      LMSTUDIO_MODEL: memstack-e2e
+      LMSTUDIO_SMALL_MODEL: memstack-e2e
+      LMSTUDIO_EMBEDDING_MODEL: memstack-e2e
+      LMSTUDIO_BASE_URL: http://localhost:8010/v1
+      OPENAI_FIXTURE_BASE: http://localhost:8010
+      EMBEDDING_DIMENSION: 1024
+      E2E_EMBEDDING_DIMENSIONS: 1024
+      LLM_CACHE_ENABLED: false
+      LLM_MAX_RETRIES: 0
+      AGENT_RUNTIME_MODE: local
+      AGENT_MEMORY_RUNTIME_MODE: plugin
+      RUN_BACKGROUND_WORKERS: false
+      WORKSPACE_SYNC_ENABLED: false
+      WORKSPACE_SUPERVISOR_ENABLED: false
+      SKILL_EVOLUTION_ENABLED: false
+      ENABLE_TELEMETRY: false
+      LANGFUSE_ENABLED: false
+      MCP_ENABLED: false
+      CI: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+        with:
+          enable-cache: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 11.15.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: |
+            web/pnpm-lock.yaml
+            agi-stack/apps/desktop/pnpm-lock.yaml
+
+      - name: Install backend dependencies
+        run: uv sync --extra dev --dev --frozen
+
+      - name: Install Web and Desktop dependencies
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir agi-stack/apps/desktop install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --dir agi-stack/apps/desktop exec playwright install --with-deps chromium
+
+      - name: Materialize authoritative test database URL
+        run: |
+          install -m 0600 /dev/null .env
+          printf '%s\n' "$DATABASE_URL" | sed 's|^|DATABASE_URL=|' > .env
+
+      - name: Start digest-pinned Neo4j with persistent data
+        run: |
+          mkdir -p neo4j-runtime-logs
+          docker volume create memstack-neo4j-runtime-data
+          docker run --detach \
+            --name memstack-neo4j-runtime \
+            --publish 7474:7474 \
+            --publish 7687:7687 \
+            --env NEO4J_AUTH=neo4j/testpassword \
+            --volume memstack-neo4j-runtime-data:/data \
+            neo4j:5.26-community@sha256:d9dd3dc7d1c78fa959191ff02dbdcbefadceaf83eee23428fb92a58cac8ad3fe
+          docker inspect --format \
+            '{"image_id":{{json .Image}},"image_reference":{{json .Config.Image}},"container_name":{{json .Name}}}' \
+            memstack-neo4j-runtime > neo4j-runtime-logs/image-inspect.json
+          for attempt in $(seq 1 60); do
+            if docker exec memstack-neo4j-runtime cypher-shell \
+              -u neo4j -p testpassword 'RETURN 1'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs memstack-neo4j-runtime
+          exit 1
+
+      - name: Initialize relational and graph schemas
+        run: |
+          PYTHONPATH=. uv run python -c \
+            "import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
+          PYTHONPATH=. uv run alembic upgrade head
+
+      - name: Start deterministic fixture and API
+        run: |
+          nohup uv run uvicorn scripts.fake_openai_server:app \
+            --host 127.0.0.1 --port 8010 > neo4j-runtime-logs/fake-openai.log 2>&1 &
+          echo $! > neo4j-runtime-logs/fake-openai.pid
+          nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app \
+            --host 127.0.0.1 --port 8000 > neo4j-runtime-logs/api.log 2>&1 &
+          echo $! > neo4j-runtime-logs/api.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8010/v1/models >/dev/null && \
+              curl -fsS http://localhost:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          tail -200 neo4j-runtime-logs/api.log
+          exit 1
+
+      - name: Verify real graph mutation, search, traversal, and communities
+        run: uv run python -m scripts.verify_e2e_graph
+
+      - name: Verify Web and Desktop Neo4j matched state
+        env:
+          NEO4J_MATCHED_STATE_EVIDENCE_DIR: ${{ github.workspace }}/neo4j-runtime-logs/matched-state
+          NEO4J_RUNTIME_CONTAINER: memstack-neo4j-runtime
+        run: pnpm --dir agi-stack/apps/desktop run qa:neo4j-matched-state
+
+      - name: Freeze persistent sentinel and online indexes
+        run: |
+          docker exec memstack-neo4j-runtime cypher-shell -u neo4j -p testpassword \
+            'CALL db.awaitIndexes(120)'
+          docker exec memstack-neo4j-runtime cypher-shell --format plain \
+            -u neo4j -p testpassword \
+            "SHOW INDEXES YIELD name, state, type RETURN name, state, type ORDER BY name" \
+            > neo4j-runtime-logs/indexes-before.txt
+          offline_count="$(docker exec memstack-neo4j-runtime cypher-shell --format plain \
+            -u neo4j -p testpassword \
+            "SHOW INDEXES YIELD state WHERE state <> 'ONLINE' RETURN count(*) AS offline" \
+            | tail -n 1)"
+          test "$offline_count" = "0"
+          docker exec memstack-neo4j-runtime cypher-shell -u neo4j -p testpassword \
+            "MERGE (:RuntimeSentinel {id: 'neo4j-runtime-persistence'})"
+
+      - name: Verify structured degradation while Neo4j is stopped
+        run: |
+          docker stop memstack-neo4j-runtime
+          uv run python -m scripts.verify_neo4j_runtime --expect degraded
+
+      - name: Restart Neo4j and verify automatic client recovery
+        run: |
+          docker start memstack-neo4j-runtime
+          for attempt in $(seq 1 60); do
+            if docker exec memstack-neo4j-runtime cypher-shell \
+              -u neo4j -p testpassword 'RETURN 1'; then
+              break
+            fi
+            if [ "$attempt" = 60 ]; then
+              docker logs memstack-neo4j-runtime
+              exit 1
+            fi
+            sleep 2
+          done
+          uv run python -m scripts.verify_neo4j_runtime --expect available
+          sentinel_count="$(docker exec memstack-neo4j-runtime cypher-shell --format plain \
+            -u neo4j -p testpassword \
+            "MATCH (s:RuntimeSentinel {id: 'neo4j-runtime-persistence'}) RETURN count(s)" \
+            | tail -n 1)"
+          test "$sentinel_count" = "1"
+          docker exec memstack-neo4j-runtime cypher-shell -u neo4j -p testpassword \
+            'CALL db.awaitIndexes(120)'
+          docker exec memstack-neo4j-runtime cypher-shell --format plain \
+            -u neo4j -p testpassword \
+            "SHOW INDEXES YIELD name, state, type RETURN name, state, type ORDER BY name" \
+            > neo4j-runtime-logs/indexes-after.txt
+          uv run python -m scripts.verify_e2e_graph
+
+      - name: Capture Neo4j and API logs
+        if: always()
+        run: |
+          docker logs memstack-neo4j-runtime > neo4j-runtime-logs/neo4j.log 2>&1 || true
+          tail -400 neo4j-runtime-logs/api.log > neo4j-runtime-logs/api-tail.log || true
+
+      - name: Upload Neo4j runtime evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: neo4j-runtime-evidence
+          path: neo4j-runtime-logs
+          if-no-files-found: error
+
+      - name: Clean Neo4j runtime
+        if: always()
+        run: |
+          if [ -f neo4j-runtime-logs/api.pid ]; then
+            kill "$(cat neo4j-runtime-logs/api.pid)" 2>/dev/null || true
+          fi
+          if [ -f neo4j-runtime-logs/fake-openai.pid ]; then
+            kill "$(cat neo4j-runtime-logs/fake-openai.pid)" 2>/dev/null || true
+          fi
+          docker rm --force memstack-neo4j-runtime 2>/dev/null || true
+          docker volume rm memstack-neo4j-runtime-data 2>/dev/null || true

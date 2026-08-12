@@ -892,3 +892,18 @@ class TestNativeGraphAdapterTypedPrimitives:
         assert result == 2
         query = mock_neo4j_client.execute_query.await_args.args[0]
         assert "MATCH (n:Community)" in query
+
+    @pytest.mark.asyncio
+    async def test_health_probe_uses_fail_fast_query_timeout(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        mock_neo4j_client.execute_query.return_value = MagicMock(records=[{"ok": 1}])
+
+        assert await adapter.health_probe() is True
+
+        mock_neo4j_client.execute_query.assert_awaited_once_with(
+            "RETURN 1 AS ok",
+            timeout=2.0,
+        )

@@ -69,7 +69,22 @@ export type BrowserBridgeStatus = {
   enabled: boolean;
   port: number;
   brokerConnected: boolean;
-  manifests: { browser: string; path: string; present: boolean }[];
+  extensionId: string | null;
+  extensionVersion: string | null;
+  hostVersion: string;
+  protocolMin: number;
+  protocolMax: number;
+  manifests: {
+    browser: string;
+    path: string;
+    registrationLocation: string;
+    present: boolean;
+    state: 'missing' | 'valid' | 'owned_stale' | 'collision' | 'invalid';
+    reasonCode: string;
+    allowedActions: ('install' | 'repair' | 'uninstall')[];
+    brokerDigest?: string;
+    error?: string;
+  }[];
   registryPath: string;
   extensionIds: string[];
 };

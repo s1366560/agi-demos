@@ -1,0 +1,215 @@
+name: Desktop Release Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact protected desktop prerelease tag to promote
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: desktop-release-promotion-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Validate external v3 evidence and promote stable
+    runs-on: ubuntu-latest
+    environment: desktop-release-production
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Authorize protected promotion identity
+        id: identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_RELEASE_ALLOWED_ACTORS: ${{ vars.DESKTOP_RELEASE_ALLOWED_ACTORS }}
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag }}'
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "promotion tag is invalid" >&2
+            exit 1
+          fi
+          TAG="$tag" node <<'NODE'
+          const actors = (process.env.DESKTOP_RELEASE_ALLOWED_ACTORS ?? '')
+            .split(/[,\n]/)
+            .map((value) => value.trim())
+            .filter(Boolean);
+          if (actors.length === 0 || !actors.includes(process.env.GITHUB_ACTOR)) {
+            throw new Error('promotion actor is not authorized');
+          }
+          NODE
+          commit_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq '.sha')"
+          comparison_status="$(
+            gh api "repos/${GITHUB_REPOSITORY}/compare/${commit_sha}...main" --jq '.status'
+          )"
+          if [[ "$comparison_status" != "ahead" && "$comparison_status" != "identical" ]]; then
+            echo "promotion tag commit must be an ancestor of main" >&2
+            exit 1
+          fi
+          release_json="$(
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,tagName
+          )"
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "false" || \
+                "$(jq -r '.isPrerelease' <<<"$release_json")" != "true" || \
+                "$(jq -r '.tagName' <<<"$release_json")" != "$tag" ]]; then
+            echo "promotion_status=blocked reason=source_release_not_prerelease" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout immutable promotion validator
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.identity.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Download immutable prerelease assets and external v3 evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/desktop-promotion-assets"
+          manifest_before="$RUNNER_TEMP/github-release-assets.before.json"
+          manifest_after="$RUNNER_TEMP/github-release-assets.after.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$manifest_before"
+          gh release download "${{ steps.identity.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/desktop-promotion-assets"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$manifest_after"
+          if ! cmp -s "$manifest_before" "$manifest_after"; then
+            echo 'promotion_status=blocked reason=github_asset_set_changed_during_download' >&2
+            exit 1
+          fi
+
+      - name: Validate external v3 promotion evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGISTACK_EXPECTED_TAG: ${{ steps.identity.outputs.tag }}
+          AGISTACK_EXPECTED_COMMIT_SHA: ${{ steps.identity.outputs.commit_sha }}
+          AGISTACK_GITHUB_RELEASE_ASSET_MANIFEST: ${{ runner.temp }}/github-release-assets.after.json
+          AGISTACK_PRODUCER_STATUS_PREFIX: promotion_status
+        run: |
+          set -euo pipefail
+          producer_manifest="$RUNNER_TEMP/github-workflow-producers.json"
+          bash agi-stack/apps/desktop/scripts/resolve-supplemental-producers.sh \
+            "$AGISTACK_EXPECTED_COMMIT_SHA" \
+            "$AGISTACK_EXPECTED_TAG" \
+            "$AGISTACK_GITHUB_RELEASE_ASSET_MANIFEST" \
+            "$producer_manifest"
+          export AGISTACK_GITHUB_WORKFLOW_PRODUCER_MANIFEST="$producer_manifest"
+          node agi-stack/apps/desktop/scripts/release-promotion-validation.mjs \
+            validate-promotion "$RUNNER_TEMP/desktop-promotion-assets"
+
+      - name: Revalidate immutable assets before stable promotion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          live_manifest="$RUNNER_TEMP/github-release-assets.before-promotion.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$live_manifest"
+          if ! cmp -s "$RUNNER_TEMP/github-release-assets.after.json" "$live_manifest"; then
+            echo 'promotion_status=blocked reason=github_asset_set_changed_before_promotion' >&2
+            exit 1
+          fi
+
+      - name: Promote the exact prerelease to stable
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.identity.outputs.tag }}"
+          commit_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq '.sha')"
+          if [[ "$commit_sha" != "${{ steps.identity.outputs.commit_sha }}" ]]; then
+            echo "promotion_status=blocked reason=tag_identity_changed" >&2
+            exit 1
+          fi
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease=false --draft=false
+          release_json="$(
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,tagName
+          )"
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "false" || \
+                "$(jq -r '.isPrerelease' <<<"$release_json")" != "false" || \
+                "$(jq -r '.tagName' <<<"$release_json")" != "$tag" ]]; then
+            echo "stable promotion did not reach the exact final state" >&2
+            exit 1
+          fi
+
+      - name: Verify immutable assets after stable promotion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          live_manifest="$RUNNER_TEMP/github-release-assets.after-promotion.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$live_manifest"
+          if ! cmp -s "$RUNNER_TEMP/github-release-assets.after.json" "$live_manifest"; then
+            echo 'promotion_status=blocked reason=github_asset_set_changed_after_promotion' >&2
+            exit 1
+          fi
+
+      - name: Report incomplete v3 promotion evidence as blocked
+        if: failure()
+        run: |
+          echo 'promotion_status=blocked reason=v3_promotion_evidence_incomplete' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Stable promotion remains blocked when a physical platform run, required outcome, Neo4j/WCAG/Browser Bridge judgment, signing evidence, attestation, or exact GitHub release asset identity is absent.' >> "$GITHUB_STEP_SUMMARY"

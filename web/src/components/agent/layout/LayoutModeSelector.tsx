@@ -149,7 +149,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 ${
                   isActive
                     ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100'
                 }
               `}
               aria-pressed={isActive}

@@ -629,7 +629,7 @@ export const AcpDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-6 dark:[&_.ant-tabs-tab]:!text-slate-300 dark:[&_.ant-typography-secondary]:!text-slate-300">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Title level={2} className="m-0">

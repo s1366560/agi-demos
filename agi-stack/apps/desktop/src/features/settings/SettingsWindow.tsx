@@ -43,6 +43,7 @@ import { ModelProviderWorkspace } from './ModelProviderWorkspace';
 import { MCPServerSettingsPage } from './MCPServerSettingsPage';
 import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { ShortcutSettingsPage } from './ShortcutSettingsPage';
+import { UpdateSettingsPage } from './UpdateSettingsPage';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -399,6 +400,7 @@ export function SettingsWindow({
       account: [t(sectionMeta.account.label), t(sectionMeta.account.description)],
       workspace: [t(sectionMeta.workspace.label), t(sectionMeta.workspace.description)],
       general: [t(sectionMeta.general.label), t(sectionMeta.general.description)],
+      updates: [t(sectionMeta.updates.label), t(sectionMeta.updates.description)],
       appearance: [t(sectionMeta.appearance.label), t(sectionMeta.appearance.description)],
       notifications: [t(sectionMeta.notifications.label), t(sectionMeta.notifications.description)],
       shortcuts: [t(sectionMeta.shortcuts.label), t(sectionMeta.shortcuts.description)],
@@ -622,6 +624,7 @@ export function SettingsWindow({
               {section === 'general' ? (
                 <GeneralSettingsPage counts={resourceCounts} onOpenResource={setSection} />
               ) : null}
+              {section === 'updates' ? <UpdateSettingsPage /> : null}
               {section === 'appearance' || section === 'notifications' ? (
                 <PreferenceSummaryPage section={section} />
               ) : null}
@@ -808,6 +811,7 @@ function SettingsGroup({
             type="button"
             key={section}
             className={active === section ? 'active' : ''}
+            aria-label={t(meta.label)}
             onClick={() => onSelect(section)}
           >
             <meta.Icon />

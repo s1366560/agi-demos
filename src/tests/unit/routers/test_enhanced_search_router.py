@@ -75,11 +75,21 @@ class TestEnhancedSearchRouter:
     async def test_capabilities_declare_advanced_without_removing_semantic(
         self,
         test_user: User,
+        mock_graph_service: Mock,
     ) -> None:
-        capabilities = await get_search_capabilities(current_user=test_user)
+        capabilities = await get_search_capabilities(
+            current_user=test_user,
+            graph_store=mock_graph_service,
+        )
 
         assert capabilities["service_version"] == "0.1.0"
-        assert capabilities["contract_version"] == "2.0.0"
+        assert capabilities["contract_version"] == "2.1.0"
+        assert capabilities["graph_backend"] == {
+            "status": "available",
+            "reason_code": None,
+            "retryable": False,
+            "allowed_actions": ["search", "traverse", "rebuild_communities"],
+        }
         assert capabilities["search_types"]["semantic"]["endpoint"] == "/api/v1/memory/search"
         assert (
             capabilities["search_types"]["advanced"]["endpoint"]
@@ -94,6 +104,25 @@ class TestEnhancedSearchRouter:
             "tenant_id": "string (optional)",
             "project_id": "string (optional)",
             "since": "ISO datetime string (optional)",
+        }
+
+    async def test_capabilities_report_retryable_graph_backend_degradation(
+        self,
+        test_user: User,
+        mock_graph_service: Mock,
+    ) -> None:
+        mock_graph_service.health_probe = AsyncMock(return_value=False)
+
+        capabilities = await get_search_capabilities(
+            current_user=test_user,
+            graph_store=mock_graph_service,
+        )
+
+        assert capabilities["graph_backend"] == {
+            "status": "degraded",
+            "reason_code": "graph_backend_unavailable",
+            "retryable": True,
+            "allowed_actions": ["retry"],
         }
 
     @pytest.mark.asyncio
@@ -120,9 +149,7 @@ class TestEnhancedSearchRouter:
 
         store.graph_traversal_search.assert_awaited_once()
         kwargs = store.graph_traversal_search.await_args.kwargs
-        assert kwargs["relationship_types"] == [
-            'RELATES_TO") MATCH (n) DETACH DELETE n //'
-        ]
+        assert kwargs["relationship_types"] == ['RELATES_TO") MATCH (n) DETACH DELETE n //']
         assert kwargs["project_id"] == test_project_db.id
 
     @pytest.mark.asyncio
@@ -274,6 +301,40 @@ class TestEnhancedSearchRouter:
         kwargs = store.community_search.await_args.kwargs
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["include_episodes"] is True
+
+    async def test_community_search_serializes_neo4j_temporal_values(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        class Neo4jTemporalValue:
+            def isoformat(self) -> str:
+                return "2026-08-11T09:00:00Z"
+
+        store = _store_with_community_project(test_project_db.id)
+        store.community_search = AsyncMock(
+            return_value=[
+                {
+                    "uuid": "entity-1",
+                    "type": "entity",
+                    "created_at": Neo4jTemporalValue(),
+                }
+            ]
+        )
+
+        response = await search_by_community(
+            community_uuid="community-1",
+            limit=50,
+            include_episodes=True,
+            tenant_id=None,
+            project_id=None,
+            current_user=test_user,
+            db=test_db,
+            graph_store=store,
+        )
+
+        assert response["results"][0]["created_at"] == "2026-08-11T09:00:00Z"
 
     @pytest.mark.asyncio
     async def test_community_search_rejects_explicit_project_mismatch(
@@ -658,7 +719,9 @@ class TestEnhancedSearchRouter:
         test_user: User,
     ) -> None:
         store = _store_with_community_project(test_project_db.id)
-        store.community_search = AsyncMock(side_effect=RuntimeError("internal community query failed"))
+        store.community_search = AsyncMock(
+            side_effect=RuntimeError("internal community query failed")
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             await search_by_community(

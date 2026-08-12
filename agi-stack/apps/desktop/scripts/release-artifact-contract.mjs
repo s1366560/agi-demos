@@ -5,7 +5,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { parseDocument } from 'yaml';
 
-const RELEASE_EVIDENCE_CONTRACT = 'desktop-release-evidence-v2';
+const RELEASE_EVIDENCE_CONTRACT = 'desktop-release-package-evidence-v1';
 const BLOCKMAP_VERIFICATION_SCOPE = 'blockmap_structure_and_coverage_only';
 const DIAGNOSTIC_ROOT_FILES = new Set(['builder-debug.yml', 'builder-effective-config.yaml']);
 const PLATFORM_POLICIES = Object.freeze({
@@ -549,12 +549,23 @@ export function buildReleaseEvidence({
 
   return {
     contract_version: RELEASE_EVIDENCE_CONTRACT,
-    evidence_scope: 'package_artifacts_only',
+    evidence_scope: 'package_artifacts_and_promotion_requirements',
     blockmap_verification_scope: BLOCKMAP_VERIFICATION_SCOPE,
     artifact_verification_status: 'verified_by_tag_ci',
-    release_disposition: 'draft_only',
-    release_blocker_reason_code: 'native_release_evidence_required',
+    release_disposition: 'prerelease_only',
+    release_blocker_reason_code: 'stable_promotion_native_evidence_required',
     required_native_checks: ['install', 'launch', 'updater_apply', 'updater_failure_rollback'],
+    verification_checks: [
+      { id: 'package_artifacts', status: 'passed', reason_code: null },
+      { id: 'install', status: 'blocked', reason_code: 'native_install_evidence_missing' },
+      { id: 'launch', status: 'blocked', reason_code: 'native_launch_evidence_missing' },
+      { id: 'updater_apply', status: 'blocked', reason_code: 'updater_apply_evidence_missing' },
+      {
+        id: 'updater_failure_rollback',
+        status: 'blocked',
+        reason_code: 'updater_failure_rollback_evidence_missing',
+      },
+    ],
     platform,
     version,
     tag,

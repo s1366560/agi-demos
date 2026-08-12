@@ -17,8 +17,11 @@ describe('dispatcher', () => {
       id: 1,
       result: {
         protocolVersion: 1,
+        protocolMin: 1,
+        protocolMax: 2,
         backend: 'chrome-extension',
         extensionId: 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl',
+        extensionVersion: '0.1.0',
         capabilities: ['cdp', 'tabs', 'events'],
       },
     });

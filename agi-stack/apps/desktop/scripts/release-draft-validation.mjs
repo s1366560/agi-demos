@@ -11,6 +11,11 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  buildReleasePackageEvidenceIndex,
+  writeReleasePackageEvidenceIndex,
+} from './release-evidence-index.mjs';
+
 const PLATFORM_POLICIES = Object.freeze({
   macos: Object.freeze({
     evidence: 'release-evidence-macos.json',
@@ -34,6 +39,7 @@ const RELEASE_EVIDENCE_KEYS = Object.freeze([
   'release_disposition',
   'release_blocker_reason_code',
   'required_native_checks',
+  'verification_checks',
   'platform',
   'version',
   'tag',
@@ -44,6 +50,7 @@ const RELEASE_EVIDENCE_KEYS = Object.freeze([
 ]);
 const WORKFLOW_RUN_KEYS = Object.freeze(['id', 'attempt', 'url']);
 const ASSET_KEYS = Object.freeze(['name', 'size', 'sha512']);
+const VERIFICATION_CHECK_KEYS = Object.freeze(['id', 'status', 'reason_code']);
 const VERIFIED_ASSET_MANIFEST_KEYS = Object.freeze(['name', 'path', 'size', 'sha256']);
 const PACKAGE_VERIFICATION_KEYS = Object.freeze({
   macos: Object.freeze([
@@ -251,24 +258,44 @@ function assertEvidenceIdentity(evidence, platform, env) {
   const expectedRunUrl =
     `https://github.com/${env.GITHUB_REPOSITORY}` + `/actions/runs/${env.GITHUB_RUN_ID}`;
   assertExactRecordKeys(evidence, RELEASE_EVIDENCE_KEYS, `${platform} release evidence`);
-  if (evidence.contract_version !== 'desktop-release-evidence-v2') {
+  if (evidence.contract_version !== 'desktop-release-package-evidence-v1') {
     throw new Error(`${platform} release evidence contract is invalid`);
   }
   if (
-    evidence.release_disposition !== 'draft_only' ||
-    evidence.release_blocker_reason_code !== 'native_release_evidence_required' ||
+    evidence.release_disposition !== 'prerelease_only' ||
+    evidence.release_blocker_reason_code !== 'stable_promotion_native_evidence_required' ||
     JSON.stringify(evidence.required_native_checks) !==
       JSON.stringify(['install', 'launch', 'updater_apply', 'updater_failure_rollback'])
   ) {
-    throw new Error(`${platform} release evidence must remain draft-only`);
+    throw new Error(`${platform} release evidence must remain prerelease-only`);
   }
   if (
-    evidence.evidence_scope !== 'package_artifacts_only' ||
+    evidence.evidence_scope !== 'package_artifacts_and_promotion_requirements' ||
     evidence.blockmap_verification_scope !== 'blockmap_structure_and_coverage_only' ||
     evidence.artifact_verification_status !== 'verified_by_tag_ci'
   ) {
     throw new Error(`${platform} package artifact evidence status is invalid`);
   }
+  const expectedChecks = [
+    ['package_artifacts', 'passed', null],
+    ['install', 'blocked', 'native_install_evidence_missing'],
+    ['launch', 'blocked', 'native_launch_evidence_missing'],
+    ['updater_apply', 'blocked', 'updater_apply_evidence_missing'],
+    [
+      'updater_failure_rollback',
+      'blocked',
+      'updater_failure_rollback_evidence_missing',
+    ],
+  ];
+  if (!Array.isArray(evidence.verification_checks) || evidence.verification_checks.length !== 5) {
+    throw new Error(`${platform} release verification checks are invalid`);
+  }
+  evidence.verification_checks.forEach((check, index) => {
+    assertExactRecordKeys(check, VERIFICATION_CHECK_KEYS, `${platform} verification check`);
+    if (JSON.stringify([check.id, check.status, check.reason_code]) !== JSON.stringify(expectedChecks[index])) {
+      throw new Error(`${platform} release verification checks are invalid`);
+    }
+  });
   assertExactRecordKeys(
     evidence.workflow_run,
     WORKFLOW_RUN_KEYS,
@@ -424,7 +451,7 @@ export function validateCombinedReleaseAssets({ root = process.cwd(), env = proc
       assetPaths,
     });
   }
-  const manifest = assetPaths
+  const preliminaryManifest = assetPaths
     .map((path) => ({
       name: basename(path),
       path,
@@ -432,6 +459,34 @@ export function validateCombinedReleaseAssets({ root = process.cwd(), env = proc
       sha256: fileDigest(path, 'sha256', 'hex'),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
+  const platformEvidence = Object.keys(PLATFORM_POLICIES).map((platform) => {
+    const name = PLATFORM_POLICIES[platform].evidence;
+    const asset = preliminaryManifest.find((entry) => entry.name === name);
+    if (!asset) throw new Error(`release evidence index is missing ${name}`);
+    return { platform, name, sha256: asset.sha256 };
+  });
+  const index = buildReleasePackageEvidenceIndex({
+    version: env.AGISTACK_RELEASE_VERSION,
+    tag: env.GITHUB_REF_NAME,
+    commitSha: env.GITHUB_SHA,
+    workflowRun: {
+      id: env.GITHUB_RUN_ID,
+      attempt: env.GITHUB_RUN_ATTEMPT,
+      url: `https://github.com/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`,
+    },
+    platformEvidence,
+    assets: preliminaryManifest.map(({ name, size, sha256 }) => ({ name, size, sha256 })),
+  });
+  const indexPath = writeReleasePackageEvidenceIndex({ releaseRoot: resolvedRoot, index });
+  const manifest = [
+    ...preliminaryManifest,
+    {
+      name: basename(indexPath),
+      path: indexPath,
+      size: statSync(indexPath).size,
+      sha256: fileDigest(indexPath, 'sha256', 'hex'),
+    },
+  ].sort((left, right) => left.name.localeCompare(right.name));
   writeFileSync(
     join(resolvedRoot, 'verified-assets.txt'),
     `${manifest.map(({ name }) => name).join('\n')}\n`,

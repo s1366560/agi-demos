@@ -504,6 +504,9 @@ export const TenantLayout: React.FC = memo(() => {
             className={`flex-1 relative ${
               isFullHeightPath ? 'overflow-hidden h-full' : 'overflow-y-auto p-4'
             }`}
+            role={isFullHeightPath ? undefined : 'region'}
+            aria-label={isFullHeightPath ? undefined : t('common.pageContent')}
+            tabIndex={isFullHeightPath ? undefined : 0}
           >
             <div className={isFullHeightPath ? 'h-full' : 'max-w-full'}>
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">

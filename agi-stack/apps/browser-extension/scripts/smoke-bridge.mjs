@@ -11,7 +11,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import { chromium } from 'playwright';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const EXT_DIR = resolve(here, '../.output/chrome-mv3');
+const extensionManifest = JSON.parse(readFileSync(join(EXT_DIR, 'manifest.json'), 'utf8'));
 const SIDECAR =
   process.env.AGISTACK_SIDECAR_PATH ??
   resolve(here, '../../../target/debug/agistack-desktop-sidecar');
@@ -185,6 +186,7 @@ async function main() {
   }
 
   let connected = false;
+  let connectedStatus = null;
   for (let i = 0; i < 45 && !connected; i++) {
     const t0 = performance.now();
     try {
@@ -192,7 +194,10 @@ async function main() {
       log(
         `poll ${i}: ${(performance.now() - t0).toFixed(0)}ms brokerConnected=${st.result?.brokerConnected}`,
       );
-      if (st.ok && st.result.brokerConnected) connected = true;
+      if (st.ok && st.result.brokerConnected) {
+        connected = true;
+        connectedStatus = st.result;
+      }
     } catch (e) {
       log(`poll ${i}: ${(performance.now() - t0).toFixed(0)}ms ERROR ${e.message}`);
     }
@@ -200,6 +205,35 @@ async function main() {
   }
   if (!connected) return fail('broker never connected (45s)');
   log('broker connected ✔');
+  if (connectedStatus.extensionId !== 'enbljdpbhdllbbkcjhccmbgpkfmcdkkl') {
+    return fail(`unexpected extension identity ${connectedStatus.extensionId}`);
+  }
+  if (connectedStatus.extensionVersion !== extensionManifest.version) {
+    return fail(
+      `extension version ${connectedStatus.extensionVersion}, expected ${extensionManifest.version}`,
+    );
+  }
+  if (
+    connectedStatus.protocolMin !== 1 ||
+    connectedStatus.protocolMax !== 2 ||
+    typeof connectedStatus.hostVersion !== 'string' ||
+    connectedStatus.hostVersion.length === 0
+  ) {
+    return fail(`invalid host protocol status ${JSON.stringify(connectedStatus)}`);
+  }
+  const qaRegistration = connectedStatus.manifests?.find(
+    (manifest) => manifest.browser === 'QA Chromium',
+  );
+  if (
+    qaRegistration?.state !== 'valid' ||
+    qaRegistration.reasonCode !== 'registration_valid' ||
+    qaRegistration.registrationLocation !== expectedManifestPath ||
+    !qaRegistration.allowedActions?.includes('uninstall') ||
+    !/^[a-f0-9]{64}$/u.test(qaRegistration.brokerDigest ?? '')
+  ) {
+    return fail(`invalid registration status ${JSON.stringify(qaRegistration)}`);
+  }
+  log('version/protocol/registration status contract ✔');
 
   // M3: the broker must prefer the unix socket transport (0600, 0700 dir).
   {

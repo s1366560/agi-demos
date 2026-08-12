@@ -181,7 +181,7 @@ const EmptyStateSimpleComponent: FC<EmptyStateSimpleProps> = ({
     : 'py-8';
 
   return (
-    <div className={`${containerClass} ${className}`}>
+    <div className={`${containerClass} ${className}`} data-state="empty" role="status">
       {Icon && (
         <div
           className="
@@ -194,9 +194,7 @@ const EmptyStateSimpleComponent: FC<EmptyStateSimpleProps> = ({
         </div>
       )}
       <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
-      {description && (
-        <p className="text-sm text-content-tertiary max-w-sm mb-5">{description}</p>
-      )}
+      {description && <p className="text-sm text-content-tertiary max-w-sm mb-5">{description}</p>}
       {action}
     </div>
   );
@@ -314,9 +312,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
                   {card.title}
                 </h3>
 
-                <p className="text-xs text-content-tertiary leading-relaxed">
-                  {card.description}
-                </p>
+                <p className="text-xs text-content-tertiary leading-relaxed">{card.description}</p>
               </button>
             );
           })}

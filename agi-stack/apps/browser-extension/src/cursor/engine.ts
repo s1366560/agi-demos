@@ -400,7 +400,7 @@ export class CursorAnimator {
       this.visibility.snap(1);
       this.arrivedPending = true;
       this.move = null;
-      this.wobbleTime = 0;
+      this.wobbleTime = WOBBLE_DURATION_S;
       return;
     }
     const path = planPath(from, to, this.viewport);

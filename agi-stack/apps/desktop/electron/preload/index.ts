@@ -14,6 +14,10 @@ import type {
   NativeFileSaveResult,
 } from '../main/nativeFileDialogPolicy';
 import {
+  parseUpdateLifecycleState,
+  type UpdateLifecycleState,
+} from '../main/updateLifecycle';
+import {
   compactNativeFileIngestRequest,
   compactNativeFileIngestResult,
   compactNativeFileOpenResult,
@@ -30,6 +34,10 @@ const SIDECAR_RECOVERED_CHANNEL = 'agistack:sidecar-recovered';
 const OAUTH_SESSION_CHANGED_CHANNEL = 'agistack:oauth-session-changed';
 const CLOUD_SOCKET_EVENT_CHANNEL = 'agistack:cloud-socket-event';
 const IAB_TABS_CHANGED_CHANNEL = 'agistack:iab-tabs-changed';
+const UPDATE_STATE_CHANNEL = 'agistack:update-state';
+const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
+const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
+const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
 const allowedCommands = new Set([
   'frontend_ready',
   'trusted_session_clear',
@@ -154,6 +162,36 @@ const fileBridge = Object.freeze({
   ingest: ingestNativeFile,
 });
 
+async function getUpdateState(): Promise<UpdateLifecycleState> {
+  return parseUpdateLifecycleState(await ipcRenderer.invoke(UPDATE_STATE_CHANNEL));
+}
+
+async function checkForUpdate(): Promise<UpdateLifecycleState> {
+  return parseUpdateLifecycleState(await ipcRenderer.invoke(UPDATE_CHECK_CHANNEL));
+}
+
+async function restartToApplyUpdate(): Promise<UpdateLifecycleState> {
+  return parseUpdateLifecycleState(await ipcRenderer.invoke(UPDATE_RESTART_TO_APPLY_CHANNEL));
+}
+
+function subscribeToUpdateState(listener: (state: UpdateLifecycleState) => void): () => void {
+  if (typeof listener !== 'function') throw new Error('update state listener is invalid');
+  const wrappedListener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+    listener(parseUpdateLifecycleState(payload));
+  };
+  ipcRenderer.on(UPDATE_STATE_CHANGED_CHANNEL, wrappedListener);
+  return () => ipcRenderer.removeListener(UPDATE_STATE_CHANGED_CHANNEL, wrappedListener);
+}
+
+const updateBridge = Object.freeze({
+  getState: getUpdateState,
+  check: checkForUpdate,
+  restartToApply: restartToApplyUpdate,
+  subscribe: subscribeToUpdateState,
+  // Read-only compatibility for renderers built before the v2 lifecycle.
+  onStateChanged: subscribeToUpdateState,
+});
+
 function onSidecarRecovered(listener: () => void): () => void {
   if (typeof listener !== 'function') {
     throw new Error('sidecar recovery listener is invalid');
@@ -243,6 +281,7 @@ contextBridge.exposeInMainWorld(
     focusMainWindow,
     windowControls,
     files: fileBridge,
+    updates: updateBridge,
     iab: iabBridge,
     events: Object.freeze({
       onSidecarRecovered,

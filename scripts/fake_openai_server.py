@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Iterator, Mapping
 from typing import Any, cast
 
@@ -12,7 +13,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 E2E_MODEL = "memstack-e2e"
 E2E_AGENT_RESPONSE = "E2E_AGENT_OK"
-E2E_EMBEDDING_DIMENSIONS = 1536
+E2E_EMBEDDING_DIMENSIONS = int(os.getenv("E2E_EMBEDDING_DIMENSIONS", "1536"))
 E2E_GRAPH_RESPONSE = {
     "goal_achieved": True,
     "reason": "The deterministic E2E response was delivered.",

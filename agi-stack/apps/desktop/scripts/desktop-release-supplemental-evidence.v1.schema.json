@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Desktop supplemental release judgment evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "release_identity",
+    "id",
+    "producer_run",
+    "judgment_revision",
+    "judgment_ledger",
+    "check"
+  ],
+  "properties": {
+    "contract_version": { "const": "desktop-release-supplemental-evidence-v1" },
+    "release_identity": { "$ref": "#/$defs/releaseIdentity" },
+    "id": { "enum": ["neo4j_runtime", "wcag_aa", "browser_bridge"] },
+    "producer_run": { "$ref": "#/$defs/producerRun" },
+    "judgment_revision": { "$ref": "#/$defs/sha" },
+    "judgment_ledger": { "$ref": "#/$defs/evidenceRef" },
+    "check": { "$ref": "#/$defs/check" }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "safeName": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,240}$" },
+    "githubUrl": { "type": "string", "pattern": "^https://github\\.com/" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?Z$"
+    },
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attempt", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "$ref": "#/$defs/githubUrl" }
+      }
+    },
+    "releaseIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "tag", "commit_sha", "channel", "workflow_run"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "tag": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "commit_sha": { "$ref": "#/$defs/sha" },
+        "channel": { "const": "prerelease" },
+        "workflow_run": { "$ref": "#/$defs/workflowRun" }
+      }
+    },
+    "producerArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github_artifact_id", "name", "size", "sha256", "release_asset_name"],
+      "properties": {
+        "github_artifact_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "$ref": "#/$defs/safeName" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "release_asset_name": { "$ref": "#/$defs/safeName" }
+      }
+    },
+    "producerRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflow_path", "id", "attempt", "url", "head_sha", "conclusion", "artifact"],
+      "properties": {
+        "workflow_path": {
+          "const": ".github/workflows/desktop-release-supplemental-evidence.yml"
+        },
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$"
+        },
+        "head_sha": { "$ref": "#/$defs/sha" },
+        "conclusion": { "const": "success" },
+        "artifact": { "$ref": "#/$defs/producerArtifact" }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "url"],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeName" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "url": { "$ref": "#/$defs/githubUrl" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "reason_code",
+        "timestamp",
+        "retryable",
+        "log_refs",
+        "artifact_refs"
+      ],
+      "properties": {
+        "id": { "enum": ["neo4j_runtime", "wcag_aa", "browser_bridge"] },
+        "status": { "enum": ["passed", "failed", "blocked", "not_run"] },
+        "reason_code": { "type": ["string", "null"] },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "retryable": { "type": "boolean" },
+        "log_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        },
+        "artifact_refs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    }
+  }
+}

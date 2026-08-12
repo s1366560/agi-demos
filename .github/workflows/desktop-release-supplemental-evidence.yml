@@ -1,0 +1,161 @@
+name: Desktop Release Supplemental Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact protected desktop prerelease tag under evidence collection
+        required: true
+        type: string
+      supplemental_id:
+        description: Required release evidence channel
+        required: true
+        type: choice
+        options:
+          - neo4j_runtime
+          - wcag_aa
+          - browser_bridge
+
+permissions: {}
+
+concurrency:
+  group: desktop-release-supplemental-${{ inputs.tag }}-${{ inputs.supplemental_id }}
+  cancel-in-progress: false
+
+jobs:
+  produce:
+    name: Produce fail-closed supplemental evidence
+    runs-on: ubuntu-latest
+    environment: desktop-release-qa
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Authorize immutable release identity
+        id: identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo 'evidence_status=blocked reason=supplemental_producer_tag_invalid' >&2
+            exit 1
+          fi
+          commit_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REQUESTED_TAG}" --jq '.sha')"
+          comparison_status="$(
+            gh api "repos/${GITHUB_REPOSITORY}/compare/${commit_sha}...main" --jq '.status'
+          )"
+          release_json="$(
+            gh release view "$REQUESTED_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,tagName
+          )"
+          if [[ "$comparison_status" != "ahead" && "$comparison_status" != "identical" ]] || \
+             [[ "$(jq -r '.isDraft' <<<"$release_json")" != 'false' ]] || \
+             [[ "$(jq -r '.isPrerelease' <<<"$release_json")" != 'true' ]] || \
+             [[ "$(jq -r '.tagName' <<<"$release_json")" != "$REQUESTED_TAG" ]]; then
+            echo 'evidence_status=blocked reason=supplemental_producer_release_untrusted' >&2
+            exit 1
+          fi
+          tag_ref="refs/tags/${REQUESTED_TAG}"
+          rule_suites="$(
+            gh api \
+              --method GET \
+              "repos/${GITHUB_REPOSITORY}/rulesets/rule-suites" \
+              -f ref="$tag_ref" \
+              -f rule_suite_result=all \
+              -f time_period=month \
+              -f per_page=100
+          )"
+          if ! jq -e \
+            --arg ref "$tag_ref" \
+            --arg commit_sha "$commit_sha" '
+              [
+                .[] |
+                select(
+                  .ref == $ref and
+                  .after_sha == $commit_sha
+                )
+              ] as $matching |
+              ($matching | length) > 0 and
+              all($matching[]; .result == "pass")
+            ' <<<"$rule_suites" >/dev/null; then
+            echo 'evidence_status=blocked reason=supplemental_producer_ref_untrusted' >&2
+            exit 1
+          fi
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout immutable supplemental producer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.identity.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Materialize traceable blocked evidence
+        shell: bash
+        env:
+          SUPPLEMENTAL_ID: ${{ inputs.supplemental_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT_SHA: ${{ steps.identity.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          case "$SUPPLEMENTAL_ID" in
+            neo4j_runtime)
+              reason_code='neo4j_electron_physical_evidence_missing'
+              ;;
+            wcag_aa)
+              reason_code='manual_assistive_technology_evidence_missing'
+              ;;
+            browser_bridge)
+              reason_code='browser_bridge_three_platform_physical_evidence_missing'
+              ;;
+            *)
+              echo 'evidence_status=failed reason=supplemental_id_invalid' >&2
+              exit 1
+              ;;
+          esac
+          export REASON_CODE="$reason_code"
+          artifact_dir="$RUNNER_TEMP/supplemental-evidence"
+          mkdir -m 0700 "$artifact_dir"
+          node <<'NODE'
+          const { writeFileSync } = require('node:fs');
+          const { join } = require('node:path');
+          const value = {
+            contract_version: 'desktop-release-supplemental-producer-status-v1',
+            release_identity: {
+              tag: process.env.RELEASE_TAG,
+              commit_sha: process.env.RELEASE_COMMIT_SHA,
+            },
+            supplemental_id: process.env.SUPPLEMENTAL_ID,
+            producer_run: {
+              workflow_path: '.github/workflows/desktop-release-supplemental-evidence.yml',
+              id: process.env.GITHUB_RUN_ID,
+              attempt: process.env.GITHUB_RUN_ATTEMPT,
+              url: `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`,
+              head_sha: process.env.RELEASE_COMMIT_SHA,
+            },
+            status: 'blocked',
+            reason_code: process.env.REASON_CODE,
+            retryable: true,
+          };
+          writeFileSync(
+            join(process.env.RUNNER_TEMP, 'supplemental-evidence', 'producer-status.json'),
+            `${JSON.stringify(value, null, 2)}\n`,
+            { mode: 0o600 },
+          );
+          NODE
+      - name: Upload immutable producer artifact
+        if: always() && steps.identity.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ inputs.supplemental_id == 'neo4j_runtime' && 'neo4j-runtime' || inputs.supplemental_id == 'wcag_aa' && 'wcag-aa' || 'browser-bridge-release' }}-evidence
+          path: ${{ runner.temp }}/supplemental-evidence
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Keep incomplete release evidence blocked
+        shell: bash
+        run: |
+          echo 'evidence_status=blocked reason=required_external_evidence_missing' >> "$GITHUB_STEP_SUMMARY"
+          exit 1

@@ -126,7 +126,7 @@
 .desktop-design-header-row strong,
 .desktop-design-header-row span {
   overflow: hidden;
-  color: var(--desktop-faint);
+  color: var(--desktop-muted);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -290,7 +290,7 @@
 }
 
 .desktop-design-profile small {
-  color: var(--desktop-faint);
+  color: var(--desktop-muted);
   font-size: 7px;
 }
 

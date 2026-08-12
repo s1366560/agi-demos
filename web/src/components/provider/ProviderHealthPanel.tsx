@@ -44,9 +44,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
       : 0;
 
   const getHealthColor = () => {
-    if (healthPercentage >= 80) return 'text-emerald-600 dark:text-emerald-400';
+    if (healthPercentage >= 80) return 'text-emerald-700 dark:text-emerald-300';
     if (healthPercentage >= 50) return 'text-amber-600 dark:text-amber-400';
-    return 'text-red-600 dark:text-red-400';
+    return 'text-red-700 dark:text-red-300';
   };
 
   const getHealthIcon = () => {
@@ -126,7 +126,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <span className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
               {totalProviders}
             </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            <span className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
               {t('components.provider.health.activeCount', {
                 count: activeProviders,
                 defaultValue: '{{count}} active',
@@ -147,7 +147,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <span className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               {healthyProviders}
             </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-500">
+            <span className="text-xs text-emerald-700 dark:text-emerald-300">
               {t('components.provider.health.providers', { defaultValue: 'providers' })}
             </span>
           </div>

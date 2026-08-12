@@ -48,7 +48,7 @@ export function ToastViewport({
 }) {
   const { t } = useI18n();
   return (
-    <div className="toast-viewport" aria-label={t('toast.viewportLabel')} aria-live="polite">
+    <section className="toast-viewport" aria-label={t('toast.viewportLabel')} aria-live="polite">
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -72,7 +72,7 @@ export function ToastViewport({
           </button>
         </div>
       ))}
-    </div>
+    </section>
   );
 }
 

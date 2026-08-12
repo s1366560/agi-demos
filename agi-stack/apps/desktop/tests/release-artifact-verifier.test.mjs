@@ -601,6 +601,7 @@ test('release evidence binds tag CI identity and package-only artifact checks', 
     'release_disposition',
     'release_blocker_reason_code',
     'required_native_checks',
+    'verification_checks',
     'platform',
     'version',
     'tag',
@@ -609,17 +610,28 @@ test('release evidence binds tag CI identity and package-only artifact checks', 
     'package_verification',
     'assets',
   ]);
-  assert.equal(evidence.contract_version, 'desktop-release-evidence-v2');
-  assert.equal(evidence.evidence_scope, 'package_artifacts_only');
+  assert.equal(evidence.contract_version, 'desktop-release-package-evidence-v1');
+  assert.equal(evidence.evidence_scope, 'package_artifacts_and_promotion_requirements');
   assert.equal(evidence.blockmap_verification_scope, 'blockmap_structure_and_coverage_only');
   assert.equal(evidence.artifact_verification_status, 'verified_by_tag_ci');
-  assert.equal(evidence.release_disposition, 'draft_only');
-  assert.equal(evidence.release_blocker_reason_code, 'native_release_evidence_required');
+  assert.equal(evidence.release_disposition, 'prerelease_only');
+  assert.equal(evidence.release_blocker_reason_code, 'stable_promotion_native_evidence_required');
   assert.deepEqual(evidence.required_native_checks, [
     'install',
     'launch',
     'updater_apply',
     'updater_failure_rollback',
+  ]);
+  assert.deepEqual(evidence.verification_checks, [
+    { id: 'package_artifacts', status: 'passed', reason_code: null },
+    { id: 'install', status: 'blocked', reason_code: 'native_install_evidence_missing' },
+    { id: 'launch', status: 'blocked', reason_code: 'native_launch_evidence_missing' },
+    { id: 'updater_apply', status: 'blocked', reason_code: 'updater_apply_evidence_missing' },
+    {
+      id: 'updater_failure_rollback',
+      status: 'blocked',
+      reason_code: 'updater_failure_rollback_evidence_missing',
+    },
   ]);
   assert.deepEqual(evidence.package_verification, input.packageVerification);
   assert.equal('verification_status' in evidence, false);
@@ -767,9 +779,26 @@ test('draft staging validation accepts exact evidence and rejects a mutated asse
     const validationTool = fileURLToPath(
       new URL('../scripts/release-draft-validation.mjs', import.meta.url),
     );
+    const evidenceIndexTool = fileURLToPath(
+      new URL('../scripts/release-evidence-index.mjs', import.meta.url),
+    );
+    const evidenceIndexSchema = fileURLToPath(
+      new URL('../scripts/desktop-release-package-evidence-index.v1.schema.json', import.meta.url),
+    );
+    const schemaValidator = fileURLToPath(
+      new URL('../contracts/desktop-web-parity/schema-validator.mjs', import.meta.url),
+    );
     const toolDirectory = join(root, 'release-tools');
     mkdirSync(toolDirectory);
     copyFileSync(validationTool, join(toolDirectory, 'release-draft-validation.mjs'));
+    copyFileSync(evidenceIndexTool, join(toolDirectory, 'release-evidence-index.mjs'));
+    copyFileSync(
+      evidenceIndexSchema,
+      join(toolDirectory, 'desktop-release-package-evidence-index.v1.schema.json'),
+    );
+    const contractDirectory = join(root, 'contracts', 'desktop-web-parity');
+    mkdirSync(contractDirectory, { recursive: true });
+    copyFileSync(schemaValidator, join(contractDirectory, 'schema-validator.mjs'));
     assert.match(
       readFileSync(join(toolDirectory, 'release-draft-validation.mjs'), 'utf8'),
       /assertExactRecordKeys/u,
@@ -937,7 +966,7 @@ test('draft staging validation accepts exact evidence and rejects a mutated asse
     );
     const publishableClaim = validate();
     assert.notEqual(publishableClaim.status, 0);
-    assert.match(publishableClaim.stderr, /release evidence must remain draft-only/u);
+    assert.match(publishableClaim.stderr, /release evidence must remain prerelease-only/u);
     writeFileSync(linuxEvidencePath, JSON.stringify(packageEvidence));
 
     writeFileSync(

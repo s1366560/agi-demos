@@ -1,0 +1,155 @@
+.settings-update-card {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  background: var(--gray-2);
+  border: 1px solid var(--gray-6);
+  border-radius: 12px;
+}
+
+.settings-update-card.tone-progress {
+  border-color: var(--cyan-7);
+}
+
+.settings-update-card.tone-success {
+  border-color: var(--green-7);
+}
+
+.settings-update-card.tone-danger {
+  border-color: var(--red-7);
+}
+
+.settings-update-card header,
+.settings-update-card header > span:last-child {
+  display: flex;
+}
+
+.settings-update-card header {
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-update-card header > span:last-child {
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-update-card header strong {
+  color: var(--gray-12);
+  font-size: 14px;
+}
+
+.settings-update-card header small,
+.settings-update-message,
+.settings-update-versions dt,
+.settings-update-progress label {
+  color: var(--gray-10);
+  font-size: 11px;
+}
+
+.settings-update-state-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--cyan-11);
+  background: var(--cyan-3);
+  border-radius: 9px;
+}
+
+.tone-success .settings-update-state-icon {
+  color: var(--green-11);
+  background: var(--green-3);
+}
+
+.tone-danger .settings-update-state-icon {
+  color: var(--red-11);
+  background: var(--red-3);
+}
+
+.settings-update-message {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.settings-update-progress {
+  display: grid;
+  gap: 7px;
+}
+
+.settings-update-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--cyan-9);
+}
+
+.settings-update-versions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.settings-update-versions > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--gray-3);
+  border: 1px solid var(--gray-6);
+  border-radius: 8px;
+}
+
+.settings-update-versions dd {
+  margin: 0;
+  color: var(--gray-12);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-update-card footer button {
+  min-height: 32px;
+  padding: 0 13px;
+  color: var(--gray-12);
+  background: var(--gray-4);
+  border: 1px solid var(--gray-7);
+  border-radius: 7px;
+}
+
+.settings-update-card footer button.primary {
+  color: var(--cyan-12);
+  background: var(--cyan-4);
+  border-color: var(--cyan-8);
+}
+
+.settings-update-card footer button:focus-visible {
+  outline: 2px solid var(--cyan-9);
+  outline-offset: 2px;
+}
+
+.settings-update-card footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 520px) {
+  .settings-update-versions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-update-card * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

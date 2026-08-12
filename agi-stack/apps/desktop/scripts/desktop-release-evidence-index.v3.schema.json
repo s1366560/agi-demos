@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Desktop external promotion evidence index v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "release_identity",
+    "promotion_status",
+    "required_promotion_checks",
+    "platform_evidence",
+    "supplemental_evidence",
+    "assets"
+  ],
+  "properties": {
+    "contract_version": { "const": "desktop-release-evidence-index-v3" },
+    "release_identity": { "$ref": "#/$defs/releaseIdentity" },
+    "promotion_status": { "enum": ["passed", "blocked"] },
+    "required_promotion_checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "macos_install_launch",
+          "windows_install_launch",
+          "linux_install_launch",
+          "updater_apply",
+          "updater_failure_rollback",
+          "neo4j_runtime",
+          "wcag_aa",
+          "browser_bridge"
+        ]
+      }
+    },
+    "platform_evidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/platformEvidence" }
+    },
+    "supplemental_evidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/supplementalEvidence" }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/releaseAsset" }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "safeName": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,240}$" },
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "attempt", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/" }
+      }
+    },
+    "releaseIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "tag", "commit_sha", "channel", "workflow_run"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "tag": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "commit_sha": { "$ref": "#/$defs/sha" },
+        "channel": { "enum": ["prerelease", "stable"] },
+        "workflow_run": { "$ref": "#/$defs/workflowRun" }
+      }
+    },
+    "evidenceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "judgment_revision"],
+      "properties": {
+        "name": { "$ref": "#/$defs/safeName" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "judgment_revision": { "$ref": "#/$defs/sha" }
+      }
+    },
+    "platformEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "name", "sha256", "judgment_revision"],
+      "properties": {
+        "platform": { "enum": ["macos", "windows", "linux"] },
+        "name": {
+          "type": "string",
+          "pattern": "^release-platform-evidence-(?:macos|windows|linux)-v3\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "judgment_revision": { "$ref": "#/$defs/sha" }
+      }
+    },
+    "supplementalEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "sha256", "judgment_revision"],
+      "properties": {
+        "id": { "enum": ["neo4j_runtime", "wcag_aa", "browser_bridge"] },
+        "name": { "$ref": "#/$defs/safeName" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "judgment_revision": { "$ref": "#/$defs/sha" }
+      }
+    },
+    "releaseAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github_asset_id", "name", "size", "sha256", "sha512"],
+      "properties": {
+        "github_asset_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "$ref": "#/$defs/safeName" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sha512": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" }
+      }
+    }
+  }
+}

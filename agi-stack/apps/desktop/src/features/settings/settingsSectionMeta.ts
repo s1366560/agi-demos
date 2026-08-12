@@ -9,6 +9,7 @@ import {
   KeyboardIcon,
   MagicWandIcon,
   PersonIcon,
+  ReloadIcon,
 } from '@radix-ui/react-icons';
 
 import type { SettingsSection } from './settingsNavigationModel';
@@ -28,6 +29,11 @@ export const settingsSectionMeta = {
     label: 'settings.general',
     description: 'settings.generalDescription',
     Icon: GearIcon,
+  },
+  updates: {
+    label: 'settings.updates',
+    description: 'settings.updatesDescription',
+    Icon: ReloadIcon,
   },
   connection: {
     label: 'settings.connectionRecovery',
