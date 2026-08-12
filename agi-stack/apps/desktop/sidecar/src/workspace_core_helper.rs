@@ -25,6 +25,7 @@ use crate::local_runtime::LocalRuntimeService;
 use crate::private_file_permissions::{
     set_private_directory_permissions, set_private_file_permissions,
 };
+use crate::workspace_core_legacy_import::stage_legacy_workspace_snapshot;
 
 const DEFAULT_MAX_RESTART_ATTEMPTS: usize = 4;
 const DESKTOP_CONTROL_PROTOCOL_VERSION: u16 = 1;
@@ -82,6 +83,8 @@ struct WorkspaceCoreLaunchConfig {
     provider_webhook_token: Zeroizing<String>,
     provider_event_token: Zeroizing<String>,
     sidecar_api_base_url: String,
+    legacy_import_path: PathBuf,
+    legacy_import_sha256: String,
 }
 
 #[derive(Serialize)]
@@ -102,6 +105,8 @@ struct DesktopInitialize<'a> {
     provider_event_token: &'a str,
     plan_dispatch_url: String,
     instance_id: String,
+    legacy_import_path: &'a Path,
+    legacy_import_sha256: &'a str,
 }
 
 #[derive(Deserialize)]
@@ -166,6 +171,7 @@ impl WorkspaceCoreSupervisor {
         let api_base_url = format!("http://127.0.0.1:{port}");
         let config_path = runtime_directory.join("bcs-config.toml");
         write_config(&config_path, &runtime_directory, port).await?;
+        let legacy_import = stage_legacy_workspace_snapshot(&runtime, &runtime_directory).await?;
 
         let launch = Arc::new(WorkspaceCoreLaunchConfig {
             binary_path,
@@ -177,9 +183,12 @@ impl WorkspaceCoreSupervisor {
             provider_webhook_token: random_secret()?,
             provider_event_token: random_secret()?,
             sidecar_api_base_url: sidecar_api_base_url.to_string(),
+            legacy_import_path: legacy_import.path,
+            legacy_import_sha256: legacy_import.sha256,
         });
         let authority_generation = runtime.install_workspace_core_authority(
             launch.api_base_url.clone(),
+            launch.service_token.as_str().to_string(),
             launch.agent_registry_token.as_str().to_string(),
             launch.provider_webhook_token.as_str().to_string(),
             launch.provider_event_token.as_str().to_string(),
@@ -404,6 +413,8 @@ async fn launch_helper(config: &WorkspaceCoreLaunchConfig) -> Result<SupervisedC
         provider_event_token: config.provider_event_token.as_str(),
         plan_dispatch_url,
         instance_id: format!("desktop-sidecar:{}", std::process::id()),
+        legacy_import_path: &config.legacy_import_path,
+        legacy_import_sha256: &config.legacy_import_sha256,
     };
     let mut encoded = Zeroizing::new(
         serde_json::to_string(&initialize)
@@ -636,6 +647,8 @@ mod tests {
             provider_webhook_token: Zeroizing::new("w".repeat(43)),
             provider_event_token: Zeroizing::new("e".repeat(43)),
             sidecar_api_base_url: "http://127.0.0.1:31000".to_string(),
+            legacy_import_path: PathBuf::from("/tmp/workspace-core/legacy-import.json"),
+            legacy_import_sha256: "a".repeat(64),
         }
     }
 

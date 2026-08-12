@@ -70,7 +70,7 @@ export interface AgentV3State {
     options?: LoadMessagesOptions
   ) => Promise<void>;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
-  createNewConversation: (projectId: string) => Promise<string | null>;
+  createNewConversation: (projectId: string, workspaceId?: string | null) => Promise<string | null>;
   sendMessage: (
     content: string,
     projectId: string,

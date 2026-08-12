@@ -374,7 +374,7 @@ export function createDesktopWorkbenchCapabilityClient(
             withCapabilityScope(automationCapabilities.cronJobs, projectScope),
           ),
           search: observed(withCapabilityScope(search, projectScope)),
-          workspace_collaboration: (config.mode === 'local' ? declared : observed)(
+          workspace_collaboration: observed(
             withCapabilityScope(workspaceCollaboration, workspaceScope),
           ),
           sandbox_isolation: declared(
@@ -1285,6 +1285,7 @@ export function normalizeProjectCronJobsCapabilityContract(
 export function normalizeWorkspaceCollaborationCapabilityContract(
   input: unknown,
   scope: WorkspaceCollaborationCapabilityScope,
+  expectedAuthority: DesktopRuntimeConfig['mode'] = 'cloud',
 ): DesktopCapabilityAvailability {
   const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
   if (!negotiation.compatible) {
@@ -1297,7 +1298,7 @@ export function normalizeWorkspaceCollaborationCapabilityContract(
     return unavailable('workspace_collaboration_capability_contract_invalid', negotiation);
   }
   if (
-    input.authority !== 'cloud' ||
+    input.authority !== expectedAuthority ||
     input.canonical_read !== true ||
     !matchesExactStringArray(input.read_surfaces, WORKSPACE_COLLABORATION_READ_SURFACES) ||
     input.tenant_id !== scope.tenantId ||
@@ -1485,9 +1486,6 @@ async function loadWorkspaceCollaborationCapability(
   config: DesktopRuntimeConfig,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
-  if (config.mode === 'local') {
-    return unavailable('local_workspace_collaboration_unavailable');
-  }
   const scope = readWorkspaceCollaborationCapabilityScope(config);
   if (!scope) {
     return unavailable('workspace_collaboration_capability_scope_unavailable');
@@ -1515,7 +1513,11 @@ async function loadWorkspaceCollaborationCapability(
       return unavailable('workspace_collaboration_capability_contract_invalid');
     }
     const payload = await response.json().catch(() => null);
-    const capability = normalizeWorkspaceCollaborationCapabilityContract(payload, scope);
+    const capability = normalizeWorkspaceCollaborationCapabilityContract(
+      payload,
+      scope,
+      config.mode,
+    );
     if (capability.availability !== 'available' && capability.availability !== 'degraded') {
       return capability;
     }

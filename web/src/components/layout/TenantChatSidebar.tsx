@@ -16,15 +16,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, mem
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, NavLink, Link } from 'react-router-dom';
 
-import {
-  Plus,
-  MessageSquare,
-  Trash2,
-  Edit3,
-  Bot,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Edit3, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
@@ -1251,17 +1243,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;
-    const newId = await createNewConversation(selectedProjectId);
+    const newId = await createNewConversation(selectedProjectId, workspaceIdFromQuery);
     if (newId) {
       void navigate(
         buildAgentWorkspacePath({
           tenantId,
           conversationId: newId,
           projectId: selectedProjectId,
+          workspaceId: workspaceIdFromQuery,
         })
       );
     }
-  }, [selectedProjectId, createNewConversation, navigate, tenantId]);
+  }, [selectedProjectId, createNewConversation, navigate, tenantId, workspaceIdFromQuery]);
 
   // Delete confirmation + optimistic-undo state
   const [deleteTarget, setDeleteTarget] = useState<ConversationWithProject | null>(null);
@@ -1649,9 +1642,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       )}
 
       {/* Header */}
-      <div
-        className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0"
-      >
+      <div className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0">
         <div className="flex items-center gap-3 w-full min-w-0">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
             <Bot className="text-slate-50 dark:text-slate-900" size={24} />
@@ -1667,155 +1658,155 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* Project Selector */}
       <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
-          <div
-            className="relative"
-            title={projectSwitcherDisabled ? projectSwitcherDisabledReason : undefined}
+        <div
+          className="relative"
+          title={projectSwitcherDisabled ? projectSwitcherDisabledReason : undefined}
+        >
+          <select
+            aria-label={t('agent.sidebar.projectSwitcher', 'Project switcher')}
+            value={selectedProjectId ?? ''}
+            onChange={(event) => {
+              if (event.target.value) {
+                handleProjectChange(event.target.value);
+              }
+            }}
+            disabled={projectSwitcherDisabled}
+            className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
           >
-            <select
-              aria-label={t('agent.sidebar.projectSwitcher', 'Project switcher')}
-              value={selectedProjectId ?? ''}
-              onChange={(event) => {
-                if (event.target.value) {
-                  handleProjectChange(event.target.value);
-                }
-              }}
-              disabled={projectSwitcherDisabled}
-              className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
+            {selectableProjects.length === 0 ? (
+              <option value="">{emptyProjectOptionLabel}</option>
+            ) : (
+              <>
+                {!selectedProjectId ? (
+                  <option value="">
+                    {t('agent.sidebar.selectProjectTitle', 'Select Project')}
+                  </option>
+                ) : null}
+                {selectableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </>
+            )}
+          </select>
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+        </div>
+        {projectsLoadError && tenantScopedProjects.length === 0 ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
+            <span>{t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')}</span>
+            <button
+              type="button"
+              onClick={loadProjectsForSwitcher}
+              className="shrink-0 font-medium underline hover:no-underline"
             >
-              {selectableProjects.length === 0 ? (
-                <option value="">{emptyProjectOptionLabel}</option>
-              ) : (
-                <>
-                  {!selectedProjectId ? (
-                    <option value="">
-                      {t('agent.sidebar.selectProjectTitle', 'Select Project')}
-                    </option>
-                  ) : null}
-                  {selectableProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </>
-              )}
-            </select>
-            <ChevronDown
-              size={16}
-              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-            />
+              {t('common.retry', 'Retry')}
+            </button>
           </div>
-          {projectsLoadError && tenantScopedProjects.length === 0 ? (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
-              <span>{t('agent.sidebar.projectsLoadFailed', 'Failed to load projects')}</span>
-              <button
-                type="button"
-                onClick={loadProjectsForSwitcher}
-                className="shrink-0 font-medium underline hover:no-underline"
-              >
-                {t('common.retry', 'Retry')}
-              </button>
-            </div>
-          ) : null}
-          <div className="relative">
-            <LazyInput
-              aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
-              className="w-full"
-              placeholder={t(
-                'agent.sidebar.searchProjectsPlaceholder',
-                'Search all authorized projects'
-              )}
-              value={projectSearchQuery}
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                handleProjectSearch(event.target.value);
-              }}
-            />
-            {isProjectSearchLoading ? (
-              <span
-                role="status"
-                aria-live="polite"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400"
-              >
-                {t('agent.sidebar.searchingProjects', 'Searching projects…')}
-              </span>
-            ) : null}
-          </div>
-          {hasProjectSearchQuery && hasProjectSearchResults ? (
-            <div
-              role="list"
-              aria-label={projectSearchResultsLabel}
-              className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        ) : null}
+        <div className="relative">
+          <LazyInput
+            aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
+            className="w-full"
+            placeholder={t(
+              'agent.sidebar.searchProjectsPlaceholder',
+              'Search all authorized projects'
+            )}
+            value={projectSearchQuery}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+              handleProjectSearch(event.target.value);
+            }}
+          />
+          {isProjectSearchLoading ? (
+            <span
+              role="status"
+              aria-live="polite"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400"
             >
-              {projectSearchResults.map((project) => {
-                const isSelectedProject = selectedProjectId === project.id;
-                return (
-                  <div key={project.id} role="listitem">
-                    <button
-                      type="button"
-                      aria-current={isSelectedProject ? 'true' : undefined}
-                      className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
-                      onClick={() => {
-                        handleProjectChange(project.id);
-                      }}
-                    >
-                      <span className="truncate">{project.name}</span>
-                      {isSelectedProject ? (
-                        <span
-                          aria-hidden="true"
-                          className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs-plus font-medium text-primary"
-                        >
-                          {selectedProjectBadge}
-                        </span>
-                      ) : null}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {projectSearchError && hasProjectSearchQuery ? (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
-              <span>{t('agent.sidebar.projectSearchFailed', 'Project search failed')}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  handleProjectSearch(projectSearchQuery);
-                }}
-                className="shrink-0 font-medium underline hover:no-underline"
-              >
-                {t('common.retry', 'Retry')}
-              </button>
-            </div>
-          ) : null}
-          {showProjectSearchEmpty && !projectSearchError ? (
-            <div className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('agent.sidebar.noProjectsFound', 'No projects found')}
-            </div>
-          ) : null}
-          {hasProjectSearchQuery && projectSearchTotal > 0 ? (
-            <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span>{projectSearchCountText}</span>
-              {hasMoreProjectSearchResults ? (
-                <button
-                  type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-                  disabled={isProjectSearchLoading || isProjectSearchLoadingMore}
-                  onClick={handleLoadMoreProjectSearchResults}
-                >
-                  <ChevronDown
-                    size={14}
-                    className={
-                      isProjectSearchLoadingMore ? 'animate-spin motion-reduce:animate-none' : ''
-                    }
-                    aria-hidden="true"
-                  />
-                  {isProjectSearchLoadingMore
-                    ? t('agent.sidebar.loadingMoreProjects', 'Loading…')
-                    : t('agent.sidebar.loadMoreProjects', 'Load more')}
-                </button>
-              ) : null}
-            </div>
+              {t('agent.sidebar.searchingProjects', 'Searching projects…')}
+            </span>
           ) : null}
         </div>
+        {hasProjectSearchQuery && hasProjectSearchResults ? (
+          <div
+            role="list"
+            aria-label={projectSearchResultsLabel}
+            className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            {projectSearchResults.map((project) => {
+              const isSelectedProject = selectedProjectId === project.id;
+              return (
+                <div key={project.id} role="listitem">
+                  <button
+                    type="button"
+                    aria-current={isSelectedProject ? 'true' : undefined}
+                    className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
+                    onClick={() => {
+                      handleProjectChange(project.id);
+                    }}
+                  >
+                    <span className="truncate">{project.name}</span>
+                    {isSelectedProject ? (
+                      <span
+                        aria-hidden="true"
+                        className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs-plus font-medium text-primary"
+                      >
+                        {selectedProjectBadge}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+        {projectSearchError && hasProjectSearchQuery ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-rose-200 px-3 py-2 text-xs text-rose-600 dark:border-rose-900/50 dark:text-rose-400">
+            <span>{t('agent.sidebar.projectSearchFailed', 'Project search failed')}</span>
+            <button
+              type="button"
+              onClick={() => {
+                handleProjectSearch(projectSearchQuery);
+              }}
+              className="shrink-0 font-medium underline hover:no-underline"
+            >
+              {t('common.retry', 'Retry')}
+            </button>
+          </div>
+        ) : null}
+        {showProjectSearchEmpty && !projectSearchError ? (
+          <div className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            {t('agent.sidebar.noProjectsFound', 'No projects found')}
+          </div>
+        ) : null}
+        {hasProjectSearchQuery && projectSearchTotal > 0 ? (
+          <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>{projectSearchCountText}</span>
+            {hasMoreProjectSearchResults ? (
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                disabled={isProjectSearchLoading || isProjectSearchLoadingMore}
+                onClick={handleLoadMoreProjectSearchResults}
+              >
+                <ChevronDown
+                  size={14}
+                  className={
+                    isProjectSearchLoadingMore ? 'animate-spin motion-reduce:animate-none' : ''
+                  }
+                  aria-hidden="true"
+                />
+                {isProjectSearchLoadingMore
+                  ? t('agent.sidebar.loadingMoreProjects', 'Loading…')
+                  : t('agent.sidebar.loadMoreProjects', 'Load more')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {/* New Chat Button */}
       <div className="p-3">
@@ -1857,103 +1848,103 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         onScroll={handleConversationScroll}
       >
         <div className="px-3">
-            {conversationsLoading ? (
-              <div className="flex items-center justify-center py-8" role="status">
-                <div
-                  className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">{t('common.loading', 'Loading…')}</span>
-              </div>
-            ) : (
-              <>
-                {conversationsLoadError && isAgentWorkspaceRoute && selectedProjectId ? (
-                  <div className="text-center py-8">
-                    <MessageSquare size={32} className="mx-auto mb-2 text-rose-400" />
-                    <p className="text-xs text-rose-600 dark:text-rose-400">
-                      {t('agent.sidebar.conversationsLoadFailed', 'Failed to load conversations')}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleRetryLoadConversations}
-                      className="mt-2 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      {t('common.retry', 'Retry')}
-                    </button>
-                  </div>
-                ) : filteredConversations.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
-                    <p className="text-xs">
-                      {conversationFilter.trim()
-                        ? t(
-                            'agent.sidebar.noMatchingConversations',
-                            'No conversations match your filter'
-                          )
-                        : selectedProjectId
-                          ? t('agent.sidebar.noConversations', 'No conversations yet')
-                          : t(
-                              'agent.sidebar.selectProjectToViewConversations',
-                              'Select a project to view conversations'
-                            )}
-                    </p>
-                  </div>
-                ) : (
-                  conversationSections.map((section) => {
-                    const groupCollapsed = collapsedGroupIds.has(section.id);
-                    return (
-                      <section key={section.id} aria-label={section.workspaceTitle}>
-                        <ConversationGroupHeader
-                          collapsed={groupCollapsed}
-                          conversationCount={section.conversations.length}
-                          onToggle={() => {
-                            toggleConversationGroup(section.id);
-                          }}
-                          workspaceTitle={section.workspaceTitle}
-                        />
-                        {!groupCollapsed
-                          ? section.conversations.map((conv) => (
-                              <ConversationItem
-                                activeItemRef={
-                                  conv.id === selectedConversationId
-                                    ? activeConversationItemRef
-                                    : undefined
-                                }
-                                key={conv.id}
-                                conversation={conv}
-                                grouped
-                                isActive={conv.id === selectedConversationId}
-                                href={buildAgentWorkspacePath({
-                                  tenantId,
-                                  conversationId: conv.id,
-                                  projectId: conv.projectId,
-                                  workspaceId: workspaceIdFromConversation(conv),
-                                })}
-                                onDelete={(e) => {
-                                  handleDeleteConversation(conv, e);
-                                }}
-                                onRename={(e) => {
-                                  handleRenameClick(conv, e);
-                                }}
-                              />
-                            ))
-                          : null}
-                      </section>
-                    );
-                  })
-                )}
-                {isLoadingMore && (
-                  <div className="flex items-center justify-center py-3" role="status">
-                    <div
-                      className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
-                      aria-hidden="true"
-                    />
-                    <span className="sr-only">{t('common.loading', 'Loading…')}</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          {conversationsLoading ? (
+            <div className="flex items-center justify-center py-8" role="status">
+              <div
+                className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+              <span className="sr-only">{t('common.loading', 'Loading…')}</span>
+            </div>
+          ) : (
+            <>
+              {conversationsLoadError && isAgentWorkspaceRoute && selectedProjectId ? (
+                <div className="text-center py-8">
+                  <MessageSquare size={32} className="mx-auto mb-2 text-rose-400" />
+                  <p className="text-xs text-rose-600 dark:text-rose-400">
+                    {t('agent.sidebar.conversationsLoadFailed', 'Failed to load conversations')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryLoadConversations}
+                    className="mt-2 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {t('common.retry', 'Retry')}
+                  </button>
+                </div>
+              ) : filteredConversations.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-xs">
+                    {conversationFilter.trim()
+                      ? t(
+                          'agent.sidebar.noMatchingConversations',
+                          'No conversations match your filter'
+                        )
+                      : selectedProjectId
+                        ? t('agent.sidebar.noConversations', 'No conversations yet')
+                        : t(
+                            'agent.sidebar.selectProjectToViewConversations',
+                            'Select a project to view conversations'
+                          )}
+                  </p>
+                </div>
+              ) : (
+                conversationSections.map((section) => {
+                  const groupCollapsed = collapsedGroupIds.has(section.id);
+                  return (
+                    <section key={section.id} aria-label={section.workspaceTitle}>
+                      <ConversationGroupHeader
+                        collapsed={groupCollapsed}
+                        conversationCount={section.conversations.length}
+                        onToggle={() => {
+                          toggleConversationGroup(section.id);
+                        }}
+                        workspaceTitle={section.workspaceTitle}
+                      />
+                      {!groupCollapsed
+                        ? section.conversations.map((conv) => (
+                            <ConversationItem
+                              activeItemRef={
+                                conv.id === selectedConversationId
+                                  ? activeConversationItemRef
+                                  : undefined
+                              }
+                              key={conv.id}
+                              conversation={conv}
+                              grouped
+                              isActive={conv.id === selectedConversationId}
+                              href={buildAgentWorkspacePath({
+                                tenantId,
+                                conversationId: conv.id,
+                                projectId: conv.projectId,
+                                workspaceId: workspaceIdFromConversation(conv),
+                              })}
+                              onDelete={(e) => {
+                                handleDeleteConversation(conv, e);
+                              }}
+                              onRename={(e) => {
+                                handleRenameClick(conv, e);
+                              }}
+                            />
+                          ))
+                        : null}
+                    </section>
+                  );
+                })
+              )}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-3" role="status">
+                  <div
+                    className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">{t('common.loading', 'Loading…')}</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Mobile Navigation Links - shown only in mobile drawer */}

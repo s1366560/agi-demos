@@ -118,6 +118,7 @@ type DesktopCommandArgs = Record<string, unknown> | undefined;
 
 let mainWindow: BrowserWindow | null = null;
 let sidecarSupervisor: SidecarSupervisor | null = null;
+const SIDECAR_HANDSHAKE_TIMEOUT_MS = 180_000;
 let cloudAuthenticationAuthority: DesktopCloudAuthenticationAuthority | null = null;
 let cloudSocketBroker: DesktopCloudSocketBroker | null = null;
 let oauthCallbackAuthority: DesktopOAuthCallbackAuthority | null = null;
@@ -810,6 +811,7 @@ function createSidecarSupervisor(): SidecarSupervisor {
     workspaceCoreBinaryPath: workspaceCoreBinaryPath(),
     dataDirectory,
     workspaceRoot: defaultWorkspaceRoot(),
+    handshakeTimeoutMs: SIDECAR_HANDSHAKE_TIMEOUT_MS,
     legacyDataDirectories: resolveSidecarLegacyDataDirectories({
       qaProfileDirectory,
       resolveNormalCandidates: () => legacyTauriDataDirectories(dataDirectory),

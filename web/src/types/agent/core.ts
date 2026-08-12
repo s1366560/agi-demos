@@ -195,6 +195,7 @@ export interface CreateConversationRequest {
   project_id: string;
   title?: string | undefined;
   agent_config?: Record<string, unknown> | undefined;
+  workspace_id?: string | null | undefined;
 }
 
 /**

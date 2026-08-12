@@ -915,6 +915,22 @@ describe('ConversationsStore', () => {
       });
     });
 
+    it('should create conversation with workspace linkage', async () => {
+      const newConversation = createMockConversation('conv-1', 'proj-1', 'Workspace Chat');
+      createConversationMock.mockResolvedValue(newConversation);
+
+      await useConversationsStore
+        .getState()
+        .createConversation('proj-1', 'Workspace Chat', undefined, 'workspace-1');
+
+      expect(createConversationMock).toHaveBeenCalledWith({
+        project_id: 'proj-1',
+        title: 'Workspace Chat',
+        agent_config: { selected_agent_id: 'builtin:all-access' },
+        workspace_id: 'workspace-1',
+      });
+    });
+
     it('should prepend new conversation to existing list', async () => {
       const existingConv = createMockConversation('existing', 'proj-1', 'Existing');
 

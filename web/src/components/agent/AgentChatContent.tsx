@@ -239,8 +239,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       if (!projectId) return '';
       const params = new URLSearchParams();
       params.set('projectId', projectId);
+      if (effectiveWorkspaceId) params.set('workspaceId', effectiveWorkspaceId);
       return `?${params.toString()}`;
-    }, [projectId]);
+    }, [effectiveWorkspaceId, projectId]);
 
     // Determine base path for navigation
     const basePath = useMemo(() => {
@@ -288,8 +289,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const runInputDeliveryOptions = useMemo(
       () =>
         (runInputAuthority.activeRun?.allowed_actions ?? []).filter(
-          (action): action is RunInputDelivery =>
-            action === 'steer_now' || action === 'queue_next'
+          (action): action is RunInputDelivery => action === 'steer_now' || action === 'queue_next'
         ),
       [runInputAuthority.activeRun?.allowed_actions]
     );
@@ -647,11 +647,18 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     const handleNewConversation = useCallback(async () => {
       if (!projectId) return;
-      const newId = await createNewConversation(projectId);
+      const newId = await createNewConversation(projectId, effectiveWorkspaceId);
       if (newId) {
         void navigate(`${basePath}/${newId}${newConversationNavigationSuffix}`);
       }
-    }, [projectId, createNewConversation, navigate, basePath, newConversationNavigationSuffix]);
+    }, [
+      projectId,
+      createNewConversation,
+      navigate,
+      basePath,
+      effectiveWorkspaceId,
+      newConversationNavigationSuffix,
+    ]);
 
     const handleSend = useCallback(
       async (

@@ -1266,16 +1266,39 @@ test('Workspace Collaboration authority normalization requires exact scoped revi
   );
 });
 
-test('Workspace Collaboration 404 and local mode remain structured unavailable', async () => {
+test('Workspace Collaboration 404 remains unavailable while local mode observes Sidecar authority', async () => {
   const originalFetch = globalThis.fetch;
   let capabilityFetchCalls = 0;
   globalThis.fetch = async (input) => {
     if (String(input).includes('/collaboration/capabilities')) {
       capabilityFetchCalls += 1;
+      if (String(input).startsWith(DEFAULT_CONFIG.apiBaseUrl)) {
+        return new Response(
+          JSON.stringify({
+            ...workspaceCollaborationContract,
+            authority: 'local',
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: 'local-workspace',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
       return new Response(JSON.stringify({ detail: 'legacy server' }), {
         status: 404,
         headers: { 'content-type': 'application/json' },
       });
+    }
+    if (String(input).includes('/collaboration/authority')) {
+      return new Response(
+        JSON.stringify({
+          ...workspaceCollaborationAuthority,
+          tenant_id: 'local',
+          project_id: 'local-project',
+          workspace_id: 'local-workspace',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     }
     return new Response(JSON.stringify(searchContract), {
       status: 200,
@@ -1326,13 +1349,21 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
     const local = await localClient.loadSnapshot();
     assert.deepEqual(
       local.capabilities.workspace_collaboration,
-      withDeclaredAuthority(
-        withScope(unavailableCapability('local_workspace_collaboration_unavailable'), {
+      withObservedAuthority(
+        withScope(
+          degradedCapability(
+            'workspace_collaboration_mutation_guards_unavailable',
+            workspaceReadActions,
+            7,
+          ),
+          {
           tenant_id: 'local',
           project_id: 'local-project',
           workspace_id: 'local-workspace',
           instance_id: null,
-        }),
+          },
+        ),
+        'sidecar',
       ),
     );
     assert.deepEqual(
@@ -1403,7 +1434,7 @@ test('Workspace Collaboration 404 and local mode remain structured unavailable',
         authority_revision: null,
       }),
     );
-    assert.equal(capabilityFetchCalls, 1);
+    assert.equal(capabilityFetchCalls, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -270,12 +270,15 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       }
     },
 
-    createNewConversation: async (projectId: string): Promise<string | null> => {
+    createNewConversation: async (
+      projectId: string,
+      workspaceId?: string | null
+    ): Promise<string | null> => {
       set({ isCreatingConversation: true });
       try {
         const newConv = await useConversationsStore
           .getState()
-          .createConversation(projectId, 'New Conversation');
+          .createConversation(projectId, 'New Conversation', undefined, workspaceId);
         resetCanvasForConversationScope();
 
         const newConvState = createDefaultConversationState();

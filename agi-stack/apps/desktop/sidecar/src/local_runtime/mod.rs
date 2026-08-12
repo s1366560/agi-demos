@@ -239,6 +239,7 @@ impl LocalRuntimeService {
     pub(crate) fn install_workspace_core_authority(
         &self,
         core_api_base_url: String,
+        service_token: String,
         agent_registry_token: String,
         provider_webhook_token: String,
         provider_event_token: String,
@@ -246,6 +247,7 @@ impl LocalRuntimeService {
         workspace_core_bridge::install_authority(
             &self.state,
             core_api_base_url,
+            service_token,
             agent_registry_token,
             provider_webhook_token,
             provider_event_token,
@@ -258,6 +260,18 @@ impl LocalRuntimeService {
 
     pub(crate) async fn replay_workspace_core_terminal_callbacks(&self) -> Result<usize, String> {
         workspace_core_bridge::replay_pending_terminal_callbacks(Arc::clone(&self.state)).await
+    }
+
+    pub(crate) fn legacy_workspace_rows(
+        &self,
+    ) -> Result<
+        (
+            Vec<session_store::DesktopLegacyWorkspaceRow>,
+            Vec<session_store::DesktopLegacyWorkspaceMessageRow>,
+        ),
+        String,
+    > {
+        self.state.session_store.legacy_workspace_rows()
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -3071,6 +3085,11 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
         .merge(parity_routes::router())
+        .fallback(workspace_core_bridge::proxy_workspace_fallback)
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            workspace_core_bridge::proxy_workspace_if_authoritative,
+        ))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             require_active_scope,
@@ -3142,6 +3161,7 @@ fn local_cors_layer() -> CorsLayer {
             CONTENT_TYPE,
             HeaderName::from_static("idempotency-key"),
             HeaderName::from_static("x-agistack-launch"),
+            HeaderName::from_static("x-expected-revision"),
         ])
 }
 
@@ -6496,7 +6516,10 @@ async fn list_conversations(
         .unwrap_or_else(|| authenticated.workspace.project_id.clone());
     ensure_active_project(&authenticated, &project_id)?;
     let workspace_id = query.workspace_id;
-    if let Some(workspace_id) = workspace_id.as_deref() {
+    if let Some(workspace_id) = workspace_id
+        .as_deref()
+        .filter(|_| !workspace_core_bridge::core_authority_is_installed(&state))
+    {
         ensure_active_workspace(&state, &authenticated, workspace_id)?;
     }
     let page_query = HierarchyListQuery {
@@ -14930,6 +14953,46 @@ mod tests {
             "content-type",
             "idempotency-key",
             "x-agistack-launch",
+        ] {
+            assert!(allowed_headers
+                .split(',')
+                .any(|header| header.trim().eq_ignore_ascii_case(expected)));
+        }
+
+        let workspace_mutation_preflight = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri(
+                        "/api/v1/tenants/local/projects/local-project/workspaces/workspace-1/collaboration/mutations",
+                    )
+                    .header("origin", "agistack://app")
+                    .header("access-control-request-method", "POST")
+                    .header(
+                        "access-control-request-headers",
+                        "authorization,content-type,idempotency-key,x-agistack-launch,x-expected-revision",
+                    )
+                    .body(Body::empty())
+                    .expect("workspace mutation POST preflight request"),
+            )
+            .await
+            .expect("workspace mutation POST preflight response");
+        assert_eq!(
+            workspace_mutation_preflight.status(),
+            axum::http::StatusCode::OK
+        );
+        let allowed_headers = workspace_mutation_preflight
+            .headers()
+            .get("access-control-allow-headers")
+            .and_then(|value| value.to_str().ok())
+            .expect("allowed workspace mutation POST headers");
+        for expected in [
+            "authorization",
+            "content-type",
+            "idempotency-key",
+            "x-agistack-launch",
+            "x-expected-revision",
         ] {
             assert!(allowed_headers
                 .split(',')

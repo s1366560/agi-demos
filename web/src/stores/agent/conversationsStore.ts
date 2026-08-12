@@ -66,7 +66,8 @@ interface ConversationsState {
   createConversation: (
     projectId: string,
     title?: string,
-    selectedAgentId?: string
+    selectedAgentId?: string,
+    workspaceId?: string | null
   ) => Promise<Conversation>;
   getConversation: (conversationId: string, projectId: string) => Promise<Conversation | null>;
   deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
@@ -449,7 +450,8 @@ export const useConversationsStore = create<ConversationsState>()(
       createConversation: async (
         projectId: string,
         title = 'New Chat',
-        selectedAgentId = DEFAULT_GENERAL_AGENT_ID
+        selectedAgentId = DEFAULT_GENERAL_AGENT_ID,
+        workspaceId?: string | null
       ) => {
         set({ conversationsLoading: true, conversationsError: null });
         try {
@@ -457,6 +459,7 @@ export const useConversationsStore = create<ConversationsState>()(
             project_id: projectId,
             title,
             agent_config: { selected_agent_id: selectedAgentId },
+            ...(workspaceId ? { workspace_id: workspaceId } : {}),
           };
           const conversation = await agentService.createConversation(request);
           const { conversations } = get();

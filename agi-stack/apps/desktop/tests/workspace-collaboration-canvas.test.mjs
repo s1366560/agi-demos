@@ -91,8 +91,20 @@ test('every authority state remains explicit and refreshable', () => {
   }
   assert.match(componentSource, /workspaceCollaboration\.actions\.refresh/u);
   assert.match(componentSource, /data-reason-code/u);
-  assert.match(componentSource, /status === 'empty'/u);
+  assert.match(componentSource, /'empty'/u);
   assert.match(componentSource, /status === 'unavailable'/u);
+});
+
+test('authoritative empty collections still render their first-item creation controls', () => {
+  const showStateStart = canvasSource.indexOf('const showStateOnly');
+  const tabHandlerStart = canvasSource.indexOf('const onTabKeyDown', showStateStart);
+  assert.ok(showStateStart >= 0);
+  assert.ok(tabHandlerStart > showStateStart);
+  const showStateSource = canvasSource.slice(showStateStart, tabHandlerStart);
+  assert.match(showStateSource, /!hasData/u);
+  assert.match(showStateSource, /status === 'loading'/u);
+  assert.match(showStateSource, /status === 'unavailable'/u);
+  assert.doesNotMatch(showStateSource, /status === 'empty'/u);
 });
 
 test('surface-specific interactions cover goals, discussion, members, genes, and topology', () => {

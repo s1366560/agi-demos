@@ -3,7 +3,11 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use axum::{
-    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
+    body::{to_bytes, Body},
+    extract::State,
+    http::{header::AUTHORIZATION, HeaderMap, HeaderName, Request, StatusCode},
+    middleware::Next,
+    response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
@@ -24,6 +28,18 @@ mod provider;
 mod registry;
 
 const CALLBACK_TIMEOUT_SECONDS: u64 = 10;
+const MAX_PROXY_REQUEST_BYTES: usize = 64 * 1024 * 1024;
+const FORWARDED_REQUEST_HEADERS: &[&str] = &[
+    "accept",
+    "content-type",
+    "idempotency-key",
+    "if-match",
+    "range",
+    "x-expected-revision",
+    "x-memstack-actor-id",
+    "x-memstack-actor-type",
+    "x-memstack-workspace-id",
+];
 
 pub(super) type BridgeError = (StatusCode, Json<Value>);
 pub(super) type BridgeResult = Result<Json<Value>, BridgeError>;
@@ -31,6 +47,7 @@ pub(super) type BridgeResult = Result<Json<Value>, BridgeError>;
 pub(super) struct WorkspaceCoreAuthority {
     generation: u64,
     core_api_base_url: String,
+    service_token: Zeroizing<String>,
     agent_registry_token: Zeroizing<String>,
     provider_webhook_token: Zeroizing<String>,
     provider_event_token: Zeroizing<String>,
@@ -40,6 +57,7 @@ pub(super) struct WorkspaceCoreAuthority {
 pub(super) fn install_authority(
     state: &LocalRuntimeState,
     core_api_base_url: String,
+    service_token: String,
     agent_registry_token: String,
     provider_webhook_token: String,
     provider_event_token: String,
@@ -47,6 +65,7 @@ pub(super) fn install_authority(
     validate_authority(
         state,
         &core_api_base_url,
+        &service_token,
         &agent_registry_token,
         &provider_webhook_token,
         &provider_event_token,
@@ -70,12 +89,175 @@ pub(super) fn install_authority(
         .expect("Workspace Core authority") = Some(Arc::new(WorkspaceCoreAuthority {
         generation,
         core_api_base_url: core_api_base_url.trim_end_matches('/').to_string(),
+        service_token: Zeroizing::new(service_token),
         agent_registry_token: Zeroizing::new(agent_registry_token),
         provider_webhook_token: Zeroizing::new(provider_webhook_token),
         provider_event_token: Zeroizing::new(provider_event_token),
         client,
     }));
     Ok(generation)
+}
+
+pub(super) async fn proxy_workspace_if_authoritative(
+    State(state): State<Arc<LocalRuntimeState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    if core_authority_is_installed(&state) && workspace_proxy_scope(request.uri().path()).is_ok() {
+        return proxy_installed_workspace_request(&state, request).await;
+    }
+    next.run(request).await
+}
+
+pub(super) async fn proxy_workspace_fallback(
+    State(state): State<Arc<LocalRuntimeState>>,
+    request: Request<Body>,
+) -> Response {
+    if core_authority_is_installed(&state) && workspace_proxy_scope(request.uri().path()).is_ok() {
+        return proxy_installed_workspace_request(&state, request).await;
+    }
+    not_found("Local runtime route is not available").into_response()
+}
+
+pub(super) fn core_authority_is_installed(state: &LocalRuntimeState) -> bool {
+    state
+        .workspace_core_authority
+        .lock()
+        .expect("Workspace Core authority")
+        .is_some()
+}
+
+async fn proxy_installed_workspace_request(
+    state: &LocalRuntimeState,
+    request: Request<Body>,
+) -> Response {
+    proxy_workspace_request_inner(state, request)
+        .await
+        .unwrap_or_else(IntoResponse::into_response)
+}
+
+async fn proxy_workspace_request_inner(
+    state: &LocalRuntimeState,
+    request: Request<Body>,
+) -> Result<Response, BridgeError> {
+    let authenticated = request
+        .extensions()
+        .get::<super::AuthenticatedContext>()
+        .cloned()
+        .ok_or_else(|| forbidden("Authenticated Desktop scope is unavailable"))?;
+    let authority = state
+        .workspace_core_authority
+        .lock()
+        .expect("Workspace Core authority")
+        .clone()
+        .ok_or_else(|| unavailable("Workspace Core Desktop authority is not installed"))?;
+    let path = request.uri().path();
+    let (tenant_id, project_id, _) = workspace_proxy_scope(path)?;
+    if tenant_id.is_some_and(|tenant_id| tenant_id != authenticated.workspace.tenant_id)
+        || project_id.is_some_and(|project_id| project_id != authenticated.workspace.project_id)
+    {
+        return Err(forbidden(
+            "Request is outside the trusted Workspace Core scope",
+        ));
+    }
+    let upstream_url = format!("{}{}", authority.core_api_base_url, request.uri());
+    let mut upstream = authority
+        .client
+        .request(request.method().clone(), upstream_url)
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-memstack-user-id", authenticated.user.user_id.as_str())
+        .header(
+            "x-memstack-user-is-superuser",
+            authenticated.user.is_superuser.to_string(),
+        )
+        .header("x-memstack-user-email", authenticated.user.email.as_str())
+        .header(
+            "x-memstack-tenant-id",
+            authenticated.workspace.tenant_id.as_str(),
+        )
+        .header(
+            "x-memstack-project-membership-role",
+            authenticated.membership_role.as_str(),
+        );
+    for name in FORWARDED_REQUEST_HEADERS {
+        if let Some(value) = request.headers().get(*name) {
+            upstream = upstream.header(*name, value);
+        }
+    }
+    let body = to_bytes(request.into_body(), MAX_PROXY_REQUEST_BYTES)
+        .await
+        .map_err(|_| bad_request("Workspace Core request body is invalid"))?;
+    let upstream_response = upstream.body(body).send().await.map_err(|error| {
+        tracing::warn!(
+            error_kind = workspace_core_transport_error_kind(&error),
+            is_connect = error.is_connect(),
+            is_timeout = error.is_timeout(),
+            is_request = error.is_request(),
+            "Workspace Core Desktop proxy request failed"
+        );
+        unavailable("Workspace Core is unavailable")
+    })?;
+    let status = upstream_response.status();
+    let response_headers = upstream_response.headers().clone();
+    let response_body = upstream_response.bytes().await.map_err(|error| {
+        tracing::warn!(error = %error, "Workspace Core Desktop proxy response failed");
+        unavailable("Workspace Core response is unavailable")
+    })?;
+    let mut response = Response::builder().status(status);
+    for (name, value) in &response_headers {
+        if !is_hop_by_hop_header(name) {
+            response = response.header(name, value);
+        }
+    }
+    response
+        .body(Body::from(response_body))
+        .map_err(|_| unavailable("Workspace Core response could not be constructed"))
+}
+
+fn workspace_proxy_scope(
+    path: &str,
+) -> Result<(Option<&str>, Option<&str>, Option<&str>), BridgeError> {
+    let segments = path.trim_matches('/').split('/').collect::<Vec<_>>();
+    match segments.as_slice() {
+        ["api", "v1", "tenants", tenant_id, "projects", project_id, "workspaces"] => {
+            Ok((Some(tenant_id), Some(project_id), None))
+        }
+        ["api", "v1", "tenants", tenant_id, "projects", project_id, "workspaces", workspace_id, ..] => {
+            Ok((Some(tenant_id), Some(project_id), Some(workspace_id)))
+        }
+        ["api", "v1", "workspaces", workspace_id, ..] => Ok((None, None, Some(workspace_id))),
+        _ => Err(not_found("Workspace Core route is not available")),
+    }
+}
+
+fn is_hop_by_hop_header(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    )
+}
+
+fn workspace_core_transport_error_kind(error: &reqwest::Error) -> &'static str {
+    if error.is_connect() {
+        "connect"
+    } else if error.is_timeout() {
+        "timeout"
+    } else if error.is_request() {
+        "request"
+    } else if error.is_body() {
+        "body"
+    } else if error.is_decode() {
+        "decode"
+    } else {
+        "other"
+    }
 }
 
 pub(super) fn clear_authority(state: &LocalRuntimeState, generation: u64) {
@@ -230,6 +412,7 @@ pub(super) fn ensure_workspace_scope(
 fn validate_authority(
     state: &LocalRuntimeState,
     core_api_base_url: &str,
+    service_token: &str,
     agent_registry_token: &str,
     provider_webhook_token: &str,
     provider_event_token: &str,
@@ -248,6 +431,7 @@ fn validate_authority(
         return Err("Workspace Core API base URL must be an exact loopback origin".to_string());
     }
     let tokens = [
+        service_token,
         agent_registry_token,
         provider_webhook_token,
         provider_event_token,

@@ -21,6 +21,8 @@ const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.me
 test('Electron passes the helper path to the authenticated Sidecar bootstrap without spawning it', () => {
   assert.match(mainSource, /function workspaceCoreBinaryPath\(\): string/u);
   assert.match(mainSource, /workspaceCoreBinaryPath:\s*workspaceCoreBinaryPath\(\)/u);
+  assert.match(mainSource, /const SIDECAR_HANDSHAKE_TIMEOUT_MS = 180_000/u);
+  assert.match(mainSource, /handshakeTimeoutMs:\s*SIDECAR_HANDSHAKE_TIMEOUT_MS/u);
   assert.match(mainSource, /\.cache\/avernet-bcs\/target\/debug/u);
   assert.doesNotMatch(mainSource, /third_party\/avernet-bcs\/target\/debug/u);
   assert.doesNotMatch(mainSource, /spawn\([^)]*memstack-workspace-core/u);

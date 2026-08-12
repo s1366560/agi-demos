@@ -296,7 +296,6 @@ export function WorkspaceCollaborationCanvas({
   const showStateOnly =
     !hasData ||
     status === 'loading' ||
-    status === 'empty' ||
     status === 'unavailable';
 
   const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

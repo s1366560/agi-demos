@@ -868,7 +868,7 @@ describe('TenantChatSidebar', () => {
     fireEvent.click(newChatButton);
 
     await waitFor(() => {
-      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-2');
+      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-2', null);
     });
     expect(projectState.setCurrentProject).toHaveBeenCalledWith({
       id: 'project-2',
@@ -1102,7 +1102,7 @@ describe('TenantChatSidebar', () => {
     expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
-  it('does not carry workspace context when creating a new conversation', async () => {
+  it('carries workspace context when creating a new conversation', async () => {
     render(
       <>
         <TenantChatSidebar tenantId="tenant-1" mobile />
@@ -1121,12 +1121,11 @@ describe('TenantChatSidebar', () => {
     fireEvent.click(newChatButton);
 
     await waitFor(() => {
-      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-1');
+      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-1', 'ws-current');
       expect(screen.getByTestId('location-probe')).toHaveTextContent(
-        '/tenant/tenant-1/agent-workspace/conv-new?projectId=project-1'
+        '/tenant/tenant-1/agent-workspace/conv-new?projectId=project-1&workspaceId=ws-current'
       );
     });
-    expect(screen.getByTestId('location-probe')).not.toHaveTextContent('workspaceId=');
   });
 
   it('renders the selected conversation background as a full-width block', () => {

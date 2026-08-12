@@ -155,6 +155,21 @@ pub(super) enum DesktopWorkspaceCoreRequestClaimError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DesktopLegacyWorkspaceRow {
+    pub(crate) id: String,
+    pub(crate) project_id: String,
+    pub(crate) value: Value,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DesktopLegacyWorkspaceMessageRow {
+    pub(crate) id: String,
+    pub(crate) workspace_id: String,
+    pub(crate) position: i64,
+    pub(crate) value: Value,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct DesktopWorkspaceCoreTerminalCallback {
     pub(super) id: String,
     pub(super) run_id: String,
@@ -2029,6 +2044,77 @@ impl DesktopSessionStore {
             )
             .map_err(|error| error.to_string())?;
         json_rows(statement.query_map([workspace_id], |row| row.get::<_, String>(0)))
+    }
+
+    pub(crate) fn legacy_workspace_rows(
+        &self,
+    ) -> Result<
+        (
+            Vec<DesktopLegacyWorkspaceRow>,
+            Vec<DesktopLegacyWorkspaceMessageRow>,
+        ),
+        String,
+    > {
+        let connection = self.connection()?;
+        let workspaces = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT id, project_id, value_json FROM desktop_workspaces ORDER BY rowid ASC",
+                )
+                .map_err(|error| error.to_string())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|error| error.to_string())?
+                .map(|row| {
+                    let (id, project_id, raw) = row.map_err(|error| error.to_string())?;
+                    let value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                    Ok(DesktopLegacyWorkspaceRow {
+                        id,
+                        project_id,
+                        value,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            rows
+        };
+        let messages = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT id, workspace_id, position, value_json \
+                     FROM desktop_workspace_messages ORDER BY workspace_id ASC, position ASC",
+                )
+                .map_err(|error| error.to_string())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(|error| error.to_string())?
+                .map(|row| {
+                    let (id, workspace_id, position, raw) =
+                        row.map_err(|error| error.to_string())?;
+                    let value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                    Ok(DesktopLegacyWorkspaceMessageRow {
+                        id,
+                        workspace_id,
+                        position,
+                        value,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            rows
+        };
+        Ok((workspaces, messages))
     }
 
     pub(super) fn insert_conversation(
