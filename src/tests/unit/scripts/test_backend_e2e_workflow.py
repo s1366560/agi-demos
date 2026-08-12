@@ -81,11 +81,55 @@ def test_neo4j_runtime_job_is_dedicated_pinned_and_restartable() -> None:
     assert "CALL db.awaitIndexes" in commands
     assert "SHOW INDEXES" in commands
     assert "RuntimeSentinel" in commands
+    assert job["env"]["AGENT_MEMORY_RUNTIME_MODE"] == "plugin"
+    assert job["env"]["EMBEDDING_DIMENSION"] == 1024
+    assert job["env"]["E2E_EMBEDDING_DIMENSIONS"] == 1024
+    assert "docker inspect --format" in commands
+    assert "{{.Config.Env}}" not in commands
+    assert "docker inspect memstack-neo4j-runtime >" not in commands
 
     cleanup = next(step for step in job["steps"] if step.get("name") == "Clean Neo4j runtime")
     assert cleanup["if"] == "always()"
     assert "docker rm --force memstack-neo4j-runtime" in cleanup["run"]
     assert "docker volume rm memstack-neo4j-runtime-data" in cleanup["run"]
+
+
+def test_neo4j_runtime_job_runs_required_web_desktop_matched_state() -> None:
+    workflow = yaml.safe_load(NEO4J_RUNTIME_WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+    job = workflow["jobs"]["neo4j-runtime"]
+    steps = job["steps"]
+    step_names = [str(step.get("name", "")) for step in steps]
+    commands = "\n".join(str(step.get("run", "")) for step in steps)
+
+    setup_pnpm = next(
+        step for step in steps if str(step.get("uses", "")).startswith("pnpm/action-setup@")
+    )
+    assert setup_pnpm["with"]["version"] == "11.15.1"
+    setup_node = next(
+        step for step in steps if str(step.get("uses", "")).startswith("actions/setup-node@")
+    )
+    assert setup_node["with"]["node-version"] == "22"
+    assert "pnpm --dir web install --frozen-lockfile" in commands
+    assert "pnpm --dir agi-stack/apps/desktop install --frozen-lockfile" in commands
+    assert "playwright install --with-deps chromium" in commands
+
+    matched_state = next(
+        step for step in steps if step.get("name") == "Verify Web and Desktop Neo4j matched state"
+    )
+    assert matched_state.get("continue-on-error") is not True
+    assert "qa:neo4j-matched-state" in matched_state["run"]
+    assert step_names.index("Verify real graph mutation, search, traversal, and communities") < (
+        step_names.index("Verify Web and Desktop Neo4j matched state")
+    )
+    assert step_names.index("Verify Web and Desktop Neo4j matched state") < step_names.index(
+        "Verify structured degradation while Neo4j is stopped"
+    )
+
+    upload = next(step for step in steps if step.get("name") == "Upload Neo4j runtime evidence")
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "neo4j-runtime-logs"
+    assert upload["with"]["if-no-files-found"] == "error"
 
 
 def test_compose_api_uses_service_hostnames_for_python_dependencies() -> None:

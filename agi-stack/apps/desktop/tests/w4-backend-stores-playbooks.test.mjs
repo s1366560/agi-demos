@@ -252,6 +252,253 @@ test('Electron vault-bound broker strictly allowlists the identity observation e
   );
 });
 
+test('Electron vault-bound broker permits only the exact revision-bound workspace scope switch', async () => {
+  const requests = [];
+  const result = await executeVaultBoundCloudRequest(
+    {
+      path: '/api/v1/workspace-context/switch',
+      method: 'POST',
+      body: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-2',
+        expected_revision: 5,
+        idempotency_key: 'scope-switch-12345678',
+      },
+    },
+    cloudRequestDependencies((url, init) => {
+      requests.push({ url, init });
+      const target = new URL(url);
+      if (target.pathname === '/api/v1/workspace-context') {
+        return jsonResponse({
+          context: {
+            tenant_id: 'tenant-1',
+            project_id: 'project-1',
+            revision: 5,
+          },
+        });
+      }
+      assert.equal(target.pathname, '/api/v1/workspace-context/switch');
+      assert.equal(init.method, 'POST');
+      assert.deepEqual(JSON.parse(String(init.body)), {
+        tenant_id: 'tenant-1',
+        project_id: 'project-2',
+        expected_revision: 5,
+        idempotency_key: 'scope-switch-12345678',
+      });
+      return jsonResponse({
+        context: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-2',
+          revision: 6,
+        },
+        changed: true,
+      });
+    }),
+  );
+
+  assert.equal(requests.length, 2);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.context.project_id, 'project-2');
+  for (const rejected of [
+    {
+      path: '/api/v1/workspace-context/switch?force=true',
+      method: 'POST',
+      body: {
+        tenant_id: 'tenant-1',
+        project_id: 'project-2',
+        expected_revision: 5,
+        idempotency_key: 'scope-switch-12345678',
+      },
+    },
+    {
+      path: '/api/v1/workspace-context/switch',
+      method: 'GET',
+    },
+  ]) {
+    await assert.rejects(
+      executeVaultBoundCloudRequest(rejected, {
+        async loadTrustedSession() {
+          throw new Error('invalid scope switch must reject before vault access');
+        },
+        async fetch() {
+          throw new Error('invalid scope switch must reject before network access');
+        },
+      }),
+      /cloud request endpoint is not allowed/u,
+    );
+  }
+});
+
+test('Electron vault-bound broker scopes exact Project Knowledge reads and Advanced Search', async () => {
+  const tenantId = 'tenant-1';
+  const projectId = 'project-2';
+  const admitted = [
+    {
+      path:
+        `/api/v1/graph/entities/?tenant_id=${tenantId}&project_id=${projectId}` +
+        '&limit=50&offset=0',
+      method: 'GET',
+    },
+    {
+      path: `/api/v1/graph/entities/types?tenant_id=${tenantId}&project_id=${projectId}`,
+      method: 'GET',
+    },
+    {
+      path:
+        `/api/v1/graph/communities/?tenant_id=${tenantId}&project_id=${projectId}` +
+        '&limit=50&offset=0',
+      method: 'GET',
+    },
+    {
+      path:
+        `/api/v1/graph/memory/graph?tenant_id=${tenantId}&project_id=${projectId}` +
+        '&limit=1000',
+      method: 'GET',
+    },
+    {
+      path: '/api/v1/search-enhanced/advanced',
+      method: 'POST',
+      body: {
+        query: 'Ariadne Vale',
+        strategy: 'hybrid',
+        focal_node_uuid: null,
+        reranker: null,
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+    {
+      path: '/api/v1/search-enhanced/graph-traversal',
+      method: 'POST',
+      body: {
+        start_entity_uuid: 'entity-1',
+        max_depth: 2,
+        relationship_types: ['FOUNDED'],
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+    {
+      path: '/api/v1/search-enhanced/temporal',
+      method: 'POST',
+      body: {
+        query: 'Ariadne Vale',
+        since: null,
+        until: null,
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+    {
+      path: '/api/v1/search-enhanced/faceted',
+      method: 'POST',
+      body: {
+        query: 'Ariadne Vale',
+        entity_types: ['Person'],
+        tags: ['fixture'],
+        since: null,
+        limit: 20,
+        offset: 0,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+    {
+      path: '/api/v1/search-enhanced/community',
+      method: 'POST',
+      body: {
+        community_uuid: 'community-1',
+        include_episodes: true,
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+  ];
+
+  for (const request of admitted) {
+    const requests = [];
+    const result = await executeVaultBoundCloudRequest(
+      request,
+      cloudRequestDependencies((url, init) => {
+        requests.push({ url, init });
+        const target = new URL(url);
+        if (target.pathname === '/api/v1/workspace-context') {
+          return jsonResponse({
+            context: { tenant_id: tenantId, project_id: projectId, revision: 6 },
+          });
+        }
+        assert.equal(target.pathname, new URL(request.path, 'https://desktop.test').pathname);
+        return jsonResponse({ ok: true });
+      }),
+    );
+    assert.equal(result.status, 200, request.path);
+    assert.equal(requests.length, 2, request.path);
+  }
+
+  for (const request of [
+    {
+      path:
+        `/api/v1/graph/entities/?tenant_id=${tenantId}&project_id=${projectId}` +
+        '&limit=500&offset=0',
+      method: 'GET',
+    },
+    {
+      path: '/api/v1/search-enhanced/advanced?debug=true',
+      method: 'POST',
+      body: { tenant_id: tenantId, project_id: projectId },
+    },
+    {
+      path: '/api/v1/search-enhanced/advanced',
+      method: 'POST',
+      body: { tenant_id: 'tenant-2', project_id: projectId },
+    },
+    {
+      path: '/api/v1/search-enhanced/graph-traversal',
+      method: 'POST',
+      body: {
+        start_entity_uuid: 'entity-1',
+        max_depth: 6,
+        relationship_types: [],
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+      },
+    },
+    {
+      path: '/api/v1/search-enhanced/community',
+      method: 'POST',
+      body: {
+        community_uuid: 'community-1',
+        include_episodes: true,
+        limit: 20,
+        tenant_id: tenantId,
+        project_id: projectId,
+        debug: true,
+      },
+    },
+  ]) {
+    await assert.rejects(
+      executeVaultBoundCloudRequest(
+        request,
+        cloudRequestDependencies((url) => {
+          const target = new URL(url);
+          if (target.pathname !== '/api/v1/workspace-context') {
+            throw new Error('invalid Project Knowledge request reached its target');
+          }
+          return jsonResponse({
+            context: { tenant_id: tenantId, project_id: projectId, revision: 6 },
+          });
+        }),
+      ),
+      /cloud request (?:endpoint is not allowed|tenant scope mismatch)/u,
+    );
+  }
+});
+
 test('Electron vault-bound broker admits only observed tenant/project/workspace HTTP scopes', async () => {
   const requests = [];
   const result = await executeVaultBoundCloudRequest(

@@ -11,6 +11,7 @@ type EndpointRequest = Readonly<{
   method?: CloudProductRequestMethod;
   body?: Readonly<Record<string, unknown>>;
   form?: readonly Readonly<Record<string, unknown>>[];
+  mutation?: unknown;
   response?: Readonly<{
     kind: 'binary' | 'event-stream';
     max_bytes: number;
@@ -86,6 +87,56 @@ const TENANT_GENE_QUERY = new Set([
   'scope',
   'search',
 ]);
+const PROJECT_KNOWLEDGE_PAGE_QUERY = new Set([
+  'tenant_id',
+  'project_id',
+  'limit',
+  'offset',
+]);
+const PROJECT_KNOWLEDGE_SCOPE_QUERY = new Set(['tenant_id', 'project_id']);
+const PROJECT_GRAPH_QUERY = new Set(['tenant_id', 'project_id', 'limit']);
+const ADVANCED_SEARCH_BODY_KEYS = new Set([
+  'query',
+  'strategy',
+  'focal_node_uuid',
+  'reranker',
+  'limit',
+  'tenant_id',
+  'project_id',
+]);
+const GRAPH_TRAVERSAL_SEARCH_BODY_KEYS = new Set([
+  'start_entity_uuid',
+  'max_depth',
+  'relationship_types',
+  'limit',
+  'tenant_id',
+  'project_id',
+]);
+const TEMPORAL_SEARCH_BODY_KEYS = new Set([
+  'query',
+  'since',
+  'until',
+  'limit',
+  'tenant_id',
+  'project_id',
+]);
+const FACETED_SEARCH_BODY_KEYS = new Set([
+  'query',
+  'entity_types',
+  'tags',
+  'since',
+  'limit',
+  'offset',
+  'tenant_id',
+  'project_id',
+]);
+const COMMUNITY_SEARCH_BODY_KEYS = new Set([
+  'community_uuid',
+  'include_episodes',
+  'limit',
+  'tenant_id',
+  'project_id',
+]);
 
 export function authorizeCloudProductEndpoint(
   request: EndpointRequest,
@@ -113,6 +164,9 @@ export function authorizeCloudProductEndpoint(
   const operational = authorizeOperationalCohort(request, target, segments);
   if (operational) return operational;
 
+  const projectKnowledge = authorizeProjectKnowledgeCohort(request, target, segments);
+  if (projectKnowledge) return projectKnowledge;
+
   const identity = authorizeIdentityCatalog(request, target, segments);
   if (identity) return identity;
 
@@ -126,6 +180,109 @@ export function authorizeCloudProductEndpoint(
   if (agent) return agent;
 
   return authorizeProjectCohort(request, target, segments);
+}
+
+function authorizeProjectKnowledgeCohort(
+  request: EndpointRequest,
+  target: URL,
+  segments: readonly string[],
+): CloudProductEndpoint | null {
+  if (request.form !== undefined || request.mutation !== undefined || request.response !== undefined) {
+    return null;
+  }
+  if (request.method === 'GET' && segments[3] === 'graph') {
+    const page =
+      (target.pathname === '/api/v1/graph/entities/' ||
+        target.pathname === '/api/v1/graph/communities/') &&
+      exactQueryKeys(target.searchParams, PROJECT_KNOWLEDGE_PAGE_QUERY) &&
+      target.searchParams.get('limit') === '50' &&
+      target.searchParams.get('offset') === '0';
+    const types =
+      target.pathname === '/api/v1/graph/entities/types' &&
+      exactQueryKeys(target.searchParams, PROJECT_KNOWLEDGE_SCOPE_QUERY);
+    const graph =
+      target.pathname === '/api/v1/graph/memory/graph' &&
+      exactQueryKeys(target.searchParams, PROJECT_GRAPH_QUERY) &&
+      target.searchParams.get('limit') === '1000';
+    if (page || types || graph) {
+      return endpoint(
+        'project',
+        requiredIdentifier(target.searchParams.get('tenant_id')),
+        requiredIdentifier(target.searchParams.get('project_id')),
+        null,
+      );
+    }
+  }
+  if (
+    target.pathname === '/api/v1/search-enhanced/advanced' &&
+    request.method === 'POST' &&
+    noQuery(target) &&
+    exactBodyKeys(request.body, ADVANCED_SEARCH_BODY_KEYS) &&
+    validSearchText(request.body?.query, 4096) &&
+    validSearchText(request.body?.strategy, 256) &&
+    validOptionalIdentifier(request.body?.focal_node_uuid) &&
+    validOptionalIdentifier(request.body?.reranker) &&
+    Number.isSafeInteger(request.body?.limit) &&
+    Number(request.body?.limit) >= 1 &&
+    Number(request.body?.limit) <= 200
+  ) {
+    return endpoint(
+      'project',
+      requiredBodyIdentifier(request.body, 'tenant_id'),
+      requiredBodyIdentifier(request.body, 'project_id'),
+      null,
+    );
+  }
+  if (
+    target.pathname === '/api/v1/search-enhanced/graph-traversal' &&
+    request.method === 'POST' &&
+    noQuery(target) &&
+    exactBodyKeys(request.body, GRAPH_TRAVERSAL_SEARCH_BODY_KEYS) &&
+    validSearchIdentifier(request.body?.start_entity_uuid) &&
+    validSearchInteger(request.body?.max_depth, 1, 5) &&
+    validSearchStringList(request.body?.relationship_types) &&
+    validSearchInteger(request.body?.limit, 1, 200)
+  ) {
+    return scopedSearchEndpoint(request.body);
+  }
+  if (
+    target.pathname === '/api/v1/search-enhanced/temporal' &&
+    request.method === 'POST' &&
+    noQuery(target) &&
+    exactBodyKeys(request.body, TEMPORAL_SEARCH_BODY_KEYS) &&
+    validSearchText(request.body?.query, 4096) &&
+    validOptionalSearchText(request.body?.since, 128) &&
+    validOptionalSearchText(request.body?.until, 128) &&
+    validSearchInteger(request.body?.limit, 1, 200)
+  ) {
+    return scopedSearchEndpoint(request.body);
+  }
+  if (
+    target.pathname === '/api/v1/search-enhanced/faceted' &&
+    request.method === 'POST' &&
+    noQuery(target) &&
+    exactBodyKeys(request.body, FACETED_SEARCH_BODY_KEYS) &&
+    validSearchText(request.body?.query, 4096) &&
+    validSearchStringList(request.body?.entity_types) &&
+    validSearchStringList(request.body?.tags) &&
+    validOptionalSearchText(request.body?.since, 128) &&
+    validSearchInteger(request.body?.limit, 1, 200) &&
+    validSearchInteger(request.body?.offset, 0, Number.MAX_SAFE_INTEGER)
+  ) {
+    return scopedSearchEndpoint(request.body);
+  }
+  if (
+    target.pathname === '/api/v1/search-enhanced/community' &&
+    request.method === 'POST' &&
+    noQuery(target) &&
+    exactBodyKeys(request.body, COMMUNITY_SEARCH_BODY_KEYS) &&
+    validSearchIdentifier(request.body?.community_uuid) &&
+    typeof request.body?.include_episodes === 'boolean' &&
+    validSearchInteger(request.body?.limit, 1, 200)
+  ) {
+    return scopedSearchEndpoint(request.body);
+  }
+  return null;
 }
 
 function authorizeDesktopCloudClientCohort(
@@ -1966,6 +2123,65 @@ function allowedQueryKeys(
     observed.add(key);
   }
   return required.every((key) => observed.has(key));
+}
+
+function exactBodyKeys(
+  body: Readonly<Record<string, unknown>> | undefined,
+  keys: ReadonlySet<string>,
+): body is Readonly<Record<string, unknown>> {
+  if (!body) return false;
+  const observed = Object.keys(body);
+  return observed.length === keys.size && observed.every((key) => keys.has(key));
+}
+
+function validSearchText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    value === value.trim() &&
+    !hasControl(value)
+  );
+}
+
+function validOptionalSearchText(value: unknown, maxLength: number): boolean {
+  return value === null || validSearchText(value, maxLength);
+}
+
+function validSearchIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && requiredIdentifier(value) === value;
+}
+
+function validSearchInteger(value: unknown, minimum: number, maximum: number): boolean {
+  return (
+    Number.isSafeInteger(value) &&
+    Number(value) >= minimum &&
+    Number(value) <= maximum
+  );
+}
+
+function validSearchStringList(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= 100 &&
+    value.every((item) => validSearchText(item, 256))
+  );
+}
+
+function scopedSearchEndpoint(
+  body: Readonly<Record<string, unknown>>,
+): CloudProductEndpoint {
+  return endpoint(
+    'project',
+    requiredBodyIdentifier(body, 'tenant_id'),
+    requiredBodyIdentifier(body, 'project_id'),
+    null,
+  );
+}
+
+function validOptionalIdentifier(value: unknown): boolean {
+  return value === null ||
+    (typeof value === 'string' && requiredIdentifier(value) === value);
 }
 
 function noQuery(target: URL): boolean {

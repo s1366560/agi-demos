@@ -84,6 +84,7 @@ type AuthorizedEndpoint = Readonly<{
     | 'identity-catalog'
     | 'tenant-admin'
     | 'workspace-context'
+    | 'workspace-context-switch'
     | 'backend-stores'
     | 'project-playbooks'
     | 'project'
@@ -99,6 +100,12 @@ const IDEMPOTENCY_MUTATION_KEYS = new Set(['kind', 'idempotency_key']);
 const FORM_TEXT_KEYS = new Set(['kind', 'name', 'value']);
 const FORM_FILE_KEYS = new Set(['kind', 'name', 'filename', 'mime_type', 'bytes_base64']);
 const RESPONSE_KEYS = new Set(['kind', 'max_bytes']);
+const WORKSPACE_CONTEXT_SWITCH_KEYS = new Set([
+  'tenant_id',
+  'project_id',
+  'expected_revision',
+  'idempotency_key',
+]);
 const MAX_REQUEST_BYTES = 512 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_BINARY_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -635,6 +642,36 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
     return Object.freeze({
       kind: 'workspace-context',
       tenantId: null,
+      projectId: null,
+    });
+  }
+  if (
+    target.pathname === '/api/v1/workspace-context/switch' &&
+    request.method === 'POST' &&
+    request.mutation === undefined &&
+    [...target.searchParams].length === 0
+  ) {
+    const body = exactRecord(
+      request.body,
+      WORKSPACE_CONTEXT_SWITCH_KEYS,
+      'cloud request workspace context switch is invalid',
+    );
+    const tenantId = identifier(
+      body.tenant_id,
+      'cloud request workspace context switch is invalid',
+    );
+    identifier(body.project_id, 'cloud request workspace context switch is invalid');
+    identifier(body.idempotency_key, 'cloud request workspace context switch is invalid');
+    if (
+      Object.keys(body).length !== WORKSPACE_CONTEXT_SWITCH_KEYS.size ||
+      !Number.isSafeInteger(body.expected_revision) ||
+      Number(body.expected_revision) < 0
+    ) {
+      throw new Error('cloud request workspace context switch is invalid');
+    }
+    return Object.freeze({
+      kind: 'workspace-context-switch',
+      tenantId,
       projectId: null,
     });
   }
