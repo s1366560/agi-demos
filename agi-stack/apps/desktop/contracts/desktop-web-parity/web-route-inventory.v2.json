@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "c0fbc945bf91586e8d6df079546e38b4313541d2",
+  "source_revision": "09d96c9f3a54f538c300c1bf0e283f78de0dbe70",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 660,
+    "audited_sources": 661,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1789,
-    "production_dependency_ownership": 659,
-    "production_dependency_sources": 659,
+    "production_dependency_edges": 1790,
+    "production_dependency_ownership": 660,
+    "production_dependency_sources": 660,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 1
@@ -3208,7 +3208,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fae4e75c4377b1037cfc4d3ef305b9c79bb104c8e8951ba26931742c76e2dc0b"
+      "sha256": "sha256:366d960a9e126d0a85e5f993f4e483e0bacd7fcfd5fd8be2662cf8c25ec4d83d"
     },
     {
       "source_entry": "web/src/services/agent/restApi.ts",
@@ -3775,7 +3775,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fe26af39c03123d5c6e538f5a4f6cd37c42916c25f32ef1b1968ad7a8292339c"
+      "sha256": "sha256:4bb84cbcea58d7edae75b1dde7472fdb0c737333d29fe6e3699ed93c8486d389"
     },
     {
       "source_entry": "web/src/stores/agent/streamingStore.ts",
@@ -4065,6 +4065,13 @@
       "sha256": "sha256:7cd37d001b4e36e8c49dc61720c0054c6b71611322b999ae9f3b96875876af7d"
     },
     {
+      "source_entry": "web/src/types/agent/eventParity.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f35f2807037e533414ca71d65a38448955101c90151e22cb0238b202cbc6c566"
+    },
+    {
       "source_entry": "web/src/types/common.ts",
       "roles": [
         "production_dependency"
@@ -4279,7 +4286,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:72f8576fcfbadd70255779e871234a5e968a731aed532c3b45f0232854830962"
+      "sha256": "sha256:962fb96584650206cefc6c7a338be42f179d9e8013f862da91cfa0f1f325ff6b"
     },
     {
       "source_entry": "web/src/utils/tabSync.ts",
@@ -17765,6 +17772,11 @@
     {
       "from_source_entry": "web/src/utils/sseEventAdapter.ts",
       "relationship": "static_import",
+      "to_source_entry": "web/src/types/agent/eventParity.ts"
+    },
+    {
+      "from_source_entry": "web/src/utils/sseEventAdapter.ts",
+      "relationship": "static_import",
       "to_source_entry": "web/src/types/generated/eventEnvelope.ts"
     },
     {
@@ -23966,6 +23978,16 @@
     {
       "classification": "shared",
       "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Blackboard.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/types/agent/eventParity.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
         "web/src/components/mcp/McpServerListV2.tsx",
         "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/DeviceApprove.tsx",
@@ -25474,6 +25496,7 @@
     "web/src/theme/index.ts",
     "web/src/theme/tokens.ts",
     "web/src/types/acp.ts",
+    "web/src/types/agent/eventParity.ts",
     "web/src/types/common.ts",
     "web/src/types/conversationState.ts",
     "web/src/types/geneConfig.ts",
