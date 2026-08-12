@@ -74,7 +74,7 @@
 .settings-window-scope small,
 .settings-profile-card small {
   overflow: hidden;
-  color: var(--gray-9);
+  color: var(--desktop-muted);
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -139,7 +139,7 @@
 
 .settings-rail-group > span {
   padding: 12px 9px 6px;
-  color: var(--desktop-gray-15);
+  color: var(--desktop-muted);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -171,7 +171,7 @@
 }
 
 .settings-rail-group button.active small {
-  color: var(--desktop-gray-11);
+  color: var(--desktop-muted);
 }
 
 .settings-rail-group button > span {
@@ -188,7 +188,7 @@
 
 .settings-rail-group small {
   overflow: hidden;
-  color: var(--desktop-gray-17);
+  color: var(--desktop-muted);
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -280,10 +280,14 @@
   letter-spacing: -0.03em;
 }
 
+.settings-page-heading .rt-Text {
+  color: var(--desktop-muted);
+}
+
 .settings-page-heading p {
   max-width: 650px;
   margin: 0;
-  color: var(--gray-9);
+  color: var(--desktop-muted);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -331,7 +335,7 @@
 
 .settings-session-card small,
 .settings-session-card dt {
-  color: var(--gray-9);
+  color: var(--desktop-muted);
   font-size: 11px;
 }
 
@@ -451,8 +455,12 @@
   justify-content: center;
   flex-direction: column;
   gap: 7px;
-  color: var(--gray-9);
+  color: var(--desktop-muted);
   text-align: center;
+}
+
+.settings-resource-state > strong {
+  color: var(--gray-12);
 }
 
 .settings-resource-state.error {

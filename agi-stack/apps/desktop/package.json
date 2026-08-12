@@ -18,6 +18,8 @@
     "build:electron": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && electron-vite build",
     "qa:browser": "playwright test --config browser-qa/playwright.config.mjs",
     "qa:accessibility": "playwright test --config browser-qa/accessibility.playwright.config.mjs",
+    "qa:accessibility:extension": "pnpm --dir ../browser-extension build && playwright test --config browser-qa/browser-extension-accessibility.playwright.config.mjs",
+    "qa:neo4j-matched-state": "playwright test --config browser-qa/neo4j-matched-state.playwright.config.mjs",
     "qa:paired-production": "node browser-qa/run-paired-production.mjs",
     "package:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && corepack pnpm exec electron-builder --config electron-builder.local.yml --publish never",
     "release:electron": "corepack pnpm run build:electron && corepack pnpm run build:sidecar && corepack pnpm run stage:sidecar && corepack pnpm exec electron-builder --publish never",
