@@ -20,8 +20,10 @@ from sqlalchemy.sql.functions import FunctionElement
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
+from src.configuration.workspace_core import WorkspaceCoreBackend, WorkspaceCoreSettings
 from src.domain.model.agent import ConversationStatus
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
+from src.domain.ports.services.workspace_access_verifier_port import WorkspaceAccessRequest
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -45,6 +47,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_reposito
     conversation_activity_order,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.workspace_core.client import (
+    AvernetWorkspaceAccessVerifier,
+    WorkspaceCoreClient,
+)
 
 from .schemas import (
     ConversationResponse,
@@ -341,11 +347,34 @@ async def _workspace_name_by_id(
 async def _ensure_workspace_access(
     db: AsyncSession,
     *,
+    request: Request,
     current_user: User,
     tenant_id: str,
     project_id: str,
     workspace_id: str,
 ) -> None:
+    settings = getattr(request.app.state, "workspace_core_settings", None)
+    client = getattr(request.app.state, "workspace_core_client", None)
+    if (
+        isinstance(settings, WorkspaceCoreSettings)
+        and settings.backend is WorkspaceCoreBackend.AVERNET
+        and isinstance(client, WorkspaceCoreClient)
+    ):
+        verifier = AvernetWorkspaceAccessVerifier(client)
+        allowed = await verifier.has_access(
+            WorkspaceAccessRequest(
+                tenant_id=tenant_id,
+                user_id=str(current_user.id),
+                workspace_id=workspace_id,
+            )
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_("Workspace access required"),
+            )
+        return
+
     workspace_exists = (
         await db.execute(
             refresh_select_statement(
@@ -405,6 +434,7 @@ async def _ensure_workspace_task_linkage(
 async def _ensure_workspace_linkage_access(
     db: AsyncSession,
     *,
+    request: Request,
     conversation: "Conversation",
     data: UpdateConversationModeRequest,
     current_user: User,
@@ -422,6 +452,7 @@ async def _ensure_workspace_linkage_access(
     if workspace_id:
         await _ensure_workspace_access(
             db,
+            request=request,
             current_user=current_user,
             tenant_id=tenant_id,
             project_id=project_id,
@@ -686,6 +717,15 @@ async def create_conversation(
             tenant_id=tenant_id,
             project_id=data.project_id,
         )
+        if data.workspace_id:
+            await _ensure_workspace_access(
+                db,
+                request=request,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                project_id=data.project_id,
+                workspace_id=data.workspace_id,
+            )
         llm = await create_llm_client(tenant_id)
         use_case = container.create_conversation_use_case(llm)
         conversation = await use_case.execute(
@@ -694,6 +734,7 @@ async def create_conversation(
             tenant_id=tenant_id,
             title=data.title,
             agent_config=data.agent_config,
+            workspace_id=data.workspace_id,
         )
         await db.commit()
         try:
@@ -814,6 +855,7 @@ async def list_conversations(
         elif requested_workspace_id:
             await _ensure_workspace_access(
                 db,
+                request=request,
                 current_user=current_user,
                 tenant_id=tenant_id,
                 project_id=project_id,
@@ -1223,6 +1265,7 @@ async def update_conversation_mode(
         fields = data.model_fields_set
         await _ensure_workspace_linkage_access(
             db,
+            request=request,
             conversation=conversation,
             data=data,
             current_user=current_user,

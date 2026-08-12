@@ -20,6 +20,10 @@ class WorkspaceCoreClientError(RuntimeError):
     """Workspace Core was unavailable or violated its private contract."""
 
 
+class WorkspaceCoreNotFoundError(WorkspaceCoreClientError):
+    """Workspace Core could not find the requested private resource."""
+
+
 class WorkspaceCoreCompatibilityError(WorkspaceCoreClientError):
     """Workspace Core cannot serve the gateway's frozen public API contract."""
 
@@ -491,6 +495,12 @@ class WorkspaceCoreClient:
                 response = await client.get(path, params=params)
                 _ = response.raise_for_status()
                 payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise WorkspaceCoreNotFoundError(
+                    f"Workspace Core resource was not found for GET {path}"
+                ) from exc
+            raise WorkspaceCoreClientError(f"Workspace Core request failed for GET {path}") from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise WorkspaceCoreClientError(f"Workspace Core request failed for GET {path}") from exc
         if not isinstance(payload, dict):
@@ -574,6 +584,7 @@ __all__ = [
     "WorkspaceCoreClientError",
     "WorkspaceCoreCompatibilityError",
     "WorkspaceCoreHealth",
+    "WorkspaceCoreNotFoundError",
     "WorkspaceCoreProxyResponse",
     "WorkspaceCorePublicApiCapabilities",
     "WorkspaceCorePublicRoute",

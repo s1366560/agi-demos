@@ -1277,6 +1277,7 @@ class AgentService(AgentServicePort):
         tenant_id: str,
         title: str | None = None,
         agent_config: dict[str, Any] | None = None,
+        workspace_id: str | None = None,
     ) -> Conversation:
         """Create a new conversation."""
         conversation = await self._conversation_mgr.create_conversation(
@@ -1285,6 +1286,7 @@ class AgentService(AgentServicePort):
             tenant_id=tenant_id,
             title=title,
             agent_config=agent_config,
+            workspace_id=workspace_id,
         )
         await self._invalidate_conv_cache(project_id)
         return conversation

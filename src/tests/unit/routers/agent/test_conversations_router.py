@@ -6,10 +6,12 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.workspace_core import WorkspaceCoreBackend, WorkspaceCoreSettings
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.conversation.errors import (
     ConversationDomainError,
@@ -33,6 +35,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceModel,
     WorkspaceTaskModel,
 )
+from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
 
 class FailingListUseCase:
@@ -287,6 +290,61 @@ async def test_list_conversations_expands_workspace_group_and_names(
     assert {item.workspace_id for item in response.items} == {"ws-group"}
     assert response.next_offset == 1
     assert response.has_more is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_conversation_persists_authorized_workspace_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = Conversation(
+        id="conversation-workspace-linked",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Workspace-linked conversation",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+        workspace_id="workspace-core-only",
+    )
+    use_case = SimpleNamespace(execute=AsyncMock(return_value=created))
+    container = SimpleNamespace(
+        create_conversation_use_case=lambda _llm: use_case, redis=lambda: None
+    )
+    request = MagicMock()
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
+    membership = AsyncMock()
+    monkeypatch.setattr(conversations_router, "_ensure_workspace_access", membership)
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    response = await conversations_router.create_conversation(
+        data=CreateConversationRequest(
+            project_id="project-1",
+            title="Workspace-linked conversation",
+            workspace_id="workspace-core-only",
+        ),
+        request=request,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    membership.assert_awaited_once()
+    use_case.execute.assert_awaited_once_with(
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+        title="Workspace-linked conversation",
+        agent_config=None,
+        workspace_id="workspace-core-only",
+    )
+    assert response.workspace_id == "workspace-core-only"
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -950,6 +1008,50 @@ async def test_list_workspace_conversations_requires_workspace_membership(
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Workspace access required"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_workspace_conversations_uses_avernet_membership_authority(
+    db_session: AsyncSession,
+    test_project_db: Project,
+    test_user: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"allowed": True}))
+    settings = WorkspaceCoreSettings.model_validate(
+        {
+            "WORKSPACE_CORE_BACKEND": WorkspaceCoreBackend.AVERNET.value,
+            "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
+            "WORKSPACE_CORE_SERVICE_TOKEN": "service-token",
+            "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "webhook-token",
+            "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "provider-token",
+            "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "registry-token",
+        }
+    )
+    request = MagicMock()
+    request.app.state.workspace_core_settings = settings
+    request.app.state.workspace_core_client = WorkspaceCoreClient(settings, transport=transport)
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+
+    response = await conversations_router.list_conversations(
+        request=request,
+        project_id=test_project_db.id,
+        status="active",
+        limit=10,
+        offset=0,
+        workspace_id="workspace-core-only",
+        group_by_workspace=False,
+        current_user=test_user,
+        tenant_id=test_project_db.tenant_id,
+        db=db_session,
+    )
+
+    assert response.items == []
+    assert response.total == 0
 
 
 def test_list_conversations_accepts_large_workspace_refresh_pages() -> None:

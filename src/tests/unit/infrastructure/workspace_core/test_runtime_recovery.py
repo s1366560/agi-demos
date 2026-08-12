@@ -12,6 +12,7 @@ from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
+    WorkspaceCoreNotFoundError,
     WorkspaceRuntimeCallbackAckRequest,
     WorkspaceRuntimeRecoveryClaimRequest,
     WorkspaceRuntimeRecoveryClaimResponse,
@@ -131,6 +132,7 @@ class _FakeCoreClient:
         self.judgment_requests: list[WorkspaceRuntimeRecoveryJudgmentRequest] = []
         self.ack_requests: list[WorkspaceRuntimeCallbackAckRequest] = []
         self.ack_error: Exception | None = None
+        self.read_error: Exception | None = None
 
     async def claim_runtime_recoveries(
         self,
@@ -155,6 +157,8 @@ class _FakeCoreClient:
             "project-1",
             "workspace-1",
         )
+        if self.read_error is not None:
+            raise self.read_error
         return self.terminal
 
     async def record_runtime_terminal(
@@ -295,6 +299,59 @@ async def test_terminal_but_unacknowledged_replays_core_terminal() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("status", "legacy_event_type", "expected_state"),
+    [
+        ("completed", AgentEventType.COMPLETE, "final"),
+        ("failed", "error", "error"),
+    ],
+)
+async def test_terminal_status_without_core_terminal_repairs_from_matching_legacy_evidence(
+    status: str,
+    legacy_event_type: AgentEventType | str,
+    expected_state: str,
+) -> None:
+    worker, core, sink, _, operations = _worker(
+        _recovery(status=status),
+        terminal=_legacy_terminal(legacy_event_type),
+    )
+    core.read_error = WorkspaceCoreNotFoundError("terminal proof is missing")
+
+    assert await worker.sweep_once() == 1
+
+    assert operations == ["claim", "read", "find", "terminal", "publish", "ack"]
+    assert core.terminal_requests[0].execution_status == (
+        "complete" if status == "completed" else "error"
+    )
+    assert sink.events[0].state == expected_state
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("status", "legacy_event_type"),
+    [
+        ("failed", AgentEventType.COMPLETE),
+        ("aborted", "error"),
+    ],
+)
+async def test_terminal_status_without_matching_legacy_evidence_stays_fail_closed(
+    status: str,
+    legacy_event_type: AgentEventType | str,
+) -> None:
+    worker, core, sink, _, operations = _worker(
+        _recovery(status=status),
+        terminal=_legacy_terminal(legacy_event_type),
+    )
+    core.read_error = WorkspaceCoreNotFoundError("terminal proof is missing")
+
+    assert await worker.sweep_once() == 1
+
+    assert operations == ["claim", "read", "find"]
+    assert core.terminal_requests == []
+    assert sink.events == []
+
+
+@pytest.mark.unit
 async def test_running_with_legacy_terminal_commits_core_before_callback() -> None:
     worker, core, sink, _, operations = _worker(
         _recovery(),
@@ -423,6 +480,67 @@ class _Container:
 
     def with_db(self, _db: object) -> _ScopedContainer:
         return self.scoped
+
+
+class _ExecutionEventRepository:
+    def __init__(self, events: list[AgentExecutionEvent]) -> None:
+        self.events = events
+
+    async def get_events_by_message(
+        self,
+        conversation_id: str,
+        message_id: str,
+    ) -> list[AgentExecutionEvent]:
+        assert conversation_id == "conversation-1"
+        assert message_id
+        return self.events
+
+
+class _ScopedContainerWithEvents(_ScopedContainer):
+    def __init__(
+        self,
+        conversation: Conversation,
+        events: list[AgentExecutionEvent],
+    ) -> None:
+        super().__init__(conversation)
+        self.events = _ExecutionEventRepository(events)
+
+    def agent_execution_event_repository(self) -> _ExecutionEventRepository:
+        return self.events
+
+
+class _ContainerWithEvents(_Container):
+    def __init__(
+        self,
+        conversation: Conversation,
+        events: list[AgentExecutionEvent],
+    ) -> None:
+        super().__init__(conversation)
+        self.scoped = _ScopedContainerWithEvents(conversation, events)
+
+
+@pytest.mark.unit
+async def test_evidence_selects_terminal_matching_core_status() -> None:
+    conversation = Conversation(
+        id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        title="Provider conversation",
+        workspace_id="workspace-1",
+        linked_workspace_task_id="task-1",
+    )
+    error_event = _legacy_terminal("error")
+    complete_event = _legacy_terminal()
+    container = _ContainerWithEvents(conversation, [error_event, complete_event])
+    evidence = MemStackRuntimeRecoveryEvidence(
+        session_factory=cast(Callable[[], Any], _SessionContext),
+        container_provider=lambda: cast(Any, container),
+    )
+
+    terminal = await evidence.find_terminal(_recovery(status="failed"))
+
+    assert terminal is error_event
 
 
 @pytest.mark.unit

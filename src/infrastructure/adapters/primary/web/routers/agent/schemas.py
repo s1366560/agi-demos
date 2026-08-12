@@ -19,6 +19,7 @@ class CreateConversationRequest(BaseModel):
     project_id: str
     title: str | None = "New Conversation"
     agent_config: dict[str, Any] | None = None
+    workspace_id: str | None = None
 
 
 class UpdateConversationTitleRequest(BaseModel):

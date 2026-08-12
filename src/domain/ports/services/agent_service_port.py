@@ -101,6 +101,7 @@ class AgentServicePort(ABC):
         tenant_id: str,
         title: str | None = None,
         agent_config: dict[str, Any] | None = None,
+        workspace_id: str | None = None,
     ) -> Conversation:
         """
         Create a new conversation.

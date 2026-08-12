@@ -33,6 +33,7 @@ class CreateConversationUseCase:
         tenant_id: str,
         title: str | None = None,
         agent_config: dict[str, Any] | None = None,
+        workspace_id: str | None = None,
     ) -> Conversation:
         """
         Execute the use case.
@@ -43,6 +44,7 @@ class CreateConversationUseCase:
             tenant_id: Tenant ID for multi-tenancy
             title: Optional title for the conversation
             agent_config: Optional agent configuration
+            workspace_id: Optional owning Workspace
 
         Returns:
             Created conversation entity
@@ -63,6 +65,7 @@ class CreateConversationUseCase:
             tenant_id=tenant_id,
             title=title,
             agent_config=agent_config,
+            workspace_id=workspace_id,
         )
 
         logger.info(

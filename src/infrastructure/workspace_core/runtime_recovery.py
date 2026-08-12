@@ -24,6 +24,7 @@ from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.infrastructure.llm.model_pool import ModelPoolService, PoolFilter, get_model_pool_service
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
+    WorkspaceCoreNotFoundError,
     WorkspaceRuntimeCallbackAckRequest,
     WorkspaceRuntimeRecoveryClaimRequest,
     WorkspaceRuntimeRecoveryItem,
@@ -253,11 +254,19 @@ class MemStackRuntimeRecoveryEvidence:
                 recovery.conversation_id,
                 _execution_message_id(recovery.delivery_request_id),
             )
+        expected_event_type = {
+            "completed": "complete",
+            "failed": "error",
+        }.get(recovery.status)
         return next(
             (
                 event
                 for event in reversed(events)
-                if _event_type_value(event) in _TERMINAL_EVENT_TYPES
+                if (
+                    _event_type_value(event) == expected_event_type
+                    if expected_event_type is not None
+                    else _event_type_value(event) in _TERMINAL_EVENT_TYPES
+                )
             ),
             None,
         )
@@ -425,13 +434,33 @@ class AvernetRuntimeRecoveryWorker:
     async def _process_recovery(self, recovery: WorkspaceRuntimeRecoveryItem) -> None:
         request = _callback_request(recovery)
         if recovery.status in {"completed", "failed", "aborted"}:
-            terminal = await self._core_client.read_runtime_terminal(
-                recovery.correlation_id,
-                tenant_id=recovery.tenant_id,
-                project_id=recovery.project_id,
-                workspace_id=recovery.workspace_id,
-            )
-            await self._publish_and_ack(request, _replayed_terminal_event(terminal))
+            try:
+                terminal = await self._core_client.read_runtime_terminal(
+                    recovery.correlation_id,
+                    tenant_id=recovery.tenant_id,
+                    project_id=recovery.project_id,
+                    workspace_id=recovery.workspace_id,
+                )
+            except WorkspaceCoreNotFoundError:
+                persisted = await self._evidence.find_terminal(recovery)
+                if persisted is None or not _legacy_terminal_matches_status(
+                    persisted,
+                    recovery.status,
+                ):
+                    logger.warning(
+                        "Avernet terminal proof is missing or conflicts with legacy evidence",
+                        extra={
+                            "correlation_id": recovery.correlation_id,
+                            "workspace_id": recovery.workspace_id,
+                            "status": recovery.status,
+                        },
+                    )
+                    return
+                event = _provider_event_from_legacy(recovery, persisted)
+                await self._commit_terminal(recovery, event, persisted)
+                await self._publish_and_ack(request, event)
+            else:
+                await self._publish_and_ack(request, _replayed_terminal_event(terminal))
             return
 
         persisted = await self._evidence.find_terminal(recovery)
@@ -699,6 +728,14 @@ def _event_content(data: dict[str, Any]) -> str:
 def _event_type_value(event: AgentExecutionEvent) -> str:
     event_type = event.event_type
     return event_type.value if isinstance(event_type, AgentEventType) else event_type
+
+
+def _legacy_terminal_matches_status(event: AgentExecutionEvent, status: str) -> bool:
+    expected_event_type = {
+        "completed": "complete",
+        "failed": "error",
+    }.get(status)
+    return expected_event_type is not None and _event_type_value(event) == expected_event_type
 
 
 async def _authorized_conversation(

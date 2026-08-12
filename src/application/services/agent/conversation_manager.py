@@ -55,6 +55,7 @@ class ConversationManager:
         tenant_id: str,
         title: str | None = None,
         agent_config: dict[str, Any] | None = None,
+        workspace_id: str | None = None,
     ) -> Conversation:
         """Create a new conversation."""
         conversation = Conversation(
@@ -68,6 +69,7 @@ class ConversationManager:
             metadata={"created_at": datetime.now(UTC).isoformat()},
             message_count=0,
             created_at=datetime.now(UTC),
+            workspace_id=workspace_id,
         )
 
         await self._conversation_repo.save(conversation)

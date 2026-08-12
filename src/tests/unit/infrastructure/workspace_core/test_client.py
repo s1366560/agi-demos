@@ -13,6 +13,7 @@ from src.infrastructure.workspace_core.client import (
     AvernetWorkspaceAccessVerifier,
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
+    WorkspaceCoreNotFoundError,
     WorkspaceCorePublicApiCapabilities,
     WorkspaceRuntimeCallbackAckRequest,
     WorkspaceRuntimeCorrelationRequest,
@@ -44,6 +45,30 @@ async def test_health_uses_private_service_token() -> None:
 
     assert health.status == "ok"
     assert health.version == "0.1.0"
+
+
+@pytest.mark.unit
+async def test_get_maps_only_not_found_status_to_typed_error() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "missing"})
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    with pytest.raises(WorkspaceCoreNotFoundError, match="resource was not found"):
+        await client.health()
+
+
+@pytest.mark.unit
+async def test_get_keeps_server_failure_as_generic_client_error() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    with pytest.raises(WorkspaceCoreClientError, match="request failed") as error:
+        await client.health()
+
+    assert not isinstance(error.value, WorkspaceCoreNotFoundError)
 
 
 @pytest.mark.unit
