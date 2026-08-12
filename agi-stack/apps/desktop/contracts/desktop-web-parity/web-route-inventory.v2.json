@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "09d96c9f3a54f538c300c1bf0e283f78de0dbe70",
+  "source_revision": "466a25117dc45e2aae634b2face3aa7938cb35e9",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -36,14 +36,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:dd8891ec30169fc09fda99649b7faa1ba30d5e818607864dac5010976cf6cdd0"
+      "sha256": "sha256:3332f8554967b292faddc11646adc34361f95f54b90620676205e2c468918d31"
     },
     {
       "source_entry": "web/pnpm-lock.yaml",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:9a31354514d36e5012b6edb9ceb86bf61503e3f47ce3a385e4a700c9c3fb3a18"
+      "sha256": "sha256:d8a13e0de9d9a5e0a9a26a47d68e188e6e003a35bf97df77718b4bc7182cd929"
     },
     {
       "source_entry": "web/src/App.css",
@@ -71,7 +71,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4a830ae58b6ad279f06b8199e97e10fc1702033b76e72abf667b4984db859ebd"
+      "sha256": "sha256:4ecde5958a8effc8b90e92bf49a2c24148a82ba5947fdfa8f228d313f25594a4"
     },
     {
       "source_entry": "web/src/components/agent/AgentDefinitionModal.tsx",
@@ -127,7 +127,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:9e5ba318c73f4265d0e1d1e9de4c213d9e59ebdec66b29ae8b1992c48f4a2fdc"
+      "sha256": "sha256:e7982a490362a1b398a867ac15b190c5675edc7bf3ef6128147bad11e688f698"
     },
     {
       "source_entry": "web/src/components/agent/FileUploader.tsx",
@@ -190,7 +190,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fa01499d827b4f07b362d6f6905f4793c22492ccc1bc79d363697e6242fd2771"
+      "sha256": "sha256:e53df4ddb879712bb2fe95440a131808edff8ff3cea588b54ceaab02c7f01bd5"
     },
     {
       "source_entry": "web/src/components/agent/Resizer.tsx",
@@ -617,7 +617,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:ffee0c32dc8100cee61cc8834927dc70da27071ec6004fd24bd5694e1095b9ae"
+      "sha256": "sha256:38cf6cb462c3aca036910386980ed48bfd09ad244facb5bfc39099116f4d11ae"
     },
     {
       "source_entry": "web/src/components/agent/evidence/EvidenceBundleDrawer.tsx",
@@ -659,7 +659,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2dd7cbe6e11da4d96ed4b7cb0099a63b7cbe2a22b214137f672dcd9aeaa0ee3d"
+      "sha256": "sha256:4c712bd997af25e91ebbb0db021c94b84324ee6edf3ec32034536385b4163ae2"
     },
     {
       "source_entry": "web/src/components/agent/message/ConversationSummaryCardWrapper.tsx",
@@ -792,14 +792,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5f4b3ede242e16cc53c021a341a85154aae507fa2b66c31872802dfb5a800919"
+      "sha256": "sha256:c4950542346bedbe14d8ee94ef4a29e4573175ec8e4a14aceb74db3dc70cf9d8"
     },
     {
       "source_entry": "web/src/components/agent/patterns/PatternStats.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:e0ff4c980049d841f763d3b7c9f35a224cd536c1564573b954c4317394b2cbc3"
+      "sha256": "sha256:5b15ca028fc845a80dae111cdffa8d72d104c01af4b5b6b297f1afbd0d87aa01"
     },
     {
       "source_entry": "web/src/components/agent/results/MultiSourceResultsCard.tsx",
@@ -1254,7 +1254,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:f2b4ca3eedd5b16d26b960f269d981818f22cb2bf7a84a18742f12cb2baa43ae"
+      "sha256": "sha256:68d987617c3d7dfd608e39f1368ca7848a43ccfeb0f48d8203820565dbb65a38"
     },
     {
       "source_entry": "web/src/components/common/AppModal.tsx",
@@ -1394,7 +1394,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5e48532fa7cd9b5ea2bd66f551f9ec707731e0f17ec07e7616150253ecd516e7"
+      "sha256": "sha256:2f6058777b9d785d398118875f54b2cb0fc3c891d56a750e8c27b867ed086453"
     },
     {
       "source_entry": "web/src/components/graph/CytoscapeGraph/NodeInfoPanel.tsx",
@@ -1408,7 +1408,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a5036d6bcb23aeff5d2b1b511d25ce70ff9bc064f4df1cb4123d5a4c29c613ce"
+      "sha256": "sha256:96265c617d4e49493aff263b5a95a908ed40013c88438281cbe7cc504a47b614"
     },
     {
       "source_entry": "web/src/components/graph/CytoscapeGraph/index.tsx",
@@ -1450,14 +1450,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c8c7c2ad26be9bd15da2dd41db1c0860b593b69156250bb453dd8bf4c2297dcf"
+      "sha256": "sha256:ddbb5ee3e9fd8bf311f6a5d3ea550fadd8fb98d3bb468a08352017387467db7e"
     },
     {
       "source_entry": "web/src/components/layout/TenantHeader.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1125794484f8255a3e029eb13daf2720a7b7577ba5082db1234535e731fa6ce4"
+      "sha256": "sha256:05a81dea9eb795cca0d41c298ae6da9d0123406b67a5c6ddfbba7ed42dc3016f"
     },
     {
       "source_entry": "web/src/components/layout/tenantNavigation.ts",
@@ -1471,7 +1471,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4be8f257bc498ee0ba50559e880440a81c969fa4bf267a71d572e457376ab9e0"
+      "sha256": "sha256:e5538721cd7f7307a1a82a9cb03d27e15f1eee313eb7ca397f9dba293f2b8a14"
     },
     {
       "source_entry": "web/src/components/marketplace/InstallEntityModal.tsx",
@@ -1583,14 +1583,14 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:c1f46ca838b001a816c014b5c19ae5233d22e580daadb6a76a372db20717d786"
+      "sha256": "sha256:50f444fbab2f8b8ed2d512af8ba3bf77e34d6b53338795b0e34dd2948ca5b575"
     },
     {
       "source_entry": "web/src/components/mcp/McpServerTabV2.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:79f6cbb47799324d34a8cd7c02c0451bf0ea0bc3f889bb835c71579c87ff8e39"
+      "sha256": "sha256:2a219f029ce2fe761e856367439e141d57393054ee0c456681ef7e9e4acf389e"
     },
     {
       "source_entry": "web/src/components/mcp/McpToolItemV2.tsx",
@@ -1618,7 +1618,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2dc6b136c60a27214987fa45bcc67124e8aeee3c63986a530ecd651ce29f98b0"
+      "sha256": "sha256:8feee35f15d04385e9d0c6a11cbdc46516e3fcea8bd86ed8df9bce5e1036427d"
     },
     {
       "source_entry": "web/src/components/mcp/types.ts",
@@ -1639,7 +1639,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:eafa5c709a16f97d6c0d1064cc005c16ccbeed03a9c14b76d68ebce6856125ea"
+      "sha256": "sha256:57f20213c9dc1e99301194386f547156c4b49819ec8afe1ce5295c16cac98f16"
     },
     {
       "source_entry": "web/src/components/project/BackendStoreSelectors.tsx",
@@ -1688,7 +1688,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:26a3403ad88209dc5f45c18f8bac28aa992c896a30586c1453a900a968ed7229"
+      "sha256": "sha256:d9ca51e0b3146234c87f6bc20bcb712b7fcd0b8075e3e8e52c9f2132d7254a1d"
     },
     {
       "source_entry": "web/src/components/provider/ProviderIcon.tsx",
@@ -1758,7 +1758,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:6a6cf533b549bd2d3c72064750f3bf1973f08041d92f48ba1ef41c2906ccd961"
+      "sha256": "sha256:b77040b86044776a8a3b744055e02d86aef7934bd450ee0f441baef5578f9bbd"
     },
     {
       "source_entry": "web/src/components/shared/ui/LanguageSwitcher.tsx",
@@ -1807,7 +1807,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:6842a0458dc4db0a15767c5f94cc3cee087e5be5073dec464c17fe5ad51be686"
+      "sha256": "sha256:ae59667ef3aa85c698f589554847054362cce445318d2b31ae4c70885c3d9ca7"
     },
     {
       "source_entry": "web/src/components/tenant/EditUserModal.tsx",
@@ -1842,7 +1842,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fa41d197a3b2fc3c8afbc054ff7828aab2aed2d9b1cea76b0fff2cf083f3aa0b"
+      "sha256": "sha256:75e93b4d2f495a659c49a7ceec1064139e66d75e180a1baa32f7054d131c7ffd"
     },
     {
       "source_entry": "web/src/components/ui/lazyAntd.tsx",
@@ -2298,7 +2298,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:692f61d1776e848b58a91c11b9b2b0a2dfbf36ac13dafd15eaeea803da84fbd7"
+      "sha256": "sha256:6016d002e787827fc8e50b0776695e2bb6adcd512730cfeaf5d1d2932ac1752f"
     },
     {
       "source_entry": "web/src/layouts/SchemaLayout.tsx",
@@ -2312,21 +2312,21 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:e0d91694d949b69e53fe813cdf564fdecb2c0206395af01c215e18737757f528"
+      "sha256": "sha256:cdb51535982429a822c1f49a9405e4f390eb35f6b61109a71a19738d7db07c31"
     },
     {
       "source_entry": "web/src/locales/en-US.json",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:e37e4072d7e9a44364dd26016cd14e322e623df38185292e8e959548c17cfe78"
+      "sha256": "sha256:c0848f3d922095cbacbcf6183a781393201fc5615de470f19dff6565909bb7e6"
     },
     {
       "source_entry": "web/src/locales/zh-CN.json",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4cb3aa1e41d61e819620370bd412161bdd10b666e5a0467f99bf33b1e62ce8cd"
+      "sha256": "sha256:a1837140f1555a05acb0df6878bfe290208f9e5ea36e1e260fba11d65c7949df"
     },
     {
       "source_entry": "web/src/main.tsx",
@@ -2424,7 +2424,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:2c68213346cc6847270638037daa124b62c3156dae82319f16b58cc54026310d"
+      "sha256": "sha256:445ef87b2618cc7d0fbe62467a17a7e182a417acce4e3d9f457becdcc73b9441"
     },
     {
       "source_entry": "web/src/pages/project/EntitiesList.tsx",
@@ -2487,7 +2487,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:db42211c68c74aa77df2567ec2304955926fb014b4d324980e2bd4fcb6682028"
+      "sha256": "sha256:f89829ba119fe5410471f4e817fe40ec3ed0f8d021544bf838013b1166c3aef1"
     },
     {
       "source_entry": "web/src/pages/project/ProjectAgentPatterns.tsx",
@@ -2613,7 +2613,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:1bd0ce7eac895e96dc833e10933b9b6ca1124b9a222357e5592b106b94f1cfe4"
+      "sha256": "sha256:d81a52e784283d8ca2b00eca3694dc6d1e212b0e770b2e842498e1d9e38a045c"
     },
     {
       "source_entry": "web/src/pages/tenant/AgentBindings.tsx",
@@ -2648,7 +2648,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:60601eeb9f84c703d1e5383f754f29cd276daf2808f1042161de9f5c3466c062"
+      "sha256": "sha256:49a773dc6086cbb17d447622404aee973a389800541eaaa1b2355aea8d1d91b0"
     },
     {
       "source_entry": "web/src/pages/tenant/Analytics.tsx",
@@ -3061,7 +3061,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:a4d67b088bcbb0f2a9c534a69e7708a097ee49595dd6e72639983fa69ca41332"
+      "sha256": "sha256:2d6b6ce2ca304e78fe0282eb3eefcad8778f097cb8589472fb71c508d6da3771"
     },
     {
       "source_entry": "web/src/pages/tenant/org-settings/OrgSmtp.tsx",
@@ -3705,14 +3705,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1a73d57c46bacdc406a410509dd2a3e443e513576d798dc179119e6a281f2089"
+      "sha256": "sha256:a9413195cabc98ee254263339c2278a3fa3e4e0581c01802a4e2fa7ac17707c5"
     },
     {
       "source_entry": "web/src/stores/agent/conversationsStore.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:18989334adba9393386e49d6a8a06a857cbf7349c422fa47c884926b596ad976"
+      "sha256": "sha256:c2bff718a41ece42cff103468be93ae93369149c289f88fff8273cbf69572fb9"
     },
     {
       "source_entry": "web/src/stores/agent/deltaBuffers.ts",
