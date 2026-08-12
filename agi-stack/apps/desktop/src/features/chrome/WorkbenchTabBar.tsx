@@ -40,7 +40,7 @@ export function WorkbenchTabBar({
       : tab.title || t('session.untitled');
 
   return (
-    <div className="workbench-tab-bar" role="toolbar" aria-label={t('tabs.bar')}>
+    <div className="workbench-tab-bar" role="tablist" aria-label={t('tabs.bar')}>
       {tabs.map((tab) => {
         const key = tabKey(tab);
         const active = key === activeTabKey;
@@ -54,7 +54,8 @@ export function WorkbenchTabBar({
             <button
               type="button"
               className="workbench-tab-activate"
-              aria-pressed={active}
+              role="tab"
+              aria-selected={active}
               title={label}
               onClick={() => onActivate(tab)}
             >
