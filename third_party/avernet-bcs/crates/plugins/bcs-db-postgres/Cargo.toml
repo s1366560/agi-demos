@@ -1,0 +1,39 @@
+[package]
+name         = "bcs-db-postgres"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bcs-db-api = { workspace = true }
+
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+native-tls = { workspace = true }
+postgres-native-tls = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+bcs-bot-store = { workspace = true }
+bcs-cache-local = { workspace = true }
+bcs-collaboration-store = { workspace = true }
+bcs-domain = { workspace = true }
+bcs-friend-store = { workspace = true }
+bcs-group-store = { workspace = true }
+bcs-message-store = { workspace = true }
+bcs-organization-store = { workspace = true }
+bcs-relation-store = { workspace = true }
+bcs-service-api = { workspace = true }
+bcs-session-store = { workspace = true }
+bcs-test-support = { workspace = true }
+serde_yaml = { workspace = true }

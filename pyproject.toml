@@ -175,6 +175,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# Preserve the verified byte identity of the vendored Avernet snapshot while
+# keeping Ruff enabled for every downstream patch, addition, and future file.
+"third_party/avernet-bcs/tests/openapi/test_bot_v1_contract.py" = ["I001", "ANN001", "ANN202"]
+"third_party/avernet-bcs/tests/openapi/test_contract.py" = ["ANN202"]
+"third_party/avernet-bcs/tests/openapi/test_dump_openapi.py" = ["I001", "ANN202", "PT009"]
+
 # Delayed import exemptions (logging config etc.)
 "src/infrastructure/adapters/primary/web/main.py" = ["E402"]
 "src/infrastructure/adapters/secondary/ray/__init__.py" = ["E402"]

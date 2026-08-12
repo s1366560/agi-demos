@@ -1,0 +1,3797 @@
+//! MySQL-based Group Session Storage.
+//!
+//! This module provides a persistent group session store backed by MySQL.
+//!
+//! # Architecture
+//!
+//! ```text
+//! MySQL: Session metadata + Participants (persistent)
+//! ```
+//!
+//! Messages and workspace are NOT persisted - they are lost on server restart.
+
+use async_trait::async_trait;
+use bcs_db_api::{
+    DbError, DbPlugin, DbResult, DbRow, DbSqlFlavor, DbStatement, DbStatementBuilder,
+    DbTransactionStep, DbTransactionStepResult, DbValue as Value, db_get_column, db_get_column_opt,
+};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
+
+use bcs_service_api::{
+    ActorKind, DefaultDelivery, Group, GroupMessage, GroupMetricCount, GroupMetricsSnapshotPort,
+    GroupMutableFieldsPatch, GroupStatus, GroupStrategy, Participant, ParticipantKind,
+    ParticipantMode, ParticipantRole, RoutingPolicy, ServiceError, ServiceResult, Workspace,
+};
+
+pub mod memory;
+
+pub use bcs_service_api::port::repo::GroupRepoPort;
+pub use memory::{GroupBuilder, MemoryGroupRepo};
+
+/// MySQL-backed group repository.
+pub type MysqlGroupRepo = MySqlGroupStore;
+
+#[derive(Clone)]
+struct DbPluginCompat {
+    db: Arc<dyn DbPlugin>,
+}
+
+impl DbPluginCompat {
+    fn new(db: Arc<dyn DbPlugin>) -> Self {
+        Self { db }
+    }
+
+    fn plugin(&self) -> Arc<dyn DbPlugin> {
+        self.db.clone()
+    }
+
+    async fn query_with(&self, logical_db: &str, statement: DbStatement) -> DbResult<Vec<DbRow>> {
+        assert_empty_logical_db(logical_db)?;
+        self.db.query(statement).await
+    }
+
+    async fn execute_with(&self, logical_db: &str, statement: DbStatement) -> DbResult<u64> {
+        assert_empty_logical_db(logical_db)?;
+        self.db
+            .execute(statement)
+            .await
+            .map(|result| result.affected_rows)
+    }
+}
+
+fn assert_empty_logical_db(logical_db: &str) -> DbResult<()> {
+    if logical_db.is_empty() {
+        Ok(())
+    } else {
+        Err(DbError::InvalidInput(
+            "DbPlugin is bound to a single datasource by bootstrap; service code must not pass logical_db routing keys"
+                .to_string(),
+        ))
+    }
+}
+
+/// MySQL-backed group session store.
+///
+/// Uses MySQL for persistent storage of session metadata and participants.
+///
+/// Messages and workspace are NEVER persisted - they are lost on server restart.
+pub struct MySqlGroupStore {
+    /// Database plugin selected by the composition root.
+    db: DbPluginCompat,
+    /// TODO: remove with DbPluginCompat once legacy helper signatures stop threading logical_db.
+    /// Retained as an always-empty logical label for legacy helper signatures.
+    logical_db: String,
+    /// Environment for multi-tenancy.
+    env: String,
+    /// SQL dialect (MySQL vs SQLite).
+    flavor: DbSqlFlavor,
+    /// In-memory message counts per group (not persisted, lost on restart).
+    message_counts: RwLock<HashMap<String, usize>>,
+    /// In-memory group cache (master mode only, avoids repeated DB queries).
+    cache: RwLock<HashMap<String, Group>>,
+}
+
+impl MySqlGroupStore {
+    /// Create a new MySqlGroupStore.
+    pub fn new(db: Arc<dyn DbPlugin>, env: String) -> Self {
+        Self {
+            db: DbPluginCompat::new(db),
+            logical_db: String::new(),
+            env,
+            flavor: DbSqlFlavor::Mysql,
+            message_counts: RwLock::new(HashMap::new()),
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Create a new MySqlGroupStore with SQLite dialect.
+    pub fn sqlite(db: Arc<dyn DbPlugin>, env: String) -> Self {
+        Self {
+            db: DbPluginCompat::new(db),
+            logical_db: String::new(),
+            env,
+            flavor: DbSqlFlavor::Sqlite,
+            message_counts: RwLock::new(HashMap::new()),
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub fn postgres(db: Arc<dyn DbPlugin>, env: String) -> Self {
+        Self {
+            db: DbPluginCompat::new(db),
+            logical_db: String::new(),
+            env,
+            flavor: DbSqlFlavor::Postgres,
+            message_counts: RwLock::new(HashMap::new()),
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Convert GroupStatus to string.
+    fn status_to_str(status: &GroupStatus) -> &'static str {
+        match status {
+            GroupStatus::Active => "active",
+            GroupStatus::Completed => "completed",
+            GroupStatus::Error => "error",
+            GroupStatus::Closed => "closed",
+            GroupStatus::Inactive => "inactive",
+        }
+    }
+
+    /// Convert string to GroupStatus.
+    fn str_to_status(s: &str) -> GroupStatus {
+        match s {
+            "active" => GroupStatus::Active,
+            "completed" => GroupStatus::Completed,
+            "error" => GroupStatus::Error,
+            "closed" => GroupStatus::Closed,
+            "inactive" => GroupStatus::Inactive,
+            _ => GroupStatus::Active,
+        }
+    }
+
+    /// Convert ParticipantRole to string.
+    fn role_to_str(role: &ParticipantRole) -> &'static str {
+        match role {
+            ParticipantRole::Driver => "driver",
+            ParticipantRole::Consultant => "consultant",
+            ParticipantRole::Manager => "manager",
+            ParticipantRole::Worker => "worker",
+            ParticipantRole::Observer => "observer",
+        }
+    }
+
+    /// Convert string to ParticipantRole.
+    fn str_to_role(s: &str) -> ParticipantRole {
+        match s {
+            "driver" => ParticipantRole::Driver,
+            "consultant" => ParticipantRole::Consultant,
+            "manager" => ParticipantRole::Manager,
+            "worker" => ParticipantRole::Worker,
+            "observer" => ParticipantRole::Observer,
+            _ => ParticipantRole::Driver,
+        }
+    }
+
+    /// Convert UNIX_TIMESTAMP seconds (from MySQL) to milliseconds.
+    fn seconds_to_millis(secs: Option<i64>) -> u64 {
+        secs.unwrap_or(0) as u64 * 1000
+    }
+
+    /// Convert ActorKind to canonical string used in MySQL.
+    fn actor_kind_to_str(kind: ActorKind) -> &'static str {
+        match kind {
+            ActorKind::Bot => "bot",
+            ActorKind::Human => "human",
+        }
+    }
+
+    /// Convert ParticipantMode to canonical string used in MySQL.
+    fn mode_to_str(mode: ParticipantMode) -> &'static str {
+        match mode {
+            ParticipantMode::Auto => "auto",
+            ParticipantMode::Muted => "muted",
+            ParticipantMode::Present => "present",
+            ParticipantMode::Absent => "absent",
+        }
+    }
+
+    /// Convert `GroupKind` to the canonical string stored in
+    /// `bcs_groups.group_kind` (Task G.2 / migration 005).
+    fn group_kind_to_str(kind: bcs_service_api::GroupKind) -> &'static str {
+        match kind {
+            bcs_service_api::GroupKind::Normal => "normal",
+            bcs_service_api::GroupKind::Dm => "dm",
+        }
+    }
+
+    /// Parse `bcs_groups.group_kind` column. NULL / unknown values fall back
+    /// to `Normal` for backward compatibility with rows that pre-date
+    /// migration 005.
+    fn parse_group_kind(s: Option<&str>) -> bcs_service_api::GroupKind {
+        match s {
+            Some("dm") => bcs_service_api::GroupKind::Dm,
+            _ => bcs_service_api::GroupKind::Normal,
+        }
+    }
+
+    /// Convert `GroupStrategy` to the canonical string stored in
+    /// `bcs_groups.group_strategy`.
+    fn group_strategy_to_str(strategy: GroupStrategy) -> &'static str {
+        match strategy {
+            GroupStrategy::Chat => "chat",
+            GroupStrategy::ManagerWorker => "manager_worker",
+            GroupStrategy::StateMachine => "state_machine",
+        }
+    }
+
+    /// Parse `bcs_groups.group_strategy` column. NULL / unknown values fall back
+    /// to `Chat` for backward compatibility with rows that pre-date this column.
+    fn parse_group_strategy(s: Option<&str>) -> GroupStrategy {
+        match s {
+            Some("manager_worker") => GroupStrategy::ManagerWorker,
+            Some("state_machine") => GroupStrategy::StateMachine,
+            _ => GroupStrategy::Chat,
+        }
+    }
+
+    /// Parse `actor_kind` column. Unknown / NULL values fall back to `Bot`
+    /// (consistent with the DB-level DEFAULT and Requirement 3.16). The
+    /// caller is responsible for emitting an `error!` log when this happens
+    /// during the normalization step.
+    #[allow(dead_code)]
+    fn parse_actor_kind(s: Option<&str>) -> ActorKind {
+        match s {
+            Some("human") => ActorKind::Human,
+            _ => ActorKind::Bot,
+        }
+    }
+
+    /// Parse `mode` column without validating against `actor_kind`. Returns
+    /// `None` for unknown values so the normalization step can detect them
+    /// and apply `ParticipantMode::default_for(actor_kind)`.
+    fn parse_participant_mode_opt(s: Option<&str>) -> Option<ParticipantMode> {
+        match s {
+            Some("auto") => Some(ParticipantMode::Auto),
+            Some("muted") => Some(ParticipantMode::Muted),
+            Some("present") => Some(ParticipantMode::Present),
+            Some("absent") => Some(ParticipantMode::Absent),
+            _ => None,
+        }
+    }
+
+    /// Normalize an `(actor_kind_str, mode_str)` row pair read from
+    /// `bcs_group_participants` into a valid `(ActorKind, ParticipantMode)`
+    /// pair, in-memory only (Task M.6, Requirement 3.10#2 and 3.18#6).
+    ///
+    /// Behavior matrix:
+    ///
+    /// | actor_kind_str         | mode_str                         | result                                | log    |
+    /// |------------------------|----------------------------------|---------------------------------------|--------|
+    /// | NULL                   | (any)                            | actor_kind = Bot (compat path)        | none   |
+    /// | "bot" / "human"        | NULL                             | mode = default_for(kind)              | none   |
+    /// | "bot" / "human"        | valid + matches kind             | mode = parsed                         | none   |
+    /// | "bot" / "human"        | valid but illegal for this kind  | mode = default_for(kind), normalized  | ERROR  |
+    /// | "bot" / "human"        | unknown string ("supervised", …) | mode = default_for(kind), normalized  | ERROR  |
+    /// | unknown string         | (any)                            | actor_kind = Bot, normalized          | ERROR  |
+    ///
+    /// NULL on either column is a normal compatibility path (existing rows
+    /// pre-dating this migration) and MUST NOT spam ERROR logs. Only truly
+    /// invalid data — illegal combinations, unrecognized strings — is
+    /// surfaced as ERROR with the full set of triage fields:
+    /// `group_id, actor_id, actor_kind, mode, env`.
+    ///
+    /// The offending DB row is NEVER rewritten; it is fixed in-memory so that
+    /// downstream business logic always observes a valid combination.
+    fn normalize_kind_mode(
+        group_id: &str,
+        actor_id: &str,
+        env: &str,
+        actor_kind_str: Option<&str>,
+        mode_str: Option<&str>,
+    ) -> (ActorKind, ParticipantMode) {
+        let kind = match actor_kind_str {
+            Some("bot") => ActorKind::Bot,
+            Some("human") => ActorKind::Human,
+            None => {
+                // Compat path: column NULL / absent. Silently default per M.6 (a).
+                ActorKind::Bot
+            }
+            Some(other) => {
+                error!(
+                    group_id = %group_id,
+                    actor_id = %actor_id,
+                    env = %env,
+                    actor_kind = %other,
+                    mode = ?mode_str,
+                    "mysql_store: unknown actor_kind value loaded from DB; \
+                     normalizing to 'bot' in-memory only"
+                );
+                ActorKind::Bot
+            }
+        };
+
+        let mode = match mode_str {
+            // (a) NULL / absent — silent compat path, derive default for kind.
+            None => ParticipantMode::default_for(kind),
+            Some(raw) => {
+                match Self::parse_participant_mode_opt(Some(raw)) {
+                    Some(m) if m.is_valid_for(kind) => m,
+                    Some(m) => {
+                        // (b) Recognized mode value but illegal for this kind.
+                        let fallback = ParticipantMode::default_for(kind);
+                        error!(
+                            group_id = %group_id,
+                            actor_id = %actor_id,
+                            env = %env,
+                            actor_kind = ?kind,
+                            mode = ?m,
+                            "mysql_store: invalid (actor_kind, mode) combination loaded from DB; \
+                             normalizing in-memory only"
+                        );
+                        fallback
+                    }
+                    None => {
+                        // (c) Unrecognized mode string (e.g. "supervised").
+                        let fallback = ParticipantMode::default_for(kind);
+                        error!(
+                            group_id = %group_id,
+                            actor_id = %actor_id,
+                            env = %env,
+                            actor_kind = ?kind,
+                            mode = %raw,
+                            "mysql_store: unrecognized mode value loaded from DB; \
+                             normalizing in-memory only"
+                        );
+                        fallback
+                    }
+                }
+            }
+        };
+
+        (kind, mode)
+    }
+
+    // ========== MySQL Operations ==========
+
+    /// Deserialize routing_policy_json column into Option<RoutingPolicy>.
+    fn deserialize_routing_policy(json_str: Option<String>) -> Option<RoutingPolicy> {
+        json_str.and_then(|s| {
+            if s.is_empty() {
+                return None;
+            }
+            match serde_json::from_str::<RoutingPolicy>(&s) {
+                Ok(policy) => Some(policy),
+                Err(e) => {
+                    warn!(error = %e, json = %s, "Failed to deserialize routing_policy_json, using None");
+                    None
+                }
+            }
+        })
+    }
+
+    /// Load session from MySQL.
+    async fn load_group_from_mysql(&self, group_id: &str) -> ServiceResult<Option<Group>> {
+        // Task G.2 / migration 005: read group_kind + dm_pair_key from DB so
+        // dm groups round-trip through `get()` without losing their identity.
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, false);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT group_id, label, status, driver_bot, originator, routing_policy_json, context, \
+                 service_group_uuid, service_mode, service_spec, version, record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, group_kind, dm_pair_key, group_strategy, visibility \
+                 FROM bcs_groups WHERE group_id = ",
+            )
+            .bind(group_id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .map_err(|error| {
+                ServiceError::InternalError(format!("load Group '{group_id}': {error}"))
+            })?;
+
+        if let Some(row) = rows.first() {
+            let id: String = db_get_column(row, "group_id").map_err(|error| {
+                ServiceError::InternalError(format!("load Group group_id: {error}"))
+            })?;
+            let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+            let status_str: String = db_get_column(row, "status").unwrap_or_default();
+            let driver_bot: String = db_get_column(row, "driver_bot").map_err(|error| {
+                ServiceError::InternalError(format!("load Group driver_bot: {error}"))
+            })?;
+            let originator: Option<String> = db_get_column_opt(row, "originator").ok().flatten();
+            let routing_policy_json: Option<String> =
+                db_get_column_opt(row, "routing_policy_json").ok().flatten();
+            let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+            let service_group_uuid: Option<String> =
+                db_get_column_opt(row, "service_group_uuid").ok().flatten();
+            let service_mode: Option<String> =
+                db_get_column_opt(row, "service_mode").ok().flatten();
+            let service_spec_json: Option<String> =
+                db_get_column_opt(row, "service_spec").ok().flatten();
+            let service_spec: Option<bcs_service_api::ServiceSpec> =
+                match service_spec_json.as_deref() {
+                    Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                    _ => None,
+                };
+            let version: i32 = db_get_column_opt::<i64>(row, "version")
+                .ok()
+                .flatten()
+                .unwrap_or(1) as i32;
+            let record_status: String = db_get_column_opt(row, "record_status")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "active".to_string());
+            let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+            let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+            let group_kind_str: Option<String> =
+                db_get_column_opt(row, "group_kind").ok().flatten();
+            let dm_pair_key: Option<String> = db_get_column_opt(row, "dm_pair_key").ok().flatten();
+            let group_strategy_str: Option<String> =
+                db_get_column_opt(row, "group_strategy").ok().flatten();
+            let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+            let visibility: String = db_get_column_opt(row, "visibility")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "private".to_string());
+
+            let participants = self.load_participants_from_mysql(group_id).await?;
+
+            return Ok(Some(Group {
+                id,
+                label,
+                status: Self::str_to_status(&status_str),
+                driver_bot,
+                originator,
+                routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                context,
+                participants,
+                messages: Vec::new(),            // Not persisted
+                workspace: Workspace::default(), // Not persisted
+                service_group_uuid,
+                service_mode,
+                created_at: Self::seconds_to_millis(created_ts),
+                updated_at: Self::seconds_to_millis(updated_ts),
+                group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                dm_pair_key,
+                group_strategy,
+                service_spec,
+                version,
+                record_status,
+                visibility,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    /// Load participants from MySQL.
+    async fn load_participants_from_mysql(
+        &self,
+        group_id: &str,
+    ) -> ServiceResult<Vec<Participant>> {
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT bot_uuid, role, actor_kind, mode FROM bcs_group_participants \
+                 WHERE group_id = ",
+            )
+            .bind(group_id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .map_err(|error| {
+                ServiceError::InternalError(format!(
+                    "load participants for Group '{group_id}': {error}"
+                ))
+            })?;
+
+        rows.iter()
+            .map(|row| {
+                let decode = |column: &str, error: DbError| {
+                    ServiceError::InternalError(format!(
+                        "decode participant column '{column}' for Group '{group_id}': {error}"
+                    ))
+                };
+                let bot_uuid: String =
+                    db_get_column(row, "bot_uuid").map_err(|error| decode("bot_uuid", error))?;
+                let role_str: String =
+                    db_get_column(row, "role").map_err(|error| decode("role", error))?;
+                let actor_kind_str: Option<String> = db_get_column_opt(row, "actor_kind")
+                    .map_err(|error| decode("actor_kind", error))?;
+                let mode_str: Option<String> =
+                    db_get_column_opt(row, "mode").map_err(|error| decode("mode", error))?;
+
+                let (actor_kind, mode) = Self::normalize_kind_mode(
+                    group_id,
+                    &bot_uuid,
+                    self.env.as_str(),
+                    actor_kind_str.as_deref(),
+                    mode_str.as_deref(),
+                );
+
+                Ok(Participant {
+                    bot_uuid,
+                    bot_name: None,
+                    kind: Some(ParticipantKind::Bot),
+                    role: Self::str_to_role(&role_str),
+                    actor_kind,
+                    mode: Some(mode),
+                })
+            })
+            .collect()
+    }
+
+    /// Load all sessions from MySQL.
+    async fn load_all_groups_from_mysql(&self) -> Vec<Group> {
+        // Fixed-shape JOIN: one prepared statement regardless of data volume.
+        // Task G.2: also project gs.group_kind / gs.dm_pair_key so the `list()`
+        // result reflects the persisted dm identity (otherwise dm groups would
+        // collapse to GroupKind::Normal in memory after a server restart).
+        let _start = std::time::Instant::now();
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, true);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp.bot_uuid, gp.role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, gp.actor_kind, gp.mode, gs.group_kind, gs.dm_pair_key, \
+                 gs.group_strategy, gs.visibility FROM bcs_groups gs \
+                 LEFT JOIN bcs_group_participants gp ON gs.group_id = gp.group_id AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .push_static(" WHERE gs.env = ")
+            .bind(self.env.as_str())
+            .build();
+        let rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => {
+                let elapsed = _start.elapsed();
+                if elapsed.as_millis() > 100 {
+                    warn!(duration_ms = %elapsed.as_millis(), rows = r.len(), "slow load_all_groups_from_mysql");
+                } else {
+                    info!(duration_ms = %elapsed.as_millis(), rows = r.len(), "load_all_groups_from_mysql");
+                }
+                r
+            }
+            Err(e) => {
+                warn!(duration_ms = %_start.elapsed().as_millis(), error = %e, "load_all_groups_from_mysql failed");
+                return Vec::new();
+            }
+        };
+
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+            if let (Ok(bot_uuid), Ok(role_str)) = (
+                db_get_column::<String>(row, "bot_uuid"),
+                db_get_column::<String>(row, "role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&role_str),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+        let mut groups = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut groups);
+        groups
+    }
+
+    /// Delete session from MySQL.
+    async fn delete_group_from_mysql(&self, group_id: &str) -> ServiceResult<bool> {
+        let env = self.env.as_str();
+        let delete_participants = DbStatementBuilder::new(self.flavor)
+            .push_static("DELETE FROM bcs_group_participants WHERE group_id = ")
+            .bind(group_id)
+            .push_static(" AND env = ")
+            .bind(env)
+            .build();
+        let delete_group = DbStatementBuilder::new(self.flavor)
+            .push_static("DELETE FROM bcs_groups WHERE group_id = ")
+            .bind(group_id)
+            .push_static(" AND env = ")
+            .bind(env)
+            .build();
+        let results = self
+            .db
+            .plugin()
+            .transaction(vec![
+                DbTransactionStep::Execute(delete_participants),
+                DbTransactionStep::Execute(delete_group),
+            ])
+            .await
+            .map_err(|e| {
+                warn!(group_id = %group_id, error = %e, "Failed to delete group transaction");
+                ServiceError::InternalError(format!("Failed to delete group: {e}"))
+            })?;
+        Ok(matches!(
+            results.get(1),
+            Some(DbTransactionStepResult::Executed(result)) if result.affected_rows > 0
+        ))
+    }
+}
+
+fn group_timestamp_exprs(flavor: DbSqlFlavor, qualified: bool) -> (&'static str, &'static str) {
+    match (flavor, qualified) {
+        (DbSqlFlavor::Mysql, false) => {
+            ("UNIX_TIMESTAMP(gmt_create)", "UNIX_TIMESTAMP(gmt_modified)")
+        }
+        (DbSqlFlavor::Sqlite, false) => (
+            "CAST(strftime('%s',gmt_create) AS INTEGER)",
+            "CAST(strftime('%s',gmt_modified) AS INTEGER)",
+        ),
+        (DbSqlFlavor::Postgres, false) => (
+            "CAST(EXTRACT(EPOCH FROM gmt_create) AS BIGINT)",
+            "CAST(EXTRACT(EPOCH FROM gmt_modified) AS BIGINT)",
+        ),
+        (DbSqlFlavor::Mysql, true) => (
+            "UNIX_TIMESTAMP(gs.gmt_create)",
+            "UNIX_TIMESTAMP(gs.gmt_modified)",
+        ),
+        (DbSqlFlavor::Sqlite, true) => (
+            "CAST(strftime('%s',gs.gmt_create) AS INTEGER)",
+            "CAST(strftime('%s',gs.gmt_modified) AS INTEGER)",
+        ),
+        (DbSqlFlavor::Postgres, true) => (
+            "CAST(EXTRACT(EPOCH FROM gs.gmt_create) AS BIGINT)",
+            "CAST(EXTRACT(EPOCH FROM gs.gmt_modified) AS BIGINT)",
+        ),
+    }
+}
+
+fn participant_group_timestamp_exprs(flavor: DbSqlFlavor) -> (&'static str, &'static str) {
+    match flavor {
+        DbSqlFlavor::Mysql => (
+            "UNIX_TIMESTAMP(g.gmt_create)",
+            "UNIX_TIMESTAMP(g.gmt_modified)",
+        ),
+        DbSqlFlavor::Sqlite => (
+            "CAST(strftime('%s',g.gmt_create) AS INTEGER)",
+            "CAST(strftime('%s',g.gmt_modified) AS INTEGER)",
+        ),
+        DbSqlFlavor::Postgres => (
+            "CAST(EXTRACT(EPOCH FROM g.gmt_create) AS BIGINT)",
+            "CAST(EXTRACT(EPOCH FROM g.gmt_modified) AS BIGINT)",
+        ),
+    }
+}
+
+fn sql_metric_service_mode_to_option(raw: &str) -> Option<String> {
+    match raw {
+        "none" => None,
+        "master_slave" => Some("master_slave".to_string()),
+        _ => Some("other".to_string()),
+    }
+}
+
+#[async_trait]
+impl GroupMetricsSnapshotPort for MySqlGroupStore {
+    async fn group_counts(&self) -> ServiceResult<Vec<GroupMetricCount>> {
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT status, group_kind, group_strategy, service_mode, COUNT(*) AS group_count \
+                 FROM (SELECT status, COALESCE(group_kind, 'normal') AS group_kind, \
+                 CASE WHEN group_strategy = 'manager_worker' THEN 'manager_worker' \
+                 WHEN group_strategy = 'state_machine' THEN 'state_machine' ELSE 'chat' END AS group_strategy, \
+                 CASE WHEN service_mode IS NULL OR TRIM(service_mode) = '' THEN 'none' \
+                 WHEN service_mode = 'master_slave' THEN 'master_slave' ELSE 'other' END AS service_mode \
+                 FROM bcs_groups WHERE env = ",
+            )
+            .bind(self.env.as_str())
+            .push_static(
+                ") metric_groups GROUP BY status, group_kind, group_strategy, service_mode",
+            )
+            .build();
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .map_err(|e| {
+                warn!(env = %self.env, error = %e, "group metrics snapshot query failed");
+                ServiceError::InternalError(format!("group metrics snapshot query failed: {}", e))
+            })?;
+
+        let mut counts = Vec::with_capacity(rows.len());
+        for row in rows {
+            let status_raw: String = db_get_column(&row, "status").map_err(|e| {
+                ServiceError::InternalError(format!(
+                    "group metrics status conversion failed: {}",
+                    e
+                ))
+            })?;
+            let group_kind_raw: String = db_get_column(&row, "group_kind").map_err(|e| {
+                ServiceError::InternalError(format!("group metrics kind conversion failed: {}", e))
+            })?;
+            let service_mode_raw: String = db_get_column(&row, "service_mode").map_err(|e| {
+                ServiceError::InternalError(format!(
+                    "group metrics service_mode conversion failed: {}",
+                    e
+                ))
+            })?;
+            let group_strategy_raw: String =
+                db_get_column(&row, "group_strategy").map_err(|e| {
+                    ServiceError::InternalError(format!(
+                        "group metrics group_strategy conversion failed: {}",
+                        e
+                    ))
+                })?;
+            let group_count: i64 = db_get_column(&row, "group_count").map_err(|e| {
+                ServiceError::InternalError(format!("group metrics count conversion failed: {}", e))
+            })?;
+            let count = u64::try_from(group_count).map_err(|e| {
+                ServiceError::InternalError(format!("group metrics count is invalid: {}", e))
+            })?;
+            if count == 0 {
+                continue;
+            }
+
+            counts.push(GroupMetricCount {
+                status: Self::str_to_status(&status_raw),
+                kind: Self::parse_group_kind(Some(group_kind_raw.as_str())),
+                group_strategy: Self::parse_group_strategy(Some(group_strategy_raw.as_str())),
+                service_mode: sql_metric_service_mode_to_option(&service_mode_raw),
+                count,
+            });
+        }
+
+        Ok(counts)
+    }
+}
+
+#[async_trait]
+impl GroupRepoPort for MySqlGroupStore {
+    /// Create or update a session.
+    async fn upsert(&self, group: Group) -> ServiceResult<()> {
+        let group_id = group.id.clone();
+        let env = self.env.clone();
+        let _start = std::time::Instant::now();
+
+        let status_str = Self::status_to_str(&group.status);
+        let routing_policy_json: Option<String> = group
+            .routing_policy
+            .as_ref()
+            .and_then(|rp| serde_json::to_string(rp).ok());
+        // Task G.2 / migration 005: persist `group_kind` + `dm_pair_key`.
+        // - `group_kind` is always written (defaults to "normal" via the
+        //   in-memory enum default, but we still write the explicit value
+        //   so DB column reflects intent).
+        // - `dm_pair_key` is `NULL` for normal groups; for dm groups, the
+        //   `(env, dm_pair_key)` unique index (migration 005) guards
+        //   against concurrent duplicate creation.
+        // - We DO NOT update `group_kind` / `dm_pair_key` on conflict —
+        //   these are immutable per-group identity attributes set at
+        //   creation; allowing UPDATE would let a normal group silently
+        //   become a dm or change pair, breaking F.7 / G.5 invariants.
+        let group_kind_str = Self::group_kind_to_str(group.group_kind);
+
+        // Pre-extract all values from `group` so the closure captures only
+        // owned data (no partial moves of `group`).
+        let g_id = group.id.clone();
+        let g_label: Option<String> = group.label.clone();
+        let g_driver_bot = group.driver_bot.clone();
+        let g_originator: Option<String> = group.originator.clone();
+        let g_context: Option<String> = group.context.clone();
+        let g_dm_pair_key: Option<String> = group.dm_pair_key.clone();
+        let g_group_strategy_str = Self::group_strategy_to_str(group.group_strategy);
+        let g_service_group_uuid: Option<String> = group.service_group_uuid.clone();
+        let g_service_mode: Option<String> = group.service_mode.clone();
+        let g_service_spec_json: Option<String> = match group.service_spec {
+            Some(ref spec) => Some(
+                serde_json::to_string(spec)
+                    .map_err(|e| ServiceError::InternalError(format!("service_spec: {e}")))?,
+            ),
+            None => None,
+        };
+        let g_version: i64 = group.version as i64;
+        let g_record_status = group.record_status.clone();
+        // Build participant tuples: (bot_uuid, role_str, actor_kind_str, mode_str)
+        let g_participants: Vec<(String, &'static str, &'static str, &'static str)> = group
+            .participants
+            .iter()
+            .map(|p| {
+                (
+                    p.bot_uuid.clone(),
+                    Self::role_to_str(&p.role),
+                    Self::actor_kind_to_str(p.actor_kind),
+                    Self::mode_to_str(p.effective_mode()),
+                )
+            })
+            .collect();
+
+        let g_visibility = group.visibility.clone();
+
+        let group_builder = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "INSERT INTO bcs_groups \
+                 (group_id, label, status, driver_bot, originator, env, routing_policy_json, \
+                  context, group_kind, dm_pair_key, group_strategy, service_group_uuid, \
+                  service_mode, service_spec, version, record_status, visibility, \
+                  gmt_create, gmt_modified) VALUES (",
+            )
+            .bind(g_id.as_str())
+            .push_static(", ")
+            .bind(g_label.as_deref())
+            .push_static(", ")
+            .bind(status_str)
+            .push_static(", ")
+            .bind(g_driver_bot.as_str())
+            .push_static(", ")
+            .bind(g_originator.as_deref())
+            .push_static(", ")
+            .bind(env.as_str())
+            .push_static(", ")
+            .bind(routing_policy_json.as_deref())
+            .push_static(", ")
+            .bind(g_context.as_deref())
+            .push_static(", ")
+            .bind(group_kind_str)
+            .push_static(", ")
+            .bind(g_dm_pair_key.as_deref())
+            .push_static(", ")
+            .bind(g_group_strategy_str)
+            .push_static(", ")
+            .bind(g_service_group_uuid.as_deref())
+            .push_static(", ")
+            .bind(g_service_mode.as_deref())
+            .push_static(", ")
+            .bind(g_service_spec_json.as_deref())
+            .push_static(", ")
+            .bind(g_version)
+            .push_static(", ")
+            .bind(g_record_status.as_str())
+            .push_static(", ")
+            .bind(g_visibility.as_str())
+            .push_static(", ")
+            .push_static(self.flavor.now())
+            .push_static(", ")
+            .push_static(self.flavor.now())
+            .push_static(") ");
+        let group_statement = match self.flavor {
+            DbSqlFlavor::Mysql => group_builder.push_static(
+                "ON DUPLICATE KEY UPDATE label=VALUES(label), status=VALUES(status), \
+                 driver_bot=VALUES(driver_bot), originator=VALUES(originator), \
+                 routing_policy_json=VALUES(routing_policy_json), context=VALUES(context), \
+                 service_spec=VALUES(service_spec), version=VALUES(version), \
+                 record_status=VALUES(record_status), visibility=VALUES(visibility), \
+                 gmt_modified=NOW()",
+            ),
+            DbSqlFlavor::Sqlite | DbSqlFlavor::Postgres => group_builder.push_static(
+                "ON CONFLICT(group_id, env) DO UPDATE SET label=excluded.label, \
+                 status=excluded.status, driver_bot=excluded.driver_bot, \
+                 originator=excluded.originator, routing_policy_json=excluded.routing_policy_json, \
+                 context=excluded.context, service_spec=excluded.service_spec, \
+                 version=excluded.version, record_status=excluded.record_status, \
+                 visibility=excluded.visibility, gmt_modified=CURRENT_TIMESTAMP",
+            ),
+        }
+        .build();
+
+        let mut steps = Vec::with_capacity(2 + g_participants.len());
+        steps.push(DbTransactionStep::Execute(group_statement));
+
+        let delete_participants = DbStatementBuilder::new(self.flavor)
+            .push_static("DELETE FROM bcs_group_participants WHERE group_id = ")
+            .bind(g_id.as_str())
+            .push_static(" AND env = ")
+            .bind(env.as_str())
+            .build();
+        steps.push(DbTransactionStep::Execute(delete_participants));
+
+        // 3. Insert new participants.
+        // Always populate actor_kind + mode explicitly per Requirement 3.10#2 / 3.18#6.
+        for (bot_uuid, role_str, actor_kind_str, mode_str) in &g_participants {
+            let statement = DbStatementBuilder::new(self.flavor)
+                .push_static(
+                    "INSERT INTO bcs_group_participants \
+                     (group_id, bot_uuid, role, env, actor_kind, mode) VALUES (",
+                )
+                .bind(g_id.as_str())
+                .push_static(", ")
+                .bind(bot_uuid.as_str())
+                .push_static(", ")
+                .bind(*role_str)
+                .push_static(", ")
+                .bind(env.as_str())
+                .push_static(", ")
+                .bind(*actor_kind_str)
+                .push_static(", ")
+                .bind(*mode_str)
+                .push_static(")")
+                .build();
+            steps.push(DbTransactionStep::Execute(statement));
+        }
+
+        self.db.plugin().transaction(steps).await.map_err(|e| {
+            warn!(group_id = %group_id, error = %e, "upsert transaction failed");
+            ServiceError::InternalError(e.to_string())
+        })?;
+
+        let elapsed = _start.elapsed();
+        if elapsed.as_millis() > 100 {
+            warn!(group_id = %group_id, duration_ms = %elapsed.as_millis(), "slow upsert");
+        } else {
+            info!(group_id = %group_id, duration_ms = %elapsed.as_millis(), "upsert");
+        }
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(group_id, group);
+        }
+        Ok(())
+    }
+
+    async fn patch_mutable_fields(
+        &self,
+        id: &str,
+        patch: GroupMutableFieldsPatch,
+    ) -> ServiceResult<()> {
+        if self.try_get(id).await?.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        let mut statement =
+            DbStatementBuilder::new(self.flavor).push_static("UPDATE bcs_groups SET ");
+        let mut has_assignment = false;
+        if let Some(label) = patch.label {
+            statement = statement.push_static("label = ").bind(label);
+            has_assignment = true;
+        }
+        if let Some(context) = patch.context {
+            if has_assignment {
+                statement = statement.push_static(", ");
+            }
+            statement = statement.push_static("context = ").bind(context);
+            has_assignment = true;
+        }
+        if let Some(visibility) = patch.visibility {
+            if has_assignment {
+                statement = statement.push_static(", ");
+            }
+            statement = statement.push_static("visibility = ").bind(visibility);
+            has_assignment = true;
+        }
+        if let Some(delivery) = patch.default_bot_final_delivery {
+            if has_assignment {
+                statement = statement.push_static(", ");
+            }
+            let delivery = match delivery {
+                DefaultDelivery::SendToDriver => "send_to_driver",
+                DefaultDelivery::InjectObservers => "inject_observers",
+            };
+            statement = match self.flavor {
+                DbSqlFlavor::Mysql => statement
+                    .push_static(
+                        "routing_policy_json = JSON_SET(COALESCE(routing_policy_json, JSON_OBJECT()), \
+                         '$.default_bot_final_delivery', ",
+                    )
+                    .bind(delivery)
+                    .push_static(")"),
+                DbSqlFlavor::Sqlite => statement
+                    .push_static(
+                        "routing_policy_json = json_set(COALESCE(routing_policy_json, '{}'), \
+                         '$.default_bot_final_delivery', ",
+                    )
+                    .bind(delivery)
+                    .push_static(")"),
+                DbSqlFlavor::Postgres => statement
+                    .push_static(
+                        "routing_policy_json = jsonb_set( \
+                         COALESCE(CAST(routing_policy_json AS JSONB), '{}'::JSONB), \
+                         '{default_bot_final_delivery}', to_jsonb(",
+                    )
+                    .bind(delivery)
+                    .push_static("::TEXT), true)::TEXT"),
+            };
+            has_assignment = true;
+        }
+        if !has_assignment {
+            return Ok(());
+        }
+        let statement = statement
+            .push_static(", ")
+            .push_static(self.flavor.set_modified_now())
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        let affected_rows = self
+            .db
+            .execute_with(&self.logical_db, statement)
+            .await
+            .map_err(|error| {
+                warn!(group_id = %id, error = %error, "Failed to patch mutable group fields");
+                ServiceError::InternalError(error.to_string())
+            })?;
+
+        // Invalidate instead of reconstructing the row so hidden routing fields
+        // changed concurrently are always reloaded from the authoritative store.
+        self.cache.write().await.remove(id);
+        if affected_rows == 0 && self.try_get(id).await?.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Get a session by ID (cache-first, fallback to DB).
+    async fn get(&self, id: &str) -> Option<Group> {
+        match self.try_get(id).await {
+            Ok(group) => group,
+            Err(error) => {
+                warn!(group_id = %id, error = %error, "Failed to load Group");
+                None
+            }
+        }
+    }
+
+    async fn try_get(&self, id: &str) -> ServiceResult<Option<Group>> {
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(group) = cache.get(id) {
+                return Ok(Some(group.clone()));
+            }
+        }
+        // Cache miss — load from DB and populate cache
+        let Some(group) = self.load_group_from_mysql(id).await? else {
+            return Ok(None);
+        };
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(id.to_string(), group.clone());
+        }
+        Ok(Some(group))
+    }
+
+    /// Add a message to a session - NOT PERSISTED (memory only, lost on restart).
+    async fn add_message(&self, id: &str, _message: GroupMessage) -> ServiceResult<()> {
+        debug!(group_id = %id, "Message added to group (not persisted)");
+        Ok(())
+    }
+
+    /// Add a participant to a session.
+    async fn add_participant(&self, id: &str, participant: Participant) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        // Check if already exists
+        let check_statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT 1 FROM bcs_group_participants WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND bot_uuid = ")
+            .bind(participant.bot_uuid.as_str())
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+
+        let rows = self
+            .db
+            .query_with(&self.logical_db, check_statement)
+            .await
+            .map_err(|e| {
+                ServiceError::InternalError(format!("Failed to check participant existence: {}", e))
+            })?;
+
+        if !rows.is_empty() {
+            return Ok(()); // Already a participant, no-op
+        }
+
+        // Add to MySQL. Always populate actor_kind + mode explicitly
+        // per Requirement 3.10#2 / 3.18#6.
+        let role_str = Self::role_to_str(&participant.role);
+        let actor_kind_str = Self::actor_kind_to_str(participant.actor_kind);
+        let mode_str = Self::mode_to_str(participant.effective_mode());
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "INSERT INTO bcs_group_participants \
+                 (group_id, bot_uuid, role, env, actor_kind, mode) VALUES (",
+            )
+            .bind(id)
+            .push_static(", ")
+            .bind(participant.bot_uuid.as_str())
+            .push_static(", ")
+            .bind(role_str)
+            .push_static(", ")
+            .bind(self.env.as_str())
+            .push_static(", ")
+            .bind(actor_kind_str)
+            .push_static(", ")
+            .bind(mode_str)
+            .push_static(")")
+            .build();
+        self.db.execute_with(&self.logical_db, statement).await
+            .map_err(|e| {
+                warn!(group_id = %id, bot_uuid = %participant.bot_uuid, error = %e, "Failed to add participant to MySQL");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, bot_uuid = %participant.bot_uuid, "Participant added to group");
+        // Invalidate cache
+        self.cache.write().await.remove(id);
+        Ok(())
+    }
+
+    async fn add_participant_with_visibility_guard(
+        &self,
+        id: &str,
+        participant: Participant,
+        actor_is_public: bool,
+    ) -> ServiceResult<()> {
+        let role = Self::role_to_str(&participant.role);
+        let actor_kind = Self::actor_kind_to_str(participant.actor_kind);
+        let mode = Self::mode_to_str(participant.effective_mode());
+        let update_group = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_groups SET ")
+            .push_static(self.flavor.set_modified_now())
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .push_static(" AND (visibility <> 'public' OR ")
+            .bind(actor_is_public)
+            .push_static(") AND NOT EXISTS (SELECT 1 FROM bcs_group_participants WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND bot_uuid = ")
+            .bind(participant.bot_uuid.as_str())
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .push_static(")")
+            .build();
+        let insert_builder = match self.flavor {
+            DbSqlFlavor::Mysql => DbStatementBuilder::new(self.flavor).push_static(
+                "INSERT IGNORE INTO bcs_group_participants \
+                 (group_id, bot_uuid, role, env, actor_kind, mode) SELECT ",
+            ),
+            DbSqlFlavor::Sqlite => DbStatementBuilder::new(self.flavor).push_static(
+                "INSERT OR IGNORE INTO bcs_group_participants \
+                 (group_id, bot_uuid, role, env, actor_kind, mode) SELECT ",
+            ),
+            DbSqlFlavor::Postgres => DbStatementBuilder::new(self.flavor).push_static(
+                "INSERT INTO bcs_group_participants \
+                 (group_id, bot_uuid, role, env, actor_kind, mode) SELECT ",
+            ),
+        }
+        .bind(id)
+        .push_static(", ")
+        .bind(participant.bot_uuid.as_str())
+        .push_static(", ")
+        .bind(role)
+        .push_static(", ")
+        .bind(self.env.as_str())
+        .push_static(", ")
+        .bind(actor_kind)
+        .push_static(", ")
+        .bind(mode)
+        .push_static(" FROM bcs_groups WHERE group_id = ")
+        .bind(id)
+        .push_static(" AND env = ")
+        .bind(self.env.as_str())
+        .push_static(" AND (visibility <> 'public' OR ")
+        .bind(actor_is_public)
+        .push_static(")");
+        let insert_participant = match self.flavor {
+            DbSqlFlavor::Postgres => insert_builder
+                .push_static(" ON CONFLICT(group_id, bot_uuid, env) DO NOTHING")
+                .build(),
+            DbSqlFlavor::Mysql | DbSqlFlavor::Sqlite => insert_builder.build(),
+        };
+        let results = self
+            .db
+            .plugin()
+            .transaction(vec![
+                DbTransactionStep::Execute(update_group),
+                DbTransactionStep::Execute(insert_participant),
+            ])
+            .await
+            .map_err(|error| {
+                ServiceError::InternalError(format!(
+                    "visibility-guarded participant insert failed: {error}"
+                ))
+            })?;
+        let group_updated = matches!(
+            results.first(),
+            Some(DbTransactionStepResult::Executed(result)) if result.affected_rows > 0
+        );
+        self.cache.write().await.remove(id);
+        if group_updated {
+            return Ok(());
+        }
+
+        let group = self
+            .try_get(id)
+            .await?
+            .ok_or_else(|| ServiceError::GroupNotFound(id.to_string()))?;
+        if group
+            .participants
+            .iter()
+            .any(|existing| existing.bot_uuid == participant.bot_uuid)
+        {
+            return Ok(());
+        }
+        if group.visibility == "public" && !actor_is_public {
+            return Err(ServiceError::ExistNonPublicBots {
+                bots: vec![(participant.bot_uuid, participant.bot_name)],
+            });
+        }
+        Err(ServiceError::InternalError(format!(
+            "visibility-guarded participant insert made no progress for Group '{id}'"
+        )))
+    }
+
+    async fn remove_participant(&self, group_id: &str, bot_uuid: &str) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(group_id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(group_id.to_string()));
+        }
+
+        let delete_statement = DbStatementBuilder::new(self.flavor)
+            .push_static("DELETE FROM bcs_group_participants WHERE group_id = ")
+            .bind(group_id)
+            .push_static(" AND bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+
+        let affected = self
+            .db
+            .execute_with(&self.logical_db, delete_statement)
+            .await
+            .map_err(|e| {
+                warn!(group_id = %group_id, bot_uuid = %bot_uuid, error = %e, "Failed to remove participant from MySQL");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        if affected == 0 {
+            return Err(ServiceError::ParticipantNotFound(bot_uuid.to_string()));
+        }
+
+        debug!(group_id = %group_id, bot_uuid = %bot_uuid, "Participant removed from group");
+        // Invalidate cache
+        self.cache.write().await.remove(group_id);
+        Ok(())
+    }
+
+    /// Update an existing participant's `mode` (Human Actor V1, Task P.1).
+    async fn update_participant_mode(
+        &self,
+        id: &str,
+        actor_id: &str,
+        mode: ParticipantMode,
+    ) -> ServiceResult<()> {
+        // Verify group exists.
+        let group = self
+            .get(id)
+            .await
+            .ok_or_else(|| ServiceError::GroupNotFound(id.to_string()))?;
+
+        // Verify participant exists and capture current mode for idempotency check.
+        let current_mode = group
+            .participants
+            .iter()
+            .find(|p| p.bot_uuid == actor_id)
+            .map(|p| p.effective_mode())
+            .ok_or_else(|| ServiceError::BotNotFound(actor_id.to_string()))?;
+
+        if current_mode == mode {
+            debug!(group_id = %id, actor_id = %actor_id, ?mode, "Participant mode unchanged, skipping DB write");
+            return Ok(());
+        }
+
+        let mode_str = Self::mode_to_str(mode);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_group_participants SET mode = ")
+            .bind(mode_str)
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND bot_uuid = ")
+            .bind(actor_id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        self.db.execute_with(&self.logical_db, statement).await
+            .map_err(|e| {
+                warn!(group_id = %id, actor_id = %actor_id, error = %e, "Failed to update participant mode");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, actor_id = %actor_id, ?mode, "Participant mode updated");
+        // Invalidate cache so the next get() reloads with the new mode.
+        self.cache.write().await.remove(id);
+        Ok(())
+    }
+
+    /// Update workspace - NOT PERSISTED (memory only, lost on restart).
+    async fn update_workspace(&self, id: &str, workspace: Workspace) -> ServiceResult<()> {
+        let mut group = self
+            .get(id)
+            .await
+            .ok_or_else(|| ServiceError::GroupNotFound(id.to_string()))?;
+        group.workspace = workspace;
+        self.cache.write().await.insert(id.to_string(), group);
+
+        debug!(group_id = %id, "Group workspace updated in memory (not persisted)");
+        Ok(())
+    }
+
+    /// Update session label.
+    async fn update_label(&self, id: &str, label: Option<String>) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        // Persist to MySQL using parameter binding
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_groups SET label = ")
+            .bind(label.as_deref())
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        self.db
+            .execute_with(&self.logical_db, statement)
+            .await
+            .map_err(|e| {
+                warn!(group_id = %id, error = %e, "Failed to update group label");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, "Group label updated");
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            if let Some(group) = cache.get_mut(id) {
+                group.label = label;
+            }
+        }
+        Ok(())
+    }
+
+    /// Update session status.
+    async fn update_status(&self, id: &str, status: GroupStatus) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        // Persist to MySQL using parameter binding
+        let status_str = Self::status_to_str(&status);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_groups SET status = ")
+            .bind(status_str)
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        self.db.execute_with(&self.logical_db, statement).await
+            .map_err(|e| {
+                warn!(group_id = %id, status = ?status, error = %e, "Failed to update group status");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, status = ?status, "Group status updated");
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            if let Some(group) = cache.get_mut(id) {
+                group.status = status;
+            }
+        }
+        Ok(())
+    }
+
+    /// Persist a `service_spec` patch to MySQL. `Some(spec)` writes a JSON
+    /// blob into the `service_spec` column; `None` clears the column. Caller
+    /// is responsible for validation (route-field lock, callback_config
+    /// immutability) — this method only writes.
+    async fn update_service_spec(
+        &self,
+        id: &str,
+        service_spec: Option<bcs_service_api::ServiceSpec>,
+    ) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        let spec_json = match service_spec.as_ref() {
+            Some(s) => {
+                serde_json::to_string(s).map_err(|e| ServiceError::InternalError(e.to_string()))?
+            }
+            None => String::new(),
+        };
+        let spec_value: Value = if service_spec.is_some() {
+            Value::from(spec_json.as_str())
+        } else {
+            Value::Null
+        };
+
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_groups SET service_spec = ")
+            .bind(spec_value)
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        self.db
+            .execute_with(&self.logical_db, statement)
+            .await
+            .map_err(|e| {
+                warn!(group_id = %id, error = %e, "Failed to update group service_spec");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, "Group service_spec updated");
+        {
+            let mut cache = self.cache.write().await;
+            if let Some(group) = cache.get_mut(id) {
+                group.service_spec = service_spec;
+            }
+        }
+        Ok(())
+    }
+
+    /// Delete a session.
+    async fn delete(&self, id: &str) -> ServiceResult<Option<Group>> {
+        // Capture a fallible rollback snapshot before deleting. Proceeding
+        // after a failed read can delete the persistent Group while returning
+        // `None`, which prevents callers from running committed-delete cleanup.
+        let group = self.try_get(id).await?;
+
+        // Delete from MySQL
+        let deleted = self.delete_group_from_mysql(id).await?;
+
+        // Remove from cache
+        self.cache.write().await.remove(id);
+        if !deleted {
+            return Ok(None);
+        }
+
+        debug!(group_id = %id, "Group deleted");
+        Ok(group)
+    }
+
+    /// List all sessions.
+    async fn list(&self) -> Vec<Group> {
+        self.load_all_groups_from_mysql().await
+    }
+
+    /// List groups with pagination.
+    async fn list_paginated(&self, offset: u64, limit: u64) -> Vec<Group> {
+        // Subquery paginates groups first, then JOIN fetches participants.
+        // LIMIT/OFFSET on the outer JOIN would paginate rows (not groups) due to fan-out.
+        // Task G.2: project group_kind / dm_pair_key from both inner and outer
+        // SELECT so dm groups stay tagged after pagination.
+        let _start = std::time::Instant::now();
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, false);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp.bot_uuid, gp.role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, \
+                 gs.created_ts, gs.updated_ts, gp.actor_kind, gp.mode, gs.group_kind, \
+                 gs.dm_pair_key, gs.group_strategy, gs.visibility \
+                 FROM (SELECT group_id, label, status, driver_bot, originator, \
+                 routing_policy_json, context, service_group_uuid, service_mode, service_spec, \
+                 version, record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, group_kind, dm_pair_key, group_strategy, visibility \
+                 FROM bcs_groups WHERE env = ",
+            )
+            .bind(self.env.as_str())
+            .push_static(" LIMIT ")
+            .bind(limit)
+            .push_static(" OFFSET ")
+            .bind(offset)
+            .push_static(
+                ") gs LEFT JOIN bcs_group_participants gp ON gs.group_id = gp.group_id \
+                 AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .build();
+        let rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => {
+                let elapsed = _start.elapsed();
+                if elapsed.as_millis() > 100 {
+                    warn!(duration_ms = %elapsed.as_millis(), rows = r.len(), offset = offset, limit = limit, "slow list_paginated");
+                } else {
+                    info!(duration_ms = %elapsed.as_millis(), rows = r.len(), offset = offset, limit = limit, "list_paginated");
+                }
+                r
+            }
+            Err(e) => {
+                warn!(duration_ms = %_start.elapsed().as_millis(), error = %e, "list_paginated: query failed");
+                return Vec::new();
+            }
+        };
+
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+            if let (Ok(bot_uuid), Ok(role_str)) = (
+                db_get_column::<String>(row, "bot_uuid"),
+                db_get_column::<String>(row, "role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&role_str),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+        let mut groups = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut groups);
+        groups
+    }
+
+    /// Find all groups where the given bot is a participant.
+    /// Uses a single JOIN query instead of 3 serial queries to reduce cursor usage.
+    async fn find_by_participant(&self, bot_uuid: &str) -> Vec<Group> {
+        info!(
+            bot_uuid = %bot_uuid,
+            env = %self.env,
+            logical_db = %self.logical_db,
+            "find_by_participant: starting query"
+        );
+
+        // Single JOIN query: find groups + details + all participants in one shot.
+        // Task G.2: also project group_kind / dm_pair_key for dm group tagging.
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, true);
+        let env = self.env.as_str();
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp2.bot_uuid AS p_bot_uuid, gp2.role AS p_role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, gp2.actor_kind AS p_actor_kind, gp2.mode AS p_mode, \
+                 gs.group_kind AS g_group_kind, gs.dm_pair_key AS g_dm_pair_key, \
+                 gs.group_strategy, gs.visibility FROM bcs_group_participants gp \
+                 JOIN bcs_groups gs ON gp.group_id = gs.group_id AND gs.env = ",
+            )
+            .bind(env)
+            .push_static(
+                " JOIN bcs_group_participants gp2 ON gs.group_id = gp2.group_id AND gp2.env = ",
+            )
+            .bind(env)
+            .push_static(" WHERE gp.bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND gp.env = ")
+            .bind(env)
+            .build();
+
+        info!(
+            bot_uuid = %bot_uuid,
+            "find_by_participant: executing query"
+        );
+
+        let rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => {
+                info!(
+                    row_count = r.len(),
+                    "find_by_participant: query returned rows"
+                );
+                r
+            }
+            Err(e) => {
+                warn!(error = %e, "find_by_participant: query failed");
+                return Vec::new();
+            }
+        };
+
+        // Aggregate flat rows into Groups by group_id
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "g_group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "g_dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+
+            // Add participant (deduplicate by bot_uuid)
+            if let (Ok(p_bot_uuid), Ok(p_role)) = (
+                db_get_column::<String>(row, "p_bot_uuid"),
+                db_get_column::<String>(row, "p_role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == p_bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "p_actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "p_mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &p_bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid: p_bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&p_role),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+
+        let mut result = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut result);
+
+        info!(
+            bot_uuid = %bot_uuid,
+            result_count = result.len(),
+            "find_by_participant: completed"
+        );
+
+        result
+    }
+
+    async fn try_find_by_participant(&self, bot_uuid: &str) -> ServiceResult<Vec<Group>> {
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT DISTINCT group_id FROM bcs_group_participants WHERE bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .map_err(|error| {
+                ServiceError::InternalError(format!(
+                    "find Groups for participant '{bot_uuid}': {error}"
+                ))
+            })?;
+        let mut groups = Vec::with_capacity(rows.len());
+        for row in rows {
+            let group_id: String = db_get_column(&row, "group_id").map_err(|error| {
+                ServiceError::InternalError(format!(
+                    "find Groups for participant group_id: {error}"
+                ))
+            })?;
+            if let Some(group) = self.try_get(&group_id).await? {
+                groups.push(group);
+            }
+        }
+        Group::sort_by_updated_at_desc(&mut groups);
+        Ok(groups)
+    }
+
+    async fn find_by_participant_filtered(
+        &self,
+        bot_uuid: &str,
+        kind: Option<bcs_service_api::GroupKind>,
+        label_query: Option<&str>,
+    ) -> Vec<Group> {
+        info!(
+            bot_uuid = %bot_uuid,
+            env = %self.env,
+            has_group_kind = kind.is_some(),
+            has_label_query = label_query.map(str::trim).is_some_and(|q| !q.is_empty()),
+            "find_by_participant_filtered: starting query"
+        );
+
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, true);
+        let env = self.env.as_str();
+        let mut statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp2.bot_uuid AS p_bot_uuid, gp2.role AS p_role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, gp2.actor_kind AS p_actor_kind, gp2.mode AS p_mode, \
+                 gs.group_kind AS g_group_kind, gs.dm_pair_key AS g_dm_pair_key, \
+                 gs.group_strategy, gs.visibility FROM bcs_group_participants gp \
+                 JOIN bcs_groups gs ON gp.group_id = gs.group_id AND gs.env = ",
+            )
+            .bind(env)
+            .push_static(
+                " JOIN bcs_group_participants gp2 ON gs.group_id = gp2.group_id AND gp2.env = ",
+            )
+            .bind(env)
+            .push_static(" WHERE gp.bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND gp.env = ")
+            .bind(env);
+        if let Some(kind) = kind {
+            statement = statement
+                .push_static(" AND gs.group_kind = ")
+                .bind(Self::group_kind_to_str(kind));
+        }
+        if let Some(query) = label_query.map(str::trim).filter(|q| !q.is_empty()) {
+            statement = statement
+                .push_static(" AND LOWER(COALESCE(gs.label, '')) LIKE ")
+                .bind(format!("%{}%", query.to_lowercase()));
+        }
+
+        let rows = match self
+            .db
+            .query_with(&self.logical_db, statement.build())
+            .await
+        {
+            Ok(r) => {
+                info!(
+                    row_count = r.len(),
+                    "find_by_participant_filtered: query returned rows"
+                );
+                r
+            }
+            Err(e) => {
+                warn!(error = %e, "find_by_participant_filtered: query failed");
+                return Vec::new();
+            }
+        };
+
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "g_group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "g_dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+
+            if let (Ok(p_bot_uuid), Ok(p_role)) = (
+                db_get_column::<String>(row, "p_bot_uuid"),
+                db_get_column::<String>(row, "p_role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == p_bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "p_actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "p_mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &p_bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid: p_bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&p_role),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+
+        let mut result = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut result);
+
+        info!(
+            bot_uuid = %bot_uuid,
+            result_count = result.len(),
+            "find_by_participant_filtered: completed"
+        );
+
+        result
+    }
+
+    /// Count all groups.
+    async fn count(&self) -> u64 {
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT COUNT(*) as cnt FROM bcs_groups WHERE env = ")
+            .bind(self.env.as_str())
+            .build();
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .unwrap_or_default();
+        rows.first()
+            .and_then(|row| db_get_column::<i64>(row, "cnt").ok())
+            .unwrap_or(0) as u64
+    }
+
+    /// CR-4: count groups optionally filtered by `group_kind`.
+    ///
+    /// Pushes the filter down to a `SELECT COUNT(*)` so callers paging
+    /// through `kind=dm` see a `total` consistent with their page contents
+    /// (the previous default in-memory filter returned the all-kinds total
+    /// which made the X-of-Y display lie for filtered queries).
+    async fn count_by_kind(&self, kind: Option<bcs_service_api::GroupKind>) -> u64 {
+        let mut statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT COUNT(*) as cnt FROM bcs_groups WHERE env = ")
+            .bind(self.env.as_str());
+        if let Some(kind) = kind {
+            statement = statement
+                .push_static(" AND group_kind = ")
+                .bind(Self::group_kind_to_str(kind));
+        }
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement.build())
+            .await
+            .unwrap_or_default();
+        rows.first()
+            .and_then(|row| db_get_column::<i64>(row, "cnt").ok())
+            .unwrap_or(0) as u64
+    }
+
+    /// CR-4: paginate groups optionally filtered by `group_kind`.
+    ///
+    /// Pushes the filter into the inner subquery (which is what `LIMIT` /
+    /// `OFFSET` apply to), so callers paging through `kind=dm` get a stable
+    /// page of dm groups regardless of how many normal groups precede them
+    /// in scan order. The legacy in-memory post-filter could return a
+    /// short or empty page even when more matching rows existed further
+    /// in the table.
+    async fn list_paginated_by_kind(
+        &self,
+        kind: Option<bcs_service_api::GroupKind>,
+        offset: u64,
+        limit: u64,
+    ) -> Vec<Group> {
+        // We share the same SELECT shape as `list_paginated` (subquery
+        // paginates groups → outer JOIN fetches participants) but conditionally
+        // append the group kind to the inner WHERE. This keeps the same row →
+        // Group reduction logic below.
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, false);
+        let mut statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp.bot_uuid, gp.role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, \
+                 gs.created_ts, gs.updated_ts, gp.actor_kind, gp.mode, gs.group_kind, \
+                 gs.dm_pair_key, gs.group_strategy, gs.visibility \
+                 FROM (SELECT group_id, label, status, driver_bot, originator, \
+                 routing_policy_json, context, service_group_uuid, service_mode, service_spec, \
+                 version, record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, group_kind, dm_pair_key, group_strategy, visibility \
+                 FROM bcs_groups WHERE env = ",
+            )
+            .bind(self.env.as_str());
+        if let Some(kind) = kind {
+            statement = statement
+                .push_static(" AND group_kind = ")
+                .bind(Self::group_kind_to_str(kind));
+        }
+        let statement = statement
+            .push_static(" LIMIT ")
+            .bind(limit)
+            .push_static(" OFFSET ")
+            .bind(offset)
+            .push_static(
+                ") gs LEFT JOIN bcs_group_participants gp ON gs.group_id = gp.group_id \
+                 AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .build();
+        let rows_result = self.db.query_with(&self.logical_db, statement).await;
+
+        let rows = match rows_result {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(?kind, error = %e, "list_paginated_by_kind: query failed");
+                return Vec::new();
+            }
+        };
+
+        // Identical row → Group aggregation as `list_paginated`.
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+            if let (Ok(bot_uuid), Ok(role_str)) = (
+                db_get_column::<String>(row, "bot_uuid"),
+                db_get_column::<String>(row, "role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&role_str),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+        let mut groups = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut groups);
+        groups
+    }
+
+    /// Count groups where the given bot is a participant.
+    async fn count_by_participant(&self, bot_uuid: &str) -> u64 {
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT COUNT(DISTINCT gs.group_id) as cnt FROM bcs_groups gs \
+                 JOIN bcs_group_participants gp ON gs.group_id = gp.group_id AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .push_static(" WHERE gp.bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND gs.env = ")
+            .bind(self.env.as_str())
+            .build();
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement)
+            .await
+            .unwrap_or_default();
+        rows.first()
+            .and_then(|row| db_get_column::<i64>(row, "cnt").ok())
+            .unwrap_or(0) as u64
+    }
+
+    /// Find groups by participant with pagination.
+    async fn find_by_participant_paginated(
+        &self,
+        bot_uuid: &str,
+        offset: u64,
+        limit: u64,
+    ) -> Vec<Group> {
+        debug!(
+            "find_by_participant_paginated: bot_uuid={} limit={} offset={}",
+            bot_uuid, limit, offset
+        );
+
+        // Subquery paginates groups first, then JOIN fetches all participants.
+        // LIMIT/OFFSET on the outer JOIN would paginate rows (not groups) due to fan-out.
+        // Task G.2: project group_kind / dm_pair_key from both inner DISTINCT
+        // and outer SELECT so dm groups remain tagged through pagination.
+        let (created_ts, updated_ts) = participant_group_timestamp_exprs(self.flavor);
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp2.bot_uuid, gp2.role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, \
+                 gs.created_ts, gs.updated_ts, gp2.actor_kind, gp2.mode, gs.group_kind, \
+                 gs.dm_pair_key, gs.group_strategy, gs.visibility \
+                 FROM (SELECT DISTINCT g.group_id, g.label, g.status, g.driver_bot, \
+                 g.originator, g.routing_policy_json, g.context, g.service_group_uuid, \
+                 g.service_mode, g.service_spec, g.version, g.record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, g.group_kind, g.dm_pair_key, g.group_strategy, g.visibility \
+                 FROM bcs_groups g JOIN bcs_group_participants gp \
+                 ON g.group_id = gp.group_id AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .push_static(" WHERE gp.bot_uuid = ")
+            .bind(bot_uuid)
+            .push_static(" AND g.env = ")
+            .bind(self.env.as_str())
+            .push_static(" ORDER BY updated_ts DESC, group_id ASC LIMIT ")
+            .bind(limit)
+            .push_static(" OFFSET ")
+            .bind(offset)
+            .push_static(
+                ") gs LEFT JOIN bcs_group_participants gp2 ON gs.group_id = gp2.group_id \
+                 AND gp2.env = ",
+            )
+            .bind(self.env.as_str())
+            .build();
+        let detail_rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!(
+                    "find_by_participant_paginated: failed to load group details for bot_uuid={}: {:?}",
+                    bot_uuid, e
+                );
+                return Vec::new();
+            }
+        };
+
+        // Aggregate flat rows into Groups by group_id
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+        for row in &detail_rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+            if let (Ok(p_bot_uuid), Ok(p_role)) = (
+                db_get_column::<String>(row, "bot_uuid"),
+                db_get_column::<String>(row, "role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == p_bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &p_bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid: p_bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&p_role),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+        let mut groups = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut groups);
+        groups
+    }
+
+    /// Messages are not persisted in MySQL; count is tracked in memory.
+    async fn message_count(&self, id: &str) -> ServiceResult<usize> {
+        let counts = self.message_counts.read().await;
+        Ok(counts.get(id).copied().unwrap_or(0))
+    }
+
+    async fn increment_message_count(&self, id: &str) -> ServiceResult<()> {
+        let mut counts = self.message_counts.write().await;
+        *counts.entry(id.to_string()).or_insert(0) += 1;
+        Ok(())
+    }
+
+    async fn reset_message_count(&self, id: &str) -> ServiceResult<()> {
+        let mut counts = self.message_counts.write().await;
+        counts.insert(id.to_string(), 0);
+        Ok(())
+    }
+
+    /// Task G.2: precise indexed lookup for dm groups by canonical pair key.
+    ///
+    /// Backed by the `(env, dm_pair_key)` UNIQUE index on `bcs_groups`
+    /// (migration 005). This overrides the default trait impl which would
+    /// otherwise scan `list()` — a non-starter at production scale.
+    ///
+    /// Returns `None` on:
+    /// - no row matching the key in this env
+    /// - row exists but participants fail to load (we don't want to surface a
+    ///   half-loaded group to the caller; logged via `warn!` upstream)
+    async fn find_dm_by_pair_key(&self, dm_pair_key: &str) -> Option<Group> {
+        // Hit cache first to avoid repeated DB round-trips for hot dm pairs.
+        // Cache key is `group_id`, not `dm_pair_key`, so we still need the
+        // initial DB lookup to translate pair_key → group_id; afterwards
+        // `load_group_from_mysql` (which `get` uses) benefits from the cache.
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT group_id FROM bcs_groups WHERE env = ")
+            .bind(self.env.as_str())
+            .push_static(" AND group_kind = 'dm' AND dm_pair_key = ")
+            .bind(dm_pair_key)
+            .push_static(" LIMIT 1")
+            .build();
+
+        let rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    dm_pair_key = %dm_pair_key,
+                    env = %self.env,
+                    error = %e,
+                    "find_dm_by_pair_key: query failed"
+                );
+                return None;
+            }
+        };
+
+        let row = rows.first()?;
+        let group_id: String = db_get_column(row, "group_id").ok()?;
+        // Reuse the standard load path (cache + participants normalization).
+        self.get(&group_id).await
+    }
+
+    /// Try to insert a DM group without mutating an existing row with the same pair key.
+    ///
+    /// Returns `true` only when this call created the canonical group row.
+    /// Returns `false` when the `(env, dm_pair_key)` unique index already has
+    /// a winner; the caller owns refetching that row via `find_dm_by_pair_key`.
+    ///
+    /// Participant inserts are guarded by the newly inserted group row. This
+    /// matters because `bcs_group_participants` has no FK to `bcs_groups`: a
+    /// loser in a DM pair-key race must not create participant rows for its
+    /// caller-supplied, non-canonical `group_id`.
+    async fn insert_dm_group_if_absent(&self, group: Group) -> ServiceResult<bool> {
+        let pair_key = group.dm_pair_key.clone().ok_or_else(|| {
+            ServiceError::InternalError(
+                "insert_dm_group_if_absent requires group.dm_pair_key".to_string(),
+            )
+        })?;
+
+        // ------------------------------------------------------------------
+        // Step 1: Pre-flight find. The unique index makes this fast.
+        //         If hit -> report no insert, NEVER mutate.
+        // ------------------------------------------------------------------
+        if self.find_dm_by_pair_key(&pair_key).await.is_some() {
+            debug!(
+                pair_key = %pair_key,
+                requested_id = %group.id,
+                "insert_dm_group_if_absent: reuse via pre-flight pair_key lookup"
+            );
+            return Ok(false);
+        }
+
+        // ------------------------------------------------------------------
+        // Step 2: Race-safe create via the database plugin transaction API.
+        //
+        // The first statement reports whether the INSERT happened (we won the
+        // race) or the unique key already existed (affected_rows == 0).
+        // Participant inserts are idempotent for the winner and guarded for
+        // the loser: when the caller's `group_id` is not the canonical row,
+        // the INSERT ... SELECT matches zero rows and writes no participants.
+        // ------------------------------------------------------------------
+        let group_kind_str = Self::group_kind_to_str(group.group_kind);
+        let status_str = Self::status_to_str(&group.status);
+        let env = self.env.clone();
+
+        // Pre-extract values so the closure captures only owned data and
+        // `group` remains available after the closure for cache/logging.
+        let g_id = group.id.clone();
+        let g_label = group.label.clone();
+        let g_driver_bot = group.driver_bot.clone();
+        let g_originator: Option<String> = group.originator.clone();
+        let g_context = group.context.clone();
+        let g_dm_pair_key = group.dm_pair_key.clone();
+        let g_group_strategy_str = Self::group_strategy_to_str(group.group_strategy);
+        // Build participant tuples: (bot_uuid, role_str, actor_kind_str, mode_str)
+        let g_participants: Vec<(String, &'static str, &'static str, &'static str)> = group
+            .participants
+            .iter()
+            .map(|p| {
+                (
+                    p.bot_uuid.clone(),
+                    Self::role_to_str(&p.role),
+                    Self::actor_kind_to_str(p.actor_kind),
+                    Self::mode_to_str(p.effective_mode()),
+                )
+            })
+            .collect();
+
+        let mut steps = Vec::with_capacity(1 + g_participants.len());
+        // 3.1 Race-safe insert into `bcs_groups`.
+        //
+        // Only the canonical `(env, dm_pair_key)` unique key is a lost-race
+        // signal. A conflicting caller-supplied group id remains a genuine
+        // error for SQLite/PostgreSQL instead of being silently ignored.
+        let group_insert = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "INSERT INTO bcs_groups \
+                 (group_id, label, status, driver_bot, originator, env, routing_policy_json, \
+                  context, group_kind, dm_pair_key, group_strategy, gmt_create, gmt_modified) \
+                 VALUES (",
+            )
+            .bind(g_id.as_str())
+            .push_static(", ")
+            .bind(g_label.as_deref())
+            .push_static(", ")
+            .bind(status_str)
+            .push_static(", ")
+            .bind(g_driver_bot.as_str())
+            .push_static(", ")
+            .bind(g_originator.as_deref())
+            .push_static(", ")
+            .bind(env.as_str())
+            .push_static(", NULL, ")
+            .bind(g_context.as_deref())
+            .push_static(", ")
+            .bind(group_kind_str)
+            .push_static(", ")
+            .bind(g_dm_pair_key.as_deref())
+            .push_static(", ")
+            .bind(g_group_strategy_str)
+            .push_static(", ")
+            .push_static(self.flavor.now())
+            .push_static(", ")
+            .push_static(self.flavor.now())
+            .push_static(") ");
+        let group_insert = match self.flavor {
+            DbSqlFlavor::Mysql => {
+                group_insert.push_static("ON DUPLICATE KEY UPDATE dm_pair_key=dm_pair_key")
+            }
+            DbSqlFlavor::Sqlite | DbSqlFlavor::Postgres => {
+                group_insert.push_static("ON CONFLICT(env, dm_pair_key) DO NOTHING")
+            }
+        }
+        .build();
+        steps.push(DbTransactionStep::Execute(group_insert));
+
+        // 3.2 Insert the two Bot participants in the same transaction, but
+        // only if this caller's group row exists with the requested pair key.
+        for (bot_uuid, role_str, actor_kind_str, mode_str) in &g_participants {
+            let participant_insert = match self.flavor {
+                DbSqlFlavor::Mysql => {
+                    DbStatementBuilder::new(self.flavor).push_static("INSERT IGNORE")
+                }
+                DbSqlFlavor::Sqlite => {
+                    DbStatementBuilder::new(self.flavor).push_static("INSERT OR IGNORE")
+                }
+                DbSqlFlavor::Postgres => DbStatementBuilder::new(self.flavor).push_static("INSERT"),
+            }
+            .push_static(
+                " INTO bcs_group_participants (group_id, bot_uuid, role, env, actor_kind, mode) \
+                 SELECT ",
+            )
+            .bind(g_id.as_str())
+            .push_static(", ")
+            .bind(bot_uuid.as_str())
+            .push_static(", ")
+            .bind(*role_str)
+            .push_static(", ")
+            .bind(env.as_str())
+            .push_static(", ")
+            .bind(*actor_kind_str)
+            .push_static(", ")
+            .bind(*mode_str)
+            .push_static(" FROM bcs_groups WHERE group_id = ")
+            .bind(g_id.as_str())
+            .push_static(" AND env = ")
+            .bind(env.as_str())
+            .push_static(" AND dm_pair_key = ")
+            .bind(pair_key.as_str());
+            let participant_insert = match self.flavor {
+                DbSqlFlavor::Postgres => participant_insert
+                    .push_static(" ON CONFLICT(env, group_id, bot_uuid) DO NOTHING"),
+                DbSqlFlavor::Mysql | DbSqlFlavor::Sqlite => participant_insert,
+            }
+            .build();
+            steps.push(DbTransactionStep::Execute(participant_insert));
+        }
+
+        let tx_result = self.db.plugin().transaction(steps).await;
+
+        match tx_result {
+            Ok(results) => {
+                let group_insert_affected_rows = match results.first() {
+                    Some(DbTransactionStepResult::Executed(result)) => result.affected_rows,
+                    _ => {
+                        return Err(ServiceError::InternalError(
+                            "insert_dm_group_if_absent: transaction did not return insert result"
+                                .to_string(),
+                        ));
+                    }
+                };
+                let mut participant_inserted_rows = 0;
+                for result in results.iter().skip(1) {
+                    match result {
+                        DbTransactionStepResult::Executed(result) => {
+                            participant_inserted_rows += result.affected_rows;
+                        }
+                        DbTransactionStepResult::Rows(_) => {
+                            return Err(ServiceError::InternalError(
+                                "insert_dm_group_if_absent: transaction returned query rows for participant insert"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+
+                let expected_participant_rows = g_participants.len() as u64;
+                if participant_inserted_rows > 0
+                    && participant_inserted_rows != expected_participant_rows
+                {
+                    return Err(ServiceError::InternalError(format!(
+                        "insert_dm_group_if_absent: inserted {} participant rows, expected {}",
+                        participant_inserted_rows, expected_participant_rows
+                    )));
+                }
+
+                let created = group_insert_affected_rows == 1
+                    && participant_inserted_rows == expected_participant_rows;
+
+                if created {
+                    info!(
+                        group_id = %group.id,
+                        pair_key = %pair_key,
+                        driver_bot = %group.driver_bot,
+                        "insert_dm_group_if_absent: created new dm group"
+                    );
+
+                    // Populate the cache so the next `get(group_id)` skips a roundtrip.
+                    {
+                        let mut cache = self.cache.write().await;
+                        cache.insert(group.id.clone(), group.clone());
+                    }
+
+                    return Ok(true);
+                }
+
+                // Lost the race — the no-op upsert committed without changing
+                // group business columns.
+                warn!(
+                    pair_key = %pair_key,
+                    requested_id = %group.id,
+                    "insert_dm_group_if_absent: lost race on dm_pair_key unique index"
+                );
+                Ok(false)
+            }
+            Err(e) => {
+                if e.is_duplicate_key() {
+                    warn!(
+                        pair_key = %pair_key,
+                        requested_id = %group.id,
+                        error = %e,
+                        "insert_dm_group_if_absent: lost race on unique key"
+                    );
+                    return Ok(false);
+                }
+                // Genuine transaction failure.
+                warn!(
+                    pair_key = %pair_key,
+                    requested_id = %group.id,
+                    error = %e,
+                    "insert_dm_group_if_absent: transaction failed"
+                );
+                Err(ServiceError::InternalError(e.to_string()))
+            }
+        }
+    }
+
+    async fn update_visibility(&self, id: &str, visibility: &str) -> ServiceResult<()> {
+        // Verify group exists
+        if self.get(id).await.is_none() {
+            return Err(ServiceError::GroupNotFound(id.to_string()));
+        }
+
+        let statement = DbStatementBuilder::new(self.flavor)
+            .push_static("UPDATE bcs_groups SET visibility = ")
+            .bind(visibility)
+            .push_static(", ")
+            .push_static(self.flavor.set_modified_now())
+            .push_static(" WHERE group_id = ")
+            .bind(id)
+            .push_static(" AND env = ")
+            .bind(self.env.as_str())
+            .build();
+        self.db
+            .execute_with(&self.logical_db, statement)
+            .await
+            .map_err(|e| {
+                warn!(group_id = %id, error = %e, "Failed to update group visibility");
+                ServiceError::InternalError(e.to_string())
+            })?;
+
+        debug!(group_id = %id, visibility = %visibility, "Group visibility updated");
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            if let Some(group) = cache.get_mut(id) {
+                group.visibility = visibility.to_string();
+            }
+        }
+        Ok(())
+    }
+
+    async fn count_filtered(
+        &self,
+        kind: Option<bcs_service_api::GroupKind>,
+        visibility: Option<&str>,
+        label: Option<&str>,
+    ) -> u64 {
+        let mut statement = DbStatementBuilder::new(self.flavor)
+            .push_static("SELECT COUNT(*) as cnt FROM bcs_groups WHERE env = ")
+            .bind(self.env.as_str());
+
+        if let Some(k) = kind {
+            statement = statement
+                .push_static(" AND group_kind = ")
+                .bind(Self::group_kind_to_str(k));
+        }
+        if let Some(v) = visibility {
+            statement = statement.push_static(" AND visibility = ").bind(v);
+        }
+        if let Some(l) = label.map(str::trim).filter(|l| !l.is_empty()) {
+            let escaped = l
+                .to_lowercase()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            statement = statement
+                .push_static(" AND LOWER(label) LIKE ")
+                .bind(format!("%{}%", escaped));
+        }
+
+        let rows = self
+            .db
+            .query_with(&self.logical_db, statement.build())
+            .await
+            .unwrap_or_default();
+        rows.first()
+            .and_then(|row| db_get_column::<i64>(row, "cnt").ok())
+            .unwrap_or(0) as u64
+    }
+
+    async fn list_paginated_filtered(
+        &self,
+        offset: u64,
+        limit: u64,
+        kind: Option<bcs_service_api::GroupKind>,
+        visibility: Option<&str>,
+        label: Option<&str>,
+    ) -> Vec<Group> {
+        let (created_ts, updated_ts) = group_timestamp_exprs(self.flavor, false);
+        let mut statement = DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "SELECT gs.group_id, gs.label, gs.status, gs.driver_bot, gs.originator, \
+                 gp.bot_uuid, gp.role, gs.routing_policy_json, gs.context, \
+                 gs.service_group_uuid, gs.service_mode, gs.service_spec, gs.version, gs.record_status, \
+                 gs.created_ts, gs.updated_ts, gp.actor_kind, gp.mode, gs.group_kind, \
+                 gs.dm_pair_key, gs.group_strategy, gs.visibility FROM (SELECT group_id, \
+                 label, status, driver_bot, originator, routing_policy_json, context, \
+                 service_group_uuid, service_mode, service_spec, version, record_status, ",
+            )
+            .push_static(created_ts)
+            .push_static(" AS created_ts, ")
+            .push_static(updated_ts)
+            .push_static(
+                " AS updated_ts, group_kind, dm_pair_key, group_strategy, visibility \
+                 FROM bcs_groups WHERE env = ",
+            )
+            .bind(self.env.as_str());
+
+        if let Some(k) = kind {
+            statement = statement
+                .push_static(" AND group_kind = ")
+                .bind(Self::group_kind_to_str(k));
+        }
+        if let Some(v) = visibility {
+            statement = statement.push_static(" AND visibility = ").bind(v);
+        }
+        if let Some(l) = label.map(str::trim).filter(|l| !l.is_empty()) {
+            let escaped = l
+                .to_lowercase()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            statement = statement
+                .push_static(" AND LOWER(label) LIKE ")
+                .bind(format!("%{}%", escaped));
+        }
+
+        let statement = statement
+            .push_static(" ORDER BY gmt_modified DESC LIMIT ")
+            .bind(limit)
+            .push_static(" OFFSET ")
+            .bind(offset)
+            .push_static(
+                ") gs LEFT JOIN bcs_group_participants gp ON gs.group_id = gp.group_id \
+                 AND gp.env = ",
+            )
+            .bind(self.env.as_str())
+            .build();
+
+        let rows = match self.db.query_with(&self.logical_db, statement).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(error = %e, "list_paginated_filtered: query failed");
+                return Vec::new();
+            }
+        };
+
+        let mut groups_map: HashMap<String, Group> = HashMap::new();
+        for row in &rows {
+            let group_id: String = match db_get_column(row, "group_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entry = groups_map.entry(group_id.clone()).or_insert_with(|| {
+                let label: Option<String> = db_get_column_opt(row, "label").ok().flatten();
+                let status_str: String = db_get_column(row, "status").unwrap_or_default();
+                let driver_bot: String = db_get_column(row, "driver_bot").unwrap_or_default();
+                let originator: Option<String> =
+                    db_get_column_opt(row, "originator").ok().flatten();
+                let routing_policy_json: Option<String> =
+                    db_get_column_opt(row, "routing_policy_json").ok().flatten();
+                let context: Option<String> = db_get_column_opt(row, "context").ok().flatten();
+                let service_group_uuid: Option<String> =
+                    db_get_column_opt(row, "service_group_uuid").ok().flatten();
+                let service_mode: Option<String> =
+                    db_get_column_opt(row, "service_mode").ok().flatten();
+                let service_spec_json: Option<String> =
+                    db_get_column_opt(row, "service_spec").ok().flatten();
+                let service_spec: Option<bcs_service_api::ServiceSpec> =
+                    match service_spec_json.as_deref() {
+                        Some(s) if !s.is_empty() => serde_json::from_str(s).ok(),
+                        _ => None,
+                    };
+                let version: i32 = db_get_column_opt::<i64>(row, "version")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(1) as i32;
+                let record_status: String = db_get_column_opt(row, "record_status")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "active".to_string());
+                let created_ts: Option<i64> = db_get_column_opt(row, "created_ts").ok().flatten();
+                let updated_ts: Option<i64> = db_get_column_opt(row, "updated_ts").ok().flatten();
+                let group_kind_str: Option<String> =
+                    db_get_column_opt(row, "group_kind").ok().flatten();
+                let dm_pair_key: Option<String> =
+                    db_get_column_opt(row, "dm_pair_key").ok().flatten();
+                let group_strategy_str: Option<String> =
+                    db_get_column_opt(row, "group_strategy").ok().flatten();
+                let group_strategy = Self::parse_group_strategy(group_strategy_str.as_deref());
+                let visibility: String = db_get_column_opt(row, "visibility")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "private".to_string());
+
+                Group {
+                    id: group_id,
+                    label,
+                    status: Self::str_to_status(&status_str),
+                    driver_bot,
+                    originator,
+                    routing_policy: Self::deserialize_routing_policy(routing_policy_json),
+                    context,
+                    participants: Vec::new(),
+                    messages: Vec::new(),
+                    workspace: Workspace::default(),
+                    service_group_uuid,
+                    service_mode,
+                    created_at: Self::seconds_to_millis(created_ts),
+                    updated_at: Self::seconds_to_millis(updated_ts),
+                    group_kind: Self::parse_group_kind(group_kind_str.as_deref()),
+                    dm_pair_key,
+                    group_strategy,
+                    service_spec,
+                    version,
+                    record_status,
+                    visibility,
+                }
+            });
+            if let (Ok(bot_uuid), Ok(role_str)) = (
+                db_get_column::<String>(row, "bot_uuid"),
+                db_get_column::<String>(row, "role"),
+            ) {
+                if !entry.participants.iter().any(|p| p.bot_uuid == bot_uuid) {
+                    let actor_kind_str: Option<String> =
+                        db_get_column_opt(row, "actor_kind").ok().flatten();
+                    let mode_str: Option<String> = db_get_column_opt(row, "mode").ok().flatten();
+                    let (actor_kind, mode) = Self::normalize_kind_mode(
+                        &entry.id,
+                        &bot_uuid,
+                        self.env.as_str(),
+                        actor_kind_str.as_deref(),
+                        mode_str.as_deref(),
+                    );
+                    entry.participants.push(Participant {
+                        bot_uuid,
+                        bot_name: None,
+                        kind: Some(ParticipantKind::Bot),
+                        role: Self::str_to_role(&role_str),
+                        actor_kind,
+                        mode: Some(mode),
+                    });
+                }
+            }
+        }
+        let mut groups = groups_map.into_values().collect::<Vec<_>>();
+        Group::sort_by_updated_at_desc(&mut groups);
+        groups
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bcs_db_api::{DbExecuteResult, DbHealth};
+    use std::collections::BTreeMap;
+    use std::sync::Mutex as StdMutex;
+
+    #[derive(Default)]
+    struct RecordingDbPlugin {
+        query_statements: StdMutex<Vec<DbStatement>>,
+        transaction_sql: StdMutex<Vec<String>>,
+        transaction_statements: StdMutex<Vec<DbStatement>>,
+        execute_statements: StdMutex<Vec<DbStatement>>,
+        first_execute_affected_rows: u64,
+        fail_queries: bool,
+        query_rows: Vec<DbRow>,
+        transaction_error: Option<String>,
+    }
+
+    impl RecordingDbPlugin {
+        fn with_first_execute_affected_rows(first_execute_affected_rows: u64) -> Self {
+            Self {
+                first_execute_affected_rows,
+                ..Self::default()
+            }
+        }
+
+        fn failing_queries() -> Self {
+            Self {
+                fail_queries: true,
+                ..Self::default()
+            }
+        }
+
+        fn with_query_rows(query_rows: Vec<DbRow>) -> Self {
+            Self {
+                query_rows,
+                ..Self::default()
+            }
+        }
+
+        fn with_duplicate_transaction_error() -> Self {
+            Self {
+                transaction_error: Some(
+                    "UNIQUE constraint failed: bcs_groups.env, bcs_groups.dm_pair_key".into(),
+                ),
+                ..Self::default()
+            }
+        }
+    }
+
+    #[async_trait]
+    impl DbPlugin for RecordingDbPlugin {
+        async fn query(&self, statement: DbStatement) -> DbResult<Vec<DbRow>> {
+            self.query_statements
+                .lock()
+                .expect("query statements")
+                .push(statement);
+            if self.fail_queries {
+                return Err(DbError::Backend("database unavailable".to_string()));
+            }
+            Ok(self.query_rows.clone())
+        }
+
+        async fn execute(&self, statement: DbStatement) -> DbResult<DbExecuteResult> {
+            self.execute_statements
+                .lock()
+                .expect("execute statements")
+                .push(statement);
+            Ok(DbExecuteResult {
+                affected_rows: self.first_execute_affected_rows,
+                last_insert_id: None,
+            })
+        }
+
+        async fn transaction(
+            &self,
+            steps: Vec<DbTransactionStep>,
+        ) -> DbResult<Vec<DbTransactionStepResult>> {
+            if let Some(error) = &self.transaction_error {
+                return Err(DbError::Backend(error.clone()));
+            }
+            let mut results = Vec::with_capacity(steps.len());
+            let mut sql = self.transaction_sql.lock().expect("transaction sql");
+            let mut execute_index = 0;
+
+            for (step_index, step) in steps.into_iter().enumerate() {
+                match step {
+                    DbTransactionStep::Query(statement) => {
+                        self.transaction_statements
+                            .lock()
+                            .expect("transaction statements")
+                            .push(statement.clone());
+                        sql.push(statement.sql().to_string());
+                        results.push(DbTransactionStepResult::Rows(Vec::new()));
+                    }
+                    DbTransactionStep::Execute(statement) => {
+                        self.transaction_statements
+                            .lock()
+                            .expect("transaction statements")
+                            .push(statement.clone());
+                        sql.push(statement.sql().to_string());
+                        let affected_rows = if execute_index == 0 {
+                            self.first_execute_affected_rows
+                        } else {
+                            0
+                        };
+                        execute_index += 1;
+                        results.push(DbTransactionStepResult::Executed(DbExecuteResult {
+                            affected_rows,
+                            last_insert_id: None,
+                        }));
+                    }
+                    DbTransactionStep::QueryChecked {
+                        statement,
+                        expected_rows,
+                    } => {
+                        self.transaction_statements
+                            .lock()
+                            .expect("transaction statements")
+                            .push(statement.clone());
+                        sql.push(statement.sql().to_string());
+                        expected_rows.verify(
+                            step_index,
+                            bcs_db_api::DbTransactionResultKind::Rows,
+                            0,
+                        )?;
+                        results.push(DbTransactionStepResult::Rows(Vec::new()));
+                    }
+                    DbTransactionStep::ExecuteChecked {
+                        statement,
+                        expected_affected_rows,
+                    } => {
+                        self.transaction_statements
+                            .lock()
+                            .expect("transaction statements")
+                            .push(statement.clone());
+                        sql.push(statement.sql().to_string());
+                        let affected_rows = if execute_index == 0 {
+                            self.first_execute_affected_rows
+                        } else {
+                            0
+                        };
+                        execute_index += 1;
+                        expected_affected_rows.verify(
+                            step_index,
+                            bcs_db_api::DbTransactionResultKind::AffectedRows,
+                            affected_rows,
+                        )?;
+                        results.push(DbTransactionStepResult::Executed(DbExecuteResult {
+                            affected_rows,
+                            last_insert_id: None,
+                        }));
+                    }
+                }
+            }
+
+            Ok(results)
+        }
+
+        async fn health_check(&self) -> DbResult<DbHealth> {
+            Ok(DbHealth::healthy())
+        }
+    }
+
+    #[test]
+    fn test_logical_db_must_stay_empty() {
+        assert!(assert_empty_logical_db("").is_ok());
+        assert!(matches!(
+            assert_empty_logical_db("legacy-db"),
+            Err(DbError::InvalidInput(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn fallible_group_reads_propagate_database_failures() {
+        let db = Arc::new(RecordingDbPlugin::failing_queries());
+        let repo = MySqlGroupStore::new(db, "local".to_string());
+
+        let get_error = repo.try_get("group-1").await.expect_err("get must fail");
+        assert!(get_error.to_string().contains("database unavailable"));
+
+        let list_error = repo
+            .try_find_by_participant("bot-1")
+            .await
+            .expect_err("participant query must fail");
+        assert!(list_error.to_string().contains("database unavailable"));
+    }
+
+    #[tokio::test]
+    async fn mutable_patch_propagates_preflight_read_failures() {
+        let db = Arc::new(RecordingDbPlugin::failing_queries());
+        let repo = MySqlGroupStore::new(db, "local".to_string());
+
+        let error = repo
+            .patch_mutable_fields(
+                "group-1",
+                GroupMutableFieldsPatch {
+                    label: Some("Renamed".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("patch preflight read must fail");
+
+        assert!(error.to_string().contains("database unavailable"));
+    }
+
+    #[tokio::test]
+    async fn delete_aborts_before_persistence_when_snapshot_read_fails() {
+        let db = Arc::new(RecordingDbPlugin::failing_queries());
+        let repo = MySqlGroupStore::new(db.clone(), "local".to_string());
+
+        let error = repo
+            .delete("group-1")
+            .await
+            .expect_err("snapshot failure must abort deletion");
+
+        assert!(error.to_string().contains("database unavailable"));
+        assert!(
+            db.transaction_sql
+                .lock()
+                .expect("transaction sql")
+                .is_empty(),
+            "delete transaction must not run without a rollback snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn participant_row_decode_failures_are_not_silently_dropped() {
+        let malformed = DbRow::new(BTreeMap::from([(
+            "role".to_string(),
+            Value::from("consultant"),
+        )]));
+        let db = Arc::new(RecordingDbPlugin::with_query_rows(vec![malformed]));
+        let repo = MySqlGroupStore::new(db, "local".to_string());
+
+        let error = repo
+            .load_participants_from_mysql("group-1")
+            .await
+            .expect_err("missing bot_uuid must fail the Group read");
+
+        assert!(error.to_string().contains("bot_uuid"));
+    }
+
+    #[tokio::test]
+    async fn sqlite_dm_pair_unique_conflict_is_treated_as_a_lost_race() {
+        let db = Arc::new(RecordingDbPlugin::with_duplicate_transaction_error());
+        let repo = MySqlGroupStore::sqlite(db, "local".to_string());
+        let mut group = Group::new(
+            "loser",
+            "alice",
+            vec![
+                Participant::bot("alice", ParticipantRole::Driver),
+                Participant::bot("bob", ParticipantRole::Consultant),
+            ],
+        );
+        group.group_kind = bcs_domain::GroupKind::Dm;
+        group.dm_pair_key = Some(Group::compute_dm_pair_key("alice", "bob"));
+
+        let created = repo
+            .insert_dm_group_if_absent(group)
+            .await
+            .expect("duplicate pair key must be handled as a lost race");
+
+        assert!(!created);
+    }
+
+    #[tokio::test]
+    async fn dm_insert_loser_participant_steps_are_guarded_by_group_row() {
+        let db = Arc::new(RecordingDbPlugin::with_first_execute_affected_rows(1));
+        let repo = MySqlGroupStore::new(db.clone(), "race".to_string());
+        let pair_key = Group::compute_dm_pair_key("alice", "bob");
+        let participants = vec![
+            Participant {
+                bot_uuid: "alice".to_string(),
+                bot_name: None,
+                kind: None,
+                role: ParticipantRole::Driver,
+                actor_kind: ActorKind::Bot,
+                mode: None,
+            },
+            Participant {
+                bot_uuid: "bob".to_string(),
+                bot_name: None,
+                kind: None,
+                role: ParticipantRole::Consultant,
+                actor_kind: ActorKind::Bot,
+                mode: None,
+            },
+        ];
+        let mut group = Group::new("loser-group", "alice", participants);
+        group.group_kind = bcs_domain::GroupKind::Dm;
+        group.dm_pair_key = Some(pair_key);
+
+        let created = repo
+            .insert_dm_group_if_absent(group)
+            .await
+            .expect("insert dm group");
+
+        assert!(!created);
+        let sql = db.transaction_sql.lock().expect("transaction sql");
+        let participant_sql: Vec<_> = sql
+            .iter()
+            .filter(|statement| statement.contains("bcs_group_participants"))
+            .collect();
+
+        assert_eq!(participant_sql.len(), 2);
+        assert!(participant_sql.iter().all(|statement| {
+            statement.contains("SELECT")
+                && statement.contains("FROM bcs_groups")
+                && statement.contains("group_id = ?")
+                && statement.contains("dm_pair_key = ?")
+        }));
+    }
+
+    #[tokio::test]
+    async fn dm_insert_persists_the_requested_context() {
+        let db = Arc::new(RecordingDbPlugin::with_first_execute_affected_rows(1));
+        let repo = MySqlGroupStore::new(db.clone(), "local".to_string());
+        let mut group = Group::new(
+            "dm-context",
+            "alice",
+            vec![
+                Participant::bot("alice", ParticipantRole::Driver),
+                Participant::bot("bob", ParticipantRole::Consultant),
+            ],
+        );
+        group.group_kind = bcs_domain::GroupKind::Dm;
+        group.dm_pair_key = Some(Group::compute_dm_pair_key("alice", "bob"));
+        group.context = Some("review release".to_string());
+
+        repo.insert_dm_group_if_absent(group)
+            .await
+            .expect("insert DM with context");
+
+        let statements = db.transaction_statements.lock().expect("transaction steps");
+        let insert = statements.first().expect("group insert");
+        assert!(insert.sql().contains("NULL, ?, ?, ?, ?"));
+        assert_eq!(insert.params()[6], Value::from("review release"));
+    }
+
+    #[tokio::test]
+    async fn postgres_filtered_group_query_uses_contiguous_numbered_binds() {
+        let db = Arc::new(RecordingDbPlugin::default());
+        let repo = MySqlGroupStore::postgres(db.clone(), "tenant-a".to_string());
+
+        let groups = repo
+            .find_by_participant_filtered(
+                "bot-1",
+                Some(bcs_service_api::GroupKind::Dm),
+                Some("Release"),
+            )
+            .await;
+
+        assert!(groups.is_empty());
+        let statements = db.query_statements.lock().expect("query statements");
+        let statement = statements.first().expect("filtered query");
+        assert!(!statement.sql().contains('?'));
+        for index in 1..=6 {
+            assert!(
+                statement.sql().contains(&format!("${index}")),
+                "missing bind ${index} in {}",
+                statement.sql()
+            );
+        }
+        assert_eq!(
+            statement.params(),
+            &[
+                Value::from("tenant-a"),
+                Value::from("tenant-a"),
+                Value::from("bot-1"),
+                Value::from("tenant-a"),
+                Value::from("dm"),
+                Value::from("%release%"),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn postgres_dm_insert_targets_pair_and_participant_unique_keys() {
+        let db = Arc::new(RecordingDbPlugin::with_first_execute_affected_rows(1));
+        let repo = MySqlGroupStore::postgres(db.clone(), "tenant-a".to_string());
+        let mut group = Group::new(
+            "dm-1",
+            "alice",
+            vec![
+                Participant::bot("alice", ParticipantRole::Driver),
+                Participant::bot("bob", ParticipantRole::Consultant),
+            ],
+        );
+        group.group_kind = bcs_domain::GroupKind::Dm;
+        group.dm_pair_key = Some(Group::compute_dm_pair_key("alice", "bob"));
+
+        let created = repo
+            .insert_dm_group_if_absent(group)
+            .await
+            .expect("record PostgreSQL DM statements");
+
+        assert!(!created, "recording plugin reports no participant inserts");
+        let statements = db
+            .transaction_statements
+            .lock()
+            .expect("transaction statements");
+        let group_insert = statements.first().expect("group insert");
+        assert!(!group_insert.sql().contains('?'));
+        assert!(group_insert.sql().contains("$10"));
+        assert!(
+            group_insert
+                .sql()
+                .contains("ON CONFLICT(env, dm_pair_key) DO NOTHING")
+        );
+
+        let participant_inserts = &statements[1..];
+        assert_eq!(participant_inserts.len(), 2);
+        assert!(participant_inserts.iter().all(|statement| {
+            !statement.sql().contains('?')
+                && statement.sql().contains("$9")
+                && statement
+                    .sql()
+                    .contains("ON CONFLICT(env, group_id, bot_uuid) DO NOTHING")
+        }));
+    }
+
+    #[tokio::test]
+    async fn workspace_update_is_visible_until_restart() {
+        let db = Arc::new(RecordingDbPlugin::default());
+        let repo = MySqlGroupStore::new(db, "local".to_string());
+        let group = Group::new("group-1", "driver", Vec::new());
+        repo.cache.write().await.insert(group.id.clone(), group);
+        let workspace = Workspace {
+            decisions: vec!["ship the hotfix".to_string()],
+            notes: vec!["customer impact contained".to_string()],
+            ..Workspace::default()
+        };
+
+        repo.update_workspace("group-1", workspace.clone())
+            .await
+            .expect("update workspace");
+
+        let stored = repo.get("group-1").await.expect("group exists");
+        assert_eq!(stored.workspace.decisions, workspace.decisions);
+        assert_eq!(stored.workspace.notes, workspace.notes);
+    }
+
+    #[tokio::test]
+    async fn mutable_patch_uses_field_scoped_sql() {
+        let db = Arc::new(RecordingDbPlugin::with_first_execute_affected_rows(1));
+        let repo = MySqlGroupStore::new(db.clone(), "local".to_string());
+        let group = Group::new("group-1", "driver", Vec::new());
+        repo.cache.write().await.insert(group.id.clone(), group);
+
+        repo.patch_mutable_fields(
+            "group-1",
+            GroupMutableFieldsPatch {
+                label: Some("Renamed".to_string()),
+                default_bot_final_delivery: Some(DefaultDelivery::InjectObservers),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("patch mutable fields");
+
+        let statements = db.execute_statements.lock().expect("execute statements");
+        assert_eq!(statements.len(), 1);
+        let sql = statements[0].sql();
+        assert!(sql.contains("label = ?"));
+        assert!(sql.contains("JSON_SET"));
+        assert!(sql.contains("$.default_bot_final_delivery"));
+        assert!(!sql.contains("sender_routes"));
+        assert!(!sql.contains("participants"));
+        assert_eq!(
+            statements[0].params(),
+            &[
+                Value::from("Renamed"),
+                Value::from("inject_observers"),
+                Value::from("group-1"),
+                Value::from("local"),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn guarded_participant_insert_preserves_group_version() {
+        let db = Arc::new(RecordingDbPlugin::with_first_execute_affected_rows(1));
+        let repo = MySqlGroupStore::new(db.clone(), "local".to_string());
+
+        repo.add_participant_with_visibility_guard(
+            "group-1",
+            Participant::bot("protected", ParticipantRole::Consultant),
+            false,
+        )
+        .await
+        .expect("guarded insert");
+
+        let sql = db.transaction_sql.lock().expect("transaction sql");
+        assert_eq!(sql.len(), 2);
+        assert!(!sql[0].contains("version"));
+        assert!(sql[0].contains("visibility <> 'public' OR ?"));
+        assert!(sql[0].contains("NOT EXISTS"));
+        assert!(sql[0].contains("bcs_group_participants"));
+        assert!(sql[1].contains("INSERT IGNORE"));
+        assert!(sql[1].contains("visibility <> 'public' OR ?"));
+    }
+
+    #[tokio::test]
+    async fn delete_returns_none_when_the_group_row_lost_a_race() {
+        let db = Arc::new(RecordingDbPlugin::default());
+        let repo = MySqlGroupStore::new(db, "local".to_string());
+        let group = Group::new("group-1", "driver", Vec::new());
+        repo.cache.write().await.insert(group.id.clone(), group);
+
+        let deleted = repo.delete("group-1").await.expect("delete group");
+
+        assert!(deleted.is_none());
+        assert!(repo.cache.read().await.get("group-1").is_none());
+    }
+
+    #[test]
+    fn test_status_conversion() {
+        assert_eq!(
+            MySqlGroupStore::status_to_str(&GroupStatus::Active),
+            "active"
+        );
+        assert_eq!(
+            MySqlGroupStore::status_to_str(&GroupStatus::Completed),
+            "completed"
+        );
+        assert_eq!(
+            MySqlGroupStore::status_to_str(&GroupStatus::Closed),
+            "closed"
+        );
+        assert_eq!(
+            MySqlGroupStore::status_to_str(&GroupStatus::Inactive),
+            "inactive"
+        );
+
+        assert!(matches!(
+            MySqlGroupStore::str_to_status("active"),
+            GroupStatus::Active
+        ));
+        assert!(matches!(
+            MySqlGroupStore::str_to_status("completed"),
+            GroupStatus::Completed
+        ));
+        assert!(matches!(
+            MySqlGroupStore::str_to_status("unknown"),
+            GroupStatus::Active
+        ));
+    }
+
+    #[test]
+    fn test_role_conversion() {
+        assert_eq!(
+            MySqlGroupStore::role_to_str(&ParticipantRole::Driver),
+            "driver"
+        );
+        assert_eq!(
+            MySqlGroupStore::role_to_str(&ParticipantRole::Consultant),
+            "consultant"
+        );
+        assert_eq!(
+            MySqlGroupStore::role_to_str(&ParticipantRole::Observer),
+            "observer"
+        );
+
+        assert!(matches!(
+            MySqlGroupStore::str_to_role("driver"),
+            ParticipantRole::Driver
+        ));
+        assert!(matches!(
+            MySqlGroupStore::str_to_role("consultant"),
+            ParticipantRole::Consultant
+        ));
+        assert!(matches!(
+            MySqlGroupStore::str_to_role("unknown"),
+            ParticipantRole::Driver
+        ));
+    }
+
+    // ======================================================================
+    // M.6 Human Actor V1 — actor_kind / mode parsing & normalization tests
+    // ======================================================================
+
+    #[test]
+    fn test_actor_kind_to_str_and_back() {
+        assert_eq!(MySqlGroupStore::actor_kind_to_str(ActorKind::Bot), "bot");
+        assert_eq!(
+            MySqlGroupStore::actor_kind_to_str(ActorKind::Human),
+            "human"
+        );
+
+        assert!(matches!(
+            MySqlGroupStore::parse_actor_kind(Some("bot")),
+            ActorKind::Bot
+        ));
+        assert!(matches!(
+            MySqlGroupStore::parse_actor_kind(Some("human")),
+            ActorKind::Human
+        ));
+        // Unknown / NULL → falls back to Bot
+        assert!(matches!(
+            MySqlGroupStore::parse_actor_kind(Some("alien")),
+            ActorKind::Bot
+        ));
+        assert!(matches!(
+            MySqlGroupStore::parse_actor_kind(None),
+            ActorKind::Bot
+        ));
+    }
+
+    #[test]
+    fn test_mode_to_str_and_back() {
+        assert_eq!(MySqlGroupStore::mode_to_str(ParticipantMode::Auto), "auto");
+        assert_eq!(
+            MySqlGroupStore::mode_to_str(ParticipantMode::Muted),
+            "muted"
+        );
+        assert_eq!(
+            MySqlGroupStore::mode_to_str(ParticipantMode::Present),
+            "present"
+        );
+        assert_eq!(
+            MySqlGroupStore::mode_to_str(ParticipantMode::Absent),
+            "absent"
+        );
+
+        assert_eq!(
+            MySqlGroupStore::parse_participant_mode_opt(Some("auto")),
+            Some(ParticipantMode::Auto)
+        );
+        assert_eq!(
+            MySqlGroupStore::parse_participant_mode_opt(Some("muted")),
+            Some(ParticipantMode::Muted)
+        );
+        assert_eq!(
+            MySqlGroupStore::parse_participant_mode_opt(Some("present")),
+            Some(ParticipantMode::Present)
+        );
+        assert_eq!(
+            MySqlGroupStore::parse_participant_mode_opt(Some("absent")),
+            Some(ParticipantMode::Absent)
+        );
+        assert_eq!(
+            MySqlGroupStore::parse_participant_mode_opt(Some("supervised")),
+            None
+        );
+        assert_eq!(MySqlGroupStore::parse_participant_mode_opt(None), None);
+    }
+
+    #[test]
+    fn test_normalize_kind_mode_legal_combinations_passthrough() {
+        let cases = [
+            ("bot", "auto", ActorKind::Bot, ParticipantMode::Auto),
+            ("bot", "muted", ActorKind::Bot, ParticipantMode::Muted),
+            (
+                "human",
+                "present",
+                ActorKind::Human,
+                ParticipantMode::Present,
+            ),
+            ("human", "absent", ActorKind::Human, ParticipantMode::Absent),
+        ];
+        for (kind_str, mode_str, expect_kind, expect_mode) in cases {
+            let (k, m) = MySqlGroupStore::normalize_kind_mode(
+                "g1",
+                "a1",
+                "dev",
+                Some(kind_str),
+                Some(mode_str),
+            );
+            assert_eq!(k, expect_kind, "kind for ({}, {})", kind_str, mode_str);
+            assert_eq!(m, expect_mode, "mode for ({}, {})", kind_str, mode_str);
+        }
+    }
+
+    #[test]
+    fn test_normalize_kind_mode_illegal_pair_falls_back_to_default_for_kind() {
+        // Bot + Present is illegal → fallback to ParticipantMode::Auto
+        let (k, m) =
+            MySqlGroupStore::normalize_kind_mode("g1", "b1", "dev", Some("bot"), Some("present"));
+        assert_eq!(k, ActorKind::Bot);
+        assert_eq!(m, ParticipantMode::Auto);
+
+        // Human + Auto is illegal → fallback to ParticipantMode::Absent
+        let (k, m) =
+            MySqlGroupStore::normalize_kind_mode("g1", "h1", "dev", Some("human"), Some("auto"));
+        assert_eq!(k, ActorKind::Human);
+        assert_eq!(m, ParticipantMode::Absent);
+    }
+
+    #[test]
+    fn test_normalize_kind_mode_unknown_inputs_default() {
+        // Unknown actor_kind → Bot, unknown mode → default_for(Bot) = Auto
+        let (k, m) = MySqlGroupStore::normalize_kind_mode(
+            "g1",
+            "b1",
+            "dev",
+            Some("alien"),
+            Some("supervised"),
+        );
+        assert_eq!(k, ActorKind::Bot);
+        assert_eq!(m, ParticipantMode::Auto);
+    }
+
+    /// Regression test for review Finding #4.
+    ///
+    /// NULL / absent `mode` is the normal compatibility path (rows that
+    /// pre-date Migration 003) and MUST NOT emit ERROR logs. The result
+    /// must be the kind-aware default per Requirement 3.18#3.
+    #[test]
+    fn test_normalize_kind_mode_null_mode_is_silent_compat_path() {
+        // (bot, NULL) → auto
+        let (k, m) = MySqlGroupStore::normalize_kind_mode("g1", "b1", "dev", Some("bot"), None);
+        assert_eq!(k, ActorKind::Bot);
+        assert_eq!(m, ParticipantMode::Auto);
+
+        // (human, NULL) → absent
+        let (k, m) = MySqlGroupStore::normalize_kind_mode("g1", "h1", "dev", Some("human"), None);
+        assert_eq!(k, ActorKind::Human);
+        assert_eq!(m, ParticipantMode::Absent);
+
+        // (NULL, NULL) → bot/auto (full compat for legacy rows)
+        let (k, m) = MySqlGroupStore::normalize_kind_mode("g1", "b1", "dev", None, None);
+        assert_eq!(k, ActorKind::Bot);
+        assert_eq!(m, ParticipantMode::Auto);
+
+        // (NULL, "auto") → kind defaults to Bot (compat); mode passes through
+        let (k, m) = MySqlGroupStore::normalize_kind_mode("g1", "b1", "dev", None, Some("auto"));
+        assert_eq!(k, ActorKind::Bot);
+        assert_eq!(m, ParticipantMode::Auto);
+    }
+}

@@ -1,0 +1,98 @@
+{
+  "schema_version": 2,
+  "captured_at": "2026-08-10",
+  "updated_at": "2026-08-11",
+  "upstream": {
+    "repository": "https://github.com/inclusionAI/Avernet",
+    "commit": "e470fb3d88979b9da8dc11c63f9d9c4b73343c9d",
+    "bcs_tree": "a5f7da1ab934cee9d2e8e2156605c2632e2c6b12",
+    "source_file_count": 1125,
+    "source_bytes": 13581145,
+    "executable_file_count": 38,
+    "upstream_cargo_lock_sha256": "d767c35fb59dea1ebe1fadc6117fa09a9726ab8229747e024780a749e2660536"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.91.1 (ed61e7d7e 2025-11-07)",
+    "protoc": "libprotoc 25.3",
+    "cargo_packages": 87,
+    "cargo_workspace_members": 87,
+    "isolated_rustup_home": true,
+    "isolated_cargo_home": true,
+    "isolated_target_dir": true
+  },
+  "verified": {
+    "cargo_metadata_locked_no_deps": "passed",
+    "cargo_check_workspace_locked": "passed",
+    "bcs_db_api": {"passed": 14, "failed": 0},
+    "message_flow_contracts": {"passed": 3, "failed": 0},
+    "runtime_progression": {"passed": 42, "failed": 0},
+    "bcs_api_http_serialized": {"passed": 26, "failed": 0},
+    "cargo_test_workspace_locked_serialized": {"status": "passed", "exit_code": 0},
+    "workspace_postgres_verifier": {
+      "status": "passed",
+      "exit_code": 0,
+      "alembic_head": "a17c3e5f7b9d",
+      "tables": 69,
+      "triggers": 58,
+      "gene_contract": {"passed": 2, "failed": 0},
+      "blackboard_contract": {"passed": 2, "failed": 0}
+    },
+    "workspace_public_api": {
+      "required_routes": 92,
+      "implemented_routes": 75,
+      "pending_routes": 17,
+      "implemented_route_keys_sha256": "dd4ee61240571caf3d8c8c5311d342a72ee918d83e413b1c22d2891ccd08e2bb",
+      "implemented_contract_sha256": null,
+      "complete": false
+    }
+  },
+  "test_isolation": {
+    "parallel_workspace_run": "failed",
+    "failure": "bcs-api-http tracing log capture assertion; failing test moved between parallel reruns",
+    "exact_test_rerun": "passed",
+    "serialized_bcs_api_http": "passed",
+    "workspace_gate": "RUST_TEST_THREADS=1"
+  },
+  "supply_chain": {
+    "cargo_audit_version": "0.22.2",
+    "locked_dependencies": 518,
+    "rustsec_status": "passed",
+    "rustsec_deny_warnings": true,
+    "vulnerabilities": [],
+    "warnings": [],
+    "removed_advisory_coordinates": [
+      "rkyv@0.7.46",
+      "rsa@0.9.10",
+      "proc-macro-error2@2.0.1",
+      "lru@0.12.5"
+    ],
+    "license_policy": "passed",
+    "cargo_cyclonedx_1_6_sbom": "passed_reproducible",
+    "npm_cyclonedx_1_6_sbom": "passed_reproducible",
+    "required_notices": "present",
+    "build_provenance": "passed"
+  },
+  "import_integrity": {
+    "status": "failed_closed",
+    "unregistered_upstream_baseline_mismatches": 414,
+    "classification": "formatting-shaped drift outside reviewed downstream patches",
+    "examples": [
+      "crates/service-api/bcs-service-api/src/port/repo/organization.rs",
+      "crates/adapters/http/bcs-http/src/routes/register.rs"
+    ],
+    "policy": "do not overwrite, restore, or legalize until ownership and provenance are reviewed"
+  },
+  "pending": {
+    "public_routes": {
+      "blackboard_files": 7,
+      "execution_diagnostics": 1,
+      "objectives": 6,
+      "autonomy": 1,
+      "collaboration_mutations": 2
+    },
+    "cloud_build": "not_verified_for_release",
+    "desktop_helper_build": "not_implemented",
+    "desktop_migration_signing_updater": "not_implemented",
+    "production_scale_migration_rehearsals": 3
+  }
+}

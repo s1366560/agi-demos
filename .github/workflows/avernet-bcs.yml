@@ -1,0 +1,97 @@
+name: Avernet BCS Baseline
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/avernet-bcs.yml'
+      - 'scripts/avernet-bcs/**'
+      - 'third_party/avernet-bcs/**'
+  push:
+    branches: [main, develop]
+    paths:
+      - '.github/workflows/avernet-bcs.yml'
+      - 'scripts/avernet-bcs/**'
+      - 'third_party/avernet-bcs/**'
+
+permissions:
+  contents: read
+
+env:
+  MEMSTACK_HOST_GIT_REVISION: ${{ github.sha }}
+  SOURCE_DATE_EPOCH: '1786291263'
+
+jobs:
+  windows-compile:
+    name: Windows Workspace Core compile
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Compile native Windows Workspace Core
+        shell: bash
+        run: >-
+          scripts/avernet-bcs/cargo.sh check
+          -p bcs
+          -p memstack-workspace-core
+          --locked
+
+  baseline:
+    name: Import, contracts, and state machine
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Verify imported source
+        run: make -C third_party/avernet-bcs verify-import
+
+      - name: Run baseline gate
+        run: make -C third_party/avernet-bcs baseline
+
+      - name: Run full BCS test suite
+        run: make -C third_party/avernet-bcs test
+
+  dependency-audit:
+    name: RustSec dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-audit in an isolated root
+        env:
+          CARGO_AUDIT_VERSION: 0.22.2
+        run: >-
+          cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+          --locked --root "${RUNNER_TEMP}/cargo-audit"
+
+      - name: Audit locked dependencies
+        env:
+          CARGO_AUDIT_BIN: ${{ runner.temp }}/cargo-audit/bin/cargo-audit
+        run: scripts/avernet-bcs/audit.sh
+
+      - name: Verify license and SBOM contracts
+        run: scripts/avernet-bcs/test-supply-chain.sh
+
+      - name: Generate deterministic CycloneDX SBOMs
+        run: >-
+          python3 scripts/avernet-bcs/generate-sbom.py
+          --output-dir "${RUNNER_TEMP}/avernet-bcs-sbom"
+
+      - name: Upload Avernet SBOMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: avernet-bcs-sbom
+          path: ${{ runner.temp }}/avernet-bcs-sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 30

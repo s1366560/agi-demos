@@ -1,0 +1,41 @@
+# Build output
+/target/
+
+# Stray profraw from instrumented build scripts / proc-macros during
+# `cargo build` with RUSTFLAGS=-Cinstrument-coverage. These processes run
+# without LLVM_PROFILE_FILE and write default-*.profraw to cwd. Harmless
+# (cargo llvm-cov report only reads profraw under llvm-cov-target/), but
+# noisy and easy to accidentally commit. *.profraw catches the merged
+# output and any future naming too.
+default_*.profraw
+*.profraw
+
+# IDE
+/.idea/
+*.iml
+
+# macOS
+.DS_Store
+docs/temp
+bots-scenarios-test-dir
+three_bots_test_dir
+bcs_test_tmp
+bcs_bots_test_dir
+# Cargo.lock
+
+bcs.log
+# SQLite WAL/SHM runtime sidecar files (bcs.db itself ignored at repo root)
+bcs.db-shm
+bcs.db-wal
+.bcs.pid
+.bcs-env
+.backup*
+config/bcs-config.json
+.dingtalk-local-lab/
+
+CLAUDE.local.md
+.superpowers/
+
+# Local smoke-test scratch (not source)
+PR2_SMOKE_TEST_RESULTS.txt
+SMOKE_TEST_RUNTIME.md

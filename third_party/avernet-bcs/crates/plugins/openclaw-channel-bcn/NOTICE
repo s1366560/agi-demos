@@ -1,0 +1,11 @@
+@avernet-plugin/openclaw-channel-bcn source and license notice
+
+Source: https://github.com/inclusionAI/Avernet
+Pinned upstream revision: e470fb3d88979b9da8dc11c63f9d9c4b73343c9d
+Pinned upstream path: src/bcs/crates/plugins/openclaw-channel-bcn
+
+The pinned upstream package manifest declares this package under the MIT
+license but does not contain a package-level copy of that license. MemStack
+adds the adjacent standard MIT license text for compliant redistribution of
+the fixed source snapshot. Authorship and copyright remain with the Avernet
+contributors. This notice does not expand the upstream license grant.

@@ -1,0 +1,60 @@
+[package]
+name = "memstack-workspace-core"
+description = "MemStack Workspace authority embedded in Avernet BCS"
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[[bin]]
+name = "memstack-workspace-core"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["multipart"] }
+bcs = { workspace = true }
+bcs-db-api = { workspace = true }
+bcs-domain = { workspace = true }
+bcs-provider-http = { workspace = true }
+bcs-protocol = { workspace = true }
+bcs-route-security = { workspace = true }
+bcs-service-api = { workspace = true }
+bcs-storage-api = { workspace = true }
+bcs-storage-baas = { workspace = true }
+bcs-storage-local = { workspace = true }
+clap = { workspace = true }
+bytes = { workspace = true }
+base64 = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+memstack-workspace-service = { workspace = true }
+memstack-workspace-service-api = { workspace = true }
+redis = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["codec", "io"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+bcs-db-local = { workspace = true }
+bcs-db-postgres = { workspace = true }
+bcs-http = { workspace = true }
+bcs-services-container = { workspace = true, features = ["test-support"] }
+tempfile = { workspace = true }
+tower = { workspace = true }
+
+[lints]
+workspace = true
