@@ -1,0 +1,234 @@
+name: Desktop Release Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact protected desktop prerelease tag to assemble
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: desktop-release-evidence-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  assemble:
+    name: Assemble immutable desktop release evidence v3
+    runs-on: ubuntu-latest
+    environment: desktop-release-qa
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Authorize exact prerelease identity
+        id: identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_RELEASE_ALLOWED_ACTORS: ${{ vars.DESKTOP_RELEASE_ALLOWED_ACTORS }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo 'evidence_status=blocked reason=release_tag_invalid' >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const actors = (process.env.DESKTOP_RELEASE_ALLOWED_ACTORS ?? '')
+            .split(/[,\n]/)
+            .map((value) => value.trim())
+            .filter(Boolean);
+          if (
+            actors.length === 0 ||
+            new Set(actors).size !== actors.length ||
+            !actors.includes(process.env.GITHUB_ACTOR)
+          ) {
+            throw new Error('evidence actor is not authorized');
+          }
+          NODE
+
+          commit_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq '.sha')"
+          comparison_status="$(
+            gh api "repos/${GITHUB_REPOSITORY}/compare/${commit_sha}...main" --jq '.status'
+          )"
+          if [[ "$comparison_status" != "ahead" && "$comparison_status" != "identical" ]]; then
+            echo 'evidence_status=blocked reason=release_commit_not_on_main' >&2
+            exit 1
+          fi
+          release_json="$(
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,tagName
+          )"
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "false" || \
+                "$(jq -r '.isPrerelease' <<<"$release_json")" != "true" || \
+                "$(jq -r '.tagName' <<<"$release_json")" != "$tag" ]]; then
+            echo 'evidence_status=blocked reason=source_release_not_prerelease' >&2
+            exit 1
+          fi
+
+          package_path="$RUNNER_TEMP/desktop-package.json"
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/contents/agi-stack/apps/desktop/package.json?ref=${commit_sha}" \
+            --jq '.content' | tr -d '\n' | base64 --decode > "$package_path"
+          TAG="$tag" PACKAGE_PATH="$package_path" node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const value = JSON.parse(readFileSync(process.env.PACKAGE_PATH, 'utf8'));
+          if (process.env.TAG !== `v${value.version}`) {
+            throw new Error('release tag does not match the immutable desktop package version');
+          }
+          NODE
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout immutable evidence assembler
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.identity.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Download immutable prerelease evidence and assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_root="$RUNNER_TEMP/desktop-release-evidence"
+          manifest_before="$RUNNER_TEMP/github-release-assets.before-evidence.json"
+          manifest_after="$RUNNER_TEMP/github-release-assets.after-evidence.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          mkdir -m 0700 "$release_root"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$manifest_before"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_root"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$manifest_after"
+          if ! cmp -s "$manifest_before" "$manifest_after"; then
+            echo 'evidence_status=blocked reason=github_asset_set_changed_during_evidence_assembly' >&2
+            exit 1
+          fi
+          echo "release_root=$release_root" >> "$GITHUB_ENV"
+          echo "asset_manifest=$manifest_after" >> "$GITHUB_ENV"
+
+      - name: Rebuild trusted supplemental producer manifest from GitHub
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGISTACK_PRODUCER_STATUS_PREFIX: evidence_status
+        run: |
+          set -euo pipefail
+          producer_manifest="$RUNNER_TEMP/github-workflow-producers.json"
+          bash agi-stack/apps/desktop/scripts/resolve-supplemental-producers.sh \
+            '${{ steps.identity.outputs.commit_sha }}' \
+            '${{ steps.identity.outputs.tag }}' \
+            "$asset_manifest" \
+            "$producer_manifest"
+          echo "producer_manifest=$producer_manifest" >> "$GITHUB_ENV"
+
+      - name: Assemble exact v3 evidence index
+        shell: bash
+        env:
+          AGISTACK_EXPECTED_TAG: ${{ steps.identity.outputs.tag }}
+          AGISTACK_EXPECTED_COMMIT_SHA: ${{ steps.identity.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          node agi-stack/apps/desktop/scripts/release-evidence-assembly.mjs \
+            assemble "$release_root" "$asset_manifest" "$producer_manifest"
+
+      - name: Publish the immutable v3 evidence index once
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.identity.outputs.tag }}"
+          index="$release_root/release-evidence-index-v3.json"
+          if jq -e '.assets[] | select(.name == "release-evidence-index-v3.json")' \
+            "$asset_manifest" >/dev/null; then
+            echo 'The immutable v3 evidence index already exists; refusing asset replacement.'
+          else
+            gh release upload "$tag" "$index" --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Verify the published index and unchanged source assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.identity.outputs.tag }}"
+          live_manifest="$RUNNER_TEMP/github-release-assets.after-index.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$live_manifest"
+          BEFORE="$asset_manifest" AFTER="$live_manifest" \
+            INDEX="$release_root/release-evidence-index-v3.json" node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { readFileSync, statSync } = require('node:fs');
+          const before = JSON.parse(readFileSync(process.env.BEFORE, 'utf8'));
+          const after = JSON.parse(readFileSync(process.env.AFTER, 'utf8'));
+          const indexBytes = readFileSync(process.env.INDEX);
+          const expectedDigest = `sha256:${createHash('sha256').update(indexBytes).digest('hex')}`;
+          const beforeByName = new Map(before.assets.map((asset) => [asset.name, asset]));
+          const afterByName = new Map(after.assets.map((asset) => [asset.name, asset]));
+          for (const [name, asset] of beforeByName) {
+            const live = afterByName.get(name);
+            if (!live || JSON.stringify(live) !== JSON.stringify(asset)) {
+              throw new Error(`source release asset changed during evidence publication: ${name}`);
+            }
+          }
+          const indexAsset = afterByName.get('release-evidence-index-v3.json');
+          if (
+            !indexAsset ||
+            indexAsset.size !== statSync(process.env.INDEX).size ||
+            indexAsset.digest !== expectedDigest
+          ) {
+            throw new Error('published v3 evidence index identity mismatch');
+          }
+          if (
+            after.assets.length !==
+            before.assets.length + (beforeByName.has('release-evidence-index-v3.json') ? 0 : 1)
+          ) {
+            throw new Error('unexpected release asset appeared during evidence publication');
+          }
+          NODE
+
+      - name: Report incomplete release evidence as blocked
+        if: failure()
+        run: |
+          echo 'evidence_status=blocked reason=release_evidence_incomplete' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The prerelease remains non-promotable until physical platform, update rollback, WCAG, Neo4j, Browser Bridge, signature, and attestation evidence all pass.' >> "$GITHUB_STEP_SUMMARY"

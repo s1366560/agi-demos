@@ -17,6 +17,10 @@ The output includes:
 - a macOS `.mobileconfig` configuration profile for the four browser preference
   domains;
 - a Windows current-user `.reg` policy artifact.
+- `browser-bridge-enterprise-policy-bundle.json`, containing the exact bytes of
+  every generated policy member;
+- `browser-bridge-enterprise-policy-member-manifest.json`, binding every member
+  path, byte size, and SHA-256 digest to the extension ID and update URL.
 
 The generator refuses non-HTTPS update URLs and refuses to overwrite existing
 artifacts. It validates the generated macOS and Linux documents against the
@@ -33,6 +37,12 @@ update manifest through environment variables. It validates the CRX3 signature,
 public-key-derived extension ID, payload manifest version/key, update URL, and
 update-manifest identity. It never creates or persists a CRX private key. A
 missing externally provisioned CRX fails closed.
+
+Browser Bridge promotion evidence must additionally bind these live release
+assets to the same prerelease identity: `memstack-browser-bridge.crx`, `qa.xml`,
+the policy bundle and member manifest above, and `stable.xml.candidate`. The
+stable candidate freezes the exact bytes that promotion may publish; it does
+not authorize changing the public stable pointer during prerelease QA.
 
 The extension `hello` response retains `protocolVersion: 1` and also advertises
 the explicit supported interval `protocolMin: 1` through `protocolMax: 2` so a

@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: desktop-release-production
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Authorize protected promotion identity
@@ -116,13 +117,47 @@ jobs:
       - name: Validate external v3 promotion evidence
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           AGISTACK_EXPECTED_TAG: ${{ steps.identity.outputs.tag }}
           AGISTACK_EXPECTED_COMMIT_SHA: ${{ steps.identity.outputs.commit_sha }}
           AGISTACK_GITHUB_RELEASE_ASSET_MANIFEST: ${{ runner.temp }}/github-release-assets.after.json
+          AGISTACK_PRODUCER_STATUS_PREFIX: promotion_status
         run: |
           set -euo pipefail
+          producer_manifest="$RUNNER_TEMP/github-workflow-producers.json"
+          bash agi-stack/apps/desktop/scripts/resolve-supplemental-producers.sh \
+            "$AGISTACK_EXPECTED_COMMIT_SHA" \
+            "$AGISTACK_EXPECTED_TAG" \
+            "$AGISTACK_GITHUB_RELEASE_ASSET_MANIFEST" \
+            "$producer_manifest"
+          export AGISTACK_GITHUB_WORKFLOW_PRODUCER_MANIFEST="$producer_manifest"
           node agi-stack/apps/desktop/scripts/release-promotion-validation.mjs \
             validate-promotion "$RUNNER_TEMP/desktop-promotion-assets"
+
+      - name: Revalidate immutable assets before stable promotion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          live_manifest="$RUNNER_TEMP/github-release-assets.before-promotion.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$live_manifest"
+          if ! cmp -s "$RUNNER_TEMP/github-release-assets.after.json" "$live_manifest"; then
+            echo 'promotion_status=blocked reason=github_asset_set_changed_before_promotion' >&2
+            exit 1
+          fi
 
       - name: Promote the exact prerelease to stable
         shell: bash
@@ -145,6 +180,31 @@ jobs:
                 "$(jq -r '.isPrerelease' <<<"$release_json")" != "false" || \
                 "$(jq -r '.tagName' <<<"$release_json")" != "$tag" ]]; then
             echo "stable promotion did not reach the exact final state" >&2
+            exit 1
+          fi
+
+      - name: Verify immutable assets after stable promotion
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          live_manifest="$RUNNER_TEMP/github-release-assets.after-promotion.json"
+          tag="${{ steps.identity.outputs.tag }}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '
+            {
+              contract_version: "github-release-assets-v1",
+              tag: .tag_name,
+              assets: ([.assets[] | {
+                github_asset_id: (.id | tostring),
+                name: .name,
+                size: .size,
+                digest: .digest
+              }] | sort_by(.name))
+            }
+          ' > "$live_manifest"
+          if ! cmp -s "$RUNNER_TEMP/github-release-assets.after.json" "$live_manifest"; then
+            echo 'promotion_status=blocked reason=github_asset_set_changed_after_promotion' >&2
             exit 1
           fi
 

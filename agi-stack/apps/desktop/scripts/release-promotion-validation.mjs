@@ -22,21 +22,95 @@ const supplementalEvidenceSchema = JSON.parse(
     'utf8',
   ),
 );
+const nativeQaSchema = JSON.parse(
+  readFileSync(new URL('desktop-native-qa-evidence.v1.schema.json', import.meta.url), 'utf8'),
+);
 const githubReleaseAssetsSchema = JSON.parse(
   readFileSync(new URL('github-release-assets.v1.schema.json', import.meta.url), 'utf8'),
 );
-const REQUIRED_PLATFORM_CHECKS = Object.freeze([
-  'install',
-  'launch',
-  'updater_apply',
-  'updater_failure_rollback',
-]);
+const producerManifestSchema = JSON.parse(
+  readFileSync(new URL('github-workflow-producers.v1.schema.json', import.meta.url), 'utf8'),
+);
+const REQUIRED_PLATFORM_CHECKS = Object.freeze({
+  linux: Object.freeze([
+    'appimage_install',
+    'appimage_launch',
+    'appimage_updater_apply',
+    'appimage_failure_rollback',
+    'deb_install',
+    'deb_upgrade',
+    'deb_downgrade',
+    'data_compatibility',
+    'uninstall',
+    'provenance',
+    'file_permissions',
+    'browser_bridge_registration',
+  ]),
+  macos: Object.freeze([
+    'dmg_install',
+    'dmg_launch',
+    'zip_updater_apply',
+    'zip_failure_rollback',
+    'data_compatibility',
+    'uninstall',
+    'notarization',
+    'gatekeeper',
+    'nested_signatures',
+    'browser_bridge_registration',
+  ]),
+  windows: Object.freeze([
+    'nsis_install',
+    'nsis_launch',
+    'nsis_updater_apply',
+    'nsis_failure_rollback',
+    'data_compatibility',
+    'uninstall',
+    'authenticode',
+    'vault_acl',
+    'browser_bridge_registration',
+  ]),
+});
+const REQUIRED_PLATFORM_PACKAGE_TYPES = Object.freeze({
+  linux: Object.freeze(['appimage', 'deb']),
+  macos: Object.freeze(['dmg', 'zip']),
+  windows: Object.freeze(['nsis']),
+});
 const REQUIRED_PLATFORMS = Object.freeze(['linux', 'macos', 'windows']);
 const REQUIRED_SUPPLEMENTAL_EVIDENCE = Object.freeze([
   'browser_bridge',
   'neo4j_runtime',
   'wcag_aa',
 ]);
+const REQUIRED_BROWSER_BRIDGE_RELEASE_ASSETS = Object.freeze([
+  'memstack-browser-bridge.crx',
+  'qa.xml',
+  'browser-bridge-enterprise-policy-bundle.json',
+  'browser-bridge-enterprise-policy-member-manifest.json',
+  'stable.xml.candidate',
+]);
+const SUPPLEMENTAL_PRODUCER_CONTRACTS = Object.freeze({
+  browser_bridge: Object.freeze({
+    artifactName: 'desktop-browser-bridge-release-evidence',
+    requiredRefs: Object.freeze([
+      'browser-bridge-macos-chrome-edge.log',
+      'browser-bridge-windows-chrome-edge.log',
+      'browser-bridge-linux-chrome-edge.log',
+    ]),
+  }),
+  neo4j_runtime: Object.freeze({
+    artifactName: 'desktop-neo4j-runtime-evidence',
+    requiredRefs: Object.freeze(['neo4j-electron-matched-state.log']),
+  }),
+  wcag_aa: Object.freeze({
+    artifactName: 'desktop-wcag-aa-evidence',
+    requiredRefs: Object.freeze([
+      'voiceover-at-ledger.jsonl',
+      'nvda-at-ledger.jsonl',
+      'orca-at-ledger.jsonl',
+    ]),
+  }),
+});
+const TRUSTED_SUPPLEMENTAL_WORKFLOW = '.github/workflows/desktop-release-supplemental-evidence.yml';
 
 function blocked(reason) {
   throw new Error(`promotion_status=blocked reason=${reason}`);
@@ -78,6 +152,58 @@ function sameReleaseIdentity(left, right) {
   );
 }
 
+function sameProducerRun(left, right) {
+  return (
+    left?.workflow_path === right?.workflow_path &&
+    left?.id === right?.id &&
+    left?.attempt === right?.attempt &&
+    left?.url === right?.url &&
+    left?.head_sha === right?.head_sha &&
+    left?.conclusion === right?.conclusion &&
+    left?.artifact?.github_artifact_id === right?.artifact?.github_artifact_id &&
+    left?.artifact?.name === right?.artifact?.name &&
+    left?.artifact?.size === right?.artifact?.size &&
+    left?.artifact?.sha256 === right?.artifact?.sha256 &&
+    left?.artifact?.release_asset_name === right?.artifact?.release_asset_name
+  );
+}
+
+function assertSupplementalProducer({ evidence, id, liveProducer, repository, assetsByName }) {
+  const contract = SUPPLEMENTAL_PRODUCER_CONTRACTS[id];
+  if (evidence.producer_run.workflow_path !== TRUSTED_SUPPLEMENTAL_WORKFLOW) {
+    blocked('supplemental_producer_workflow_untrusted');
+  }
+  if (evidence.judgment_revision !== evidence.release_identity.commit_sha) {
+    blocked('supplemental_judgment_revision_mismatch');
+  }
+  const expectedUrl = liveProducer
+    ? `https://github.com/${repository}/actions/runs/${liveProducer.id}/attempts/${liveProducer.attempt}`
+    : null;
+  if (
+    !liveProducer ||
+    !sameProducerRun(evidence.producer_run, liveProducer) ||
+    liveProducer.workflow_path !== TRUSTED_SUPPLEMENTAL_WORKFLOW ||
+    liveProducer.head_sha !== evidence.release_identity.commit_sha ||
+    liveProducer.conclusion !== 'success' ||
+    liveProducer.url !== expectedUrl ||
+    liveProducer.artifact.name !== contract.artifactName
+  ) {
+    blocked('supplemental_producer_identity_mismatch');
+  }
+  const producerAsset = assetsByName.get(liveProducer.artifact.release_asset_name);
+  if (
+    !producerAsset ||
+    producerAsset.size !== liveProducer.artifact.size ||
+    producerAsset.sha256 !== liveProducer.artifact.sha256
+  ) {
+    blocked('supplemental_producer_artifact_mismatch');
+  }
+  const references = new Set(evidence.check.artifact_refs.map(({ name }) => name));
+  if (contract.requiredRefs.some((name) => !references.has(name))) {
+    blocked('supplemental_evidence_required_refs_incomplete');
+  }
+}
+
 function assertPassedOutcome(check) {
   if (
     check?.status !== 'passed' ||
@@ -88,6 +214,43 @@ function assertPassedOutcome(check) {
     check.log_refs.length + check.artifact_refs.length === 0
   ) {
     blocked('required_evidence_not_passed');
+  }
+}
+
+function assertJudgmentLedger(evidence) {
+  const checkRefs = evidence.check
+    ? [...evidence.check.log_refs, ...evidence.check.artifact_refs]
+    : evidence.checks.flatMap((check) => [...check.log_refs, ...check.artifact_refs]);
+  if (
+    evidence.judgment_revision !== evidence.release_identity.commit_sha ||
+    !evidence.judgment_ledger.name.endsWith('.jsonl') ||
+    !checkRefs.some(
+      (reference) =>
+        reference.name === evidence.judgment_ledger.name &&
+        reference.sha256 === evidence.judgment_ledger.sha256 &&
+        reference.url === evidence.judgment_ledger.url,
+    )
+  ) {
+    blocked('judgment_ledger_identity_mismatch');
+  }
+}
+
+function assertBrowserBridgeReleaseAssets(evidence, assetsByName) {
+  const references = new Map(
+    evidence.check.artifact_refs.map((reference) => [reference.name, reference]),
+  );
+  if (
+    references.size !== evidence.check.artifact_refs.length ||
+    REQUIRED_BROWSER_BRIDGE_RELEASE_ASSETS.some((name) => !references.has(name))
+  ) {
+    blocked('browser_bridge_release_asset_evidence_incomplete');
+  }
+  for (const name of REQUIRED_BROWSER_BRIDGE_RELEASE_ASSETS) {
+    const reference = references.get(name);
+    const asset = assetsByName.get(name);
+    if (!asset || reference.sha256 !== asset.sha256) {
+      blocked('browser_bridge_release_asset_identity_mismatch');
+    }
   }
 }
 
@@ -102,6 +265,7 @@ export function validatePromotionBundle({ releaseRoot = process.cwd(), env = pro
   const root = resolve(releaseRoot);
   const indexPath = join(root, RELEASE_EVIDENCE_INDEX_NAME);
   const nativeQaPath = join(root, NATIVE_QA_EVIDENCE_NAME);
+  const producerManifestPath = env.AGISTACK_GITHUB_WORKFLOW_PRODUCER_MANIFEST;
   const index = readJson(
     indexPath,
     'release_evidence_index_missing',
@@ -109,6 +273,23 @@ export function validatePromotionBundle({ releaseRoot = process.cwd(), env = pro
     indexSchema,
   );
   const releaseIdentity = index.release_identity;
+  if (!env.AGISTACK_GITHUB_RELEASE_ASSET_MANIFEST) {
+    blocked('github_asset_manifest_missing');
+  }
+  if (!producerManifestPath) blocked('producer_manifest_missing');
+  const producerManifest = readJson(
+    resolve(producerManifestPath),
+    'producer_manifest_missing',
+    'producer_manifest_invalid',
+    producerManifestSchema,
+  );
+  const producersById = new Map(producerManifest.runs.map((run) => [run.supplemental_id, run]));
+  if (
+    producersById.size !== REQUIRED_SUPPLEMENTAL_EVIDENCE.length ||
+    REQUIRED_SUPPLEMENTAL_EVIDENCE.some((id) => !producersById.has(id))
+  ) {
+    blocked('producer_manifest_set_invalid');
+  }
   if (
     releaseIdentity.channel !== 'prerelease' ||
     releaseIdentity.tag !== `v${releaseIdentity.version}` ||
@@ -158,26 +339,42 @@ export function validatePromotionBundle({ releaseRoot = process.cwd(), env = pro
     ) {
       blocked('platform_evidence_identity_mismatch');
     }
-    const artifact = assetsByName.get(evidence.artifact_identity.name);
+    assertJudgmentLedger(evidence);
+    const packageTypes = evidence.artifact_identities.map(
+      ({ package_type: packageType }) => packageType,
+    );
     if (
-      !artifact ||
-      artifact.github_asset_id !== evidence.artifact_identity.github_asset_id ||
-      artifact.size !== evidence.artifact_identity.size ||
-      artifact.sha256 !== evidence.artifact_identity.sha256 ||
-      artifact.sha512 !== evidence.artifact_identity.sha512
+      new Set(packageTypes).size !== packageTypes.length ||
+      REQUIRED_PLATFORM_PACKAGE_TYPES[binding.platform].some(
+        (packageType) => !packageTypes.includes(packageType),
+      )
     ) {
-      blocked('platform_artifact_identity_mismatch');
+      blocked('platform_artifact_set_invalid');
+    }
+    for (const identity of evidence.artifact_identities) {
+      const artifact = assetsByName.get(identity.name);
+      if (
+        !artifact ||
+        artifact.github_asset_id !== identity.github_asset_id ||
+        artifact.size !== identity.size ||
+        artifact.sha256 !== identity.sha256 ||
+        artifact.sha512 !== identity.sha512
+      ) {
+        blocked('platform_artifact_identity_mismatch');
+      }
+      assertPassedOutcome(identity.signature);
+      assertPassedOutcome(identity.attestation);
     }
     const checks = new Map(evidence.checks.map((check) => [check.id, check]));
     if (
       checks.size !== evidence.checks.length ||
-      REQUIRED_PLATFORM_CHECKS.some((id) => !checks.has(id))
+      REQUIRED_PLATFORM_CHECKS[binding.platform].some((id) => !checks.has(id))
     ) {
       blocked('platform_evidence_check_set_invalid');
     }
-    assertPassedOutcome(evidence.artifact_identity.signature);
-    assertPassedOutcome(evidence.artifact_identity.attestation);
-    for (const id of REQUIRED_PLATFORM_CHECKS) assertPassedOutcome(checks.get(id));
+    for (const id of REQUIRED_PLATFORM_CHECKS[binding.platform]) {
+      assertPassedOutcome(checks.get(id));
+    }
   }
 
   const supplementalIds = index.supplemental_evidence.map(({ id }) => id).sort();
@@ -206,6 +403,37 @@ export function validatePromotionBundle({ releaseRoot = process.cwd(), env = pro
       blocked('supplemental_evidence_identity_mismatch');
     }
     assertPassedOutcome(evidence.check);
+    assertJudgmentLedger(evidence);
+    assertSupplementalProducer({
+      evidence,
+      id: binding.id,
+      liveProducer: producersById.get(binding.id),
+      repository: producerManifest.repository,
+      assetsByName,
+    });
+    if (binding.id === 'browser_bridge') {
+      assertBrowserBridgeReleaseAssets(evidence, assetsByName);
+    }
+  }
+
+  if (existsSync(nativeQaPath)) {
+    const nativeQa = readJson(
+      nativeQaPath,
+      'native_qa_evidence_missing',
+      'native_qa_evidence_invalid',
+      nativeQaSchema,
+    );
+    if (
+      nativeQa.version !== releaseIdentity.version ||
+      nativeQa.tag !== releaseIdentity.tag ||
+      nativeQa.commit_sha !== releaseIdentity.commit_sha ||
+      nativeQa.workflow_run.id !== releaseIdentity.workflow_run.id ||
+      nativeQa.workflow_run.attempt !== releaseIdentity.workflow_run.attempt ||
+      nativeQa.workflow_run.url !== releaseIdentity.workflow_run.url ||
+      nativeQa.source_index_sha256 !== sha256(indexPath)
+    ) {
+      blocked('native_qa_evidence_identity_mismatch');
+    }
   }
 
   const expectedNames = new Set([

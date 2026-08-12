@@ -7,14 +7,18 @@
     "contract_version",
     "release_identity",
     "id",
+    "producer_run",
     "judgment_revision",
+    "judgment_ledger",
     "check"
   ],
   "properties": {
     "contract_version": { "const": "desktop-release-supplemental-evidence-v1" },
     "release_identity": { "$ref": "#/$defs/releaseIdentity" },
     "id": { "enum": ["neo4j_runtime", "wcag_aa", "browser_bridge"] },
+    "producer_run": { "$ref": "#/$defs/producerRun" },
     "judgment_revision": { "$ref": "#/$defs/sha" },
+    "judgment_ledger": { "$ref": "#/$defs/evidenceRef" },
     "check": { "$ref": "#/$defs/check" }
   },
   "$defs": {
@@ -53,6 +57,37 @@
         "commit_sha": { "$ref": "#/$defs/sha" },
         "channel": { "const": "prerelease" },
         "workflow_run": { "$ref": "#/$defs/workflowRun" }
+      }
+    },
+    "producerArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github_artifact_id", "name", "size", "sha256", "release_asset_name"],
+      "properties": {
+        "github_artifact_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "$ref": "#/$defs/safeName" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "release_asset_name": { "$ref": "#/$defs/safeName" }
+      }
+    },
+    "producerRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflow_path", "id", "attempt", "url", "head_sha", "conclusion", "artifact"],
+      "properties": {
+        "workflow_path": {
+          "const": ".github/workflows/desktop-release-supplemental-evidence.yml"
+        },
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$"
+        },
+        "head_sha": { "$ref": "#/$defs/sha" },
+        "conclusion": { "const": "success" },
+        "artifact": { "$ref": "#/$defs/producerArtifact" }
       }
     },
     "evidenceRef": {

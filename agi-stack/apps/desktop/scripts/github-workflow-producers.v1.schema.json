@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Live trusted supplemental evidence producer runs v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "repository", "runs"],
+  "properties": {
+    "contract_version": { "const": "github-workflow-producers-v1" },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/producer" }
+    }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "safeName": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,240}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github_artifact_id",
+        "name",
+        "size",
+        "sha256",
+        "release_asset_name"
+      ],
+      "properties": {
+        "github_artifact_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "$ref": "#/$defs/safeName" },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "release_asset_name": { "$ref": "#/$defs/safeName" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supplemental_id",
+        "workflow_path",
+        "id",
+        "attempt",
+        "url",
+        "head_sha",
+        "conclusion",
+        "artifact"
+      ],
+      "properties": {
+        "supplemental_id": {
+          "enum": ["neo4j_runtime", "wcag_aa", "browser_bridge"]
+        },
+        "workflow_path": {
+          "type": "string",
+          "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.yml$"
+        },
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "attempt": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$"
+        },
+        "head_sha": { "$ref": "#/$defs/sha" },
+        "conclusion": { "enum": ["success", "failure", "cancelled", "timed_out"] },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      }
+    }
+  }
+}

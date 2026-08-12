@@ -33,6 +33,11 @@ const artifactRef = Object.freeze({
   sha256: 'b'.repeat(64),
   url: `${workflowRun.url}#artifacts`,
 });
+const judgmentLedger = Object.freeze({
+  name: 'macos-judgment-ledger.jsonl',
+  sha256: 'e'.repeat(64),
+  url: `${workflowRun.url}#artifacts`,
+});
 
 function outcome(id, status = 'passed') {
   return {
@@ -50,31 +55,41 @@ function platformEvidenceV3() {
   return {
     contract_version: 'desktop-release-evidence-v3',
     release_identity: releaseIdentity,
-    artifact_identity: {
-      github_asset_id: '987654321',
-      name: 'agi-stack-desktop-0.2.0-mac-universal.dmg',
-      size: 4096,
-      sha256: 'c'.repeat(64),
-      sha512: Buffer.alloc(64, 7).toString('base64'),
-      signature: outcome('artifact_signature'),
-      attestation: outcome('artifact_attestation'),
-    },
+    artifact_identities: ['dmg', 'zip'].map((packageType, index) => ({
+      github_asset_id: String(987654321 + index),
+      name: `agi-stack-desktop-0.2.0-mac-universal.${packageType}`,
+      size: 4096 + index,
+      sha256: String(index + 3).repeat(64),
+      sha512: Buffer.alloc(64, index + 7).toString('base64'),
+      package_type: packageType,
+      signature: outcome(`${packageType}_signature`),
+      attestation: outcome(`${packageType}_attestation`),
+    })),
     platform: {
       os: 'macos',
       os_version: '15.6',
       os_build: '24G84',
       architecture: 'arm64',
       environment: 'physical',
-      package_type: 'dmg',
       anonymous_host_id: `sha256:${'d'.repeat(64)}`,
     },
     checks: [
-      outcome('install'),
-      outcome('launch'),
-      outcome('updater_apply'),
-      outcome('updater_failure_rollback'),
+      outcome('dmg_install'),
+      outcome('dmg_launch'),
+      outcome('zip_updater_apply'),
+      outcome('zip_failure_rollback'),
+      outcome('data_compatibility'),
+      outcome('uninstall'),
+      outcome('notarization'),
+      outcome('gatekeeper'),
+      outcome('nested_signatures'),
+      {
+        ...outcome('browser_bridge_registration'),
+        artifact_refs: [artifactRef, judgmentLedger],
+      },
     ],
-    judgment_revision: 'e'.repeat(40),
+    judgment_revision: releaseIdentity.commit_sha,
+    judgment_ledger: judgmentLedger,
   };
 }
 
@@ -116,10 +131,11 @@ function indexV3() {
 }
 
 test('v3 platform evidence binds release, GitHub artifact, physical host, and complete checks', () => {
+  assert.ok(platformSchemaV3.required.includes('judgment_ledger'));
   const evidence = platformEvidenceV3();
   assert.deepEqual(validateJsonSchema(platformSchemaV3, evidence), []);
 
-  for (const field of ['release_identity', 'artifact_identity', 'platform', 'checks']) {
+  for (const field of ['release_identity', 'artifact_identities', 'platform', 'checks']) {
     const missing = structuredClone(evidence);
     delete missing[field];
     assert.notDeepEqual(validateJsonSchema(platformSchemaV3, missing), [], field);

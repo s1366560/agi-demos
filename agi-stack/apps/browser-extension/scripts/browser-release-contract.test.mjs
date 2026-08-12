@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
   assertReleaseInputs,
   createEnterprisePolicyBundle,
+  createEnterprisePolicyReleaseArtifacts,
   createLinuxManagedPolicyBundle,
   createMacOsConfigurationProfile,
   createUpdateManifest,
@@ -58,26 +59,81 @@ test('macOS and Linux enterprise artifacts are deterministic and contract-valida
   }
 });
 
+test('enterprise release artifacts bind every policy member and its immutable bytes', () => {
+  const artifacts = createEnterprisePolicyReleaseArtifacts({
+    extensionId,
+    updateUrl,
+  });
+  assert.equal(artifacts.bundle.contract_version, 'browser-bridge-enterprise-policy-bundle-v1');
+  assert.equal(
+    artifacts.memberManifest.contract_version,
+    'browser-bridge-enterprise-policy-member-manifest-v1',
+  );
+  assert.equal(artifacts.bundle.extension_id, extensionId);
+  assert.equal(artifacts.bundle.update_url, updateUrl);
+  assert.deepEqual(
+    artifacts.bundle.members.map(({ path }) => path),
+    artifacts.memberManifest.members.map(({ path }) => path),
+  );
+  assert.deepEqual(
+    artifacts.memberManifest.members.map(({ path }) => path),
+    [...artifacts.memberManifest.members.map(({ path }) => path)].sort(),
+  );
+  assert.ok(artifacts.memberManifest.members.length >= 10);
+  for (const member of artifacts.memberManifest.members) {
+    assert.match(member.sha256, /^[a-f0-9]{64}$/u);
+    assert.ok(member.size > 0);
+    const bundled = artifacts.bundle.members.find(({ path }) => path === member.path);
+    assert.ok(bundled);
+    const bytes = Buffer.from(bundled.content_base64, 'base64');
+    assert.equal(bytes.byteLength, member.size);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), member.sha256);
+  }
+});
+
 test('update manifest validation rejects identity and version drift', () => {
-  const manifest = createUpdateManifest({ extensionId, version: '0.1.0', crxUrl });
+  const manifest = createUpdateManifest({
+    extensionId,
+    version: '0.1.0',
+    crxUrl,
+  });
   validateUpdateManifest(manifest, { extensionId, version: '0.1.0', crxUrl });
   assert.throws(
-    () => validateUpdateManifest(manifest, { extensionId: `a${extensionId.slice(1)}`, version: '0.1.0', crxUrl }),
+    () =>
+      validateUpdateManifest(manifest, {
+        extensionId: `a${extensionId.slice(1)}`,
+        version: '0.1.0',
+        crxUrl,
+      }),
     /extension id/u,
   );
   assert.throws(
-    () => validateUpdateManifest(manifest, { extensionId, version: '0.2.0', crxUrl }),
+    () =>
+      validateUpdateManifest(manifest, {
+        extensionId,
+        version: '0.2.0',
+        crxUrl,
+      }),
     /version/u,
   );
 });
 
 test('release inputs fail closed without a separately provisioned CRX', () => {
   assert.throws(
-    () => assertReleaseInputs({ crxPath: '', updateManifestPath: '', expectedExtensionId: extensionId }),
+    () =>
+      assertReleaseInputs({
+        crxPath: '',
+        updateManifestPath: '',
+        expectedExtensionId: extensionId,
+      }),
     /CRX artifact/u,
   );
   assert.throws(
-    () => createEnterprisePolicyBundle({ extensionId, updateUrl: 'http://updates.example.test/update.xml' }),
+    () =>
+      createEnterprisePolicyBundle({
+        extensionId,
+        updateUrl: 'http://updates.example.test/update.xml',
+      }),
     /HTTPS/u,
   );
 });
@@ -86,7 +142,10 @@ test('CRX3 verification binds signature, payload manifest, identity, and version
   const { privateKey, publicKey: publicKeyObject } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
   });
-  const publicKeyBytes = publicKeyObject.export({ format: 'der', type: 'spki' });
+  const publicKeyBytes = publicKeyObject.export({
+    format: 'der',
+    type: 'spki',
+  });
   const syntheticId = extensionIdFromPublicKey(publicKeyBytes.toString('base64'));
   const zip = storedZip(
     'manifest.json',
@@ -115,7 +174,13 @@ test('CRX3 verification binds signature, payload manifest, identity, and version
     protobufBytesField(2, proof),
     protobufBytesField(10000, signedHeader),
   ]);
-  const crx = Buffer.concat([Buffer.from('Cr24'), uint32Le(3), uint32Le(header.length), header, zip]);
+  const crx = Buffer.concat([
+    Buffer.from('Cr24'),
+    uint32Le(3),
+    uint32Le(header.length),
+    header,
+    zip,
+  ]);
 
   const result = verifyCrx3(crx, {
     expectedExtensionId: syntheticId,

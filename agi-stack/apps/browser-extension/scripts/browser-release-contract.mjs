@@ -1,9 +1,5 @@
 import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
-import {
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
@@ -133,7 +129,13 @@ export function validateLinuxManagedPolicyBundle(bundle, expected) {
 export function createMacOsConfigurationProfile({ extensionId, updateUrl }) {
   const bundle = createEnterprisePolicyBundle({ extensionId, updateUrl });
   const payloads = MACOS_POLICY_TARGETS.map(({ target, domain, identifier, uuid }) =>
-    macOsPolicyPayload({ domain, identifier, uuid, extensionId, policy: bundle[target] }),
+    macOsPolicyPayload({
+      domain,
+      identifier,
+      uuid,
+      extensionId,
+      policy: bundle[target],
+    }),
   ).join('\n');
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -168,6 +170,54 @@ export function validateMacOsConfigurationProfile(profile, expected) {
   if (profile !== createMacOsConfigurationProfile(expected)) {
     throw new Error('macOS configuration profile is not the canonical fail-closed contract');
   }
+}
+
+export function createEnterprisePolicyReleaseArtifacts({ extensionId, updateUrl }) {
+  const bundle = createEnterprisePolicyBundle({ extensionId, updateUrl });
+  const linux = createLinuxManagedPolicyBundle({ extensionId, updateUrl });
+  validateLinuxManagedPolicyBundle(linux, { extensionId, updateUrl });
+  const macos = createMacOsConfigurationProfile({ extensionId, updateUrl });
+  validateMacOsConfigurationProfile(macos, { extensionId, updateUrl });
+  const members = [
+    ...Object.entries(bundle).map(([target, policy]) => [
+      `generic/${target}.managed-policy.json`,
+      `${JSON.stringify(policy, null, 2)}\n`,
+    ]),
+    ...Object.entries(linux).map(([target, artifact]) => [
+      `linux/${target}.managed-policy.json`,
+      `${JSON.stringify(artifact.policy, null, 2)}\n`,
+    ]),
+    ['macos/memstack-browser-bridge.mobileconfig', macos],
+    [
+      'windows/memstack-browser-bridge-current-user.reg',
+      createWindowsPolicyReg({ extensionId, updateUrl }),
+    ],
+  ]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, source]) => {
+      const bytes = Buffer.from(source, 'utf8');
+      return Object.freeze({
+        path,
+        size: bytes.byteLength,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        content_base64: bytes.toString('base64'),
+      });
+    });
+  const memberManifest = Object.freeze({
+    contract_version: 'browser-bridge-enterprise-policy-member-manifest-v1',
+    extension_id: extensionId,
+    update_url: updateUrl,
+    members: members.map(({ content_base64: _content, ...member }) => member),
+  });
+  return Object.freeze({
+    bundle: Object.freeze({
+      contract_version: 'browser-bridge-enterprise-policy-bundle-v1',
+      extension_id: extensionId,
+      update_url: updateUrl,
+      members,
+    }),
+    memberManifest,
+  });
 }
 
 function macOsPolicyPayload({ domain, identifier, uuid, extensionId, policy }) {
@@ -306,7 +356,11 @@ export function verifyCrx3(crxBytes, { expectedExtensionId, expectedVersion }) {
     const signature = requireSingleBytesField(proof, 2, 'CRX3 RSA signature');
     const publicKeyId = extensionIdFromPublicKey(publicKey.toString('base64'));
     if (publicKeyId !== signedExtensionId) continue;
-    const key = createPublicKey({ key: publicKey, format: 'der', type: 'spki' });
+    const key = createPublicKey({
+      key: publicKey,
+      format: 'der',
+      type: 'spki',
+    });
     if (verifySignature('sha256', signatureInput, key, signature)) {
       verifiedPublicKey = publicKey;
       break;
@@ -498,11 +552,7 @@ function readLocalZipEntry(zip, offset, compression, compressedSize, uncompresse
   if (dataEnd > zip.length) throw new Error('CRX ZIP entry data is truncated');
   const compressed = zip.subarray(dataStart, dataEnd);
   const content =
-    compression === 0
-      ? compressed
-      : compression === 8
-        ? inflateRawSync(compressed)
-        : null;
+    compression === 0 ? compressed : compression === 8 ? inflateRawSync(compressed) : null;
   if (content === null) throw new Error(`CRX ZIP compression method ${compression} is unsupported`);
   if (content.length !== uncompressedSize) {
     throw new Error('CRX ZIP entry size does not match its central directory');
@@ -553,7 +603,10 @@ function runCli() {
     const bundle = createEnterprisePolicyBundle({ extensionId, updateUrl });
     mkdirSync(outputDirectory, { recursive: true });
     for (const [target, policy] of Object.entries(bundle)) {
-      writeArtifact(resolve(outputDirectory, `${target}.managed-policy.json`), `${JSON.stringify(policy, null, 2)}\n`);
+      writeArtifact(
+        resolve(outputDirectory, `${target}.managed-policy.json`),
+        `${JSON.stringify(policy, null, 2)}\n`,
+      );
     }
     const linux = createLinuxManagedPolicyBundle({ extensionId, updateUrl });
     validateLinuxManagedPolicyBundle(linux, { extensionId, updateUrl });
@@ -569,6 +622,18 @@ function runCli() {
     writeArtifact(
       resolve(outputDirectory, 'windows-current-user-policy.reg'),
       createWindowsPolicyReg({ extensionId, updateUrl }),
+    );
+    const releaseArtifacts = createEnterprisePolicyReleaseArtifacts({
+      extensionId,
+      updateUrl,
+    });
+    writeArtifact(
+      resolve(outputDirectory, 'browser-bridge-enterprise-policy-bundle.json'),
+      `${JSON.stringify(releaseArtifacts.bundle, null, 2)}\n`,
+    );
+    writeArtifact(
+      resolve(outputDirectory, 'browser-bridge-enterprise-policy-member-manifest.json'),
+      `${JSON.stringify(releaseArtifacts.memberManifest, null, 2)}\n`,
     );
     return;
   }
