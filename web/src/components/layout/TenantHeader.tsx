@@ -172,7 +172,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
             </button>
             <Link
               to={basePath}
-              className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 hidden sm:block ml-1"
+              className="min-h-6 items-center text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 hidden sm:flex ml-1"
             >
               MemStack
             </Link>
@@ -221,17 +221,17 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
           </nav>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-none">
+          <div className="relative z-10 flex items-center gap-1 sm:gap-2 ml-auto flex-none bg-surface-light dark:bg-surface-dark">
             {onCommandPaletteOpen ? (
               <button
                 type="button"
                 onClick={onCommandPaletteOpen}
-                className="hidden md:flex items-center gap-2 h-9 px-2.5 rounded-lg border border-slate-200 dark:border-border-dark text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="hidden min-w-12 shrink-0 md:flex items-center gap-2 h-9 px-2.5 rounded-lg border border-slate-200 dark:border-border-dark text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 aria-label={commandPaletteLabel}
                 title={commandPaletteLabel}
               >
                 <Command size={16} />
-                <kbd className="text-[10px] font-medium tracking-wide opacity-70">
+                <kbd className="text-[10px] font-medium tracking-wide text-slate-600 dark:text-slate-300">
                   {isMacPlatform ? '⌘K' : 'Ctrl K'}
                 </kbd>
               </button>

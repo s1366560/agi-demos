@@ -64,7 +64,7 @@ export function PatternStats({
   };
 
   const getTrendColor = (value: number, positive: boolean) => {
-    if (value === 0) return 'text-slate-400';
+    if (value === 0) return 'text-slate-600 dark:text-slate-300';
     if (positive) {
       return value >= 0 ? 'text-emerald-500' : 'text-red-500';
     }

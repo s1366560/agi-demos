@@ -67,6 +67,8 @@ export function TenantAcpPage({
             onChange={(event) => setName(event.target.value)}
           />
           <select
+            aria-label={t('tenantAdmin.acp.transport')}
+            className="tenant-acp-transport"
             value={transport}
             onChange={(event) => setTransport(event.target.value as TenantAcpTransport)}
           >

@@ -17,7 +17,7 @@
 
 .tenant-overview-header span,
 .tenant-overview-summary span {
-  color: var(--gray-10);
+  color: var(--gray-11);
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;

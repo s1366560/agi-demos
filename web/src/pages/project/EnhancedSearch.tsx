@@ -796,7 +796,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               {/* Error Message */}
               {includeError && error && (
                 <div
-                  className="flex items-center gap-2 rounded-md border border-error-border bg-error-bg p-3 text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark"
+                  className="flex items-center gap-2 rounded-md border border-error-border bg-error-bg p-3 text-red-700 dark:border-error-border-dark dark:bg-error-bg-dark dark:text-red-300"
                   data-testid="search-error"
                   role="alert"
                 >

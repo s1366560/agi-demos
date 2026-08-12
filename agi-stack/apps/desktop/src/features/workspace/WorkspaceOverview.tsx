@@ -116,7 +116,11 @@ export function WorkspaceOverview({
             <Button variant="surface" color="gray" onClick={onOpenSettings}>
               <GearIcon /> {t('overview.configure')}
             </Button>
-            <Button disabled title={newTaskDisabledReason ?? t('task.disabledProjectRequired')}>
+            <Button
+              highContrast
+              disabled
+              title={newTaskDisabledReason ?? t('task.disabledProjectRequired')}
+            >
               <PlusIcon /> {t('overview.newTask')}
             </Button>
           </div>
@@ -256,6 +260,7 @@ export function WorkspaceOverview({
             <GearIcon /> {t('overview.configure')}
           </Button>
           <Button
+            highContrast
             disabled={Boolean(newTaskDisabledReason)}
             title={newTaskDisabledReason ?? undefined}
             onClick={onNewTask}

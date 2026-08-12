@@ -811,6 +811,7 @@ function SettingsGroup({
             type="button"
             key={section}
             className={active === section ? 'active' : ''}
+            aria-label={t(meta.label)}
             onClick={() => onSelect(section)}
           >
             <meta.Icon />

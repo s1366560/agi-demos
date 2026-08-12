@@ -24,20 +24,27 @@ const InitialLoadingScreen: React.FC<{ timedOut?: boolean | undefined }> = ({
   const { t } = useTranslation();
 
   return (
-    <div className="fixed inset-0 bg-background-light dark:bg-background-dark flex items-center justify-center z-50">
+    <div
+      className="fixed inset-0 bg-background-light dark:bg-background-dark flex items-center justify-center z-50"
+      data-app-initializer-state="loading"
+    >
       <div className="flex flex-col items-center gap-4">
         {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 p-3 rounded-xl">
             <Brain size={30} className="text-primary" />
           </div>
-          <h1 className="text-slate-900 dark:text-white text-2xl font-bold">
-            MemStack<span className="text-primary">.ai</span>
+          <h1 className="text-2xl font-bold text-slate-950 dark:text-white">
+            MemStack<span className="text-blue-700 dark:text-blue-300">.ai</span>
           </h1>
         </div>
 
         {/* Loading spinner */}
-        <div className="flex items-center gap-2 text-slate-500" role="status" aria-live="polite">
+        <div
+          className="flex items-center gap-2 text-slate-700 dark:text-slate-200"
+          role="status"
+          aria-live="polite"
+        >
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
           <span className="text-sm">{t('common.loading')}</span>
         </div>

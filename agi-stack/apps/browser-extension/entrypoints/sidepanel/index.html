@@ -11,8 +11,8 @@
       <select id="conversation-picker" class="picker" aria-label="Conversation"></select>
       <button id="new-conversation" class="icon-button" title="New conversation" aria-label="New conversation">+</button>
     </header>
-    <div id="status" class="status" hidden></div>
-    <main id="timeline" class="timeline" aria-live="polite"></main>
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+    <main id="timeline" class="timeline" role="log" aria-live="polite" aria-label="Conversation timeline"></main>
     <form id="composer" class="composer">
       <textarea
         id="composer-input"

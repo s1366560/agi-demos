@@ -16,6 +16,37 @@ const SURFACES = Object.freeze([
   "native_electron",
 ]);
 const EXECUTED_STATUSES = new Set(["passed", "failed"]);
+const NATIVE_SETTINGS_SECTIONS = Object.freeze([
+  "account",
+  "workspace",
+  "general",
+  "updates",
+  "appearance",
+  "notifications",
+  "shortcuts",
+  "browser",
+  "models",
+  "mcp",
+  "skills",
+  "plugins",
+  "agents",
+  "subagents",
+  "connection",
+]);
+const BROWSER_EXTENSION_ROUTES = Object.freeze([
+  Object.freeze({
+    routeId: "browser-extension-options",
+    launchTarget: "chrome-extension://:extensionId/options.html",
+    contexts: Object.freeze(["browser-extension", "options"]),
+    automation: "playwright_extension",
+  }),
+  Object.freeze({
+    routeId: "browser-extension-sidepanel",
+    launchTarget: "chrome-extension://:extensionId/sidepanel.html",
+    contexts: Object.freeze(["browser-extension", "sidepanel"]),
+    automation: "playwright_extension",
+  }),
+]);
 
 export const REQUIRED_ACCESSIBILITY_STATES = Object.freeze([
   "default",
@@ -37,6 +68,29 @@ export const REQUIRED_ACCESSIBILITY_STATES = Object.freeze([
   "data-error",
   "data-conflict",
 ]);
+
+export function deriveZoomEquivalentViewport(referenceViewport, zoomFactor) {
+  const width = Number(referenceViewport?.width);
+  const height = Number(referenceViewport?.height);
+  const factor = Number(zoomFactor);
+  if (
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    !Number.isFinite(height) ||
+    height <= 0 ||
+    !Number.isFinite(factor) ||
+    factor <= 0
+  ) {
+    throw new Error("accessibility_zoom_factor_invalid");
+  }
+  return Object.freeze({
+    referenceWidth: width,
+    referenceHeight: height,
+    zoomFactor: factor,
+    width: Math.floor(width / factor),
+    height: Math.floor(height / factor),
+  });
+}
 
 export const WCAG_22_AA_CRITERIA = Object.freeze([
   criterion("1.1.1", "A", "Non-text Content"),
@@ -130,6 +184,180 @@ export function buildCanonicalAccessibilityRouteInventory(routeContract) {
   });
 }
 
+export function buildCanonicalAccessibilityDataContract(
+  routeContract,
+  definitionDocuments,
+) {
+  const inventory = buildCanonicalAccessibilityRouteInventory(routeContract);
+  if (!Array.isArray(definitionDocuments)) {
+    throw new Error("accessibility_data_contract_definitions_invalid");
+  }
+  const expectedRouteIds = new Set(inventory.routes.map(({ routeId }) => routeId));
+  const definitionsByRouteId = new Map();
+  for (const document of definitionDocuments) {
+    if (!isRecord(document) || !Array.isArray(document.capabilities)) {
+      throw new Error("accessibility_data_contract_document_invalid");
+    }
+    for (const capability of document.capabilities) {
+      if (!isRecord(capability) || !expectedRouteIds.has(capability.id)) continue;
+      if (definitionsByRouteId.has(capability.id)) {
+        throw new Error(`accessibility_data_contract_duplicate:${capability.id}`);
+      }
+      definitionsByRouteId.set(capability.id, capability);
+    }
+  }
+  const routes = inventory.routes.map(({ routeId }) => {
+    const definition = definitionsByRouteId.get(routeId);
+    if (!definition) {
+      throw new Error(`accessibility_data_contract_missing:${routeId}`);
+    }
+    const dataContract = desktopAccessibilityDataContract(definition, routeId);
+    return Object.freeze({
+      routeId,
+      method: dataContract.method,
+      pathTemplate: dataContract.path,
+      ...(dataContract.injectionTrigger
+        ? { injectionTrigger: dataContract.injectionTrigger }
+        : {}),
+    });
+  });
+  return Object.freeze({
+    sourceRevision: inventory.sourceRevision,
+    routes: Object.freeze(routes),
+  });
+}
+
+function desktopAccessibilityDataContract(definition, routeId) {
+  const method = requiredText(
+    definition.api_method,
+    `accessibility_data_contract_method_invalid:${routeId}`,
+  );
+  const path = requiredText(
+    definition.api_path,
+    `accessibility_data_contract_path_invalid:${routeId}`,
+  );
+  const desktopContracts = Array.isArray(definition.api_contracts)
+    ? definition.api_contracts.filter(
+        (contract) =>
+          isRecord(contract) &&
+          contract.surface === "desktop_cloud" &&
+          contract.method !== "NONE",
+      )
+    : [];
+  const pathWithoutQuery = (value) => value.split("?", 1)[0];
+  const matchingContract = desktopContracts.find(
+    (contract) =>
+      contract.method === method &&
+      typeof contract.path === "string" &&
+      pathWithoutQuery(contract.path) === pathWithoutQuery(path),
+  );
+  const collaborationAuthorities = desktopContracts.filter(
+    (contract) =>
+      contract.method === "GET" &&
+      typeof contract.path === "string" &&
+      pathWithoutQuery(contract.path).endsWith("/collaboration/authority"),
+  );
+  const selected =
+    matchingContract ??
+    (collaborationAuthorities.length === 1 ? collaborationAuthorities[0] : null);
+  const selectedPath = selected
+    ? requiredText(
+        selected.path,
+        `accessibility_data_contract_path_invalid:${routeId}`,
+      )
+    : path;
+  const selectedMethod = selected
+    ? requiredText(
+        selected.method,
+        `accessibility_data_contract_method_invalid:${routeId}`,
+      )
+    : method;
+  const normalizedSelectedPath = pathWithoutQuery(selectedPath);
+  return Object.freeze({
+    method: selectedMethod,
+    path: selectedPath,
+    ...(normalizedSelectedPath.endsWith("/collaboration/authority")
+      ? { injectionTrigger: "workspace-collaboration-refresh" }
+      : selectedMethod === "POST" &&
+          normalizedSelectedPath === "/api/v1/search-enhanced/advanced"
+        ? { injectionTrigger: "search-submit" }
+      : {}),
+  });
+}
+
+export function materializeAccessibilityDataPath(contract, scope) {
+  const pathTemplate = requiredText(
+    contract?.pathTemplate,
+    "accessibility_data_contract_path_invalid",
+  );
+  const values = Object.freeze({
+    tenant_id: scope?.tenantId,
+    project_id: scope?.projectId,
+    workspace_id: scope?.workspaceId,
+    conversation_id: scope?.conversationId,
+    instance_id: scope?.instanceId,
+  });
+  const path = pathTemplate.split("?", 1)[0].replace(
+    /\{([a-z_]+)\}/gu,
+    (_, key) => {
+      const value = values[key];
+      return encodeURIComponent(
+        requiredText(value, `accessibility_data_scope_required:${key}`),
+      );
+    },
+  );
+  if (!path.startsWith("/api/v1/") || /\{[^}]+\}/u.test(path)) {
+    throw new Error("accessibility_data_contract_path_invalid");
+  }
+  return path;
+}
+
+export function buildReleaseAccessibilitySurfaceInventory(routeContract) {
+  const canonical = buildCanonicalAccessibilityRouteInventory(routeContract);
+  const canonicalSurfaceRoutes = canonical.routes.map((route) =>
+    Object.freeze({
+      ...route,
+      launchTarget: route.pathTemplate,
+      automation: "playwright",
+    }),
+  );
+  const nativeSettingsRoutes = NATIVE_SETTINGS_SECTIONS.map((section) =>
+    Object.freeze({
+      routeId: `native-settings-${section}`,
+      launchTarget: `electron://settings/${section}`,
+      contexts: Object.freeze(["native-only", "settings", section]),
+      automation: "manual_at",
+    }),
+  );
+  const updateRecoveryRoute = Object.freeze({
+    routeId: "native-update-recovery",
+    launchTarget: "electron://settings/updates",
+    contexts: Object.freeze(["native-only", "updates", "recovery"]),
+    automation: "manual_at",
+  });
+  const surfaces = Object.freeze({
+    web: Object.freeze([...canonicalSurfaceRoutes]),
+    desktop_browser_qa: Object.freeze([...canonicalSurfaceRoutes]),
+    browser_extension: BROWSER_EXTENSION_ROUTES,
+    native_electron: Object.freeze([
+      ...canonicalSurfaceRoutes,
+      ...nativeSettingsRoutes,
+      updateRecoveryRoute,
+    ]),
+  });
+
+  for (const [surface, routes] of Object.entries(surfaces)) {
+    const routeIds = routes.map(({ routeId }) => routeId);
+    if (new Set(routeIds).size !== routeIds.length) {
+      throw new Error(`accessibility_release_surface_route_duplicate:${surface}`);
+    }
+  }
+  return Object.freeze({
+    sourceRevision: canonical.sourceRevision,
+    surfaces,
+  });
+}
+
 export function materializeAccessibilityRoutePath(route, scope) {
   const tenantId = requiredText(
     scope?.tenantId,
@@ -138,12 +366,38 @@ export function materializeAccessibilityRoutePath(route, scope) {
   const projectId = route.pathTemplate.includes(":projectId")
     ? requiredText(scope?.projectId, "accessibility_project_scope_required")
     : null;
+  const workspaceId = route.pathTemplate.includes(":workspaceId")
+    ? requiredText(scope?.workspaceId, "accessibility_workspace_scope_required")
+    : null;
   return route.pathTemplate
     .replace(":tenantId", encodeURIComponent(tenantId))
     .replace(
       ":projectId",
       projectId === null ? ":projectId" : encodeURIComponent(projectId),
+    )
+    .replace(
+      ":workspaceId",
+      workspaceId === null ? ":workspaceId" : encodeURIComponent(workspaceId),
     );
+}
+
+export function classifyDesktopDataStateRequest({
+  method,
+  pathname,
+  exactMethod = "GET",
+  exactDataPath,
+  routeSurfaceActive,
+}) {
+  if (
+    method !== exactMethod ||
+    typeof pathname !== "string" ||
+    !pathname.startsWith("/api/v1/") ||
+    typeof exactDataPath !== "string" ||
+    pathname !== exactDataPath
+  ) {
+    return "ignore";
+  }
+  return routeSurfaceActive ? "inject" : "authority";
 }
 
 export function assertCompleteAccessibilityRouteResults(inventory, results) {
@@ -336,7 +590,7 @@ function canonicalPathTemplate(target) {
   }
   const projectRoot = "/tenant/:tenantId/project/:projectId";
   if (target.route_family === "project-blackboard-dynamic")
-    return `${projectRoot}/blackboard`;
+    return `${projectRoot}/blackboard?workspaceId=:workspaceId`;
   const contexts = requiredStringArray(target.contexts);
   if (contexts.includes("agent")) {
     const relativePath = requiredRelativePath(target.relative_path);

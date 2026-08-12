@@ -24,10 +24,10 @@ const levelLabels: Record<string, string> = {
 };
 
 function getOccupancyColorClass(pct: number): string {
-  if (pct < 60) return 'text-emerald-500';
-  if (pct < 80) return 'text-amber-500';
-  if (pct < 90) return 'text-orange-500';
-  return 'text-red-500';
+  if (pct < 60) return 'text-emerald-700 dark:text-emerald-400';
+  if (pct < 80) return 'text-amber-700 dark:text-amber-400';
+  if (pct < 90) return 'text-orange-700 dark:text-orange-400';
+  return 'text-red-700 dark:text-red-400';
 }
 
 function getBarColorClass(pct: number): string {

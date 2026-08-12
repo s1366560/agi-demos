@@ -53,7 +53,9 @@ export function TenantOverviewPage({
           <h2>{t('tenantOverview.projects')}</h2>
         </div>
         {model.projects.length === 0 ? (
-          <p>{t('tenantOverview.projects.empty')}</p>
+          <p role="status" data-state="empty">
+            {t('tenantOverview.projects.empty')}
+          </p>
         ) : (
           <div className="tenant-overview-project-list">
             {model.projects.map((project) => (
@@ -88,6 +90,7 @@ function TenantOverviewState({
       className="tenant-overview-page tenant-overview-state"
       data-state={model.state}
       aria-busy={busy || undefined}
+      role={busy ? 'status' : 'alert'}
     >
       <Icon />
       <h1>{t(`tenantOverview.state.${model.state}.title`)}</h1>

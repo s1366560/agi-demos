@@ -75,7 +75,7 @@ export function ProjectAgentLogs() {
     <section className="space-y-6" data-testid="project-agent-logs">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
             {t('projectAgent.eyebrow')}
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950 dark:text-white">

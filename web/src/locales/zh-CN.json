@@ -10,6 +10,7 @@
     "search": "搜索",
     "loading": "加载中…",
     "skipToContent": "跳转到主要内容",
+    "pageContent": "页面内容",
     "success": "成功",
     "error": "错误",
     "required": "必填",
@@ -319,6 +320,7 @@
     },
     "patterns": {
       "title": "Agent 模式",
+      "empty": "此项目暂无可用的租户共享 Agent 模式。",
       "degradedBadge": "租户共享权威",
       "sharedBadge": "在当前租户内共享",
       "sharedDescription": "通过项目的租户成员关系提供只读工作流模式。这些模式仍归租户所有，并在项目间共享。",
@@ -431,7 +433,12 @@
       "loadingVisualization": "正在加载图谱可视化…",
       "initializeFailed": "图谱可视化初始化失败",
       "loadDataFailed": "加载图谱数据失败",
-      "loadingGraph": "正在加载图谱…"
+      "loadingGraph": "正在加载图谱…",
+      "accessibleGraph": "无障碍图谱数据",
+      "accessibleSummary": "共 {{nodes}} 个节点和 {{edges}} 条关系。可使用表格控件选择图谱节点。",
+      "accessibleNodes": "图谱节点",
+      "selectNode": "选择 {{name}}",
+      "accessibleRelationships": "图谱关系"
     }
   },
   "search": {
@@ -1332,6 +1339,8 @@
       "openProject": "打开项目 {{name}}",
       "openProjectActions": "打开 {{name}} 的操作菜单",
       "loading": "正在加载租户信息…",
+      "forbidden": "您无权查看此租户概览。",
+      "conflict": "加载期间租户数据已更改，请重试以刷新数据。",
       "loadFailed": "加载租户数据失败",
       "noProjects": "暂无项目"
     },
@@ -2404,6 +2413,7 @@
       "project": "项目 {{name}}",
       "memories_count": "{{count}} 个记忆",
       "no_data": "暂无数据",
+      "empty": "尚未记录任何分析活动。",
       "creation_trend": "记忆创建趋势（最近30天）",
       "workspace_info": "工作空间信息",
       "name": "名称",
@@ -2425,6 +2435,7 @@
       "resumeSubmitted": "已提交 {{count}} 个待处理任务",
       "resumeFailed": "恢复待处理任务失败",
       "loadFailed": "加载任务数据失败",
+      "empty": "尚未记录任何任务。",
       "new_task": "新建任务",
       "stats": {
         "total": "总任务数 (累计)",
@@ -2436,6 +2447,7 @@
       "charts": {
         "queue_depth": "队列深度随时间变化",
         "queue_desc": "等待处理的任务 • 实时",
+        "queueAriaLabel": "队列深度历史图表",
         "current": "当前",
         "status_dist": "任务状态",
         "dist_desc": "分布",
@@ -3613,6 +3625,7 @@
     },
     "deploy": {
       "listTitle": "部署记录",
+      "loading": "正在加载部署历史",
       "detailTitle": "部署详情",
       "notFound": "未找到部署记录",
       "defaultDescription": "新部署",
@@ -3758,6 +3771,8 @@
     "clusters": {
       "title": "集群管理",
       "subtitle": "管理您的 Kubernetes 集群",
+      "emptyText": "未找到集群",
+      "loadFailed": "加载集群失败",
       "createButton": "添加集群",
       "deletedSuccess": "集群删除成功",
       "updatedSuccess": "集群更新成功",
@@ -4750,6 +4765,13 @@
       "title": "项目设置",
       "close": "关闭项目设置",
       "noProject": "未选择项目",
+      "loading": "正在加载项目设置…",
+      "states": {
+        "empty": "此项目已不可用。",
+        "forbidden": "您无权查看此项目设置。",
+        "conflict": "加载设置期间项目已更改，请重试以刷新。",
+        "error": "加载项目设置失败。"
+      },
       "saved": "设置保存成功",
       "failed": "保存设置失败",
       "basicTitle": "基本设置",
@@ -6773,7 +6795,8 @@
       },
       "deletePattern": "删除模式",
       "deleteAria": "删除 {{name}}",
-      "empty": "未找到模式"
+      "empty": "未找到模式",
+      "tableLabel": "模式表格"
     },
     "chatHistory": {
       "newConversationAria": "新建对话",
@@ -8968,7 +8991,8 @@
         "total": "共 {{count}} 个实例"
       },
       "emptyInstances": "没有符合当前筛选条件的实例。资源池会按需扩容实例。",
-      "searchInstances": "按实例标识搜索"
+      "searchInstances": "按实例标识搜索",
+      "instancesTableScrollRegion": "活跃实例表格"
     },
     "deadLetterQueue": {
       "title": "死信队列",
@@ -9393,6 +9417,7 @@
       "reconcileFailed": "协调 MCP 运行时失败",
       "errorBanner": "{{count}} 个服务器存在同步错误，请检查服务器卡片详情",
       "loadingServers": "加载服务器中…",
+      "loadErrorTitle": "无法加载 MCP 服务器",
       "emptyTitle": "暂无 MCP 服务器",
       "emptyHint": "创建第一个 MCP 服务器，启用强大的工具和功能",
       "emptyCreateButton": "创建服务器",

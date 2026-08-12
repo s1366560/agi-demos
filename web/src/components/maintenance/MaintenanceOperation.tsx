@@ -106,7 +106,7 @@ export const MaintenanceOperation: React.FC<MaintenanceOperationProps> = ({
             void handleAction();
           }}
           disabled={loading}
-          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 sm:flex-none ${warning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-primary hover:bg-primary/90'}`}
+          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 sm:flex-none ${warning ? 'bg-yellow-700 hover:bg-yellow-800' : 'bg-primary hover:bg-primary/90'}`}
         >
           {loading && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />}
           {actionLabel}

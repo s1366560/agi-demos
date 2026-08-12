@@ -368,7 +368,11 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
             />
           )}
           {!loading && nodeCount === 0 && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
+            <div
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80"
+              role="status"
+              data-state="empty"
+            >
               <StateDisplay.Empty
                 icon={Share2}
                 title={tFallback(t, 'project.graph.cytoscapeEmpty.title', 'No nodes to display')}
@@ -417,7 +421,11 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
           setCyInstance={setCyInstance}
         />
         {!loading && nodeCount === 0 && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80"
+            role="status"
+            data-state="empty"
+          >
             <StateDisplay.Empty
               icon={Share2}
               title={tFallback(t, 'project.graph.cytoscapeEmpty.title', 'No nodes to display')}

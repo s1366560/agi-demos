@@ -52,6 +52,8 @@ export const McpServerTabV2: React.FC = () => {
   const syncingServers = useMCPStore((s) => s.syncingServers);
   const testingServers = useMCPStore((s) => s.testingServers);
   const isLoading = useMCPStore((s) => s.isLoading);
+  const error = useMCPStore((s) => s.error);
+  const errorStatusCode = useMCPStore((s) => s.errorStatusCode);
   const listServers = useMCPStore((s) => s.listServers);
   const deleteServer = useMCPStore((s) => s.deleteServer);
   const toggleEnabled = useMCPStore((s) => s.toggleEnabled);
@@ -63,7 +65,7 @@ export const McpServerTabV2: React.FC = () => {
   const { projectId } = useMcpProjectScope();
 
   useEffect(() => {
-    void listServers(projectId ? { project_id: projectId } : {});
+    void listServers(projectId ? { project_id: projectId } : {}).catch(() => undefined);
     void fetchApps(projectId);
   }, [listServers, fetchApps, projectId]);
 
@@ -196,7 +198,7 @@ export const McpServerTabV2: React.FC = () => {
   );
 
   const handleRefresh = useCallback(() => {
-    void listServers(projectId ? { project_id: projectId } : {});
+    void listServers(projectId ? { project_id: projectId } : {}).catch(() => undefined);
     void fetchApps(projectId);
   }, [listServers, fetchApps, projectId]);
 
@@ -235,6 +237,9 @@ export const McpServerTabV2: React.FC = () => {
     filters.enabled !== 'all' ||
     filters.type !== 'all' ||
     filters.runtime !== 'all';
+
+  const errorState =
+    errorStatusCode === 403 ? 'forbidden' : errorStatusCode === 409 ? 'conflict' : 'error';
 
   const clearFilters = () => {
     setFilters({
@@ -396,12 +401,39 @@ export const McpServerTabV2: React.FC = () => {
 
       {/* Content */}
       {isLoading && servers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16">
+        <div
+          role="status"
+          aria-busy="true"
+          data-state="loading"
+          className="flex flex-col items-center justify-center py-16"
+        >
           <Spinner size={32} />
-          <p className="text-sm text-slate-400 mt-4">{t('mcp.servers.loadingServers')}</p>
+          <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+            {t('mcp.servers.loadingServers')}
+          </p>
+        </div>
+      ) : error && servers.length === 0 ? (
+        <div
+          role="alert"
+          data-state={errorState}
+          className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base}`}
+        >
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+            <AlertCircle size={28} className="text-red-600 dark:text-red-400" aria-hidden="true" />
+          </div>
+          <h3 className="mb-1 text-base font-semibold text-slate-900 dark:text-white">
+            {t('mcp.servers.loadErrorTitle')}
+          </h3>
+          <p className="mb-4 max-w-sm text-sm text-slate-600 dark:text-slate-300">{error}</p>
+          <button type="button" onClick={handleRefresh} className={BUTTON_STYLES.primary}>
+            <RefreshCw size={18} aria-hidden="true" />
+            {t('common.retry')}
+          </button>
         </div>
       ) : servers.length === 0 ? (
         <div
+          role="status"
+          data-state="empty"
           className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
         >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">

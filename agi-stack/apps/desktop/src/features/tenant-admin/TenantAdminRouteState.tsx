@@ -14,8 +14,11 @@ export function TenantAdminRouteState({
 }>) {
   const { t } = useI18n();
   const normalizedState = state === 'ready' || state === 'degraded' ? 'loading' : state;
+  const role = ['forbidden', 'conflict', 'unavailable', 'error'].includes(state)
+    ? 'alert'
+    : 'status';
   return (
-    <section data-tenant-admin-state={state}>
+    <section data-tenant-admin-state={state} data-state={state} role={role}>
       <h1>{t(`tenantAdmin.state.${normalizedState}.title`)}</h1>
       <p>{t(`tenantAdmin.state.${normalizedState}.description`)}</p>
       {reasonCode ? <code>{reasonCode}</code> : null}

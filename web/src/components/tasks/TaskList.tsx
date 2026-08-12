@@ -114,6 +114,9 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
                 placeholder={t('components.taskList.searchPlaceholder', 'Search Task ID or Name…')}
                 type="text"
                 value={searchQuery}
+                onFocus={(event) => {
+                  event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                }}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                 }}
@@ -298,7 +301,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 })
   const { t } = useTranslation();
 
   return (
-    <tr>
+    <tr data-state="empty" role="status">
       <td colSpan={colSpan} className="px-6 py-12 text-center text-slate-500">
         {children || (
           <div className="flex flex-col items-center gap-2">

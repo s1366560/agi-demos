@@ -282,7 +282,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
           <span className="flex items-center gap-1.5">
             <Keyboard size={12} />
-            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans text-2xs">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-300 font-sans text-2xs">
               {t('agent.emptyState.cmdKey', 'Cmd')}+1-5
             </kbd>
             {t('agent.emptyState.layoutModes', 'layout modes')}

@@ -94,7 +94,10 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
         </Space>
       }
       extra={
-        <Link to="/tenant/agent-definitions" className="text-[13px]">
+        <Link
+          to="/tenant/agent-definitions"
+          className="text-[13px] !text-blue-700 hover:!text-blue-800 dark:!text-blue-300 dark:hover:!text-blue-200"
+        >
           {t('project.agentTeammates.manage')}
         </Link>
       }

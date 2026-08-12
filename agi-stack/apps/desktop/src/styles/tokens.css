@@ -15,6 +15,7 @@
   --desktop-cyan: #ededed;
   --desktop-accent: #ededed;
   --desktop-green: #35d399;
+  --desktop-green-text: #63d78f;
   --desktop-amber: #f0b35a;
   --desktop-red: #ff6978;
   /* Motion tokens */
@@ -403,6 +404,7 @@
   --desktop-cyan: #262626;
   --desktop-accent: #262626;
   --desktop-green: #0d7f57;
+  --desktop-green-text: #0c7952;
   --desktop-amber: #b4741c;
   --desktop-red: #d63a4b;
   --desktop-sidebar-preferred-width: 220px;

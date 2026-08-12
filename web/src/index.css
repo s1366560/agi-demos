@@ -16,7 +16,6 @@ html:not(.app-ready) body {
 html.app-ready body {
   visibility: visible;
   opacity: 1;
-  transition: opacity 0.15s ease-out;
 }
 
 /* Prevent text rendering before fonts/i18n load */
