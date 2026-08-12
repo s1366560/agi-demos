@@ -741,7 +741,11 @@ mod tests {
         assert!(postgres.sql().contains("$1"));
         assert!(postgres.sql().contains("$2"));
         assert!(postgres.sql().contains("correlation.status = 'running'"));
-        assert!(postgres.sql().contains("correlation.callback_completed_at IS NULL"));
+        assert!(
+            postgres
+                .sql()
+                .contains("correlation.callback_completed_at IS NULL")
+        );
         assert!(
             postgres
                 .sql()

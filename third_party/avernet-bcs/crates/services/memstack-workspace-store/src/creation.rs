@@ -36,6 +36,9 @@ pub enum WorkspaceCreationPlanError {
     #[error("Workspace creation timestamps must not be blank")]
     InvalidTimestamp,
 
+    #[error("Workspace creation owner email must not be blank")]
+    InvalidOwnerEmail,
+
     #[error(transparent)]
     LegacyEvent(#[from] LegacyWorkspaceEventError),
 }
@@ -81,6 +84,61 @@ impl WorkspaceCreationTimestamps {
     }
 }
 
+/// Authenticated owner identity projection sharing the creation timestamps.
+#[derive(Debug, Clone, Copy)]
+pub struct WorkspaceCreationOwnerIdentity<'a> {
+    email: &'a str,
+    timestamps: &'a WorkspaceCreationTimestamps,
+}
+
+impl<'a> WorkspaceCreationOwnerIdentity<'a> {
+    /// Construct an identity projection from an authenticated non-blank email.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceCreationPlanError::InvalidOwnerEmail`] for a blank email.
+    pub fn new(
+        email: &'a str,
+        timestamps: &'a WorkspaceCreationTimestamps,
+    ) -> Result<Self, WorkspaceCreationPlanError> {
+        if email.trim().is_empty() {
+            return Err(WorkspaceCreationPlanError::InvalidOwnerEmail);
+        }
+        Ok(Self { email, timestamps })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WorkspaceCreationPersistence<'a> {
+    timestamps: Option<&'a WorkspaceCreationTimestamps>,
+    owner_email: Option<&'a str>,
+}
+
+impl WorkspaceCreationPersistence<'_> {
+    const DATABASE_DEFAULTS: Self = Self {
+        timestamps: None,
+        owner_email: None,
+    };
+
+    const fn with_timestamps(
+        timestamps: &WorkspaceCreationTimestamps,
+    ) -> WorkspaceCreationPersistence<'_> {
+        WorkspaceCreationPersistence {
+            timestamps: Some(timestamps),
+            owner_email: None,
+        }
+    }
+
+    const fn with_owner_identity(
+        owner_identity: WorkspaceCreationOwnerIdentity<'_>,
+    ) -> WorkspaceCreationPersistence<'_> {
+        WorkspaceCreationPersistence {
+            timestamps: Some(owner_identity.timestamps),
+            owner_email: Some(owner_identity.email),
+        }
+    }
+}
+
 /// Ordered atomic transaction for a Workspace that does not yet exist.
 #[derive(Debug, Clone)]
 pub struct WorkspaceCreationPlan {
@@ -91,7 +149,7 @@ pub struct WorkspaceCreationPlan {
     access_step: usize,
     absence_step: usize,
     receipt_insert_step: usize,
-    domain_steps: [usize; 5],
+    domain_steps: Vec<usize>,
 }
 
 impl WorkspaceCreationPlan {
@@ -170,7 +228,14 @@ impl WorkspaceCreationPlanner {
         response: Value,
         event_payload: Value,
     ) -> Result<WorkspaceCreationPlan, WorkspaceCreationPlanError> {
-        self.plan_inner(command, profile, owner, response, event_payload, None)
+        self.plan_inner(
+            command,
+            profile,
+            owner,
+            response,
+            event_payload,
+            WorkspaceCreationPersistence::DATABASE_DEFAULTS,
+        )
     }
 
     /// Build the creation transaction with explicit profile/member timestamps.
@@ -198,7 +263,31 @@ impl WorkspaceCreationPlanner {
             owner,
             response,
             event_payload,
-            Some(timestamps),
+            WorkspaceCreationPersistence::with_timestamps(timestamps),
+        )
+    }
+
+    /// Build the public creation transaction with an authenticated owner identity mirror.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same structured errors as [`Self::plan_with_timestamps`].
+    pub fn plan_with_owner_identity(
+        self,
+        command: &WorkspaceMutationCommand,
+        profile: WorkspaceCreateProfile,
+        owner: WorkspaceCreateOwner,
+        response: Value,
+        event_payload: Value,
+        owner_identity: WorkspaceCreationOwnerIdentity<'_>,
+    ) -> Result<WorkspaceCreationPlan, WorkspaceCreationPlanError> {
+        self.plan_inner(
+            command,
+            profile,
+            owner,
+            response,
+            event_payload,
+            WorkspaceCreationPersistence::with_owner_identity(owner_identity),
         )
     }
 
@@ -209,7 +298,7 @@ impl WorkspaceCreationPlanner {
         owner: WorkspaceCreateOwner,
         response: Value,
         event_payload: Value,
-        timestamps: Option<&WorkspaceCreationTimestamps>,
+        persistence: WorkspaceCreationPersistence<'_>,
     ) -> Result<WorkspaceCreationPlan, WorkspaceCreationPlanError> {
         if command.action() != WorkspaceMutationAction::CreateWorkspace {
             return Err(WorkspaceCreationPlanError::InvalidAction);
@@ -250,9 +339,7 @@ impl WorkspaceCreationPlanner {
         let profile_step = 3;
         let receipt_insert_step = 4;
         let member_step = 5;
-        let participant_step = 6;
-        let authority_step = 7;
-        let steps = vec![
+        let mut steps = vec![
             DbTransactionStep::query_checked(
                 self.project_access_check(command, &owner),
                 DbCountExpectation::exactly(1),
@@ -271,7 +358,7 @@ impl WorkspaceCreationPlanner {
                     &profile,
                     &owner,
                     &profile_metadata_json,
-                    timestamps,
+                    persistence.timestamps,
                 ),
                 DbCountExpectation::exactly(1),
             ),
@@ -280,17 +367,29 @@ impl WorkspaceCreationPlanner {
                 DbCountExpectation::exactly(1),
             ),
             DbTransactionStep::execute_checked(
-                self.member_insert(command, &owner, timestamps),
+                self.member_insert(command, &owner, persistence.timestamps),
                 DbCountExpectation::exactly(1),
             ),
-            DbTransactionStep::execute_checked(
-                self.participant_insert(&profile, &owner),
+        ];
+        let mut domain_steps = vec![group_step, profile_step, member_step];
+        if let Some(owner_email) = persistence.owner_email {
+            domain_steps.push(steps.len());
+            steps.push(DbTransactionStep::execute_checked(
+                self.owner_identity_insert(command, &owner, owner_email, persistence.timestamps),
                 DbCountExpectation::exactly(1),
-            ),
-            DbTransactionStep::execute_checked(
-                self.authority_insert(command),
-                DbCountExpectation::exactly(1),
-            ),
+            ));
+        }
+        domain_steps.push(steps.len());
+        steps.push(DbTransactionStep::execute_checked(
+            self.participant_insert(&profile, &owner),
+            DbCountExpectation::exactly(1),
+        ));
+        domain_steps.push(steps.len());
+        steps.push(DbTransactionStep::execute_checked(
+            self.authority_insert(command),
+            DbCountExpectation::exactly(1),
+        ));
+        steps.extend([
             DbTransactionStep::execute_checked(
                 self.outbox_insert(
                     command,
@@ -309,7 +408,7 @@ impl WorkspaceCreationPlanner {
                 self.receipt_lookup(command),
                 DbCountExpectation::exactly(1),
             ),
-        ];
+        ]);
 
         Ok(WorkspaceCreationPlan {
             receipt_id,
@@ -319,13 +418,7 @@ impl WorkspaceCreationPlanner {
             access_step,
             absence_step,
             receipt_insert_step,
-            domain_steps: [
-                group_step,
-                profile_step,
-                member_step,
-                participant_step,
-                authority_step,
-            ],
+            domain_steps,
         })
     }
 
@@ -495,6 +588,42 @@ impl WorkspaceCreationPlanner {
             .bind(profile.bcs_environment().as_str())
             .push_static(", 'human', 'auto')")
             .build()
+    }
+
+    fn owner_identity_insert(
+        self,
+        command: &WorkspaceMutationCommand,
+        owner: &WorkspaceCreateOwner,
+        owner_email: &str,
+        timestamps: Option<&WorkspaceCreationTimestamps>,
+    ) -> DbStatement {
+        let mut statement = DbStatementBuilder::new(self.flavor).push_static(
+            "INSERT INTO workspace_principal_identities (tenant_id, project_id, workspace_id, user_id, participant_actor_id, email, display_name, is_active, identity_authority, source_created_at, source_updated_at) VALUES (",
+        );
+        statement = statement
+            .bind(command.scope().tenant_id().as_str())
+            .push_static(", ")
+            .bind(command.scope().project_id().as_str())
+            .push_static(", ")
+            .bind(command.scope().workspace_id().as_str())
+            .push_static(", ")
+            .bind(owner.user_id().as_str())
+            .push_static(", ")
+            .bind(owner.participant_actor_id().as_str())
+            .push_static(", ")
+            .bind(owner_email)
+            .push_static(", NULL, ")
+            .bind(true)
+            .push_static(", 'memstack', ");
+        if let Some(timestamps) = timestamps {
+            statement = statement
+                .bind(timestamps.created_at())
+                .push_static(", ")
+                .bind(timestamps.updated_at());
+        } else {
+            statement = statement.push_static("CURRENT_TIMESTAMP, CURRENT_TIMESTAMP");
+        }
+        statement.push_static(")").build()
     }
 
     fn authority_insert(self, command: &WorkspaceMutationCommand) -> DbStatement {

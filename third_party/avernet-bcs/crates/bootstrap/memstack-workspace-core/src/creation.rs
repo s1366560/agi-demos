@@ -14,12 +14,15 @@ use memstack_workspace_service::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 
 use super::public_api::caller_from_headers;
 use super::{ApiError, WorkspaceCoreState, required_header};
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 const PUBLIC_IDEMPOTENCY_HEADER: &str = "idempotency-key";
+const USER_EMAIL_HEADER: &str = "x-memstack-user-email";
+const PROJECT_MEMBERSHIP_ROLE_HEADER: &str = "x-memstack-project-membership-role";
 const WORKSPACE_NAME_MAX_CHARS: usize = 255;
 
 #[derive(Debug, Deserialize)]
@@ -134,10 +137,28 @@ pub(super) async fn create_public_workspace(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let Json(request) = request.map_err(map_public_json_rejection)?;
     let caller = caller_from_headers(&headers)?;
+    let owner_email = required_header(&headers, USER_EMAIL_HEADER)?;
+    let owner_email = owner_email.trim();
+    if owner_email.is_empty() {
+        return Err(ApiError::InvalidRequest(format!(
+            "invalid {USER_EMAIL_HEADER} header"
+        )));
+    }
+    if state.authority == super::WorkspaceCoreAuthority::Local {
+        mirror_local_project_principal(
+            state.as_ref(),
+            tenant_id.as_str(),
+            project_id.as_str(),
+            caller.user_id.as_str(),
+            &headers,
+        )
+        .await?;
+    }
     let input = parse_public_create_request(
         tenant_id,
         project_id,
         caller.user_id,
+        owner_email.to_string(),
         optional_header(&headers, PUBLIC_IDEMPOTENCY_HEADER)?,
         request,
     )?;
@@ -146,6 +167,63 @@ pub(super) async fn create_public_workspace(
         .await
         .map_err(map_public_service_error)?;
     Ok((StatusCode::CREATED, Json(outcome.response)))
+}
+
+async fn mirror_local_project_principal(
+    state: &WorkspaceCoreState,
+    tenant_id: &str,
+    project_id: &str,
+    user_id: &str,
+    headers: &HeaderMap,
+) -> Result<(), ApiError> {
+    let role = required_header(headers, PROJECT_MEMBERSHIP_ROLE_HEADER)?;
+    let role = role.trim();
+    if !matches!(role, "owner" | "admin" | "editor" | "member" | "viewer") {
+        return Err(ApiError::InvalidRequest(format!(
+            "invalid {PROJECT_MEMBERSHIP_ROLE_HEADER} header"
+        )));
+    }
+    let source_material = format!("{tenant_id}\0{project_id}\0{user_id}");
+    let source_membership_id = format!(
+        "desktop-sidecar:{}",
+        hex::encode(Sha256::digest(source_material.as_bytes()))
+    );
+    let statement = bcs_db_api::DbStatementBuilder::new(state.sql_flavor)
+        .push_static(
+            "INSERT INTO project_principal_memberships (tenant_id, project_id, user_id, \
+             participant_actor_id, source_membership_id, role, permissions_json, is_active, \
+             identity_authority, source_created_at, source_updated_at) VALUES (",
+        )
+        .bind(tenant_id)
+        .push_static(", ")
+        .bind(project_id)
+        .push_static(", ")
+        .bind(user_id)
+        .push_static(", ")
+        .bind(user_id)
+        .push_static(", ")
+        .bind(source_membership_id)
+        .push_static(", ")
+        .bind(role)
+        .push_static(", '{}', ")
+        .bind(true)
+        .push_static(
+            ", 'desktop-sidecar', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) \
+                      ON CONFLICT (tenant_id, project_id, user_id) DO UPDATE SET \
+                      participant_actor_id = excluded.participant_actor_id, \
+                      source_membership_id = excluded.source_membership_id, \
+                      role = excluded.role, permissions_json = excluded.permissions_json, \
+                      is_active = excluded.is_active, \
+                      identity_authority = excluded.identity_authority, \
+                      source_updated_at = CURRENT_TIMESTAMP",
+        )
+        .build();
+    state
+        .db
+        .execute(statement)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(())
 }
 
 pub(super) fn map_public_json_rejection(_error: JsonRejection) -> ApiError {
@@ -162,6 +240,7 @@ fn parse_public_create_request(
     tenant_id: String,
     project_id: String,
     user_id: String,
+    owner_email: String,
     idempotency_key: Option<String>,
     request: Value,
 ) -> Result<PublicCreateWorkspaceInput, ApiError> {
@@ -235,6 +314,7 @@ fn parse_public_create_request(
         tenant_id,
         project_id,
         user_id,
+        owner_email,
         name: name.to_string(),
         description,
         metadata,

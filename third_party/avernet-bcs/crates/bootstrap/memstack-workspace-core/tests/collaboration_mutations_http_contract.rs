@@ -11,7 +11,7 @@ use bcs_db_local::LocalSqliteDbPlugin;
 use bcs_storage_api::ByteStream;
 use bcs_storage_local::{LocalStorageConfig, LocalStoragePlugin};
 use memstack_workspace_core::object_store::StoragePluginObjectStorePort;
-use memstack_workspace_core::{WorkspaceCoreState, workspace_router};
+use memstack_workspace_core::{WorkspaceCoreAuthority, WorkspaceCoreState, workspace_router};
 use memstack_workspace_service::{
     ObjectStageRequest, ObjectStoreError, ObjectStorePort, ReadyObjectReference,
     StagedObjectReference,
@@ -25,6 +25,35 @@ const SERVICE_TOKEN: &str = "collaboration-mutation-contract-token";
 const PATH: &str =
     "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/collaboration/mutations";
 const UPLOAD_PATH: &str = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/collaboration/mutations/files/upload";
+
+#[tokio::test]
+async fn desktop_local_capability_reports_local_authority() -> Result<(), Box<dyn Error>> {
+    let db = Arc::new(seeded_db().await?);
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db,
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let request = Request::builder()
+        .uri(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/collaboration/capabilities",
+        )
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "user-1")
+        .body(Body::empty())?;
+
+    let response = workspace_router(state).oneshot(request).await?;
+    let status = response.status();
+    let capability: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+
+    assert_eq!(status, StatusCode::OK, "{capability}");
+    assert_eq!(capability["authority"], "local");
+    Ok(())
+}
 
 #[tokio::test]
 async fn collaboration_task_receipt_is_atomic_replayable_and_alias_sensitive()

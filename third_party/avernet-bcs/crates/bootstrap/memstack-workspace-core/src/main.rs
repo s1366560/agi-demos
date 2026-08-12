@@ -29,7 +29,9 @@ use memstack_workspace_core::task_dispatch_worker::{
     WorkspaceTaskDispatchWorker, WorkspaceTaskDispatchWorkerConfig,
 };
 use memstack_workspace_core::workspace_provider_events::WorkspaceProviderBotEventService;
-use memstack_workspace_core::{WorkspaceCoreState, workspace_router_with_message_runtime};
+use memstack_workspace_core::{
+    WorkspaceCoreAuthority, WorkspaceCoreState, workspace_router_with_message_runtime,
+};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
@@ -150,25 +152,38 @@ async fn main() -> Result<()> {
         .try_init()
         .ok();
 
-    let (mut desktop_control, principal_signing_key, group_session_ws_signing_key) =
-        if args.desktop_control {
-            let (control, initialize) = desktop_control::DesktopControl::read_initialize().await?;
-            args.config_dir = Some(initialize.config_path().clone());
-            args.mode = WorkspaceCoreMode::DesktopLocal;
-            args.service_token = initialize.service_token().to_string();
-            args.agent_registry_url = initialize.agent_registry_url().to_string();
-            args.agent_registry_token = initialize.agent_registry_token().to_string();
-            args.provider_webhook_url = initialize.provider_webhook_url().to_string();
-            args.provider_webhook_token = initialize.provider_webhook_token().to_string();
-            args.provider_event_token = initialize.provider_event_token().to_string();
-            args.plan_dispatch_url = initialize.plan_dispatch_url().to_string();
-            args.instance_id = Some(initialize.instance_id().to_string());
-            let signing_key = control.principal_signing_key();
-            let group_session_key = control.group_session_ws_signing_key();
-            (Some(control), Some(signing_key), Some(group_session_key))
-        } else {
-            (None, None, None)
-        };
+    let (
+        mut desktop_control,
+        principal_signing_key,
+        group_session_ws_signing_key,
+        desktop_legacy_import,
+    ) = if args.desktop_control {
+        let (control, initialize) = desktop_control::DesktopControl::read_initialize().await?;
+        args.config_dir = Some(initialize.config_path().clone());
+        args.mode = WorkspaceCoreMode::DesktopLocal;
+        args.service_token = initialize.service_token().to_string();
+        args.agent_registry_url = initialize.agent_registry_url().to_string();
+        args.agent_registry_token = initialize.agent_registry_token().to_string();
+        args.provider_webhook_url = initialize.provider_webhook_url().to_string();
+        args.provider_webhook_token = initialize.provider_webhook_token().to_string();
+        args.provider_event_token = initialize.provider_event_token().to_string();
+        args.plan_dispatch_url = initialize.plan_dispatch_url().to_string();
+        args.instance_id = Some(initialize.instance_id().to_string());
+        let signing_key = control.principal_signing_key();
+        let group_session_key = control.group_session_ws_signing_key();
+        let legacy_import = (
+            initialize.legacy_import_path().clone(),
+            initialize.legacy_import_sha256().to_string(),
+        );
+        (
+            Some(control),
+            Some(signing_key),
+            Some(group_session_key),
+            Some(legacy_import),
+        )
+    } else {
+        (None, None, None, None)
+    };
 
     if args.service_token.trim().is_empty() {
         bail!("WORKSPACE_CORE_SERVICE_TOKEN must not be blank");
@@ -215,6 +230,23 @@ async fn main() -> Result<()> {
     let db = infrastructure
         .db()
         .context("Avernet database plugin is unavailable")?;
+    if matches!(args.mode, WorkspaceCoreMode::DesktopLocal) {
+        memstack_workspace_core::desktop_schema::run_desktop_workspace_schema_migrations(
+            db.as_ref(),
+        )
+        .await
+        .context("initialize Desktop Workspace extension schema")?;
+        let (legacy_import_path, legacy_import_sha256) = desktop_legacy_import
+            .as_ref()
+            .context("Desktop legacy Workspace import contract is unavailable")?;
+        memstack_workspace_core::desktop_legacy_import::import_legacy_workspace_snapshot(
+            db.as_ref(),
+            legacy_import_path,
+            legacy_import_sha256,
+        )
+        .await
+        .context("import legacy Desktop Workspace authority")?;
+    }
     let instance_id = outbox_instance_id(args.instance_id.as_deref());
     let workspace_object_store = build_workspace_object_store(
         &config,
@@ -293,6 +325,10 @@ async fn main() -> Result<()> {
             autonomy_judge,
         )
         .map_err(anyhow::Error::msg)?
+        .with_authority(match args.mode {
+            WorkspaceCoreMode::Cloud => WorkspaceCoreAuthority::Cloud,
+            WorkspaceCoreMode::DesktopLocal => WorkspaceCoreAuthority::Local,
+        })
         .with_object_store(workspace_object_store),
     );
     let router_state = Arc::clone(&workspace_state);

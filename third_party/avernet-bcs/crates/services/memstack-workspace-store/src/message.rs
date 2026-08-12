@@ -894,8 +894,7 @@ pub(crate) fn message_from_row(
     row: &DbRow,
 ) -> Result<WorkspaceMessageRecord, WorkspaceMessageStoreError> {
     let content_json = required_string(row, "content")?;
-    let content = serde_json::from_str::<String>(&content_json)
-        .map_err(WorkspaceMessageStoreError::InvalidJson)?;
+    let content = serde_json::from_str::<String>(&content_json).unwrap_or(content_json);
     let mentions_json = required_string(row, "mentions_json")?;
     let mentions =
         serde_json::from_str(&mentions_json).map_err(WorkspaceMessageStoreError::InvalidJson)?;

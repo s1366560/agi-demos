@@ -211,7 +211,7 @@ async fn command_context(
     let request_hash = hex::encode(Sha256::digest(canonical));
     let caller = caller_from_headers(headers).map_err(IntoResponse::into_response)?;
     require_scoped_workspace_access(
-        state.db.as_ref(),
+        state,
         tenant_id.as_str(),
         project_id.as_str(),
         workspace_id.as_str(),
@@ -280,7 +280,7 @@ where
                 return Err(authority_unavailable());
             }
             let current = read_authority_revision(
-                state.db.as_ref(),
+                state,
                 command.tenant_id.as_str(),
                 command.project_id.as_str(),
                 command.workspace_id.as_str(),

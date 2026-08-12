@@ -48,6 +48,8 @@ pub(crate) struct DesktopInitialize {
     provider_event_token: String,
     plan_dispatch_url: String,
     instance_id: String,
+    legacy_import_path: PathBuf,
+    legacy_import_sha256: String,
 }
 
 impl DesktopInitialize {
@@ -87,6 +89,14 @@ impl DesktopInitialize {
         &self.instance_id
     }
 
+    pub(crate) fn legacy_import_path(&self) -> &PathBuf {
+        &self.legacy_import_path
+    }
+
+    pub(crate) fn legacy_import_sha256(&self) -> &str {
+        &self.legacy_import_sha256
+    }
+
     fn validate(&self) -> Result<Zeroizing<Vec<u8>>> {
         if self.message_type != "desktop_initialize" {
             bail!("first Desktop control frame must be desktop_initialize");
@@ -99,6 +109,15 @@ impl DesktopInitialize {
         }
         if !self.config_path.is_absolute() {
             bail!("Desktop control configPath must be absolute");
+        }
+        if !self.legacy_import_path.is_absolute()
+            || self.legacy_import_sha256.len() != 64
+            || !self
+                .legacy_import_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            bail!("Desktop control legacy import contract is invalid");
         }
         validate_identifier("nonce", &self.nonce, 16, 256)?;
         validate_identifier("instanceId", &self.instance_id, 1, 256)?;
@@ -318,6 +337,8 @@ mod tests {
             provider_event_token: "event-token-0123456789abcdef012345678901".to_string(),
             plan_dispatch_url: "http://127.0.0.1:31000/internal/plan-dispatch".to_string(),
             instance_id: "desktop-sidecar-1".to_string(),
+            legacy_import_path: PathBuf::from("/tmp/workspace-core/legacy-import.json"),
+            legacy_import_sha256: "a".repeat(64),
         }
     }
 
@@ -405,6 +426,8 @@ mod tests {
             "providerEventToken": "event-token-0123456789abcdef012345678901",
             "planDispatchUrl": "http://127.0.0.1:31000/internal/plan-dispatch",
             "instanceId": "desktop-sidecar-1",
+            "legacyImportPath": "/tmp/workspace-core/legacy-import.json",
+            "legacyImportSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "unexpected": true,
         });
         let error = match serde_json::from_value::<DesktopInitialize>(raw) {

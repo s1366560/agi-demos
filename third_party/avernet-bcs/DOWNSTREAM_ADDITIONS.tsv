@@ -1,14 +1,14 @@
 # path<TAB>local_sha256<TAB>mode<TAB>reason
-crates/bootstrap/memstack-workspace-core/Cargo.toml	3b4eb3d1a1b82a85fc93acd48fc48c273f72dcde08cd1e79eaf037addbf9fae3	100644	Add the isolated MemStack Workspace Core package
+crates/bootstrap/memstack-workspace-core/Cargo.toml	3f93ead759737f57088217e581f111f2ee8640cfa2aceec272dcddd985c0de18	100644	Add the isolated MemStack Workspace Core package
 crates/bootstrap/memstack-workspace-core/src/agent_registry.rs	5badc58ac1cde531488e9f38fb8f3ec99abceec5d151c83bd36c86157a38efe5	100644	Add fail-closed structured HTTP Agent Registry authority
 crates/bootstrap/memstack-workspace-core/src/agents.rs	905dcd7b397681dffe590382638593a0db0dd40f720ee3119e68d2709e1237d4	100644	Add legacy-compatible public Workspace Agent mutation adapters
 crates/bootstrap/memstack-workspace-core/src/capabilities.rs	649b3bd06326a57ae31978829c807df7ffdfe1bca50c8e133fab395b3e837bf6	100644	Add fail-closed public API capability negotiation
 crates/bootstrap/memstack-workspace-core/src/context.rs	2014c7e3d3eaea88a041b3b90a0074e4b809df80c5227530b893814f79a7e20e	100644	Add legacy-compatible public Workspace Context HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/context_judge.rs	f62e0f82e7c2d743acd7ef8fa920dacc4f0e27c6c0dfb11d2b7c0249da46cde8	100644	Add structured Agent Judge client for ambiguous Context selection
-crates/bootstrap/memstack-workspace-core/src/creation.rs	8842a4d4aa2ffaa52f98455444da2f8c3e8d03ab2257a28541f8d04986e00c77	100644	Add internal and legacy-compatible public Create Workspace HTTP adapters
-crates/bootstrap/memstack-workspace-core/src/lib.rs	16f49095d41422ab9bb825eae510dbe6106b99dba12bf8466318368c8e204031	100644	Add authenticated Workspace authority routes and contracts
-crates/bootstrap/memstack-workspace-core/src/main.rs	ee4931463ce63f745f266dd91a28f084c9c329ce1d20407ae1cc6333ebf518a2	100644	Add the Cloud and Desktop Workspace Core binary entrypoint
-crates/bootstrap/memstack-workspace-core/src/desktop_control.rs	c6b325f01d1058436389aa0f566e7dfbdf20e61ff944bc261b988b7cc6047473	100644	Add the authenticated Desktop helper control protocol
+crates/bootstrap/memstack-workspace-core/src/creation.rs	e647aced575da8c2532c9d144effbb9f715bf8e2ca304df7a698988065730211	100644	Add internal and legacy-compatible public Create Workspace HTTP adapters
+crates/bootstrap/memstack-workspace-core/src/lib.rs	2f4a01d10de40fc943d3b2028346564b6bcd542676f8f6f5ff007d0969ac7f8d	100644	Add authenticated Workspace authority routes and contracts
+crates/bootstrap/memstack-workspace-core/src/main.rs	41f20893880a20b329d82f1200fd58d256d63845fef4ba535cc68dec6b356de7	100644	Add the Cloud and Desktop Workspace Core binary entrypoint
+crates/bootstrap/memstack-workspace-core/src/desktop_control.rs	dc5c858694f923fedfa4bbc20e36dac257af4878ead4ff456002f80607bbedaa	100644	Add the authenticated Desktop helper control protocol
 crates/bootstrap/memstack-workspace-core/src/message_delivery.rs	3a27b3bda8e2432b7aa890cb94d56dda6d9f8ef3a7f4398fc462362dd43d6205	100644	Deliver committed Workspace messages through the Agent Runtime Provider
 crates/bootstrap/memstack-workspace-core/src/messages.rs	889c36397d37c75fd399382f07f0dc089181f8d877ccec7079e8472253c9d199	100644	Add legacy-compatible public Workspace message HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/members.rs	b510262f925478994985a2fcea239f58fc393040d2194ca5e5f218edeff5979a	100644	Add legacy-compatible public Workspace Member mutation adapters
@@ -16,13 +16,13 @@ crates/bootstrap/memstack-workspace-core/src/mutations.rs	d0f0d14d27ed5bad28f3fc
 crates/bootstrap/memstack-workspace-core/src/outbox.rs	f6a34048b3aec1045d9bb1325368ecdc0dc13f6c32a3eddba6ec21a28c30d87b	100644	Add durable Redis Streams outbox dispatch
 crates/bootstrap/memstack-workspace-core/src/policy.rs	7ffb98ab89074afa547af85b59d2661e56029e8945b0ee6a7073f639d323d974	100644	Add legacy-compatible Workspace Agent Policy HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/provider_registry.rs	ebd240e7edaf3e5a1657d0d370290d2983d8026bcbc6a4771187e065e31b0ef3	100644	Add structured external Provider Registry validation client
-crates/bootstrap/memstack-workspace-core/src/public_api.rs	0dc7978a425134b6c0b93e25536c2f4d3d1844041213b075ddc561955c3f532e	100644	Add scoped public Workspace read compatibility handlers
+crates/bootstrap/memstack-workspace-core/src/public_api.rs	eaf5bda1e9bcff6f856cc691e22b28db8ae1c07a4bbb1ca37a37eebc6b6862d4	100644	Add scoped public Workspace read compatibility handlers
 crates/bootstrap/memstack-workspace-core/src/runtime.rs	a2f27e021ce665142d129b396adc60672a669a1137cd1c6c4748f0adcad4cb9d	100644	Add durable Agent Runtime correlation terminal and replay authority
 crates/bootstrap/memstack-workspace-core/src/runtime_recovery.rs	ca54d420b795301e78bbd1a7b968abe4d0fc263a1de24ec4abd9a1a201a7c162	100644	Add leased Agent-judged runtime recovery and callback acknowledgement
-crates/bootstrap/memstack-workspace-core/src/workspace_provider_events.rs	58ff5da6c2d9fc899bf6263b441ef899481c4e174490c0004bebc4094f6347e0	100644	Bridge authenticated Workspace Agent Runtime Provider callbacks
+crates/bootstrap/memstack-workspace-core/src/workspace_provider_events.rs	2667433cc93bf8da5fe42d0fe1865962cdc43b3957793dffcda9c4a7f2059e73	100644	Bridge authenticated Workspace Agent Runtime Provider callbacks
 crates/bootstrap/memstack-workspace-core/tests/agent_http_contract.rs	2427697a5405c96cf678f1ac54401f1f1faf136c1f086046957ad94604696ef3	100644	Add Agent HTTP golden replay validation permission CAS and roster contracts
 crates/bootstrap/memstack-workspace-core/tests/context_http_contract.rs	2a3e13208942a8a6e6cf4acf7e2e63f45a7637508167aaac00801c21a23d8788	100644	Add Workspace Context HTTP shape error CAS replay and Judge contracts
-crates/bootstrap/memstack-workspace-core/tests/creation_http_contract.rs	28f169c2f6f8d47cf3b14a343f4d02711207e80746c0d36e0cd881c5806908d4	100644	Add SQLite internal and public Create Workspace compatibility contracts
+crates/bootstrap/memstack-workspace-core/tests/creation_http_contract.rs	6c6aad33a2326093700890b442fd83e851cce7ac571066d99a309ff0caebcb93	100644	Add SQLite internal public and Desktop persistence compatibility contracts
 crates/bootstrap/memstack-workspace-core/tests/message_http_contract.rs	f12b6e14ee39ae73b0a7737f55f4d10c5f1b5ed82c8ee703b5ef7bba27e58b15	100644	Add Workspace message HTTP shape replay mention and delivery contracts
 crates/bootstrap/memstack-workspace-core/tests/outbox_postgres_contract.rs	34ea80cbb351278966bc9122423d7e2b563b8ef4c0111b1df2f1f6afcd05c296	100644	Add real PostgreSQL Context outbox dispatcher lease and finalize contract
 crates/bootstrap/memstack-workspace-core/tests/policy_http_contract.rs	88b1606c6c79e0c60a09bc901a3de726d143ff2363327df00747520da26a40cb	100644	Add Workspace Agent Policy HTTP compatibility contracts
@@ -40,10 +40,10 @@ crates/service-api/memstack-workspace-service-api/src/context_judge.rs	3e2ca2d11
 crates/service-api/memstack-workspace-service-api/src/lib.rs	f7b8aded9bc98b92ec63de8a10b5aab53ca8b04998422f53eece63ff42ede252	100644	Define scoped revisioned idempotent Workspace mutation and creation types
 crates/service-api/memstack-workspace-service-api/src/provider_registry.rs	2abe7860448618109efe0abce1431e67c0a508722a5cf7ddab8ea9853cced195	100644	Define structured Provider Registry validation port
 crates/services/memstack-workspace-service/Cargo.toml	dda9992474df012adec42c340b44347d648b2e153ca98155892e17456220bea3	100644	Add the Workspace creation application service package
-crates/services/memstack-workspace-service/src/lib.rs	09d7c88763a809cc233e6e9b3f23d22092ae752bbccc508694c98a7071baaa39	100644	Orchestrate canonical typed Create Workspace commands above the store
+crates/services/memstack-workspace-service/src/lib.rs	30990ccef840e164a071e547fcdba3ef635e94d5620287a99e801b440f7be0dd	100644	Orchestrate canonical typed Create Workspace commands above the store
 crates/services/memstack-workspace-service/src/public_agents.rs	d14fcc2dfd52a661b2cdb4f996714a7c09231f594476e9a12240051b4389d4a9	100644	Orchestrate atomic Agent binding Bot roster receipt and outbox mutations
 crates/services/memstack-workspace-service/src/public_context.rs	de1c15f31e3e7c6b0ffc02c5a1d4caa2cd062449d76bf53d7caeac7af19990c2	100644	Orchestrate active Context access Judge CAS replay audit and outbox
-crates/services/memstack-workspace-service/src/public_creation.rs	879dd74f19b000010725cfd9af68f68c9a7ddf12d31f52c6c48008e6f97483f3	100644	Compose legacy public Create metadata IDs and optional idempotency above the shared store
+crates/services/memstack-workspace-service/src/public_creation.rs	f48b4908ef1722511c83fbf71dad5e383f9c38395f16573736f218f1ae4b18a6	100644	Compose legacy public Create metadata IDs and optional idempotency above the shared store
 crates/services/memstack-workspace-service/src/public_members.rs	28ff30b6ca44ef5258e3515483413b0da421463ad4d1526f5432dd9a38f6e28b	100644	Orchestrate atomic Workspace Member ACL roster and outbox mutations
 crates/services/memstack-workspace-service/src/public_messages.rs	0e45f4c7cc5f2fd4b8772aba89d52abd65c7639b4f0ba18345536b02492872be	100644	Orchestrate validated idempotent Workspace message operations
 crates/services/memstack-workspace-service/src/public_mutations.rs	c86bb42242df514dfbfee83d6385ccde388c8c11653c2c64b156693950f8b211	100644	Orchestrate public Workspace update delete revision receipt and outbox mutations
@@ -60,13 +60,13 @@ crates/services/memstack-workspace-service/tests/update_delete_workspace.rs	0556
 crates/services/memstack-workspace-store/Cargo.toml	281fe0b40dce555149b7f17a320cec0d00e5165819f76d9330fb62953949bf08	100644	Add the Workspace transactional store package
 crates/services/memstack-workspace-store/src/agent.rs	d9752fc33d90672cf1ad1654097ddd83653212b993a618a1bfa450b3e833251b	100644	Build dialect-aware checked Agent binding Bot and Participant mutations
 crates/services/memstack-workspace-store/src/context.rs	6bbde9be997623cdf55c0347bd5e5bea4f430dc82d7294925d52107eb29050b1	100644	Build dialect-aware active Context CAS event audit and outbox transactions
-crates/services/memstack-workspace-store/src/creation.rs	0b8db51d8c25844b401adb01daa909f116803136587a4a05d49b35214c7fd49b	100644	Build atomic first-time Workspace Group profile owner authority receipt and outbox plans
+crates/services/memstack-workspace-store/src/creation.rs	8ae5fec83bf74326b1c5b88b4957268ae22b224c8a05aaa6ff355f80d7814a20	100644	Build atomic first-time Workspace Group profile owner authority receipt and outbox plans
 crates/services/memstack-workspace-store/src/event.rs	58b3ca1d84cfd2bae8a25d273fe643862d1e71fd1578ad142c2aa6a62100fdd2	100644	Freeze deterministic legacy Workspace event mappings
-crates/services/memstack-workspace-store/src/lib.rs	cbdbbe818d3d1d9506294629584bd33dfa6f188499390607bacb8f47cb7ce2c3	100644	Expose Workspace mutation and first-time creation transaction APIs
-crates/services/memstack-workspace-store/src/message.rs	2f0ca0c21bd13924bdc614cfb758a5b22ce9c5a382d505d68846b8b4b1c4cacc	100644	Persist Workspace messages sessions correlations and outbox atomically
+crates/services/memstack-workspace-store/src/lib.rs	64b585f2a903611725197a1c358466f53b6c2c5dd29b78b18335d50a1630049d	100644	Expose Workspace mutation and first-time creation transaction APIs
+crates/services/memstack-workspace-store/src/message.rs	20092dc68fe6045ed14c6c6e9b3e2fe292b9a64f418a5cad556e7e10d235778e	100644	Persist Workspace messages sessions correlations and outbox atomically
 crates/services/memstack-workspace-store/src/message_delivery.rs	371aea225dbf93e32ed07124bd6a9beae5877db1e7790ccf55668cfc23b976ff	100644	Lease complete retry and dead-letter Workspace message deliveries
 crates/services/memstack-workspace-store/src/message_delivery_sql_tests.rs	1193135920569e31b0f2ece4588493f4b6c1d25f8976246d737948a924a4fddc	100644	Cover dialect-aware Workspace message delivery SQL
-crates/services/memstack-workspace-store/src/message_sql_tests.rs	986d0824a187ba6b45b0efd72c7671def8df33a8b752d079a8e5b9462c25c7d6	100644	Cover dialect-aware Workspace message SQL generation
+crates/services/memstack-workspace-store/src/message_sql_tests.rs	ae573734dc2d69ae81399f5a739428751c110d3ae962ad4f4fba5b2f08a75f52	100644	Cover dialect-aware Workspace message SQL generation
 crates/services/memstack-workspace-store/src/member.rs	5b53d3621908587bf88814141360bebae13808402a8b324b29317d69e25f5625	100644	Build dialect-aware checked Member ACL and Participant mutations
 crates/services/memstack-workspace-store/src/plan.rs	2bb2401c28bda335d6269df08b8ef69dfaa9e3f71b9d30f3d8e8dae009316160	100644	Build dialect-aware atomic Workspace mutation plans
 crates/services/memstack-workspace-store/src/policy.rs	139adbd131044536ae653cc5769fc068fa49be16df7d28df8aa9d504e4f593c0	100644	Build dialect-aware Agent Policy CAS receipt and outbox transactions
@@ -95,7 +95,7 @@ crates/bootstrap/memstack-workspace-core/src/topology.rs	f446bb0c59a23a4f269a872
 crates/bootstrap/memstack-workspace-core/src/workspace_scope.rs	b9bc0e916963eff8226549e9f01308a542969f28ed7e9ef1ada73f2b04336622	100644	Expose MemStack Workspace workspace scope composition and compatibility behavior
 crates/bootstrap/memstack-workspace-core/tests/blackboard_http_contract.rs	dbf14b4d0a30a0656740dc54d50d8f11391e133d196e1f2f7d2599d32c5b7e37	100644	Add legacy-compatible blackboard http contract HTTP contract coverage
 crates/bootstrap/memstack-workspace-core/tests/diagnostics_http_contract.rs	db618c51674f9252e32086b763cc52cfdf5ac52582970fc9b1bfa8907ba9ff7d	100644	Add legacy-compatible diagnostics http contract HTTP contract coverage
-crates/bootstrap/memstack-workspace-core/tests/gene_http_contract.rs	27ee9c5908f38791d044d2593bc044f80bb8dbeadc975ad5ef31e5ca8772cc4e	100644	Add legacy-compatible gene http contract HTTP contract coverage
+crates/bootstrap/memstack-workspace-core/tests/gene_http_contract.rs	f5830550f9f004db5c491709da453ba3a5364859dc1f110ebb82ffea6ab63ab5	100644	Add legacy-compatible gene http contract HTTP contract coverage
 crates/bootstrap/memstack-workspace-core/tests/plan_delivery_worker.rs	68b79ba3c2ecf08def42833377aa28736d4f88f3d8f2dcd5764be6567d6716eb	100644	Add downstream plan delivery worker contract coverage
 crates/bootstrap/memstack-workspace-core/tests/plan_http_contract.rs	2b0e3332d5eed64efac88f7929a1aa4a67e620ac43afa6389c7546fe876e5c82	100644	Add legacy-compatible plan http contract HTTP contract coverage
 crates/bootstrap/memstack-workspace-core/tests/plan_outbox_ownership.rs	cdc7688cb59093080de6c1b01432f198482d8c42c39a7d7655d0484c3c6780fc	100644	Add downstream plan outbox ownership contract coverage
@@ -163,13 +163,13 @@ crates/bootstrap/memstack-workspace-core/src/autonomy.rs	93b2e1cff59eaba2e5ef852
 crates/bootstrap/memstack-workspace-core/src/autonomy_judge.rs	2f032080f45d34b09c7ad2ec7ebbaf79caa098968d3d31ba69f9e53e6865098e	100644	Call the structured Judge for Workspace autonomy verdicts
 crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/dispatch_primary.rs	16f11d7325bc79ae912f5a080266a7e4e31702914400c0c8575749a30f98a163	100644	Dispatch primary Collaboration mutation surfaces
 crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/dispatch_secondary.rs	41c9e54ed08ea8d2c51ed8e6ae6903ccd451c1ba6cf31844daf164606003802f	100644	Dispatch secondary Collaboration mutation surfaces
-crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/mod.rs	6b81712b7c05f3e0f645b3553d76a14855c0f7f97ebd5fa67671594f1aa5670d	100644	Expose atomic Collaboration mutation HTTP adapters
+crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/mod.rs	7577fc68a0538ac7351383108a2eaf5fa35f4bf1dc8ba0cbd80ce9b562ba1e05	100644	Expose atomic Collaboration mutation HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/models.rs	5bad45b8f53e14c6795d1b42ed05b23b26703f9f6092ae980c54b16a5d6e9a25	100644	Define structured Collaboration mutation HTTP models
 crates/bootstrap/memstack-workspace-core/src/collaboration_mutations/upload.rs	8e52e5833213382ed1b82621e9469e4af848e97f8b3b360e70f409b40e1d2a61	100644	Stage validate and compensate Collaboration multipart uploads
 crates/bootstrap/memstack-workspace-core/src/files.rs	3a02b1cba82c5e1f42b1fc783aceddf644a59066466403c1474073187ba9babc	100644	Expose legacy-compatible Workspace File HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/object_store.rs	d47118e7f71c7887185684c0bdac69b473e49ba3d9adfadea88e414f143042b4	100644	Define Cloud object store and Desktop vault file authority
 crates/bootstrap/memstack-workspace-core/tests/autonomy_http_contract.rs	49c517b2fa28122e253242825acc4df35fd07cad4cc6771bc1f1caea1b221e63	100644	Add legacy-compatible autonomy HTTP and Judge audit contracts
-crates/bootstrap/memstack-workspace-core/tests/collaboration_mutations_http_contract.rs	ca6e3f6ce60457aa26d534bcc632a76a34d00d7254cb192fc29bf1eb254192d1	100644	Add Collaboration mutation replay rollback and multipart HTTP contracts
+crates/bootstrap/memstack-workspace-core/tests/collaboration_mutations_http_contract.rs	281632cb8628f77d6bbdb78b85f96f875a3ff5c460838f183384e381741f4160	100644	Add Collaboration mutation replay rollback and multipart HTTP contracts
 crates/bootstrap/memstack-workspace-core/tests/collaboration_mutations_postgres_contract.rs	8cc813035b777aeea0db5fdfcc0400d18b047966d7db940a1ece905b7668a4db	100644	Add real PostgreSQL Collaboration mutation atomicity contracts
 crates/bootstrap/memstack-workspace-core/tests/file_http_contract.rs	dc3d50923f3a58587b0caf68b9f0f831cf08e9ff2e81328c79a88032e34181ad	100644	Add legacy-compatible File HTTP staging and compensation contracts
 crates/bootstrap/memstack-workspace-core/tests/objective_http_contract.rs	9c6f6d6824a5042192bbd0ab95ee60fe8d41c1f438ec885ef8d5ef0e1fd57bf9	100644	Add legacy-compatible Objective HTTP contracts
@@ -177,3 +177,9 @@ crates/services/memstack-workspace-service/src/public_autonomy.rs	cc4116a4de332b
 crates/services/memstack-workspace-service/tests/postgres_file_authority.rs	5acca5d8ae425ceacd94acfa3f44276d51b7cc9cffd64a48661107104f43d927	100644	Add real PostgreSQL File authority and rollback contracts
 crates/services/memstack-workspace-service/tests/postgres_objective_autonomy_authority.rs	a1e43f0019aea83f41fb328443431a4e9523aaf1d166dffbf9fbdcedaedb95ec	100644	Add real PostgreSQL Objective and Autonomy authority contracts
 crates/services/memstack-workspace-store/src/autonomy.rs	99d319903ac5d01909d9e4b400819f294398e42ae7f14fa690db4ba18a6957db	100644	Persist Workspace autonomy ticks and Judge audit authority
+crates/bootstrap/memstack-workspace-core/src/desktop_schema.rs	e501798ca41ff1adb174b6132389045e22724ed77ea1efbcbf6491d5b3d3dbee	100644	Apply versioned checksum-guarded Desktop Workspace SQLite migrations
+crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema.sql	0769cf329066d77eb109511da70e23a84c8f7546646cab3ccb03f9885d952822	100644	Define the generated Desktop Workspace SQLite v1 schema
+crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema_v2.sql	1bccb0c64aedf17d7edb722f319ae5cbcdff508ec4bb20d33740f0f91300a10e	100644	Add Workspace message authority columns to Desktop BCS persistence
+crates/bootstrap/memstack-workspace-core/tests/desktop_schema.rs	42d80faa1aa4dac8d7f72d2fd462ae552c6465565ed27bd148a7a6cec0670c90	100644	Validate Desktop Workspace schema upgrade checksum idempotency and row preservation
+crates/bootstrap/memstack-workspace-core/src/desktop_legacy_import.rs	7f68744d46707d5102c56c7295c0e6b2af4b62b177003fd25fb7e91e3456e42f	100644	Import Sidecar legacy Workspace authority with fail-closed transactional verification
+crates/bootstrap/memstack-workspace-core/tests/desktop_legacy_import.rs	af15dd009c5b19be28fffee0d5de863b7955ed6e1fce4ce7386f47562f984b97	100644	Validate Desktop legacy Workspace import hashing rollback idempotency and persistence

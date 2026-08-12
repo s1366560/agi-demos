@@ -27,6 +27,7 @@ bcs-storage-baas = { workspace = true }
 bcs-storage-local = { workspace = true }
 clap = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }

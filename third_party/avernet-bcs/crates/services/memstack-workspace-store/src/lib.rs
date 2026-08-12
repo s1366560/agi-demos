@@ -34,9 +34,8 @@ mod topology_mutation;
 
 pub use agent::{WorkspaceAgentSnapshot, WorkspaceAgentStore, WorkspaceAgentStoreError};
 pub use autonomy::{
-    WorkspaceAutonomyJudgmentAudit, WorkspaceAutonomyMutation,
-    WorkspaceAutonomyMutationOutcome, WorkspaceAutonomyScope, WorkspaceAutonomyStore,
-    WorkspaceAutonomyStoreError,
+    WorkspaceAutonomyJudgmentAudit, WorkspaceAutonomyMutation, WorkspaceAutonomyMutationOutcome,
+    WorkspaceAutonomyScope, WorkspaceAutonomyStore, WorkspaceAutonomyStoreError,
 };
 pub use blackboard::{
     WorkspaceBlackboardDomainWrite, WorkspaceBlackboardMutation,
@@ -50,8 +49,8 @@ pub use context::{
     WorkspaceContextStoreError, WorkspaceContextTransition, WorkspaceContextTransitionKind,
 };
 pub use creation::{
-    WorkspaceCreationPlan, WorkspaceCreationPlanError, WorkspaceCreationPlanner,
-    WorkspaceCreationTimestamps,
+    WorkspaceCreationOwnerIdentity, WorkspaceCreationPlan, WorkspaceCreationPlanError,
+    WorkspaceCreationPlanner, WorkspaceCreationTimestamps,
 };
 pub use event::{LegacyWorkspaceEvent, LegacyWorkspaceEventError};
 pub use file::{
@@ -101,10 +100,10 @@ pub use repository::{
     WorkspaceMutationOutcome, WorkspaceMutationStore, WorkspaceMutationStoreError,
 };
 pub use task::{
+    WorkspaceObjectiveTaskProjection, WorkspaceObjectiveTaskProjectionWrite,
     WorkspaceTaskAttemptRecord, WorkspaceTaskAuxiliaryWrite, WorkspaceTaskDomainWrite,
     WorkspaceTaskExecutionRecord, WorkspaceTaskMutation, WorkspaceTaskMutationOutcome,
-    WorkspaceObjectiveTaskProjection, WorkspaceObjectiveTaskProjectionWrite, WorkspaceTaskRecord,
-    WorkspaceTaskScope, WorkspaceTaskStore, WorkspaceTaskStoreError,
+    WorkspaceTaskRecord, WorkspaceTaskScope, WorkspaceTaskStore, WorkspaceTaskStoreError,
 };
 pub use task_dispatch::{
     WorkspaceTaskDispatchClaim, WorkspaceTaskDispatchFailureOutcome, WorkspaceTaskDispatchWrite,

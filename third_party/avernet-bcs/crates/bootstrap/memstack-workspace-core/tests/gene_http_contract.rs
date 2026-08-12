@@ -10,8 +10,7 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const SERVICE_TOKEN: &str = "gene-http-contract-token";
-const GENES_PATH: &str =
-    "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/genes";
+const GENES_PATH: &str = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/genes";
 
 #[tokio::test]
 async fn gene_http_preserves_semantic_version_replay_filters_and_atomic_events()
@@ -104,9 +103,16 @@ async fn gene_http_preserves_semantic_version_replay_filters_and_atomic_events()
     assert_eq!(updated["name"], "Planner v2");
     assert_eq!(updated["version"], "2.0.0");
     assert_eq!(updated["is_active"], false);
-    assert_eq!(scalar_i64(db.as_ref(), "SELECT version AS value FROM workspace_genes").await?, 2);
     assert_eq!(
-        scalar_string(db.as_ref(), "SELECT source_version AS value FROM workspace_genes").await?,
+        scalar_i64(db.as_ref(), "SELECT version AS value FROM workspace_genes").await?,
+        2
+    );
+    assert_eq!(
+        scalar_string(
+            db.as_ref(),
+            "SELECT source_version AS value FROM workspace_genes"
+        )
+        .await?,
         "2.0.0"
     );
 
@@ -139,7 +145,10 @@ async fn gene_http_preserves_semantic_version_replay_filters_and_atomic_events()
     assert_eq!(replayed_delete.status(), StatusCode::NO_CONTENT);
     assert_eq!(authority_revision(db.as_ref()).await?, 3);
     assert_eq!(table_count(db.as_ref(), "workspace_genes").await?, 0);
-    assert_eq!(table_count(db.as_ref(), "workspace_mutation_receipts").await?, 3);
+    assert_eq!(
+        table_count(db.as_ref(), "workspace_mutation_receipts").await?,
+        3
+    );
     assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 3);
     Ok(())
 }
@@ -162,7 +171,10 @@ async fn gene_http_rejects_non_object_config_viewer_write_and_stale_revision()
         StatusCode::UNPROCESSABLE_ENTITY,
     )
     .await?;
-    assert_eq!(invalid, json!({"detail": "config_json must be a JSON object"}));
+    assert_eq!(
+        invalid,
+        json!({"detail": "config_json must be a JSON object"})
+    );
 
     let denied = send_json(
         state.clone(),
@@ -187,16 +199,11 @@ async fn gene_http_rejects_non_object_config_viewer_write_and_stale_revision()
         Some("superuser-create"),
         Some(0),
     )?;
-    superuser_request.headers_mut().insert(
-        "x-memstack-user-is-superuser",
-        "true".parse()?,
-    );
-    let superuser_created = send_json(
-        state.clone(),
-        superuser_request,
-        StatusCode::CREATED,
-    )
-    .await?;
+    superuser_request
+        .headers_mut()
+        .insert("x-memstack-user-is-superuser", "true".parse()?);
+    let superuser_created =
+        send_json(state.clone(), superuser_request, StatusCode::CREATED).await?;
     assert_eq!(superuser_created["created_by"], "superuser-1");
 
     let stale = send_json(
@@ -212,7 +219,10 @@ async fn gene_http_rejects_non_object_config_viewer_write_and_stale_revision()
         StatusCode::CONFLICT,
     )
     .await?;
-    assert_eq!(stale, json!({"detail": "Workspace Gene authority conflict"}));
+    assert_eq!(
+        stale,
+        json!({"detail": "Workspace Gene authority conflict"})
+    );
     Ok(())
 }
 

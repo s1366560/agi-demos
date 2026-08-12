@@ -29,6 +29,8 @@ mod collaboration_mutations;
 mod context;
 pub mod context_judge;
 mod creation;
+pub mod desktop_legacy_import;
+pub mod desktop_schema;
 mod diagnostics;
 mod files;
 mod genes;
@@ -94,6 +96,24 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "workspace_task_dispatch_outbox",
 ];
 
+/// Deployment authority reported by Workspace collaboration contracts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkspaceCoreAuthority {
+    /// Cloud-hosted PostgreSQL authority.
+    Cloud,
+    /// Desktop-local SQLite authority supervised by the Sidecar.
+    Local,
+}
+
+impl WorkspaceCoreAuthority {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Cloud => "cloud",
+            Self::Local => "local",
+        }
+    }
+}
+
 /// Runtime dependencies owned by the Workspace extension.
 pub struct WorkspaceCoreState {
     db: Arc<dyn DbPlugin>,
@@ -104,6 +124,7 @@ pub struct WorkspaceCoreState {
     context_judge: Arc<dyn WorkspaceContextJudgePort>,
     autonomy_judge: Arc<dyn PublicWorkspaceAutonomyJudgePort>,
     object_store: Arc<dyn ObjectStorePort>,
+    authority: WorkspaceCoreAuthority,
 }
 
 impl WorkspaceCoreState {
@@ -241,6 +262,7 @@ impl WorkspaceCoreState {
             context_judge,
             autonomy_judge,
             object_store: Arc::new(object_store::UnavailableObjectStorePort),
+            authority: WorkspaceCoreAuthority::Cloud,
         })
     }
 
@@ -248,6 +270,13 @@ impl WorkspaceCoreState {
     #[must_use]
     pub fn with_object_store(mut self, object_store: Arc<dyn ObjectStorePort>) -> Self {
         self.object_store = object_store;
+        self
+    }
+
+    /// Set the deployment authority exposed by collaboration capability contracts.
+    #[must_use]
+    pub fn with_authority(mut self, authority: WorkspaceCoreAuthority) -> Self {
+        self.authority = authority;
         self
     }
 }

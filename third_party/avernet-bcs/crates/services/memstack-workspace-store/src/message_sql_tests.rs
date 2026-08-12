@@ -145,3 +145,33 @@ fn duplicate_without_a_replayable_receipt_fails_closed() {
         WorkspaceMessageStoreError::DomainConflict
     ));
 }
+
+#[test]
+fn message_rows_preserve_legacy_plain_text_content() -> Result<(), Box<dyn std::error::Error>> {
+    let row = DbRow::new(std::collections::BTreeMap::from([
+        ("message_id".to_string(), "message-legacy".into()),
+        ("group_id".to_string(), "group-1".into()),
+        ("workspace_id".to_string(), "workspace-1".into()),
+        ("sender_id".to_string(), "user-1".into()),
+        ("sender_type".to_string(), "human".into()),
+        (
+            "content".to_string(),
+            "legacy BCS content was stored as plain text".into(),
+        ),
+        ("mentions_json".to_string(), "[]".into()),
+        (
+            "parent_message_id".to_string(),
+            Option::<String>::None.into(),
+        ),
+        ("metadata_json".to_string(), "{}".into()),
+        ("created_at".to_string(), 1_700_000_000_000_i64.into()),
+    ]));
+
+    let message = message_from_row(&row)?;
+
+    assert_eq!(
+        message.content,
+        "legacy BCS content was stored as plain text"
+    );
+    Ok(())
+}

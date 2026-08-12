@@ -139,6 +139,10 @@ fn redact_sensitive_values_in_place(value: &mut Value) {
                     if !child.is_null() {
                         *child = Value::String("<redacted>".to_string());
                     }
+                } else if let Value::String(raw) = child
+                    && let Some(redacted) = redact_url_userinfo(raw)
+                {
+                    *raw = redacted;
                 } else {
                     redact_sensitive_values_in_place(child);
                 }
@@ -151,6 +155,19 @@ fn redact_sensitive_values_in_place(value: &mut Value) {
         }
         _ => {}
     }
+}
+
+fn redact_url_userinfo(value: &str) -> Option<String> {
+    let scheme_end = value.find("://")? + 3;
+    let authority_end = value[scheme_end..]
+        .find(['/', '?', '#'])
+        .map_or(value.len(), |offset| scheme_end + offset);
+    let userinfo_end = value[scheme_end..authority_end].rfind('@')? + scheme_end;
+    let mut redacted = String::with_capacity(value.len());
+    redacted.push_str(&value[..scheme_end]);
+    redacted.push_str("<redacted>");
+    redacted.push_str(&value[userinfo_end..]);
+    Some(redacted)
 }
 
 fn is_sensitive_config_key(key: &str) -> bool {
@@ -567,6 +584,30 @@ mod tests {
         );
         assert_eq!(redacted["telemetry"]["extra_headers"], "<redacted>");
         assert!(source["telemetry"]["extra_headers"].is_object());
+    }
+
+    #[test]
+    fn test_redact_sensitive_values_masks_url_userinfo_without_hiding_endpoint() {
+        let source = serde_json::json!({
+            "database": {
+                "postgres": {
+                    "url": "postgresql://workspace-user:database-secret@db.example.com:5432/memstack"
+                }
+            },
+            "bcs_endpoint": "https://bcs.example.com"
+        });
+
+        let redacted = redact_sensitive_values(&source);
+
+        assert_eq!(
+            redacted["database"]["postgres"]["url"],
+            "postgresql://<redacted>@db.example.com:5432/memstack"
+        );
+        assert_eq!(redacted["bcs_endpoint"], "https://bcs.example.com");
+        assert_eq!(
+            source["database"]["postgres"]["url"],
+            "postgresql://workspace-user:database-secret@db.example.com:5432/memstack"
+        );
     }
 
     // =========================================================================

@@ -84,6 +84,7 @@ pub struct PublicCreateWorkspaceInput {
     pub tenant_id: String,
     pub project_id: String,
     pub user_id: String,
+    pub owner_email: String,
     pub name: String,
     pub description: Option<String>,
     pub metadata: Value,
@@ -157,7 +158,7 @@ impl<'a> PublicWorkspaceCreationService<'a> {
             idempotency_key: identifiers.idempotency_key,
         };
         WorkspaceCreationService::new(self.db, self.flavor)
-            .create(&command)
+            .create_with_owner_identity(&command, input.owner_email.as_str())
             .await
             .map_err(PublicWorkspaceCreationError::Create)
     }
@@ -433,6 +434,7 @@ mod tests {
             tenant_id: "tenant-1".to_string(),
             project_id: "project-1".to_string(),
             user_id: "user-1".to_string(),
+            owner_email: "user-1@example.com".to_string(),
             name: "Workspace".to_string(),
             description: None,
             metadata: json!({}),

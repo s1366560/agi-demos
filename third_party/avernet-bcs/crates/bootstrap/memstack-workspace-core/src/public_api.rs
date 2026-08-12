@@ -6,7 +6,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query};
 use axum::http::HeaderMap;
 use axum::{Extension, Json};
-use bcs_db_api::{DbPlugin, DbRow, DbSqlFlavor, DbStatementBuilder};
+use bcs_db_api::{DbRow, DbStatementBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -139,7 +139,7 @@ pub(super) async fn get_workspace(
 ) -> Result<Json<WorkspaceResponse>, ApiError> {
     let caller = caller_from_headers(&headers)?;
     let workspace = require_workspace_service_access(
-        state.db.as_ref(),
+        state.as_ref(),
         &tenant_id,
         &project_id,
         &workspace_id,
@@ -157,7 +157,7 @@ pub(super) async fn list_workspaces(
 ) -> Result<Json<Vec<WorkspaceResponse>>, ApiError> {
     let caller = caller_from_headers(&headers)?;
     let (limit, offset) = pagination(query.limit.as_deref(), query.offset.as_deref(), 50)?;
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static(
             "SELECT p.workspace_id, p.tenant_id, p.project_id, p.name, p.created_by, \
              p.description, p.is_archived, p.metadata_json, p.office_status, \
@@ -198,14 +198,14 @@ pub(super) async fn list_workspace_agents(
     let active_only = query_bool("active_only", query.active_only.as_deref(), false)?;
     let (limit, offset) = pagination(query.limit.as_deref(), query.offset.as_deref(), 100)?;
     let _workspace = require_workspace_service_access(
-        state.db.as_ref(),
+        state.as_ref(),
         &tenant_id,
         &project_id,
         &workspace_id,
         &caller,
     )
     .await?;
-    let mut statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let mut statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static(
             "SELECT binding_id, workspace_id, agent_id, display_name, description, config_json, \
              is_active, hex_q, hex_r, theme_color, label, status, created_at, updated_at \
@@ -246,14 +246,14 @@ pub(super) async fn list_workspace_members(
     let caller = caller_from_headers(&headers)?;
     let (limit, offset) = pagination(query.limit.as_deref(), query.offset.as_deref(), 100)?;
     let _workspace = require_workspace_service_access(
-        state.db.as_ref(),
+        state.as_ref(),
         &tenant_id,
         &project_id,
         &workspace_id,
         &caller,
     )
     .await?;
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static(
             "SELECT m.member_id, m.workspace_id, m.user_id, i.email AS user_email, \
              m.role, m.invited_by, m.created_at, m.updated_at \
@@ -290,19 +290,21 @@ pub(super) async fn get_collaboration_capabilities(
     headers: HeaderMap,
 ) -> Result<Json<CollaborationCapabilitiesResponse>, ApiError> {
     let caller = caller_from_headers(&headers)?;
-    let _workspace = require_workspace_service_access(
-        state.db.as_ref(),
+    require_scoped_workspace_access(
+        state.as_ref(),
         &tenant_id,
         &project_id,
         &workspace_id,
         &caller,
+        false,
+        "Access denied",
     )
     .await?;
     let actions = collaboration_actions();
     Ok(Json(CollaborationCapabilitiesResponse {
         service_version: "0.2.0",
         contract_version: "2.0.0",
-        authority: "cloud",
+        authority: state.authority.as_str(),
         tenant_id,
         project_id,
         workspace_id,
@@ -327,7 +329,7 @@ pub(super) async fn get_collaboration_authority(
 ) -> Result<Json<CollaborationAuthorityResponse>, ApiError> {
     let caller = caller_from_headers(&headers)?;
     require_scoped_workspace_access(
-        state.db.as_ref(),
+        state.as_ref(),
         &tenant_id,
         &project_id,
         &workspace_id,
@@ -336,10 +338,9 @@ pub(super) async fn get_collaboration_authority(
         "Workspace access required",
     )
     .await?;
-    let revision =
-        read_authority_revision(state.db.as_ref(), &tenant_id, &project_id, &workspace_id)
-            .await?
-            .unwrap_or(0);
+    let revision = read_authority_revision(state.as_ref(), &tenant_id, &project_id, &workspace_id)
+        .await?
+        .unwrap_or(0);
     let cursor = format!("workspace:{workspace_id}:revision:{revision}");
     Ok(Json(CollaborationAuthorityResponse {
         contract_version: "2.0.0",
@@ -352,10 +353,10 @@ pub(super) async fn get_collaboration_authority(
 }
 
 async fn read_workspace(
-    db: &dyn DbPlugin,
+    state: &WorkspaceCoreState,
     workspace_id: &str,
 ) -> Result<Option<WorkspaceResponse>, ApiError> {
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static(
             "SELECT workspace_id, tenant_id, project_id, name, created_by, description, \
              is_archived, metadata_json, office_status, hex_layout_config_json, \
@@ -364,21 +365,25 @@ async fn read_workspace(
         .bind(workspace_id)
         .push_static(" AND deleted_at IS NULL")
         .build();
-    let rows = db.query(statement).await.map_err(ApiError::Database)?;
+    let rows = state
+        .db
+        .query(statement)
+        .await
+        .map_err(ApiError::Database)?;
     rows.first().map(workspace_from_row).transpose()
 }
 
 async fn require_workspace_service_access(
-    db: &dyn DbPlugin,
+    state: &WorkspaceCoreState,
     tenant_id: &str,
     project_id: &str,
     workspace_id: &str,
     caller: &Caller,
 ) -> Result<WorkspaceResponse, ApiError> {
-    let workspace = read_workspace(db, workspace_id)
+    let workspace = read_workspace(state, workspace_id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    require_membership(db, workspace_id, caller, "Access denied").await?;
+    require_membership(state, workspace_id, caller, "Access denied").await?;
     if workspace.tenant_id != tenant_id || workspace.project_id != project_id {
         return Err(ApiError::NotFound);
     }
@@ -386,7 +391,7 @@ async fn require_workspace_service_access(
 }
 
 pub(super) async fn require_scoped_workspace_access(
-    db: &dyn DbPlugin,
+    state: &WorkspaceCoreState,
     tenant_id: &str,
     project_id: &str,
     workspace_id: &str,
@@ -394,7 +399,7 @@ pub(super) async fn require_scoped_workspace_access(
     allow_superuser: bool,
     forbidden_detail: &'static str,
 ) -> Result<(), ApiError> {
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static("SELECT 1 AS workspace_exists FROM workspace_profiles WHERE tenant_id = ")
         .bind(tenant_id)
         .push_static(" AND project_id = ")
@@ -403,30 +408,38 @@ pub(super) async fn require_scoped_workspace_access(
         .bind(workspace_id)
         .push_static(" AND deleted_at IS NULL LIMIT 1")
         .build();
-    let rows = db.query(statement).await.map_err(ApiError::Database)?;
+    let rows = state
+        .db
+        .query(statement)
+        .await
+        .map_err(ApiError::Database)?;
     if rows.is_empty() {
         return Err(ApiError::NotFound);
     }
     if allow_superuser && caller.is_superuser {
         return Ok(());
     }
-    require_membership(db, workspace_id, caller, forbidden_detail).await
+    require_membership(state, workspace_id, caller, forbidden_detail).await
 }
 
 async fn require_membership(
-    db: &dyn DbPlugin,
+    state: &WorkspaceCoreState,
     workspace_id: &str,
     caller: &Caller,
     forbidden_detail: &'static str,
 ) -> Result<(), ApiError> {
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static("SELECT 1 AS member_role FROM workspace_members WHERE workspace_id = ")
         .bind(workspace_id)
         .push_static(" AND user_id = ")
         .bind(caller.user_id.as_str())
         .push_static(" LIMIT 1")
         .build();
-    let rows = db.query(statement).await.map_err(ApiError::Database)?;
+    let rows = state
+        .db
+        .query(statement)
+        .await
+        .map_err(ApiError::Database)?;
     if rows.is_empty() {
         return Err(ApiError::Forbidden(forbidden_detail));
     }
@@ -434,12 +447,12 @@ async fn require_membership(
 }
 
 pub(super) async fn read_authority_revision(
-    db: &dyn DbPlugin,
+    state: &WorkspaceCoreState,
     tenant_id: &str,
     project_id: &str,
     workspace_id: &str,
 ) -> Result<Option<u64>, ApiError> {
-    let statement = DbStatementBuilder::new(DbSqlFlavor::Postgres)
+    let statement = DbStatementBuilder::new(state.sql_flavor)
         .push_static("SELECT revision FROM workspace_authorities WHERE tenant_id = ")
         .bind(tenant_id)
         .push_static(" AND project_id = ")
@@ -447,7 +460,11 @@ pub(super) async fn read_authority_revision(
         .push_static(" AND workspace_id = ")
         .bind(workspace_id)
         .build();
-    let rows = db.query(statement).await.map_err(ApiError::Database)?;
+    let rows = state
+        .db
+        .query(statement)
+        .await
+        .map_err(ApiError::Database)?;
     let Some(row) = rows.first() else {
         return Ok(None);
     };

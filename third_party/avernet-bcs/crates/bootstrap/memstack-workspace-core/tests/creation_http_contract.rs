@@ -6,10 +6,13 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use bcs_db_api::{
     DbError, DbExecuteResult, DbHealth, DbPlugin, DbResult, DbRow, DbSqlFlavor, DbStatement,
-    DbTransactionStep, DbTransactionStepResult,
+    DbTransactionStep, DbTransactionStepResult, DbValue,
 };
 use bcs_db_local::LocalSqliteDbPlugin;
-use memstack_workspace_core::{WorkspaceCoreState, workspace_router};
+use memstack_workspace_core::{
+    WorkspaceCoreAuthority, WorkspaceCoreState,
+    desktop_schema::run_desktop_workspace_schema_migrations, workspace_router,
+};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -168,7 +171,9 @@ async fn public_create_preserves_the_legacy_defaults_and_durable_owner_event()
         .header("x-memstack-user-id", "owner-1")
         .header("x-memstack-user-is-superuser", "false")
         .body(Body::empty())?;
-    let read_response = workspace_router(state).oneshot(read_request).await?;
+    let read_response = workspace_router(state.clone())
+        .oneshot(read_request)
+        .await?;
     assert_eq!(read_response.status(), StatusCode::OK);
     let refreshed: Value =
         serde_json::from_slice(&to_bytes(read_response.into_body(), usize::MAX).await?)?;
@@ -178,8 +183,27 @@ async fn public_create_preserves_the_legacy_defaults_and_durable_owner_event()
     assert!(refreshed["created_at"].as_str().is_some());
     assert!(refreshed["updated_at"].as_str().is_some());
 
+    let members_request = Request::builder()
+        .uri(format!(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/{workspace_id}/members"
+        ))
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-is-superuser", "false")
+        .body(Body::empty())?;
+    let members_response = workspace_router(state).oneshot(members_request).await?;
+    assert_eq!(members_response.status(), StatusCode::OK);
+    let members: Value =
+        serde_json::from_slice(&to_bytes(members_response.into_body(), usize::MAX).await?)?;
+    assert_eq!(members[0]["user_id"], "owner-1");
+    assert_eq!(members[0]["user_email"], "owner-1@example.com");
+
     assert_eq!(table_count(db.as_ref(), "workspace_profiles").await?, 1);
     assert_eq!(table_count(db.as_ref(), "workspace_members").await?, 1);
+    assert_eq!(
+        table_count(db.as_ref(), "workspace_principal_identities").await?,
+        1
+    );
     assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 1);
     let event = outbox_event(db.as_ref()).await?;
     assert_eq!(event["event_type"], "workspace_member_joined");
@@ -198,6 +222,257 @@ async fn public_create_preserves_the_legacy_defaults_and_durable_owner_event()
             .as_str()
             .is_some_and(|value| value.ends_with("+00:00"))
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn desktop_local_create_mirrors_the_authenticated_project_principal()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(creation_db_without_principal().await?);
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+
+    let response = workspace_router(state)
+        .oneshot(public_local_create_request()?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let rows = db
+        .query(DbStatement::new(
+            "SELECT tenant_id, project_id, user_id, participant_actor_id, \
+             source_membership_id, role, permissions_json, is_active, identity_authority \
+             FROM project_principal_memberships",
+        ))
+        .await?;
+    let principal = rows.first().ok_or("missing Desktop principal mirror")?;
+    assert_eq!(
+        principal.get_string("tenant_id")?.as_deref(),
+        Some("tenant-1")
+    );
+    assert_eq!(
+        principal.get_string("project_id")?.as_deref(),
+        Some("project-1")
+    );
+    assert_eq!(principal.get_string("user_id")?.as_deref(), Some("owner-1"));
+    assert_eq!(
+        principal.get_string("participant_actor_id")?.as_deref(),
+        Some("owner-1")
+    );
+    assert!(
+        principal
+            .get_string("source_membership_id")?
+            .is_some_and(|value| value.starts_with("desktop-sidecar:"))
+    );
+    assert_eq!(principal.get_string("role")?.as_deref(), Some("owner"));
+    assert_eq!(
+        principal.get_string("permissions_json")?.as_deref(),
+        Some("{}")
+    );
+    assert_eq!(principal.get_i64("is_active")?, Some(1));
+    assert_eq!(
+        principal.get_string("identity_authority")?.as_deref(),
+        Some("desktop-sidecar")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn desktop_local_workspace_reads_survive_a_file_database_reopen() -> Result<(), Box<dyn Error>>
+{
+    let directory = tempfile::tempdir()?;
+    let database_path = directory.path().join("avernet-workspace.db");
+    let workspace_id = {
+        let db = Arc::new(LocalSqliteDbPlugin::new_file(&database_path)?);
+        bcs::migrations::run_sqlite_migrations(db.as_ref()).await?;
+        run_desktop_workspace_schema_migrations(db.as_ref()).await?;
+        let state = Arc::new(
+            WorkspaceCoreState::new_with_sql_flavor(
+                db,
+                SERVICE_TOKEN.to_string(),
+                DbSqlFlavor::Sqlite,
+            )?
+            .with_authority(WorkspaceCoreAuthority::Local),
+        );
+        let response = workspace_router(state)
+            .oneshot(public_local_create_request()?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let payload: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+        payload["id"]
+            .as_str()
+            .ok_or("missing Desktop workspace id")?
+            .to_string()
+    };
+
+    let db = Arc::new(LocalSqliteDbPlugin::new_file(&database_path)?);
+    bcs::migrations::run_sqlite_migrations(db.as_ref()).await?;
+    run_desktop_workspace_schema_migrations(db.as_ref()).await?;
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+
+    for path in [
+        "/api/v1/tenants/tenant-1/projects/project-1/workspaces?limit=500&offset=0".to_string(),
+        format!("/api/v1/tenants/tenant-1/projects/project-1/workspaces/{workspace_id}"),
+        format!("/api/v1/tenants/tenant-1/projects/project-1/workspaces/{workspace_id}/members"),
+        format!(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/\
+             {workspace_id}/collaboration/capabilities"
+        ),
+    ] {
+        let request = Request::builder()
+            .uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+            .header("x-memstack-user-id", "owner-1")
+            .header("x-memstack-user-is-superuser", "false")
+            .body(Body::empty())?;
+        let response = workspace_router(state.clone()).oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let revision_rows = db
+        .query(DbStatement::with_params(
+            "SELECT revision FROM workspace_authorities WHERE workspace_id = ?",
+            vec![DbValue::from(workspace_id.as_str())],
+        ))
+        .await?;
+    let revision = revision_rows
+        .first()
+        .ok_or("missing Desktop Workspace authority")?
+        .get_i64("revision")?
+        .ok_or("missing Desktop Workspace authority revision")?;
+    let collaboration_path = format!(
+        "/api/v1/tenants/tenant-1/projects/project-1/workspaces/{workspace_id}/collaboration/mutations"
+    );
+    let discussion_request = Request::builder()
+        .method("POST")
+        .uri(collaboration_path)
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-is-superuser", "false")
+        .header("x-expected-revision", revision.to_string())
+        .header("idempotency-key", "desktop-reopen-discussion")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "contract_version": "2.0.0",
+                "surface": "discussion",
+                "action": "create_post",
+                "expected_revision": revision,
+                "idempotency_key": "desktop-reopen-discussion",
+                "payload": {
+                    "title": "Desktop persistence",
+                    "content": "Avernet collaboration mutation survived a file database reopen"
+                }
+            })
+            .to_string(),
+        ))?;
+    let response = workspace_router(state.clone())
+        .oneshot(discussion_request)
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let messages_path =
+        format!("/api/v1/tenants/tenant-1/projects/project-1/workspaces/{workspace_id}/messages");
+    let list_request = Request::builder()
+        .uri(messages_path.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-is-superuser", "false")
+        .header("x-memstack-user-email", "owner-1@example.com")
+        .body(Body::empty())?;
+    let response = workspace_router(state.clone())
+        .oneshot(list_request)
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+    assert_eq!(payload["items"], json!([]));
+
+    let create_request = Request::builder()
+        .method("POST")
+        .uri(messages_path.as_str())
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-is-superuser", "false")
+        .header("x-memstack-user-email", "owner-1@example.com")
+        .header("idempotency-key", "desktop-reopen-message")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"content": "Persisted message"}).to_string(),
+        ))?;
+    let response = workspace_router(state).oneshot(create_request).await?;
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let db = Arc::new(LocalSqliteDbPlugin::new_file(&database_path)?);
+    bcs::migrations::run_sqlite_migrations(db.as_ref()).await?;
+    run_desktop_workspace_schema_migrations(db.as_ref()).await?;
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let list_request = Request::builder()
+        .uri(messages_path)
+        .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
+        .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-is-superuser", "false")
+        .header("x-memstack-user-email", "owner-1@example.com")
+        .body(Body::empty())?;
+    let response = workspace_router(state).oneshot(list_request).await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+    assert_eq!(payload["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(payload["items"][0]["content"], "Persisted message");
+    let posts = db
+        .query(DbStatement::with_params(
+            "SELECT title, content FROM workspace_blackboard_posts WHERE workspace_id = ?",
+            vec![DbValue::from(workspace_id.as_str())],
+        ))
+        .await?;
+    assert_eq!(posts.len(), 1);
+    assert_eq!(
+        posts[0].get_string("title")?.as_deref(),
+        Some("Desktop persistence")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cloud_create_does_not_mirror_a_desktop_project_principal() -> Result<(), Box<dyn Error>> {
+    let db = Arc::new(creation_db_without_principal().await?);
+    let state = Arc::new(WorkspaceCoreState::new_with_sql_flavor(
+        db.clone(),
+        SERVICE_TOKEN.to_string(),
+        DbSqlFlavor::Sqlite,
+    )?);
+
+    let response = workspace_router(state)
+        .oneshot(public_local_create_request()?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        table_count(db.as_ref(), "project_principal_memberships").await?,
+        0
+    );
+    assert_eq!(table_count(db.as_ref(), "workspace_profiles").await?, 0);
     Ok(())
 }
 
@@ -292,6 +567,7 @@ async fn public_create_preserves_legacy_validation_and_permission_envelopes()
         .uri("/api/v1/tenants/tenant-1/projects/project-1/workspaces")
         .header(header::AUTHORIZATION, format!("Bearer {SERVICE_TOKEN}"))
         .header("x-memstack-user-id", "owner-1")
+        .header("x-memstack-user-email", "owner-1@example.com")
         .header("x-memstack-user-is-superuser", "false")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from("{"))?;
@@ -301,6 +577,36 @@ async fn public_create_preserves_legacy_validation_and_permission_envelopes()
         serde_json::from_slice(&to_bytes(malformed.into_body(), usize::MAX).await?)?;
     assert_eq!(malformed["detail"][0]["type"], "json_invalid");
     assert_eq!(malformed["detail"][0]["loc"], json!(["body", 0]));
+
+    let missing_email = workspace_router(state.clone())
+        .oneshot(public_create_request_with_email(
+            json!({"name": "Missing Identity"}),
+            None,
+            None,
+        )?)
+        .await?;
+    assert_eq!(missing_email.status(), StatusCode::BAD_REQUEST);
+    let missing_email: Value =
+        serde_json::from_slice(&to_bytes(missing_email.into_body(), usize::MAX).await?)?;
+    assert_eq!(
+        missing_email,
+        json!({"detail": "missing x-memstack-user-email header"})
+    );
+
+    let blank_email = workspace_router(state.clone())
+        .oneshot(public_create_request_with_email(
+            json!({"name": "Blank Identity"}),
+            None,
+            Some(" "),
+        )?)
+        .await?;
+    assert_eq!(blank_email.status(), StatusCode::BAD_REQUEST);
+    let blank_email: Value =
+        serde_json::from_slice(&to_bytes(blank_email.into_body(), usize::MAX).await?)?;
+    assert_eq!(
+        blank_email,
+        json!({"detail": "invalid x-memstack-user-email header"})
+    );
 
     let invalid_name = workspace_router(state.clone())
         .oneshot(public_create_request(json!({"name": ""}), None)?)
@@ -590,7 +896,12 @@ async fn public_member_mutations_preserve_legacy_status_shape_and_atomic_roster(
 -> Result<(), Box<dyn Error>> {
     let db = Arc::new(creation_db().await?);
     db.execute(DbStatement::new(
-        "INSERT INTO project_principal_memberships (tenant_id, project_id, user_id, participant_actor_id, is_active) VALUES ('tenant-1', 'project-1', 'member-user', 'member-user', 1)",
+        "INSERT INTO project_principal_memberships \
+         (tenant_id, project_id, user_id, participant_actor_id, source_membership_id, role, \
+          permissions_json, is_active, identity_authority, source_created_at, source_updated_at) \
+         VALUES ('tenant-1', 'project-1', 'member-user', 'member-user', \
+                 'membership-member-user', 'member', '{}', 1, 'memstack', \
+                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
     ))
     .await?;
     let state = Arc::new(WorkspaceCoreState::new_with_sql_flavor(
@@ -742,6 +1053,14 @@ fn public_create_request(
     payload: Value,
     idempotency_key: Option<&str>,
 ) -> Result<Request<Body>, Box<dyn Error>> {
+    public_create_request_with_email(payload, idempotency_key, Some("owner-1@example.com"))
+}
+
+fn public_create_request_with_email(
+    payload: Value,
+    idempotency_key: Option<&str>,
+    owner_email: Option<&str>,
+) -> Result<Request<Body>, Box<dyn Error>> {
     let mut builder = Request::builder()
         .method("POST")
         .uri("/api/v1/tenants/tenant-1/projects/project-1/workspaces")
@@ -749,10 +1068,27 @@ fn public_create_request(
         .header("x-memstack-user-id", "owner-1")
         .header("x-memstack-user-is-superuser", "false")
         .header(header::CONTENT_TYPE, "application/json");
+    if let Some(owner_email) = owner_email {
+        builder = builder.header("x-memstack-user-email", owner_email);
+    }
     if let Some(idempotency_key) = idempotency_key {
         builder = builder.header("idempotency-key", idempotency_key);
     }
     Ok(builder.body(Body::from(payload.to_string()))?)
+}
+
+fn public_local_create_request() -> Result<Request<Body>, Box<dyn Error>> {
+    let mut request = public_create_request(
+        json!({
+            "name": "Desktop Local Workspace",
+            "description": "Avernet Desktop authority contract"
+        }),
+        Some("desktop-local-create"),
+    )?;
+    request
+        .headers_mut()
+        .insert("x-memstack-project-membership-role", "owner".parse()?);
+    Ok(request)
 }
 
 fn public_workspace_request(
@@ -814,30 +1150,46 @@ fn public_member_request(
 }
 
 async fn creation_db() -> Result<LocalSqliteDbPlugin, Box<dyn Error>> {
+    let db = creation_db_without_principal().await?;
+    db.execute(DbStatement::new(
+        "INSERT INTO project_principal_memberships \
+         (tenant_id, project_id, user_id, participant_actor_id, source_membership_id, role, \
+          permissions_json, is_active, identity_authority, source_created_at, source_updated_at) \
+         VALUES ('tenant-1', 'project-1', 'owner-1', 'owner-1', 'membership-owner-1', 'owner', \
+                 '{}', 1, 'memstack', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+    ))
+    .await?;
+    Ok(db)
+}
+
+async fn creation_db_without_principal() -> Result<LocalSqliteDbPlugin, Box<dyn Error>> {
     let db = LocalSqliteDbPlugin::new()?;
     for ddl in [
-        "CREATE TABLE project_principal_memberships (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_actor_id TEXT NOT NULL, is_active INTEGER NOT NULL, PRIMARY KEY (tenant_id, project_id, user_id))",
+        "CREATE TABLE project_principal_memberships (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_actor_id TEXT NOT NULL, source_membership_id TEXT NOT NULL, role TEXT NOT NULL, permissions_json TEXT NOT NULL DEFAULT '{}', is_active INTEGER NOT NULL, identity_authority TEXT NOT NULL, source_created_at TEXT NOT NULL, source_updated_at TEXT NOT NULL, PRIMARY KEY (tenant_id, project_id, user_id), UNIQUE (tenant_id, project_id, participant_actor_id), UNIQUE (source_membership_id))",
         "CREATE TABLE bcs_groups (group_id TEXT NOT NULL, label TEXT, status TEXT NOT NULL, driver_bot TEXT NOT NULL, originator TEXT, env TEXT NOT NULL, routing_policy_json TEXT, context TEXT, group_kind TEXT NOT NULL DEFAULT 'normal', version INTEGER NOT NULL DEFAULT 1, record_status TEXT NOT NULL DEFAULT 'active', lifecycle_status TEXT NOT NULL DEFAULT 'active', group_strategy TEXT NOT NULL DEFAULT 'chat', created_by TEXT, visibility TEXT NOT NULL DEFAULT 'private', gmt_modified TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(group_id, env))",
         "CREATE TABLE bcs_group_participants (group_id TEXT NOT NULL, bot_uuid TEXT NOT NULL, role TEXT NOT NULL, env TEXT NOT NULL, actor_kind TEXT NOT NULL DEFAULT 'bot', mode TEXT NOT NULL DEFAULT 'auto', gmt_modified TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(env, group_id, bot_uuid))",
         "CREATE TABLE workspace_profiles (workspace_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, group_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, created_by TEXT NOT NULL, is_archived INTEGER NOT NULL DEFAULT 0, office_status TEXT NOT NULL DEFAULT 'inactive', hex_layout_config_json TEXT NOT NULL DEFAULT '{}', default_blocking_categories_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT, deleted_by TEXT, UNIQUE(tenant_id, project_id, workspace_id), UNIQUE(tenant_id, project_id, name))",
         "CREATE TABLE workspace_members (member_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_actor_id TEXT NOT NULL, role TEXT NOT NULL, invited_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(workspace_id, user_id), UNIQUE(workspace_id, participant_actor_id))",
+        "CREATE TABLE workspace_principal_identities (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_actor_id TEXT NOT NULL, email TEXT NOT NULL, display_name TEXT, is_active INTEGER NOT NULL, identity_authority TEXT NOT NULL, source_created_at TEXT NOT NULL, source_updated_at TEXT NOT NULL, PRIMARY KEY(tenant_id, project_id, workspace_id, user_id), UNIQUE(tenant_id, project_id, workspace_id, participant_actor_id))",
         "CREATE TABLE workspace_authorities (workspace_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, revision INTEGER NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
         "CREATE TABLE workspace_mutation_receipts (receipt_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, contract_version TEXT NOT NULL, surface TEXT NOT NULL, action TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, expected_revision INTEGER NOT NULL, committed_revision INTEGER, response_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, committed_at TEXT, UNIQUE(workspace_id, actor_id, idempotency_key))",
         "CREATE TABLE workspace_outbox (outbox_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, event_type TEXT NOT NULL, stream_name TEXT NOT NULL, event_sequence INTEGER NOT NULL, payload_json TEXT NOT NULL, metadata_json TEXT NOT NULL, correlation_id TEXT, idempotency_key TEXT NOT NULL, UNIQUE(workspace_id, idempotency_key), UNIQUE(workspace_id, stream_name, event_sequence))",
     ] {
         db.execute(DbStatement::new(ddl)).await?;
     }
-    db.execute(DbStatement::new(
-        "INSERT INTO project_principal_memberships (tenant_id, project_id, user_id, participant_actor_id, is_active) VALUES ('tenant-1', 'project-1', 'owner-1', 'owner-1', 1)",
-    ))
-    .await?;
     Ok(db)
 }
 
 async fn table_count(db: &dyn DbPlugin, table: &str) -> Result<i64, Box<dyn Error>> {
     let sql = match table {
+        "project_principal_memberships" => {
+            "SELECT COUNT(*) AS value FROM project_principal_memberships"
+        }
         "workspace_profiles" => "SELECT COUNT(*) AS value FROM workspace_profiles",
         "workspace_members" => "SELECT COUNT(*) AS value FROM workspace_members",
+        "workspace_principal_identities" => {
+            "SELECT COUNT(*) AS value FROM workspace_principal_identities"
+        }
         "workspace_outbox" => "SELECT COUNT(*) AS value FROM workspace_outbox",
         _ => return Err("unsupported table".into()),
     };

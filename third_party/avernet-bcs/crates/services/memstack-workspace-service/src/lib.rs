@@ -17,8 +17,8 @@ use memstack_workspace_service_api::{
 };
 pub use memstack_workspace_service_api::{WorkspaceMemberRole, WorkspaceMutationAuthority};
 use memstack_workspace_store::{
-    WorkspaceCreationPlanError, WorkspaceCreationPlanner, WorkspaceCreationTimestamps,
-    WorkspaceMutationStore, WorkspaceMutationStoreError,
+    WorkspaceCreationOwnerIdentity, WorkspaceCreationPlanError, WorkspaceCreationPlanner,
+    WorkspaceCreationTimestamps, WorkspaceMutationStore, WorkspaceMutationStoreError,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -274,12 +274,33 @@ impl<'a> WorkspaceCreationService<'a> {
         &self,
         input: &CreateWorkspaceInput,
     ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
+        self.create_inner(input, None).await
+    }
+
+    /// Atomically create a public Workspace and its authenticated owner identity mirror.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same structured errors as [`Self::create`].
+    pub async fn create_with_owner_identity(
+        &self,
+        input: &CreateWorkspaceInput,
+        owner_email: &str,
+    ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
+        self.create_inner(input, Some(owner_email)).await
+    }
+
+    async fn create_inner(
+        &self,
+        input: &CreateWorkspaceInput,
+        owner_email: Option<&str>,
+    ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
         let now = Utc::now();
         let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
         let response_at = now.to_rfc3339_opts(SecondsFormat::Micros, true);
         let timestamps =
             WorkspaceCreationTimestamps::new(persisted_at.clone(), persisted_at.clone())?;
-        let request_hash = canonical_request_hash(input)?;
+        let request_hash = canonical_request_hash(input, owner_email)?;
         let workspace_id = WorkspaceId::parse(input.scope.workspace_id.clone())?;
         let actor_id = ActorId::parse(input.owner.user_id.clone())?;
         let command = WorkspaceMutationCommand::new(
@@ -307,14 +328,28 @@ impl<'a> WorkspaceCreationService<'a> {
             UserId::parse(input.owner.user_id.clone())?,
             ParticipantActorId::parse(input.owner.user_id.clone())?,
         );
-        let plan = WorkspaceCreationPlanner::new(self.flavor).plan_with_timestamps(
-            &command,
-            profile,
-            owner,
-            creation_response(input, &response_at),
-            owner_event_payload(input, &persisted_at),
-            &timestamps,
-        )?;
+        let response = creation_response(input, &response_at);
+        let event_payload = owner_event_payload(input, &persisted_at);
+        let planner = WorkspaceCreationPlanner::new(self.flavor);
+        let plan = if let Some(owner_email) = owner_email {
+            planner.plan_with_owner_identity(
+                &command,
+                profile,
+                owner,
+                response,
+                event_payload,
+                WorkspaceCreationOwnerIdentity::new(owner_email, &timestamps)?,
+            )?
+        } else {
+            planner.plan_with_timestamps(
+                &command,
+                profile,
+                owner,
+                response,
+                event_payload,
+                &timestamps,
+            )?
+        };
         let outcome = WorkspaceMutationStore::new(self.db)
             .execute_creation(&command, plan)
             .await?;
@@ -329,6 +364,7 @@ impl<'a> WorkspaceCreationService<'a> {
 
 fn canonical_request_hash(
     input: &CreateWorkspaceInput,
+    owner_email: Option<&str>,
 ) -> Result<RequestHash, CreateWorkspaceServiceError> {
     let payload = json!({
         "scope": {
@@ -341,6 +377,7 @@ fn canonical_request_hash(
             "member_id": &input.owner.member_id,
             "user_id": &input.owner.user_id,
             "is_superuser": input.owner.is_superuser,
+            "email": owner_email,
         },
         "content": {
             "name": &input.content.name,
