@@ -37,7 +37,7 @@ use super::{
     ConversationCapabilityMode, ConversationRunMode, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 23;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 25;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -140,6 +140,31 @@ pub(super) enum HitlResponseCommitError {
 pub(super) enum DesktopClientTurnClaimError {
     PayloadConflict,
     Storage(String),
+}
+
+#[derive(Debug, PartialEq)]
+pub(super) enum DesktopWorkspaceCoreRequestClaim {
+    Claimed,
+    Duplicate(Value),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum DesktopWorkspaceCoreRequestClaimError {
+    PayloadConflict,
+    Storage(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct DesktopWorkspaceCoreTerminalCallback {
+    pub(super) id: String,
+    pub(super) run_id: String,
+    pub(super) sequence: u64,
+    pub(super) provider_bot_ref: String,
+    pub(super) payload: Value,
+    pub(super) created_at: String,
+    pub(super) attempt_count: u64,
+    pub(super) last_attempt_at: Option<String>,
+    pub(super) last_error: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -646,6 +671,26 @@ impl DesktopSessionStore {
                    updated_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_workspace_core_requests (
+                   request_id TEXT PRIMARY KEY,
+                   channel TEXT NOT NULL,
+                   request_hash TEXT NOT NULL,
+                   response_json TEXT NOT NULL,
+                   created_at TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_workspace_core_terminal_callbacks (
+                   id TEXT PRIMARY KEY,
+                   run_id TEXT NOT NULL,
+                   sequence INTEGER NOT NULL CHECK (sequence >= 0),
+                   provider_bot_ref TEXT NOT NULL,
+                   payload_json TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   delivered_at TEXT,
+                   attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+                   last_attempt_at TEXT,
+                   last_error TEXT,
+                   UNIQUE(run_id, sequence)
+                 );
                  CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_project
                    ON desktop_workspaces(project_id);
                  CREATE INDEX IF NOT EXISTS idx_desktop_conversations_scope
@@ -695,7 +740,13 @@ impl DesktopSessionStore {
                  CREATE INDEX IF NOT EXISTS idx_desktop_tool_invocations_status
                    ON desktop_tool_invocations(status, prepared_at_ms DESC);
                  CREATE INDEX IF NOT EXISTS idx_desktop_checkpoint_authorities_run
-                   ON desktop_checkpoint_authorities(run_id);",
+                   ON desktop_checkpoint_authorities(run_id);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_workspace_core_requests_created
+                   ON desktop_workspace_core_requests(created_at);
+                 CREATE INDEX IF NOT EXISTS idx_desktop_workspace_core_callbacks_pending
+                   ON desktop_workspace_core_terminal_callbacks(
+                     delivered_at, created_at, sequence
+                   );",
             )
             .map_err(|error| error.to_string())?;
         let locking_mode: String = connection
@@ -750,6 +801,268 @@ impl DesktopSessionStore {
 
     pub(super) fn installation_id(&self) -> &str {
         &self.installation_id
+    }
+
+    pub(super) fn project_tenant_id(&self, project_id: &str) -> Result<Option<String>, String> {
+        self.connection()?
+            .query_row(
+                "SELECT tenant_id FROM desktop_projects WHERE id = ?1 AND status = 'active'",
+                [project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn claim_workspace_core_request(
+        &self,
+        request_id: &str,
+        channel: &str,
+        request_hash: &str,
+        response: &Value,
+        created_at: &str,
+    ) -> Result<DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError> {
+        let mut connection = self
+            .connection()
+            .map_err(DesktopWorkspaceCoreRequestClaimError::Storage)?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string()))?;
+        let existing = transaction
+            .query_row(
+                "SELECT channel, request_hash, response_json
+                 FROM desktop_workspace_core_requests WHERE request_id = ?1",
+                [request_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string()))?;
+        if let Some((existing_channel, existing_hash, response_json)) = existing {
+            if existing_channel != channel || existing_hash != request_hash {
+                return Err(DesktopWorkspaceCoreRequestClaimError::PayloadConflict);
+            }
+            let response = serde_json::from_str(&response_json).map_err(|error| {
+                DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string())
+            })?;
+            transaction.commit().map_err(|error| {
+                DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string())
+            })?;
+            return Ok(DesktopWorkspaceCoreRequestClaim::Duplicate(response));
+        }
+        let response_json = serde_json::to_string(response)
+            .map_err(|error| DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string()))?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_workspace_core_requests(
+                   request_id, channel, request_hash, response_json, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![request_id, channel, request_hash, response_json, created_at],
+            )
+            .map_err(|error| DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| DesktopWorkspaceCoreRequestClaimError::Storage(error.to_string()))?;
+        Ok(DesktopWorkspaceCoreRequestClaim::Claimed)
+    }
+
+    pub(super) fn enqueue_workspace_core_terminal_callback(
+        &self,
+        callback: &DesktopWorkspaceCoreTerminalCallback,
+    ) -> Result<(), String> {
+        if callback.id.trim().is_empty()
+            || callback.run_id.trim().is_empty()
+            || callback.provider_bot_ref.trim().is_empty()
+            || callback.attempt_count != 0
+            || callback.last_attempt_at.is_some()
+            || callback.last_error.is_some()
+        {
+            return Err("Workspace Core terminal callback is invalid".to_string());
+        }
+        let sequence = i64::try_from(callback.sequence)
+            .map_err(|_| "Workspace Core callback sequence overflow".to_string())?;
+        let payload_json =
+            serde_json::to_string(&callback.payload).map_err(|error| error.to_string())?;
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| error.to_string())?;
+        let existing = transaction
+            .query_row(
+                "SELECT run_id, sequence, provider_bot_ref, payload_json, created_at
+                 FROM desktop_workspace_core_terminal_callbacks WHERE id = ?1",
+                [&callback.id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if let Some((run_id, stored_sequence, provider_bot_ref, stored_payload, created_at)) =
+            existing
+        {
+            if run_id != callback.run_id
+                || stored_sequence != sequence
+                || provider_bot_ref != callback.provider_bot_ref
+                || stored_payload != payload_json
+                || created_at != callback.created_at
+            {
+                return Err("Workspace Core terminal callback id collision".to_string());
+            }
+            return transaction.commit().map_err(|error| error.to_string());
+        }
+        transaction
+            .execute(
+                "INSERT INTO desktop_workspace_core_terminal_callbacks(
+                   id, run_id, sequence, provider_bot_ref, payload_json, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    callback.id,
+                    callback.run_id,
+                    sequence,
+                    callback.provider_bot_ref,
+                    payload_json,
+                    callback.created_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn pending_workspace_core_terminal_callbacks(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<DesktopWorkspaceCoreTerminalCallback>, String> {
+        if !(1..=1_000).contains(&limit) {
+            return Err("Workspace Core callback query limit is invalid".to_string());
+        }
+        let limit = i64::try_from(limit).map_err(|error| error.to_string())?;
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, run_id, sequence, provider_bot_ref, payload_json, created_at,
+                        attempt_count, last_attempt_at, last_error
+                 FROM desktop_workspace_core_terminal_callbacks
+                 WHERE delivered_at IS NULL
+                 ORDER BY created_at ASC, sequence ASC, id ASC
+                 LIMIT ?1",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([limit], |row| {
+                let sequence = row.get::<_, i64>(2)?;
+                let attempt_count = row.get::<_, i64>(6)?;
+                let payload_json = row.get::<_, String>(4)?;
+                let payload = serde_json::from_str(&payload_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    sequence,
+                    row.get::<_, String>(3)?,
+                    payload,
+                    row.get::<_, String>(5)?,
+                    attempt_count,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?;
+        rows.map(|row| {
+            let (
+                id,
+                run_id,
+                sequence,
+                provider_bot_ref,
+                payload,
+                created_at,
+                attempt_count,
+                last_attempt_at,
+                last_error,
+            ) = row.map_err(|error| error.to_string())?;
+            Ok(DesktopWorkspaceCoreTerminalCallback {
+                id,
+                run_id,
+                sequence: u64::try_from(sequence).map_err(|error| error.to_string())?,
+                provider_bot_ref,
+                payload,
+                created_at,
+                attempt_count: u64::try_from(attempt_count).map_err(|error| error.to_string())?,
+                last_attempt_at,
+                last_error,
+            })
+        })
+        .collect()
+    }
+
+    pub(super) fn mark_workspace_core_terminal_callback_delivered(
+        &self,
+        callback_id: &str,
+        delivered_at: &str,
+    ) -> Result<(), String> {
+        let connection = self.connection()?;
+        let changed = connection
+            .execute(
+                "UPDATE desktop_workspace_core_terminal_callbacks
+                 SET delivered_at = ?2, attempt_count = attempt_count + 1,
+                     last_attempt_at = ?2, last_error = NULL
+                 WHERE id = ?1 AND delivered_at IS NULL",
+                params![callback_id, delivered_at],
+            )
+            .map_err(|error| error.to_string())?;
+        if changed != 0
+            || connection
+                .query_row(
+                    "SELECT 1 FROM desktop_workspace_core_terminal_callbacks WHERE id = ?1",
+                    [callback_id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?
+                .is_some()
+        {
+            Ok(())
+        } else {
+            Err("Workspace Core terminal callback was not found".to_string())
+        }
+    }
+
+    pub(super) fn record_workspace_core_terminal_callback_failure(
+        &self,
+        callback_id: &str,
+        attempted_at: &str,
+        error: &str,
+    ) -> Result<(), String> {
+        let changed = self
+            .connection()?
+            .execute(
+                "UPDATE desktop_workspace_core_terminal_callbacks
+                 SET attempt_count = attempt_count + 1, last_attempt_at = ?2, last_error = ?3
+                 WHERE id = ?1 AND delivered_at IS NULL",
+                params![callback_id, attempted_at, error],
+            )
+            .map_err(|error| error.to_string())?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err("Workspace Core terminal callback is not pending".to_string())
+        }
     }
 
     pub(super) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -4425,6 +4738,7 @@ impl DesktopSessionStore {
 
     /// Fire-and-forget audit sink for browser tool calls. The caller logs and
     /// swallows failures — auditing must never fail a tool call.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn insert_browser_action_audit(
         &self,
         run_id: Option<&str>,
@@ -6834,5 +7148,68 @@ mod tests {
             .expect("list after sweep");
         assert_eq!(remaining.len(), 2);
         assert!(remaining.iter().all(|entry| entry.created_at >= 2_500));
+    }
+
+    #[test]
+    fn workspace_core_terminal_callback_outbox_survives_store_reopen() {
+        let path = std::env::temp_dir().join(format!(
+            "desktop-workspace-core-outbox-{}.db",
+            Uuid::new_v4()
+        ));
+        let callback = DesktopWorkspaceCoreTerminalCallback {
+            id: "callback-1".to_string(),
+            run_id: "provider-run-1".to_string(),
+            sequence: 3,
+            provider_bot_ref: "builtin:all-access".to_string(),
+            payload: json!({
+                "run_id": "provider-run-1",
+                "payload": { "state": "final" }
+            }),
+            created_at: "2026-08-11T00:00:00Z".to_string(),
+            attempt_count: 0,
+            last_attempt_at: None,
+            last_error: None,
+        };
+        {
+            let store = DesktopSessionStore::open(&path).expect("open session store");
+            store
+                .enqueue_workspace_core_terminal_callback(&callback)
+                .expect("enqueue callback");
+            store
+                .record_workspace_core_terminal_callback_failure(
+                    &callback.id,
+                    "2026-08-11T00:00:01Z",
+                    "Core unavailable",
+                )
+                .expect("record failed delivery");
+        }
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen session store");
+            let pending = store
+                .pending_workspace_core_terminal_callbacks(10)
+                .expect("pending callbacks");
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].attempt_count, 1);
+            assert_eq!(pending[0].last_error.as_deref(), Some("Core unavailable"));
+            assert_eq!(pending[0].payload, callback.payload);
+            store
+                .mark_workspace_core_terminal_callback_delivered(
+                    &callback.id,
+                    "2026-08-11T00:00:02Z",
+                )
+                .expect("mark callback delivered");
+            assert!(store
+                .pending_workspace_core_terminal_callbacks(10)
+                .expect("drained callbacks")
+                .is_empty());
+        }
+        {
+            let store = DesktopSessionStore::open(&path).expect("reopen delivered store");
+            assert!(store
+                .pending_workspace_core_terminal_callbacks(10)
+                .expect("persisted delivery marker")
+                .is_empty());
+        }
+        let _ = std::fs::remove_file(path);
     }
 }

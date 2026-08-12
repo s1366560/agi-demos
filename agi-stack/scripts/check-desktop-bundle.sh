@@ -6,6 +6,7 @@ BUNDLE_ROOT="${AGISTACK_DESKTOP_BUNDLE_ROOT:-$ROOT/release}"
 CONFIG="$ROOT/electron-builder.yml"
 EXPECTED_ID="${AGISTACK_DESKTOP_IDENTIFIER:-ai.agistack.desktop}"
 EXPECTED_SIDECAR="${AGISTACK_DESKTOP_SIDECAR:-agistack-desktop-sidecar}"
+EXPECTED_WORKSPACE_CORE="${AGISTACK_DESKTOP_WORKSPACE_CORE:-memstack-workspace-core}"
 
 grep -q "^appId: $EXPECTED_ID$" "$CONFIG" || {
   echo "unexpected Electron app identifier in $CONFIG" >&2
@@ -26,6 +27,7 @@ app_dir="$(find "$BUNDLE_ROOT" -name '*.app' -type d -print -quit || true)"
 if [[ -n "$app_dir" ]]; then
   macos_bin="$(find "$app_dir/Contents/MacOS" -type f -perm -111 -print -quit)"
   sidecar_bin="$app_dir/Contents/Resources/sidecar/$EXPECTED_SIDECAR"
+  workspace_core_bin="$app_dir/Contents/Resources/workspace-core/$EXPECTED_WORKSPACE_CORE"
   info_plist="$app_dir/Contents/Info.plist"
   test -n "$macos_bin" || {
     echo "macOS bundle has no executable" >&2
@@ -33,6 +35,10 @@ if [[ -n "$app_dir" ]]; then
   }
   test -x "$sidecar_bin" || {
     echo "macOS sidecar is missing or not executable: $sidecar_bin" >&2
+    exit 1
+  }
+  test -x "$workspace_core_bin" || {
+    echo "macOS Workspace Core helper is missing or not executable: $workspace_core_bin" >&2
     exit 1
   }
   test -f "$info_plist" || {
@@ -67,6 +73,7 @@ if [[ -n "$app_dir" ]]; then
   done
   codesign --verify --deep --strict "$app_dir"
   codesign --verify --strict "$sidecar_bin"
+  codesign --verify --strict "$workspace_core_bin"
 fi
 
 echo "DESKTOP_BUNDLE_SMOKE_OK bundle_root=$BUNDLE_ROOT"

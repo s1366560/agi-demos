@@ -23,6 +23,13 @@ DESKTOP_ICON_PNG ?= $(DESKTOP_APP_DIR)/electron/resources/icon.png
 DESKTOP_ICON_ICNS ?= $(DESKTOP_APP_DIR)/electron/resources/icon.icns
 DESKTOP_ENTITLEMENTS_DIR ?= $(DESKTOP_APP_DIR)/electron/resources
 PNPM_INSTALL_ARGS ?= --frozen-lockfile
+AVERNET_BCS_TARGET_DIR ?= $(abspath ../.cache/avernet-bcs/target)
+export AVERNET_BCS_TARGET_DIR
+ifeq ($(OS),Windows_NT)
+DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core.exe
+else
+DESKTOP_WORKSPACE_CORE_DEBUG ?= $(AVERNET_BCS_TARGET_DIR)/debug/memstack-workspace-core
+endif
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
 ANDROID_TARGET ?= aarch64-linux-android
@@ -93,9 +100,10 @@ desktop: desktop-check desktop-bundle desktop-bundle-smoke ## 桌面:构建 Elec
 	@echo "==> 桌面可安装客户端构建完成:$(DESKTOP_APP_DIR)/release/"
 
 desktop-check: desktop-deps ## 桌面:Rust sidecar 与 Electron/renderer 测试
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	$(CARGO) test -p agistack-desktop-sidecar
-	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) $(PNPM) test
+	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(abspath target/debug/agistack-desktop-sidecar) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_DEBUG) $(PNPM) test
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:electron
 	@echo "==> Electron 外壳与 sidecar 验证通过"
 
@@ -136,6 +144,7 @@ desktop-icons: ## 桌面:验证已跟踪的 electron-builder 图标和 macOS ent
 	test -s $(DESKTOP_ENTITLEMENTS_DIR)/entitlements.mac.inherit.plist
 
 run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
+	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
 	$(CARGO) build -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run dev:electron

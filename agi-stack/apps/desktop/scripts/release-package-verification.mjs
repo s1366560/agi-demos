@@ -5,9 +5,7 @@ import { basename, join, relative, sep } from 'node:path';
 
 function requireUniquePath(paths, label) {
   if (paths.length !== 1) {
-    throw new Error(
-      `${label} must have exactly one match; found ${paths.length}`,
-    );
+    throw new Error(`${label} must have exactly one match; found ${paths.length}`);
   }
   return paths[0];
 }
@@ -35,9 +33,7 @@ async function requireTopLevelMacApp(root, label) {
   return requireUniquePath(
     directories.filter((path) => {
       const relativePath = relative(root, path);
-      return (
-        relativePath.split(sep).length === 1 && relativePath.endsWith('.app')
-      );
+      return relativePath.split(sep).length === 1 && relativePath.endsWith('.app');
     }),
     label,
   );
@@ -55,15 +51,7 @@ async function withMountedMacDmg(dmgPath, inspect) {
   try {
     execFileSync(
       '/usr/bin/hdiutil',
-      [
-        'attach',
-        dmgPath,
-        '-readonly',
-        '-nobrowse',
-        '-noautoopen',
-        '-mountpoint',
-        mountRoot,
-      ],
+      ['attach', dmgPath, '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', mountRoot],
       { stdio: 'inherit' },
     );
     attached = true;
@@ -82,16 +70,19 @@ function assertMatchingMacPackageResults(zipResult, dmgResult) {
   if (zipResult.sidecar_sha256 !== dmgResult.sidecar_sha256) {
     throw new Error('zip and dmg sidecar digests do not match');
   }
-  for (const field of [
-    'developer_id_authority',
-    'team_identifier',
-    'signing_certificate_sha256',
-  ]) {
+  if (zipResult.workspace_core_sha256 !== dmgResult.workspace_core_sha256) {
+    throw new Error('zip and dmg Workspace Core digests do not match');
+  }
+  for (const field of ['developer_id_authority', 'team_identifier', 'signing_certificate_sha256']) {
     if (zipResult[field] !== dmgResult[field]) {
       throw new Error(`zip and dmg ${field} values do not match`);
     }
   }
-  for (const field of ['app_architectures', 'sidecar_architectures']) {
+  for (const field of [
+    'app_architectures',
+    'sidecar_architectures',
+    'workspace_core_architectures',
+  ]) {
     if (JSON.stringify(zipResult[field]) !== JSON.stringify(dmgResult[field])) {
       throw new Error(`zip and dmg ${field} values do not match`);
     }
@@ -111,16 +102,10 @@ export async function verifyMacPackageArtifacts({
   const zipRoot = await mkdtemp(join(tmpdir(), 'agistack.zip-extracted-'));
   try {
     await extractZip(zipPath, zipRoot);
-    const zipAppPath = await requireTopLevelMacApp(
-      zipRoot,
-      'uploaded zip macOS application',
-    );
+    const zipAppPath = await requireTopLevelMacApp(zipRoot, 'uploaded zip macOS application');
     const zipResult = await inspectAppBundle(zipAppPath, 'zip');
     const dmgResult = await withMountedDmg(dmgPath, async (dmgRoot) => {
-      const dmgAppPath = await requireTopLevelMacApp(
-        dmgRoot,
-        'uploaded dmg macOS application',
-      );
+      const dmgAppPath = await requireTopLevelMacApp(dmgRoot, 'uploaded dmg macOS application');
       return inspectAppBundle(dmgAppPath, 'dmg');
     });
     assertMatchingMacPackageResults(zipResult, dmgResult);
@@ -128,9 +113,13 @@ export async function verifyMacPackageArtifacts({
       ...zipResult,
       architecture: 'universal',
       sidecar_sha256: zipResult.sidecar_sha256,
+      workspace_core_sha256: zipResult.workspace_core_sha256,
       zip_sidecar_sha256: zipResult.sidecar_sha256,
       dmg_sidecar_sha256: dmgResult.sidecar_sha256,
+      zip_workspace_core_sha256: zipResult.workspace_core_sha256,
+      dmg_workspace_core_sha256: dmgResult.workspace_core_sha256,
       package_sidecars_identical: true,
+      package_workspace_cores_identical: true,
       zip_app_verified: true,
       dmg_app_verified: true,
     };
@@ -151,11 +140,10 @@ function expectedWindowsPayloadArchive(architecture) {
   throw new Error(`unsupported Windows release architecture: ${architecture}`);
 }
 
-function pathContainsSidecarDirectory(path, root) {
+function pathContainsResourceDirectory(path, root, resourceDirectory) {
   const segments = relative(root, path).split(sep);
   return segments.some(
-    (segment, index) =>
-      segment === 'resources' && segments[index + 1] === 'sidecar',
+    (segment, index) => segment === 'resources' && segments[index + 1] === resourceDirectory,
   );
 }
 
@@ -163,25 +151,21 @@ export async function verifyWindowsInstallerArtifact({
   installerPath,
   expectedArchitecture,
   sidecarName,
+  workspaceCoreName,
   inspectInstallerPayload,
   extractArchive = extractWithSevenZip,
 }) {
   if (typeof inspectInstallerPayload !== 'function') {
     throw new Error('inspectInstallerPayload dependency is required');
   }
-  const installerRoot = await mkdtemp(
-    join(tmpdir(), 'agistack.nsis-extracted-'),
-  );
+  const installerRoot = await mkdtemp(join(tmpdir(), 'agistack.nsis-extracted-'));
   const payloadRoot = await mkdtemp(join(tmpdir(), 'agistack.nsis-payload-'));
-  const payloadArchiveName =
-    expectedWindowsPayloadArchive(expectedArchitecture);
+  const payloadArchiveName = expectedWindowsPayloadArchive(expectedArchitecture);
   try {
     await extractArchive(installerPath, installerRoot);
     const installerEntries = await collectEntries(installerRoot);
     const payloadArchivePath = requireUniquePath(
-      installerEntries.files.filter(
-        (path) => basename(path) === payloadArchiveName,
-      ),
+      installerEntries.files.filter((path) => basename(path) === payloadArchiveName),
       `NSIS embedded ${payloadArchiveName}`,
     );
     await extractArchive(payloadArchivePath, payloadRoot);
@@ -190,13 +174,22 @@ export async function verifyWindowsInstallerArtifact({
       payloadEntries.files.filter(
         (path) =>
           basename(path) === sidecarName &&
-          pathContainsSidecarDirectory(path, payloadRoot),
+          pathContainsResourceDirectory(path, payloadRoot, 'sidecar'),
       ),
       'NSIS packaged sidecar',
+    );
+    const packagedWorkspaceCorePath = requireUniquePath(
+      payloadEntries.files.filter(
+        (path) =>
+          basename(path) === workspaceCoreName &&
+          pathContainsResourceDirectory(path, payloadRoot, 'workspace-core'),
+      ),
+      'NSIS packaged Workspace Core',
     );
     const inspection = await inspectInstallerPayload({
       installerPath,
       packagedSidecarPath,
+      packagedWorkspaceCorePath,
       expectedArchitecture,
     });
     if (!/^[a-f0-9]{64}$/u.test(inspection.sidecar_sha256 ?? '')) {
@@ -206,6 +199,15 @@ export async function verifyWindowsInstallerArtifact({
       throw new Error(
         `NSIS packaged sidecar architecture must be ${expectedArchitecture}; ` +
           `found ${inspection.sidecar_architecture}`,
+      );
+    }
+    if (!/^[a-f0-9]{64}$/u.test(inspection.workspace_core_sha256 ?? '')) {
+      throw new Error('NSIS packaged Workspace Core SHA-256 is invalid');
+    }
+    if (inspection.workspace_core_architecture !== expectedArchitecture) {
+      throw new Error(
+        `NSIS packaged Workspace Core architecture must be ${expectedArchitecture}; ` +
+          `found ${inspection.workspace_core_architecture}`,
       );
     }
     return {
@@ -220,24 +222,15 @@ export async function verifyWindowsInstallerArtifact({
 }
 
 export function inspectPortableExecutableArchitecture(buffer) {
-  if (
-    !Buffer.isBuffer(buffer) ||
-    buffer.byteLength < 64 ||
-    buffer.readUInt16LE(0) !== 0x5a4d
-  ) {
+  if (!Buffer.isBuffer(buffer) || buffer.byteLength < 64 || buffer.readUInt16LE(0) !== 0x5a4d) {
     throw new Error('portable executable header is invalid');
   }
   const headerOffset = buffer.readUInt32LE(0x3c);
-  if (
-    headerOffset > buffer.byteLength - 6 ||
-    buffer.readUInt32LE(headerOffset) !== 0x00004550
-  ) {
+  if (headerOffset > buffer.byteLength - 6 || buffer.readUInt32LE(headerOffset) !== 0x00004550) {
     throw new Error('portable executable header is invalid');
   }
   const machine = buffer.readUInt16LE(headerOffset + 4);
   if (machine === 0x8664) return 'x64';
   if (machine === 0xaa64) return 'arm64';
-  throw new Error(
-    `portable executable machine is unsupported: 0x${machine.toString(16)}`,
-  );
+  throw new Error(`portable executable machine is unsupported: 0x${machine.toString(16)}`);
 }

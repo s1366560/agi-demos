@@ -1054,7 +1054,7 @@ impl BrowserBridgeRuntime {
 /// OS-assigned ephemeral port (tests).
 fn bind_bridge_listener(port: u16) -> Result<(TcpListener, u16), String> {
     if port == 0 {
-        return std_listener(0).and_then(|listener| into_tokio(listener));
+        return std_listener(0).and_then(into_tokio);
     }
     let mut last_error = None;
     for candidate in port..=port.saturating_add(PORT_FALLBACK_ATTEMPTS) {
@@ -1682,9 +1682,7 @@ mod tests {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
     {
         ws.send(ClientMessage::Text(
-            json!({ "jsonrpc": "2.0", "id": id, "result": result })
-                .to_string()
-                .into(),
+            json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string(),
         ))
         .await
         .expect("broker respond");
@@ -1722,9 +1720,7 @@ mod tests {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
     {
         ws.send(ClientMessage::Text(
-            json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": {} })
-                .to_string()
-                .into(),
+            json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": {} }).to_string(),
         ))
         .await
         .expect("broker request");
@@ -1881,8 +1877,7 @@ mod tests {
                     "method": NOTIFY_ON_CDP_EVENT,
                     "params": {"tabId": 7, "method": "Runtime.consoleAPICalled", "params": {"type": "log", "args": [{"value": "hi"}], "timestamp": 1.0}}
                 })
-                .to_string()
-                .into(),
+                .to_string(),
             ))
             .await
             .expect("send notification");

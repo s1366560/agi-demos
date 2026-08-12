@@ -7,6 +7,8 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_RESTART_DELAYS_MS = [250, 1_000, 4_000, 10_000] as const;
 const DEFAULT_RESTART_STABILITY_MS = 60_000;
+const DEFAULT_MAX_RESTART_ATTEMPTS = 4;
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 40_000;
 
 type SidecarReady = {
   type: 'ready';
@@ -36,12 +38,15 @@ export type SidecarSupervisorOptions = {
   binaryPath: string;
   dataDirectory: string;
   workspaceRoot: string;
+  workspaceCoreBinaryPath: string;
   legacyDataDirectories: readonly string[];
   environment?: Readonly<Record<string, string>>;
   handshakeTimeoutMs?: number;
   requestTimeoutMs?: number;
   restartDelaysMs?: readonly number[];
   restartStabilityMs?: number;
+  maxRestartAttempts?: number;
+  shutdownTimeoutMs?: number;
   onRecovered?: () => void;
 };
 
@@ -77,6 +82,7 @@ export class SidecarSupervisor {
   #resolveRestartDelay: (() => void) | null = null;
   #restartStabilityTimer: NodeJS.Timeout | null = null;
   #restartAttempt = 0;
+  #restartExhausted = false;
   #shouldRun = false;
   #hasBeenReady = false;
 
@@ -92,6 +98,7 @@ export class SidecarSupervisor {
     this.#shouldRun = true;
     if (this.#restartDelay) await this.#restartDelay;
     if (!this.#shouldRun) throw new Error('sidecar stopped');
+    if (this.#restartExhausted) throw new Error('sidecar restart budget exhausted');
     if (this.#identity) return { ...this.#identity };
     if (this.#starting) return this.#starting;
     const starting = this.#launch();
@@ -133,6 +140,8 @@ export class SidecarSupervisor {
 
   async stop(): Promise<void> {
     this.#shouldRun = false;
+    this.#restartAttempt = 0;
+    this.#restartExhausted = false;
     this.#cancelRestartDelay();
     this.#clearRestartStabilityTimer();
     const child = this.#child;
@@ -142,15 +151,26 @@ export class SidecarSupervisor {
     if (!child || child.exitCode !== null) return;
 
     await new Promise<void>((resolve) => {
-      const killTimer = setTimeout(() => {
-        child.kill('SIGKILL');
-      }, 2_000);
-      child.once('exit', () => {
+      const shutdownTimeoutMs = Math.max(
+        1,
+        this.#options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
+      );
+      let settled = false;
+      let killTimer: NodeJS.Timeout;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
         clearTimeout(killTimer);
         resolve();
+      };
+      killTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+      }, shutdownTimeoutMs);
+      child.once('exit', finish);
+      child.stdin.once('error', () => {
+        if (child.exitCode === null) child.kill('SIGKILL');
       });
       child.stdin.end();
-      child.kill('SIGTERM');
     });
   }
 
@@ -259,6 +279,7 @@ export class SidecarSupervisor {
           secret,
           dataDirectory: this.#options.dataDirectory,
           workspaceRoot: this.#options.workspaceRoot,
+          workspaceCoreBinaryPath: this.#options.workspaceCoreBinaryPath,
           legacyDataDirectories: this.#options.legacyDataDirectories,
         })}\n`,
         (error) => {
@@ -291,6 +312,14 @@ export class SidecarSupervisor {
 
   #scheduleRestart(): void {
     if (this.#restartDelay || this.#starting || !this.#shouldRun) return;
+    const maxRestartAttempts = Math.max(
+      0,
+      this.#options.maxRestartAttempts ?? DEFAULT_MAX_RESTART_ATTEMPTS,
+    );
+    if (this.#restartAttempt >= maxRestartAttempts) {
+      this.#restartExhausted = true;
+      return;
+    }
     const delays = this.#options.restartDelaysMs?.length
       ? this.#options.restartDelaysMs
       : DEFAULT_RESTART_DELAYS_MS;
@@ -325,7 +354,10 @@ export class SidecarSupervisor {
     const stabilityMs = this.#options.restartStabilityMs ?? DEFAULT_RESTART_STABILITY_MS;
     this.#restartStabilityTimer = setTimeout(() => {
       this.#restartStabilityTimer = null;
-      if (this.#child === child && this.#identity) this.#restartAttempt = 0;
+      if (this.#child === child && this.#identity) {
+        this.#restartAttempt = 0;
+        this.#restartExhausted = false;
+      }
     }, stabilityMs);
     this.#restartStabilityTimer.unref();
   }

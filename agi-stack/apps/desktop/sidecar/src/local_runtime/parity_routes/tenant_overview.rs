@@ -44,10 +44,7 @@ async fn tenant_overview(
         .list_user_projects(&authenticated.user.user_id, &tenant_id)
         .map_err(|error| tenant_overview_store_error(error.to_string()))?;
     let active = projects.len();
-    let new_this_week = projects
-        .iter()
-        .filter(|project| is_new_this_week(project))
-        .count();
+    let new_this_week = projects.iter().filter(is_new_this_week).count();
     let project_list = projects.into_iter().map(ProjectProjection::from).collect();
     let response = TenantOverviewResponse {
         capability: CAPABILITY,

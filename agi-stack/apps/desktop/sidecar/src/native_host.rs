@@ -212,7 +212,7 @@ async fn serve_connection<S>(
             frame = outbound_rx.recv() => {
                 match frame {
                     Some(frame) => {
-                        if let Err(error) = sink.send(Message::Text(frame.into())).await {
+                        if let Err(error) = sink.send(Message::Text(frame)).await {
                             tracing::warn!(%error, "browser bridge broker send failed");
                             return;
                         }
@@ -692,8 +692,7 @@ where
         });
     }
 
-    let mut committed = 0usize;
-    for plan in &plans {
+    for (committed, plan) in plans.iter().enumerate() {
         let destination = plan.target.manifest_path();
         if let Err(error) = commit(&plan.staged, &destination) {
             let rollback_errors = rollback_install(&plans, committed);
@@ -707,7 +706,6 @@ where
                 plan.target.browser
             ));
         }
-        committed += 1;
         installed.push(InstalledManifest {
             browser: plan.target.browser.to_string(),
             manifest_path: destination,

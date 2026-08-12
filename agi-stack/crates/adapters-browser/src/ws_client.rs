@@ -214,7 +214,7 @@ async fn serve_session(ws: Ws, outbound: &mut mpsc::Receiver<String>, shared: &A
             frame = outbound.recv() => {
                 match frame {
                     Some(frame) => {
-                        if let Err(e) = sink.send(Message::Text(frame.into())).await {
+                        if let Err(e) = sink.send(Message::Text(frame)).await {
                             tracing::warn!("browser bridge send failed: {e}");
                             return;
                         }

@@ -8,6 +8,7 @@ mod native_host;
 mod oauth_pending_attempt;
 mod private_file_permissions;
 mod trusted_session;
+mod workspace_core_helper;
 
 fn main() {
     tracing_subscriber::fmt()

@@ -751,6 +751,26 @@ function sidecarBinaryPath(): string {
   return join(currentDirectory, '../../../../target/debug', executable);
 }
 
+function workspaceCoreBinaryPath(): string {
+  const executable =
+    process.platform === 'win32' ? 'memstack-workspace-core.exe' : 'memstack-workspace-core';
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'workspace-core', executable);
+  }
+  const override = process.env.AGISTACK_WORKSPACE_CORE_PATH;
+  if (override) {
+    if (!isAbsolute(override)) {
+      throw new Error('AGISTACK_WORKSPACE_CORE_PATH must be absolute');
+    }
+    return override;
+  }
+  return join(
+    currentDirectory,
+    '../../../../../.cache/avernet-bcs/target/debug',
+    executable,
+  );
+}
+
 function defaultWorkspaceRoot(): string {
   const configured = process.env.AGISTACK_WORKSPACE_ROOT;
   if (configured && isAbsolute(configured)) return resolve(configured);
@@ -787,6 +807,7 @@ function createSidecarSupervisor(): SidecarSupervisor {
   const dataDirectory = join(app.getPath('userData'), 'runtime');
   return new SidecarSupervisor({
     binaryPath: sidecarBinaryPath(),
+    workspaceCoreBinaryPath: workspaceCoreBinaryPath(),
     dataDirectory,
     workspaceRoot: defaultWorkspaceRoot(),
     legacyDataDirectories: resolveSidecarLegacyDataDirectories({

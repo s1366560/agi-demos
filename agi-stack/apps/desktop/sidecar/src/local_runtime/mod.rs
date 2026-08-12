@@ -106,6 +106,7 @@ mod steering;
 mod task_session;
 mod timeline_presentation;
 mod tool_authority;
+mod workspace_core_bridge;
 mod worktree;
 
 const RECOVERED_CHECKPOINT_AUTHORITY_ERROR: &str =
@@ -233,6 +234,30 @@ impl LocalRuntimeService {
     pub(crate) async fn shutdown(&self) {
         self.state.stop_automation_worker().await;
         self.state.stop_browser_bridge();
+    }
+
+    pub(crate) fn install_workspace_core_authority(
+        &self,
+        core_api_base_url: String,
+        agent_registry_token: String,
+        provider_webhook_token: String,
+        provider_event_token: String,
+    ) -> Result<u64, String> {
+        workspace_core_bridge::install_authority(
+            &self.state,
+            core_api_base_url,
+            agent_registry_token,
+            provider_webhook_token,
+            provider_event_token,
+        )
+    }
+
+    pub(crate) fn clear_workspace_core_authority(&self, generation: u64) {
+        workspace_core_bridge::clear_authority(&self.state, generation);
+    }
+
+    pub(crate) async fn replay_workspace_core_terminal_callbacks(&self) -> Result<usize, String> {
+        workspace_core_bridge::replay_pending_terminal_callbacks(Arc::clone(&self.state)).await
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -1023,6 +1048,8 @@ struct LocalRuntimeState {
     event_counter: AtomicU64,
     terminal_sessions: Mutex<HashMap<String, TerminalSessionLease>>,
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
+    workspace_core_generation: AtomicU64,
+    workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
@@ -1352,6 +1379,8 @@ impl LocalRuntimeState {
             event_counter: AtomicU64::new(1),
             terminal_sessions: Mutex::new(HashMap::new()),
             agent_runs: Mutex::new(HashMap::new()),
+            workspace_core_generation: AtomicU64::new(0),
+            workspace_core_authority: Mutex::new(None),
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
@@ -3051,7 +3080,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             require_user_session,
         ));
 
-    Router::new()
+    let public_router = Router::new()
         .route("/api/v1/auth/local-session", post(create_local_session))
         .route(
             "/api/v1/auth/local-session/resume",
@@ -3064,7 +3093,8 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             require_launch_capability,
         ))
         .layer(local_cors_layer())
-        .with_state(state)
+        .with_state(Arc::clone(&state));
+    public_router.merge(workspace_core_bridge::router(state))
 }
 
 fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
@@ -14493,7 +14523,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 23);
+        assert_eq!(version, 25);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -14582,13 +14612,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 24;")
+                .execute_batch("PRAGMA user_version = 26;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 23"));
+        assert!(error.contains("newer than supported schema version 25"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -15437,7 +15467,7 @@ mod tests {
         let schema_version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("schema version");
-        assert_eq!(schema_version, 23);
+        assert_eq!(schema_version, 25);
         drop(connection);
         std::fs::remove_dir_all(root).expect("remove test root");
     }

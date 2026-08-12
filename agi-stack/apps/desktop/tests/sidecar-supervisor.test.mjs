@@ -104,6 +104,7 @@ test('sidecar initialization serializes explicit empty legacy migration candidat
 
   const supervisor = new SidecarSupervisor({
     binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
     dataDirectory: join(root, 'data'),
     workspaceRoot: root,
     legacyDataDirectories: [],
@@ -122,6 +123,83 @@ test('sidecar initialization serializes explicit empty legacy migration candidat
   }
 });
 
+test('sidecar shutdown waits for authenticated helper cleanup before forcing termination', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-graceful-stop-'));
+  const binaryPath = join(root, 'graceful-sidecar.cjs');
+  const markerPath = join(root, 'shutdown.txt');
+  const counterPath = join(root, 'starts.txt');
+  await writeFile(
+    binaryPath,
+    String.raw`#!/usr/bin/env node
+const { createHmac } = require('node:crypto');
+const { appendFileSync } = require('node:fs');
+const readline = require('node:readline');
+
+const markerPath = process.env.FAKE_SIDECAR_SHUTDOWN_MARKER;
+const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+process.on('SIGTERM', () => {
+  appendFileSync(markerPath, 'sigterm\n');
+  process.exit(143);
+});
+input.once('line', (line) => {
+  const initialize = JSON.parse(line);
+  const apiBaseUrl = 'http://127.0.0.1:41999';
+  const apiToken = 'graceful-sidecar-token';
+  const message = [
+    initialize.protocolVersion,
+    initialize.nonce,
+    process.pid,
+    apiBaseUrl,
+    apiToken,
+  ].join('\n');
+  const proof = createHmac(
+    'sha256',
+    Buffer.from(initialize.secret, 'base64url'),
+  ).update(message).digest('base64url');
+  process.stdout.write(JSON.stringify({
+    type: 'ready',
+    protocolVersion: initialize.protocolVersion,
+    nonce: initialize.nonce,
+    pid: process.pid,
+    apiBaseUrl,
+    apiToken,
+    proof,
+  }) + '\n');
+});
+input.on('close', () => {
+  setTimeout(() => {
+    appendFileSync(markerPath, 'graceful\n');
+    process.exit(0);
+  }, 50);
+});
+`,
+    'utf8',
+  );
+  await chmod(binaryPath, 0o700);
+  await writeFile(counterPath, '', 'utf8');
+  const supervisor = new SidecarSupervisor({
+    binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
+    dataDirectory: join(root, 'data'),
+    workspaceRoot: root,
+    legacyDataDirectories: [],
+    environment: {
+      FAKE_SIDECAR_COUNTER: counterPath,
+      FAKE_SIDECAR_SHUTDOWN_MARKER: markerPath,
+    },
+    shutdownTimeoutMs: 500,
+  });
+
+  try {
+    await supervisor.start();
+    await supervisor.stop();
+    assert.equal(await readFile(markerPath, 'utf8'), 'graceful\n');
+  } finally {
+    await supervisor.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('sidecar handshake is authenticated and the supervisor recovers after a crash', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-supervisor-'));
   const binaryPath = join(root, 'fake-sidecar.cjs');
@@ -132,6 +210,7 @@ test('sidecar handshake is authenticated and the supervisor recovers after a cra
 
   const supervisor = new SidecarSupervisor({
     binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
     dataDirectory: join(root, 'data'),
     workspaceRoot: root,
     legacyDataDirectories: [join(root, 'legacy')],
@@ -186,6 +265,7 @@ readline.createInterface({ input: process.stdin }).once('line', (line) => {
   await chmod(binaryPath, 0o700);
   const supervisor = new SidecarSupervisor({
     binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
     dataDirectory: join(root, 'data'),
     workspaceRoot: root,
     legacyDataDirectories: [],
@@ -207,6 +287,7 @@ test('sidecar restart backoff grows across rapid crashes and remains capped', as
   await chmod(binaryPath, 0o700);
   const supervisor = new SidecarSupervisor({
     binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
     dataDirectory: join(root, 'data'),
     workspaceRoot: root,
     legacyDataDirectories: [],
@@ -236,6 +317,41 @@ test('sidecar restart backoff grows across rapid crashes and remains capped', as
   }
 });
 
+test('sidecar crash recovery stops after the configured restart budget is exhausted', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-restart-budget-'));
+  const binaryPath = join(root, 'crashing-sidecar.cjs');
+  const counterPath = join(root, 'starts.txt');
+  await writeFile(binaryPath, fakeSidecarSource, 'utf8');
+  await chmod(binaryPath, 0o700);
+  const supervisor = new SidecarSupervisor({
+    binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
+    dataDirectory: join(root, 'data'),
+    workspaceRoot: root,
+    legacyDataDirectories: [],
+    environment: {
+      FAKE_SIDECAR_COUNTER: counterPath,
+      FAKE_SIDECAR_CRASH_COUNT: '99',
+    },
+    restartDelaysMs: [1],
+    restartStabilityMs: 5_000,
+    maxRestartAttempts: 2,
+  });
+
+  try {
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
+    await assert.rejects(supervisor.invoke('local_runtime_status'), /sidecar exited unexpectedly/);
+    await assert.rejects(supervisor.start(), /sidecar restart budget exhausted/u);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal((await readFile(counterPath, 'utf8')).trim().split('\n').length, 3);
+  } finally {
+    await supervisor.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('sidecar diagnostics are drained without blocking readiness or requests', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agistack-sidecar-stderr-'));
   const binaryPath = join(root, 'noisy-sidecar.cjs');
@@ -244,6 +360,7 @@ test('sidecar diagnostics are drained without blocking readiness or requests', a
   await chmod(binaryPath, 0o700);
   const supervisor = new SidecarSupervisor({
     binaryPath,
+    workspaceCoreBinaryPath: binaryPath,
     dataDirectory: join(root, 'data'),
     workspaceRoot: root,
     legacyDataDirectories: [],

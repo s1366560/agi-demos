@@ -26,6 +26,7 @@ use crate::{
         deserialize_local_record, serialize_local_record, TrustedSessionBroker,
         TrustedSessionRecord,
     },
+    workspace_core_helper::WorkspaceCoreSupervisor,
 };
 
 const PROTOCOL_VERSION: u16 = 1;
@@ -47,6 +48,7 @@ struct InitializeRequest {
     data_directory: PathBuf,
     workspace_root: PathBuf,
     legacy_data_directories: Vec<PathBuf>,
+    workspace_core_binary_path: PathBuf,
 }
 
 #[derive(Debug, Serialize)]
@@ -90,6 +92,7 @@ struct ControlState {
     runtime: LocalRuntimeService,
     oauth_pending_attempts: OAuthPendingAttemptBroker,
     trusted_sessions: TrustedSessionBroker,
+    workspace_core: WorkspaceCoreSupervisor,
 }
 
 pub(crate) async fn run() -> Result<(), String> {
@@ -112,7 +115,7 @@ pub(crate) async fn run() -> Result<(), String> {
     let credential_vault = ApplicationCredentialVault::open(&initialize.data_directory)
         .map_err(|error| error.to_string())?;
     let runtime = LocalRuntimeService::start(
-        initialize.data_directory,
+        initialize.data_directory.clone(),
         initialize.workspace_root,
         credential_vault.clone(),
     )
@@ -120,6 +123,20 @@ pub(crate) async fn run() -> Result<(), String> {
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
     let status = runtime.status();
+    let workspace_core = match WorkspaceCoreSupervisor::start(
+        initialize.workspace_core_binary_path,
+        &initialize.data_directory,
+        &status.api_base_url,
+        runtime.clone(),
+    )
+    .await
+    {
+        Ok(supervisor) => supervisor,
+        Err(error) => {
+            runtime.shutdown().await;
+            return Err(error);
+        }
+    };
     let ready = ready_response(
         &initialize.nonce,
         &status.api_base_url,
@@ -133,6 +150,7 @@ pub(crate) async fn run() -> Result<(), String> {
         runtime,
         oauth_pending_attempts,
         trusted_sessions,
+        workspace_core,
     };
     while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
         let response = match serde_json::from_str::<ControlRequest>(&line) {
@@ -147,6 +165,7 @@ pub(crate) async fn run() -> Result<(), String> {
         };
         write_json_line(&mut output, &response).await?;
     }
+    state.workspace_core.shutdown().await;
     state.runtime.shutdown().await;
     Ok(())
 }
@@ -179,6 +198,7 @@ fn validate_initialize(initialize: &InitializeRequest) -> Result<(), String> {
         || initialize.nonce.len() > 128
         || !initialize.data_directory.is_absolute()
         || !initialize.workspace_root.is_absolute()
+        || !initialize.workspace_core_binary_path.is_absolute()
         || initialize.legacy_data_directories.len() > MAX_LEGACY_DIRECTORIES
         || initialize
             .legacy_data_directories
@@ -242,6 +262,8 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
         "local_runtime_status" => {
             serde_json::to_value(state.runtime.status()).map_err(|error| error.to_string())
         }
+        "workspace_core_status" => serde_json::to_value(state.workspace_core.status().await)
+            .map_err(|error| error.to_string()),
         "local_runtime_configure" => {
             let runtime = state.runtime.clone();
             parse_arg::<LocalRuntimeConfig>(request.args.as_ref(), "config")
@@ -437,6 +459,8 @@ mod tests {
             data_directory: Path::new("relative-data").to_path_buf(),
             workspace_root: Path::new("/absolute/workspace").to_path_buf(),
             legacy_data_directories: Vec::new(),
+            workspace_core_binary_path: Path::new("/absolute/memstack-workspace-core")
+                .to_path_buf(),
         };
 
         assert_eq!(

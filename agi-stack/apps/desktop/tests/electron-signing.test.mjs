@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+import { parseDocument } from 'yaml';
+
 const repositoryRoot = fileURLToPath(new URL('../../../..', import.meta.url));
 const builderConfig = readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8');
 const macEntitlements = readFileSync(
@@ -19,6 +21,10 @@ const localMacEntitlements = readFileSync(
   'utf8',
 );
 const stageScript = readFileSync(new URL('../scripts/stage-sidecar.mjs', import.meta.url), 'utf8');
+const stageWorkspaceCoreScript = readFileSync(
+  new URL('../scripts/stage-workspace-core.mjs', import.meta.url),
+  'utf8',
+);
 const updaterSource = readFileSync(new URL('../electron/main/updater.ts', import.meta.url), 'utf8');
 const updatePolicySource = readFileSync(
   new URL('../electron/main/updatePolicy.ts', import.meta.url),
@@ -73,6 +79,14 @@ const cleanCheckoutResources = [
   'agi-stack/apps/desktop/scripts/verify-release-artifacts.mjs',
 ];
 
+test('desktop release workflow is valid YAML without duplicate mapping keys', () => {
+  const document = parseDocument(releaseWorkflow, { uniqueKeys: true });
+  assert.deepEqual(
+    document.errors.map((error) => error.message),
+    [],
+  );
+});
+
 test('macOS packaging signs the sidecar and enables hardened notarized builds', () => {
   assert.match(builderConfig, /hardenedRuntime:\s*true/u);
   assert.match(builderConfig, /notarize:\s*true/u);
@@ -113,6 +127,8 @@ test('packaging configuration, signing scripts, icons, and entitlements are trac
 test('packaging stages an integrity digest and enables signed auto-updates', () => {
   assert.match(stageScript, /createHash\('sha256'\)/u);
   assert.match(stageScript, /SHA256SUMS/u);
+  assert.match(stageWorkspaceCoreScript, /createHash\('sha256'\)/u);
+  assert.match(stageWorkspaceCoreScript, /SHA256SUMS/u);
   assert.match(builderConfig, /provider:\s*github/u);
   assert.match(builderConfig, /releaseType:\s*draft/u);
   assert.match(builderConfig, /publishAutoUpdate:\s*true/u);
@@ -328,6 +344,12 @@ test('tag releases fail closed and stage only a draft after package verification
   assert.match(releaseArtifactContract, /parseDocument/u);
   assert.match(releaseArtifactContract, /createHash\('sha512'\)/u);
   assert.match(releaseVerification, /SHA256SUMS/u);
+  assert.match(releaseVerification, /memstack-workspace-core/u);
+  assert.match(releaseVerification, /workspace_core_sha256/u);
+  assert.match(releaseVerification, /workspace_core_signature_valid/u);
+  assert.match(releaseWorkflow, /Build universal macOS Workspace Core/u);
+  assert.match(releaseWorkflow, /pnpm run build:workspace-core/u);
+  assert.match(releaseWorkflow, /pnpm run stage:workspace-core/u);
   assert.match(releaseVerification, /verifyMacPackageArtifacts/u);
   assert.match(releaseVerification, /verifyWindowsInstallerArtifact/u);
   assert.match(releasePackageVerification, /ditto/u);
@@ -366,13 +388,19 @@ test('tag releases fail closed and stage only a draft after package verification
   assert.match(releaseVerification, /DESKTOP_RELEASE_ARTIFACTS_VERIFIED/u);
   assert.doesNotMatch(releaseVerification, /\bnativeVerification\b/u);
   assert.match(releaseArtifactContract, /flag:\s*'wx'/u);
+  assert.match(releaseVerification, /\['sidecar',\s*sidecarSignature\]/u);
+  assert.match(releaseVerification, /\['Workspace Core',\s*workspaceCoreSignature\]/u);
   assert.match(
     releaseVerification,
-    /appSignature\.developerIdAuthority\s*!==\s*sidecarSignature\.developerIdAuthority/u,
+    /appSignature\.developerIdAuthority\s*!==\s*signature\.developerIdAuthority/u,
   );
   assert.match(
     releaseVerification,
-    /appSignature\.teamIdentifier\s*!==\s*sidecarSignature\.teamIdentifier/u,
+    /appSignature\.teamIdentifier\s*!==\s*signature\.teamIdentifier/u,
+  );
+  assert.match(
+    releaseVerification,
+    /appSignature\.signingCertificateSha256\s*!==\s*signature\.signingCertificateSha256/u,
   );
   const notarizationGateIndex = releaseVerification.indexOf(
     "process.env.AGISTACK_REQUIRE_NOTARIZATION === '1'",

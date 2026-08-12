@@ -225,11 +225,13 @@ test('macOS package verification inspects the app and sidecar from both uploaded
         inspectedSources.push({ appPath, source });
         return {
           sidecar_sha256: 'a'.repeat(64),
+          workspace_core_sha256: 'c'.repeat(64),
           developer_id_authority: 'Developer ID Application: Example Company (TEAMID1234)',
           team_identifier: 'TEAMID1234',
           signing_certificate_sha256: 'b'.repeat(64),
           app_architectures: ['arm64', 'x86_64'],
           sidecar_architectures: ['arm64', 'x86_64'],
+          workspace_core_architectures: ['arm64', 'x86_64'],
         };
       },
     });
@@ -241,9 +243,11 @@ test('macOS package verification inspects the app and sidecar from both uploaded
     assert.ok(inspectedSources[0].appPath.includes('.zip-extracted-'));
     assert.ok(inspectedSources[1].appPath.startsWith(mountedRoot));
     assert.equal(result.package_sidecars_identical, true);
+    assert.equal(result.package_workspace_cores_identical, true);
     assert.equal(result.zip_app_verified, true);
     assert.equal(result.dmg_app_verified, true);
     assert.equal(result.sidecar_sha256, 'a'.repeat(64));
+    assert.equal(result.workspace_core_sha256, 'c'.repeat(64));
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
@@ -270,11 +274,13 @@ test('macOS package verification rejects different sidecars in the zip and dmg',
         },
         inspectAppBundle: async (_appPath, source) => ({
           sidecar_sha256: (source === 'zip' ? 'a' : 'c').repeat(64),
+          workspace_core_sha256: 'd'.repeat(64),
           developer_id_authority: 'Developer ID Application: Example Company (TEAMID1234)',
           team_identifier: 'TEAMID1234',
           signing_certificate_sha256: 'b'.repeat(64),
           app_architectures: ['arm64', 'x86_64'],
           sidecar_architectures: ['arm64', 'x86_64'],
+          workspace_core_architectures: ['arm64', 'x86_64'],
         }),
       }),
       /zip and dmg sidecar digests do not match/u,
@@ -293,6 +299,7 @@ test('Windows package verification extracts the uploaded NSIS installer fail-clo
       installerPath,
       expectedArchitecture: 'x64',
       sidecarName: 'agistack-desktop-sidecar.exe',
+      workspaceCoreName: 'memstack-workspace-core.exe',
       extractArchive: async (archivePath, destination) => {
         extracted.push(archivePath);
         if (archivePath === installerPath) {
@@ -301,20 +308,33 @@ test('Windows package verification extracts the uploaded NSIS installer fail-clo
           return;
         }
         const sidecarDirectory = join(destination, 'resources', 'sidecar');
+        const workspaceCoreDirectory = join(destination, 'resources', 'workspace-core');
         mkdirSync(sidecarDirectory, { recursive: true });
+        mkdirSync(workspaceCoreDirectory, { recursive: true });
         writeFileSync(join(sidecarDirectory, 'agistack-desktop-sidecar.exe'), 'signed-sidecar');
+        writeFileSync(
+          join(workspaceCoreDirectory, 'memstack-workspace-core.exe'),
+          'signed-workspace-core',
+        );
       },
-      inspectInstallerPayload: async ({ packagedSidecarPath }) => {
+      inspectInstallerPayload: async ({ packagedSidecarPath, packagedWorkspaceCorePath }) => {
         assert.match(
           packagedSidecarPath,
           /resources[\\/]sidecar[\\/]agistack-desktop-sidecar\.exe$/u,
         );
+        assert.match(
+          packagedWorkspaceCorePath,
+          /resources[\/]workspace-core[\/]memstack-workspace-core\.exe$/u,
+        );
         return {
           sidecar_sha256: 'd'.repeat(64),
+          workspace_core_sha256: 'f'.repeat(64),
           sidecar_architecture: 'x64',
+          workspace_core_architecture: 'x64',
           signer_thumbprint: 'E'.repeat(40),
           installer_authenticode_valid: true,
           sidecar_authenticode_valid: true,
+          workspace_core_authenticode_valid: true,
         };
       },
     });
@@ -325,6 +345,8 @@ test('Windows package verification extracts the uploaded NSIS installer fail-clo
     assert.equal(result.installer_payload_archive, 'app-64.7z');
     assert.equal(result.sidecar_sha256, 'd'.repeat(64));
     assert.equal(result.sidecar_architecture, 'x64');
+    assert.equal(result.workspace_core_sha256, 'f'.repeat(64));
+    assert.equal(result.workspace_core_architecture, 'x64');
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
@@ -336,6 +358,7 @@ test('Windows package verification rejects a missing embedded NSIS payload', asy
       installerPath: '/release/agi-stack-desktop-0.1.0-win-x64.exe',
       expectedArchitecture: 'x64',
       sidecarName: 'agistack-desktop-sidecar.exe',
+      workspaceCoreName: 'memstack-workspace-core.exe',
       extractArchive: async () => {},
       inspectInstallerPayload: async () => {
         throw new Error('must not inspect an absent payload');

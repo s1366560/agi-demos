@@ -10,10 +10,16 @@ const { SidecarSupervisor } = require(
   '/tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js',
 );
 const binaryPath = process.env.AGISTACK_REAL_SIDECAR;
+const workspaceCoreBinaryPath = process.env.AGISTACK_REAL_WORKSPACE_CORE;
+const realRuntimeConfigured = Boolean(binaryPath && workspaceCoreBinaryPath);
 
 test(
   'Electron supervisor completes a real sidecar handshake and credential round trip',
-  { skip: binaryPath ? false : 'AGISTACK_REAL_SIDECAR is not configured' },
+  {
+    skip: realRuntimeConfigured
+      ? false
+      : 'AGISTACK_REAL_SIDECAR and AGISTACK_REAL_WORKSPACE_CORE are not configured',
+  },
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'agistack-real-sidecar-'));
     const dataDirectory = join(root, 'data');
@@ -21,6 +27,7 @@ test(
     await mkdir(workspaceRoot);
     const supervisor = new SidecarSupervisor({
       binaryPath: resolve(binaryPath),
+      workspaceCoreBinaryPath: resolve(workspaceCoreBinaryPath),
       dataDirectory,
       workspaceRoot,
       legacyDataDirectories: [],
@@ -64,7 +71,11 @@ test(
 
 test(
   'real sidecar migrates the legacy credential vault and local session database',
-  { skip: binaryPath ? false : 'AGISTACK_REAL_SIDECAR is not configured' },
+  {
+    skip: realRuntimeConfigured
+      ? false
+      : 'AGISTACK_REAL_SIDECAR and AGISTACK_REAL_WORKSPACE_CORE are not configured',
+  },
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'agistack-real-sidecar-migration-'));
     const legacyDataDirectory = join(root, 'legacy-tauri-data');
@@ -89,6 +100,7 @@ test(
     };
     const legacySupervisor = new SidecarSupervisor({
       binaryPath: resolve(binaryPath),
+      workspaceCoreBinaryPath: resolve(workspaceCoreBinaryPath),
       dataDirectory: legacyDataDirectory,
       workspaceRoot,
       legacyDataDirectories: [],
@@ -96,6 +108,7 @@ test(
     });
     const migratedSupervisor = new SidecarSupervisor({
       binaryPath: resolve(binaryPath),
+      workspaceCoreBinaryPath: resolve(workspaceCoreBinaryPath),
       dataDirectory: electronDataDirectory,
       workspaceRoot,
       legacyDataDirectories: [legacyDataDirectory],
