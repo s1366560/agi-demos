@@ -2288,7 +2288,7 @@ function requireCreateTaskSessionResponse(
       metadata: initialMessage.metadata,
       created_at: initialMessage.created_at,
     },
-    ...(payload.policy === undefined
+    ...(payload.policy === null || payload.policy === undefined
       ? {}
       : { policy: normalizeWorkspaceAgentPolicy(payload.policy) }),
     ...(typeof payload.capability_version === 'string'

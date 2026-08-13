@@ -3921,6 +3921,67 @@ test('createTaskSession posts one strictly scoped atomic task-session contract',
   }
 });
 
+test('createTaskSession accepts an explicit null optional workspace policy', async () => {
+  const originalFetch = globalThis.fetch;
+  const request = {
+    idempotency_key: 'desktop-task-session-no-policy',
+    workspace: { kind: 'existing', workspace_id: 'workspace-1' },
+    conversation: { title: 'Atomic task without policy', capability_mode: 'work' },
+    initial_message: { content: 'Create the reviewable plan without a policy' },
+  };
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        replayed: false,
+        workspace: workspaceRecord(1, { name: 'Atomic task without policy' }),
+        conversation: conversationRecord(1, {
+          title: request.conversation.title,
+          conversation_mode: 'workspace',
+          current_mode: 'plan',
+          workspace_id: 'workspace-1',
+          workspace_name: 'Atomic task without policy',
+          agent_config: {
+            selected_agent_id: 'builtin:all-access',
+            capability_mode: 'work',
+          },
+        }),
+        initial_message: {
+          id: 'message-no-policy-1',
+          workspace_id: 'workspace-1',
+          sender_id: 'user-1',
+          sender_type: 'human',
+          content: request.initial_message.content,
+          mentions: [],
+          parent_message_id: null,
+          metadata: {
+            source: 'task_session',
+            conversation_id: 'conversation-1',
+          },
+          created_at: '2026-07-19T00:00:00Z',
+        },
+        policy: null,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      localApiToken: 'local-session-token',
+    });
+
+    const result = await client.createTaskSession(request);
+
+    assert.equal(result.conversation.id, 'conversation-1');
+    assert.equal(Object.hasOwn(result, 'policy'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('createTaskSession retries one transport failure with the identical idempotent request', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
