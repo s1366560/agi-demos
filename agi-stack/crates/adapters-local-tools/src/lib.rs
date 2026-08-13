@@ -1651,7 +1651,7 @@ fn mcp_error(message: impl Into<String>) -> McpToolResult {
 }
 
 fn input_path(input: &Value) -> Result<String, String> {
-    string_any(input, &["path", "file_path", "filename"])
+    string_any(input, &["path", "file_path", "filename", "file"])
 }
 
 fn string_any(input: &Value, keys: &[&str]) -> Result<String, String> {
@@ -1970,6 +1970,30 @@ mod tests {
             .await
             .expect("read");
         assert!(output.contains("ship local"));
+    }
+
+    #[tokio::test]
+    async fn read_accepts_model_file_alias_without_changing_existing_path_precedence() {
+        let root = temp_root();
+        std::fs::create_dir_all(&root).expect("workspace");
+        std::fs::write(root.join("README.md"), "alias content\n").expect("alias fixture");
+        std::fs::write(root.join("preferred.md"), "preferred content\n")
+            .expect("preferred fixture");
+        let host = LocalToolHost::new(&root).expect("host");
+
+        let aliased = host
+            .call("read", r#"{"file":"README.md"}"#)
+            .await
+            .expect("file alias");
+        assert!(aliased.contains("alias content"));
+
+        let preferred = host
+            .call("read", r#"{"path":"preferred.md","file":"README.md"}"#)
+            .await
+            .expect("existing path alias precedence");
+        assert!(preferred.contains("preferred content"));
+        assert!(!preferred.contains("alias content"));
+        std::fs::remove_dir_all(root).expect("remove workspace");
     }
 
     #[tokio::test]

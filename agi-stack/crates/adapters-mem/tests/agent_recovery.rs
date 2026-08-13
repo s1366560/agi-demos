@@ -3,11 +3,14 @@
 //! structural round-budget circuit-breaker.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm, StubLlm};
-use agistack_core::agent::types::{CompletedCall, Role, TranscriptEntry};
-use agistack_core::ports::{CheckpointStore, CoreResult, ToolHost};
+use agistack_core::agent::{
+    types::{CompletedCall, Role, TranscriptEntry},
+    ReActObserver,
+};
+use agistack_core::ports::{CheckpointStore, CoreError, CoreResult, ToolHost};
 use agistack_core::{AgentAction, ReActEngine, SessionState, SessionStatus};
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -42,6 +45,56 @@ impl ToolHost for CountingToolHost {
     }
 }
 
+struct FailingToolHost;
+
+#[async_trait]
+impl ToolHost for FailingToolHost {
+    fn list_tools(&self) -> Vec<String> {
+        vec!["read".to_string()]
+    }
+
+    async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
+        Err(CoreError::Tool("missing path alias".to_string()))
+    }
+}
+
+#[derive(Default)]
+struct RecordingObserver {
+    events: Mutex<Vec<String>>,
+}
+
+#[async_trait]
+impl ReActObserver for RecordingObserver {
+    async fn on_tool_call(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        tool: &str,
+        _input_json: &str,
+    ) -> CoreResult<()> {
+        self.events
+            .lock()
+            .expect("observer events")
+            .push(format!("start:{tool}"));
+        Ok(())
+    }
+
+    async fn on_tool_error(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        tool: &str,
+        _input_json: &str,
+        error: &CoreError,
+    ) -> CoreResult<()> {
+        self.events
+            .lock()
+            .expect("observer events")
+            .push(format!("failed:{tool}:{error}"));
+        Ok(())
+    }
+}
+
 const LEN_INPUT: &str = r#"{"text":"hello"}"#;
 
 /// StubLlm drives: round 0 calls the first available tool, round 1 finishes with
@@ -69,6 +122,75 @@ fn happy_path_runs_tool_once_then_finishes() {
 
     // A checkpoint was persisted for the finished session.
     let saved = block_on(checkpoints.load("s-happy")).unwrap().unwrap();
+    assert_eq!(saved.status, SessionStatus::Finished);
+}
+
+#[test]
+fn observed_tool_failure_emits_one_terminal_failure_and_preserves_original_error() {
+    let observer = Arc::new(RecordingObserver::default());
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![AgentAction::CallTool {
+            tool: "read".to_string(),
+            input_json: r#"{"file":"README.md"}"#.to_string(),
+        }])),
+        Arc::new(FailingToolHost),
+        Arc::new(InMemoryCheckpointStore::new()),
+        Arc::new(FixedClock(0)),
+    );
+
+    let error = block_on(engine.run_observed(
+        "s-observed-tool-failure",
+        "read README",
+        Some("p1"),
+        observer.clone(),
+    ))
+    .expect_err("tool failure must propagate");
+
+    assert_eq!(error.to_string(), "tool error: missing path alias");
+    assert_eq!(
+        observer.events.lock().expect("observer events").as_slice(),
+        &["start:read", "failed:read:tool error: missing path alias"]
+    );
+}
+
+#[test]
+fn declared_terminal_tool_finishes_without_another_llm_decision() {
+    let tools = Arc::new(CountingToolHost::new(&["submit_plan"]));
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let script = vec![
+        AgentAction::CallTool {
+            tool: "submit_plan".into(),
+            input_json: r#"{"tasks":[{"content":"Inspect"}]}"#.into(),
+        },
+        AgentAction::CallTool {
+            tool: "submit_plan".into(),
+            input_json: r#"{"tasks":[{"content":"Duplicate"}]}"#.into(),
+        },
+    ];
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(script)),
+        tools.clone(),
+        checkpoints.clone(),
+        Arc::new(FixedClock(0)),
+    )
+    .with_terminal_tools(["submit_plan"]);
+
+    let state = block_on(engine.run("s-terminal", "publish plan", Some("p1"))).unwrap();
+
+    assert_eq!(state.status, SessionStatus::Finished);
+    assert_eq!(state.round, 1);
+    assert_eq!(tools.count(), 1, "terminal tool must execute exactly once");
+    assert_eq!(state.completed_tool_calls.len(), 1);
+    assert_eq!(
+        state
+            .transcript
+            .iter()
+            .filter(|entry| entry.role == Role::Action)
+            .count(),
+        1
+    );
+    assert!(state.answer.is_none());
+    let saved = block_on(checkpoints.load("s-terminal")).unwrap().unwrap();
     assert_eq!(saved.status, SessionStatus::Finished);
 }
 

@@ -3,6 +3,7 @@
 //! HTTP response, so these tests add no heavy mock-framework dependency and run
 //! fully offline (they prove parsing + error mapping, not a live provider).
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use agistack_adapters_http_llm::{AnthropicLlm, HttpEmbedding, HttpLlm};
@@ -36,6 +37,37 @@ async fn mock(status: u16, body: &'static str) -> (String, Arc<tokio::sync::Mute
                 body
             );
             let _ = sock.write_all(resp.as_bytes()).await;
+            let _ = sock.flush().await;
+        }
+    });
+    (format!("http://{addr}"), captured)
+}
+
+async fn mock_responses(bodies: Vec<String>) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let captured = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
+    let sink = captured.clone();
+    let responses = Arc::new(tokio::sync::Mutex::new(VecDeque::from(bodies)));
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                break;
+            };
+            let mut buf = vec![0u8; 8192];
+            let n = sock.read(&mut buf).await.unwrap_or(0);
+            sink.lock()
+                .await
+                .push(String::from_utf8_lossy(&buf[..n]).to_string());
+            let Some(body) = responses.lock().await.pop_front() else {
+                break;
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = sock.write_all(response.as_bytes()).await;
             let _ = sock.flush().await;
         }
     });
@@ -97,6 +129,135 @@ async fn decide_parses_call_tool_action() {
 }
 
 #[tokio::test]
+async fn decide_accepts_structured_tool_input_and_normalizes_it_to_json() {
+    let action = r#"{"kind":"call_tool","tool":"submit_plan","input_json":{"tasks":[{"content":"Inspect the workspace","priority":"high"}]}}"#;
+    let body: &'static str = Box::leak(chat_body(action).into_boxed_str());
+    let (base, _captured) = mock(200, body).await;
+
+    let llm = HttpLlm::new(base, "m");
+    let got = llm.decide("plan", 0, &[], &[]).await.unwrap();
+
+    match got {
+        AgentAction::CallTool { tool, input_json } => {
+            assert_eq!(tool, "submit_plan");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&input_json).unwrap(),
+                serde_json::json!({
+                    "tasks": [{
+                        "content": "Inspect the workspace",
+                        "priority": "high"
+                    }]
+                })
+            );
+        }
+        other => panic!("unexpected action: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn decide_retries_an_incomplete_permission_packet_before_returning_it() {
+    let incomplete = serde_json::json!({
+        "kind": "request_human",
+        "request": {
+            "id": "approve-plan-001",
+            "kind": "permission",
+            "prompt": "Proceed with the approved plan?",
+            "decision": {
+                "action": { "name": "execute_approved_plan", "label": "Proceed" },
+                "target": { "kind": "plan", "id": "plan-version-1" },
+                "data": { "summary": "Execute the approved plan" },
+                "reason": "The plan requires explicit approval",
+                "risk": { "level": "low", "rationale": "Read-only work" },
+                "reversibility": { "mode": "reversible" },
+                "scope": { "kind": "plan", "ids": ["step-1"] },
+                "evidence": []
+            }
+        }
+    })
+    .to_string();
+    let complete = serde_json::json!({
+        "kind": "request_human",
+        "request": {
+            "id": "approve-plan-001",
+            "kind": "permission",
+            "prompt": "Proceed with the approved plan?",
+            "decision": {
+                "action": { "name": "execute_approved_plan", "label": "Proceed" },
+                "target": { "kind": "plan", "id": "plan-version-1" },
+                "data": { "summary": "Execute the approved plan" },
+                "reason": "The plan requires explicit approval",
+                "risk": { "level": "low", "rationale": "Read-only work" },
+                "reversibility": { "mode": "reversible" },
+                "scope": { "kind": "plan", "ids": ["step-1"] },
+                "evidence": [{
+                    "kind": "plan",
+                    "id": "plan-version-1",
+                    "label": "Approved structured plan"
+                }]
+            }
+        }
+    })
+    .to_string();
+    let (base, captured) = mock_responses(vec![chat_body(&incomplete), chat_body(&complete)]).await;
+
+    let action = HttpLlm::new(base, "m")
+        .decide("execute the plan", 0, &[], &[])
+        .await
+        .unwrap();
+
+    let AgentAction::RequestHuman { request } = action else {
+        panic!("expected a request_human action");
+    };
+    assert!(request.decision.unwrap().is_complete());
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("evidence must contain at least one structured item"));
+}
+
+#[tokio::test]
+async fn decide_retries_trailing_text_instead_of_accepting_an_ambiguous_action() {
+    let malformed = concat!(
+        r#"{"kind":"call_tool","tool":"submit_plan","input_json":{"tasks":[]}}"#,
+        "\nI have prepared the plan."
+    );
+    let corrected = r#"{"kind":"call_tool","tool":"submit_plan","input_json":{"tasks":[{"content":"Inspect README.md","priority":"high"}]}}"#;
+    let (base, captured) = mock_responses(vec![chat_body(malformed), chat_body(corrected)]).await;
+
+    let action = HttpLlm::new(base, "m")
+        .decide("plan", 0, &[], &["submit_plan".to_string()])
+        .await
+        .unwrap();
+
+    let AgentAction::CallTool { tool, input_json } = action else {
+        panic!("expected a call_tool action");
+    };
+    assert_eq!(tool, "submit_plan");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&input_json).unwrap(),
+        serde_json::json!({
+            "tasks": [{ "content": "Inspect README.md", "priority": "high" }]
+        })
+    );
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("return exactly one JSON object"));
+}
+
+#[tokio::test]
+async fn openai_compatible_requests_do_not_force_temperature() {
+    let body: &'static str =
+        Box::leak(chat_body(r#"{"kind":"finish","answer":"ok"}"#).into_boxed_str());
+    let (base, captured) = mock(200, body).await;
+
+    let llm = HttpLlm::new(base, "provider-defined-model");
+    llm.decide("finish", 0, &[], &[]).await.unwrap();
+
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert!(!requests[0].contains("\"temperature\""));
+}
+
+#[tokio::test]
 async fn decide_tolerates_markdown_fenced_finish() {
     // Real models often wrap JSON in ```json fences — the adapter strips them.
     let fenced = "```json\n{\"kind\":\"finish\",\"answer\":\"42\"}\n```";
@@ -139,6 +300,7 @@ async fn stream_complete_collects_openai_sse_deltas() {
     assert!(reqs[0].contains("POST /chat/completions"));
     assert!(reqs[0].contains("authorization: Bearer stream-key"));
     assert!(reqs[0].contains("\"stream\":true"));
+    assert!(!reqs[0].contains("\"temperature\""));
 }
 
 #[tokio::test]

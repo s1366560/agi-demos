@@ -36,7 +36,7 @@ use tokio::{
 
 use agistack_adapters_postgres::AgentExecutionEventInsertRecord;
 use agistack_core::agent::{HitlRequest, ReActObserver, SessionStatus};
-use agistack_core::ports::CoreResult;
+use agistack_core::ports::{CoreError, CoreResult};
 use futures_util::future::{AbortHandle, Abortable};
 
 use crate::agent_conversations_api::{AgentConversationsApiError, ConversationSocketAccess};
@@ -1006,6 +1006,39 @@ impl ReActObserver for AgentWsRunObserver {
         data.insert("is_error".to_string(), Value::Bool(false));
         copy_tool_metadata(&mut data, &input);
         copy_tool_metadata(&mut data, &output);
+        append_event(
+            &self.app,
+            &self.conversation_id,
+            AgentEventType::Observe,
+            Value::Object(data),
+        )
+        .await
+        .map_err(agistack_core::ports::CoreError::Event)
+    }
+
+    async fn on_tool_error(
+        &self,
+        _session_id: &str,
+        round: u64,
+        tool: &str,
+        input_json: &str,
+        error: &CoreError,
+    ) -> CoreResult<()> {
+        let input = json_or_string(input_json);
+        let output = json!({ "error": error.to_string() });
+        let mut data = tool_event_base(
+            &self.conversation_id,
+            &self.project_id,
+            self.message_id.as_deref(),
+            round,
+            tool,
+        );
+        data.insert("tool_input".to_string(), input.clone());
+        data.insert("tool_output".to_string(), output.clone());
+        data.insert("observation".to_string(), output.clone());
+        data.insert("error".to_string(), Value::String(error.to_string()));
+        data.insert("is_error".to_string(), Value::Bool(true));
+        copy_tool_metadata(&mut data, &input);
         append_event(
             &self.app,
             &self.conversation_id,

@@ -10,6 +10,69 @@ use agistack_core::ports::{CoreError, CoreResult, LlmPort, MemoryDraft, Relation
 use crate::endpoint::Endpoint;
 use crate::structured::{clean_structured, parse_memory_draft, parse_relationship_drafts};
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ToolInputWire {
+    Json(String),
+    Structured(serde_json::Value),
+}
+
+impl ToolInputWire {
+    fn into_json(self) -> CoreResult<String> {
+        match self {
+            Self::Json(json) => Ok(json),
+            Self::Structured(value) => serde_json::to_string(&value)
+                .map_err(|error| CoreError::Llm(format!("bad tool input json: {error}"))),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum AgentActionWire {
+    CallTool {
+        tool: String,
+        input_json: ToolInputWire,
+    },
+    Finish {
+        answer: String,
+    },
+    RequestHuman {
+        request: agistack_core::agent::types::HitlRequest,
+    },
+}
+
+impl AgentActionWire {
+    fn has_incomplete_human_decision(&self) -> bool {
+        match self {
+            Self::RequestHuman { request }
+                if matches!(
+                    request.kind,
+                    agistack_core::agent::types::HitlKind::Decision
+                        | agistack_core::agent::types::HitlKind::Permission
+                ) =>
+            {
+                !request
+                    .decision
+                    .as_deref()
+                    .is_some_and(agistack_core::agent::types::DecisionContext::is_complete)
+            }
+            _ => false,
+        }
+    }
+
+    fn into_action(self) -> CoreResult<AgentAction> {
+        match self {
+            Self::CallTool { tool, input_json } => Ok(AgentAction::CallTool {
+                tool,
+                input_json: input_json.into_json()?,
+            }),
+            Self::Finish { answer } => Ok(AgentAction::Finish { answer }),
+            Self::RequestHuman { request } => Ok(AgentAction::RequestHuman { request }),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct ChatMessage {
     role: &'static str,
@@ -20,7 +83,8 @@ struct ChatMessage {
 struct ChatRequest {
     model: String,
     messages: Vec<ChatMessage>,
-    temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
 }
@@ -63,12 +127,24 @@ const EXTRACT_SYSTEM: &str = "You distill an episode into a memory. Respond with
 No prose, no code fences.";
 
 const DECIDE_SYSTEM: &str = "You are a ReAct agent. Choose the next action and respond with ONLY a JSON object, one of: \
-{\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string} | \
+{\"kind\":\"call_tool\",\"tool\":string,\"input_json\":object} | \
 {\"kind\":\"finish\",\"answer\":string} | \
 {\"kind\":\"request_human\",\"request\":{\"id\":string,\"kind\":\"clarification\"|\"decision\"|\"env_var\"|\"permission\",\"prompt\":string,\"decision\":{\"action\":{\"name\":string,\"label\":string},\"target\":{\"kind\":string,\"id\":string,\"version_id\":string|null,\"path\":string|null},\"data\":{\"summary\":string,\"redacted_fields\":string[]},\"reason\":string,\"risk\":{\"level\":\"low\"|\"medium\"|\"high\",\"rationale\":string},\"reversibility\":{\"mode\":\"reversible\"|\"partial\"|\"irreversible\",\"recovery\":string|null},\"scope\":{\"kind\":string,\"ids\":string[]},\"evidence\":[{\"kind\":string,\"id\":string,\"label\":string,\"uri\":string|null,\"digest\":string|null}]}}}. \
 decision is required and must be complete for decision or permission; omit it for clarification or env_var. \
 Risk, rationale, reversibility, scope, and evidence are your structured judgment and must not be delegated to prompt parsing. \
-Redact secrets from data.summary and name them in redacted_fields. input_json must be a JSON string. No prose, no code fences.";
+Redact secrets from data.summary and name them in redacted_fields. input_json must be the tool's JSON input object, not a string containing encoded JSON. No prose, no code fences.";
+
+const DECISION_REPAIR_GUIDANCE: &str = "\nProtocol correction: your previous request_human \
+action was structurally incomplete and was not accepted or persisted. Reissue the same semantic \
+action as a complete JSON object. For decision or permission, action, target, data, reason, risk, \
+reversibility, scope, and evidence are required; evidence must contain at least one structured item \
+with non-empty kind, id, and label. Supply your own structured judgment without inferring fields \
+from message text.";
+
+const ACTION_JSON_REPAIR_GUIDANCE: &str = "\nProtocol correction: your previous response was not \
+a valid structured action and was not accepted or persisted. Reissue the same semantic action and \
+return exactly one JSON object matching the requested action schema. Do not add prose, Markdown, a \
+second JSON value, or trailing characters.";
 
 const RELATIONSHIP_SYSTEM: &str = "You extract semantic relationships between the provided entities. \
 Respond with ONLY a JSON object: {\"relationships\":[{\"source\":string,\"target\":string,\"relation_type\":string,\"fact\":string,\"score\":number}]}. \
@@ -108,7 +184,7 @@ impl HttpLlm {
                     content: user,
                 },
             ],
-            temperature: 0.0,
+            temperature: None,
             stream: None,
         };
         let resp: ChatResponse = self
@@ -143,7 +219,7 @@ impl HttpLlm {
                     content: user,
                 },
             ],
-            temperature: 0.0,
+            temperature: None,
             stream: Some(true),
         };
         let url = format!("{}/chat/completions", self.ep.base_url);
@@ -288,8 +364,28 @@ impl LlmPort for HttpLlm {
                 user.push_str(&format!("- [{who}] {}\n", e.content));
             }
         }
-        let content = self.chat(DECIDE_SYSTEM, user).await?;
-        serde_json::from_str(clean_structured(&content))
-            .map_err(|e| CoreError::Llm(format!("bad action json: {e}")))
+        let content = self.chat(DECIDE_SYSTEM, user.clone()).await?;
+        let first_wire = serde_json::from_str::<AgentActionWire>(clean_structured(&content));
+        let repair_guidance = match first_wire.as_ref() {
+            Ok(wire) if wire.has_incomplete_human_decision() => Some(DECISION_REPAIR_GUIDANCE),
+            Ok(_) => None,
+            Err(_) => Some(ACTION_JSON_REPAIR_GUIDANCE),
+        };
+        let wire = if let Some(guidance) = repair_guidance {
+            user.push_str(guidance);
+            let repaired = self.chat(DECIDE_SYSTEM, user).await?;
+            let wire: AgentActionWire = serde_json::from_str(clean_structured(&repaired))
+                .map_err(|e| CoreError::Llm(format!("bad repaired action json: {e}")))?;
+            if wire.has_incomplete_human_decision() {
+                return Err(CoreError::Llm(
+                    "request_human decision remains structurally incomplete after one repair"
+                        .to_string(),
+                ));
+            }
+            wire
+        } else {
+            first_wire.expect("wire was validated above")
+        };
+        wire.into_action()
     }
 }

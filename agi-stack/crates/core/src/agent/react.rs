@@ -15,7 +15,7 @@
 //! the server, on device, and in the browser. Concurrency (running independent
 //! plan branches in parallel) is the host runner's job, not the core's.
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -51,6 +51,17 @@ pub trait ReActObserver: Send + Sync {
         _tool: &str,
         _input_json: &str,
         _output_json: &str,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn on_tool_error(
+        &self,
+        _session_id: &str,
+        _round: u64,
+        _tool: &str,
+        _input_json: &str,
+        _error: &CoreError,
     ) -> CoreResult<()> {
         Ok(())
     }
@@ -122,6 +133,10 @@ pub struct ReActEngine {
     doom_cfg: Option<(usize, usize)>,
     /// Optional per-session spend ceiling (arithmetic).
     cost_budget: Option<CostBudget>,
+    /// Tools declared by the host as structurally terminal. A successful call
+    /// finishes the session at the same durable boundary without asking the
+    /// model for a redundant follow-up verdict.
+    terminal_tools: BTreeSet<String>,
     /// Optional injected agent that judges a fired trigger (Agent First). Without
     /// one, a fired trigger is a deterministic structural stop.
     supervisor: Option<Arc<dyn SupervisorPort>>,
@@ -142,6 +157,7 @@ impl ReActEngine {
             max_rounds: 16,
             doom_cfg: None,
             cost_budget: None,
+            terminal_tools: BTreeSet::new(),
             supervisor: None,
         }
     }
@@ -158,6 +174,18 @@ impl ReActEngine {
     /// loops — a structural bound, not a semantic verdict).
     pub fn with_max_rounds(mut self, max_rounds: u64) -> Self {
         self.max_rounds = max_rounds;
+        self
+    }
+
+    /// Declare tool names whose successful completion is the terminal protocol
+    /// result for this engine instance. Tool identity is host-supplied static
+    /// metadata; the engine does not infer terminality from user or model text.
+    pub fn with_terminal_tools<I, S>(mut self, tools: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.terminal_tools = tools.into_iter().map(Into::into).collect();
         self
     }
 
@@ -387,7 +415,23 @@ impl ReActEngine {
                     {
                         Some(prior) => prior,
                         None => {
-                            let out = self.tools.call(&tool, &input_json).await?;
+                            let out = match self.tools.call(&tool, &input_json).await {
+                                Ok(output) => output,
+                                Err(error) => {
+                                    if let Some(observer) = observer.as_deref() {
+                                        let _ = observer
+                                            .on_tool_error(
+                                                session_id,
+                                                state.round,
+                                                &tool,
+                                                &input_json,
+                                                &error,
+                                            )
+                                            .await;
+                                    }
+                                    return Err(error);
+                                }
+                            };
                             state.completed_tool_calls.push(CompletedCall {
                                 round: state.round,
                                 tool: tool.clone(),
@@ -408,6 +452,9 @@ impl ReActEngine {
                     }
 
                     state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output));
+                    if self.terminal_tools.contains(&tool) {
+                        state.status = SessionStatus::Finished;
+                    }
                 }
                 AgentAction::RequestHuman { request } => {
                     // The "ask" is recorded once (dedup-safe on replay).
