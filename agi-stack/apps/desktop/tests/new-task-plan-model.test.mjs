@@ -47,8 +47,15 @@ test('planning prompt establishes a real structured plan and approval boundary',
 test('revision and execution prompts preserve the human authority boundary', () => {
   assert.match(buildRevisionPrompt('Add accessibility verification'), /Remain in Plan mode/);
   assert.match(buildRevisionPrompt('Add accessibility verification'), /accessibility verification/);
-  assert.match(buildExecutionPrompt(), /human approved/);
-  assert.match(buildExecutionPrompt(), /permission, credential, or irreversible decision/);
+  const prompt = buildExecutionPrompt([
+    { content: 'Inspect the approved workspace', priority: 'high' },
+    { content: 'Report the exact tool output', priority: 'medium' },
+  ]);
+  assert.match(prompt, /human approved/);
+  assert.match(prompt, /permission, credential, or irreversible decision/);
+  assert.match(prompt, /Inspect the approved workspace/);
+  assert.match(prompt, /Report the exact tool output/);
+  assert.match(prompt, /"priority":"high"/);
 });
 
 test('plan tasks are ordered and revisions change the plan signature', () => {

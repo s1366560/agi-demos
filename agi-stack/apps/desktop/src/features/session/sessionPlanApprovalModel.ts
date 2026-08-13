@@ -132,7 +132,7 @@ export function sessionPlanApprovalRequest(
     planVersionId: input.plan.id,
     expectedPlanVersion: input.plan.version,
     permissionProfile: input.permissionProfile,
-    message: buildExecutionPrompt(),
+    message: buildExecutionPrompt(input.plan.tasks),
     messageId: `desktop-build-${input.requestId}`,
     idempotencyKey: `desktop-plan-approval-${input.requestId}`,
     environmentKind: input.environmentKind,

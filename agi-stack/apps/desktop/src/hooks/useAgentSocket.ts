@@ -76,6 +76,7 @@ export type AgentRunMessage = {
   deferUntilNextConnection?: boolean;
   agentId?: string;
   forcedSkillName?: string;
+  subAgentId?: string;
   mentions?: string[];
   fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
@@ -90,6 +91,7 @@ export type AgentRunSocketMessage = {
   message_id: string;
   agent_id?: string;
   forced_skill_name?: string;
+  subagent_id?: string;
   mentions?: string[];
   file_metadata?: AgentInputFileMetadata[];
   app_model_context?: Record<string, unknown>;
@@ -210,6 +212,7 @@ function agentRunSocketMessage(
     `desktop-agent-${Date.now()}-${(pendingAgentMessageSequence += 1)}`;
   const agentId = message.agentId?.trim();
   const forcedSkillName = message.forcedSkillName?.trim();
+  const subAgentId = message.subAgentId?.trim();
   const mentions = message.mentions
     ?.map((mention) => mention.trim())
     .filter(Boolean);
@@ -222,6 +225,7 @@ function agentRunSocketMessage(
     message_id: messageId,
     ...(agentId ? { agent_id: agentId } : {}),
     ...(forcedSkillName ? { forced_skill_name: forcedSkillName } : {}),
+    ...(subAgentId ? { subagent_id: subAgentId } : {}),
     ...(mentions?.length ? { mentions: [...new Set(mentions)] } : {}),
     ...(message.fileMetadata?.length
       ? { file_metadata: message.fileMetadata.map((file) => ({ ...file })) }

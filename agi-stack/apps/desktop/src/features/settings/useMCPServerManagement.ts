@@ -39,6 +39,8 @@ export function useMCPServerManagement({
   const [dialog, setDialog] = useState<MCPServerDialogState>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const requestId = useRef(0);
   const contextKeyRef = useRef(contextKey);
   contextKeyRef.current = contextKey;
@@ -134,6 +136,29 @@ export function useMCPServerManagement({
     [canManage, config, load],
   );
 
+  const testServer = useCallback(
+    async (serverId: string) => {
+      if (!canManage) return;
+      setActionBusyId(serverId);
+      setActionMessage(null);
+      setError(null);
+      try {
+        const result = await new DesktopApiClient(config).testMCPServer(serverId);
+        setActionMessage(
+          result.success
+            ? `settings.mcpServers.testSucceeded:${result.tools_discovered}`
+            : 'settings.mcpServers.testFailed',
+        );
+        await load();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [canManage, config, load],
+  );
+
   return {
     servers,
     loading,
@@ -142,8 +167,11 @@ export function useMCPServerManagement({
     dialog,
     dialogBusy,
     dialogError,
+    actionBusyId,
+    actionMessage,
     openCreate,
     closeDialog,
     create,
+    testServer,
   };
 }

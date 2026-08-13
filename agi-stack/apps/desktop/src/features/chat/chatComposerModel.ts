@@ -11,6 +11,7 @@ export type ComposerAgentExecutionContext = {
   mentions: string[];
   agentId?: string;
   forcedSkillName?: string;
+  subAgentId?: string;
   fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: {
     desktop_composer_context: {
@@ -133,20 +134,12 @@ export function composerAgentExecutionContext(
     'skill',
     'execution_skill_name',
   );
-  const subAgentName = lastExecutionMetadata(
-    contextItems,
-    'subagent',
-    'execution_subagent_name',
-  );
+  const subAgentId = lastExecutionResourceId(contextItems, 'subagent');
   const command = lastExecutionResourceId(contextItems, 'command');
   const content = rawMessage.trim();
   const fileMetadata = composerFileMetadata(contextItems);
   const commandMessage = command ? `${command} ${content}` : content;
-  const message = subAgentName
-    ? `[System Instruction: Delegate this task strictly to SubAgent ${JSON.stringify(
-        subAgentName,
-      )}]\n${commandMessage}`
-    : commandMessage;
+  const message = commandMessage;
   const resources = contextItems
     .filter(
       (item) =>
@@ -158,6 +151,7 @@ export function composerAgentExecutionContext(
     mentions: composerMentionIds(contextItems),
     ...(agentId ? { agentId } : {}),
     ...(forcedSkillName ? { forcedSkillName } : {}),
+    ...(subAgentId ? { subAgentId } : {}),
     ...(fileMetadata.length ? { fileMetadata } : {}),
     ...(resources.length
       ? { appModelContext: { desktop_composer_context: { resources } } }

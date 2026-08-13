@@ -186,6 +186,36 @@ test('production routing wraps the existing workbench tree without keying or rem
   assert.match(appSource, /const socket = useAgentSocket\(/u);
 });
 
+test('workbench selections release an active native production route before changing sections', () => {
+  const workspaceSelectionStart = appSource.indexOf('const selectWorkspace =');
+  const workspaceSelectionEnd = appSource.indexOf(
+    '\n  const createWorkspaceFromDialog',
+    workspaceSelectionStart,
+  );
+  const workspaceSelectionSource = appSource.slice(
+    workspaceSelectionStart,
+    workspaceSelectionEnd,
+  );
+  const conversationSelectionStart = appSource.indexOf('const selectConversation =');
+  const conversationSelectionEnd = appSource.indexOf(
+    '\n  const sendChatMessage',
+    conversationSelectionStart,
+  );
+  const conversationSelectionSource = appSource.slice(
+    conversationSelectionStart,
+    conversationSelectionEnd,
+  );
+
+  assert.match(
+    workspaceSelectionSource,
+    /desktopProductionRouteNavigation\.clearHash\(\)[\s\S]*applySectionSideEffects\('workspace'\)/u,
+  );
+  assert.match(
+    conversationSelectionSource,
+    /desktopProductionRouteNavigation\.clearHash\(\)[\s\S]*applySectionSideEffects\(targetSection\)/u,
+  );
+});
+
 test('anonymous unknown routes are handled natively before the login gate', () => {
   const forcedPasswordGate = appSource.lastIndexOf("auth.status === 'password_change_required'");
   const anonymousGate = appSource.indexOf('if (!identityAuthenticated)', forcedPasswordGate);

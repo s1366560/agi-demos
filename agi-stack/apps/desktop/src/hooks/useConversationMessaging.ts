@@ -140,6 +140,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
       messageId,
       agentId: execution.agentId,
       forcedSkillName: execution.forcedSkillName,
+      subAgentId: execution.subAgentId,
       mentions: execution.mentions,
       fileMetadata: execution.fileMetadata,
       appModelContext: execution.appModelContext,
@@ -168,6 +169,8 @@ export function useConversationMessaging(params: AgentConversationParams) {
         execution.message,
         messageId,
         config.projectId,
+        undefined,
+        execution,
       );
       invalidateSessionAuthority();
       upsertAgentTaskSignal({

@@ -97,7 +97,7 @@ test('approval request binds the exact previewed version and retry identity', ()
       expectedPlanVersion: 7,
       permissionProfile: 'workspace_write',
       message:
-        'The human approved the current structured plan.\n\nBuild mode is now active. Execute the approved tasks in order.\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.',
+        'The human approved the current structured plan.\n\nBuild mode is now active. Execute only the approved tasks below, in order.\n\nApproved structured tasks: [{"content":"Inspect the authoritative session","priority":null}]\n\nKeep the task list status current and pause for any permission, credential, or irreversible decision.',
       messageId: 'desktop-build-request-42',
       idempotencyKey: 'desktop-plan-approval-request-42',
       environmentKind: 'worktree',

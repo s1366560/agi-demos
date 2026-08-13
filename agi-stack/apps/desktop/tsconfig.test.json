@@ -195,6 +195,7 @@
     "src/features/settings/settingsEntryRouting.ts",
     "src/features/settings/managedResourceModel.ts",
     "src/features/settings/managedResourcesClient.ts",
+    "src/features/settings/mcpCommandModel.ts",
     "src/features/settings/agentDefinitionEventModel.ts",
     "src/features/settings/notificationPreferences.ts",
     "src/features/settings/ShortcutSettingsPage.tsx",

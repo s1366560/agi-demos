@@ -314,6 +314,8 @@ export function useConversationThreads(params: AgentConversationParams) {
         input.message,
         input.messageId,
         input.projectId,
+        undefined,
+        input,
       );
       return 'acknowledged';
     }
@@ -406,6 +408,7 @@ export function useConversationThreads(params: AgentConversationParams) {
             messageId: firstMessageId,
             agentId: execution.agentId,
             forcedSkillName: execution.forcedSkillName,
+            subAgentId: execution.subAgentId,
             mentions: execution.mentions,
             fileMetadata: execution.fileMetadata,
             appModelContext: execution.appModelContext,
@@ -544,6 +547,7 @@ export function useConversationThreads(params: AgentConversationParams) {
           messageId: `desktop-plan-${crypto.randomUUID()}`,
           agentId: execution.agentId,
           forcedSkillName: execution.forcedSkillName,
+          subAgentId: execution.subAgentId,
           mentions: execution.mentions,
           fileMetadata: execution.fileMetadata,
           appModelContext: execution.appModelContext,

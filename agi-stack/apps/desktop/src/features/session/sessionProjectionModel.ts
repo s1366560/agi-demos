@@ -294,7 +294,7 @@ function readConversation(
     !Object.hasOwn(conversation, 'linked_workspace_task_id') ||
     !optionalString(conversation.workspace_id) ||
     !optionalString(conversation.linked_workspace_task_id) ||
-    typeof conversation.workspace_name !== 'string' ||
+    !optionalString(conversation.workspace_name) ||
     !Array.isArray(conversation.participant_agents) ||
     !conversation.participant_agents.every((participant) => nonEmptyString(participant)) ||
     !Object.hasOwn(conversation, 'coordinator_agent_id') ||
@@ -399,14 +399,18 @@ function readPlan(value: unknown, scope: SessionProjectionScope): SessionProject
 
 function readTask(value: unknown, scope: SessionProjectionScope): SessionProjectionTask | null {
   const task = recordValue(value);
-  if (!task || !nonEmptyString(task.id)) return null;
+  if (!task || !nonEmptyString(task.id) || !nonEmptyString(task.content)) return null;
   if (
     task.conversation_id !== undefined &&
     task.conversation_id !== scope.conversationId
   ) {
     return null;
   }
-  return task as SessionProjectionTask;
+  return {
+    ...task,
+    content: task.content as string,
+    priority: typeof task.priority === 'string' ? task.priority : null,
+  } as SessionProjectionTask;
 }
 
 function readHitl(

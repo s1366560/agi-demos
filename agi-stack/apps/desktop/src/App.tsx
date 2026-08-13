@@ -3234,6 +3234,7 @@ export function App() {
     setAgentTaskSignals([]);
     setReviewTab('overview');
     setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
+    desktopProductionRouteNavigation.clearHash();
     applySectionSideEffects('workspace');
     void refreshRuntime(nextConfig);
   };
@@ -3737,6 +3738,7 @@ export function App() {
     if (workspaceId) {
       setExpandedWorkspaceIds((current) => new Set([...current, workspaceId]));
     }
+    desktopProductionRouteNavigation.clearHash();
     applySectionSideEffects(targetSection);
     void loadConversationTimeline(conversation, projectId, nextConfig);
     if (requiresRuntimeRefresh) void refreshRuntime(nextConfig);

@@ -50,6 +50,10 @@ const agentConversationSource = [
 ]
   .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
   .join('\n');
+const conversationThreadsSource = readFileSync(
+  new URL('../src/hooks/useConversationThreads.ts', import.meta.url),
+  'utf8',
+);
 const qaSource = readFileSync(new URL('../src/qa/SessionSteeringQa.tsx', import.meta.url), 'utf8');
 const newThreadComposerSource = readFileSync(
   new URL('../src/features/task/NewThreadComposer.tsx', import.meta.url),
@@ -218,12 +222,11 @@ test('composer execution context routes selected Web resources into the cloud Ag
   ];
 
   assert.deepEqual(composerAgentExecutionContext('Review this change', contextItems), {
-    message:
-      '[System Instruction: Delegate this task strictly to SubAgent "security-reviewer"]\n' +
-      '/review Review this change',
+    message: '/review Review this change',
     mentions: ['agent-research'],
     agentId: 'definition-reviewer',
     forcedSkillName: 'source-research',
+    subAgentId: 'subagent-security',
     appModelContext: {
       desktop_composer_context: {
         resources: [
@@ -236,6 +239,13 @@ test('composer execution context routes selected Web resources into the cloud Ag
       },
     },
   });
+});
+
+test('new composer threads forward the selected Sub Agent through both task launch paths', () => {
+  assert.equal(
+    conversationThreadsSource.split('subAgentId: execution.subAgentId').length - 1,
+    2,
+  );
 });
 
 test('uploaded attachment context becomes authoritative sandbox file metadata', () => {

@@ -142,6 +142,21 @@ function validProjection() {
   });
 }
 
+test('desktop session projection accepts a null workspace display name', () => {
+  const payload = validProjection();
+  payload.conversation.workspace_name = null;
+
+  const projection = decodeSignedProjection(payload, {
+    conversationId: 'conversation-1',
+    projectId: 'project-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(projection?.conversation.workspace_name, null);
+  assert.equal(projection?.capabilities.canQueueNext, true);
+});
+
 function validCloudProjection() {
   const attempt = {
     id: 'attempt-2',
@@ -681,8 +696,8 @@ test('session projection decoder fails closed on cross-conversation or inconsist
 
 test('session projection decoder accepts minimally structured tasks and rejects scope drift', () => {
   const minimalTaskProjection = validProjection();
-  minimalTaskProjection.current_plan.tasks = [{ id: 'task-minimal' }];
-  minimalTaskProjection.tasks = [{ id: 'task-minimal' }];
+  minimalTaskProjection.current_plan.tasks = [{ id: 'task-minimal', content: 'Inspect' }];
+  minimalTaskProjection.tasks = [{ id: 'task-minimal', content: 'Inspect' }];
   assert.equal(
     decodeSignedProjection(minimalTaskProjection, {
       conversationId: 'conversation-1',

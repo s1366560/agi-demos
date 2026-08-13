@@ -10,6 +10,8 @@ import type {
 export type SessionProjectionTask = Record<string, unknown> & {
   id: string;
   conversation_id?: string;
+  content: string;
+  priority?: string | null;
 };
 
 export type SessionProjectionPlan = {

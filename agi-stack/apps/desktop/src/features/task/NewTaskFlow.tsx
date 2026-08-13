@@ -106,6 +106,7 @@ export type NewTaskAgentTurnInput = {
   messageId: string;
   agentId?: string;
   forcedSkillName?: string;
+  subAgentId?: string;
   mentions?: string[];
   fileMetadata?: AgentInputFileMetadata[];
   appModelContext?: Record<string, unknown>;
@@ -1054,7 +1055,7 @@ export function NewTaskFlow({
     try {
       const outcome = await runAgentTurn(
         activeSession,
-        buildExecutionPrompt(),
+        buildExecutionPrompt(planTasks),
         approvalAttemptRef.current.messageId,
       );
       if (outcome === 'unknown_outcome') {
@@ -1100,7 +1101,7 @@ export function NewTaskFlow({
       planVersionId: previewedPlanVersion.id,
       expectedPlanVersion: previewedPlanVersion.version,
       permissionProfile,
-      message: buildExecutionPrompt(),
+      message: buildExecutionPrompt(previewedPlanVersion.tasks),
       messageId: `desktop-build-${approvalId}`,
       idempotencyKey: `desktop-plan-approval-${approvalId}`,
       environmentKind,

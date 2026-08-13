@@ -249,6 +249,19 @@ export type DesktopMCPServerSummary = {
   server_type: DesktopMCPTransport;
   enabled: boolean;
   runtime_status: string;
+  runtime_metadata?: {
+    reason_code?: string | null;
+    revision?: number;
+  };
+  discovered_tools?: Array<{ name?: string }>;
+};
+
+export type DesktopMCPServerTestResult = {
+  success: boolean;
+  message: string;
+  tools_discovered: number;
+  connection_time_ms: number;
+  errors: string[];
 };
 
 const WORKSPACE_ROSTER_PAGE_SIZE = 500;
@@ -1465,6 +1478,11 @@ export class DesktopApiClient {
     messageId?: string,
     projectId = this.config.projectId,
     workloadRole?: LlmRoutingRole,
+    execution?: {
+      agentId?: string;
+      forcedSkillName?: string;
+      subAgentId?: string;
+    },
   ): Promise<{ queued: boolean }> {
     const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<{ queued: boolean }>(
@@ -1476,6 +1494,11 @@ export class DesktopApiClient {
           message,
           message_id: messageId,
           ...(workloadRole ? { workload_role: workloadRole } : {}),
+          ...(execution?.agentId ? { agent_id: execution.agentId } : {}),
+          ...(execution?.forcedSkillName
+            ? { forced_skill_name: execution.forcedSkillName }
+            : {}),
+          ...(execution?.subAgentId ? { subagent_id: execution.subAgentId } : {}),
         },
       },
     );
@@ -2022,6 +2045,13 @@ export class DesktopApiClient {
       method: 'POST',
       body: input,
     });
+  }
+
+  async testMCPServer(serverId: string): Promise<DesktopMCPServerTestResult> {
+    return this.request<DesktopMCPServerTestResult>(
+      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}/test`,
+      { method: 'POST' },
+    );
   }
 
   async callMCPAppTool(

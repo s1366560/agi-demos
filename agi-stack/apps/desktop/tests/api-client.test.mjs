@@ -1773,7 +1773,7 @@ test('conversation history requests preserve forward and backward cursor pairs',
   }
 });
 
-test('conversation execution carries an explicit structured workload role', async () => {
+test('conversation execution carries explicit structured runtime selections', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -1797,6 +1797,11 @@ test('conversation execution carries an explicit structured workload role', asyn
       'message-1',
       'project-1',
       'vision',
+      {
+        agentId: 'definition-reviewer',
+        forcedSkillName: 'source-research',
+        subAgentId: 'subagent-security',
+      },
     );
 
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
@@ -1804,6 +1809,9 @@ test('conversation execution carries an explicit structured workload role', asyn
       message: 'Analyze the attached image.',
       message_id: 'message-1',
       workload_role: 'vision',
+      agent_id: 'definition-reviewer',
+      forced_skill_name: 'source-research',
+      subagent_id: 'subagent-security',
     });
   } finally {
     globalThis.fetch = originalFetch;

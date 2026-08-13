@@ -44,6 +44,15 @@ export function MCPServerSettingsPage({
         <SettingsState text={t('settings.mcpServers.empty')} />
       ) : (
         <section className="settings-panel settings-rows">
+          {management.actionMessage ? (
+            <div className="settings-state">
+              {management.actionMessage.startsWith('settings.mcpServers.testSucceeded:')
+                ? t('settings.mcpServers.testSucceeded', {
+                    count: management.actionMessage.split(':')[1],
+                  })
+                : t(management.actionMessage)}
+            </div>
+          ) : null}
           {management.servers.map((server) => (
             <article className="settings-row" key={server.id}>
               <div>
@@ -55,6 +64,24 @@ export function MCPServerSettingsPage({
               <div>
                 <strong>{t('settings.mcpServers.status')}</strong>
                 <small>{server.enabled ? server.runtime_status : 'disabled'}</small>
+                {server.runtime_metadata?.reason_code ? (
+                  <small>{server.runtime_metadata.reason_code}</small>
+                ) : null}
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!canManage || management.actionBusyId !== null}
+                  onClick={() => void management.testServer(server.id)}
+                >
+                  {management.actionBusyId === server.id ? (
+                    <ReloadIcon className="managed-resource-spin" />
+                  ) : null}
+                  {t(
+                    server.runtime_status === 'error'
+                      ? 'settings.mcpServers.retry'
+                      : 'settings.mcpServers.test',
+                  )}
+                </button>
               </div>
             </article>
           ))}

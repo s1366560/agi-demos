@@ -654,7 +654,7 @@ test("pending cloud turns reset when authenticated project authority changes", (
   assert.notEqual(currentKey, pendingAgentRunQueueScopeKey(baseConfig, 8));
 });
 
-test("queued cloud turns preserve Agent, skill, mention, attachment, and composer context routing", () => {
+test("queued cloud turns preserve Agent, skill, Sub Agent, mention, attachment, and composer context routing", () => {
   const queue = createPendingAgentMessageQueue();
   enqueuePendingAgentRunMessage(queue, {
     conversationId: "conversation-1",
@@ -663,6 +663,7 @@ test("queued cloud turns preserve Agent, skill, mention, attachment, and compose
     messageId: "message-context-1",
     agentId: "definition-reviewer",
     forcedSkillName: "source-research",
+    subAgentId: "subagent-security",
     mentions: ["agent-research"],
     fileMetadata: [
       {
@@ -696,6 +697,7 @@ test("queued cloud turns preserve Agent, skill, mention, attachment, and compose
       message_id: "message-context-1",
       agent_id: "definition-reviewer",
       forced_skill_name: "source-research",
+      subagent_id: "subagent-security",
       mentions: ["agent-research"],
       file_metadata: [
         {

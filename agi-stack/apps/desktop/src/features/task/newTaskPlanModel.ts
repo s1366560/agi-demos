@@ -298,10 +298,17 @@ export function buildRevisionPrompt(feedback: string): string {
   ].join('\n\n');
 }
 
-export function buildExecutionPrompt(): string {
+export function buildExecutionPrompt(
+  tasks: ReadonlyArray<{ content: string; priority?: string | null }>,
+): string {
+  const approvedTasks = tasks.map((task) => ({
+    content: task.content,
+    priority: task.priority ?? null,
+  }));
   return [
     'The human approved the current structured plan.',
-    'Build mode is now active. Execute the approved tasks in order.',
+    'Build mode is now active. Execute only the approved tasks below, in order.',
+    `Approved structured tasks: ${JSON.stringify(approvedTasks)}`,
     'Keep the task list status current and pause for any permission, credential, or irreversible decision.',
   ].join('\n\n');
 }

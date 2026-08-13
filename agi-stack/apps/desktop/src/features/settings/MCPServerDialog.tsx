@@ -7,6 +7,7 @@ import {
 
 import { useI18n } from '../../i18n';
 import type { DesktopMCPTransport } from '../../api/client';
+import { parseMCPStdioCommand } from './mcpCommandModel';
 import type { MCPServerCreateSubmission } from './useMCPServerManagement';
 import { useModalDialog } from './useModalDialog';
 
@@ -45,13 +46,17 @@ export function MCPServerCreateDialog({
   const requiresCommand = serverType === 'stdio';
   const requiresUrl = !requiresCommand;
   const secretKind = credentialKind === 'none' ? null : credentialKind;
+  const parsedCommand = useMemo(
+    () => (requiresCommand ? parseMCPStdioCommand(command) : null),
+    [command, requiresCommand],
+  );
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
-    if (requiresCommand && !command.trim()) return false;
+    if (requiresCommand && parsedCommand?.ok !== true) return false;
     if (requiresUrl && !url.trim()) return false;
     if (secretKind && (!credentialName.trim() || !secret)) return false;
     return true;
-  }, [command, credentialName, name, requiresCommand, requiresUrl, secret, secretKind, url]);
+  }, [credentialName, name, parsedCommand, requiresCommand, requiresUrl, secret, secretKind, url]);
 
   const submit = () => {
     if (!canSubmit) {
@@ -63,7 +68,7 @@ export function MCPServerCreateDialog({
       description: description.trim() || undefined,
       serverType,
       transport: requiresCommand
-        ? { command: command.trim() }
+        ? { command: parsedCommand?.ok ? parsedCommand.argv : [] }
         : { url: url.trim() },
       credential: secretKind
         ? {
@@ -135,6 +140,11 @@ export function MCPServerCreateDialog({
                 onChange={(event) => setCommand(event.target.value)}
                 placeholder={t('settings.mcpServers.commandPlaceholder')}
               />
+              {command && parsedCommand?.ok === false ? (
+                <small className="plugin-management-error">
+                  {t(`settings.mcpServers.error.command.${parsedCommand.reason}`)}
+                </small>
+              ) : null}
             </label>
           ) : (
             <label>

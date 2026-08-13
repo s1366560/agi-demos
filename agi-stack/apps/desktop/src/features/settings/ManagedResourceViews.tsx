@@ -135,7 +135,7 @@ export function ManagedResourceWorkspace({
           </div>
           {(canCreate &&
             (section === 'skills' || section === 'agents' || section === 'plugins')) ||
-          (section === 'subagents' && canManage) ? (
+          (section === 'subagents' && canCreate) ? (
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
                 <>
