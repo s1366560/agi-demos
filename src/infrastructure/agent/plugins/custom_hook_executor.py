@@ -8,7 +8,7 @@ import importlib.util
 import inspect
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.tenant_agent_config import HookExecutorKind
 from src.infrastructure.agent.plugins.hook_security_policy import (
@@ -25,11 +25,22 @@ from src.infrastructure.agent.plugins.sandbox_runtime_hook_runner import (
     SandboxRuntimeHookRunner,
 )
 from src.infrastructure.agent.sandbox_resource_provider import get_sandbox_resource_port
-from src.infrastructure.audit.audit_log_service import get_audit_service
+
+if TYPE_CHECKING:
+    from src.infrastructure.audit.audit_log_service import AuditLogService
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ALLOWLISTED_SCRIPT_ROOTS = (REPO_ROOT / "src" / "infrastructure" / "agent" / "hooks" / "scripts",)
 ALLOWLISTED_PLUGIN_ROOTS = (REPO_ROOT / "src" / "infrastructure" / "agent" / "plugins",)
+
+
+def get_audit_service() -> AuditLogService:
+    """Resolve the audit service without importing persistence models at module load time."""
+    from src.infrastructure.audit.audit_log_service import (
+        get_audit_service as resolve_audit_service,
+    )
+
+    return resolve_audit_service()
 
 
 async def _log_custom_hook_audit(
