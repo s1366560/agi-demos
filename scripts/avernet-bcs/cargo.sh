@@ -9,6 +9,25 @@ readonly PROTOC_VERSION="25.3"
 readonly TOOL_ROOT="${REPO_ROOT}/.cache/avernet-bcs"
 readonly TOOL_CACHE="${TOOL_ROOT}/protoc/${PROTOC_VERSION}"
 
+# rustup may be installed at ~/.cargo/bin without being on PATH (e.g. fresh
+# login shells, IDE tasks); probe the standard location before giving up.
+if ! command -v rustup >/dev/null && [[ -x "${HOME}/.cargo/bin/rustup" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
+readonly RUSTUP_BIN="$(command -v rustup || true)"
+
+[[ -n "${RUSTUP_BIN}" ]] || {
+  echo "rustup is required to install the isolated BCS toolchain" >&2
+  exit 1
+}
+
+# A brand-new RUSTUP_HOME initializes rustup as well as the requested toolchain.
+# During that one-time initialization rustup must be able to update the proxy
+# binaries beside the rustup executable. Keep the BCS crate cache isolated for
+# normal Cargo commands, but retain the existing proxy home for installation.
+readonly RUSTUP_PROXY_CARGO_HOME="${AVERNET_BCS_RUSTUP_PROXY_CARGO_HOME:-${CARGO_HOME:-$(cd "$(dirname "${RUSTUP_BIN}")/.." && pwd)}}"
+
 export RUSTUP_HOME="${AVERNET_BCS_RUSTUP_HOME:-${TOOL_ROOT}/rustup}"
 export CARGO_HOME="${AVERNET_BCS_CARGO_HOME:-${TOOL_ROOT}/cargo}"
 export CARGO_TARGET_DIR="${AVERNET_BCS_TARGET_DIR:-${TOOL_ROOT}/target}"
@@ -99,19 +118,8 @@ install_protoc() {
   exit 1
 }
 
-# rustup may be installed at ~/.cargo/bin without being on PATH (e.g. fresh
-# login shells, IDE tasks); probe the standard location before giving up.
-if ! command -v rustup >/dev/null && [[ -x "${HOME}/.cargo/bin/rustup" ]]; then
-  export PATH="${HOME}/.cargo/bin:${PATH}"
-fi
-
-command -v rustup >/dev/null || {
-  echo "rustup is required to install the isolated BCS toolchain" >&2
-  exit 1
-}
-
 if ! rustup toolchain list | grep -q "^${RUST_VERSION}-"; then
-  rustup toolchain install "${RUST_VERSION}" \
+  CARGO_HOME="${RUSTUP_PROXY_CARGO_HOME}" rustup toolchain install "${RUST_VERSION}" \
     --profile minimal \
     --component clippy \
     --component rustfmt >&2
