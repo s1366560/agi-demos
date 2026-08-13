@@ -159,8 +159,7 @@ fn agent_available(agent: &Value) -> bool {
 }
 
 fn provider_available(provider: &Value, model_id: &str) -> bool {
-    provider.get("status").and_then(Value::as_str) == Some("active")
-        && provider.get("is_active").and_then(Value::as_bool) == Some(true)
+    provider.get("is_active").and_then(Value::as_bool) == Some(true)
         && provider_supports_route_model(provider, model_id)
 }
 

@@ -868,15 +868,15 @@ fn validate_tool_call_result(result: &Value) -> McpResult<(Vec<Value>, bool)> {
                 "MCP tools/call content is malformed",
             )
         })?;
-    let is_error = result
-        .get("isError")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| {
+    let is_error = match result.get("isError") {
+        Some(value) => value.as_bool().ok_or_else(|| {
             McpSupervisorError::new(
                 "local_mcp_malformed_response",
                 "MCP tools/call error state is malformed",
             )
-        })?;
+        })?,
+        None => false,
+    };
     Ok((content, is_error))
 }
 

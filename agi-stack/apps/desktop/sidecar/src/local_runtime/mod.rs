@@ -81,11 +81,14 @@ pub(crate) mod browser_bridge;
 mod browser_run_tool_host;
 mod changes;
 mod composer_context;
+mod execution_profile;
+mod execution_selection;
 mod fan_out_tool_host;
 #[cfg(test)]
 mod local_route_parity_tests;
 #[cfg(test)]
 mod managed_resource_tests;
+mod mcp_agent_tool_host;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
 mod mcp_supervisor;
@@ -615,14 +618,46 @@ const PLAN_MODE_TOOL_NAMES: &[&str] = &[
 const SUBMIT_PLAN_TOOL_NAME: &str = "submit_plan";
 
 #[derive(Debug, Deserialize)]
-struct SubmitPlanInput {
-    tasks: Vec<SubmitPlanTaskInput>,
+#[serde(untagged)]
+enum SubmitPlanInput {
+    Tasks { tasks: Vec<SubmitPlanTaskInput> },
+    Steps { steps: Vec<SubmitPlanStepInput> },
+    Plan { plan: SubmitPlanBodyInput },
 }
 
 #[derive(Debug, Deserialize)]
 struct SubmitPlanTaskInput {
     content: String,
     priority: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubmitPlanStepInput {
+    description: String,
+    priority: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubmitPlanBodyInput {
+    steps: Vec<SubmitPlanStepInput>,
+}
+
+impl SubmitPlanInput {
+    fn into_tasks(self) -> Vec<SubmitPlanTaskInput> {
+        match self {
+            Self::Tasks { tasks } => tasks,
+            Self::Steps { steps }
+            | Self::Plan {
+                plan: SubmitPlanBodyInput { steps },
+            } => steps
+                .into_iter()
+                .map(|step| SubmitPlanTaskInput {
+                    content: step.description,
+                    priority: step.priority,
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -652,19 +687,20 @@ impl PlanModeToolHost {
     fn submit_plan(&self, input_json: &str) -> CoreResult<String> {
         let input: SubmitPlanInput = serde_json::from_str(input_json)
             .map_err(|error| CoreError::Tool(format!("invalid submit_plan input: {error}")))?;
-        if input.tasks.is_empty() {
+        let input_tasks = input.into_tasks();
+        if input_tasks.is_empty() {
             return Err(CoreError::Tool(
                 "submit_plan requires at least one task".to_string(),
             ));
         }
-        if input.tasks.len() > 50 {
+        if input_tasks.len() > 50 {
             return Err(CoreError::Tool(
                 "submit_plan accepts at most 50 tasks".to_string(),
             ));
         }
         let now = now_iso();
-        let mut tasks = Vec::with_capacity(input.tasks.len());
-        for (index, task) in input.tasks.into_iter().enumerate() {
+        let mut tasks = Vec::with_capacity(input_tasks.len());
+        for (index, task) in input_tasks.into_iter().enumerate() {
             let content = task.content.trim();
             if content.is_empty() {
                 return Err(CoreError::Tool(format!(
@@ -1777,17 +1813,49 @@ impl LocalRuntimeState {
         let user_item = self.timeline_item(
             "user_message",
             conversation_id.clone(),
-            Some(message_id),
+            Some(message_id.clone()),
             Some("user"),
             Some(message.clone()),
             json!({}),
         );
         self.append_timeline(&conversation_id, user_item);
 
-        let observer = Arc::new(LocalTimelineObserver {
-            state: Arc::clone(&self),
-            conversation_id: conversation_id.clone(),
-        });
+        let profile = match self.execution_profile(&conversation) {
+            Ok(profile) => profile,
+            Err(error) => {
+                let item = self.timeline_item(
+                    "error",
+                    conversation_id.clone(),
+                    None,
+                    None,
+                    Some(error.clone()),
+                    json!({ "error": error }),
+                );
+                self.append_timeline(&conversation_id, item);
+                if let Some(run) = authoritative_run.as_ref() {
+                    if let Ok(failed) = self
+                        .persist_authoritative_run_outcome(
+                            run,
+                            DesktopRunStatus::Failed,
+                            Some("execution profile is unavailable".to_string()),
+                            &now_iso(),
+                        )
+                        .await
+                    {
+                        self.publish_run_status(&failed);
+                    }
+                }
+                self.release_agent_run(&conversation_id);
+                return;
+            }
+        };
+        let observer = Arc::new(LocalTimelineObserver::new(
+            Arc::clone(&self),
+            conversation_id.clone(),
+            message_id.clone(),
+            profile,
+            message.clone(),
+        ));
         let engine = match self
             .agent_engine_for_role(&conversation, authoritative_run.as_ref(), workload_role)
             .await
@@ -1844,13 +1912,16 @@ impl LocalRuntimeState {
                         &conversation_id,
                         &message,
                         Some(&project_id),
-                        observer,
+                        observer.clone(),
                         control,
                     )
                     .await
             }
             Err(error) => Err(error),
         };
+        if let Err(error) = result.as_ref() {
+            observer.complete_profile(&error.to_string(), false);
+        }
         let mut run_result = match result {
             Ok(state) => Ok(state),
             Err(error) => {
@@ -1921,6 +1992,7 @@ impl LocalRuntimeState {
     ) -> Result<ReActEngine, String> {
         #[cfg(test)]
         self.agent_engine_attempts.fetch_add(1, Ordering::SeqCst);
+        let profile = self.execution_profile(conversation)?;
         let local_tool_host: Arc<dyn ToolHost> = match run.and_then(|run| run.environment.as_ref())
         {
             Some(environment) => {
@@ -1935,39 +2007,65 @@ impl LocalRuntimeState {
         // The browser bridge joins the tool surface only while its broker is
         // connected; offline, the model never sees browser tools. The run
         // wrapper injects `_run_id` and enforces origin consent (§4.3).
-        let combined_tool_host: Arc<dyn ToolHost> = match self.connected_browser_tool_host() {
-            Some(browser_host) => Arc::new(fan_out_tool_host::FanOutToolHost::new(vec![
-                local_tool_host,
-                Arc::new(browser_run_tool_host::BrowserRunToolHost::new(
-                    browser_host,
-                    self.session_store.clone(),
-                    run.cloned(),
-                    Arc::clone(&self.browser_once_consents),
-                    self.config
-                        .lock()
-                        .expect("local runtime config")
-                        .browser_bridge
-                        .full_cdp_access_enabled,
-                    self.site_credentials.clone(),
-                    self.app_data_dir
-                        .as_ref()
-                        .map(|dir| dir.join("browser-screenshots")),
-                )),
-            ])),
-            None => local_tool_host,
+        let mut tool_hosts = vec![local_tool_host];
+        if let Some(browser_host) = self.connected_browser_tool_host() {
+            tool_hosts.push(Arc::new(browser_run_tool_host::BrowserRunToolHost::new(
+                browser_host,
+                self.session_store.clone(),
+                run.cloned(),
+                Arc::clone(&self.browser_once_consents),
+                self.config
+                    .lock()
+                    .expect("local runtime config")
+                    .browser_bridge
+                    .full_cdp_access_enabled,
+                self.site_credentials.clone(),
+                self.app_data_dir
+                    .as_ref()
+                    .map(|dir| dir.join("browser-screenshots")),
+            )));
+        }
+        let (combined_tool_host, dynamic_metadata): (
+            Arc<dyn ToolHost>,
+            std::collections::BTreeMap<String, tool_authority::ToolMetadata>,
+        ) = if let Some(run) = run {
+            let mcp_host = mcp_agent_tool_host::McpAgentToolHost::new(
+                Arc::clone(&self.mcp_supervisor),
+                mcp_supervisor::McpScope {
+                    tenant_id: conversation.tenant_id.clone(),
+                    project_id: conversation.project_id.clone(),
+                },
+                run.id.clone(),
+                Some(&profile.allowed_mcp_servers),
+            )?;
+            let metadata = mcp_host.authority_metadata_by_name();
+            tool_hosts.push(Arc::new(mcp_host));
+            (
+                Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts)),
+                metadata,
+            )
+        } else {
+            (
+                Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts)),
+                Default::default(),
+            )
         };
+        let combined_tool_host: Arc<dyn ToolHost> = Arc::new(
+            execution_profile::ProfiledToolHost::new(combined_tool_host, &profile),
+        );
         let tool_host: Arc<dyn ToolHost> = match conversation.current_mode {
             ConversationRunMode::Plan => Arc::new(PlanModeToolHost::new(
                 combined_tool_host,
                 self.session_store.clone(),
                 conversation.id.clone(),
             )),
-            ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::new(
+            ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
                 combined_tool_host,
                 self.session_store.clone(),
                 run.cloned().ok_or_else(|| {
                     "build mode requires an authoritative run for tool execution".to_string()
                 })?,
+                dynamic_metadata,
             )),
         };
         let policy = if let Some(workspace_id) = conversation.workspace_id.as_deref() {
@@ -2015,6 +2113,7 @@ impl LocalRuntimeState {
                 Arc::new(UnconfiguredLocalLlm)
             }
         };
+        let llm: Arc<dyn LlmPort> = Arc::new(execution_profile::ProfiledLlm::new(llm, &profile));
         let max_rounds = policy
             .as_ref()
             .and_then(|policy| {
@@ -2030,8 +2129,87 @@ impl LocalRuntimeState {
             .unwrap_or(8);
         Ok(
             ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
-                .with_max_rounds(max_rounds),
+                .with_max_rounds(max_rounds)
+                .with_terminal_tools(
+                    (conversation.current_mode == ConversationRunMode::Plan)
+                        .then_some(SUBMIT_PLAN_TOOL_NAME),
+                ),
         )
+    }
+
+    fn execution_profile(
+        &self,
+        conversation: &LocalConversation,
+    ) -> Result<execution_profile::ExecutionProfile, String> {
+        let selection = self
+            .session_store
+            .execution_selection(&conversation.id)?
+            .unwrap_or_default();
+        let agent_id = selection
+            .agent_id
+            .as_deref()
+            .unwrap_or("builtin:all-access");
+        let agent = self
+            .session_store
+            .managed_resource(
+                ManagedResourceKind::Agent,
+                "project",
+                &conversation.project_id,
+                agent_id,
+            )?
+            .ok_or_else(|| format!("selected Agent was not found: {agent_id}"))?;
+        let skill = selection
+            .forced_skill_id
+            .as_deref()
+            .map(|selected| self.resolve_selected_skill(conversation, selected))
+            .transpose()?;
+        let subagent = selection
+            .subagent_id
+            .as_deref()
+            .map(|selected| {
+                self.session_store
+                    .managed_resource(
+                        ManagedResourceKind::SubAgent,
+                        "tenant",
+                        &conversation.tenant_id,
+                        selected,
+                    )?
+                    .ok_or_else(|| format!("selected Sub Agent was not found: {selected}"))
+            })
+            .transpose()?;
+        execution_profile::ExecutionProfile::resolve(
+            agent_id,
+            &agent,
+            skill.as_ref(),
+            subagent.as_ref(),
+        )
+    }
+
+    fn resolve_selected_skill(
+        &self,
+        conversation: &LocalConversation,
+        selected: &str,
+    ) -> Result<Value, String> {
+        let mut matches = Vec::new();
+        for (scope_kind, scope_id) in [
+            ("tenant", conversation.tenant_id.as_str()),
+            ("project", conversation.project_id.as_str()),
+        ] {
+            matches.extend(
+                self.session_store
+                    .list_managed_resources(ManagedResourceKind::Skill, scope_kind, scope_id)?
+                    .into_iter()
+                    .filter(|resource| {
+                        resource.get("id").and_then(Value::as_str) == Some(selected)
+                            || resource.get("name").and_then(Value::as_str) == Some(selected)
+                    }),
+            );
+        }
+        match matches.len() {
+            0 => Err(format!("selected Skill was not found: {selected}")),
+            1 => Ok(matches.remove(0)),
+            _ => Err(format!("selected Skill is ambiguous: {selected}")),
+        }
     }
 
     fn persist_pending_hitl(
@@ -2118,15 +2296,35 @@ impl LocalRuntimeState {
     async fn continue_after_hitl(
         self: Arc<Self>,
         conversation: LocalConversation,
+        message_id: String,
         goal: String,
         authoritative_run: Option<DesktopRun>,
         control: Arc<LocalRunControl>,
     ) {
         let conversation_id = conversation.id.clone();
-        let observer = Arc::new(LocalTimelineObserver {
-            state: Arc::clone(&self),
-            conversation_id: conversation_id.clone(),
-        });
+        let profile = match self.execution_profile(&conversation) {
+            Ok(profile) => profile,
+            Err(error) => {
+                let item = self.timeline_item(
+                    "error",
+                    conversation_id.clone(),
+                    None,
+                    None,
+                    Some(error.clone()),
+                    json!({ "error": error }),
+                );
+                self.append_timeline(&conversation_id, item);
+                self.release_agent_run(&conversation_id);
+                return;
+            }
+        };
+        let observer = Arc::new(LocalTimelineObserver::new(
+            Arc::clone(&self),
+            conversation_id.clone(),
+            message_id,
+            profile,
+            goal.clone(),
+        ));
         let engine = match self
             .agent_engine(&conversation, authoritative_run.as_ref())
             .await
@@ -2167,10 +2365,13 @@ impl LocalRuntimeState {
                 &conversation_id,
                 &goal,
                 Some(&conversation.project_id),
-                observer,
+                observer.clone(),
                 control,
             )
             .await;
+        if let Err(error) = result.as_ref() {
+            observer.complete_profile(&error.to_string(), false);
+        }
         let mut run_result = match result {
             Ok(state) => Ok(state),
             Err(error) => {
@@ -2353,6 +2554,13 @@ impl LocalRuntimeState {
     }
 
     fn conversation_value(&self, conversation: &LocalConversation) -> Value {
+        let selected_agent_id = self
+            .session_store
+            .execution_selection(&conversation.id)
+            .ok()
+            .flatten()
+            .and_then(|selection| selection.agent_id)
+            .unwrap_or_else(|| "builtin:all-access".to_string());
         let latest_run = self
             .session_store
             .list_runs(&conversation.id)
@@ -2383,7 +2591,7 @@ impl LocalRuntimeState {
             "updated_at": conversation.updated_at,
             "summary": null,
             "agent_config": {
-                "selected_agent_id": "builtin:all-access",
+                "selected_agent_id": selected_agent_id,
                 "capability_mode": conversation.capability_mode,
             },
             "metadata": {
@@ -2821,6 +3029,10 @@ fn local_store_error(error: String) -> (StatusCode, Json<Value>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(json!({ "detail": "desktop session store unavailable" })),
     )
+}
+
+fn local_bad_request(detail: String) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(json!({ "detail": detail })))
 }
 
 fn ensure_checkpoint_run_ownership(
@@ -3454,7 +3666,7 @@ const LOCAL_LLM_PROVIDER_TYPES: &[LlmProviderTypeDescriptor] = &[
         provider_type: "openai_compatible",
         operation_type: "llm",
         probe_supported: true,
-        auth_methods: &["api_key", "none"],
+        auth_methods: &["api_key", "environment", "none"],
         unavailable_auth_methods: &[],
     },
 ];
@@ -5057,24 +5269,25 @@ fn normalized_provider_environment_variable(
     // A process credential may only be sent to the official origin associated with its provider.
     // Custom endpoints must use an explicit credential stored in the provider vault.
     let value = normalized_environment_variable_name(value)?;
-    let provider_standard_variable = match provider_type {
-        "openai" => value == "OPENAI_API_KEY",
-        "anthropic" => value == "ANTHROPIC_API_KEY",
-        _ => false,
+    let official_credential = match provider_type {
+        "openai" => Some(("OPENAI_API_KEY", "api.openai.com", None)),
+        "anthropic" => Some(("ANTHROPIC_API_KEY", "api.anthropic.com", None)),
+        "openai_compatible" => Some(("KIMI_API_KEY", "api.kimi.com", Some("/coding/v1"))),
+        _ => None,
     };
     let official_origin = Url::parse(base_url).ok().is_some_and(|url| {
-        let expected_host = match provider_type {
-            "openai" => "api.openai.com",
-            "anthropic" => "api.anthropic.com",
-            _ => return false,
+        let Some((expected_variable, expected_host, expected_path)) = official_credential else {
+            return false;
         };
         url.scheme() == "https"
+            && value == expected_variable
             && url
                 .host_str()
                 .is_some_and(|host| host.eq_ignore_ascii_case(expected_host))
             && url.port_or_known_default() == Some(443)
+            && expected_path.map_or(true, |path| url.path().trim_end_matches('/') == path)
     });
-    if !provider_standard_variable || !official_origin {
+    if !official_origin {
         return Err(provider_probe_request_error(
             "environment credentials require the provider standard variable and official endpoint",
         ));
@@ -5783,6 +5996,7 @@ struct CreateConversationBody {
 struct CreateConversationAgentConfig {
     #[serde(default)]
     capability_mode: ConversationCapabilityMode,
+    selected_agent_id: Option<String>,
 }
 
 async fn create_conversation(
@@ -5803,11 +6017,27 @@ async fn create_conversation(
         created_at: now.clone(),
         updated_at: now,
     };
-    let value = state.conversation_value(&conversation);
     state
         .session_store
         .insert_conversation(&conversation)
         .map_err(local_store_error)?;
+    let initial_selection = execution_selection::ExecutionSelection {
+        agent_id: body.agent_config.selected_agent_id,
+        forced_skill_id: None,
+        subagent_id: None,
+    }
+    .normalized()
+    .map_err(local_bad_request)?;
+    state
+        .session_store
+        .save_execution_selection(
+            &conversation.id,
+            "conversation-created",
+            &initial_selection,
+            &now_iso(),
+        )
+        .map_err(local_store_error)?;
+    let value = state.conversation_value(&conversation);
     Ok(Json(value))
 }
 
@@ -6130,6 +6360,9 @@ struct RunConversationBody {
     project_id: Option<String>,
     #[serde(default)]
     workload_role: Option<LlmWorkloadRole>,
+    agent_id: Option<String>,
+    forced_skill_name: Option<String>,
+    subagent_id: Option<String>,
 }
 
 fn client_turn_payload_hash(
@@ -6137,6 +6370,7 @@ fn client_turn_payload_hash(
     project_id: &str,
     message: &str,
     workload_role: Option<LlmWorkloadRole>,
+    selection: &execution_selection::ExecutionSelection,
 ) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"agistack-local-client-turn:v2\0");
@@ -6145,6 +6379,9 @@ fn client_turn_payload_hash(
         project_id,
         message,
         workload_role.map_or("auto", LlmWorkloadRole::as_str),
+        selection.agent_id.as_deref().unwrap_or(""),
+        selection.forced_skill_id.as_deref().unwrap_or(""),
+        selection.subagent_id.as_deref().unwrap_or(""),
     ] {
         hasher.update((value.len() as u64).to_be_bytes());
         hasher.update(value.as_bytes());
@@ -6176,6 +6413,13 @@ async fn run_conversation_message(
         ensure_active_project(&authenticated, project_id)?;
     }
     let project_id = conversation.project_id.clone();
+    let selection = execution_selection::ExecutionSelection {
+        agent_id: body.agent_id,
+        forced_skill_id: body.forced_skill_name,
+        subagent_id: body.subagent_id,
+    }
+    .normalized()
+    .map_err(local_bad_request)?;
     if conversation.current_mode == ConversationRunMode::Build {
         return Err((
             StatusCode::CONFLICT,
@@ -6189,6 +6433,7 @@ async fn run_conversation_message(
         &project_id,
         &body.message,
         body.workload_role,
+        &selection,
     );
     let created = state
         .session_store
@@ -6212,6 +6457,10 @@ async fn run_conversation_message(
             "message_id": message_id,
         })));
     }
+    state
+        .session_store
+        .save_execution_selection(&conversation_id, &message_id, &selection, &now_iso())
+        .map_err(local_store_error)?;
     let run_state = Arc::clone(&state);
     let response_message_id = message_id.clone();
     tokio::spawn(async move {
@@ -6498,19 +6747,43 @@ fn validate_composer_context_authority(
                     thread.project_id == authenticated.workspace.project_id
                         && thread.workspace_id.as_deref() == Some(workspace_id)
                 }),
-            ComposerContextKind::Agent => state
-                .session_store
-                .managed_resource(
-                    ManagedResourceKind::Agent,
-                    "project",
-                    &authenticated.workspace.project_id,
-                    &item.resource_id,
-                )
-                .map_err(local_store_error)?
-                .is_some_and(|resource| {
-                    resource.get("enabled").and_then(Value::as_bool) != Some(false)
-                        && resource.get("status").and_then(Value::as_str) != Some("disabled")
-                }),
+            ComposerContextKind::Agent => {
+                let execution_slot = item
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.get("execution_slot"))
+                    .and_then(Value::as_str);
+                if execution_slot == Some("subagent") {
+                    state
+                        .session_store
+                        .managed_resource(
+                            ManagedResourceKind::SubAgent,
+                            "tenant",
+                            &authenticated.workspace.tenant_id,
+                            &item.resource_id,
+                        )
+                        .map_err(local_store_error)?
+                        .is_some_and(|resource| {
+                            resource.get("enabled").and_then(Value::as_bool) == Some(true)
+                                && resource.get("status").and_then(Value::as_str) == Some("active")
+                        })
+                } else {
+                    state
+                        .session_store
+                        .managed_resource(
+                            ManagedResourceKind::Agent,
+                            "project",
+                            &authenticated.workspace.project_id,
+                            &item.resource_id,
+                        )
+                        .map_err(local_store_error)?
+                        .is_some_and(|resource| {
+                            resource.get("enabled").and_then(Value::as_bool) != Some(false)
+                                && resource.get("status").and_then(Value::as_str)
+                                    != Some("disabled")
+                        })
+                }
+            }
             ComposerContextKind::Skill => state
                 .session_store
                 .managed_resource(
@@ -7059,11 +7332,18 @@ async fn review_artifact_version(
                 None,
             );
             let goal = accepted.goal;
+            let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             let running_for_task = running.clone();
             tokio::spawn(async move {
                 runtime
-                    .continue_after_hitl(conversation, goal, Some(running_for_task), control)
+                    .continue_after_hitl(
+                        conversation,
+                        message_id,
+                        goal,
+                        Some(running_for_task),
+                        control,
+                    )
                     .await;
             });
             Ok(Json(json!({
@@ -7786,10 +8066,14 @@ async fn respond_to_hitl(
         "duplicate": false,
     });
     let goal = accepted.goal;
+    let message_id = authoritative_run
+        .as_ref()
+        .map(|run| run.message_id.clone())
+        .unwrap_or_else(|| format!("local-resume-{}", request.id));
     let run_state = Arc::clone(&state);
     tokio::spawn(async move {
         run_state
-            .continue_after_hitl(conversation, goal, authoritative_run, control)
+            .continue_after_hitl(conversation, message_id, goal, authoritative_run, control)
             .await;
     });
     Ok(Json(response))
@@ -8380,6 +8664,25 @@ async fn agent_ws(
         .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
 }
 
+fn execution_selection_from_agent_message(
+    value: &Value,
+) -> Result<execution_selection::ExecutionSelection, String> {
+    fn optional_string(value: &Value, field: &str) -> Result<Option<String>, String> {
+        match value.get(field) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.clone())),
+            Some(_) => Err(format!("{field} must be a string")),
+        }
+    }
+
+    execution_selection::ExecutionSelection {
+        agent_id: optional_string(value, "agent_id")?,
+        forced_skill_id: optional_string(value, "forced_skill_name")?,
+        subagent_id: optional_string(value, "subagent_id")?,
+    }
+    .normalized()
+}
+
 async fn agent_socket_loop(
     socket: WebSocket,
     state: Arc<LocalRuntimeState>,
@@ -8456,7 +8759,39 @@ async fn agent_socket_loop(
                         }
                         continue;
                     }
+                    let selection = match execution_selection_from_agent_message(&value) {
+                        Ok(selection) => selection,
+                        Err(message) => {
+                            let error = json!({
+                                "type": "error",
+                                "code": "invalid_execution_selection",
+                                "message": message,
+                                "conversation_id": conversation_id,
+                            });
+                            if sender.send(Message::Text(error.to_string())).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    };
                     let message_id = value["message_id"].as_str().map(ToString::to_string).unwrap_or_else(|| format!("local-message-{}", Uuid::new_v4()));
+                    if let Err(message) = state.session_store.save_execution_selection(
+                        &conversation_id,
+                        &message_id,
+                        &selection,
+                        &now_iso(),
+                    ) {
+                        let error = json!({
+                            "type": "error",
+                            "code": "execution_selection_unavailable",
+                            "message": message,
+                            "conversation_id": conversation_id,
+                        });
+                        if sender.send(Message::Text(error.to_string())).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
                     conversations.insert(conversation_id.clone());
                     let ack = json!({
                         "type": "ack",
@@ -9097,6 +9432,152 @@ fn sandbox_value(project_id: String) -> Value {
 struct LocalTimelineObserver {
     state: Arc<LocalRuntimeState>,
     conversation_id: String,
+    message_id: String,
+    profile: execution_profile::ExecutionProfile,
+    goal: String,
+    tool_calls: AtomicU64,
+    profile_completed: std::sync::atomic::AtomicBool,
+}
+
+impl LocalTimelineObserver {
+    fn new(
+        state: Arc<LocalRuntimeState>,
+        conversation_id: String,
+        message_id: String,
+        profile: execution_profile::ExecutionProfile,
+        goal: String,
+    ) -> Self {
+        let observer = Self {
+            state,
+            conversation_id,
+            message_id,
+            profile,
+            goal,
+            tool_calls: AtomicU64::new(0),
+            profile_completed: std::sync::atomic::AtomicBool::new(false),
+        };
+        observer.publish_profile_start();
+        observer
+    }
+
+    fn publish_profile_start(&self) {
+        if let Some(skill) = self.profile.skill.as_ref() {
+            for (kind, payload) in [
+                (
+                    "skill_matched",
+                    json!({
+                        "skill_id": skill.id,
+                        "skill_name": skill.name,
+                        "tools": self.profile.allowed_tools,
+                        "execution_mode": "forced",
+                    }),
+                ),
+                (
+                    "skill_execution_start",
+                    json!({
+                        "skill_id": skill.id,
+                        "skill_name": skill.name,
+                        "query": self.goal,
+                    }),
+                ),
+            ] {
+                let item = self.state.timeline_item(
+                    kind,
+                    self.conversation_id.clone(),
+                    None,
+                    None,
+                    None,
+                    payload,
+                );
+                self.state.append_timeline(&self.conversation_id, item);
+            }
+        }
+        if let Some(subagent) = self.profile.subagent.as_ref() {
+            for (kind, payload) in [
+                (
+                    "subagent_routed",
+                    json!({
+                        "subagent_id": subagent.id,
+                        "subagent_name": subagent.name,
+                        "reason": "explicit_execution_selection",
+                    }),
+                ),
+                (
+                    "subagent_started",
+                    json!({
+                        "subagent_id": subagent.id,
+                        "subagent_name": subagent.name,
+                        "task": self.goal,
+                    }),
+                ),
+            ] {
+                let item = self.state.timeline_item(
+                    kind,
+                    self.conversation_id.clone(),
+                    None,
+                    None,
+                    None,
+                    payload,
+                );
+                self.state.append_timeline(&self.conversation_id, item);
+            }
+        }
+    }
+
+    fn complete_profile(&self, summary: &str, success: bool) {
+        if self
+            .profile_completed
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return;
+        }
+        if let Some(skill) = self.profile.skill.as_ref() {
+            let item = self.state.timeline_item(
+                "skill_execution_complete",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "success": success,
+                    "summary": summary,
+                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        if let Some(subagent) = self.profile.subagent.as_ref() {
+            let item = self.state.timeline_item(
+                "subagent_completed",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "subagent_id": subagent.id,
+                    "subagent_name": subagent.name,
+                    "summary": summary,
+                    "success": success,
+                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        let item = self.state.timeline_item(
+            "complete",
+            self.conversation_id.clone(),
+            Some(self.message_id.clone()),
+            None,
+            None,
+            json!({
+                "success": success,
+                "summary": summary,
+            }),
+        );
+        self.state.append_timeline(&self.conversation_id, item);
+    }
 }
 
 #[async_trait]
@@ -9108,6 +9589,7 @@ impl ReActObserver for LocalTimelineObserver {
         tool: &str,
         input_json: &str,
     ) -> CoreResult<()> {
+        let tool_call_count = self.tool_calls.fetch_add(1, Ordering::AcqRel) + 1;
         let redacted_input = authorized_tool_host::redact_tool_payload(tool, input_json);
         let mut item = self.state.timeline_item(
             "act",
@@ -9127,6 +9609,24 @@ impl ReActObserver for LocalTimelineObserver {
         item["round"] = json!(round);
         item["display"] = timeline_presentation::display(tool);
         self.state.append_timeline(&self.conversation_id, item);
+        if let Some(skill) = self.profile.skill.as_ref() {
+            let item = self.state.timeline_item(
+                "skill_tool_start",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "tool_name": tool,
+                    "tool_input": redacted_input,
+                    "step_index": tool_call_count,
+                    "status": "running",
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
         Ok(())
     }
 
@@ -9167,6 +9667,53 @@ impl ReActObserver for LocalTimelineObserver {
             item["payload"]["file_metadata"] = file_metadata;
         }
         self.state.append_timeline(&self.conversation_id, item);
+        if let Some(skill) = self.profile.skill.as_ref() {
+            let item = self.state.timeline_item(
+                "skill_tool_result",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "tool_name": tool,
+                    "result": redacted_output,
+                    "step_index": self.tool_calls.load(Ordering::Acquire),
+                    "status": "completed",
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        if let Some(subagent) = self.profile.subagent.as_ref() {
+            let item = self.state.timeline_item(
+                "subagent_session_update",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "subagent_id": subagent.id,
+                    "subagent_name": subagent.name,
+                    "status_message": "tool_completed",
+                    "tool_name": tool,
+                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        if tool == SUBMIT_PLAN_TOOL_NAME {
+            let item = self.state.timeline_item(
+                "assistant_message",
+                self.conversation_id.clone(),
+                Some(format!("local-assistant-{}", Uuid::new_v4())),
+                Some("assistant"),
+                Some("Plan ready for review.".to_string()),
+                json!({ "completion_reason": "plan_submitted" }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+            self.complete_profile("Structured plan submitted", true);
+        }
         if matches!(tool, "export_artifact" | "batch_export_artifacts") {
             let run_id = self
                 .state
@@ -9207,6 +9754,83 @@ impl ReActObserver for LocalTimelineObserver {
         Ok(())
     }
 
+    async fn on_tool_error(
+        &self,
+        _session_id: &str,
+        round: u64,
+        tool: &str,
+        input_json: &str,
+        error: &CoreError,
+    ) -> CoreResult<()> {
+        let redacted_input = authorized_tool_host::redact_tool_payload(tool, input_json);
+        let redacted_error = authorized_tool_host::redact_tool_payload(
+            tool,
+            &json!({ "error": error.to_string() }).to_string(),
+        );
+        let mut item = self.state.timeline_item(
+            "observe",
+            self.conversation_id.clone(),
+            None,
+            None,
+            None,
+            json!({
+                "tool_name": tool,
+                "tool_input": redacted_input,
+                "tool_output": redacted_error,
+                "observation": redacted_error,
+                "error": redacted_error,
+                "is_error": true,
+                "round": round,
+                "display": timeline_presentation::display(tool),
+            }),
+        );
+        item["toolName"] = json!(tool);
+        item["toolInput"] = json!(redacted_input);
+        item["toolOutput"] = json!(redacted_error);
+        item["error"] = json!(redacted_error);
+        item["isError"] = json!(true);
+        item["round"] = json!(round);
+        item["display"] = timeline_presentation::display(tool);
+        self.state.append_timeline(&self.conversation_id, item);
+        if let Some(skill) = self.profile.skill.as_ref() {
+            let item = self.state.timeline_item(
+                "skill_tool_result",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "tool_name": tool,
+                    "error": redacted_error,
+                    "step_index": self.tool_calls.load(Ordering::Acquire),
+                    "status": "failed",
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        if let Some(subagent) = self.profile.subagent.as_ref() {
+            let item = self.state.timeline_item(
+                "subagent_session_update",
+                self.conversation_id.clone(),
+                None,
+                None,
+                None,
+                json!({
+                    "subagent_id": subagent.id,
+                    "subagent_name": subagent.name,
+                    "status_message": "tool_failed",
+                    "tool_name": tool,
+                    "error": redacted_error,
+                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
+                }),
+            );
+            self.state.append_timeline(&self.conversation_id, item);
+        }
+        Ok(())
+    }
+
     async fn on_finish(&self, _session_id: &str, _round: u64, answer: &str) -> CoreResult<()> {
         let item = self.state.timeline_item(
             "assistant_message",
@@ -9217,6 +9841,7 @@ impl ReActObserver for LocalTimelineObserver {
             json!({}),
         );
         self.state.append_timeline(&self.conversation_id, item);
+        self.complete_profile(answer, true);
         Ok(())
     }
 }
@@ -11520,7 +12145,7 @@ mod tests {
                     "provider_type": "openai_compatible",
                     "operation_type": "llm",
                     "probe_supported": true,
-                    "auth_methods": ["api_key", "none"],
+                    "auth_methods": ["api_key", "environment", "none"],
                     "unavailable_auth_methods": []
                 }
             ])
@@ -11769,6 +12394,7 @@ mod tests {
     async fn environment_provider_references_are_limited_to_provider_credentials() {
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
         let _environment = ScopedEnvironmentVariable::set("OPENAI_API_KEY", " ");
+        let _kimi_environment = ScopedEnvironmentVariable::set("KIMI_API_KEY", " ");
         let state = test_state("provider-environment-allowlist");
         let app = local_router(state);
         let arbitrary = app
@@ -11808,6 +12434,7 @@ mod tests {
         assert_eq!(custom_origin.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
         let intended = app
+            .clone()
             .oneshot(authenticated_json_request(
                 "POST",
                 "/api/v1/llm-providers/test-connection",
@@ -11826,6 +12453,58 @@ mod tests {
         let intended = response_json(intended).await;
         assert_eq!(intended["status"], "needs_credentials");
         assert_eq!(intended["probed"], false);
+
+        let kimi = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-environment-allowlist",
+                json!({
+                    "name": "Official Kimi environment draft",
+                    "provider_type": "openai_compatible",
+                    "base_url": "https://api.kimi.com/coding/v1",
+                    "auth_method": "environment",
+                    "environment_variable": "KIMI_API_KEY",
+                }),
+            ))
+            .await
+            .expect("official Kimi environment draft response");
+        assert_eq!(kimi.status(), StatusCode::OK);
+        let kimi = response_json(kimi).await;
+        assert_eq!(kimi["status"], "needs_credentials");
+        assert_eq!(kimi["probed"], false);
+
+        for (name, base_url, environment_variable) in [
+            (
+                "Wrong Kimi variable",
+                "https://api.kimi.com/coding/v1",
+                "OPENAI_API_KEY",
+            ),
+            (
+                "Custom Kimi origin",
+                "https://api.example.test/v1",
+                "KIMI_API_KEY",
+            ),
+        ] {
+            let rejected = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/llm-providers/test-connection",
+                    "provider-environment-allowlist",
+                    json!({
+                        "name": name,
+                        "provider_type": "openai_compatible",
+                        "base_url": base_url,
+                        "auth_method": "environment",
+                        "environment_variable": environment_variable,
+                    }),
+                ))
+                .await
+                .expect("invalid Kimi environment draft response");
+            assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        }
     }
 
     #[tokio::test]
@@ -13742,7 +14421,7 @@ mod tests {
     }
 
     #[test]
-    fn session_store_migrates_provider_selection_schema_without_downgrading_future_versions() {
+    fn session_store_migrates_execution_selection_schema_without_downgrading_future_versions() {
         let root = test_root();
         std::fs::create_dir_all(&root).expect("create schema test root");
         let old_path = root.join("old.db");
@@ -13759,7 +14438,17 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 25);
+        assert_eq!(version, 26);
+        let execution_selection_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table'
+                   AND name = 'desktop_conversation_execution_selections'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("execution selection table count");
+        assert_eq!(execution_selection_table, 1);
         let selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -13848,13 +14537,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 26;")
+                .execute_batch("PRAGMA user_version = 27;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 25"));
+        assert!(error.contains("newer than supported schema version 26"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -14589,6 +15278,255 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn explicit_skill_and_subagent_execute_with_structured_lifecycle_evidence() {
+        let state = test_state("execution-profile-secret");
+        let conversation_id = "conversation-execution-profile";
+        seed_plan_conversation(&state, conversation_id);
+        state
+            .session_store
+            .put_managed_resource(
+                ManagedResourceKind::SubAgent,
+                "tenant",
+                "local",
+                "qa-reviewer",
+                "active",
+                None,
+                json!({
+                    "id": "qa-reviewer",
+                    "tenant_id": "local",
+                    "name": "qa-reviewer",
+                    "display_name": "QA Reviewer",
+                    "system_prompt": "Verify the plan using direct evidence.",
+                    "enabled": true,
+                    "status": "active",
+                    "source": "database",
+                    "allowed_tools": ["read", "glob", "grep"],
+                    "allowed_skills": ["code-exploration"],
+                    "allowed_mcp_servers": [],
+                }),
+                Utc::now().timestamp_millis(),
+            )
+            .expect("create QA Sub Agent");
+        let response = local_router(Arc::clone(&state))
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/agent/conversations/{conversation_id}/messages"),
+                "execution-profile-secret",
+                json!({
+                    "project_id": "local-project",
+                    "message": "inspect and submit a plan",
+                    "message_id": "execution-profile-message",
+                    "agent_id": "builtin:all-access",
+                    "forced_skill_name": "code-exploration",
+                    "subagent_id": "qa-reviewer",
+                }),
+            ))
+            .await
+            .expect("execution profile response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let timeline = loop {
+            let timeline = state
+                .session_store
+                .timeline(conversation_id, 100)
+                .expect("execution profile timeline");
+            let active = state
+                .agent_runs
+                .lock()
+                .expect("active agent runs")
+                .contains_key(conversation_id);
+            if !active
+                && timeline
+                    .iter()
+                    .any(|event| event["type"] == "subagent_completed")
+            {
+                break timeline;
+            }
+            tokio::task::yield_now().await;
+        };
+        for event_type in [
+            "skill_matched",
+            "skill_execution_start",
+            "skill_tool_start",
+            "skill_tool_result",
+            "skill_execution_complete",
+            "subagent_routed",
+            "subagent_started",
+            "subagent_session_update",
+            "subagent_completed",
+            "act",
+            "observe",
+            "complete",
+        ] {
+            assert!(
+                timeline.iter().any(|event| event["type"] == event_type),
+                "missing lifecycle event {event_type}"
+            );
+        }
+        assert_eq!(
+            state
+                .session_store
+                .execution_selection(conversation_id)
+                .expect("execution selection")
+                .expect("stored execution selection")
+                .subagent_id
+                .as_deref(),
+            Some("qa-reviewer")
+        );
+        assert!(timeline.iter().any(|event| {
+            event["type"] == "complete"
+                && event["message_id"] == "execution-profile-message"
+                && event["payload"]["success"] == true
+        }));
+        assert_eq!(
+            state
+                .session_store
+                .list_agent_plan_tasks(conversation_id)
+                .expect("submitted plan")
+                .len(),
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn local_timeline_observer_projects_tool_failures_as_terminal_redacted_events() {
+        let state = test_state("tool-failure-observer-secret");
+        let conversation_id = "conversation-tool-failure-observer";
+        let profile = execution_profile::ExecutionProfile {
+            agent: execution_profile::SelectedResource {
+                id: "builtin:all-access".to_string(),
+                name: "General and coding Agent".to_string(),
+            },
+            skill: Some(execution_profile::SelectedResource {
+                id: "code-exploration".to_string(),
+                name: "Code exploration".to_string(),
+            }),
+            subagent: Some(execution_profile::SelectedResource {
+                id: "qa-inspector".to_string(),
+                name: "QA Workspace Inspector".to_string(),
+            }),
+            allowed_tools: vec!["read".to_string()],
+            allowed_mcp_servers: Vec::new(),
+            instructions: String::new(),
+        };
+        let observer = LocalTimelineObserver::new(
+            Arc::clone(&state),
+            conversation_id.to_string(),
+            "message-tool-failure-observer".to_string(),
+            profile,
+            "read README".to_string(),
+        );
+
+        observer
+            .on_tool_call(
+                conversation_id,
+                0,
+                "read",
+                r#"{"file":"README.md","token":"top-secret"}"#,
+            )
+            .await
+            .expect("tool start");
+        observer
+            .on_tool_error(
+                conversation_id,
+                0,
+                "read",
+                r#"{"file":"README.md","token":"top-secret"}"#,
+                &CoreError::Tool("missing path alias".to_string()),
+            )
+            .await
+            .expect("tool failure");
+
+        let timeline = state
+            .session_store
+            .timeline(conversation_id, 20)
+            .expect("failed timeline");
+        let observe = timeline
+            .iter()
+            .find(|event| event["type"] == "observe")
+            .expect("terminal observe");
+        assert_eq!(observe["isError"], true);
+        assert_eq!(observe["payload"]["is_error"], true);
+        assert_eq!(observe["toolName"], "read");
+        assert!(!observe.to_string().contains("top-secret"));
+        assert!(timeline.iter().any(|event| {
+            event["type"] == "skill_tool_result" && event["payload"]["status"] == "failed"
+        }));
+        assert!(timeline.iter().any(|event| {
+            event["type"] == "subagent_session_update"
+                && event["payload"]["status_message"] == "tool_failed"
+        }));
+    }
+
+    #[test]
+    fn composer_context_authority_resolves_structured_subagent_slot() {
+        let state = test_state("composer-subagent-secret");
+        let authenticated = state
+            .session_store
+            .validate_session_credential("composer-subagent-secret", Utc::now().timestamp_millis())
+            .expect("validate session credential")
+            .expect("authenticated context");
+        state
+            .session_store
+            .put_managed_resource(
+                ManagedResourceKind::SubAgent,
+                "tenant",
+                "local",
+                "qa-inspector",
+                "active",
+                None,
+                json!({
+                    "id": "qa-inspector",
+                    "tenant_id": "local",
+                    "name": "qa_inspector",
+                    "display_name": "QA Inspector",
+                    "system_prompt": "Inspect the workspace using read-only tools.",
+                    "enabled": true,
+                    "status": "active",
+                    "source": "database",
+                }),
+                Utc::now().timestamp_millis(),
+            )
+            .expect("create QA Sub Agent");
+        let context = [ComposerContextItem {
+            kind: ComposerContextKind::Agent,
+            resource_id: "qa-inspector".to_string(),
+            label: "QA Inspector".to_string(),
+            metadata: Some(json!({
+                "mention_target": false,
+                "execution_slot": "subagent",
+                "execution_subagent_name": "qa_inspector",
+            })),
+        }];
+
+        assert!(validate_composer_context_authority(
+            &state,
+            &authenticated,
+            "local-workspace",
+            &context,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn websocket_agent_message_preserves_structured_execution_selection() {
+        let selection = execution_selection_from_agent_message(&json!({
+            "type": "send_message",
+            "agent_id": " builtin:all-access ",
+            "forced_skill_name": " code-exploration ",
+            "subagent_id": " qa-reviewer ",
+        }))
+        .expect("structured WebSocket execution selection");
+
+        assert_eq!(selection.agent_id.as_deref(), Some("builtin:all-access"));
+        assert_eq!(
+            selection.forced_skill_id.as_deref(),
+            Some("code-exploration")
+        );
+        assert_eq!(selection.subagent_id.as_deref(), Some("qa-reviewer"));
+    }
+
+    #[tokio::test]
     async fn new_message_starts_after_cancelled_checkpoint() {
         let state = test_state("launch-secret");
         let conversation_id = "conversation-cancelled".to_string();
@@ -14732,6 +15670,104 @@ mod tests {
         assert_eq!(tasks.len(), 2);
         assert_eq!(tasks[0]["content"], "Inspect context");
         assert_eq!(tasks[1]["priority"], "medium");
+        let redacted = authorized_tool_host::redact_tool_payload(
+            SUBMIT_PLAN_TOOL_NAME,
+            r#"{"tasks":[{"content":"Inspect context","token":"secret"}]}"#,
+        );
+        assert!(redacted.contains("Inspect context"));
+        assert!(!redacted.contains("secret"));
+        assert!(!redacted.contains("UNAVAILABLE"));
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[tokio::test]
+    async fn submit_plan_accepts_structured_steps_from_openai_compatible_models() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create test root");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let host = PlanModeToolHost::new(
+            Arc::new(LocalToolHost::new(&root).expect("tool host")),
+            store.clone(),
+            "conversation-rich-plan".to_string(),
+        );
+
+        host.call(
+            SUBMIT_PLAN_TOOL_NAME,
+            r#"{
+                "title":"Inspect README",
+                "metadata":{"mode":"planning","requires_human_approval":true},
+                "steps":[
+                    {"number":1,"title":"Locate README","description":"Locate the workspace README.md using read-only inspection."},
+                    {"number":2,"title":"Read README","description":"Read the beginning of README.md and report the result.","priority":"high"}
+                ]
+            }"#,
+        )
+        .await
+        .expect("structured steps are accepted");
+
+        let tasks = store
+            .list_agent_plan_tasks("conversation-rich-plan")
+            .expect("stored tasks");
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(
+            tasks[0]["content"],
+            "Locate the workspace README.md using read-only inspection."
+        );
+        assert_eq!(tasks[0]["priority"], "medium");
+        assert_eq!(tasks[1]["priority"], "high");
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[tokio::test]
+    async fn submit_plan_accepts_nested_plan_steps_from_openai_compatible_models() {
+        let root = test_root();
+        std::fs::create_dir_all(&root).expect("create test root");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let host = PlanModeToolHost::new(
+            Arc::new(LocalToolHost::new(&root).expect("tool host")),
+            store.clone(),
+            "conversation-nested-plan".to_string(),
+        );
+
+        host.call(
+            SUBMIT_PLAN_TOOL_NAME,
+            r#"{
+                "plan": {
+                    "name": "README inspection",
+                    "description": "Read the workspace README and report the result.",
+                    "steps": [
+                        {
+                            "step": 1,
+                            "title": "Read README",
+                            "description": "Read the beginning of README.md using the read-only tool.",
+                            "tool": "read"
+                        },
+                        {
+                            "step": 2,
+                            "title": "Report result",
+                            "description": "Report the selected resources and README result.",
+                            "tool": "read"
+                        }
+                    ]
+                }
+            }"#,
+        )
+        .await
+        .expect("nested structured steps are accepted");
+
+        let tasks = store
+            .list_agent_plan_tasks("conversation-nested-plan")
+            .expect("stored tasks");
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(
+            tasks[0]["content"],
+            "Read the beginning of README.md using the read-only tool."
+        );
+        assert_eq!(tasks[0]["priority"], "medium");
+        assert_eq!(
+            tasks[1]["content"],
+            "Report the selected resources and README result."
+        );
         std::fs::remove_dir_all(root).expect("remove test root");
     }
 

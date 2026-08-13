@@ -198,6 +198,7 @@ pub(super) async fn resume_run(
         }
     };
     state.publish_run_status(&running);
+    let message_id = running.message_id.clone();
     let response = json!({
         "accepted": true,
         "status": "running",
@@ -207,7 +208,7 @@ pub(super) async fn resume_run(
     let runtime = Arc::clone(&state);
     tokio::spawn(async move {
         runtime
-            .continue_after_hitl(conversation, goal, Some(running), control)
+            .continue_after_hitl(conversation, message_id, goal, Some(running), control)
             .await;
     });
     Ok(Json(response))
@@ -584,9 +585,16 @@ pub(super) async fn fork_recovery_run(
     let goal = accepted.goal;
     let runtime = Arc::clone(&state);
     let running_for_task = running.clone();
+    let message_id = running.message_id.clone();
     tokio::spawn(async move {
         runtime
-            .continue_after_hitl(conversation, goal, Some(running_for_task), control)
+            .continue_after_hitl(
+                conversation,
+                message_id,
+                goal,
+                Some(running_for_task),
+                control,
+            )
             .await;
     });
     Ok(Json(json!({
@@ -866,10 +874,11 @@ pub(super) async fn review_run(
                 "run": running,
             });
             let goal = accepted.goal;
+            let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             tokio::spawn(async move {
                 runtime
-                    .continue_after_hitl(conversation, goal, Some(running), control)
+                    .continue_after_hitl(conversation, message_id, goal, Some(running), control)
                     .await;
             });
             Ok(Json(response))

@@ -181,6 +181,17 @@ fn legacy_disabled_builtin_resources_are_reconciled_on_initialization() {
     );
     agent["enabled"] = json!(false);
     agent["status"] = json!("disabled");
+    agent["allowed_tools"] = json!(["terminal"]);
+    agent["allowed_skills"] = json!(["code-exploration"]);
+    agent["allowed_mcp_servers"] = json!(["local-runtime"]);
+    agent
+        .as_object_mut()
+        .expect("agent object")
+        .remove("can_spawn");
+    agent
+        .as_object_mut()
+        .expect("agent object")
+        .remove("spawn_policy");
     agent
         .as_object_mut()
         .expect("agent object")
@@ -233,6 +244,11 @@ fn legacy_disabled_builtin_resources_are_reconciled_on_initialization() {
     assert_eq!(agent["status"], "active");
     assert_eq!(agent["enabled"], true);
     assert_eq!(agent["source"], "builtin");
+    assert_eq!(agent["allowed_tools"], json!(["*"]));
+    assert_eq!(agent["allowed_skills"], json!(["*"]));
+    assert_eq!(agent["allowed_mcp_servers"], json!(["*"]));
+    assert_eq!(agent["can_spawn"], true);
+    assert_eq!(agent["spawn_policy"]["allowed_subagents"], json!(["*"]));
 }
 
 #[test]

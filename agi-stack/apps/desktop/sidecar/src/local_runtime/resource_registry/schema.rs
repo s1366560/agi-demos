@@ -239,6 +239,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 "tenant",
                 &tenant_id,
                 id,
+                &skill,
                 now_ms,
             )?;
         }
@@ -293,6 +294,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 "tenant",
                 &tenant_id,
                 id,
+                &plugin,
                 now_ms,
             )?;
         }
@@ -313,9 +315,16 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
             "enabled": true,
             "status": "active",
             "model_name": null,
-            "allowed_tools": ["read", "write", "edit", "glob", "grep", "terminal"],
-            "allowed_skills": ["code-exploration", "implementation", "verification"],
-            "allowed_mcp_servers": ["local-runtime"],
+            "allowed_tools": ["*"],
+            "allowed_skills": ["*"],
+            "allowed_mcp_servers": ["*"],
+            "can_spawn": true,
+            "spawn_policy": {
+                "max_depth": 4,
+                "max_active_runs": 8,
+                "max_children_per_requester": 4,
+                "allowed_subagents": ["*"]
+            },
             "project_id": project_id,
             "revision": 0,
             "updated_at": iso_from_millis(now_ms),
@@ -336,6 +345,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
             "project",
             &project_id,
             "builtin:all-access",
+            &agent,
             now_ms,
         )?;
     }
@@ -411,6 +421,7 @@ fn reconcile_immutable_seed(
     scope_kind: &str,
     scope_id: &str,
     id: &str,
+    canonical: &Value,
     now_ms: i64,
 ) -> Result<(), String> {
     let existing = connection
@@ -441,17 +452,43 @@ fn reconcile_immutable_seed(
         ManagedResourceKind::Skill => {
             changed |= replace_if_different(object, "status", json!("active"));
             changed |= replace_if_different(object, "is_system_skill", json!(true));
+            changed |= replace_seed_fields(
+                object,
+                canonical,
+                &["name", "description", "scope", "tools"],
+            );
         }
         ManagedResourceKind::Plugin => {
             changed |= replace_if_different(object, "source", json!("builtin"));
             changed |= replace_if_different(object, "enabled", json!(true));
             changed |= replace_if_different(object, "status", json!("active"));
             changed |= replace_if_different(object, "discovered", json!(true));
+            changed |= replace_seed_fields(
+                object,
+                canonical,
+                &["name", "package", "kind", "providers", "tool_definitions"],
+            );
         }
         ManagedResourceKind::Agent => {
             changed |= replace_if_different(object, "source", json!("builtin"));
             changed |= replace_if_different(object, "enabled", json!(true));
             changed |= replace_if_different(object, "status", json!("active"));
+            changed |= replace_seed_fields(
+                object,
+                canonical,
+                &[
+                    "name",
+                    "display_name",
+                    "system_prompt",
+                    "model_name",
+                    "allowed_tools",
+                    "allowed_skills",
+                    "allowed_mcp_servers",
+                    "can_spawn",
+                    "spawn_policy",
+                    "project_id",
+                ],
+            );
         }
         ManagedResourceKind::SubAgent | ManagedResourceKind::PromptTemplate => return Ok(()),
         ManagedResourceKind::Provider => return Ok(()),
@@ -480,6 +517,17 @@ fn reconcile_immutable_seed(
         )
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+fn replace_seed_fields(
+    object: &mut serde_json::Map<String, Value>,
+    canonical: &Value,
+    fields: &[&str],
+) -> bool {
+    fields.iter().fold(false, |changed, field| {
+        let expected = canonical.get(*field).cloned().unwrap_or(Value::Null);
+        replace_if_different(object, field, expected) || changed
+    })
 }
 
 fn replace_if_different(

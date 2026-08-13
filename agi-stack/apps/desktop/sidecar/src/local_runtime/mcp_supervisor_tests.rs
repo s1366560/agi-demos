@@ -6,10 +6,12 @@ use std::{
     time::Duration,
 };
 
+use agistack_core::ports::ToolHost;
 use serde_json::json;
 use uuid::Uuid;
 
 use super::{
+    mcp_agent_tool_host::McpAgentToolHost,
     mcp_supervisor::{
         McpScope, McpServerDefinitionInput, McpSupervisor, McpTransport, SupervisorLimits,
     },
@@ -18,6 +20,52 @@ use super::{
 
 fn test_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("agistack-mcp-{label}-{}", Uuid::new_v4()))
+}
+
+#[tokio::test]
+async fn discovered_mcp_tools_are_dispatchable_through_the_agent_tool_host() {
+    let root = test_root("agent-tool-host");
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor = Arc::new(
+        McpSupervisor::new(store, root.clone(), None, test_limits()).expect("MCP supervisor"),
+    );
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("mock", &python, &script, "normal"),
+            "create-agent-tool-host",
+        )
+        .expect("create MCP server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discover MCP tools");
+
+    let host = McpAgentToolHost::new(
+        Arc::clone(&supervisor),
+        active_scope,
+        "run-agent-tool-host".to_string(),
+        None,
+    )
+    .expect("agent MCP tool host");
+    let tools = host.list_tools();
+    assert_eq!(tools.len(), 1);
+    assert!(tools[0].starts_with("mcp__"));
+
+    let output = host
+        .call(&tools[0], &json!({"message": "from agent"}).to_string())
+        .await
+        .expect("call MCP through agent host");
+    let output: serde_json::Value = serde_json::from_str(&output).expect("MCP output JSON");
+    assert_eq!(output["server_name"], "mock");
+    assert_eq!(output["tool_name"], "echo");
+    assert_eq!(output["content"][0]["type"], "text");
+    assert!(host.authority_metadata_by_name().contains_key(&tools[0]));
+
+    fs::remove_dir_all(root).expect("remove MCP test root");
 }
 
 fn python_executable() -> PathBuf {
@@ -75,8 +123,9 @@ for raw_line in sys.stdin:
         arguments = request.get("params", {}).get("arguments", {})
         result = {
             "content": [{"type": "text", "text": json.dumps(arguments, sort_keys=True)}],
-            "isError": False,
         }
+        if mode != "omit_is_error":
+            result["isError"] = False
     elif method == "resources/list":
         result = {
             "resources": [{
@@ -149,6 +198,55 @@ fn test_limits() -> SupervisorLimits {
         tool_call_wait_timeout: Duration::from_millis(500),
         tool_call_poll_interval: Duration::from_millis(10),
     }
+}
+
+#[tokio::test]
+async fn tool_call_without_is_error_defaults_to_success_and_replays_receipt() {
+    let root = test_root("tool-call-optional-is-error");
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor =
+        McpSupervisor::new(store, root.clone(), None, test_limits()).expect("MCP supervisor");
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("optional-is-error", &python, &script, "omit_is_error"),
+            "create-optional-is-error",
+        )
+        .expect("create MCP server");
+
+    let first = supervisor
+        .call_tool(
+            &active_scope,
+            &server.id,
+            "echo",
+            json!({"message": "optional isError"}),
+            "call-optional-is-error",
+        )
+        .await
+        .expect("call MCP tool without isError");
+    assert!(!first.is_error);
+    assert!(!first.duplicate);
+    assert!(first.result.get("isError").is_none());
+    assert_eq!(first.content[0]["type"], "text");
+
+    let replay = supervisor
+        .call_tool(
+            &active_scope,
+            &server.id,
+            "echo",
+            json!({"message": "optional isError"}),
+            "call-optional-is-error",
+        )
+        .await
+        .expect("replay persisted MCP tool receipt");
+    assert!(!replay.is_error);
+    assert!(replay.duplicate);
+    assert_eq!(replay.result, first.result);
+
+    fs::remove_dir_all(root).expect("remove MCP test root");
 }
 
 #[tokio::test]

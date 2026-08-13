@@ -140,10 +140,16 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
         let engine = automation_engine(&state, &conversation)
             .await
             .map_err(AutomationExecutorError::retryable)?;
-        let observer = Arc::new(LocalTimelineObserver {
-            state: Arc::clone(&state),
-            conversation_id: conversation.id.clone(),
-        });
+        let profile = state
+            .execution_profile(&conversation)
+            .map_err(|_| AutomationExecutorError::permanent("local_automation_profile_invalid"))?;
+        let observer = Arc::new(LocalTimelineObserver::new(
+            Arc::clone(&state),
+            conversation.id.clone(),
+            format!("local-automation-user-{}", claim.run_id),
+            profile,
+            goal.clone(),
+        ));
         let started_at = Instant::now();
         let result = engine
             .run_observed(

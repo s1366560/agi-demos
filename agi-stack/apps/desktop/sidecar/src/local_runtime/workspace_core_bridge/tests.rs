@@ -17,8 +17,9 @@ use uuid::Uuid;
 
 use super::*;
 use crate::local_runtime::{
-    local_router, now_iso, session_store::DesktopSessionStore, ConversationCapabilityMode,
-    ConversationRunMode, LocalConversation, LocalRuntimeState,
+    local_router, now_iso, resource_registry::ManagedResourceKind,
+    session_store::DesktopSessionStore, ConversationCapabilityMode, ConversationRunMode,
+    LocalConversation, LocalRuntimeState,
 };
 
 fn state() -> Arc<LocalRuntimeState> {
@@ -850,6 +851,87 @@ async fn registry_resolves_the_project_scoped_builtin_agent() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["available"], true);
     assert_eq!(body["agent_id"], "builtin:all-access");
+}
+
+#[tokio::test]
+async fn registry_resolves_active_provider_without_generic_resource_status() {
+    let state = state();
+    install(&state, "http://127.0.0.1:21000");
+    state
+        .session_store
+        .put_managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            "local",
+            "provider-1",
+            "active",
+            None,
+            json!({
+                "id": "provider-1",
+                "tenant_id": "local",
+                "provider_type": "openai_compatible",
+                "base_url": "https://provider.example.test/v1",
+                "auth_method": "none",
+                "is_active": true,
+                "llm_model": "model-1",
+                "allowed_models": ["model-1"]
+            }),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("seed provider");
+
+    let (status, body) = post_json(
+        router(Arc::clone(&state)),
+        "/internal/v1/workspace-core/provider-registry/resolve",
+        "registry-token",
+        json!({
+            "tenant_id": "local",
+            "provider_id": "provider-1",
+            "model_id": "model-1"
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["available"], true);
+    assert_eq!(body["provider_id"], "provider-1");
+    assert_eq!(body["model_id"], "model-1");
+
+    state
+        .session_store
+        .put_managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            "local",
+            "provider-1",
+            "disabled",
+            Some(0),
+            json!({
+                "id": "provider-1",
+                "tenant_id": "local",
+                "provider_type": "openai_compatible",
+                "base_url": "https://provider.example.test/v1",
+                "auth_method": "none",
+                "is_active": false,
+                "llm_model": "model-1",
+                "allowed_models": ["model-1"]
+            }),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("disable provider");
+    let (disabled_status, disabled_body) = post_json(
+        router(state),
+        "/internal/v1/workspace-core/provider-registry/resolve",
+        "registry-token",
+        json!({
+            "tenant_id": "local",
+            "provider_id": "provider-1",
+            "model_id": "model-1"
+        }),
+    )
+    .await;
+    assert_eq!(disabled_status, StatusCode::OK);
+    assert_eq!(disabled_body["available"], false);
 }
 
 #[tokio::test]

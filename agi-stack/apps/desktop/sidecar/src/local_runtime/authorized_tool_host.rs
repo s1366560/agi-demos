@@ -1,7 +1,7 @@
 //! Fail-closed, run-scoped tool execution for the local desktop runtime.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, LazyLock},
 };
 
@@ -26,6 +26,7 @@ pub(super) struct AuthorizedRunToolHost {
     inner: Arc<dyn ToolHost>,
     session_store: DesktopSessionStore,
     run: DesktopRun,
+    dynamic_metadata: BTreeMap<String, ToolMetadata>,
 }
 
 impl AuthorizedRunToolHost {
@@ -34,11 +35,28 @@ impl AuthorizedRunToolHost {
         session_store: DesktopSessionStore,
         run: DesktopRun,
     ) -> Self {
+        Self::with_dynamic_metadata(inner, session_store, run, BTreeMap::new())
+    }
+
+    pub(super) fn with_dynamic_metadata(
+        inner: Arc<dyn ToolHost>,
+        session_store: DesktopSessionStore,
+        run: DesktopRun,
+        dynamic_metadata: BTreeMap<String, ToolMetadata>,
+    ) -> Self {
         Self {
             inner,
             session_store,
             run,
+            dynamic_metadata,
         }
+    }
+
+    fn metadata(&self, tool: &str) -> Option<ToolMetadata> {
+        self.dynamic_metadata
+            .get(tool)
+            .cloned()
+            .or_else(|| tool_metadata(tool))
     }
 
     fn allows(&self, tool: &str, effect: ToolEffect) -> bool {
@@ -82,12 +100,16 @@ impl ToolHost for AuthorizedRunToolHost {
         self.inner
             .list_tools()
             .into_iter()
-            .filter(|tool| tool_effect(tool).is_some_and(|effect| self.allows(tool, effect)))
+            .filter(|tool| {
+                self.metadata(tool)
+                    .is_some_and(|metadata| self.allows(tool, metadata.effect))
+            })
             .collect()
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        let metadata = tool_metadata(tool)
+        let metadata = self
+            .metadata(tool)
             .ok_or_else(|| CoreError::Tool(format!("tool '{tool}' has no authority metadata")))?;
         if !self.allows(tool, metadata.effect) {
             return Err(CoreError::Tool(format!(
@@ -239,7 +261,12 @@ pub(super) fn tool_metadata(tool: &str) -> Option<ToolMetadata> {
 }
 
 pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
-    if tool_effect(tool).is_none() {
+    if tool_effect(tool).is_none()
+        && tool != "submit_plan"
+        && !tool.starts_with("mcp__")
+        && !tool.starts_with("skill__")
+        && !tool.starts_with("subagent__")
+    {
         return "[UNAVAILABLE]".to_string();
     }
     let Ok(value) = serde_json::from_str::<Value>(payload) else {
@@ -480,6 +507,70 @@ mod tests {
                 !super::super::PLAN_MODE_TOOL_NAMES.contains(&tool),
                 "mutating browser tool {tool} must stay out of plan mode"
             );
+        }
+    }
+
+    #[test]
+    fn dynamic_mcp_metadata_remains_fail_closed_by_permission_profile() -> Result<(), String> {
+        let (read_root, read_store, read_run, _read_inner) =
+            running_host(DesktopPermissionProfile::ReadOnly)?;
+        let mut read_metadata = BTreeMap::new();
+        read_metadata.insert(
+            "mcp__server__tool".to_string(),
+            ToolMetadata {
+                name: "mcp__server__tool".to_string(),
+                effect: ToolEffect::Mutate,
+                sensitive_input_fields: BTreeSet::new(),
+            },
+        );
+        let read_host = AuthorizedRunToolHost::with_dynamic_metadata(
+            Arc::new(StubDynamicHost),
+            read_store,
+            read_run,
+            read_metadata,
+        );
+        assert!(!read_host
+            .list_tools()
+            .iter()
+            .any(|tool| tool == "mcp__server__tool"));
+
+        let (full_root, full_store, full_run, _full_inner) =
+            running_host(DesktopPermissionProfile::FullAccess)?;
+        let mut full_metadata = BTreeMap::new();
+        full_metadata.insert(
+            "mcp__server__tool".to_string(),
+            ToolMetadata {
+                name: "mcp__server__tool".to_string(),
+                effect: ToolEffect::Mutate,
+                sensitive_input_fields: BTreeSet::new(),
+            },
+        );
+        let full_host = AuthorizedRunToolHost::with_dynamic_metadata(
+            Arc::new(StubDynamicHost),
+            full_store,
+            full_run,
+            full_metadata,
+        );
+        assert!(full_host
+            .list_tools()
+            .iter()
+            .any(|tool| tool == "mcp__server__tool"));
+
+        std::fs::remove_dir_all(read_root).map_err(|error| error.to_string())?;
+        std::fs::remove_dir_all(full_root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    struct StubDynamicHost;
+
+    #[async_trait]
+    impl ToolHost for StubDynamicHost {
+        fn list_tools(&self) -> Vec<String> {
+            vec!["mcp__server__tool".to_string()]
+        }
+
+        async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
+            Ok("{}".to_string())
         }
     }
 
