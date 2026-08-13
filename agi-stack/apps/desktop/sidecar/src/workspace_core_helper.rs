@@ -15,7 +15,7 @@ use sha2::Sha256;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::{watch, Mutex},
+    sync::{oneshot, watch, Mutex},
     task::JoinHandle,
     time::{sleep, timeout},
 };
@@ -42,6 +42,7 @@ const DEFAULT_RESTART_DELAYS: [Duration; 4] = [
 ];
 const DEFAULT_RESTART_STABILITY: Duration = Duration::from_secs(60);
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const INITIAL_READINESS_TIMEOUT: Duration = Duration::from_secs(150);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(35);
 
 #[derive(Debug, Clone, Serialize)]
@@ -244,17 +245,24 @@ impl WorkspaceCoreSupervisor {
             initial_cutover_state,
         )));
         let (shutdown, shutdown_rx) = watch::channel(false);
+        let (initial_readiness, readiness) = oneshot::channel();
         let monitor = tokio::spawn(monitor_helper(
             Arc::clone(&launch),
             Arc::clone(&status),
             shutdown_rx,
             authority_lease,
+            Some(initial_readiness),
         ));
-        Ok(Self {
+        let supervisor = Self {
             status,
             shutdown,
             monitor,
-        })
+        };
+        if let Err(error) = await_initial_readiness(readiness, INITIAL_READINESS_TIMEOUT).await {
+            supervisor.shutdown().await;
+            return Err(error);
+        }
+        Ok(supervisor)
     }
 
     pub(crate) async fn status(&self) -> WorkspaceCoreHelperStatus {
@@ -272,6 +280,7 @@ async fn monitor_helper(
     status: Arc<Mutex<WorkspaceCoreHelperStatus>>,
     mut shutdown: watch::Receiver<bool>,
     authority_lease: WorkspaceCoreAuthorityLease,
+    mut initial_readiness: Option<oneshot::Sender<Result<(), String>>>,
 ) {
     let mut restart_attempts = 0;
     let mut restart_generation = 0;
@@ -280,6 +289,10 @@ async fn monitor_helper(
         if *shutdown.borrow() {
             *status.lock().await =
                 WorkspaceCoreHelperStatus::stopped(restart_generation, cutover_state);
+            notify_initial_readiness(
+                &mut initial_readiness,
+                Err("Workspace Core supervisor stopped before initial readiness".to_string()),
+            );
             return;
         }
         restart_generation += 1;
@@ -294,6 +307,10 @@ async fn monitor_helper(
                     restart_generation,
                     cutover_state,
                 );
+                notify_initial_readiness(
+                    &mut initial_readiness,
+                    Err("Workspace Core supervisor stopped before initial readiness".to_string()),
+                );
                 return;
             }
             result = launch_helper(&launch) => result,
@@ -301,6 +318,8 @@ async fn monitor_helper(
         let mut child = match launch_result {
             Ok(child) => child,
             Err(error) => {
+                let initial_readiness_error =
+                    format!("Workspace Core initial readiness failed: {error}");
                 if !schedule_retry(
                     &status,
                     &mut shutdown,
@@ -315,6 +334,7 @@ async fn monitor_helper(
                 )
                 .await
                 {
+                    notify_initial_readiness(&mut initial_readiness, Err(initial_readiness_error));
                     return;
                 }
                 continue;
@@ -355,6 +375,10 @@ async fn monitor_helper(
                 failure_reason: Some("workspace_core_cutover_marker_failed"),
                 cutover_state: WorkspaceCoreCutoverState::CoreUnavailable,
             };
+            notify_initial_readiness(
+                &mut initial_readiness,
+                Err(format!("Workspace Core initial readiness failed: {error}")),
+            );
             return;
         }
         cutover_state = WorkspaceCoreCutoverState::CoreAuthoritative;
@@ -367,6 +391,7 @@ async fn monitor_helper(
             failure_reason: None,
             cutover_state,
         };
+        notify_initial_readiness(&mut initial_readiness, Ok(()));
         tokio::select! {
             _ = shutdown.changed() => {
                 shutdown_child(&mut child).await;
@@ -407,6 +432,26 @@ async fn monitor_helper(
         {
             return;
         }
+    }
+}
+
+async fn await_initial_readiness(
+    readiness: oneshot::Receiver<Result<(), String>>,
+    deadline: Duration,
+) -> Result<(), String> {
+    match timeout(deadline, readiness).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("Workspace Core supervisor exited before initial readiness".to_string()),
+        Err(_) => Err("Workspace Core initial readiness timed out".to_string()),
+    }
+}
+
+fn notify_initial_readiness(
+    readiness: &mut Option<oneshot::Sender<Result<(), String>>>,
+    result: Result<(), String>,
+) {
+    if let Some(readiness) = readiness.take() {
+        let _ = readiness.send(result);
     }
 }
 
@@ -850,5 +895,70 @@ mod tests {
         assert!(decode_lower_hex_proof(&"a0".repeat(32)).is_ok());
         assert!(decode_lower_hex_proof(&"A0".repeat(32)).is_err());
         assert!(decode_lower_hex_proof(&"a0".repeat(31)).is_err());
+    }
+
+    #[tokio::test]
+    async fn initial_readiness_waits_for_the_authoritative_monitor_signal() {
+        let (sender, receiver) = oneshot::channel();
+        tokio::spawn(async move {
+            sleep(Duration::from_millis(10)).await;
+            sender.send(Ok(())).expect("readiness receiver");
+        });
+
+        assert_eq!(
+            await_initial_readiness(receiver, Duration::from_millis(100)).await,
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn initial_readiness_propagates_terminal_monitor_failure() {
+        let (sender, receiver) = oneshot::channel();
+        sender
+            .send(Err("workspace_core_launch_failed".to_string()))
+            .expect("readiness receiver");
+
+        assert_eq!(
+            await_initial_readiness(receiver, Duration::from_millis(100)).await,
+            Err("workspace_core_launch_failed".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn initial_readiness_timeout_is_finite() {
+        let (_sender, receiver) = oneshot::channel();
+
+        assert_eq!(
+            await_initial_readiness(receiver, Duration::from_millis(10)).await,
+            Err("Workspace Core initial readiness timed out".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn initial_readiness_reports_monitor_exit_before_ready() {
+        let (sender, receiver) = oneshot::channel::<Result<(), String>>();
+        drop(sender);
+
+        assert_eq!(
+            await_initial_readiness(receiver, Duration::from_millis(100)).await,
+            Err("Workspace Core supervisor exited before initial readiness".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn initial_readiness_is_a_one_time_startup_gate() {
+        let (sender, receiver) = oneshot::channel();
+        let mut initial_readiness = Some(sender);
+
+        notify_initial_readiness(&mut initial_readiness, Ok(()));
+        notify_initial_readiness(
+            &mut initial_readiness,
+            Err("workspace_core_exited_unexpectedly".to_string()),
+        );
+
+        assert_eq!(
+            await_initial_readiness(receiver, Duration::from_millis(100)).await,
+            Ok(())
+        );
     }
 }
