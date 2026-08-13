@@ -324,7 +324,7 @@ Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_EN
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **agi-demos** (148127 symbols, 290620 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **agi-demos-current** (144893 symbols, 278722 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -347,10 +347,10 @@ This project is indexed by GitNexus as **agi-demos** (148127 symbols, 290620 rel
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/agi-demos/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/agi-demos/clusters` | All functional areas |
-| `gitnexus://repo/agi-demos/processes` | All execution flows |
-| `gitnexus://repo/agi-demos/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/agi-demos-current/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/agi-demos-current/clusters` | All functional areas |
+| `gitnexus://repo/agi-demos-current/processes` | All execution flows |
+| `gitnexus://repo/agi-demos-current/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 
