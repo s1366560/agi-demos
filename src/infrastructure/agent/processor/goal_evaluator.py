@@ -15,10 +15,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
@@ -27,6 +23,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
 )
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 if TYPE_CHECKING:
     from ..core.message import Message
@@ -237,10 +234,9 @@ class GoalEvaluator:
             )
             return marker_result
 
-        async with async_session_factory() as db:
-            task_repo = SqlWorkspaceTaskRepository(db)
-            task = await task_repo.find_by_id(root_goal_task_id)
-            child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
+        task_repo = legacy_workspace_runtime_retired("goal evaluator Workspace task read")
+        task = await task_repo.find_by_id(root_goal_task_id)
+        child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
 
         if task is None or task.workspace_id != workspace_id:
             return GoalCheckResult(

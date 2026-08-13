@@ -87,7 +87,7 @@ async fn desktop_workspace_schema_is_idempotent_and_checksum_guarded() -> Result
             "SELECT COUNT(*) AS count FROM workspace_sqlite_schema_migrations",
         ))
         .await?;
-    assert_eq!(db_get_column::<i64>(&rows[0], "count")?, 2);
+    assert_eq!(db_get_column::<i64>(&rows[0], "count")?, 3);
 
     db.execute(DbStatement::new(
         "UPDATE workspace_sqlite_schema_migrations SET checksum = 'tampered' WHERE version = 1",
@@ -98,6 +98,51 @@ async fn desktop_workspace_schema_is_idempotent_and_checksum_guarded() -> Result
         Ok(()) => return Err("checksum mismatch did not fail closed".into()),
     };
     assert!(error.to_string().contains("checksum mismatch"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn task_session_receipts_use_project_scope_without_replacing_workspace_scope()
+-> Result<(), Box<dyn Error>> {
+    let db = LocalSqliteDbPlugin::new()?;
+    bcs::migrations::run_sqlite_migrations(&db).await?;
+    run_desktop_workspace_schema_migrations(&db).await?;
+
+    let indexes = db
+        .query(DbStatement::new(
+            "SELECT name, sql FROM sqlite_master \
+             WHERE type = 'index' AND tbl_name = 'workspace_task_receipts'",
+        ))
+        .await?;
+    let definitions = indexes
+        .iter()
+        .map(|row| {
+            Ok((
+                db_get_column::<String>(row, "name")?,
+                db_get_column::<String>(row, "sql").unwrap_or_default(),
+            ))
+        })
+        .collect::<Result<Vec<_>, bcs_db_api::DbError>>()?;
+
+    assert!(
+        definitions.iter().any(|(name, sql)| {
+            name == "uq_avn_workspace_task_receipts_task_session_scope"
+                && sql.contains("tenant_id, project_id, actor_id, idempotency_key")
+                && sql.contains("WHERE action = 'create_task_session'")
+        }),
+        "missing task-session project-scope partial unique index",
+    );
+    let table_sql = db
+        .query(DbStatement::new(
+            "SELECT sql FROM sqlite_master \
+             WHERE type = 'table' AND name = 'workspace_task_receipts'",
+        ))
+        .await?;
+    let table_definition = db_get_column::<String>(&table_sql[0], "sql")?;
+    assert!(
+        table_definition.contains("UNIQUE (workspace_id,actor_id,idempotency_key)"),
+        "existing workspace-scope uniqueness must remain",
+    );
     Ok(())
 }
 

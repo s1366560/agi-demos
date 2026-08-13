@@ -1,331 +1,34 @@
-"""Durable worker loop for workspace plan outbox jobs."""
+"""Retired platform plan-outbox worker compatibility surface."""
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import logging
-import uuid
-from collections.abc import Awaitable, Callable, Mapping
-from contextlib import AbstractAsyncContextManager
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.infrastructure.adapters.secondary.persistence.models import WorkspacePlanOutboxModel
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
-    SqlWorkspacePlanOutboxRepository,
-)
-
-logger = logging.getLogger(__name__)
-
-WorkspacePlanOutboxHandler = Callable[[WorkspacePlanOutboxModel, AsyncSession], Awaitable[None]]
-WorkspacePlanOutboxEventPublisher = Callable[[dict[str, Any]], Awaitable[None]]
-WorkspacePlanSessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+WorkspacePlanOutboxHandler = Any
 
 
 class WorkspacePlanOutboxWorker:
-    """Poll, lease, and process durable workspace plan jobs.
+    """Inactive shell; Avernet Core owns Workspace event delivery."""
 
-    Handlers are registered by ``event_type`` so the production runtime can wire
-    dispatch, verification, projection, and supervisor-tick jobs independently.
-    The worker owns transaction boundaries around claim/complete/fail; handlers
-    should perform their work with the provided session and raise on failure.
-    """
-
-    def __init__(
-        self,
-        *,
-        session_factory: WorkspacePlanSessionFactory,
-        handlers: Mapping[str, WorkspacePlanOutboxHandler],
-        worker_id: str | None = None,
-        poll_interval_seconds: float = 2.0,
-        batch_size: int = 10,
-        lease_seconds: int = 60,
-        event_publisher: WorkspacePlanOutboxEventPublisher | None = None,
-    ) -> None:
-        super().__init__()
-        self._session_factory = session_factory
-        self._handlers = dict(handlers)
-        self._worker_id = worker_id or f"workspace-plan-outbox-{uuid.uuid4()}"
-        self._poll_interval_seconds = poll_interval_seconds
-        self._batch_size = batch_size
-        self._lease_seconds = lease_seconds
-        self._event_publisher = event_publisher
-        self._task: asyncio.Task[None] | None = None
-        self._running = False
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        del args, kwargs
 
     @property
     def worker_id(self) -> str:
-        return self._worker_id
+        return "retired-workspace-plan-outbox"
 
     @property
     def is_running(self) -> bool:
-        """Return whether the background poll task is currently alive."""
-        return self._running and self._task is not None and not self._task.done()
-
-    def _is_running(self) -> bool:
-        return self._running
+        return False
 
     def start(self) -> None:
-        """Start the polling loop."""
-        if self.is_running:
-            return
-        self._running = True
-        self._task = asyncio.create_task(self._poll_loop(), name=f"{self._worker_id}:poll")
-        logger.info("workspace plan outbox worker started: %s", self._worker_id)
+        return None
 
     async def stop(self) -> None:
-        """Stop the polling loop."""
-        self._running = False
-        if self._task is not None and not self._task.done():
-            _ = self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
-        self._task = None
-        logger.info("workspace plan outbox worker stopped: %s", self._worker_id)
+        return None
 
     async def run_once(self) -> int:
-        """Claim one batch and process it synchronously.
-
-        Returns the number of claimed items. Tests and one-shot maintenance jobs
-        can use this without starting a background task.
-        """
-        claimed_count = 0
-        for _ in range(self._batch_size):
-            async with self._session_factory() as session:
-                repo = SqlWorkspacePlanOutboxRepository(session)
-                claimed = await repo.claim_due(
-                    limit=1,
-                    lease_owner=self._worker_id,
-                    lease_seconds=self._lease_seconds,
-                )
-                claimed_ids = [item.id for item in claimed]
-                await session.commit()
-            if not claimed_ids:
-                break
-            claimed_count += len(claimed_ids)
-            outbox_id = claimed_ids[0]
-            await self._process_claimed(outbox_id)
-        return claimed_count
-
-    async def _poll_loop(self) -> None:
-        try:
-            while self._is_running():
-                try:
-                    _ = await self.run_once()
-                except asyncio.CancelledError:
-                    if not self._is_running():
-                        break
-                    logger.warning(
-                        "workspace plan outbox job cancelled; poll loop will continue",
-                        extra={"event": "workspace_plan_outbox.job_cancelled"},
-                    )
-                except Exception:
-                    logger.exception("workspace plan outbox worker poll failed")
-                try:
-                    await asyncio.sleep(self._poll_interval_seconds)
-                except asyncio.CancelledError:
-                    break
-        finally:
-            self._running = False
-
-    async def _process_claimed(self, outbox_id: str) -> None:
-        cancelled_during_processing = False
-        try:
-            async with self._session_factory() as session:
-                repo = SqlWorkspacePlanOutboxRepository(session)
-                item = await repo.get_by_id(outbox_id)
-                if item is None:
-                    return
-                if item.status != "processing" or item.lease_owner != self._worker_id:
-                    return
-                handler = self._handlers.get(item.event_type)
-                if handler is None:
-                    marked = await repo.mark_failed(
-                        outbox_id,
-                        f"no handler for event_type={item.event_type}",
-                        lease_owner=self._worker_id,
-                    )
-                    payload = (
-                        _outbox_update_payload(item, "outbox_handler_missing") if marked else None
-                    )
-                    await session.commit()
-                    if payload is not None:
-                        await self._publish_outbox_update(payload)
-                    return
-
-                cancelled_during_processing = await self._run_handler_with_lease(
-                    outbox_id,
-                    item,
-                    session,
-                    handler,
-                )
-                if cancelled_during_processing:
-                    # Do not let CancelledError escape through the session
-                    # context manager. SQLite in-memory tests can otherwise
-                    # invalidate the only connection during rollback and lose
-                    # the schema before the release/retry check runs.
-                    pass
-                else:
-                    marked = await repo.mark_completed(outbox_id, lease_owner=self._worker_id)
-                    payload = _outbox_update_payload(item, "outbox_completed") if marked else None
-                    await session.commit()
-                    if payload is not None:
-                        await self._publish_outbox_update(payload)
-            if cancelled_during_processing:
-                with contextlib.suppress(Exception):
-                    await asyncio.shield(
-                        self._release_claim_cleanly(
-                            outbox_id,
-                            "workspace plan outbox processing cancelled",
-                        )
-                    )
-                raise asyncio.CancelledError
-        except asyncio.CancelledError:
-            if not cancelled_during_processing:
-                with contextlib.suppress(Exception):
-                    await asyncio.shield(
-                        self._release_claim_cleanly(
-                            outbox_id,
-                            "workspace plan outbox processing cancelled",
-                        )
-                    )
-            raise
-        except Exception as exc:
-            await self._mark_failed_cleanly(outbox_id, str(exc))
-
-    async def _run_handler_with_lease(
-        self,
-        outbox_id: str,
-        item: WorkspacePlanOutboxModel,
-        session: AsyncSession,
-        handler: WorkspacePlanOutboxHandler,
-    ) -> bool:
-        lease_renewal_task = asyncio.create_task(
-            self._renew_processing_lease_until_done(outbox_id),
-            name=f"{self._worker_id}:renew:{outbox_id}",
-        )
-        try:
-            await handler(item, session)
-            return False
-        except asyncio.CancelledError:
-            with contextlib.suppress(Exception, asyncio.CancelledError):
-                await session.rollback()
-            return True
-        finally:
-            _ = lease_renewal_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await lease_renewal_task
-
-    async def _mark_failed_cleanly(self, outbox_id: str, error_message: str) -> None:
-        payload: dict[str, Any] | None = None
-        try:
-            async with self._session_factory() as session:
-                repo = SqlWorkspacePlanOutboxRepository(session)
-                item = await repo.get_by_id(outbox_id)
-                marked = await repo.mark_failed(
-                    outbox_id,
-                    error_message,
-                    lease_owner=self._worker_id,
-                )
-                if marked and item is not None:
-                    payload = _outbox_update_payload(item, "outbox_failed")
-                await session.commit()
-        except Exception:
-            logger.exception("failed to mark workspace plan outbox item failed: %s", outbox_id)
-            return
-        if payload is not None:
-            await self._publish_outbox_update(payload)
-
-    async def _release_claim_cleanly(self, outbox_id: str, error_message: str) -> None:
-        payload: dict[str, Any] | None = None
-        try:
-            async with self._session_factory() as session:
-                repo = SqlWorkspacePlanOutboxRepository(session)
-                item = await repo.get_by_id(outbox_id)
-                released = await repo.release_processing(
-                    outbox_id,
-                    error_message,
-                    lease_owner=self._worker_id,
-                )
-                if released and item is not None:
-                    payload = _outbox_update_payload(item, "outbox_released")
-                await session.commit()
-        except Exception:
-            logger.exception("failed to release workspace plan outbox item: %s", outbox_id)
-            return
-        if payload is not None:
-            await self._publish_outbox_update(payload)
-
-    async def _renew_processing_lease_until_done(self, outbox_id: str) -> None:
-        renew_interval_seconds = max(1.0, min(float(self._lease_seconds) / 2.0, 30.0))
-        while True:
-            await asyncio.sleep(renew_interval_seconds)
-            try:
-                async with self._session_factory() as session:
-                    repo = SqlWorkspacePlanOutboxRepository(session)
-                    renewed = await repo.renew_processing_lease(
-                        outbox_id,
-                        lease_owner=self._worker_id,
-                        lease_seconds=self._lease_seconds,
-                    )
-                    await session.commit()
-                    if not renewed:
-                        return
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.warning(
-                    "workspace plan outbox lease renewal failed",
-                    exc_info=True,
-                    extra={
-                        "event": "workspace_plan_outbox.lease_renewal_failed",
-                        "outbox_id": outbox_id,
-                        "worker_id": self._worker_id,
-                    },
-                )
-
-    async def _publish_outbox_update(self, payload: dict[str, Any]) -> None:
-        if self._event_publisher is None:
-            return
-        try:
-            await self._event_publisher(payload)
-        except Exception:
-            logger.warning(
-                "workspace plan outbox update event publish failed",
-                exc_info=True,
-                extra={
-                    "workspace_id": payload.get("workspace_id"),
-                    "plan_id": payload.get("plan_id"),
-                    "outbox_id": payload.get("outbox_id"),
-                },
-            )
+        return 0
 
 
-def _outbox_update_payload(item: WorkspacePlanOutboxModel, change: str) -> dict[str, Any]:
-    item_payload = dict(item.payload_json or {})
-    payload: dict[str, Any] = {
-        "workspace_id": item.workspace_id,
-        "plan_id": item.plan_id,
-        "outbox_id": item.id,
-        "outbox_event_type": item.event_type,
-        "outbox_status": item.status,
-        "attempt_count": item.attempt_count,
-        "max_attempts": item.max_attempts,
-        "change": change,
-    }
-    node_id = item_payload.get("node_id")
-    if isinstance(node_id, str) and node_id:
-        payload["node_id"] = node_id
-    if item.last_error:
-        payload["last_error"] = item.last_error
-    return payload
-
-
-__all__ = [
-    "WorkspacePlanOutboxEventPublisher",
-    "WorkspacePlanOutboxHandler",
-    "WorkspacePlanOutboxWorker",
-    "WorkspacePlanSessionFactory",
-]
+__all__ = ["WorkspacePlanOutboxHandler", "WorkspacePlanOutboxWorker"]

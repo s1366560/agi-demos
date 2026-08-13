@@ -1439,3 +1439,57 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('local Electron Workspace Collaboration reports permanent Core cutover outages before HTTP probing', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  let collaborationFetchCalls = 0;
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      runtime: 'electron',
+      core: {
+        invoke: async (command) => {
+          assert.equal(command, 'workspace_core_status');
+          return {
+            state: 'failed',
+            pid: null,
+            apiBaseUrl: null,
+            restartAttempts: 4,
+            failureReason: 'workspace_core_exited_unexpectedly',
+            cutoverState: 'core-unavailable',
+          };
+        },
+      },
+    },
+  };
+  globalThis.fetch = async (input) => {
+    if (String(input).includes('/collaboration/')) collaborationFetchCalls += 1;
+    return new Response(JSON.stringify(searchContract), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = createDesktopWorkbenchCapabilityClient(
+      { getAutomationCapabilities: async () => automationContract },
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'local',
+        tenantId: 'local',
+        projectId: 'local-project',
+        workspaceId: 'local-workspace',
+      },
+    );
+    const snapshot = await client.loadSnapshot();
+    assert.equal(
+      snapshot.capabilities.workspace_collaboration.reason_code,
+      'workspace_core_cutover_unavailable',
+    );
+    assert.equal(collaborationFetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});

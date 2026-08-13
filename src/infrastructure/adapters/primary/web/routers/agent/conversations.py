@@ -20,13 +20,21 @@ from sqlalchemy.sql.functions import FunctionElement
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
-from src.configuration.workspace_core import WorkspaceCoreBackend, WorkspaceCoreSettings
 from src.domain.model.agent import ConversationStatus
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
-from src.domain.ports.services.workspace_access_verifier_port import WorkspaceAccessRequest
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityNotFoundError,
+    WorkspaceAuthorityScope,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    get_workspace_authority,
+    workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -38,19 +46,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     ToolExecutionRecord,
     User,
     UserProject,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-    WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
     conversation_activity_order,
 )
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.workspace_core.client import (
-    AvernetWorkspaceAccessVerifier,
-    WorkspaceCoreClient,
-)
 
 from .schemas import (
     ConversationResponse,
@@ -324,24 +325,23 @@ async def _load_owned_conversation_row(
 
 
 async def _workspace_name_by_id(
-    db: AsyncSession,
+    request: Request,
     *,
+    current_user: User,
     project_id: str,
     tenant_id: str,
     workspace_ids: set[str],
 ) -> dict[str, str]:
     if not workspace_ids:
         return {}
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceModel.id, WorkspaceModel.name).where(
-                WorkspaceModel.project_id == project_id,
-                WorkspaceModel.tenant_id == tenant_id,
-                WorkspaceModel.id.in_(workspace_ids),
-            )
-        )
+    profiles = await get_workspace_authority(request).accessible_profiles(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        workspace_ids=workspace_ids,
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
     )
-    return {workspace_id: name for workspace_id, name in result.all()}
+    return {workspace_id: profile.name for workspace_id, profile in profiles.items()}
 
 
 async def _ensure_workspace_access(
@@ -353,78 +353,54 @@ async def _ensure_workspace_access(
     project_id: str,
     workspace_id: str,
 ) -> None:
-    settings = getattr(request.app.state, "workspace_core_settings", None)
-    client = getattr(request.app.state, "workspace_core_client", None)
-    if (
-        isinstance(settings, WorkspaceCoreSettings)
-        and settings.backend is WorkspaceCoreBackend.AVERNET
-        and isinstance(client, WorkspaceCoreClient)
-    ):
-        verifier = AvernetWorkspaceAccessVerifier(client)
-        allowed = await verifier.has_access(
-            WorkspaceAccessRequest(
+    authority = get_workspace_authority(request)
+    try:
+        await authority.get_profile(
+            WorkspaceAuthorityScope(
                 tenant_id=tenant_id,
-                user_id=str(current_user.id),
+                project_id=project_id,
                 workspace_id=workspace_id,
+                user_id=str(current_user.id),
+                is_superuser=bool(getattr(current_user, "is_superuser", False)),
             )
         )
-        if not allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_("Workspace access required"),
-            )
-        return
-
-    workspace_exists = (
-        await db.execute(
-            refresh_select_statement(
-                select(WorkspaceModel.id).where(
-                    WorkspaceModel.id == workspace_id,
-                    WorkspaceModel.tenant_id == tenant_id,
-                    WorkspaceModel.project_id == project_id,
-                )
-            )
-        )
-    ).scalar_one_or_none()
-    if workspace_exists is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found"))
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceMemberModel.id).where(
-                WorkspaceMemberModel.workspace_id == workspace_id,
-                WorkspaceMemberModel.user_id == current_user.id,
-            )
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    except WorkspaceAuthorityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_("Workspace not found")) from exc
+    except WorkspaceAuthorityAccessDeniedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Workspace access required"),
-        )
+        ) from exc
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
 
 
 async def _ensure_workspace_task_linkage(
-    db: AsyncSession,
+    request: Request,
     *,
+    current_user: User,
     linked_workspace_task_id: str,
     workspace_id: str,
     project_id: str,
     tenant_id: str,
 ) -> None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceTaskModel.id)
-            .join(WorkspaceModel, WorkspaceTaskModel.workspace_id == WorkspaceModel.id)
-            .where(
-                WorkspaceTaskModel.id == linked_workspace_task_id,
-                WorkspaceTaskModel.workspace_id == workspace_id,
-                WorkspaceModel.project_id == project_id,
-                WorkspaceModel.tenant_id == tenant_id,
-            )
+    authority = get_workspace_authority(request)
+    try:
+        valid = await authority.has_task(
+            WorkspaceAuthorityScope(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                user_id=str(current_user.id),
+                is_superuser=bool(getattr(current_user, "is_superuser", False)),
+            ),
+            linked_workspace_task_id,
         )
-    )
-    if result.scalar_one_or_none() is None:
+    except (WorkspaceAuthorityAccessDeniedError, WorkspaceAuthorityNotFoundError):
+        valid = False
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=_("Invalid workspace task linkage"),
@@ -466,7 +442,8 @@ async def _ensure_workspace_linkage_access(
             detail=_("Invalid workspace task linkage"),
         )
     await _ensure_workspace_task_linkage(
-        db,
+        request,
+        current_user=current_user,
         linked_workspace_task_id=linked_workspace_task_id,
         workspace_id=workspace_id,
         project_id=project_id,
@@ -475,7 +452,7 @@ async def _ensure_workspace_linkage_access(
 
 
 async def _accessible_workspace_ids(
-    db: AsyncSession,
+    request: Request,
     *,
     current_user: User,
     tenant_id: str,
@@ -485,19 +462,14 @@ async def _accessible_workspace_ids(
     if not workspace_ids:
         return set()
 
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceMemberModel.workspace_id)
-            .join(WorkspaceModel, WorkspaceMemberModel.workspace_id == WorkspaceModel.id)
-            .where(
-                WorkspaceMemberModel.user_id == current_user.id,
-                WorkspaceMemberModel.workspace_id.in_(workspace_ids),
-                WorkspaceModel.tenant_id == tenant_id,
-                WorkspaceModel.project_id == project_id,
-            )
-        )
+    profiles = await get_workspace_authority(request).accessible_profiles(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        workspace_ids=workspace_ids,
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
     )
-    return {str(workspace_id) for workspace_id in result.scalars().all()}
+    return set(profiles)
 
 
 async def _list_workspace_conversations(
@@ -659,7 +631,8 @@ def _conversation_responses(
 async def _enforce_conversation_invariants(
     conversation: "Conversation",
     *,
-    container: "DIContainer",
+    request: Request,
+    current_user: User,
 ) -> None:
     """Run the post-mutation invariant checks for a Conversation.
 
@@ -670,12 +643,8 @@ async def _enforce_conversation_invariants(
     below the linter's complexity thresholds; ``POST /conversations``
     will share the same helper in G4-follow-up.
     """
-    from src.application.services.agent.workspace_roster_validator import (
-        WorkspaceRosterValidator,
-    )
     from src.domain.model.agent.conversation.errors import (
         ConversationDomainError,
-        ParticipantNotPresentError,
     )
 
     if conversation.conversation_mode is not None:
@@ -685,13 +654,24 @@ async def _enforce_conversation_invariants(
             raise HTTPException(status_code=422, detail=_("Invalid conversation state")) from exc
 
     if conversation.workspace_id and conversation.participant_agents:
-        validator = WorkspaceRosterValidator(
-            workspace_agent_repository=container.workspace_agent_repository()
-        )
         try:
-            await validator.assert_valid(conversation)
-        except ParticipantNotPresentError as exc:
+            bindings = await get_workspace_authority(request).list_agents(
+                WorkspaceAuthorityScope(
+                    tenant_id=conversation.tenant_id,
+                    project_id=conversation.project_id,
+                    workspace_id=conversation.workspace_id,
+                    user_id=str(current_user.id),
+                    is_superuser=bool(getattr(current_user, "is_superuser", False)),
+                ),
+                active_only=True,
+            )
+        except (WorkspaceAuthorityAccessDeniedError, WorkspaceAuthorityNotFoundError) as exc:
             raise HTTPException(status_code=422, detail=_("Invalid workspace roster")) from exc
+        except WorkspaceAuthorityUnavailableError as exc:
+            raise workspace_core_unavailable_error() from exc
+        workspace_agent_ids = {binding.agent_id for binding in bindings}
+        if not set(conversation.participant_agents).issubset(workspace_agent_ids):
+            raise HTTPException(status_code=422, detail=_("Invalid workspace roster"))
 
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
@@ -902,7 +882,7 @@ async def list_conversations(
                     workspace_ids.add(conversation_workspace_id)
             if group_by_workspace and workspace_ids:
                 workspace_ids = await _accessible_workspace_ids(
-                    db,
+                    request,
                     current_user=current_user,
                     tenant_id=tenant_id,
                     project_id=project_id,
@@ -924,7 +904,8 @@ async def list_conversations(
             if conversation_workspace_id is not None:
                 response_workspace_ids.add(conversation_workspace_id)
         workspace_names = await _workspace_name_by_id(
-            db,
+            request,
+            current_user=current_user,
             project_id=project_id,
             tenant_id=tenant_id,
             workspace_ids=response_workspace_ids,
@@ -1295,7 +1276,11 @@ async def update_conversation_mode(
             conversation.linked_workspace_task_id = data.linked_workspace_task_id
 
         # Enforce post-mutation invariants (autonomous + workspace roster).
-        await _enforce_conversation_invariants(conversation, container=container)
+        await _enforce_conversation_invariants(
+            conversation,
+            request=request,
+            current_user=current_user,
+        )
 
         conversation.updated_at = datetime.now(UTC)
         await agent_service._conversation_repo.save(conversation)

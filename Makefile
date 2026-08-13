@@ -19,6 +19,7 @@
 
 .PHONY: help install update clean init reset fresh restart stop logs status
 .PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop
+.PHONY: workspace-core-build workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
 .PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
@@ -61,6 +62,8 @@ RERANK_MAX_LENGTH ?= 512
 RERANK_HOST ?= 0.0.0.0
 RERANKER_LOG_LEVEL ?= info
 RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
+WORKSPACE_CORE_PORT ?= 4319
+WORKSPACE_CORE_SERVICE ?= memstack-workspace-core
 WEB_DEV_CMD ?= node_modules/.bin/vite --host 0.0.0.0 --port 3000
 DEV_STARTUP_TIMEOUT ?= 60
 AGISTACK_DIR ?= agi-stack
@@ -84,6 +87,7 @@ help: ## Show this help message
 	@echo "  logs           - View all service logs"
 	@echo "  drone-up       - Start optional Drone CI services"
 	@echo "  reranker-up    - Start local reranker API"
+	@echo "  workspace-core-start - Start the Avernet Workspace authority"
 	@echo ""
 	@echo " Ray Actors:"
 	@echo "  ray-up         - Start Ray cluster (production)"
@@ -141,6 +145,11 @@ help-full: ## Show all available commands
 	@echo "  dev-web          - Start web frontend (foreground)"
 	@echo "  infra            - Start infrastructure (alias: dev-infra)"
 	@echo "  logs             - View all logs (alias: dev-logs)"
+	@echo "  workspace-core-build  - Build the Avernet Workspace authority image"
+	@echo "  workspace-core-start  - Start and health-check the Workspace authority"
+	@echo "  workspace-core-status - Show Workspace Core container health"
+	@echo "  workspace-core-logs   - Follow Workspace Core logs"
+	@echo "  workspace-core-stop   - Stop Workspace Core without deleting data"
 	@echo ""
 	@echo " Ray Actors:"
 	@echo "  ray-up           - Start Ray cluster (production)"
@@ -337,7 +346,7 @@ update: ## Update all dependencies
 dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
-dev-all: dev-infra-dev db-init
+dev-all: dev-infra-dev db-init workspace-core-start
 	@echo " Starting API server, Ray actor worker and Web in background..."
 	@echo "   API: http://localhost:8000 (logs: logs/api.log)"
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
@@ -388,7 +397,7 @@ dev-all: dev-infra-dev db-init
 
 dev-stop: ## Stop all background services
 	@echo " Stopping background services..."
-	@$(COMPOSE_ALL) stop ray-head ray-worker agent-actor-worker 2>/dev/null || true
+	@$(COMPOSE_ALL) stop ray-head ray-worker agent-actor-worker $(WORKSPACE_CORE_SERVICE) 2>/dev/null || true
 	@# Stop services by PID file and port
 	@for svc in api web; do \
 		if [ -f logs/$$svc.pid ]; then \
@@ -467,12 +476,45 @@ dev-infra-dev: ## Start infrastructure with Ray in development mode (live code r
 	@echo ""
 	@echo " Start observability stack with: make obs-start"
 
+workspace-core-build: ## Build the independent Avernet Workspace Core image
+	@echo " Building Avernet Workspace Core..."
+	@$(COMPOSE_CMD) build $(WORKSPACE_CORE_SERVICE)
+
+workspace-core-start: ## Build, start and health-check Avernet Workspace Core
+	@echo " Starting Avernet Workspace Core..."
+	@$(COMPOSE_CMD) up -d --build $(WORKSPACE_CORE_SERVICE)
+	@$(MAKE) workspace-core-health
+
+workspace-core-health: ## Wait for Avernet Workspace Core to become healthy
+	@echo " Waiting for Avernet Workspace Core health..."
+	@attempt=0; \
+	until [ "$$($(COMPOSE_CMD) ps --format json $(WORKSPACE_CORE_SERVICE) 2>/dev/null | tr -d '\n' | sed -n 's/.*\"Health\":\"\([^\"]*\)\".*/\1/p')" = "healthy" ]; do \
+		attempt=$$((attempt + 1)); \
+		if [ $$attempt -ge $(DEV_STARTUP_TIMEOUT) ]; then \
+			echo " Avernet Workspace Core did not become healthy within $(DEV_STARTUP_TIMEOUT) seconds"; \
+			$(COMPOSE_CMD) logs --tail=80 $(WORKSPACE_CORE_SERVICE) 2>/dev/null || true; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo " Avernet Workspace Core is healthy at http://127.0.0.1:$(WORKSPACE_CORE_PORT)"
+
+workspace-core-status: ## Show Avernet Workspace Core container and health status
+	@$(COMPOSE_CMD) ps $(WORKSPACE_CORE_SERVICE)
+
+workspace-core-logs: ## Follow Avernet Workspace Core logs
+	@$(COMPOSE_CMD) logs -f $(WORKSPACE_CORE_SERVICE)
+
+workspace-core-stop: ## Stop Avernet Workspace Core without deleting its data volume
+	@$(COMPOSE_CMD) stop $(WORKSPACE_CORE_SERVICE)
+
 status: ## Show status of all services
 	@echo " Service Status"
 	@echo "================"
 	@echo ""
 	@echo "Docker Services:"
 	@$(COMPOSE_CMD) ps 2>/dev/null || echo "  Docker not running"
+	@$(COMPOSE_CMD) ps $(WORKSPACE_CORE_SERVICE) 2>/dev/null || echo "  Workspace Core: Not running"
 	@echo ""
 	@echo "Background Processes:"
 	@if [ -f logs/api.pid ] && kill -0 $$(cat logs/api.pid) 2>/dev/null; then \
@@ -488,6 +530,7 @@ status: ## Show status of all services
 	@echo ""
 	@echo "Ports:"
 	@lsof -i :8000 2>/dev/null | grep -q LISTEN && echo "  8000 (API):  In use" || echo "  8000 (API):  Free"
+	@lsof -i :$(WORKSPACE_CORE_PORT) 2>/dev/null | grep -q LISTEN && echo "  $(WORKSPACE_CORE_PORT) (Workspace Core):  In use" || echo "  $(WORKSPACE_CORE_PORT) (Workspace Core):  Free"
 	@lsof -i :3000 2>/dev/null | grep -q LISTEN && echo "  3000 (Web):  In use" || echo "  3000 (Web):  Free"
 	@lsof -i :5432 2>/dev/null | grep -q LISTEN && echo "  5432 (Postgres):  In use" || echo "  5432 (Postgres):  Free"
 	@lsof -i :7687 2>/dev/null | grep -q LISTEN && echo "  7687 (Neo4j):  In use" || echo "  7687 (Neo4j):  Free"

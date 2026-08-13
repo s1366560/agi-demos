@@ -13,9 +13,10 @@ Architecture (Ray-based, Redis Streams only):
 import json
 import logging
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.workspace_authority import require_workspace_scope
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -158,6 +160,7 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
 
 async def _persist_workspace_tool_grant_if_requested(
     *,
+    request: Request,
     db: AsyncSession,
     hitl_request: HITLRequest,
     response_data: dict[str, Any],
@@ -170,9 +173,6 @@ async def _persist_workspace_tool_grant_if_requested(
     from src.infrastructure.adapters.secondary.persistence.models import (
         Conversation,
         TrustPolicyModel,
-        UserProject,
-        WorkspaceMemberModel,
-        WorkspaceModel,
     )
     from src.infrastructure.adapters.secondary.persistence.sql_trust_policy_repository import (
         SqlTrustPolicyRepository,
@@ -198,46 +198,16 @@ async def _persist_workspace_tool_grant_if_requested(
     workspace_id = conversation_result.scalar_one_or_none()
     if not workspace_id:
         raise HTTPException(status_code=400, detail=_("Conversation has no workspace"))
-    workspace_result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceModel).where(
-                WorkspaceModel.id == workspace_id,
-                WorkspaceModel.tenant_id == hitl_request.tenant_id,
-                WorkspaceModel.project_id == hitl_request.project_id,
-                WorkspaceModel.is_archived.is_(False),
-            )
-        )
-    )
-    workspace = workspace_result.scalar_one_or_none()
-    if workspace is None:
-        raise HTTPException(status_code=404, detail=_("Workspace not found"))
-
     user_id = str(current_user.id)
-    if workspace.created_by != user_id:
-        workspace_role_result = await db.execute(
-            refresh_select_statement(
-                select(WorkspaceMemberModel.role).where(
-                    WorkspaceMemberModel.workspace_id == workspace_id,
-                    WorkspaceMemberModel.user_id == user_id,
-                )
-            )
-        )
-        project_role_result = await db.execute(
-            refresh_select_statement(
-                select(UserProject.role).where(
-                    UserProject.project_id == hitl_request.project_id,
-                    UserProject.user_id == user_id,
-                )
-            )
-        )
-        if workspace_role_result.scalar_one_or_none() not in {
-            "manager",
-            "owner",
-        } and project_role_result.scalar_one_or_none() not in {"admin", "owner"}:
-            raise HTTPException(
-                status_code=403,
-                detail=_("Workspace manager permission is required"),
-            )
+    await require_workspace_scope(
+        request,
+        tenant_id=hitl_request.tenant_id,
+        project_id=hitl_request.project_id,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        allowed_roles=frozenset({"manager", "owner"}),
+    )
 
     canonical_tool_name = canonical_tool_name.strip()
     existing_result = await db.execute(
@@ -625,6 +595,7 @@ async def get_project_pending_hitl_requests(
 
 @router.post("/respond", response_model=HumanInteractionResponse)
 async def respond_to_hitl(
+    http_request: Request,
     request: HITLResponseRequest,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -680,7 +651,10 @@ async def respond_to_hitl(
                 tenant_id=tenant_id,
                 db=db,
                 validate_response=_validate_and_summarize_hitl_response,
-                persist_permission_grant=_persist_workspace_tool_grant_if_requested,
+                persist_permission_grant=partial(
+                    _persist_workspace_tool_grant_if_requested,
+                    request=http_request,
+                ),
                 publish_response=_publish_hitl_response_to_redis,
             )
         from src.domain.model.agent.hitl_request import HITLRequestStatus
@@ -705,6 +679,7 @@ async def respond_to_hitl(
         if stored_hitl_type == "permission":
             await _persist_workspace_tool_grant_if_requested(
                 db=db,
+                request=http_request,
                 hitl_request=hitl_request,
                 response_data=request.response_data,
                 current_user=current_user,

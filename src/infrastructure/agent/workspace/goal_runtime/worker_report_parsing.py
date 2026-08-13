@@ -11,12 +11,7 @@ import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.workspace_task_session_attempt_service import (
-    WorkspaceTaskSessionAttemptService,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
-    SqlWorkspaceTaskSessionAttemptRepository,
-)
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 
 def _parse_worker_report_payload(
@@ -80,10 +75,9 @@ def _build_worker_report_fingerprint(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _build_attempt_service(db: AsyncSession) -> WorkspaceTaskSessionAttemptService:
-    return WorkspaceTaskSessionAttemptService(
-        attempt_repo=SqlWorkspaceTaskSessionAttemptRepository(db),
-    )
+def _build_attempt_service(db: AsyncSession) -> None:
+    del db
+    legacy_workspace_runtime_retired("worker report attempt persistence")
 
 
 __all__ = [

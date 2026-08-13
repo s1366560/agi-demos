@@ -45,7 +45,6 @@ from src.infrastructure.workspace_core.provider import (
 def _settings() -> WorkspaceCoreSettings:
     return WorkspaceCoreSettings.model_validate(
         {
-            "WORKSPACE_CORE_BACKEND": "avernet",
             "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
             "WORKSPACE_CORE_SERVICE_TOKEN": "service-token",
             "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "webhook-token",

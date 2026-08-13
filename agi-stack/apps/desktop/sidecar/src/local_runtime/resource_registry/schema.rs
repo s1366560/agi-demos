@@ -46,21 +46,6 @@ pub(in crate::local_runtime) fn initialize_resource_registry(
                tenant_id TEXT PRIMARY KEY,
                provider_id TEXT NOT NULL,
                selected_at_ms INTEGER NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS desktop_llm_routing_policies (
-               tenant_id TEXT PRIMARY KEY,
-               revision INTEGER NOT NULL CHECK(revision >= 0),
-               updated_at_ms INTEGER NOT NULL,
-               value_json TEXT NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS desktop_llm_workspace_routing_policies (
-               tenant_id TEXT NOT NULL,
-               project_id TEXT NOT NULL,
-               workspace_id TEXT NOT NULL,
-               revision INTEGER NOT NULL CHECK(revision >= 0),
-               updated_at_ms INTEGER NOT NULL,
-               value_json TEXT NOT NULL,
-               PRIMARY KEY(tenant_id, project_id, workspace_id)
              );",
         )
         .map_err(|error| error.to_string())?;

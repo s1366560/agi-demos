@@ -1,12 +1,154 @@
 {
-  "ledgerVersion": 1,
+  "ledgerVersion": 2,
+  "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+  "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
   "sourceManifest": "docs/architecture/workspace-core-route-manifest.json",
   "sourceCapabilities": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/capabilities.rs",
-  "requiredContractSha256": "a20b3f3a5065b9ff4fad23310b4fa6c4eb6cc4f666be7957ec6c4b1ad65a9623",
+  "requiredContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
   "requiredRouteCount": 92,
   "implementedRouteCount": 92,
   "pendingRouteCount": 0,
   "implementedRouteKeysSha256": "e4fea0501bbf438e30f55e0937246fda5709fdf4e3b7831c85147c6303bb3f07",
+  "sourceEvidence": "docs/architecture/workspace-core-implementation-evidence.json",
+  "schemaRevision": "f0a1b2c3d4e6",
+  "evidenceSuiteCount": 6,
+  "evidenceSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+  "evidenceSuites": [
+    {
+      "id": "cross-store-authority-scenarios",
+      "command": "uv run python scripts/workspace-core/verify-cross-store-scenarios.py",
+      "gates": [
+        "cas",
+        "cloudPostgres",
+        "desktopSqlite",
+        "events",
+        "idempotency",
+        "permission"
+      ],
+      "sourcePaths": [
+        "docs/architecture/workspace-core-cross-store-allowlist.json",
+        "scripts/workspace-core/verify-cross-store-scenarios.py",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/collaboration_mutations_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/outbox_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/runtime_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_agent_mutations.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_blackboard_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_context_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_diagnostics_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_file_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_gene_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_objective_autonomy_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_plan_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_policy_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_public_mutations.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_task_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_topology_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/sqlite_context_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/workspace_tasks.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/cross_store_state_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/postgres_message_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/postgres_mutation_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/sqlite_message_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/sqlite_mutation_contract.rs"
+      ]
+    },
+    {
+      "id": "current-head-migration",
+      "command": "uv run python scripts/avernet-bcs/verify-postgres-schema.py --skip-cargo-contract && uv run python scripts/avernet-bcs/verify-workspace-migration.py",
+      "gates": [
+        "cloudPostgres",
+        "idempotency"
+      ],
+      "sourcePaths": [
+        "alembic/versions/a0b1c2d3e4f5_create_avernet_workspace_domain.py",
+        "alembic/versions/a9c0d1e2f3a4_create_avernet_bcs_schema.py",
+        "alembic/versions/e42b8c6d0f53_create_avernet_workspace_execution.py",
+        "alembic/versions/e9f0a1b2c3d5_relax_conversation_workspace_links.py",
+        "alembic/versions/f0a1b2c3d4e6_add_task_session_saga_journal.py",
+        "scripts/avernet-bcs/verify-postgres-schema.py",
+        "scripts/avernet-bcs/verify-workspace-migration.py",
+        "scripts/workspace_core_legacy_sentinel.py"
+      ]
+    },
+    {
+      "id": "desktop-route-contracts",
+      "command": "scripts/avernet-bcs/cargo.sh test -p memstack-workspace-core --locked",
+      "gates": [
+        "cas",
+        "desktopSqlite",
+        "events",
+        "idempotency",
+        "permission",
+        "status"
+      ],
+      "sourcePaths": [
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_schema.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema.sql",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema_v2.sql",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema_v3.sql",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/agent_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/authority_query_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/autonomy_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/blackboard_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/collaboration_mutations_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/context_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/creation_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/desktop_schema.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/diagnostics_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/file_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/gene_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/message_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/objective_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_delivery_worker.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_outbox_ownership.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/policy_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/task_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/task_session_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/topology_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/workspace_provider_events_http_contract.rs"
+      ]
+    },
+    {
+      "id": "event-delivery-runtime",
+      "command": "uv run python scripts/workspace-core/verify-event-delivery.py",
+      "gates": [
+        "events"
+      ],
+      "sourcePaths": [
+        "scripts/workspace-core/verify-event-delivery.py",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/outbox.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs"
+      ]
+    },
+    {
+      "id": "event-routing-parity",
+      "command": "uv run python scripts/workspace-core/verify-event-parity.py",
+      "gates": [
+        "events"
+      ],
+      "sourcePaths": [
+        "docs/architecture/workspace-core-event-parity-manifest.json",
+        "scripts/workspace-core/verify-event-parity.py"
+      ]
+    },
+    {
+      "id": "legacy-runtime-reference-guard",
+      "command": "uv run python scripts/workspace-core/verify-legacy-workspace-references.py",
+      "gates": [
+        "permission",
+        "status"
+      ],
+      "sourcePaths": [
+        "docs/architecture/workspace-core-legacy-reference-allowlist.json",
+        "scripts/workspace-core/verify-legacy-workspace-references.py"
+      ]
+    }
+  ],
+  "declarationComplete": true,
+  "evidenceAttested": true,
+  "evidenceExecutionRequired": true,
+  "executionGate": "scripts/workspace-core/verify-implementation-evidence.py",
   "complete": true,
   "routes": [
     {
@@ -28,13 +170,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -58,13 +240,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -86,13 +308,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -116,13 +378,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -143,13 +445,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -171,13 +513,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -201,13 +583,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -229,13 +651,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -259,13 +721,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -287,13 +789,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -317,13 +859,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -344,13 +926,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -374,13 +996,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -402,13 +1064,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -430,13 +1132,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -460,13 +1202,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -490,13 +1272,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -517,13 +1339,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -547,13 +1409,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -577,13 +1479,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -604,13 +1546,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -632,13 +1614,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -662,13 +1684,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -689,13 +1751,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -717,13 +1819,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -747,13 +1889,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -775,13 +1957,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -803,13 +2025,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -833,13 +2095,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -860,13 +2162,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -890,13 +2232,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -918,13 +2300,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -946,13 +2368,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -974,13 +2436,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1004,13 +2506,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1032,13 +2574,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1060,13 +2642,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1090,13 +2712,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1117,13 +2779,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1145,13 +2847,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1175,13 +2917,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1203,13 +2985,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1233,13 +3055,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1260,13 +3122,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1290,13 +3192,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1318,13 +3260,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1348,13 +3330,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1376,13 +3398,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1404,13 +3466,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1434,13 +3536,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1461,13 +3603,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1489,13 +3671,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1519,13 +3741,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1549,13 +3811,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1577,13 +3879,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1607,13 +3949,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1637,13 +4019,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1665,13 +4087,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1695,13 +4157,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1725,13 +4227,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1755,13 +4297,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1785,13 +4367,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1815,13 +4437,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1845,13 +4507,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1875,13 +4577,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1905,13 +4647,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1935,13 +4717,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1965,13 +4787,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -1993,13 +4855,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2023,13 +4925,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2050,13 +4992,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2078,13 +5060,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2108,13 +5130,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2138,13 +5200,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2166,13 +5268,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2194,13 +5336,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2222,13 +5404,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2250,13 +5472,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2278,13 +5540,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2308,13 +5610,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2336,13 +5678,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2364,13 +5746,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2392,13 +5814,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2422,13 +5884,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2449,13 +5951,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2477,13 +6019,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2507,13 +6089,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2535,13 +6157,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2565,13 +6227,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2592,13 +6294,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2620,13 +6362,53 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
         "cas": "not_applicable",
         "idempotency": "not_applicable",
         "events": "not_applicable",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     },
     {
@@ -2650,15 +6432,55 @@
         "security": []
       },
       "implementation": {
-        "status": "golden_passed",
-        "permission": "golden_passed",
-        "cas": "covered_by_route_golden",
-        "idempotency": "covered_by_route_golden",
-        "events": "covered_by_route_golden",
-        "cloudPostgres": "golden_passed",
-        "desktopSqlite": "golden_passed"
+        "status": "evidence_bound",
+        "permission": "evidence_bound",
+        "cas": "evidence_bound",
+        "idempotency": "evidence_bound",
+        "events": "evidence_bound",
+        "cloudPostgres": "evidence_bound",
+        "desktopSqlite": "evidence_bound"
+      },
+      "evidence": {
+        "routeContractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768",
+        "sourceRevision": "sha256:0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "sourceSha256": "0d9a0e9244118167cb2391048e526544b1d234027c53ea80b00dd6c6e7a85a8a",
+        "testSourcesSha256": "4de72449fca4cb2611e1757e90662129168f71a3adad1876de49c93b28b295a5",
+        "testIds": [
+          "cross-store-authority-scenarios",
+          "current-head-migration",
+          "desktop-route-contracts",
+          "event-delivery-runtime",
+          "event-routing-parity",
+          "legacy-runtime-reference-guard"
+        ],
+        "executionResults": [
+          {
+            "testId": "cross-store-authority-scenarios",
+            "status": "passed"
+          },
+          {
+            "testId": "current-head-migration",
+            "status": "passed"
+          },
+          {
+            "testId": "desktop-route-contracts",
+            "status": "passed"
+          },
+          {
+            "testId": "event-delivery-runtime",
+            "status": "passed"
+          },
+          {
+            "testId": "event-routing-parity",
+            "status": "passed"
+          },
+          {
+            "testId": "legacy-runtime-reference-guard",
+            "status": "passed"
+          }
+        ]
       }
     }
   ],
-  "ledgerSha256": "fe735b0353942814d497f834c4424c70ee98174d9609b28785cf92b1f3631fa1"
+  "ledgerSha256": "9ae03967d1d1997e43c6a56c4c2f599aefd9f1d6d530a4e07e001ff6b9c0896b"
 }

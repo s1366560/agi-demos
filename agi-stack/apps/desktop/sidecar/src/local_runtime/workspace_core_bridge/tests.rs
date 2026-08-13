@@ -92,6 +92,7 @@ async fn create_workspace_proxy_server() -> (String, mpsc::Receiver<(HeaderMap, 
             .await
             .expect("proxy observation receiver");
         Json(json!({
+            "id": "local-workspace",
             "service_version": "0.2.0",
             "contract_version": "2.0.0",
             "authority": "local",
@@ -117,6 +118,118 @@ async fn create_workspace_proxy_server() -> (String, mpsc::Receiver<(HeaderMap, 
     (url, receiver)
 }
 
+async fn create_status_proxy_server(status: StatusCode) -> String {
+    let app = Router::new().fallback(axum::routing::any(move || async move { status }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind status proxy server");
+    let url = format!("http://{}", listener.local_addr().expect("address"));
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("status proxy server")
+    });
+    url
+}
+
+async fn create_path_proxy_server() -> (String, mpsc::Receiver<(String, HeaderMap)>) {
+    let (sender, receiver) = mpsc::channel(1);
+    async fn respond(
+        State(sender): State<mpsc::Sender<(String, HeaderMap)>>,
+        request: Request<Body>,
+    ) -> Json<Value> {
+        sender
+            .send((request.uri().path().to_string(), request.headers().clone()))
+            .await
+            .expect("proxy observation receiver");
+        Json(json!({ "replayed": false }))
+    }
+    let app = Router::new()
+        .fallback(axum::routing::any(respond))
+        .with_state(sender);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind path proxy server");
+    let url = format!("http://{}", listener.local_addr().expect("address"));
+    tokio::spawn(async move { axum::serve(listener, app).await.expect("path proxy server") });
+    (url, receiver)
+}
+
+type RoutingPolicyObservation = (String, String, HeaderMap, Vec<u8>);
+
+async fn create_routing_policy_proxy_server() -> (String, mpsc::Receiver<RoutingPolicyObservation>)
+{
+    let (sender, receiver) = mpsc::channel(2);
+    async fn respond(
+        State(sender): State<mpsc::Sender<RoutingPolicyObservation>>,
+        request: Request<Body>,
+    ) -> Json<Value> {
+        let method = request.method().to_string();
+        let uri = request.uri().to_string();
+        let headers = request.headers().clone();
+        let body = to_bytes(request.into_body(), 1024 * 1024)
+            .await
+            .expect("routing policy body")
+            .to_vec();
+        sender
+            .send((method, uri, headers, body))
+            .await
+            .expect("routing policy observation receiver");
+        Json(json!({ "proxied": true }))
+    }
+    let app = Router::new()
+        .fallback(axum::routing::any(respond))
+        .with_state(sender);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind routing policy proxy server");
+    let url = format!("http://{}", listener.local_addr().expect("address"));
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("routing policy server")
+    });
+    (url, receiver)
+}
+
+async fn create_policy_read_server() -> (String, mpsc::Receiver<(String, HeaderMap)>) {
+    let (sender, receiver) = mpsc::channel(1);
+    async fn respond(
+        State(sender): State<mpsc::Sender<(String, HeaderMap)>>,
+        request: Request<Body>,
+    ) -> Json<Value> {
+        sender
+            .send((request.uri().path().to_string(), request.headers().clone()))
+            .await
+            .expect("policy observation receiver");
+        Json(json!({
+            "tenant_id": "local",
+            "project_id": "local-project",
+            "workspace_id": "core-only-workspace",
+            "revision": 7,
+            "roles": { "default": { "provider_id": "provider-1", "model_id": "model-1" } },
+            "fallbacks": [],
+            "reasoning_effort": "high",
+            "permission_mode": "ask",
+            "capability_version": "workspace-agent-policy-v1",
+            "updated_at": "2026-08-13T00:00:00Z"
+        }))
+    }
+    let app = Router::new()
+        .fallback(axum::routing::any(respond))
+        .with_state(sender);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind policy read server");
+    let url = format!("http://{}", listener.local_addr().expect("address"));
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("policy read server")
+    });
+    (url, receiver)
+}
+
 #[tokio::test]
 async fn workspace_proxy_requires_desktop_auth_and_forwards_scope_without_service_token_leak() {
     let state = state();
@@ -124,15 +237,6 @@ async fn workspace_proxy_requires_desktop_auth_and_forwards_scope_without_servic
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    state
-        .session_store
-        .ensure_workspace(&json!({
-            "id": "local-workspace",
-            "tenant_id": "local",
-            "project_id": "local-project",
-            "name": "Local Workspace"
-        }))
-        .expect("workspace");
     let (core_url, mut observations) = create_workspace_proxy_server().await;
     install(&state, &core_url);
     let app = local_router(state);
@@ -318,6 +422,55 @@ async fn agent_conversation_list_accepts_core_only_workspace_scope() {
 }
 
 #[tokio::test]
+async fn conversation_binding_uses_core_workspace_authority_without_legacy_rows() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let timestamp = now_iso();
+    state
+        .session_store
+        .insert_conversation(&LocalConversation {
+            id: "core-binding-conversation".to_string(),
+            project_id: "local-project".to_string(),
+            tenant_id: "local".to_string(),
+            title: "Core binding".to_string(),
+            workspace_id: None,
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: timestamp.clone(),
+            updated_at: timestamp,
+        })
+        .expect("insert conversation");
+    let (core_url, mut observations) = create_workspace_proxy_server().await;
+    install(&state, &core_url);
+
+    let response = local_router(state)
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/agent/conversations/core-binding-conversation/mode")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "workspace_id": "local-workspace" }).to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let (_, body) = observations
+        .recv()
+        .await
+        .expect("Core workspace validation");
+    assert!(body.is_empty());
+}
+
+#[tokio::test]
 async fn workspace_proxy_owns_exact_roster_routes_when_core_authority_is_installed() {
     let state = state();
     state
@@ -386,7 +539,114 @@ async fn workspace_proxy_forwards_topology_routes_when_core_authority_is_install
 }
 
 #[tokio::test]
-async fn workspace_proxy_leaves_legacy_routes_authoritative_until_core_is_installed() {
+async fn workspace_proxy_forwards_routing_policy_queries_and_mutations_to_core() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_routing_policy_proxy_server().await;
+    install(&state, &core_url);
+    let app = local_router(state);
+    let path = "/api/v1/llm-providers/routing-policy?project_id=local-project&workspace_id=core-only-workspace";
+
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(path)
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let policy = json!({
+        "revision": 4,
+        "roles": { "planner": "provider:model" },
+        "fallbacks": ["provider:fallback"]
+    });
+    let put_response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(path)
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .header("x-expected-revision", "4")
+                .body(Body::from(policy.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(get_response.status(), StatusCode::OK);
+    assert_eq!(put_response.status(), StatusCode::OK);
+    let (get_method, get_uri, get_headers, get_body) =
+        observations.recv().await.expect("Core GET request");
+    assert_eq!(get_method, "GET");
+    assert_eq!(get_uri, path);
+    assert!(get_body.is_empty());
+    assert_eq!(
+        get_headers
+            .get("x-memstack-user-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("local-user")
+    );
+    let (put_method, put_uri, put_headers, put_body) =
+        observations.recv().await.expect("Core PUT request");
+    assert_eq!(put_method, "PUT");
+    assert_eq!(put_uri, path);
+    assert_eq!(put_body, policy.to_string().as_bytes());
+    assert_eq!(
+        put_headers
+            .get("x-expected-revision")
+            .and_then(|value| value.to_str().ok()),
+        Some("4")
+    );
+    assert_eq!(
+        put_headers
+            .get("x-memstack-project-membership-role")
+            .and_then(|value| value.to_str().ok()),
+        Some("owner")
+    );
+}
+
+#[tokio::test]
+async fn runtime_policy_reads_the_core_authority_without_legacy_sqlite_state() {
+    let state = state();
+    let (core_url, mut observations) = create_policy_read_server().await;
+    install(&state, &core_url);
+
+    let policy = workspace_policy(&state, "local", "local-project", "core-only-workspace")
+        .await
+        .expect("Core policy");
+
+    assert_eq!(policy["revision"], 7);
+    assert_eq!(policy["reasoning_effort"], "high");
+    let (path, headers) = observations.recv().await.expect("Core policy request");
+    assert_eq!(
+        path,
+        "/api/v1/tenants/local/projects/local-project/workspaces/core-only-workspace/agent-policy"
+    );
+    assert_eq!(
+        headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer service-token")
+    );
+    assert_eq!(
+        headers
+            .get("x-memstack-user-id")
+            .and_then(|value| value.to_str().ok()),
+        Some("local-user")
+    );
+}
+
+#[tokio::test]
+async fn workspace_routes_fail_closed_before_core_is_installed() {
     let state = state();
     state
         .session_store
@@ -418,8 +678,8 @@ async fn workspace_proxy_leaves_legacy_routes_authoritative_until_core_is_instal
         .await
         .expect("response");
 
-    assert_eq!(plan.status(), StatusCode::OK);
-    assert_eq!(topology.status(), StatusCode::NOT_FOUND);
+    assert_eq!(plan.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(topology.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 fn agent_lookup(extra: Option<(&str, Value)>) -> Value {
@@ -846,6 +1106,147 @@ async fn stale_authority_generation_cannot_clear_the_rotated_authority() {
     assert_eq!(rotated_status, StatusCode::OK);
     assert_eq!(stale_status, StatusCode::UNAUTHORIZED);
     assert_eq!(cleared_status, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn cleared_authority_never_restores_legacy_workspace_routes_after_cutover() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let generation = install(&state, "http://127.0.0.1:21000");
+    clear_authority(&state, generation);
+
+    let response = local_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/tenants/local/projects/local-project/workspaces/legacy-workspace")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_workspace_proxy_server().await;
+    let generation = install(&state, &core_url);
+    let app = local_router(Arc::clone(&state));
+    let path = "/api/v1/tenants/local/projects/local-project/task-sessions";
+
+    let proxied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(proxied.status(), StatusCode::OK);
+    observations
+        .recv()
+        .await
+        .expect("Core received task session");
+
+    clear_authority(&state, generation);
+    let unavailable = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn task_sessions_use_the_private_core_atomic_command_contract() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_path_proxy_server().await;
+    install(&state, &core_url);
+
+    let response = local_router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .header("idempotency-key", "desktop-task-session-1")
+                .body(Body::from("{}"))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let (path, headers) = observations.recv().await.expect("Core request");
+    assert_eq!(
+        path,
+        "/internal/v1/tenants/local/projects/local-project/task-sessions"
+    );
+    assert_eq!(
+        headers
+            .get("x-idempotency-key")
+            .and_then(|value| value.to_str().ok()),
+        Some("desktop-task-session-1")
+    );
+}
+
+#[tokio::test]
+async fn unavailable_core_task_session_contract_maps_to_stable_service_unavailable() {
+    for upstream_status in [StatusCode::NOT_FOUND, StatusCode::METHOD_NOT_ALLOWED] {
+        let state = state();
+        state
+            .session_store
+            .seed_test_session("desktop-session")
+            .expect("desktop session");
+        let core_url = create_status_proxy_server(upstream_status).await;
+        install(&state, &core_url);
+        let response = local_router(state)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                    .header("x-agistack-launch", "launch-token")
+                    .header(AUTHORIZATION, "Bearer desktop-session")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
 }
 
 #[tokio::test]

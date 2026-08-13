@@ -99,6 +99,15 @@ def context(
     )
 
 
+@pytest.fixture(autouse=True)
+def workspace_access_verifier() -> Any:
+    configure_workspace_access_verifier(_StaticWorkspaceAccessVerifier(allowed=True))
+    try:
+        yield
+    finally:
+        configure_workspace_access_verifier(None)
+
+
 @pytest.mark.integration
 class TestWorkspaceWebSocket:
     async def test_subscribe_uses_configured_workspace_access_verifier(
@@ -162,7 +171,7 @@ class TestWorkspaceWebSocket:
     ) -> None:
         handler = SubscribeWorkspaceHandler()
         workspace_id = "ws-denied"
-        mock_container.mock_member_repo.find_by_workspace_and_user.return_value = None
+        configure_workspace_access_verifier(_StaticWorkspaceAccessVerifier(allowed=False))
 
         with patch(
             f"{_HANDLER_MODULE}.get_topic_manager",
@@ -329,7 +338,7 @@ class TestWorkspaceWebSocket:
     ) -> None:
         handler = SubscribeWorkspaceHandler()
         workspace_id = "ws-006"
-        mock_container.mock_member_repo.find_by_workspace_and_user.return_value = None
+        configure_workspace_access_verifier(_StaticWorkspaceAccessVerifier(allowed=False))
 
         chat_envelope = EventEnvelope(
             event_type="workspace.chat.new_message",

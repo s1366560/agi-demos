@@ -14,19 +14,14 @@ from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.primary.web.workspace_authority import require_workspace_scope
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    User,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 from .access import get_tenant_role
@@ -107,7 +102,12 @@ async def _get_resume_service(db: AsyncSession) -> Any:
     return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
 
 
-async def _get_accessible_conversation(conversation_id: str, user: User, db: AsyncSession) -> Any:
+async def _get_accessible_conversation(
+    conversation_id: str,
+    user: User,
+    db: AsyncSession,
+    request: Request,
+) -> Any:
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
         SqlConversationRepository,
     )
@@ -124,6 +124,7 @@ async def _get_accessible_conversation(conversation_id: str, user: User, db: Asy
         return conversation
     if _is_workspace_conversation(conversation) and await _has_workspace_access(
         db=db,
+        request=request,
         user=user,
         tenant_id=conversation.tenant_id,
         project_id=conversation.project_id,
@@ -160,6 +161,7 @@ def _workspace_id_from_conversation(conversation: Any) -> str | None:
 async def _has_workspace_access(
     *,
     db: AsyncSession,
+    request: Request,
     user: User,
     tenant_id: str,
     project_id: str,
@@ -168,21 +170,21 @@ async def _has_workspace_access(
     if not workspace_id:
         return False
 
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceMemberModel.id)
-            .join(WorkspaceModel, WorkspaceMemberModel.workspace_id == WorkspaceModel.id)
-            .where(
-                and_(
-                    WorkspaceMemberModel.user_id == user.id,
-                    WorkspaceMemberModel.workspace_id == workspace_id,
-                    WorkspaceModel.tenant_id == tenant_id,
-                    WorkspaceModel.project_id == project_id,
-                )
-            )
+    del db
+    try:
+        await require_workspace_scope(
+            request,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            user_id=str(user.id),
+            is_superuser=bool(getattr(user, "is_superuser", False)),
         )
-    )
-    return result.scalar_one_or_none() is not None
+    except HTTPException as exc:
+        if exc.status_code in {403, 404}:
+            return False
+        raise
+    return True
 
 
 router = APIRouter()
@@ -207,7 +209,7 @@ async def get_conversation_events(
     """
     try:
         assert request is not None
-        await _get_accessible_conversation(conversation_id, current_user, db)
+        await _get_accessible_conversation(conversation_id, current_user, db, request)
 
         container = get_container_with_db(request, db)
         event_repo = container.agent_execution_event_repository()
@@ -264,7 +266,7 @@ async def get_execution_status(
     - missed_events_count: Events missed since from_time_us
     """
     try:
-        await _get_accessible_conversation(conversation_id, current_user, db)
+        await _get_accessible_conversation(conversation_id, current_user, db, request)
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -353,7 +355,7 @@ async def resume_execution(
         - resume_request: Request payload that can be used to continue execution
     """
     try:
-        await _get_accessible_conversation(conversation_id, current_user, db)
+        await _get_accessible_conversation(conversation_id, current_user, db, request)
 
         resume_service = await _get_resume_service(db)
 
@@ -411,7 +413,9 @@ async def get_workflow_status(
         from src.infrastructure.adapters.secondary.ray.client import await_ray
         from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
-        conversation = await _get_accessible_conversation(conversation_id, current_user, db)
+        conversation = await _get_accessible_conversation(
+            conversation_id, current_user, db, request
+        )
 
         actor = await get_actor_if_exists(
             tenant_id=conversation.tenant_id,

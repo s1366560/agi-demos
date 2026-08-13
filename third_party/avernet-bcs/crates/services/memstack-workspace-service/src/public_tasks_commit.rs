@@ -2,7 +2,8 @@
 
 use memstack_workspace_store::{
     WorkspaceTaskAuxiliaryWrite, WorkspaceTaskDispatchWrite, WorkspaceTaskDomainWrite,
-    WorkspaceTaskMutation, WorkspaceTaskMutationOutcome, WorkspaceTaskRecord, WorkspaceTaskScope,
+    WorkspaceTaskMutation, WorkspaceTaskMutationOutcome, WorkspaceTaskOutboxEvent,
+    WorkspaceTaskRecord, WorkspaceTaskScope,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -55,10 +56,39 @@ impl<'a> PublicWorkspaceTaskService<'a> {
         action: &str,
         task_id: &str,
         domain_write: WorkspaceTaskDomainWrite,
+        auxiliary_writes: Vec<WorkspaceTaskAuxiliaryWrite>,
+        response: Value,
+        event_type: &str,
+        event_payload: Value,
+    ) -> Result<WorkspaceTaskMutationOutcome, PublicWorkspaceTaskError> {
+        self.commit_value_with_events(
+            context,
+            action,
+            task_id,
+            domain_write,
+            auxiliary_writes,
+            response,
+            event_type,
+            event_payload,
+            Vec::new(),
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn commit_value_with_events(
+        &self,
+        context: &PublicWorkspaceTaskContext,
+        action: &str,
+        task_id: &str,
+        domain_write: WorkspaceTaskDomainWrite,
         mut auxiliary_writes: Vec<WorkspaceTaskAuxiliaryWrite>,
         response: Value,
         event_type: &str,
         event_payload: Value,
+        additional_events: Vec<WorkspaceTaskOutboxEvent>,
+        request_payload: Option<Value>,
     ) -> Result<WorkspaceTaskMutationOutcome, PublicWorkspaceTaskError> {
         let scope = task_scope(context);
         let expected_revision = match context.expected_revision {
@@ -79,18 +109,33 @@ impl<'a> PublicWorkspaceTaskService<'a> {
         ) {
             auxiliary_writes.push(WorkspaceTaskAuxiliaryWrite::QueueDispatch(dispatch));
         }
-        let domain_hash = request_hash(json!({
-            "action": action,
-            "scope": {
-                "tenant_id": &context.tenant_id,
-                "project_id": &context.project_id,
-                "workspace_id": &context.workspace_id,
+        let scope_payload = json!({
+            "tenant_id": &context.tenant_id,
+            "project_id": &context.project_id,
+            "workspace_id": &context.workspace_id,
+        });
+        let hash_input = request_payload.map_or_else(
+            || {
+                json!({
+                    "action": action,
+                    "scope": scope_payload,
+                    "actor_id": &context.user_id,
+                    "task_id": task_id,
+                    "response": hash_payload(&response),
+                    "event_payload": hash_payload(&event_payload),
+                })
             },
-            "actor_id": &context.user_id,
-            "task_id": task_id,
-            "response": hash_payload(&response),
-            "event_payload": hash_payload(&event_payload),
-        }))?;
+            |request| {
+                json!({
+                    "action": action,
+                    "scope": scope_payload,
+                    "actor_id": &context.user_id,
+                    "task_id": task_id,
+                    "request": request,
+                })
+            },
+        );
+        let domain_hash = request_hash(hash_input)?;
         let payload_hash = self
             .receipt_authority
             .as_ref()
@@ -111,6 +156,7 @@ impl<'a> PublicWorkspaceTaskService<'a> {
                 response,
                 event_type: event_type.to_string(),
                 event_payload,
+                additional_events,
                 receipt_authority: self.receipt_authority.clone(),
             })
             .await

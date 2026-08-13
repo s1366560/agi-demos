@@ -1,6 +1,6 @@
 {
   "manifestVersion": "workspace-events-v1",
-  "contractSha256": "1c3afd58b335467de1a76c82dada3cd02f005bde4a003eb5e3fa9760f387a0b6",
+  "contractSha256": "38fbd14f097acbb2ad81cda82aba011648f1bcbce5e899b3f9476e7e2501d7cf",
   "scope": "all legacy Workspace projection and execution events",
   "envelopeRequiredFields": [
     "schema_version",
@@ -21,7 +21,21 @@
     ],
     "ordered": true,
     "idempotent": true,
-    "replayable": true
+    "replayable": true,
+    "evidence": {
+      "publish": {
+        "testPath": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs",
+        "testContains": "workspace_plan_updated_outbox_publishes_consumer_once_and_replays_after_crash"
+      },
+      "consumeDedup": {
+        "testPath": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs",
+        "testContains": "assert!(duplicate.keys.is_empty())"
+      },
+      "crashReplay": {
+        "testPath": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs",
+        "testContains": "plan-update-publisher-after-crash"
+      }
+    }
   },
   "terminalMappings": [
     {
@@ -238,21 +252,21 @@
     },
     {
       "legacyName": "task_execution_incident_opened",
-      "authority": "memstack-agent-runtime",
+      "authority": "avernet-core",
       "requiredPayload": ["workspace_id", "task_id", "incident"],
-      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_EXECUTION_INCIDENT_OPENED"}
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "task_execution_incident_opened", "testPath": "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/workspace_tasks.rs", "testContains": "recovery_action_commits_ordered_events_and_replays_without_duplicates"}
     },
     {
       "legacyName": "task_execution_session_updated",
-      "authority": "memstack-agent-runtime",
+      "authority": "avernet-core",
       "requiredPayload": ["workspace_id", "task_id", "session"],
-      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_EXECUTION_SESSION_UPDATED"}
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "task_execution_session_updated", "testPath": "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/workspace_tasks.rs", "testContains": "recovery_action_commits_ordered_events_and_replays_without_duplicates"}
     },
     {
       "legacyName": "task_recovery_action_completed",
-      "authority": "memstack-agent-runtime",
+      "authority": "avernet-core",
       "requiredPayload": ["workspace_id", "task_id", "action"],
-      "evidence": {"path": "src/application/services/task_execution_session_recovery.py", "contains": "TASK_RECOVERY_ACTION_COMPLETED"}
+      "evidence": {"path": "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/public_tasks.rs", "contains": "task_recovery_action_completed", "testPath": "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/workspace_tasks.rs", "testContains": "recovery_action_commits_ordered_events_and_replays_without_duplicates"}
     },
     {
       "legacyName": "task_recovery_action_started",
@@ -334,9 +348,19 @@
     },
     {
       "legacyName": "workspace_plan_updated",
-      "authority": "memstack-agent-runtime",
-      "requiredPayload": ["workspace_id", "plan"],
-      "evidence": {"path": "src/infrastructure/adapters/primary/web/routers/workspace_plans.py", "contains": "WORKSPACE_PLAN_UPDATED"}
+      "authority": "avernet-core",
+      "requiredPayload": ["workspace_id", "plan_id", "revision", "action"],
+      "evidence": {
+        "path": "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/plan_authority.rs",
+        "contains": "let event_type = \"workspace_plan_updated\"",
+        "testPath": "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/plan_authority.rs",
+        "testContains": "plan_update_transaction_commits_state_event_compatibility_outbox_and_replays",
+        "evidenceLevel": "transaction-delivery",
+        "transactionTestPath": "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_plan_authority.rs",
+        "transactionTestContains": "postgres_plan_update_transaction_commits_state_event_compatibility_outbox_and_replays",
+        "deliveryTestPath": "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs",
+        "deliveryTestContains": "workspace_plan_updated_outbox_publishes_consumer_once_and_replays_after_crash"
+      }
     },
     {
       "legacyName": "workspace_task_assigned",

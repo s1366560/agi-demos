@@ -1491,6 +1491,35 @@ async function loadWorkspaceCollaborationCapability(
     return unavailable('workspace_collaboration_capability_scope_unavailable');
   }
 
+  if (
+    config.mode === 'local' &&
+    typeof window !== 'undefined' &&
+    window.__MEMSTACK_DESKTOP__?.runtime === 'electron'
+  ) {
+    const invoke = window.__MEMSTACK_DESKTOP__.core?.invoke;
+    if (!invoke) {
+      return unavailable('workspace_core_status_unavailable');
+    }
+    try {
+      const helper = await invoke<DesktopWorkspaceCoreHelperStatus>('workspace_core_status');
+      const validCutoverState = [
+        'legacy-only',
+        'importing',
+        'core-authoritative',
+        'core-unavailable',
+      ].includes(helper?.cutoverState);
+      if (!validCutoverState) {
+        return unavailable('workspace_core_status_invalid');
+      }
+      if (helper.cutoverState !== 'legacy-only' && helper.state !== 'running') {
+        return unavailable('workspace_core_cutover_unavailable');
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return unavailable('workspace_core_status_unavailable');
+    }
+  }
+
   try {
     const headers = new Headers({ Accept: 'application/json' });
     const credential = desktopApiCredential(config);

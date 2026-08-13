@@ -580,20 +580,8 @@ class DIContainer:
     # === Workspace V2 (multi-agent orchestrator) ===
 
     def workspace_orchestrator(self) -> Any:
-        """Singleton lazy-built Workspace V2 orchestrator (multi-agent L5)."""
-        existing = self._workspace_v2_orchestrator
-        if existing is not None:
-            return existing
-        if self._db is not None:
-            from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
-
-            existing = build_sql_orchestrator(self._db)
-        else:
-            from src.infrastructure.agent.workspace_plan import build_default_orchestrator
-
-            existing = build_default_orchestrator()
-        self._workspace_v2_orchestrator = existing
-        return existing
+        """Reject the retired platform-owned Workspace Plan V2 orchestrator."""
+        raise RuntimeError("Workspace Plan V2 orchestration is owned by Avernet Workspace Core")
 
     def topology_repository(self) -> TopologyRepository:
         return self._project.topology_repository()

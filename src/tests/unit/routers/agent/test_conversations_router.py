@@ -11,11 +11,12 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.workspace_core import WorkspaceCoreBackend, WorkspaceCoreSettings
+from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.domain.model.agent import Conversation, ConversationStatus
-from src.domain.model.agent.conversation.errors import (
-    ConversationDomainError,
-    ParticipantNotPresentError,
+from src.domain.model.agent.conversation.errors import ConversationDomainError
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityProfile,
 )
 from src.infrastructure.adapters.primary.web.routers.agent import (
     conversations as conversations_router,
@@ -31,10 +32,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
     Project,
     UserProject,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-    WorkspaceTaskModel,
 )
+from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
 
@@ -67,9 +66,67 @@ class ListUseCase:
         return self._total
 
 
-def _request_with_container(container: object) -> MagicMock:
+class FakeWorkspaceAuthority:
+    def __init__(
+        self,
+        *,
+        names: dict[str, str] | None = None,
+        denied: bool = False,
+        linked_tasks: bool = True,
+    ) -> None:
+        self._names = names or {}
+        self._denied = denied
+        self._linked_tasks = linked_tasks
+        self.get_profile = AsyncMock(side_effect=self._get_profile)
+        self.accessible_profiles = AsyncMock(side_effect=self._accessible_profiles)
+        self.has_task = AsyncMock(return_value=linked_tasks)
+
+    async def _get_profile(self, scope: object) -> WorkspaceAuthorityProfile:
+        if self._denied:
+            raise WorkspaceAuthorityAccessDeniedError
+        workspace_id = str(scope.workspace_id)
+        return WorkspaceAuthorityProfile(
+            workspace_id=workspace_id,
+            tenant_id=str(scope.tenant_id),
+            project_id=str(scope.project_id),
+            name=self._names.get(workspace_id, workspace_id),
+            created_by="owner-1",
+            is_archived=False,
+            metadata={},
+        )
+
+    async def _accessible_profiles(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_ids: set[str],
+        **_kwargs: object,
+    ) -> dict[str, WorkspaceAuthorityProfile]:
+        if self._denied:
+            return {}
+        return {
+            workspace_id: WorkspaceAuthorityProfile(
+                workspace_id=workspace_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                name=self._names.get(workspace_id, workspace_id),
+                created_by="owner-1",
+                is_archived=False,
+                metadata={},
+            )
+            for workspace_id in workspace_ids
+        }
+
+
+def _request_with_container(
+    container: object,
+    *,
+    authority: object | None = None,
+) -> MagicMock:
     request = MagicMock()
     request.app.state.container.with_db.return_value = container
+    request.app.state.workspace_authority = authority or FakeWorkspaceAuthority()
     return request
 
 
@@ -217,13 +274,6 @@ async def test_list_conversations_expands_workspace_group_and_names(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="ws-group",
-        tenant_id="tenant-1",
-        project_id="project-1",
-        name="Grouped Workspace",
-        created_by="user-1",
-    )
     grouped_row = DBConversation(
         id="workspace-worker:ws-group:task-2:agent-1:attempt-1",
         project_id="project-1",
@@ -238,16 +288,7 @@ async def test_list_conversations_expands_workspace_group_and_names(
         current_mode="build",
         participant_agents=[],
     )
-    db_session.add_all([workspace, grouped_row])
-    db_session.add(
-        WorkspaceMemberModel(
-            id="wm-ws-group-user-1",
-            workspace_id="ws-group",
-            user_id="user-1",
-            role="viewer",
-            invited_by="user-1",
-        )
-    )
+    db_session.add(grouped_row)
     await db_session.flush()
 
     base_conversation = Conversation(
@@ -261,7 +302,10 @@ async def test_list_conversations_expands_workspace_group_and_names(
     )
     use_case = ListUseCase([base_conversation], total=2)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
-    request = _request_with_container(container)
+    request = _request_with_container(
+        container,
+        authority=FakeWorkspaceAuthority(names={"ws-group": "Grouped Workspace"}),
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -353,23 +397,6 @@ async def test_list_conversations_caps_workspace_group_expansion(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="ws-large-group",
-        tenant_id="tenant-1",
-        project_id="project-1",
-        name="Large Workspace",
-        created_by="user-1",
-    )
-    db_session.add(workspace)
-    db_session.add(
-        WorkspaceMemberModel(
-            id="wm-ws-large-group-user-1",
-            workspace_id="ws-large-group",
-            user_id="user-1",
-            role="viewer",
-            invited_by="user-1",
-        )
-    )
     db_session.add_all(
         [
             DBConversation(
@@ -410,7 +437,10 @@ async def test_list_conversations_caps_workspace_group_expansion(
     )
 
     response = await conversations_router.list_conversations(
-        request=_request_with_container(container),
+        request=_request_with_container(
+            container,
+            authority=FakeWorkspaceAuthority(names={"ws-large-group": "Large Workspace"}),
+        ),
         project_id="project-1",
         status="active",
         limit=5,
@@ -731,15 +761,7 @@ async def test_list_conversations_rejects_combined_workspace_and_unbound_filters
 async def test_workspace_filter_uses_same_precedence_as_response_projection(
     db_session: AsyncSession,
 ) -> None:
-    workspace_column = WorkspaceModel(
-        id="ws-column",
-        tenant_id="tenant-1",
-        project_id="project-1",
-        name="Column workspace",
-        created_by="user-1",
-    )
     now = datetime.now(UTC)
-    db_session.add(workspace_column)
     db_session.add_all(
         [
             DBConversation(
@@ -824,13 +846,6 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="ws-stable-order",
-        tenant_id="tenant-1",
-        project_id="project-1",
-        name="Stable Workspace",
-        created_by="user-1",
-    )
     old_time = datetime.now(UTC) - timedelta(days=2)
     base_time = datetime.now(UTC)
     rows = [
@@ -880,16 +895,7 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
             participant_agents=[],
         ),
     ]
-    db_session.add_all([workspace, *rows])
-    db_session.add(
-        WorkspaceMemberModel(
-            id="wm-ws-stable-order-user-1",
-            workspace_id="ws-stable-order",
-            user_id="user-1",
-            role="viewer",
-            invited_by="user-1",
-        )
-    )
+    db_session.add_all(rows)
     db_session.add_all(
         [
             DBAgentExecutionEvent(
@@ -932,7 +938,10 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     )
 
     response = await conversations_router.list_conversations(
-        request=_request_with_container(container),
+        request=_request_with_container(
+            container,
+            authority=FakeWorkspaceAuthority(names={"ws-stable-order": "Stable Workspace"}),
+        ),
         project_id="project-1",
         status="active",
         limit=10,
@@ -966,17 +975,9 @@ async def test_list_workspace_conversations_requires_workspace_membership(
         memory_rules={},
         graph_config={},
     )
-    workspace = WorkspaceModel(
-        id="ws-list-private",
-        tenant_id="tenant-workspace-list",
-        project_id="project-workspace-list",
-        name="Private Workspace",
-        created_by="owner-user",
-    )
     db_session.add_all(
         [
             project,
-            workspace,
             UserProject(
                 id="up-workspace-list-viewer",
                 user_id="user-1",
@@ -994,7 +995,10 @@ async def test_list_workspace_conversations_requires_workspace_membership(
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.list_conversations(
-            request=_request_with_container(container),
+            request=_request_with_container(
+                container,
+                authority=FakeWorkspaceAuthority(denied=True),
+            ),
             project_id="project-workspace-list",
             status=None,
             limit=10,
@@ -1018,10 +1022,24 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
     test_user: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"allowed": True}))
+    def workspace_profile(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/workspaces/workspace-core-only")
+        return httpx.Response(
+            200,
+            json={
+                "id": "workspace-core-only",
+                "tenant_id": test_project_db.tenant_id,
+                "project_id": test_project_db.id,
+                "name": "Core-only workspace",
+                "created_by": str(test_user.id),
+                "is_archived": False,
+                "metadata": {},
+            },
+        )
+
+    transport = httpx.MockTransport(workspace_profile)
     settings = WorkspaceCoreSettings.model_validate(
         {
-            "WORKSPACE_CORE_BACKEND": WorkspaceCoreBackend.AVERNET.value,
             "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
             "WORKSPACE_CORE_SERVICE_TOKEN": "service-token",
             "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "webhook-token",
@@ -1031,7 +1049,9 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
     )
     request = MagicMock()
     request.app.state.workspace_core_settings = settings
-    request.app.state.workspace_core_client = WorkspaceCoreClient(settings, transport=transport)
+    client = WorkspaceCoreClient(settings, transport=transport)
+    request.app.state.workspace_core_client = client
+    request.app.state.workspace_authority = AvernetWorkspaceAuthority(client)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
@@ -1684,7 +1704,8 @@ async def test_conversation_invariant_errors_are_sanitized() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router._enforce_conversation_invariants(
             conversation,
-            container=SimpleNamespace(),
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 422
@@ -1695,29 +1716,24 @@ async def test_conversation_invariant_errors_are_sanitized() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_workspace_roster_invariant_errors_are_sanitized(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingValidator:
-        def __init__(self, **_kwargs: Any) -> None:
-            pass
-
-        async def assert_valid(self, _conversation: object) -> None:
-            raise ParticipantNotPresentError("secret workspace roster mismatch")
-
-    monkeypatch.setattr(
-        "src.application.services.agent.workspace_roster_validator.WorkspaceRosterValidator",
-        FailingValidator,
-    )
     conversation = SimpleNamespace(
         conversation_mode=None,
+        tenant_id="tenant-1",
+        project_id="project-1",
         workspace_id="workspace-1",
         participant_agents=["secret-agent"],
+    )
+    request = MagicMock()
+    request.app.state.workspace_authority = SimpleNamespace(
+        list_agents=AsyncMock(return_value=()),
     )
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router._enforce_conversation_invariants(
             conversation,
-            container=SimpleNamespace(workspace_agent_repository=lambda: object()),
+            request=request,
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 422
@@ -1733,16 +1749,6 @@ async def test_update_conversation_mode_requires_workspace_membership(
     test_user: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="workspace-mode-private",
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Private mode workspace",
-        created_by=test_user.id,
-    )
-    db_session.add(workspace)
-    await db_session.flush()
-
     conversation = Conversation(
         id="conversation-mode-private",
         project_id=test_project_db.id,
@@ -1767,8 +1773,11 @@ async def test_update_conversation_mode_requires_workspace_membership(
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.update_conversation_mode(
             conversation_id=conversation.id,
-            data=UpdateConversationModeRequest(workspace_id=workspace.id),
-            request=MagicMock(),
+            data=UpdateConversationModeRequest(workspace_id="workspace-mode-private"),
+            request=_request_with_container(
+                container,
+                authority=FakeWorkspaceAuthority(denied=True),
+            ),
             project_id=test_project_db.id,
             current_user=test_user,
             tenant_id=test_project_db.tenant_id,
@@ -1787,22 +1796,6 @@ async def test_workspace_task_linkage_requires_matching_workspace_project_and_te
     test_project_db: Project,
     test_user: object,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="workspace-task-linkage",
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Task linkage workspace",
-        created_by=test_user.id,
-    )
-    task = WorkspaceTaskModel(
-        id="workspace-task-linkage-task",
-        workspace_id=workspace.id,
-        title="Linked task",
-        created_by=test_user.id,
-    )
-    db_session.add_all([workspace, task])
-    await db_session.flush()
-
     invalid_scopes = [
         {
             "workspace_id": "workspace-other",
@@ -1810,12 +1803,12 @@ async def test_workspace_task_linkage_requires_matching_workspace_project_and_te
             "tenant_id": test_project_db.tenant_id,
         },
         {
-            "workspace_id": workspace.id,
+            "workspace_id": "workspace-task-linkage",
             "project_id": "project-other",
             "tenant_id": test_project_db.tenant_id,
         },
         {
-            "workspace_id": workspace.id,
+            "workspace_id": "workspace-task-linkage",
             "project_id": test_project_db.id,
             "tenant_id": "tenant-other",
         },
@@ -1824,8 +1817,12 @@ async def test_workspace_task_linkage_requires_matching_workspace_project_and_te
     for scope in invalid_scopes:
         with pytest.raises(HTTPException) as exc_info:
             await conversations_router._ensure_workspace_task_linkage(
-                db_session,
-                linked_workspace_task_id=task.id,
+                _request_with_container(
+                    object(),
+                    authority=FakeWorkspaceAuthority(linked_tasks=False),
+                ),
+                current_user=test_user,
+                linked_workspace_task_id="workspace-task-linkage-task",
                 **scope,
             )
 
@@ -1841,29 +1838,6 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
     test_user: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = WorkspaceModel(
-        id="workspace-mode-linkage",
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Mode linkage workspace",
-        created_by=test_user.id,
-    )
-    membership = WorkspaceMemberModel(
-        id="workspace-mode-linkage-member",
-        workspace_id=workspace.id,
-        user_id=test_user.id,
-        role="member",
-        invited_by=test_user.id,
-    )
-    task = WorkspaceTaskModel(
-        id="workspace-mode-linkage-task",
-        workspace_id=workspace.id,
-        title="Mode linked task",
-        created_by=test_user.id,
-    )
-    db_session.add_all([workspace, membership, task])
-    await db_session.flush()
-
     conversation = Conversation(
         id="conversation-mode-linkage",
         project_id=test_project_db.id,
@@ -1888,18 +1862,21 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
     response = await conversations_router.update_conversation_mode(
         conversation_id=conversation.id,
         data=UpdateConversationModeRequest(
-            workspace_id=workspace.id,
-            linked_workspace_task_id=task.id,
+            workspace_id="workspace-mode-linkage",
+            linked_workspace_task_id="workspace-mode-linkage-task",
         ),
-        request=MagicMock(),
+        request=_request_with_container(
+            container,
+            authority=FakeWorkspaceAuthority(linked_tasks=True),
+        ),
         project_id=test_project_db.id,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
         db=db_session,
     )
 
-    assert response.workspace_id == workspace.id
-    assert response.linked_workspace_task_id == task.id
+    assert response.workspace_id == "workspace-mode-linkage"
+    assert response.linked_workspace_task_id == "workspace-mode-linkage-task"
     conversation_repo.save.assert_awaited_once_with(conversation)
 
 

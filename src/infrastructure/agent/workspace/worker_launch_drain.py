@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
-    WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
 
@@ -134,10 +133,7 @@ async def _enqueue_worker_launch(
     actor_user_id: str,
     leader_agent_id: str | None,
 ) -> None:
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
-        SqlWorkspacePlanOutboxRepository,
-    )
-    from src.infrastructure.agent.workspace_plan.outbox_handlers import WORKER_LAUNCH_EVENT
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
     worker_agent_id = _worker_agent_id(task)
     if not worker_agent_id:
@@ -159,13 +155,8 @@ async def _enqueue_worker_launch(
     if node_id:
         payload["node_id"] = node_id
 
-    _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
-        plan_id=_mapping_string(metadata, WORKSPACE_PLAN_ID),
-        workspace_id=task.workspace_id,
-        event_type=WORKER_LAUNCH_EVENT,
-        payload=payload,
-        metadata={"source": "workspace.worker_launch_drain"},
-    )
+    del session, payload
+    legacy_workspace_runtime_retired("worker launch outbox")
 
 
 def _worker_agent_id(task: WorkspaceTask) -> str | None:

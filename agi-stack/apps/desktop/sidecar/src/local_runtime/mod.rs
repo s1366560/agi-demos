@@ -96,8 +96,6 @@ mod provider_credentials;
 mod provider_probe;
 mod provider_usage_store;
 mod resource_registry;
-#[cfg(test)]
-mod routing_policy_tests;
 mod run_control;
 mod search_projection;
 mod session_projection;
@@ -142,15 +140,12 @@ use provider_credentials::{
 };
 use provider_probe::{ProviderProbeOutcome, ProviderProbeRequest, ProviderProbeService};
 use provider_usage_store::ProviderUsageRecord;
-use resource_registry::{ManagedResourceKind, ResourceRegistryError, WorkspaceAgentPolicyMutation};
+use resource_registry::{ManagedResourceKind, ResourceRegistryError};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
     HitlResponseCommit, HitlResponseCommitError, HitlResponseCommitOutcome,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
-use task_session::{
-    workspace_value, WorkspaceCollaborationMode, WorkspaceCreateAttributes, WorkspaceUseCase,
-};
 use worktree::WorktreeManager;
 
 #[derive(Clone)]
@@ -197,6 +192,12 @@ impl LocalRuntimeService {
         )?;
         state.app_data_dir = Some(app_data_dir.clone());
         let state = Arc::new(state);
+        if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
+            .await?
+            .is_some_and(|marker| marker.state.is_cutover())
+        {
+            workspace_core_bridge::mark_workspace_core_cutover(&state);
+        }
         state
             .mcp_supervisor
             .install_credential_vault(mcp_credential_vault)
@@ -258,20 +259,20 @@ impl LocalRuntimeService {
         workspace_core_bridge::clear_authority(&self.state, generation);
     }
 
+    pub(crate) fn mark_workspace_core_cutover(&self) {
+        workspace_core_bridge::mark_workspace_core_cutover(&self.state);
+    }
+
     pub(crate) async fn replay_workspace_core_terminal_callbacks(&self) -> Result<usize, String> {
         workspace_core_bridge::replay_pending_terminal_callbacks(Arc::clone(&self.state)).await
     }
 
-    pub(crate) fn legacy_workspace_rows(
+    pub(crate) fn with_offline_workspace_import_connection<T>(
         &self,
-    ) -> Result<
-        (
-            Vec<session_store::DesktopLegacyWorkspaceRow>,
-            Vec<session_store::DesktopLegacyWorkspaceMessageRow>,
-        ),
-        String,
-    > {
-        self.state.session_store.legacy_workspace_rows()
+        operation: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let connection = self.state.session_store.connection()?;
+        operation(&connection)
     }
 
     pub(crate) fn save_local_trusted_session(&self, value: &str) -> Result<(), String> {
@@ -576,11 +577,6 @@ struct LocalConversation {
     updated_at: String,
 }
 
-const LOCAL_DEMO_HIERARCHY_SEED_ID: &str = "northstar-desktop-client-local-demo-v1";
-const LOCAL_DEMO_SESSION_CONTENT_SEED_ID: &str =
-    "northstar-desktop-client-local-demo-session-content-v1";
-const LOCAL_DEMO_DESKTOP_WORKSPACE_ID: &str = "local-demo-desktop-client-main";
-const LOCAL_DEMO_RELIABILITY_WORKSPACE_ID: &str = "local-demo-release-reliability";
 const LOCAL_DEMO_PRIMARY_CONVERSATION_ID: &str = "local-demo-flaky-data-pipeline-test";
 const LOCAL_DEMO_CONVERSATION_IDS: &[&str] = &[
     LOCAL_DEMO_PRIMARY_CONVERSATION_ID,
@@ -588,331 +584,6 @@ const LOCAL_DEMO_CONVERSATION_IDS: &[&str] = &[
     "local-demo-task-search-shortcuts",
     "local-demo-agent-sdk-upgrade",
 ];
-
-struct LocalDemoHierarchySeed {
-    workspaces: Vec<Value>,
-    conversations: Vec<LocalConversation>,
-}
-
-struct LocalDemoSessionContentSeed {
-    conversation_id: &'static str,
-    timeline: Vec<Value>,
-}
-
-fn local_demo_hierarchy_seed(now: &str) -> LocalDemoHierarchySeed {
-    let provenance = json!({
-        "kind": "local_demo_seed",
-        "seed_id": LOCAL_DEMO_HIERARCHY_SEED_ID,
-        "catalog_scope": "northstar/desktop-client",
-    });
-    let workspaces = vec![
-        json!({
-            "id": LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
-            "tenant_id": "northstar",
-            "project_id": "desktop-client",
-            "name": "Desktop Client",
-            "description": "Local demo workspace for application UX, frontend, and Rust runtime delivery.",
-            "status": "open",
-            "created_at": now,
-            "updated_at": now,
-            "metadata": {
-                "runtime": "local",
-                "demo": true,
-                "provenance": provenance,
-            },
-        }),
-        json!({
-            "id": LOCAL_DEMO_RELIABILITY_WORKSPACE_ID,
-            "tenant_id": "northstar",
-            "project_id": "desktop-client",
-            "name": "Release Reliability",
-            "description": "Local demo workspace for CI health, releases, and verification evidence.",
-            "status": "open",
-            "created_at": now,
-            "updated_at": now,
-            "metadata": {
-                "runtime": "local",
-                "demo": true,
-                "provenance": provenance,
-            },
-        }),
-    ];
-    let conversations = [
-        (
-            "local-demo-flaky-data-pipeline-test",
-            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
-            "Fix flaky data-pipeline test",
-        ),
-        (
-            "local-demo-auth-middleware-review",
-            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
-            "Review auth middleware refactor",
-        ),
-        (
-            "local-demo-task-search-shortcuts",
-            LOCAL_DEMO_DESKTOP_WORKSPACE_ID,
-            "Add task search shortcuts",
-        ),
-        (
-            "local-demo-agent-sdk-upgrade",
-            LOCAL_DEMO_RELIABILITY_WORKSPACE_ID,
-            "Plan agent SDK upgrade",
-        ),
-    ]
-    .into_iter()
-    .map(|(id, workspace_id, title)| LocalConversation {
-        id: id.to_string(),
-        project_id: "desktop-client".to_string(),
-        tenant_id: "northstar".to_string(),
-        title: title.to_string(),
-        workspace_id: Some(workspace_id.to_string()),
-        capability_mode: ConversationCapabilityMode::Code,
-        current_mode: ConversationRunMode::Plan,
-        created_at: now.to_string(),
-        updated_at: now.to_string(),
-    })
-    .collect();
-    LocalDemoHierarchySeed {
-        workspaces,
-        conversations,
-    }
-}
-
-fn local_demo_session_content_seed() -> LocalDemoSessionContentSeed {
-    let conversation_id = LOCAL_DEMO_PRIMARY_CONVERSATION_ID;
-    let timeline = vec![
-        local_demo_timeline_event(
-            conversation_id,
-            "user-goal",
-            "user_message",
-            1,
-            Some("user"),
-            Some(
-                "Please reproduce the flaky pipeline test, isolate the race without changing \
-                 the public API, and leave verification evidence in this session.",
-            ),
-            json!({}),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "agent-plan",
-            "assistant_message",
-            2,
-            Some("assistant"),
-            Some(
-                "I’ll inspect the shared runner, reproduce the race in an isolated worktree, \
-                 then verify the smallest safe fix.\n\n- Inspect fixture ownership\n- Reproduce \
-                 concurrently\n- Patch and verify",
-            ),
-            json!({}),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "worktree-ready",
-            "sandbox_ready",
-            3,
-            None,
-            Some("Isolated worktree ready"),
-            json!({
-                "display": {
-                    "title": "Isolated worktree ready",
-                    "summary": "worktree/agent-fix · Local sandbox",
-                    "status": "Ready"
-                },
-                "environment": {
-                    "kind": "worktree",
-                    "label": "worktree/agent-fix"
-                }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "search-files-call",
-            "act",
-            4,
-            None,
-            None,
-            json!({
-                "toolName": "search_files",
-                "toolInput": { "query": "shared_runner", "path": "src/pipeline" },
-                "display": { "title": "Search files", "summary": "src/pipeline · shared_runner" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "search-files-result",
-            "observe",
-            5,
-            None,
-            None,
-            json!({
-                "toolName": "search_files",
-                "toolOutput": { "matches": 4 },
-                "display": { "title": "Search files", "summary": "4 results", "status": "Completed" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "read-code-call",
-            "act",
-            6,
-            None,
-            None,
-            json!({
-                "toolName": "read_code",
-                "toolInput": { "paths": ["runner.py", "shared.py", "test_pipeline.py"] },
-                "display": { "title": "Read code", "summary": "runner.py · shared.py · test_pipeline.py" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "read-code-result",
-            "observe",
-            7,
-            None,
-            None,
-            json!({
-                "toolName": "read_code",
-                "toolOutput": { "files": 3 },
-                "display": { "title": "Read code", "summary": "3 files", "status": "Completed" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "run-tests-call",
-            "act",
-            8,
-            None,
-            None,
-            json!({
-                "toolName": "run_tests",
-                "toolInput": { "command": "pytest --count=50" },
-                "display": { "title": "Run tests", "summary": "pytest --count=50" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "run-tests-result",
-            "observe",
-            9,
-            None,
-            None,
-            json!({
-                "toolName": "run_tests",
-                "toolOutput": { "result": "1 failure reproduced" },
-                "display": { "title": "Run tests", "summary": "1 failure reproduced", "status": "Completed" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "apply-patch-call",
-            "act",
-            10,
-            None,
-            None,
-            json!({
-                "toolName": "apply_patch",
-                "toolInput": { "scope": "Fixture ownership scoped to job ID" },
-                "display": { "title": "Apply patch", "summary": "Fixture ownership scoped to job ID" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "apply-patch-result",
-            "observe",
-            11,
-            None,
-            None,
-            json!({
-                "toolName": "apply_patch",
-                "toolOutput": { "files_changed": 4, "additions": 138, "deletions": 29 },
-                "display": { "title": "Apply patch", "summary": "+138 −29", "status": "Completed" }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "agent-result",
-            "assistant_message",
-            12,
-            Some("assistant"),
-            Some(
-                "I found the race: shared mutable state kept the previous job’s runner alive. \
-                 I scoped the fixture to the job ID and added concurrent regression coverage.",
-            ),
-            json!({
-                "display": {
-                    "title": "Review changed files",
-                    "summary": "4 files · +138 −29"
-                }
-            }),
-        ),
-        local_demo_timeline_event(
-            conversation_id,
-            "verification-progress",
-            "task_updated",
-            13,
-            None,
-            Some("18 tests passed · 50 race runs passed · static checks"),
-            json!({
-                "display": {
-                    "title": "Verifying the isolated fix",
-                    "summary": "18 tests passed · 50 race runs passed · static checks",
-                    "checkpoint": "Patch applied",
-                    "evidence": "18 tests · 50 race runs"
-                },
-                "progress": { "completed": 3, "total": 4 }
-            }),
-        ),
-    ];
-    LocalDemoSessionContentSeed {
-        conversation_id,
-        timeline,
-    }
-}
-
-fn local_demo_timeline_event(
-    conversation_id: &str,
-    suffix: &str,
-    event_type: &str,
-    event_counter: i64,
-    role: Option<&str>,
-    content: Option<&str>,
-    fields: Value,
-) -> Value {
-    const BASE_EVENT_TIME_US: i64 = 1_784_282_040_000_000;
-    let event_time_us = BASE_EVENT_TIME_US + event_counter * 1_000_000;
-    let payload = fields.clone();
-    let mut event = json!({
-        "id": format!("{conversation_id}:{suffix}"),
-        "type": event_type,
-        "event_type": event_type,
-        "conversation_id": conversation_id,
-        "eventTimeUs": event_time_us,
-        "eventCounter": event_counter,
-        "event_time_us": event_time_us,
-        "event_counter": event_counter,
-        "time_us": event_time_us,
-        "counter": event_counter,
-        "timestamp": event_time_us / 1_000,
-        "payload": payload,
-        "data": fields,
-    });
-    if let Some(role) = role {
-        event["role"] = json!(role);
-        event["data"]["role"] = json!(role);
-    }
-    if let Some(content) = content {
-        event["content"] = json!(content);
-        event["data"]["content"] = json!(content);
-    }
-    let additional_fields = event["payload"].as_object().cloned();
-    if let (Some(event_fields), Some(additional_fields)) =
-        (event.as_object_mut(), additional_fields)
-    {
-        event_fields.extend(additional_fields);
-    }
-    event
-}
 
 fn is_local_demo_conversation(conversation_id: &str) -> bool {
     LOCAL_DEMO_CONVERSATION_IDS.contains(&conversation_id)
@@ -1258,34 +929,6 @@ impl LocalRuntimeState {
             );
         }
         let (events, _) = broadcast::channel(256);
-        let workspace_id = "local-workspace".to_string();
-        let now = now_iso();
-        let workspace = json!({
-            "id": workspace_id,
-            "tenant_id": "local",
-            "project_id": "local-project",
-            "name": "Local workspace",
-            "description": "Local desktop runtime workspace",
-            "status": "open",
-            "created_at": now,
-            "updated_at": now,
-            "metadata": { "runtime": "local" },
-        });
-        session_store.ensure_workspace(&workspace)?;
-        let local_demo_seed = local_demo_hierarchy_seed(&now);
-        session_store.ensure_local_demo_hierarchy_seed(
-            LOCAL_DEMO_HIERARCHY_SEED_ID,
-            &local_demo_seed.workspaces,
-            &local_demo_seed.conversations,
-            &now,
-        )?;
-        let local_demo_session_content = local_demo_session_content_seed();
-        session_store.ensure_local_demo_session_content_seed(
-            LOCAL_DEMO_SESSION_CONTENT_SEED_ID,
-            local_demo_session_content.conversation_id,
-            &local_demo_session_content.timeline,
-            &now,
-        )?;
         let mut provider_bindings = HashMap::new();
         let mut provider_values = HashMap::new();
         let mut provider_credential_records = Vec::new();
@@ -1320,34 +963,6 @@ impl LocalRuntimeState {
                 provider_selections.insert(tenant_id, provider_id);
             } else {
                 session_store.clear_llm_provider_selection_if_matches(&tenant_id, &provider_id)?;
-            }
-        }
-        for (tenant_id, policy) in session_store.list_llm_routing_policies()? {
-            let Some(default_target) = policy.get("roles").and_then(|roles| roles.get("default"))
-            else {
-                continue;
-            };
-            let Some(provider_id) = default_target.get("provider_id").and_then(Value::as_str)
-            else {
-                continue;
-            };
-            let Some(model_id) = default_target.get("model_id").and_then(Value::as_str) else {
-                continue;
-            };
-            if provider_selections.get(&tenant_id).map(String::as_str) != Some(provider_id) {
-                continue;
-            }
-            let key = ProviderRuntimeKey {
-                tenant_id,
-                provider_id: provider_id.to_string(),
-            };
-            if provider_values
-                .get(&key)
-                .is_some_and(|provider| provider_supports_route_model(provider, model_id))
-            {
-                if let Some(binding) = provider_bindings.get_mut(&key) {
-                    binding.model = model_id.to_string();
-                }
             }
         }
         let mut runtime_credentials = HashMap::new();
@@ -1467,24 +1082,24 @@ impl LocalRuntimeState {
             .is_some_and(automation_worker::AutomationWorkerHandle::is_running)
     }
 
-    fn automation_runtime_available_for_workspace(
+    async fn automation_runtime_available_for_workspace(
         &self,
         tenant_id: &str,
         project_id: &str,
         workspace_id: &str,
     ) -> bool {
-        self.automation_worker_running()
-            && automation_executor::validate_workspace_scope(
-                self,
-                tenant_id,
-                project_id,
-                workspace_id,
-            )
+        if !self.automation_worker_running() {
+            return false;
+        }
+        automation_executor::validate_workspace_scope(self, tenant_id, project_id, workspace_id)
+            .await
             .is_ok()
-            && self.automation_agent_authority_for_workspace(tenant_id, project_id, workspace_id)
+            && self
+                .automation_agent_authority_for_workspace(tenant_id, project_id, workspace_id)
+                .await
     }
 
-    fn validate_automation_execution_authority(
+    async fn validate_automation_execution_authority(
         &self,
         tenant_id: &str,
         project_id: &str,
@@ -1500,14 +1115,18 @@ impl LocalRuntimeState {
             project_id,
             job_snapshot,
             command_conversation_id,
-        )?;
-        if !self.automation_agent_authority_for_workspace(tenant_id, project_id, &workspace_id) {
+        )
+        .await?;
+        if !self
+            .automation_agent_authority_for_workspace(tenant_id, project_id, &workspace_id)
+            .await
+        {
             return Err("local_automation_provider_unavailable");
         }
         Ok(())
     }
 
-    fn automation_agent_authority_for_workspace(
+    async fn automation_agent_authority_for_workspace(
         &self,
         tenant_id: &str,
         project_id: &str,
@@ -1517,12 +1136,14 @@ impl LocalRuntimeState {
         if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
             return true;
         }
-        let policy = match self.session_store.workspace_llm_routing_policy(
+        let policy = match workspace_core_bridge::workspace_policy(
+            self,
             tenant_id,
             project_id,
             workspace_id,
-            Utc::now().timestamp_millis(),
-        ) {
+        )
+        .await
+        {
             Ok(policy) => policy,
             Err(_) => return false,
         };
@@ -1643,11 +1264,6 @@ impl LocalRuntimeState {
             return;
         }
         let _ = self.events.send(item);
-    }
-
-    fn append_workspace_message(&self, workspace_id: &str, message: Value) -> Result<(), String> {
-        self.session_store
-            .append_workspace_message(workspace_id, &message)
     }
 
     fn publish_run_status(&self, run: &DesktopRun) {
@@ -2172,11 +1788,10 @@ impl LocalRuntimeState {
             state: Arc::clone(&self),
             conversation_id: conversation_id.clone(),
         });
-        let engine = match self.agent_engine_for_role(
-            &conversation,
-            authoritative_run.as_ref(),
-            workload_role,
-        ) {
+        let engine = match self
+            .agent_engine_for_role(&conversation, authoritative_run.as_ref(), workload_role)
+            .await
+        {
             Ok(engine) => engine,
             Err(error) => {
                 let item = self.timeline_item(
@@ -2290,15 +1905,15 @@ impl LocalRuntimeState {
         )
     }
 
-    fn agent_engine(
+    async fn agent_engine(
         &self,
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
     ) -> Result<ReActEngine, String> {
-        self.agent_engine_for_role(conversation, run, None)
+        self.agent_engine_for_role(conversation, run, None).await
     }
 
-    fn agent_engine_for_role(
+    async fn agent_engine_for_role(
         &self,
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
@@ -2355,23 +1970,53 @@ impl LocalRuntimeState {
                 })?,
             )),
         };
-        let llm = workload_role.map_or_else(
-            || self.llm_for_capability(conversation),
-            |role| self.llm_for_role(conversation, role),
-        );
-        let max_rounds = conversation
-            .workspace_id
-            .as_deref()
-            .and_then(|workspace_id| {
-                self.session_store
-                    .workspace_llm_routing_policy(
+        let policy = if let Some(workspace_id) = conversation.workspace_id.as_deref() {
+            #[cfg(test)]
+            if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+                None
+            } else {
+                Some(
+                    workspace_core_bridge::workspace_policy(
+                        self,
                         &conversation.tenant_id,
                         &conversation.project_id,
                         workspace_id,
-                        Utc::now().timestamp_millis(),
                     )
-                    .ok()
-            })
+                    .await
+                    .map_err(|_| "Workspace Core policy authority is unavailable".to_string())?,
+                )
+            }
+            #[cfg(not(test))]
+            Some(
+                workspace_core_bridge::workspace_policy(
+                    self,
+                    &conversation.tenant_id,
+                    &conversation.project_id,
+                    workspace_id,
+                )
+                .await
+                .map_err(|_| "Workspace Core policy authority is unavailable".to_string())?,
+            )
+        } else {
+            None
+        };
+        let role = workload_role
+            .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
+        let llm: Arc<dyn LlmPort> = match policy.as_ref() {
+            Some(policy) => self.llm_for_policy(&conversation.tenant_id, policy, role),
+            None => {
+                #[cfg(test)]
+                if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+                    Arc::new(MockLocalLlm)
+                } else {
+                    Arc::new(UnconfiguredLocalLlm)
+                }
+                #[cfg(not(test))]
+                Arc::new(UnconfiguredLocalLlm)
+            }
+        };
+        let max_rounds = policy
+            .as_ref()
             .and_then(|policy| {
                 policy
                     .get("reasoning_effort")
@@ -2482,7 +2127,10 @@ impl LocalRuntimeState {
             state: Arc::clone(&self),
             conversation_id: conversation_id.clone(),
         });
-        let engine = match self.agent_engine(&conversation, authoritative_run.as_ref()) {
+        let engine = match self
+            .agent_engine(&conversation, authoritative_run.as_ref())
+            .await
+        {
             Ok(engine) => engine,
             Err(error) => {
                 let item = self.timeline_item(
@@ -2568,33 +2216,27 @@ impl LocalRuntimeState {
     }
 
     #[cfg(test)]
-    fn llm(&self, tenant_id: &str) -> Arc<dyn LlmPort> {
+    async fn llm(&self, tenant_id: &str) -> Result<Arc<dyn LlmPort>, String> {
         self.llm_for_scope(
             tenant_id,
             "local-project",
             "local-workspace",
             LlmWorkloadRole::Default,
         )
+        .await
     }
 
-    fn llm_for_capability(&self, conversation: &LocalConversation) -> Arc<dyn LlmPort> {
-        self.llm_for_role(
-            conversation,
-            workload_role_for_capability(conversation.capability_mode),
-        )
-    }
-
-    fn llm_for_role(
+    async fn llm_for_role(
         &self,
         conversation: &LocalConversation,
         role: LlmWorkloadRole,
-    ) -> Arc<dyn LlmPort> {
+    ) -> Result<Arc<dyn LlmPort>, String> {
         let Some(workspace_id) = conversation.workspace_id.as_deref() else {
             #[cfg(test)]
             if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
-                return Arc::new(MockLocalLlm);
+                return Ok(Arc::new(MockLocalLlm));
             }
-            return Arc::new(UnconfiguredLocalLlm);
+            return Ok(Arc::new(UnconfiguredLocalLlm));
         };
         self.llm_for_scope(
             &conversation.tenant_id,
@@ -2602,29 +2244,38 @@ impl LocalRuntimeState {
             workspace_id,
             role,
         )
+        .await
     }
 
-    fn llm_for_scope(
+    async fn llm_for_scope(
         &self,
         tenant_id: &str,
         project_id: &str,
         workspace_id: &str,
+        role: LlmWorkloadRole,
+    ) -> Result<Arc<dyn LlmPort>, String> {
+        #[cfg(test)]
+        if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+            return Ok(Arc::new(MockLocalLlm));
+        }
+        let policy =
+            workspace_core_bridge::workspace_policy(self, tenant_id, project_id, workspace_id)
+                .await
+                .map_err(|_| "Workspace Core policy authority is unavailable".to_string())?;
+        Ok(self.llm_for_policy(tenant_id, &policy, role))
+    }
+
+    fn llm_for_policy(
+        &self,
+        tenant_id: &str,
+        policy: &Value,
         role: LlmWorkloadRole,
     ) -> Arc<dyn LlmPort> {
         let runtime = self
             .provider_runtime
             .lock()
             .expect("provider runtime state");
-        let policy = match self.session_store.workspace_llm_routing_policy(
-            tenant_id,
-            project_id,
-            workspace_id,
-            Utc::now().timestamp_millis(),
-        ) {
-            Ok(policy) => policy,
-            Err(_) => return Arc::new(UnconfiguredLocalLlm),
-        };
-        let targets = match routing_targets_for_role(&policy, role) {
+        let targets = match routing_targets_for_role(policy, role) {
             Ok(targets) => targets,
             Err(_) => return Arc::new(UnconfiguredLocalLlm),
         };
@@ -2716,15 +2367,7 @@ impl LocalRuntimeState {
             .and_then(|run| run.environment.as_ref())
             .and_then(|environment| serde_json::to_value(environment).ok())
             .unwrap_or_else(|| json!({ "kind": "local", "label": "Local runtime" }));
-        let workspace_name = conversation
-            .workspace_id
-            .as_deref()
-            .and_then(|workspace_id| {
-                self.session_store
-                    .workspace_name(workspace_id)
-                    .ok()
-                    .flatten()
-            });
+        let workspace_name: Option<String> = None;
         json!({
             "id": conversation.id,
             "project_id": conversation.project_id,
@@ -2870,14 +2513,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             post(validate_llm_provider_draft),
         )
         .route(
-            "/api/v1/llm-providers/routing-policy",
-            get(get_llm_routing_policy).put(put_llm_routing_policy),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/agent-policy",
-            get(get_workspace_agent_policy).patch(patch_workspace_agent_policy),
-        )
-        .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants",
             get(list_workspace_tool_grants),
         )
@@ -2916,6 +2551,11 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/llm-providers/:provider_id/runtime-selection",
             put(select_llm_provider_runtime),
+        )
+        .route(
+            "/api/v1/llm-providers/routing-policy",
+            get(workspace_core_bridge::proxy_workspace_fallback)
+                .put(workspace_core_bridge::proxy_workspace_fallback),
         )
         .route(
             "/api/v1/llm-providers/:provider_id",
@@ -3277,7 +2917,7 @@ fn ensure_active_workspace(
 }
 
 fn ensure_workspace_scope(
-    state: &LocalRuntimeState,
+    _state: &LocalRuntimeState,
     authenticated: &AuthenticatedContext,
     tenant_id: &str,
     project_id: &str,
@@ -3288,32 +2928,10 @@ fn ensure_workspace_scope(
     }
     ensure_active_project(authenticated, project_id)?;
 
-    let project_id = state
-        .session_store
-        .workspace_project_id(workspace_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "workspace not found" })),
-            )
-        })?;
-    let tenant_id = state
-        .session_store
-        .workspace_tenant_id(workspace_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "workspace not found" })),
-            )
-        })?;
-    if project_id != authenticated.workspace.project_id
-        || tenant_id != authenticated.workspace.tenant_id
-    {
-        return Err(active_workspace_scope_error());
-    }
-    Ok(())
+    let _ = workspace_id;
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 fn execution_environment_error(error: String) -> (StatusCode, Json<Value>) {
@@ -3381,10 +2999,6 @@ fn resource_registry_error(error: ResourceRegistryError) -> (StatusCode, Json<Va
         ResourceRegistryError::RevisionConflict { .. } => {
             (StatusCode::CONFLICT, Json(json!({ "detail": detail })))
         }
-        ResourceRegistryError::InvalidRoutingPolicy(_) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": detail })),
-        ),
         ResourceRegistryError::InvalidMutation(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({
@@ -3792,32 +3406,6 @@ struct LlmRoutingRoles {
     vision: Option<LlmRouteTarget>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LlmRoutingPolicyMutation {
-    project_id: String,
-    workspace_id: String,
-    expected_revision: u64,
-    roles: LlmRoutingRolesMutation,
-    fallbacks: Vec<LlmRouteTarget>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LlmRoutingPolicyScope {
-    project_id: String,
-    workspace_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LlmRoutingRolesMutation {
-    default: Value,
-    fast: Value,
-    coding: Value,
-    vision: Value,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum LlmWorkloadRole {
@@ -3969,182 +3557,6 @@ async fn list_llm_providers(
         })
         .collect();
     Ok(Json(Value::Array(providers)))
-}
-
-async fn get_llm_routing_policy(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Query(scope): Query<LlmRoutingPolicyScope>,
-) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &authenticated.workspace.tenant_id,
-        &scope.project_id,
-        &scope.workspace_id,
-    )?;
-    state
-        .session_store
-        .workspace_llm_routing_policy(
-            &authenticated.workspace.tenant_id,
-            &scope.project_id,
-            &scope.workspace_id,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
-}
-
-async fn put_llm_routing_policy(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(request): Json<LlmRoutingPolicyMutation>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    let tenant_id = &authenticated.workspace.tenant_id;
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        tenant_id,
-        &request.project_id,
-        &request.workspace_id,
-    )?;
-    let project_id = request.project_id.clone();
-    let workspace_id = request.workspace_id.clone();
-    let expected_revision = request.expected_revision;
-    let (roles, fallbacks) = normalized_routing_policy(request)?;
-    let mut runtime = state
-        .provider_runtime
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?;
-    let current_policy = state
-        .session_store
-        .workspace_llm_routing_policy(
-            tenant_id,
-            &project_id,
-            &workspace_id,
-            Utc::now().timestamp_millis(),
-        )
-        .map_err(resource_registry_error)?;
-    let actual_revision = current_policy
-        .get("revision")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    if expected_revision != actual_revision {
-        return Err(resource_registry_error(
-            ResourceRegistryError::RevisionConflict {
-                expected: expected_revision,
-                actual: actual_revision,
-            },
-        ));
-    }
-    for target in [
-        LlmWorkloadRole::Default,
-        LlmWorkloadRole::Fast,
-        LlmWorkloadRole::Coding,
-        LlmWorkloadRole::Vision,
-    ]
-    .into_iter()
-    .filter_map(|role| configured_routing_target(&roles, role))
-    .chain(fallbacks.iter())
-    {
-        let provider = state
-            .session_store
-            .managed_resource(
-                ManagedResourceKind::Provider,
-                "tenant",
-                tenant_id,
-                &target.provider_id,
-            )
-            .map_err(local_store_error)?
-            .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
-        let binding = runtime_binding_for_route_target(&provider, target)?;
-        let key = ProviderRuntimeKey {
-            tenant_id: tenant_id.clone(),
-            provider_id: target.provider_id.clone(),
-        };
-        if binding.auth_method != "none" && !runtime.credentials.contains_key(&key) {
-            return Err(routing_policy_validation_error(format!(
-                "provider {} requires credentials before it can be routed",
-                target.provider_id
-            )));
-        }
-        let provider_binding = runtime_binding_from_provider(&provider).ok_or_else(|| {
-            routing_policy_validation_error(format!(
-                "provider {} must be active and configured",
-                target.provider_id
-            ))
-        })?;
-        runtime.bindings.entry(key).or_insert(provider_binding);
-    }
-    let roles_json =
-        serde_json::to_value(&roles).map_err(|error| local_store_error(error.to_string()))?;
-    let fallbacks_json =
-        serde_json::to_value(&fallbacks).map_err(|error| local_store_error(error.to_string()))?;
-    let policy = state
-        .session_store
-        .put_workspace_llm_routing_policy(
-            tenant_id,
-            &project_id,
-            &workspace_id,
-            expected_revision,
-            roles_json,
-            fallbacks_json,
-            Utc::now().timestamp_millis(),
-        )
-        .map_err(resource_registry_error)?;
-    Ok(Json(policy))
-}
-
-async fn get_workspace_agent_policy(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    state
-        .session_store
-        .workspace_llm_routing_policy(
-            &tenant_id,
-            &project_id,
-            &workspace_id,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
-}
-
-async fn patch_workspace_agent_policy(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-    Json(mutation): Json<WorkspaceAgentPolicyMutation>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    state
-        .session_store
-        .patch_workspace_agent_policy(
-            &tenant_id,
-            &project_id,
-            &workspace_id,
-            &mutation,
-            Utc::now().timestamp_millis(),
-        )
-        .map(Json)
-        .map_err(resource_registry_error)
 }
 
 async fn list_workspace_tool_grants(
@@ -4462,79 +3874,6 @@ async fn list_browser_action_audit_entries(
     Ok(Json(json!({ "entries": entries })))
 }
 
-fn normalized_routing_policy(
-    request: LlmRoutingPolicyMutation,
-) -> Result<(LlmRoutingRoles, Vec<LlmRouteTarget>), (StatusCode, Json<Value>)> {
-    if request.fallbacks.len() > 8 {
-        return Err(routing_policy_validation_error(
-            "routing fallbacks cannot contain more than 8 targets",
-        ));
-    }
-    let roles = LlmRoutingRoles {
-        default: normalized_nullable_route_target(request.roles.default, "default")?,
-        fast: normalized_nullable_route_target(request.roles.fast, "fast")?,
-        coding: normalized_nullable_route_target(request.roles.coding, "coding")?,
-        vision: normalized_nullable_route_target(request.roles.vision, "vision")?,
-    };
-    if roles.default.is_none() {
-        return Err(routing_policy_validation_error(
-            "default routing target is required",
-        ));
-    }
-    let mut seen = HashSet::with_capacity(request.fallbacks.len());
-    let mut fallbacks = Vec::with_capacity(request.fallbacks.len());
-    for target in request.fallbacks {
-        let target = normalized_route_target(target)?;
-        if !seen.insert(target.clone()) {
-            return Err(routing_policy_validation_error(
-                "routing fallbacks cannot contain duplicate targets",
-            ));
-        }
-        fallbacks.push(target);
-    }
-    Ok((roles, fallbacks))
-}
-
-fn normalized_nullable_route_target(
-    value: Value,
-    role: &str,
-) -> Result<Option<LlmRouteTarget>, (StatusCode, Json<Value>)> {
-    if value.is_null() {
-        return Ok(None);
-    }
-    let target = serde_json::from_value::<LlmRouteTarget>(value)
-        .map_err(|_| routing_policy_validation_error(format!("invalid {role} routing target")))?;
-    normalized_route_target(target).map(Some)
-}
-
-fn normalized_route_target(
-    target: LlmRouteTarget,
-) -> Result<LlmRouteTarget, (StatusCode, Json<Value>)> {
-    let provider_id = target.provider_id.trim().to_string();
-    if provider_id.is_empty() {
-        return Err(routing_policy_validation_error(
-            "routing target provider_id cannot be empty",
-        ));
-    }
-    let model_id = target.model_id.trim().to_string();
-    if model_id.is_empty() {
-        return Err(routing_policy_validation_error(
-            "routing target model_id cannot be empty",
-        ));
-    }
-    Ok(LlmRouteTarget {
-        provider_id,
-        model_id,
-    })
-}
-
-fn routing_policy_validation_error(detail: impl Into<String>) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::UNPROCESSABLE_ENTITY,
-        Json(json!({ "detail": detail.into() })),
-    )
-}
-
 async fn create_llm_provider(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -4579,7 +3918,8 @@ async fn mutate_llm_provider_blocking(
 #[serde(deny_unknown_fields)]
 struct RuntimeProviderSelectionRequest {
     expected_revision: u64,
-    expected_policy_revision: u64,
+    #[serde(default, rename = "expected_policy_revision")]
+    _expected_policy_revision: Option<u64>,
 }
 
 async fn select_llm_provider_runtime(
@@ -4630,7 +3970,6 @@ async fn select_llm_provider_runtime(
             tenant_id,
             &provider_id,
             request.expected_revision,
-            request.expected_policy_revision,
             Utc::now().timestamp_millis(),
         )
         .map_err(resource_registry_error)?;
@@ -4901,6 +4240,18 @@ fn mutate_llm_provider(
     } else {
         None
     };
+    if was_selected
+        && next_binding.is_some()
+        && auth_method == "api_key"
+        && next_credential.is_none()
+    {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "detail": "replacement credentials are required when changing a selected provider connection"
+            })),
+        ));
+    }
     if let Some(object) = provider.as_object_mut() {
         object.insert(
             "credential_configured".to_string(),
@@ -5851,26 +5202,6 @@ fn runtime_binding_from_provider(provider: &Value) -> Option<ProviderRuntimeBind
     })
 }
 
-fn runtime_binding_for_route_target(
-    provider: &Value,
-    target: &LlmRouteTarget,
-) -> Result<ProviderRuntimeBinding, (StatusCode, Json<Value>)> {
-    let mut binding = runtime_binding_from_provider(provider).ok_or_else(|| {
-        routing_policy_validation_error(format!(
-            "provider {} must be active and configured",
-            target.provider_id
-        ))
-    })?;
-    if !provider_supports_route_model(provider, &target.model_id) {
-        return Err(routing_policy_validation_error(format!(
-            "model {} is not configured for provider {}",
-            target.model_id, target.provider_id
-        )));
-    }
-    binding.model.clone_from(&target.model_id);
-    Ok(binding)
-}
-
 fn provider_supports_route_model(provider: &Value, model_id: &str) -> bool {
     provider
         .get("llm_model")
@@ -6197,13 +5528,7 @@ async fn list_project_my_work(
                 Json(json!({ "detail": "run conversation project mismatch" })),
             ));
         }
-        let workspace_name = match conversation.workspace_id.as_deref() {
-            Some(workspace_id) => state
-                .session_store
-                .workspace_name(workspace_id)
-                .map_err(local_store_error)?,
-            None => None,
-        };
+        let workspace_name = None;
         let plan = state
             .session_store
             .plan_version_for_projection(&run.plan_version_id)
@@ -6286,7 +5611,6 @@ fn my_work_plan_projection(
     (summary, phase, progress)
 }
 
-const HIERARCHY_DEFAULT_PAGE_SIZE: usize = 50;
 const HIERARCHY_MAX_PAGE_SIZE: usize = 500;
 
 #[derive(Debug, Default, Deserialize)]
@@ -6317,191 +5641,78 @@ fn hierarchy_page_bounds(
 }
 
 async fn list_workspaces(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id)): Path<(String, String)>,
-    Query(query): Query<HierarchyListQuery>,
+    Query(_query): Query<HierarchyListQuery>,
 ) -> LocalJsonResult {
     if tenant_id != authenticated.workspace.tenant_id {
         return Err(active_workspace_scope_error());
     }
     ensure_active_project(&authenticated, &project_id)?;
-    let (limit, offset, _) = hierarchy_page_bounds(&query, HIERARCHY_DEFAULT_PAGE_SIZE)?;
-    let workspaces = state
-        .session_store
-        .list_workspaces(&project_id)
-        .map_err(local_store_error)?
-        .into_iter()
-        .filter(|workspace| workspace["tenant_id"] == tenant_id)
-        .skip(offset)
-        .take(limit)
-        .collect::<Vec<_>>();
-    Ok(Json(Value::Array(workspaces)))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CreateWorkspaceBody {
-    name: Option<String>,
-    description: Option<String>,
-    metadata: Option<serde_json::Map<String, Value>>,
-    use_case: Option<WorkspaceUseCase>,
-    collaboration_mode: Option<WorkspaceCollaborationMode>,
-    sandbox_code_root: Option<String>,
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 async fn create_workspace(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id)): Path<(String, String)>,
-    Json(body): Json<CreateWorkspaceBody>,
+    Json(_body): Json<Value>,
 ) -> LocalJsonResult {
     if tenant_id != authenticated.workspace.tenant_id {
         return Err(active_workspace_scope_error());
     }
     ensure_active_project(&authenticated, &project_id)?;
-    let now = now_iso();
-    let name = body
-        .name
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "Local workspace".to_string());
-    let workspace = workspace_value(
-        format!("local-workspace-{}", Uuid::new_v4()),
-        &tenant_id,
-        &project_id,
-        WorkspaceCreateAttributes {
-            name,
-            description: body.description,
-            metadata: body.metadata,
-            use_case: body.use_case.unwrap_or_default(),
-            collaboration_mode: body.collaboration_mode.unwrap_or_default(),
-            sandbox_code_root: body.sandbox_code_root,
-        },
-        &now,
-    );
-    state
-        .session_store
-        .insert_workspace(&workspace)
-        .map_err(local_store_error)?;
-    Ok(Json(workspace))
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 async fn list_workspace_messages(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
 ) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    let messages = state
-        .session_store
-        .list_workspace_messages(&workspace_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": messages })))
-}
-
-#[derive(Deserialize)]
-struct WorkspaceMessageBody {
-    content: String,
-    parent_message_id: Option<String>,
-    mentions: Option<Vec<String>>,
-    #[serde(default)]
-    context_items: Vec<ComposerContextItem>,
+    let _ = (authenticated, tenant_id, project_id, workspace_id);
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 async fn create_workspace_message(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-    Json(body): Json<WorkspaceMessageBody>,
+    Json(_body): Json<Value>,
 ) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    validate_composer_context_items(&body.context_items).map_err(invalid_composer_context)?;
-    validate_composer_context_authority(
-        &state,
-        &authenticated,
-        &workspace_id,
-        &body.context_items,
-    )?;
-    let message = json!({
-        "id": format!("local-message-{}", Uuid::new_v4()),
-        "workspace_id": &workspace_id,
-        "parent_message_id": body.parent_message_id,
-        "sender_type": "human",
-        "sender_id": "local-user",
-        "content": body.content,
-        "mentions": body.mentions.unwrap_or_default(),
-        "created_at": now_iso(),
-        "metadata": {
-            "runtime": "local",
-            "context_items": body.context_items,
-        },
-    });
-    state
-        .append_workspace_message(&workspace_id, message.clone())
-        .map_err(local_store_error)?;
-    Ok(Json(message))
+    let _ = (authenticated, tenant_id, project_id, workspace_id);
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 async fn list_tasks(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(workspace_id): Path<String>,
 ) -> LocalJsonResult {
-    ensure_active_workspace(&state, &authenticated, &workspace_id)?;
-    let snapshot = state
-        .session_store
-        .workspace_execution_snapshot(
-            &workspace_id,
-            &authenticated.workspace.project_id,
-            &authenticated.workspace.tenant_id,
-        )
-        .map_err(local_store_error)?;
-    let total = snapshot.tasks.len();
-    Ok(Json(json!({
-        "workspace_id": snapshot.workspace_id,
-        "items": snapshot.tasks,
-        "total": total,
-    })))
+    let _ = (authenticated, workspace_id);
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 async fn plan_snapshot(
-    State(state): State<Arc<LocalRuntimeState>>,
+    State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
     Path(workspace_id): Path<String>,
 ) -> LocalJsonResult {
-    ensure_active_workspace(&state, &authenticated, &workspace_id)?;
-    let snapshot = state
-        .session_store
-        .workspace_execution_snapshot(
-            &workspace_id,
-            &authenticated.workspace.project_id,
-            &authenticated.workspace.tenant_id,
-        )
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "workspace_id": snapshot.workspace_id,
-        "project_id": snapshot.project_id,
-        "plan": Value::Null,
-        "conversation_plans": snapshot.conversation_plans,
-        "plan_history": snapshot.plan_history,
-        "run_health": snapshot.run_health,
-        "pending_hitl": snapshot.pending_hitl,
-        "delivery": snapshot.delivery,
-        "artifact_index": snapshot.artifact_index,
-    })))
+    let _ = (authenticated, workspace_id);
+    Err(workspace_core_bridge::unavailable(
+        "Workspace Core authority is unavailable",
+    ))
 }
 
 #[derive(Deserialize)]
@@ -6526,7 +5737,7 @@ async fn list_conversations(
     let workspace_id = query.workspace_id;
     if let Some(workspace_id) = workspace_id
         .as_deref()
-        .filter(|_| !workspace_core_bridge::core_authority_is_installed(&state))
+        .filter(|_| !workspace_core_bridge::workspace_core_cutover_started(&state))
     {
         ensure_active_workspace(&state, &authenticated, workspace_id)?;
     }
@@ -6676,7 +5887,16 @@ async fn update_conversation_mode(
             WorkspaceIdPatch::Missing => {}
             WorkspaceIdPatch::Null => conversation.workspace_id = None,
             WorkspaceIdPatch::Value(workspace_id) => {
-                ensure_active_workspace(&state, &authenticated, &workspace_id)?;
+                if workspace_core_bridge::workspace_core_cutover_started(&state) {
+                    workspace_core_bridge::validate_workspace_access(
+                        &state,
+                        &authenticated,
+                        &workspace_id,
+                    )
+                    .await?;
+                } else {
+                    ensure_active_workspace(&state, &authenticated, &workspace_id)?;
+                }
                 conversation.workspace_id = Some(workspace_id);
             }
         }
@@ -7783,6 +7003,7 @@ async fn review_artifact_version(
                 })?;
             let engine = state
                 .agent_engine(&conversation, Some(&run))
+                .await
                 .map_err(execution_environment_error)?;
             let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
                 return Err((
@@ -8364,6 +7585,7 @@ async fn respond_to_hitl(
         browser_capability_grant_from_hitl(&request, &body.response_data)?;
     let engine = state
         .agent_engine(&conversation, engine_run.as_ref())
+        .await
         .map_err(execution_environment_error)?;
 
     let Some(control) = state.claim_agent_run(&conversation.id, request.run_id.as_deref()) else {
@@ -10111,17 +9333,6 @@ impl FailoverLlm {
         Arc::new(Self {
             candidates,
             candidate_timeout: Self::CANDIDATE_TIMEOUT,
-        })
-    }
-
-    #[cfg(test)]
-    fn from_candidates_with_timeout(
-        candidates: Vec<Arc<dyn LlmPort>>,
-        candidate_timeout: std::time::Duration,
-    ) -> Arc<dyn LlmPort> {
-        Arc::new(Self {
-            candidates,
-            candidate_timeout,
         })
     }
 
@@ -13591,31 +12802,28 @@ mod tests {
             ))
             .await
             .expect("disable active provider");
-        assert_eq!(
-            disable_a.status(),
-            axum::http::StatusCode::UNPROCESSABLE_ENTITY
-        );
-        assert!(response_json(disable_a).await["detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains("invalidate routing policy")));
+        assert_eq!(disable_a.status(), axum::http::StatusCode::OK);
+        let disabled_a = response_json(disable_a).await;
+        assert_eq!(disabled_a["is_active"], false);
+        assert_eq!(disabled_a["runtime_selected"], false);
+        assert_eq!(disabled_a["credential_configured"], true);
+        assert_eq!(disabled_a["revision"], 3);
         let runtime = state.provider_runtime.lock().expect("provider runtime");
         let key = ProviderRuntimeKey {
             tenant_id: "local".to_string(),
             provider_id: "local-runtime".to_string(),
         };
-        assert!(runtime.bindings.contains_key(&key));
-        assert!(runtime.credentials.contains_key(&key));
-        assert_eq!(
-            runtime.selections.get("local"),
-            Some(&"local-runtime".to_string())
-        );
+        assert!(!runtime.bindings.contains_key(&key));
+        assert!(!runtime.credentials.contains_key(&key));
+        assert!(runtime.configured_credentials.contains(&key));
+        assert!(!runtime.selections.contains_key("local"));
         drop(runtime);
         assert_eq!(
             state
                 .session_store
                 .list_selected_llm_providers()
                 .expect("persisted provider selections"),
-            vec![("local".to_string(), "local-runtime".to_string())]
+            Vec::<(String, String)>::new()
         );
 
         let persisted = state
@@ -13628,8 +12836,8 @@ mod tests {
             )
             .expect("persisted provider")
             .expect("local runtime provider");
-        assert_eq!(persisted["is_active"], true);
-        assert_eq!(persisted["revision"], 2);
+        assert_eq!(persisted["is_active"], false);
+        assert_eq!(persisted["revision"], 3);
         assert!(!persisted.to_string().contains("provider-key-a"));
         assert!(persisted.get("api_key").is_none());
     }
@@ -14004,13 +13212,10 @@ mod tests {
         let status = serde_json::to_value(service.status()).expect("serialize runtime status");
         assert_eq!(status["runtime_providers"], json!([]));
         service.state.mock_llm_enabled.store(0, Ordering::Release);
-        let error = service
-            .state
-            .llm("local")
-            .decide("must remain unconfigured", 0, &[], &[])
-            .await
-            .expect_err("an unselected active connection must fail closed");
-        assert!(error.to_string().contains("model_unconfigured"));
+        let Err(error) = service.state.llm("local").await else {
+            panic!("Workspace Core policy must be available before model resolution");
+        };
+        assert_eq!(error, "Workspace Core policy authority is unavailable");
     }
 
     #[tokio::test]
@@ -14142,7 +13347,7 @@ mod tests {
         );
         assert!(response_json(endpoint_change).await["detail"]
             .as_str()
-            .is_some_and(|detail| detail.contains("invalidate routing policy")));
+            .is_some_and(|detail| detail.contains("replacement credentials")));
 
         let key = ProviderRuntimeKey {
             tenant_id: "local".to_string(),
@@ -15435,1419 +14640,6 @@ mod tests {
     }
 
     #[test]
-    fn desktop_session_store_restores_workspace_conversation_and_timeline_after_reopen() {
-        let root = test_root();
-        std::fs::create_dir_all(&root).expect("create test root");
-        let path = root.join("desktop-sessions.db");
-        let workspace = json!({
-            "id": "workspace-1",
-            "project_id": "project-1",
-            "name": "Persistent workspace"
-        });
-        let conversation = LocalConversation {
-            id: "conversation-1".to_string(),
-            project_id: "project-1".to_string(),
-            tenant_id: "tenant-1".to_string(),
-            title: "Persistent session".to_string(),
-            workspace_id: Some("workspace-1".to_string()),
-            capability_mode: ConversationCapabilityMode::Code,
-            current_mode: ConversationRunMode::Build,
-            created_at: now_iso(),
-            updated_at: now_iso(),
-        };
-        let timeline_item = json!({
-            "id": "event-1",
-            "type": "user_message",
-            "content": "persist me"
-        });
-        let plan_task = json!({
-            "id": "plan-task-1",
-            "conversation_id": "conversation-1",
-            "content": "Persist the plan",
-            "status": "pending",
-            "priority": "high",
-            "order_index": 0,
-            "created_at": now_iso(),
-            "updated_at": now_iso()
-        });
-
-        {
-            let store = DesktopSessionStore::open(&path).expect("open store");
-            store
-                .insert_workspace(&workspace)
-                .expect("insert workspace");
-            store
-                .insert_conversation(&conversation)
-                .expect("insert conversation");
-            store
-                .append_timeline(&conversation.id, &timeline_item)
-                .expect("append timeline");
-            store
-                .replace_agent_plan_tasks(&conversation.id, std::slice::from_ref(&plan_task))
-                .expect("store plan task");
-            assert!(store
-                .claim_client_turn(
-                    &conversation.id,
-                    "persistent-message-id",
-                    "payload-hash",
-                    &now_iso(),
-                )
-                .expect("claim client turn"));
-        }
-
-        let restored = DesktopSessionStore::open(&path).expect("reopen store");
-        assert_eq!(
-            restored.list_workspaces("project-1").unwrap(),
-            vec![workspace]
-        );
-        assert_eq!(
-            restored
-                .conversation("conversation-1")
-                .unwrap()
-                .expect("conversation")
-                .title,
-            "Persistent session"
-        );
-        assert_eq!(
-            restored.timeline("conversation-1", 20).unwrap(),
-            vec![timeline_item]
-        );
-        assert_eq!(
-            restored.list_agent_plan_tasks("conversation-1").unwrap(),
-            vec![plan_task]
-        );
-        assert!(!restored
-            .claim_client_turn(
-                "conversation-1",
-                "persistent-message-id",
-                "payload-hash",
-                &now_iso(),
-            )
-            .expect("replay durable client turn"));
-        assert_eq!(
-            restored.claim_client_turn(
-                "conversation-1",
-                "persistent-message-id",
-                "different-payload-hash",
-                &now_iso(),
-            ),
-            Err(DesktopClientTurnClaimError::PayloadConflict)
-        );
-        drop(restored);
-        let connection = rusqlite::Connection::open(&path).expect("inspect schema version");
-        let schema_version: i64 = connection
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .expect("schema version");
-        assert_eq!(schema_version, 25);
-        drop(connection);
-        std::fs::remove_dir_all(root).expect("remove test root");
-    }
-
-    #[test]
-    fn local_demo_hierarchy_seed_creates_the_expected_fresh_scope() {
-        let state = test_state_without_session("local-demo-fresh-secret");
-
-        let default_context = state
-            .session_store
-            .workspace_context("local-user")
-            .expect("default workspace context");
-        assert_eq!(default_context.tenant_id, "northstar");
-        assert_eq!(default_context.project_id, "desktop-client");
-
-        let workspaces = state
-            .session_store
-            .list_workspaces("desktop-client")
-            .expect("desktop client workspaces");
-        assert_eq!(workspaces.len(), 2);
-        assert_eq!(
-            workspaces
-                .iter()
-                .map(|workspace| workspace["id"].as_str().expect("workspace id"))
-                .collect::<Vec<_>>(),
-            vec![
-                "local-demo-desktop-client-main",
-                "local-demo-release-reliability",
-            ]
-        );
-        for workspace in &workspaces {
-            assert_eq!(workspace["tenant_id"], "northstar");
-            assert_eq!(workspace["project_id"], "desktop-client");
-            assert_eq!(
-                workspace["metadata"]["provenance"]["kind"],
-                "local_demo_seed"
-            );
-        }
-
-        let desktop_sessions = state
-            .session_store
-            .list_conversations("desktop-client", Some("local-demo-desktop-client-main"))
-            .expect("desktop client demo sessions");
-        let reliability_sessions = state
-            .session_store
-            .list_conversations("desktop-client", Some("local-demo-release-reliability"))
-            .expect("release reliability demo sessions");
-        assert_eq!(desktop_sessions.len(), 3);
-        assert_eq!(reliability_sessions.len(), 1);
-        for conversation in desktop_sessions.iter().chain(&reliability_sessions) {
-            assert_eq!(conversation.tenant_id, "northstar");
-            assert_eq!(conversation.project_id, "desktop-client");
-            assert_eq!(
-                conversation.capability_mode,
-                ConversationCapabilityMode::Code
-            );
-            assert_eq!(conversation.current_mode, ConversationRunMode::Plan);
-            let expected_timeline_count = if conversation.id == LOCAL_DEMO_PRIMARY_CONVERSATION_ID {
-                13
-            } else {
-                0
-            };
-            assert_eq!(
-                state
-                    .session_store
-                    .timeline_count(&conversation.id)
-                    .expect("demo timeline count"),
-                expected_timeline_count
-            );
-            assert!(state
-                .session_store
-                .list_runs(&conversation.id)
-                .expect("empty demo run history")
-                .is_empty());
-        }
-        let seed_marker_count: i64 = state
-            .session_store
-            .connection()
-            .expect("seed marker connection")
-            .query_row(
-                "SELECT COUNT(*) FROM desktop_seed_migrations
-                 WHERE seed_id = 'northstar-desktop-client-local-demo-v1'
-                   AND seed_kind = 'local_demo_hierarchy'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("local demo seed marker count");
-        assert_eq!(seed_marker_count, 1);
-    }
-
-    #[test]
-    fn local_demo_session_content_seed_creates_authoritative_narrative_and_workspace_names() {
-        let state = test_state_without_session("local-demo-content-secret");
-        let timeline = state
-            .session_store
-            .timeline("local-demo-flaky-data-pipeline-test", 50)
-            .expect("seeded demo timeline");
-        assert_eq!(timeline.len(), 13);
-        assert_eq!(
-            timeline.first().and_then(|item| item["id"].as_str()),
-            Some("local-demo-flaky-data-pipeline-test:user-goal")
-        );
-        assert_eq!(
-            timeline.first().and_then(|item| item["role"].as_str()),
-            Some("user")
-        );
-        assert_eq!(
-            timeline.last().and_then(|item| item["id"].as_str()),
-            Some("local-demo-flaky-data-pipeline-test:verification-progress")
-        );
-        assert!(timeline.iter().any(|item| {
-            item["type"] == "assistant_message"
-                && item["content"]
-                    .as_str()
-                    .is_some_and(|content| content.contains("shared mutable state"))
-        }));
-        assert_eq!(
-            timeline.iter().filter(|item| item["type"] == "act").count(),
-            4
-        );
-
-        let desktop_conversation = state
-            .session_store
-            .conversation("local-demo-flaky-data-pipeline-test")
-            .expect("load desktop demo conversation")
-            .expect("desktop demo conversation");
-        assert_eq!(
-            state.conversation_value(&desktop_conversation)["workspace_name"],
-            "Desktop Client"
-        );
-        let reliability_conversation = state
-            .session_store
-            .conversation("local-demo-agent-sdk-upgrade")
-            .expect("load reliability demo conversation")
-            .expect("reliability demo conversation");
-        assert_eq!(
-            state.conversation_value(&reliability_conversation)["workspace_name"],
-            "Release Reliability"
-        );
-    }
-
-    #[test]
-    fn local_demo_session_content_seed_is_idempotent_after_reopen() {
-        let root = test_root();
-        std::fs::create_dir_all(&root).expect("create local demo content root");
-        let path = root.join("desktop-sessions.db");
-
-        for token in ["local-demo-content-first", "local-demo-content-second"] {
-            let store = DesktopSessionStore::open(&path).expect("open local demo content store");
-            let tool_host = LocalToolHost::new(&root).expect("local demo content tool host");
-            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
-            let state = LocalRuntimeState::new(
-                root.clone(),
-                tool_host,
-                checkpoints,
-                token.to_string(),
-                store,
-            )
-            .expect("seed local demo content state");
-            let timeline = state
-                .session_store
-                .timeline("local-demo-flaky-data-pipeline-test", 50)
-                .expect("reopened local demo timeline");
-            assert_eq!(timeline.len(), 13);
-            assert_eq!(
-                timeline
-                    .iter()
-                    .filter(|item| {
-                        item["id"] == "local-demo-flaky-data-pipeline-test:user-goal"
-                    })
-                    .count(),
-                1
-            );
-        }
-
-        std::fs::remove_dir_all(root).expect("remove local demo content root");
-    }
-
-    #[test]
-    fn local_demo_session_content_seed_fails_closed_on_event_conflict() {
-        let store = DesktopSessionStore::in_memory().expect("local demo content conflict store");
-        let now = now_iso();
-        let hierarchy = local_demo_hierarchy_seed(&now);
-        store
-            .ensure_local_demo_hierarchy_seed(
-                LOCAL_DEMO_HIERARCHY_SEED_ID,
-                &hierarchy.workspaces,
-                &hierarchy.conversations,
-                &now,
-            )
-            .expect("seed hierarchy before content conflict");
-        store
-            .append_timeline(
-                "local-demo-flaky-data-pipeline-test",
-                &json!({
-                    "id": "local-demo-flaky-data-pipeline-test:user-goal",
-                    "type": "user_message",
-                    "conversation_id": "local-demo-flaky-data-pipeline-test",
-                    "role": "user",
-                    "content": "Conflicting user-authored local content",
-                }),
-            )
-            .expect("insert conflicting timeline event");
-        let root = test_root();
-        let error = LocalRuntimeState::new(
-            root.clone(),
-            LocalToolHost::new(&root).expect("content conflict tool host"),
-            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
-            "local-demo-content-conflict".to_string(),
-            store,
-        )
-        .err()
-        .expect("local demo content conflict must fail startup");
-        assert!(error.contains("local demo session content event conflict"));
-    }
-
-    #[test]
-    fn local_demo_hierarchy_seed_is_idempotent_across_reopen_without_overwrite() {
-        let root = test_root();
-        std::fs::create_dir_all(&root).expect("create demo seed root");
-        let path = root.join("desktop-sessions.db");
-        let user_updated_at = "2042-05-06T07:08:09Z";
-
-        {
-            let store = DesktopSessionStore::open(&path).expect("open first demo store");
-            let tool_host = LocalToolHost::new(&root).expect("first demo tool host");
-            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
-            let state = LocalRuntimeState::new(
-                root.clone(),
-                tool_host,
-                checkpoints,
-                "first-demo-token".to_string(),
-                store,
-            )
-            .expect("seed first demo state");
-            let mut conversation = state
-                .session_store
-                .conversation("local-demo-flaky-data-pipeline-test")
-                .expect("load demo conversation")
-                .expect("seeded demo conversation");
-            conversation.title = "User renamed this local demo session".to_string();
-            conversation.current_mode = ConversationRunMode::Build;
-            conversation.updated_at = user_updated_at.to_string();
-            state
-                .session_store
-                .update_conversation(&conversation)
-                .expect("persist user demo changes");
-        }
-
-        {
-            let store = DesktopSessionStore::open(&path).expect("reopen demo store");
-            let tool_host = LocalToolHost::new(&root).expect("second demo tool host");
-            let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
-            let state = LocalRuntimeState::new(
-                root.clone(),
-                tool_host,
-                checkpoints,
-                "second-demo-token".to_string(),
-                store,
-            )
-            .expect("reopen seeded demo state");
-            assert_eq!(
-                state
-                    .session_store
-                    .list_workspaces("desktop-client")
-                    .expect("reopened workspaces")
-                    .len(),
-                2
-            );
-            assert_eq!(
-                state
-                    .session_store
-                    .list_conversations("desktop-client", None)
-                    .expect("reopened conversations")
-                    .len(),
-                4
-            );
-            let conversation = state
-                .session_store
-                .conversation("local-demo-flaky-data-pipeline-test")
-                .expect("load reopened conversation")
-                .expect("reopened demo conversation");
-            assert_eq!(conversation.title, "User renamed this local demo session");
-            assert_eq!(conversation.current_mode, ConversationRunMode::Build);
-            assert_eq!(conversation.updated_at, user_updated_at);
-            let seed_marker_count: i64 = state
-                .session_store
-                .connection()
-                .expect("reopened seed marker connection")
-                .query_row(
-                    "SELECT COUNT(*) FROM desktop_seed_migrations
-                     WHERE seed_id = 'northstar-desktop-client-local-demo-v1'",
-                    [],
-                    |row| row.get(0),
-                )
-                .expect("reopened local demo seed marker count");
-            assert_eq!(seed_marker_count, 1);
-        }
-
-        std::fs::remove_dir_all(root).expect("remove demo seed root");
-    }
-
-    #[test]
-    fn local_demo_hierarchy_seed_fails_closed_on_immutable_scope_conflicts() {
-        let workspace_store = DesktopSessionStore::in_memory().expect("workspace conflict store");
-        workspace_store
-            .insert_workspace(&json!({
-                "id": "local-demo-desktop-client-main",
-                "tenant_id": "orbital",
-                "project_id": "desktop-client",
-                "name": "Conflicting workspace",
-            }))
-            .expect("insert conflicting workspace");
-        let workspace_root = test_root();
-        let workspace_error = LocalRuntimeState::new(
-            workspace_root.clone(),
-            LocalToolHost::new(&workspace_root).expect("workspace conflict tool host"),
-            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
-            "workspace-conflict-token".to_string(),
-            workspace_store,
-        )
-        .err()
-        .expect("workspace scope conflict must fail startup");
-        assert!(workspace_error.contains("local demo workspace scope conflict"));
-
-        let conversation_store =
-            DesktopSessionStore::in_memory().expect("conversation conflict store");
-        conversation_store
-            .insert_conversation(&LocalConversation {
-                id: "local-demo-flaky-data-pipeline-test".to_string(),
-                tenant_id: "northstar".to_string(),
-                project_id: "desktop-client".to_string(),
-                workspace_id: Some("local-demo-release-reliability".to_string()),
-                title: "Conflicting conversation".to_string(),
-                capability_mode: ConversationCapabilityMode::Code,
-                current_mode: ConversationRunMode::Plan,
-                created_at: now_iso(),
-                updated_at: now_iso(),
-            })
-            .expect("insert conflicting conversation");
-        let conversation_root = test_root();
-        let conversation_error = LocalRuntimeState::new(
-            conversation_root.clone(),
-            LocalToolHost::new(&conversation_root).expect("conversation conflict tool host"),
-            Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints")),
-            "conversation-conflict-token".to_string(),
-            conversation_store,
-        )
-        .err()
-        .expect("conversation scope conflict must fail startup");
-        assert!(conversation_error.contains("local demo conversation scope conflict"));
-    }
-
-    #[test]
-    fn local_demo_hierarchy_seed_rejects_structural_column_scope_conflicts() {
-        let store = DesktopSessionStore::in_memory().expect("column conflict store");
-        let now = now_iso();
-        let seed = local_demo_hierarchy_seed(&now);
-        store
-            .ensure_local_demo_hierarchy_seed(
-                LOCAL_DEMO_HIERARCHY_SEED_ID,
-                &seed.workspaces,
-                &seed.conversations,
-                &now,
-            )
-            .expect("apply local demo seed");
-        store
-            .connection()
-            .expect("column conflict connection")
-            .execute(
-                "UPDATE desktop_conversations
-                 SET workspace_id = 'local-demo-release-reliability'
-                 WHERE id = 'local-demo-flaky-data-pipeline-test'",
-                [],
-            )
-            .expect("corrupt structural workspace column");
-
-        let error = store
-            .ensure_local_demo_hierarchy_seed(
-                LOCAL_DEMO_HIERARCHY_SEED_ID,
-                &seed.workspaces,
-                &seed.conversations,
-                &now,
-            )
-            .expect_err("structural scope conflict must fail closed");
-        assert!(error.contains("local demo conversation column scope conflict"));
-    }
-
-    #[tokio::test]
-    async fn local_demo_hierarchy_rejects_conversation_workspace_reassignment() {
-        let state = test_state("local-demo-reassignment-secret");
-        let authenticated = state
-            .session_store
-            .validate_session_credential(
-                "local-demo-reassignment-secret",
-                Utc::now().timestamp_millis(),
-            )
-            .expect("validate local demo session")
-            .expect("authenticated local demo session");
-        state
-            .session_store
-            .switch_workspace_context(
-                &authenticated,
-                &ContextSwitchRequest {
-                    tenant_id: "northstar".to_string(),
-                    project_id: "desktop-client".to_string(),
-                    expected_revision: 0,
-                    idempotency_key: "switch-local-demo-reassignment".to_string(),
-                },
-                Utc::now().timestamp_millis(),
-            )
-            .expect("switch to local demo hierarchy");
-
-        let response = local_router(Arc::clone(&state))
-            .oneshot(authenticated_json_request(
-                "PATCH",
-                "/api/v1/agent/conversations/local-demo-flaky-data-pipeline-test/mode",
-                "local-demo-reassignment-secret",
-                json!({ "workspace_id": "local-demo-release-reliability" }),
-            ))
-            .await
-            .expect("seeded conversation reassignment response");
-        assert_eq!(response.status(), StatusCode::CONFLICT);
-
-        let conversation = state
-            .session_store
-            .conversation("local-demo-flaky-data-pipeline-test")
-            .expect("load seeded conversation")
-            .expect("seeded conversation");
-        assert_eq!(
-            conversation.workspace_id.as_deref(),
-            Some(LOCAL_DEMO_DESKTOP_WORKSPACE_ID)
-        );
-        let now = now_iso();
-        let seed = local_demo_hierarchy_seed(&now);
-        state
-            .session_store
-            .ensure_local_demo_hierarchy_seed(
-                LOCAL_DEMO_HIERARCHY_SEED_ID,
-                &seed.workspaces,
-                &seed.conversations,
-                &now,
-            )
-            .expect("reopen invariant remains valid after rejected patch");
-    }
-
-    #[tokio::test]
-    async fn local_demo_hierarchy_routes_follow_the_exact_switched_scope() {
-        let state = test_state("local-demo-route-secret");
-        let authenticated = state
-            .session_store
-            .validate_session_credential("local-demo-route-secret", Utc::now().timestamp_millis())
-            .expect("validate local demo session")
-            .expect("authenticated local demo session");
-        state
-            .session_store
-            .switch_workspace_context(
-                &authenticated,
-                &ContextSwitchRequest {
-                    tenant_id: "northstar".to_string(),
-                    project_id: "desktop-client".to_string(),
-                    expected_revision: 0,
-                    idempotency_key: "switch-local-demo-hierarchy".to_string(),
-                },
-                Utc::now().timestamp_millis(),
-            )
-            .expect("switch to local demo hierarchy");
-        let app = local_router(state);
-
-        let workspaces_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(
-                        "/api/v1/tenants/northstar/projects/desktop-client/workspaces?limit=1&offset=1",
-                    )
-                    .header("authorization", "Bearer local-demo-route-secret")
-                    .body(Body::empty())
-                    .expect("workspace list request"),
-            )
-            .await
-            .expect("workspace list response");
-        assert_eq!(workspaces_response.status(), StatusCode::OK);
-        let workspaces = response_json(workspaces_response).await;
-        assert_eq!(workspaces.as_array().map(Vec::len), Some(1));
-        assert_eq!(workspaces[0]["tenant_id"], "northstar");
-        assert_eq!(workspaces[0]["project_id"], "desktop-client");
-
-        let invalid_workspace_page = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(
-                        "/api/v1/tenants/northstar/projects/desktop-client/workspaces?limit=0&offset=0",
-                    )
-                    .header("authorization", "Bearer local-demo-route-secret")
-                    .body(Body::empty())
-                    .expect("invalid workspace page request"),
-            )
-            .await
-            .expect("invalid workspace page response");
-        assert_eq!(
-            invalid_workspace_page.status(),
-            StatusCode::UNPROCESSABLE_ENTITY
-        );
-
-        let conversations_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/agent/conversations?project_id=desktop-client&workspace_id=local-demo-desktop-client-main")
-                    .header("authorization", "Bearer local-demo-route-secret")
-                    .body(Body::empty())
-                    .expect("conversation list request"),
-            )
-            .await
-            .expect("conversation list response");
-        assert_eq!(conversations_response.status(), StatusCode::OK);
-        let conversations = response_json(conversations_response).await;
-        assert_eq!(conversations["items"].as_array().map(Vec::len), Some(3));
-        for conversation in conversations["items"]
-            .as_array()
-            .expect("conversation items")
-        {
-            assert_eq!(conversation["tenant_id"], "northstar");
-            assert_eq!(conversation["project_id"], "desktop-client");
-            assert_eq!(
-                conversation["workspace_id"],
-                "local-demo-desktop-client-main"
-            );
-        }
-
-        let projection_response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/agent/conversations/local-demo-flaky-data-pipeline-test/session?tenant_id=northstar&project_id=desktop-client&workspace_id=local-demo-desktop-client-main")
-                    .header("authorization", "Bearer local-demo-route-secret")
-                    .body(Body::empty())
-                    .expect("exact session projection request"),
-            )
-            .await
-            .expect("exact session projection response");
-        assert_eq!(projection_response.status(), StatusCode::OK);
-        let projection = response_json(projection_response).await;
-        assert_eq!(projection["conversation"]["tenant_id"], "northstar");
-        assert_eq!(projection["conversation"]["project_id"], "desktop-client");
-        assert_eq!(
-            projection["conversation"]["workspace_id"],
-            "local-demo-desktop-client-main"
-        );
-    }
-
-    fn create_task_session_request(idempotency_key: &str, title: &str) -> Value {
-        json!({
-            "idempotency_key": idempotency_key,
-            "workspace": {
-                "kind": "create",
-                "name": title,
-                "description": "An atomic desktop task session",
-                "metadata": {
-                    "source": "desktop",
-                    "retained": true,
-                    "use_case": "research",
-                    "collaboration_mode": "autonomous",
-                    "sandbox_code_root": "/tmp/untrusted-task-root",
-                },
-                "use_case": "programming",
-                "collaboration_mode": "multi_agent_shared",
-                "sandbox_code_root": "/tmp/atomic-task-session",
-            },
-            "conversation": {
-                "title": title,
-                "capability_mode": "code",
-            },
-            "initial_message": {
-                "content": "Build the approved desktop task flow",
-                "context_items": [{
-                    "kind": "command",
-                    "resource_id": "/plan",
-                    "label": "/plan"
-                }],
-            },
-        })
-    }
-
-    #[tokio::test]
-    async fn task_session_route_creates_bound_metadata_complete_session_and_replays() {
-        let state = test_state("task-session-replay-secret");
-        let app = local_router(Arc::clone(&state));
-        let request = create_task_session_request("task-session-replay", "Atomic task session");
-
-        let first = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-replay-secret",
-                request.clone(),
-            ))
-            .await
-            .expect("first task session response");
-        assert_eq!(first.status(), StatusCode::CREATED);
-        let first = response_json(first).await;
-        assert_eq!(first["replayed"], false);
-        assert_eq!(
-            first["initial_message"]["metadata"]["context_items"][0]["resource_id"],
-            "/plan"
-        );
-        assert_eq!(first["workspace"]["name"], "Atomic task session");
-        assert_eq!(first["workspace"]["is_archived"], false);
-        assert_eq!(
-            first["workspace"]["description"],
-            "An atomic desktop task session"
-        );
-        assert_eq!(first["workspace"]["metadata"]["source"], "desktop");
-        assert_eq!(first["workspace"]["metadata"]["retained"], true);
-        assert_eq!(first["workspace"]["metadata"]["use_case"], "programming");
-        assert_eq!(
-            first["workspace"]["metadata"]["collaboration_mode"],
-            "multi_agent_shared"
-        );
-        assert_eq!(
-            first["workspace"]["metadata"]["sandbox_code_root"],
-            "/tmp/atomic-task-session"
-        );
-        assert_eq!(first["workspace"]["use_case"], "programming");
-        assert_eq!(
-            first["workspace"]["collaboration_mode"],
-            "multi_agent_shared"
-        );
-        assert_eq!(
-            first["workspace"]["sandbox_code_root"],
-            "/tmp/atomic-task-session"
-        );
-        assert_eq!(first["conversation"]["current_mode"], "plan");
-        assert_eq!(
-            first["conversation"]["workspace_id"],
-            first["workspace"]["id"]
-        );
-        assert_eq!(
-            first["initial_message"]["workspace_id"],
-            first["workspace"]["id"]
-        );
-        assert_eq!(
-            first["initial_message"]["content"],
-            "Build the approved desktop task flow"
-        );
-        assert_eq!(
-            first["initial_message"]["metadata"]["conversation_id"],
-            first["conversation"]["id"]
-        );
-        let original_conversation = first["conversation"].clone();
-
-        let conversation_id = first["conversation"]["id"]
-            .as_str()
-            .expect("created conversation id");
-        let mut persisted_conversation = state
-            .session_store
-            .conversation(conversation_id)
-            .expect("query created conversation")
-            .expect("created conversation");
-        persisted_conversation.current_mode = ConversationRunMode::Build;
-        persisted_conversation.updated_at = now_iso();
-        state
-            .session_store
-            .update_conversation(&persisted_conversation)
-            .expect("mutate conversation after task session creation");
-
-        let replay = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-replay-secret",
-                request,
-            ))
-            .await
-            .expect("replayed task session response");
-        assert_eq!(replay.status(), StatusCode::OK);
-        let replay = response_json(replay).await;
-        assert_eq!(replay["replayed"], true);
-        assert_eq!(replay["workspace"]["id"], first["workspace"]["id"]);
-        assert_eq!(replay["conversation"]["id"], first["conversation"]["id"]);
-        assert_eq!(replay["conversation"]["current_mode"], "plan");
-        assert_eq!(replay["conversation"], original_conversation);
-        assert_eq!(
-            replay["initial_message"]["id"],
-            first["initial_message"]["id"]
-        );
-        assert_eq!(
-            state
-                .session_store
-                .conversation(conversation_id)
-                .expect("query mutated conversation")
-                .expect("mutated conversation")
-                .current_mode,
-            ConversationRunMode::Build
-        );
-
-        assert_eq!(
-            state
-                .session_store
-                .list_workspaces("local-project")
-                .expect("workspaces")
-                .iter()
-                .filter(|workspace| workspace["name"] == "Atomic task session")
-                .count(),
-            1
-        );
-        assert_eq!(
-            state
-                .session_store
-                .list_conversations("local-project", None)
-                .expect("conversations")
-                .iter()
-                .filter(|conversation| conversation.title == "Atomic task session")
-                .count(),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn task_session_route_rejects_changed_payload_for_idempotency_key() {
-        let state = test_state("task-session-conflict-secret");
-        let app = local_router(Arc::clone(&state));
-        let first_request = create_task_session_request("task-session-conflict", "First title");
-        let first = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-conflict-secret",
-                first_request,
-            ))
-            .await
-            .expect("first conflict fixture response");
-        assert_eq!(first.status(), StatusCode::CREATED);
-
-        let conflict = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-conflict-secret",
-                create_task_session_request("task-session-conflict", "Changed title"),
-            ))
-            .await
-            .expect("task session conflict response");
-        assert_eq!(conflict.status(), StatusCode::CONFLICT);
-        assert_eq!(
-            response_json(conflict).await,
-            json!({
-                "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
-                "detail": "Task session idempotency key is already bound to a different request",
-            })
-        );
-        assert_eq!(
-            state
-                .session_store
-                .list_conversations("local-project", None)
-                .expect("conversations")
-                .iter()
-                .filter(|conversation| {
-                    matches!(conversation.title.as_str(), "First title" | "Changed title")
-                })
-                .count(),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn task_session_receipt_replays_and_conflicts_after_store_reopen() {
-        let root = test_root();
-        std::fs::create_dir_all(&root).expect("create task session restart root");
-        let store_path = root.join("task-session-restart.db");
-        let credential = "task-session-restart-secret";
-        let request = create_task_session_request("task-session-restart", "Restart-safe task");
-
-        let (workspace_id, conversation_id, initial_message_id) = {
-            let state = Arc::new(
-                LocalRuntimeState::new(
-                    root.clone(),
-                    LocalToolHost::new(&root).expect("restart tool host"),
-                    Arc::new(SqliteCheckpointStore::in_memory().expect("restart checkpoint store")),
-                    credential.to_string(),
-                    DesktopSessionStore::open(&store_path).expect("open restart session store"),
-                )
-                .expect("restart local runtime state"),
-            );
-            state
-                .session_store
-                .seed_test_session(credential)
-                .expect("seed restart session");
-            let response = local_router(state)
-                .oneshot(authenticated_json_request(
-                    "POST",
-                    "/api/v1/tenants/local/projects/local-project/task-sessions",
-                    credential,
-                    request.clone(),
-                ))
-                .await
-                .expect("create restart task session");
-            assert_eq!(response.status(), StatusCode::CREATED);
-            let response = response_json(response).await;
-            (
-                response["workspace"]["id"]
-                    .as_str()
-                    .expect("restart workspace id")
-                    .to_string(),
-                response["conversation"]["id"]
-                    .as_str()
-                    .expect("restart conversation id")
-                    .to_string(),
-                response["initial_message"]["id"]
-                    .as_str()
-                    .expect("restart initial message id")
-                    .to_string(),
-            )
-        };
-
-        {
-            let state = Arc::new(
-                LocalRuntimeState::new(
-                    root.clone(),
-                    LocalToolHost::new(&root).expect("reopened tool host"),
-                    Arc::new(
-                        SqliteCheckpointStore::in_memory().expect("reopened checkpoint store"),
-                    ),
-                    credential.to_string(),
-                    DesktopSessionStore::open(&store_path).expect("reopen task session store"),
-                )
-                .expect("reopened local runtime state"),
-            );
-            let app = local_router(state);
-            let replay = app
-                .clone()
-                .oneshot(authenticated_json_request(
-                    "POST",
-                    "/api/v1/tenants/local/projects/local-project/task-sessions",
-                    credential,
-                    request,
-                ))
-                .await
-                .expect("replay reopened task session");
-            assert_eq!(replay.status(), StatusCode::OK);
-            let replay = response_json(replay).await;
-            assert_eq!(replay["replayed"], true);
-            assert_eq!(replay["workspace"]["id"], workspace_id);
-            assert_eq!(replay["conversation"]["id"], conversation_id);
-            assert_eq!(replay["initial_message"]["id"], initial_message_id);
-
-            let conflict = app
-                .oneshot(authenticated_json_request(
-                    "POST",
-                    "/api/v1/tenants/local/projects/local-project/task-sessions",
-                    credential,
-                    create_task_session_request("task-session-restart", "Changed after restart"),
-                ))
-                .await
-                .expect("conflict reopened task session");
-            assert_eq!(conflict.status(), StatusCode::CONFLICT);
-            assert_eq!(
-                response_json(conflict).await,
-                json!({
-                    "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
-                    "detail": "Task session idempotency key is already bound to a different request",
-                })
-            );
-        }
-
-        std::fs::remove_dir_all(root).expect("remove task session restart root");
-    }
-
-    #[tokio::test]
-    async fn task_session_route_rejects_unknown_request_fields() {
-        let state = test_state("task-session-strict-secret");
-        let app = local_router(state);
-        for object_pointer in ["", "/workspace", "/conversation", "/initial_message"] {
-            let mut request = create_task_session_request("task-session-strict", "Strict request");
-            request
-                .pointer_mut(object_pointer)
-                .expect("strict request object")["unexpected"] = json!(true);
-            let response = app
-                .clone()
-                .oneshot(authenticated_json_request(
-                    "POST",
-                    "/api/v1/tenants/local/projects/local-project/task-sessions",
-                    "task-session-strict-secret",
-                    request,
-                ))
-                .await
-                .expect("strict task session response");
-            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        }
-
-        let mut request = create_task_session_request("task-session-strict", "Strict request");
-        request["conversation"]["capability_mode"] = json!("unavailable");
-        let response = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-strict-secret",
-                request,
-            ))
-            .await
-            .expect("strict task session capability response");
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    #[tokio::test]
-    async fn task_session_route_supports_existing_workspace_without_duplicate_workspace() {
-        let state = test_state("task-session-existing-secret");
-        let workspace_count = state
-            .session_store
-            .list_workspaces("local-project")
-            .expect("workspaces before task session")
-            .len();
-        let response = local_router(Arc::clone(&state))
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-existing-secret",
-                json!({
-                    "idempotency_key": "task-session-existing",
-                    "workspace": {
-                        "kind": "existing",
-                        "workspace_id": "local-workspace",
-                    },
-                    "conversation": {
-                        "title": "Existing workspace task",
-                        "capability_mode": "work",
-                    },
-                    "initial_message": {
-                        "content": "Continue in the selected workspace",
-                    },
-                }),
-            ))
-            .await
-            .expect("existing workspace task session response");
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let payload = response_json(response).await;
-        assert_eq!(payload["workspace"]["id"], "local-workspace");
-        assert_eq!(payload["conversation"]["workspace_id"], "local-workspace");
-        assert_eq!(payload["conversation"]["current_mode"], "plan");
-        assert_eq!(
-            state
-                .session_store
-                .list_workspaces("local-project")
-                .expect("workspaces after task session")
-                .len(),
-            workspace_count
-        );
-    }
-
-    #[tokio::test]
-    async fn task_session_and_workspace_routes_reject_inactive_scope_without_writes() {
-        let state = test_state("task-session-scope-secret");
-        state
-            .session_store
-            .insert_workspace(&json!({
-                "id": "outside-tenant-same-project",
-                "tenant_id": "outside",
-                "project_id": "local-project",
-                "name": "Outside tenant workspace",
-            }))
-            .expect("insert outside tenant workspace");
-        let app = local_router(Arc::clone(&state));
-        let wrong_tenant = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/outside/projects/local-project/task-sessions",
-                "task-session-scope-secret",
-                create_task_session_request("wrong-tenant-task-session", "Wrong tenant"),
-            ))
-            .await
-            .expect("wrong tenant task session response");
-        assert_eq!(wrong_tenant.status(), StatusCode::FORBIDDEN);
-
-        let wrong_project = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/outside/task-sessions",
-                "task-session-scope-secret",
-                create_task_session_request("wrong-project-task-session", "Wrong project"),
-            ))
-            .await
-            .expect("wrong project task session response");
-        assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
-
-        let foreign_existing_workspace = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-scope-secret",
-                json!({
-                    "idempotency_key": "foreign-existing-workspace",
-                    "workspace": {
-                        "kind": "existing",
-                        "workspace_id": "outside-tenant-same-project",
-                    },
-                    "conversation": {
-                        "title": "Foreign existing workspace task",
-                        "capability_mode": "work",
-                    },
-                    "initial_message": { "content": "Must remain tenant scoped" },
-                }),
-            ))
-            .await
-            .expect("foreign existing workspace response");
-        assert_eq!(foreign_existing_workspace.status(), StatusCode::FORBIDDEN);
-
-        let wrong_workspace_create = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/outside/projects/local-project/workspaces",
-                "task-session-scope-secret",
-                json!({ "name": "Wrong scoped workspace" }),
-            ))
-            .await
-            .expect("wrong scope workspace create response");
-        assert_eq!(wrong_workspace_create.status(), StatusCode::FORBIDDEN);
-
-        let wrong_workspace_list = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "GET",
-                "/api/v1/tenants/local/projects/outside/workspaces",
-                "task-session-scope-secret",
-                json!({}),
-            ))
-            .await
-            .expect("wrong scope workspace list response");
-        assert_eq!(wrong_workspace_list.status(), StatusCode::FORBIDDEN);
-
-        let active_workspace_list = app
-            .oneshot(authenticated_json_request(
-                "GET",
-                "/api/v1/tenants/local/projects/local-project/workspaces",
-                "task-session-scope-secret",
-                json!({}),
-            ))
-            .await
-            .expect("active scope workspace list response");
-        assert_eq!(active_workspace_list.status(), StatusCode::OK);
-        assert!(!response_json(active_workspace_list)
-            .await
-            .as_array()
-            .expect("workspace items")
-            .iter()
-            .any(|workspace| workspace["id"] == "outside-tenant-same-project"));
-
-        assert!(!state
-            .session_store
-            .list_workspaces("local-project")
-            .expect("workspaces")
-            .iter()
-            .any(|workspace| workspace["name"] == "Wrong scoped workspace"));
-        assert!(!state
-            .session_store
-            .list_conversations("local-project", None)
-            .expect("conversations")
-            .iter()
-            .any(|conversation| {
-                matches!(
-                    conversation.title.as_str(),
-                    "Wrong tenant" | "Wrong project" | "Foreign existing workspace task"
-                )
-            }));
-
-        let stale_context = state
-            .session_store
-            .validate_session_credential("task-session-scope-secret", Utc::now().timestamp_millis())
-            .expect("validate stale context fixture")
-            .expect("stale context fixture");
-        state
-            .session_store
-            .connection()
-            .expect("workspace context connection")
-            .execute(
-                "UPDATE desktop_workspace_contexts SET revision = revision + 1 WHERE user_id = ?1",
-                [&stale_context.user.user_id],
-            )
-            .expect("advance authoritative workspace context revision");
-        let stale_body = serde_json::from_value(create_task_session_request(
-            "stale-context-task-session",
-            "Stale context task",
-        ))
-        .expect("deserialize stale task session body");
-        let stale_response = task_session::create_task_session(
-            State(Arc::clone(&state)),
-            Extension(stale_context),
-            Path(("local".to_string(), "local-project".to_string())),
-            Json(stale_body),
-        )
-        .await
-        .expect_err("stale context must fail transaction validation");
-        assert_eq!(stale_response.0, StatusCode::FORBIDDEN);
-        assert!(!state
-            .session_store
-            .list_conversations("local-project", None)
-            .expect("conversations after stale context")
-            .iter()
-            .any(|conversation| conversation.title == "Stale context task"));
-        assert!(!state
-            .session_store
-            .list_workspaces("local-project")
-            .expect("workspaces after stale context")
-            .iter()
-            .any(|workspace| workspace["name"] == "Stale context task"));
-        let stale_receipt_count: i64 = state
-            .session_store
-            .connection()
-            .expect("stale receipt connection")
-            .query_row(
-                "SELECT COUNT(*) FROM desktop_new_task_sessions WHERE idempotency_key = ?1",
-                ["stale-context-task-session"],
-                |row| row.get(0),
-            )
-            .expect("count stale context receipts");
-        assert_eq!(stale_receipt_count, 0);
-    }
-
-    #[tokio::test]
-    async fn workspace_create_route_preserves_typed_metadata_and_rejects_unknown_fields() {
-        let state = test_state("workspace-create-contract-secret");
-        let app = local_router(state);
-        let created = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/workspaces",
-                "workspace-create-contract-secret",
-                json!({
-                    "name": "Typed workspace",
-                    "description": "Preserve the desktop contract",
-                    "metadata": {
-                        "source": "desktop",
-                        "retained": true,
-                        "use_case": "general",
-                        "collaboration_mode": "autonomous",
-                        "sandbox_code_root": "/tmp/untrusted-workspace-root",
-                    },
-                    "use_case": "research",
-                    "collaboration_mode": "multi_agent_shared",
-                    "sandbox_code_root": "/tmp/typed-workspace",
-                }),
-            ))
-            .await
-            .expect("typed workspace response");
-        assert_eq!(created.status(), StatusCode::OK);
-        let created = response_json(created).await;
-        assert_eq!(created["use_case"], "research");
-        assert_eq!(created["collaboration_mode"], "multi_agent_shared");
-        assert_eq!(created["sandbox_code_root"], "/tmp/typed-workspace");
-        assert_eq!(created["metadata"]["retained"], true);
-        assert_eq!(created["metadata"]["use_case"], "research");
-        assert_eq!(
-            created["metadata"]["collaboration_mode"],
-            "multi_agent_shared"
-        );
-        assert_eq!(
-            created["metadata"]["sandbox_code_root"],
-            "/tmp/typed-workspace"
-        );
-
-        let without_sandbox = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/workspaces",
-                "workspace-create-contract-secret",
-                json!({
-                    "name": "Workspace without sandbox",
-                    "metadata": { "sandbox_code_root": "/tmp/untrusted-workspace-root" },
-                    "use_case": "conversation",
-                    "collaboration_mode": "single_agent",
-                }),
-            ))
-            .await
-            .expect("workspace without sandbox response");
-        assert_eq!(without_sandbox.status(), StatusCode::OK);
-        let without_sandbox = response_json(without_sandbox).await;
-        assert!(without_sandbox["sandbox_code_root"].is_null());
-        assert!(without_sandbox["metadata"]["sandbox_code_root"].is_null());
-
-        let invalid = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/workspaces",
-                "workspace-create-contract-secret",
-                json!({
-                    "name": "Invalid workspace",
-                    "unexpected": true,
-                }),
-            ))
-            .await
-            .expect("strict workspace response");
-        assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    #[tokio::test]
-    async fn task_session_transaction_rolls_back_workspace_when_conversation_insert_fails() {
-        let state = test_state("task-session-conversation-failure-secret");
-        {
-            let connection = state.session_store.connection().expect("connection");
-            connection
-                .execute_batch(
-                    "CREATE TEMP TRIGGER fail_task_session_conversation
-                     BEFORE INSERT ON desktop_conversations
-                     WHEN NEW.id LIKE 'local-conversation-%'
-                     BEGIN
-                       SELECT RAISE(ABORT, 'forced task session conversation failure');
-                     END;",
-                )
-                .expect("install conversation failure");
-        }
-
-        let response = local_router(Arc::clone(&state))
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-conversation-failure-secret",
-                create_task_session_request(
-                    "task-session-conversation-failure",
-                    "Rolled back workspace",
-                ),
-            ))
-            .await
-            .expect("conversation failure response");
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert!(!state
-            .session_store
-            .list_workspaces("local-project")
-            .expect("workspaces")
-            .iter()
-            .any(|workspace| workspace["name"] == "Rolled back workspace"));
-        assert!(!state
-            .session_store
-            .list_conversations("local-project", None)
-            .expect("conversations")
-            .iter()
-            .any(|conversation| conversation.title == "Rolled back workspace"));
-    }
-
-    #[tokio::test]
-    async fn task_session_transaction_rolls_back_all_rows_when_receipt_insert_fails() {
-        let state = test_state("task-session-receipt-failure-secret");
-        {
-            let connection = state.session_store.connection().expect("connection");
-            connection
-                .execute_batch(
-                    "CREATE TEMP TRIGGER fail_task_session_receipt
-                     BEFORE INSERT ON desktop_new_task_sessions
-                     BEGIN
-                       SELECT RAISE(ABORT, 'forced task session receipt failure');
-                     END;",
-                )
-                .expect("install receipt failure");
-        }
-
-        let response = local_router(Arc::clone(&state))
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/task-sessions",
-                "task-session-receipt-failure-secret",
-                create_task_session_request(
-                    "task-session-receipt-failure",
-                    "Receipt rollback task",
-                ),
-            ))
-            .await
-            .expect("receipt failure response");
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert!(!state
-            .session_store
-            .list_workspaces("local-project")
-            .expect("workspaces")
-            .iter()
-            .any(|workspace| workspace["name"] == "Receipt rollback task"));
-        assert!(!state
-            .session_store
-            .list_conversations("local-project", None)
-            .expect("conversations")
-            .iter()
-            .any(|conversation| conversation.title == "Receipt rollback task"));
-        let connection = state.session_store.connection().expect("connection");
-        let initial_message_count: i64 = connection
-            .query_row(
-                "SELECT COUNT(*) FROM desktop_workspace_messages
-                 WHERE json_extract(value_json, '$.content') = ?1",
-                ["Build the approved desktop task flow"],
-                |row| row.get(0),
-            )
-            .expect("count rolled back initial messages");
-        let receipt_count: i64 = connection
-            .query_row(
-                "SELECT COUNT(*) FROM desktop_new_task_sessions
-                 WHERE idempotency_key = ?1",
-                ["task-session-receipt-failure"],
-                |row| row.get(0),
-            )
-            .expect("count rolled back receipts");
-        assert_eq!(initial_message_count, 0);
-        assert_eq!(receipt_count, 0);
-    }
-
-    #[test]
     fn client_turn_message_ids_are_scoped_to_the_conversation() {
         let store = DesktopSessionStore::in_memory().expect("session store");
         for conversation_id in ["conversation-a", "conversation-b"] {
@@ -16882,112 +14674,6 @@ mod tests {
                 &now_iso(),
             )
             .expect("claim second conversation"));
-    }
-
-    #[tokio::test]
-    async fn workspace_message_routes_require_full_path_and_active_workspace_scope() {
-        let state = test_state("workspace-message-scope-secret");
-        state
-            .session_store
-            .insert_workspace(&json!({
-                "id": "foreign-tenant-workspace",
-                "tenant_id": "foreign-tenant",
-                "project_id": "local-project",
-                "name": "Foreign tenant workspace",
-            }))
-            .expect("insert foreign tenant workspace");
-        state
-            .session_store
-            .insert_workspace(&json!({
-                "id": "foreign-project-workspace",
-                "tenant_id": "local",
-                "project_id": "foreign-project",
-                "name": "Foreign project workspace",
-            }))
-            .expect("insert foreign project workspace");
-        let app = local_router(Arc::clone(&state));
-
-        let wrong_tenant_path = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "GET",
-                "/api/v1/tenants/foreign-tenant/projects/local-project/workspaces/local-workspace/messages",
-                "workspace-message-scope-secret",
-                json!({}),
-            ))
-            .await
-            .expect("wrong tenant path response");
-        assert_eq!(wrong_tenant_path.status(), StatusCode::FORBIDDEN);
-
-        let wrong_project_path = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/foreign-project/workspaces/local-workspace/messages",
-                "workspace-message-scope-secret",
-                json!({ "content": "must be rejected" }),
-            ))
-            .await
-            .expect("wrong project path response");
-        assert_eq!(wrong_project_path.status(), StatusCode::FORBIDDEN);
-
-        let foreign_tenant_workspace = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "GET",
-                "/api/v1/tenants/local/projects/local-project/workspaces/foreign-tenant-workspace/messages",
-                "workspace-message-scope-secret",
-                json!({}),
-            ))
-            .await
-            .expect("foreign tenant workspace response");
-        assert_eq!(foreign_tenant_workspace.status(), StatusCode::FORBIDDEN);
-
-        let foreign_project_workspace = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/workspaces/foreign-project-workspace/messages",
-                "workspace-message-scope-secret",
-                json!({ "content": "must not persist" }),
-            ))
-            .await
-            .expect("foreign project workspace response");
-        assert_eq!(foreign_project_workspace.status(), StatusCode::FORBIDDEN);
-        assert!(state
-            .session_store
-            .list_workspace_messages("foreign-project-workspace")
-            .expect("list rejected workspace messages")
-            .is_empty());
-    }
-
-    #[tokio::test]
-    async fn workspace_message_create_propagates_persistence_failure() {
-        let state = test_state("workspace-message-store-secret");
-        {
-            let connection = state
-                .session_store
-                .connection()
-                .expect("desktop session connection");
-            connection
-                .execute("DROP TABLE desktop_workspace_messages", [])
-                .expect("drop workspace message table");
-        }
-
-        let response = local_router(state)
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/tenants/local/projects/local-project/workspaces/local-workspace/messages",
-                "workspace-message-store-secret",
-                json!({ "content": "cannot persist" }),
-            ))
-            .await
-            .expect("workspace message persistence response");
-
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(
-            response_json(response).await,
-            json!({ "detail": "desktop session store unavailable" })
-        );
     }
 
     #[test]
@@ -17106,121 +14792,6 @@ mod tests {
         assert_eq!(payload["approval"]["plan_version"], payload["plan_version"]);
     }
 
-    #[tokio::test]
-    async fn workspace_execution_projection_uses_latest_plan_and_run_without_fabricated_root_plan()
-    {
-        let state = test_state("workspace-projection-secret");
-        let conversation = LocalConversation {
-            id: "conversation-workspace-projection".to_string(),
-            project_id: "local-project".to_string(),
-            tenant_id: "local".to_string(),
-            title: "Project the approved plan".to_string(),
-            workspace_id: Some("local-workspace".to_string()),
-            capability_mode: ConversationCapabilityMode::Code,
-            current_mode: ConversationRunMode::Plan,
-            created_at: now_iso(),
-            updated_at: now_iso(),
-        };
-        state
-            .session_store
-            .insert_conversation(&conversation)
-            .expect("insert projected conversation");
-        state
-            .session_store
-            .replace_agent_plan_tasks(
-                &conversation.id,
-                &[json!({
-                    "id": "superseded-plan-task",
-                    "conversation_id": conversation.id,
-                    "content": "Old plan step",
-                    "status": "pending",
-                    "priority": "low",
-                    "order_index": 0,
-                    "created_at": now_iso(),
-                    "updated_at": now_iso(),
-                })],
-            )
-            .expect("store first plan");
-        state
-            .session_store
-            .replace_agent_plan_tasks(
-                &conversation.id,
-                &[json!({
-                    "id": "current-plan-task",
-                    "conversation_id": conversation.id,
-                    "content": "Build the workspace projection",
-                    "status": "in_progress",
-                    "priority": "high",
-                    "order_index": 0,
-                    "created_at": now_iso(),
-                    "updated_at": now_iso(),
-                })],
-            )
-            .expect("store latest plan");
-        let approved = state
-            .session_store
-            .approve_plan_and_start(
-                &conversation.id,
-                "local-project",
-                "workspace-projection-approval",
-                "workspace-projection-message",
-                "Execute the reviewed workspace plan",
-                &now_iso(),
-            )
-            .expect("approve latest plan");
-
-        let app = local_router(Arc::clone(&state));
-        let tasks_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/workspaces/local-workspace/tasks")
-                    .header("authorization", "Bearer workspace-projection-secret")
-                    .body(Body::empty())
-                    .expect("tasks request"),
-            )
-            .await
-            .expect("tasks response");
-        assert_eq!(tasks_response.status(), StatusCode::OK);
-        let tasks = response_json(tasks_response).await;
-        assert_eq!(tasks["items"].as_array().map(Vec::len), Some(1));
-        assert_eq!(tasks["items"][0]["id"], "current-plan-task");
-        assert_eq!(tasks["items"][0]["title"], "Build the workspace projection");
-        assert_eq!(tasks["items"][0]["status"], "in_progress");
-        assert_eq!(tasks["items"][0]["priority"], "high");
-        assert_eq!(tasks["items"][0]["conversation_id"], conversation.id);
-        assert_eq!(tasks["items"][0]["plan_version"], 2);
-        assert_eq!(tasks["items"][0]["plan_status"], "approved");
-        assert_eq!(tasks["items"][0]["run_id"], approved.run.id);
-        assert_eq!(tasks["items"][0]["run_status"], "queued");
-        assert_eq!(tasks["items"][0]["run_revision"], 1);
-        assert_eq!(tasks["items"][0]["source"], "agent_plan_task");
-
-        let plan_response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/workspaces/local-workspace/plan")
-                    .header("authorization", "Bearer workspace-projection-secret")
-                    .body(Body::empty())
-                    .expect("plan request"),
-            )
-            .await
-            .expect("plan response");
-        assert_eq!(plan_response.status(), StatusCode::OK);
-        let plan = response_json(plan_response).await;
-        assert!(plan["plan"].is_null());
-        assert_eq!(plan["workspace_id"], "local-workspace");
-        assert_eq!(plan["project_id"], "local-project");
-        assert_eq!(plan["conversation_plans"].as_array().map(Vec::len), Some(1));
-        assert_eq!(
-            plan["conversation_plans"][0]["conversation_id"],
-            conversation.id
-        );
-        assert_eq!(plan["conversation_plans"][0]["plan"]["version"], 2);
-        assert_eq!(plan["conversation_plans"][0]["run"]["id"], approved.run.id);
-        assert_eq!(plan["plan_history"].as_array().map(Vec::len), Some(2));
-    }
-
     #[test]
     fn conversation_projection_separates_lifecycle_status_from_latest_run() {
         let state = test_state("conversation-status-contract-secret");
@@ -17271,60 +14842,6 @@ mod tests {
         assert_eq!(projected["status"], "active");
         assert_eq!(projected["metadata"]["run"]["id"], approved.run.id);
         assert_eq!(projected["metadata"]["run"]["status"], "queued");
-    }
-
-    #[tokio::test]
-    async fn empty_workspace_projection_is_explicit_and_contains_no_fabricated_plan() {
-        let state = test_state("empty-workspace-secret");
-        state
-            .session_store
-            .insert_workspace(&json!({
-                "id": "empty-workspace",
-                "tenant_id": "local",
-                "project_id": "local-project",
-                "name": "Empty workspace",
-                "status": "open",
-                "created_at": now_iso(),
-                "updated_at": now_iso(),
-                "metadata": { "runtime": "local" },
-            }))
-            .expect("insert empty workspace");
-        let app = local_router(state);
-
-        let tasks_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/workspaces/empty-workspace/tasks")
-                    .header("authorization", "Bearer empty-workspace-secret")
-                    .body(Body::empty())
-                    .expect("tasks request"),
-            )
-            .await
-            .expect("tasks response");
-        assert_eq!(tasks_response.status(), StatusCode::OK);
-        let tasks = response_json(tasks_response).await;
-        assert_eq!(tasks["items"], json!([]));
-
-        let plan_response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/workspaces/empty-workspace/plan")
-                    .header("authorization", "Bearer empty-workspace-secret")
-                    .body(Body::empty())
-                    .expect("plan request"),
-            )
-            .await
-            .expect("plan response");
-        assert_eq!(plan_response.status(), StatusCode::OK);
-        let plan = response_json(plan_response).await;
-        assert!(plan["plan"].is_null());
-        assert_eq!(plan["conversation_plans"], json!([]));
-        assert_eq!(plan["plan_history"], json!([]));
-        assert_eq!(plan["run_health"], json!([]));
-        assert_eq!(plan["pending_hitl"], json!([]));
-        assert_eq!(plan["delivery"], json!([]));
-        assert_eq!(plan["artifact_index"], json!([]));
     }
 
     #[tokio::test]
@@ -17516,40 +15033,6 @@ mod tests {
         let snapshot = response_json(response).await;
         assert_eq!(snapshot["conversation"]["id"], conversation.id);
         assert_eq!(snapshot["conversation"]["workspace_id"], Value::Null);
-    }
-
-    #[tokio::test]
-    async fn workspace_execution_projection_rejects_a_cross_tenant_conversation_record() {
-        let state = test_state("tenant-projection-secret");
-        let conversation = LocalConversation {
-            id: "cross-tenant-workspace-projection".to_string(),
-            project_id: "local-project".to_string(),
-            tenant_id: "outside-tenant".to_string(),
-            title: "Must not be projected".to_string(),
-            workspace_id: Some("local-workspace".to_string()),
-            capability_mode: ConversationCapabilityMode::Work,
-            current_mode: ConversationRunMode::Plan,
-            created_at: now_iso(),
-            updated_at: now_iso(),
-        };
-        state
-            .session_store
-            .insert_conversation(&conversation)
-            .expect("insert invalid cross-tenant conversation");
-
-        let response = local_router(state)
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/workspaces/local-workspace/tasks")
-                    .header("authorization", "Bearer tenant-projection-secret")
-                    .body(Body::empty())
-                    .expect("tasks request"),
-            )
-            .await
-            .expect("tasks response");
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let payload = response_json(response).await;
-        assert_eq!(payload["detail"], "desktop session store unavailable");
     }
 
     #[tokio::test]
@@ -18277,19 +15760,6 @@ mod tests {
     async fn local_automation_never_selects_the_first_workspace_for_an_unscoped_job() {
         let state = test_state("automation-unscoped-secret");
         state
-            .session_store
-            .insert_workspace(&json!({
-                "id": "workspace-that-must-not-be-selected",
-                "tenant_id": "local",
-                "project_id": "local-project",
-                "name": "Must not be selected",
-                "description": null,
-                "status": "active",
-                "created_at": now_iso(),
-                "updated_at": now_iso(),
-            }))
-            .expect("insert alternative workspace");
-        state
             .start_automation_worker_with_config(test_automation_worker_config())
             .expect("start automation worker");
         let app = local_router(Arc::clone(&state));
@@ -18395,22 +15865,20 @@ mod tests {
             .await
             .expect("response");
 
-        assert_eq!(switch_response.status(), StatusCode::OK);
+        assert_eq!(switch_response.status(), StatusCode::SERVICE_UNAVAILABLE);
         let switch_body = axum::body::to_bytes(switch_response.into_body(), usize::MAX)
             .await
             .expect("body");
         let switched: Value = serde_json::from_slice(&switch_body).expect("json");
-        assert_eq!(switched["agent_config"]["capability_mode"], "code");
-        assert_eq!(switched["metadata"]["capability_mode"], "code");
-        assert_eq!(switched["workspace_id"], "local-workspace");
+        assert_eq!(switched["reason_code"], "workspace_core_unavailable");
 
         let stored = state
             .session_store
             .conversation(conversation_id)
             .expect("load stored conversation")
             .expect("stored conversation");
-        assert_eq!(stored.capability_mode, ConversationCapabilityMode::Code);
-        assert_eq!(stored.workspace_id.as_deref(), Some("local-workspace"));
+        assert_eq!(stored.capability_mode, ConversationCapabilityMode::Work);
+        assert_eq!(stored.workspace_id, None);
     }
 
     #[tokio::test]

@@ -314,17 +314,13 @@ async def workspace_assign_task_tool(
     # Failures are logged upstream; the envelope was already durably published.
     launch_info: dict[str, Any] = {"scheduled": False}
     try:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-            SqlWorkspaceTaskRepository,
-        )
         from src.infrastructure.agent.workspace.worker_launch import schedule_worker_session
+        from src.infrastructure.workspace_core.legacy_runtime import (
+            legacy_workspace_runtime_retired,
+        )
 
-        async with async_session_factory() as db:
-            task_repo = SqlWorkspaceTaskRepository(db)
-            task = await task_repo.find_by_id(task_id)
+        task_repo = legacy_workspace_runtime_retired("Workspace task assignment launch lookup")
+        task = await task_repo.find_by_id(task_id)
         if task is None:
             launch_info = {"scheduled": False, "reason": "task_not_found"}
         else:

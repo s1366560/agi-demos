@@ -1,4 +1,4 @@
-"""Isolated configuration for the Workspace Core authority switch."""
+"""Isolated configuration for the Avernet Workspace Core authority."""
 
 from __future__ import annotations
 
@@ -8,13 +8,6 @@ from typing import Self
 
 from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class WorkspaceCoreBackend(StrEnum):
-    """Workspace authority selected for the whole process."""
-
-    LEGACY = "legacy"
-    AVERNET = "avernet"
 
 
 class WorkspaceCoreMigrationMode(StrEnum):
@@ -29,13 +22,9 @@ class WorkspaceCoreSettings(BaseSettings):
     """Strict, process-scoped Workspace Core settings.
 
     This intentionally remains separate from the global application ``Settings``
-    because switching Workspace authority is an atomic deployment decision.
+    so Core credentials and migration controls stay isolated from platform settings.
     """
 
-    backend: WorkspaceCoreBackend = Field(
-        default=WorkspaceCoreBackend.LEGACY,
-        alias="WORKSPACE_CORE_BACKEND",
-    )
     migration_mode: WorkspaceCoreMigrationMode = Field(
         default=WorkspaceCoreMigrationMode.DISABLED,
         alias="WORKSPACE_CORE_MIGRATION_MODE",
@@ -60,10 +49,6 @@ class WorkspaceCoreSettings(BaseSettings):
         default=None,
         alias="WORKSPACE_CORE_AGENT_REGISTRY_TOKEN",
         repr=False,
-    )
-    shadow_read_enabled: bool = Field(
-        default=False,
-        alias="WORKSPACE_CORE_SHADOW_READ_ENABLED",
     )
     request_timeout_seconds: float = Field(
         default=5.0,
@@ -96,18 +81,13 @@ class WorkspaceCoreSettings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def require_avernet_connection_contract(self) -> Self:
-        """Reject an incomplete Avernet authority selection."""
-        connection_required = (
-            self.backend is WorkspaceCoreBackend.AVERNET or self.shadow_read_enabled
-        )
-        if connection_required and (self.base_url is None or self.service_token is None):
+    def require_connection_contract(self) -> Self:
+        """Reject an incomplete Avernet authority configuration."""
+        if self.base_url is None or self.service_token is None:
             raise ValueError("Workspace Core connection requires a base URL and service token")
-        if self.backend is WorkspaceCoreBackend.AVERNET and (
-            self.provider_webhook_token is None or self.provider_event_token is None
-        ):
+        if self.provider_webhook_token is None or self.provider_event_token is None:
             raise ValueError("Avernet Provider requires separate webhook and event tokens")
-        if self.backend is WorkspaceCoreBackend.AVERNET and self.agent_registry_token is None:
+        if self.agent_registry_token is None:
             raise ValueError("Avernet Agent Registry requires a dedicated token")
         configured_tokens = [
             token.get_secret_value()
@@ -117,17 +97,10 @@ class WorkspaceCoreSettings(BaseSettings):
                 self.provider_event_token,
                 self.agent_registry_token,
             )
-            if token is not None
         ]
         if len(configured_tokens) != len(set(configured_tokens)):
             raise ValueError("Workspace Core credentials must use separate tokens")
         return self
-
-    @property
-    def connection_enabled(self) -> bool:
-        """Return whether this process may call the Avernet core."""
-        return self.backend is WorkspaceCoreBackend.AVERNET or self.shadow_read_enabled
-
 
 @lru_cache
 def get_workspace_core_settings() -> WorkspaceCoreSettings:

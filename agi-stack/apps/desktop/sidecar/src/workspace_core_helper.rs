@@ -25,6 +25,10 @@ use crate::local_runtime::LocalRuntimeService;
 use crate::private_file_permissions::{
     set_private_directory_permissions, set_private_file_permissions,
 };
+use crate::workspace_core_cutover::{
+    load_cutover_marker, persist_cutover_marker, staged_snapshot_from_marker,
+    WorkspaceCoreCutoverState,
+};
 use crate::workspace_core_legacy_import::stage_legacy_workspace_snapshot;
 
 const DEFAULT_MAX_RESTART_ATTEMPTS: usize = 4;
@@ -38,7 +42,6 @@ const DEFAULT_RESTART_DELAYS: [Duration; 4] = [
 ];
 const DEFAULT_RESTART_STABILITY: Duration = Duration::from_secs(60);
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const SUPERVISOR_STARTUP_TIMEOUT: Duration = Duration::from_secs(150);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(35);
 
 #[derive(Debug, Clone, Serialize)]
@@ -48,27 +51,37 @@ pub(crate) struct WorkspaceCoreHelperStatus {
     pid: Option<u32>,
     api_base_url: Option<String>,
     restart_attempts: usize,
+    restart_generation: usize,
     failure_reason: Option<&'static str>,
+    cutover_state: WorkspaceCoreCutoverState,
 }
 
 impl WorkspaceCoreHelperStatus {
-    fn starting(restart_attempts: usize) -> Self {
+    fn starting(
+        restart_attempts: usize,
+        restart_generation: usize,
+        cutover_state: WorkspaceCoreCutoverState,
+    ) -> Self {
         Self {
             state: "starting",
             pid: None,
             api_base_url: None,
             restart_attempts,
+            restart_generation,
             failure_reason: None,
+            cutover_state,
         }
     }
 
-    fn stopped() -> Self {
+    fn stopped(restart_generation: usize, cutover_state: WorkspaceCoreCutoverState) -> Self {
         Self {
             state: "stopped",
             pid: None,
             api_base_url: None,
             restart_attempts: 0,
+            restart_generation,
             failure_reason: None,
+            cutover_state,
         }
     }
 }
@@ -85,6 +98,7 @@ struct WorkspaceCoreLaunchConfig {
     sidecar_api_base_url: String,
     legacy_import_path: PathBuf,
     legacy_import_sha256: String,
+    cutover_snapshot: crate::workspace_core_legacy_import::StagedLegacyWorkspaceSnapshot,
 }
 
 #[derive(Serialize)]
@@ -171,8 +185,34 @@ impl WorkspaceCoreSupervisor {
         let api_base_url = format!("http://127.0.0.1:{port}");
         let config_path = runtime_directory.join("bcs-config.toml");
         write_config(&config_path, &runtime_directory, port).await?;
-        let legacy_import = stage_legacy_workspace_snapshot(&runtime, &runtime_directory).await?;
+        let existing_marker = load_cutover_marker(&runtime_directory).await?;
+        if existing_marker
+            .as_ref()
+            .is_some_and(|marker| marker.state.is_cutover())
+        {
+            runtime.mark_workspace_core_cutover();
+        }
+        let legacy_import = match existing_marker.as_ref() {
+            Some(marker) if marker.state.is_cutover() => {
+                staged_snapshot_from_marker(&runtime_directory, marker).await?
+            }
+            _ => {
+                let snapshot =
+                    stage_legacy_workspace_snapshot(&runtime, &runtime_directory).await?;
+                persist_cutover_marker(
+                    &runtime_directory,
+                    WorkspaceCoreCutoverState::Importing,
+                    Some(&snapshot),
+                )
+                .await?;
+                runtime.mark_workspace_core_cutover();
+                snapshot
+            }
+        };
 
+        let initial_cutover_state = existing_marker
+            .as_ref()
+            .map_or(WorkspaceCoreCutoverState::Importing, |marker| marker.state);
         let launch = Arc::new(WorkspaceCoreLaunchConfig {
             binary_path,
             runtime_directory,
@@ -183,8 +223,9 @@ impl WorkspaceCoreSupervisor {
             provider_webhook_token: random_secret()?,
             provider_event_token: random_secret()?,
             sidecar_api_base_url: sidecar_api_base_url.to_string(),
-            legacy_import_path: legacy_import.path,
-            legacy_import_sha256: legacy_import.sha256,
+            legacy_import_path: legacy_import.path.clone(),
+            legacy_import_sha256: legacy_import.sha256.clone(),
+            cutover_snapshot: legacy_import,
         });
         let authority_generation = runtime.install_workspace_core_authority(
             launch.api_base_url.clone(),
@@ -197,38 +238,23 @@ impl WorkspaceCoreSupervisor {
             runtime,
             generation: authority_generation,
         };
-        let status = Arc::new(Mutex::new(WorkspaceCoreHelperStatus::starting(0)));
+        let status = Arc::new(Mutex::new(WorkspaceCoreHelperStatus::starting(
+            0,
+            0,
+            initial_cutover_state,
+        )));
         let (shutdown, shutdown_rx) = watch::channel(false);
-        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
         let monitor = tokio::spawn(monitor_helper(
             Arc::clone(&launch),
             Arc::clone(&status),
             shutdown_rx,
-            Some(ready_tx),
             authority_lease,
         ));
-        match timeout(SUPERVISOR_STARTUP_TIMEOUT, ready_rx).await {
-            Ok(Ok(Ok(()))) => Ok(Self {
-                status,
-                shutdown,
-                monitor,
-            }),
-            Ok(Ok(Err(error))) => {
-                let _ = shutdown.send(true);
-                let _ = monitor.await;
-                Err(error)
-            }
-            Ok(Err(_)) => {
-                let _ = shutdown.send(true);
-                let _ = monitor.await;
-                Err("Workspace Core supervisor stopped before readiness".to_string())
-            }
-            Err(_) => {
-                let _ = shutdown.send(true);
-                let _ = monitor.await;
-                Err("Workspace Core helper readiness timed out".to_string())
-            }
-        }
+        Ok(Self {
+            status,
+            shutdown,
+            monitor,
+        })
     }
 
     pub(crate) async fn status(&self) -> WorkspaceCoreHelperStatus {
@@ -245,19 +271,29 @@ async fn monitor_helper(
     launch: Arc<WorkspaceCoreLaunchConfig>,
     status: Arc<Mutex<WorkspaceCoreHelperStatus>>,
     mut shutdown: watch::Receiver<bool>,
-    mut ready: Option<tokio::sync::oneshot::Sender<Result<(), String>>>,
     authority_lease: WorkspaceCoreAuthorityLease,
 ) {
     let mut restart_attempts = 0;
+    let mut restart_generation = 0;
+    let mut cutover_state = status.lock().await.cutover_state;
     loop {
         if *shutdown.borrow() {
-            *status.lock().await = WorkspaceCoreHelperStatus::stopped();
+            *status.lock().await =
+                WorkspaceCoreHelperStatus::stopped(restart_generation, cutover_state);
             return;
         }
-        *status.lock().await = WorkspaceCoreHelperStatus::starting(restart_attempts);
+        restart_generation += 1;
+        *status.lock().await = WorkspaceCoreHelperStatus::starting(
+            restart_attempts,
+            restart_generation,
+            cutover_state,
+        );
         let launch_result = tokio::select! {
             _ = shutdown.changed() => {
-                *status.lock().await = WorkspaceCoreHelperStatus::stopped();
+                *status.lock().await = WorkspaceCoreHelperStatus::stopped(
+                    restart_generation,
+                    cutover_state,
+                );
                 return;
             }
             result = launch_helper(&launch) => result,
@@ -269,9 +305,13 @@ async fn monitor_helper(
                     &status,
                     &mut shutdown,
                     &mut restart_attempts,
-                    &mut ready,
-                    "workspace_core_launch_failed",
-                    error,
+                    restart_generation,
+                    &launch,
+                    cutover_state,
+                    RetryFailure {
+                        reason: "workspace_core_launch_failed",
+                        detail: error,
+                    },
                 )
                 .await
                 {
@@ -291,21 +331,43 @@ async fn monitor_helper(
                 "Workspace Core pending terminal callback replay failed"
             );
         }
+        if let Err(error) = persist_cutover_marker(
+            &launch.runtime_directory,
+            WorkspaceCoreCutoverState::CoreAuthoritative,
+            Some(&launch.cutover_snapshot),
+        )
+        .await
+        {
+            tracing::error!(error = %error, "Workspace Core authoritative cutover marker failed");
+            shutdown_child(&mut child).await;
+            *status.lock().await = WorkspaceCoreHelperStatus {
+                state: "failed",
+                pid: None,
+                api_base_url: None,
+                restart_attempts,
+                restart_generation,
+                failure_reason: Some("workspace_core_cutover_marker_failed"),
+                cutover_state: WorkspaceCoreCutoverState::CoreUnavailable,
+            };
+            return;
+        }
+        cutover_state = WorkspaceCoreCutoverState::CoreAuthoritative;
         *status.lock().await = WorkspaceCoreHelperStatus {
             state: "running",
             pid: child.child.id(),
             api_base_url: Some(launch.api_base_url.clone()),
             restart_attempts,
+            restart_generation,
             failure_reason: None,
+            cutover_state,
         };
-        if let Some(sender) = ready.take() {
-            let _ = sender.send(Ok(()));
-        }
-
         tokio::select! {
             _ = shutdown.changed() => {
                 shutdown_child(&mut child).await;
-                *status.lock().await = WorkspaceCoreHelperStatus::stopped();
+                *status.lock().await = WorkspaceCoreHelperStatus::stopped(
+                    restart_generation,
+                    cutover_state,
+                );
                 return;
             }
             _ = child.child.wait() => {}
@@ -313,13 +375,27 @@ async fn monitor_helper(
         if started_at.elapsed() >= DEFAULT_RESTART_STABILITY {
             restart_attempts = 0;
         }
+        if let Err(error) = persist_cutover_marker(
+            &launch.runtime_directory,
+            WorkspaceCoreCutoverState::CoreUnavailable,
+            Some(&launch.cutover_snapshot),
+        )
+        .await
+        {
+            tracing::error!(error = %error, "Workspace Core unavailable cutover marker failed");
+        }
+        cutover_state = WorkspaceCoreCutoverState::CoreUnavailable;
         if !schedule_retry(
             &status,
             &mut shutdown,
             &mut restart_attempts,
-            &mut ready,
-            "workspace_core_exited_unexpectedly",
-            "Workspace Core helper exited unexpectedly".to_string(),
+            restart_generation,
+            &launch,
+            cutover_state,
+            RetryFailure {
+                reason: "workspace_core_exited_unexpectedly",
+                detail: "Workspace Core helper exited unexpectedly".to_string(),
+            },
         )
         .await
         {
@@ -332,21 +408,31 @@ async fn schedule_retry(
     status: &Arc<Mutex<WorkspaceCoreHelperStatus>>,
     shutdown: &mut watch::Receiver<bool>,
     restart_attempts: &mut usize,
-    ready: &mut Option<tokio::sync::oneshot::Sender<Result<(), String>>>,
-    failure_reason: &'static str,
-    detail: String,
+    restart_generation: usize,
+    launch: &WorkspaceCoreLaunchConfig,
+    cutover_state: WorkspaceCoreCutoverState,
+    failure: RetryFailure,
 ) -> bool {
     if *restart_attempts >= DEFAULT_MAX_RESTART_ATTEMPTS {
+        if let Err(error) = persist_cutover_marker(
+            &launch.runtime_directory,
+            WorkspaceCoreCutoverState::CoreUnavailable,
+            Some(&launch.cutover_snapshot),
+        )
+        .await
+        {
+            tracing::error!(error = %error, "Workspace Core unavailable cutover marker failed");
+        }
         *status.lock().await = WorkspaceCoreHelperStatus {
             state: "failed",
             pid: None,
             api_base_url: None,
             restart_attempts: *restart_attempts,
-            failure_reason: Some(failure_reason),
+            restart_generation,
+            failure_reason: Some(failure.reason),
+            cutover_state: WorkspaceCoreCutoverState::CoreUnavailable,
         };
-        if let Some(sender) = ready.take() {
-            let _ = sender.send(Err(detail));
-        }
+        tracing::error!(detail = %failure.detail, "Workspace Core helper exhausted restart attempts");
         return false;
     }
     let delay = DEFAULT_RESTART_DELAYS
@@ -359,12 +445,19 @@ async fn schedule_retry(
         pid: None,
         api_base_url: None,
         restart_attempts: *restart_attempts,
-        failure_reason: Some(failure_reason),
+        restart_generation,
+        failure_reason: Some(failure.reason),
+        cutover_state,
     };
     tokio::select! {
         _ = sleep(delay) => true,
         _ = shutdown.changed() => false,
     }
+}
+
+struct RetryFailure {
+    reason: &'static str,
+    detail: String,
 }
 
 async fn launch_helper(config: &WorkspaceCoreLaunchConfig) -> Result<SupervisedChild, String> {
@@ -649,6 +742,10 @@ mod tests {
             sidecar_api_base_url: "http://127.0.0.1:31000".to_string(),
             legacy_import_path: PathBuf::from("/tmp/workspace-core/legacy-import.json"),
             legacy_import_sha256: "a".repeat(64),
+            cutover_snapshot: crate::workspace_core_legacy_import::StagedLegacyWorkspaceSnapshot {
+                path: PathBuf::from("/tmp/workspace-core/legacy-import.json"),
+                sha256: "a".repeat(64),
+            },
         }
     }
 
@@ -682,7 +779,9 @@ mod tests {
             pid: Some(42),
             api_base_url: Some("http://127.0.0.1:21000".to_string()),
             restart_attempts: 1,
+            restart_generation: 2,
             failure_reason: None,
+            cutover_state: WorkspaceCoreCutoverState::CoreAuthoritative,
         };
         let encoded = serde_json::to_string(&status).expect("serialize helper status");
         assert!(!encoded.contains("token"));

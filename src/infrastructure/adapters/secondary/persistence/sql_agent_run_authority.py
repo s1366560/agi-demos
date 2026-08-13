@@ -13,7 +13,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
     AgentRunAuthorityModel,
     Conversation,
-    WorkspaceAgentPolicyModel,
 )
 
 
@@ -55,12 +54,7 @@ async def ensure_chat_run_authority(
         await db.commit()
         return existing
 
-    policy = (
-        await db.get(WorkspaceAgentPolicyModel, conversation.workspace_id)
-        if conversation.workspace_id
-        else None
-    )
-    policy_permission_mode = policy.permission_mode if policy is not None else "ask"
+    policy_permission_mode = "ask"
     effective_permission_mode = permission_mode or policy_permission_mode
     permission_profile = _permission_profile(effective_permission_mode)
     now = datetime.now(UTC)
@@ -87,7 +81,7 @@ async def ensure_chat_run_authority(
             "requested_permission_mode": permission_mode,
             "effective_permission_mode": effective_permission_mode,
             "policy": {
-                "revision": policy.revision if policy is not None else 0,
+                "revision": 0,
                 "permission_mode": policy_permission_mode,
             },
             "context_authorities": (

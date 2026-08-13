@@ -235,7 +235,7 @@ async fn task_http_exposes_all_routes_with_atomic_replayable_authority()
             "user-1",
             None,
             Some("delete-1"),
-            Some(9),
+            Some(12),
         )?,
     )
     .await?;
@@ -254,12 +254,12 @@ async fn task_http_exposes_all_routes_with_atomic_replayable_authority()
         table_count(db.as_ref(), "workspace_task_receipts").await?,
         10
     );
-    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 10);
+    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 13);
     assert_eq!(
         table_count(db.as_ref(), "workspace_task_attempts").await?,
         1
     );
-    assert_eq!(authority_revision(db.as_ref()).await?, 10);
+    assert_eq!(authority_revision(db.as_ref()).await?, 13);
     Ok(())
 }
 

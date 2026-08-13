@@ -17,7 +17,6 @@ from typing import Any, cast
 
 from src.application.services.workspace_task_service import (
     WorkspaceTaskAuthorityContext,
-    WorkspaceTaskService,
 )
 from src.domain.model.agent.task import AgentTask, TaskPriority, TaskStatus
 from src.domain.model.workspace.workspace_task import (
@@ -268,18 +267,12 @@ async def todoread_tool(
 
     async with _todoread_session_factory() as session:
         if workspace_markers is not None:
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-                SqlWorkspaceTaskRepository,
+            from src.infrastructure.workspace_core.legacy_runtime import (
+                legacy_workspace_runtime_retired,
             )
 
-            workspace_id, root_goal_task_id = workspace_markers
-            workspace_tasks = await SqlWorkspaceTaskRepository(session).find_by_root_goal_task_id(
-                workspace_id,
-                root_goal_task_id,
-            )
-            todos = [_workspace_task_to_todo(task) for task in workspace_tasks]
-            if status is not None:
-                todos = [todo for todo in todos if todo["status"] == status]
+            del session, workspace_markers
+            legacy_workspace_runtime_retired("todoread Workspace authority")
         else:
             from src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository import (
                 SqlAgentTaskRepository,
@@ -815,17 +808,10 @@ async def _dispatch_created_workspace_tasks(
             },
         )
         return {"dispatched": False, "dispatch_skipped_reason": "leader_agent_id_missing"}
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-        SqlWorkspaceAgentRepository,
-    )
-    from src.infrastructure.agent.workspace.dispatcher import (
-        assign_execution_tasks_round_robin,
-    )
+    from src.infrastructure.agent.workspace.dispatcher import assign_execution_tasks_round_robin
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-    active_bindings = await SqlWorkspaceAgentRepository(session).find_by_workspace(
-        workspace_id,
-        active_only=True,
-    )
+    active_bindings = legacy_workspace_runtime_retired("todowrite Workspace dispatch")
     assigned_count = await assign_execution_tasks_round_robin(
         workspace_id=workspace_id,
         actor_user_id=actor_user_id,
@@ -1040,27 +1026,13 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
             from src.application.services.workspace_task_command_service import (
                 WorkspaceTaskCommandService,
             )
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-                SqlWorkspaceAgentRepository,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-                SqlWorkspaceMemberRepository,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-                SqlWorkspaceRepository,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-                SqlWorkspaceTaskRepository,
+            from src.infrastructure.workspace_core.legacy_runtime import (
+                legacy_workspace_runtime_retired,
             )
 
             workspace_id, root_goal_task_id = workspace_markers
-            task_repo = SqlWorkspaceTaskRepository(session)
-            task_service = WorkspaceTaskService(
-                workspace_repo=SqlWorkspaceRepository(session),
-                workspace_member_repo=SqlWorkspaceMemberRepository(session),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(session),
-                workspace_task_repo=task_repo,
-            )
+            task_repo = legacy_workspace_runtime_retired("todowrite Workspace authority")
+            task_service = legacy_workspace_runtime_retired("todowrite Workspace authority")
             command_service = WorkspaceTaskCommandService(task_service)
             runtime_ctx = ctx.runtime_context or {}
             leader_agent_id_raw = runtime_ctx.get("selected_agent_id")

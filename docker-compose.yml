@@ -23,7 +23,14 @@ services:
       - LLM_PROVIDER=gemini
       - CUA_MCP_URL=ws://cua-mcp-server:18766
       - CODEBOX_MCP_URL=ws://codebox-mcp-server:8765
+      - WORKSPACE_CORE_BASE_URL=http://memstack-workspace-core:4319
+      - WORKSPACE_CORE_SERVICE_TOKEN=${WORKSPACE_CORE_SERVICE_TOKEN-}
+      - WORKSPACE_CORE_AGENT_REGISTRY_TOKEN=${WORKSPACE_CORE_AGENT_REGISTRY_TOKEN-}
+      - WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN=${WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN-}
+      - WORKSPACE_CORE_PROVIDER_EVENT_TOKEN=${WORKSPACE_CORE_PROVIDER_EVENT_TOKEN-}
     depends_on:
+      memstack-workspace-core:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       postgres:
@@ -43,6 +50,64 @@ services:
         reservations:
           cpus: '0.25'
           memory: 512M
+
+  # Avernet-backed Workspace authority. This is an independent process: the
+  # FastAPI gateway never launches, supervises, or falls back from it.
+  memstack-workspace-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.workspace-core
+    container_name: memstack-workspace-core
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WORKSPACE_CORE_PORT:-4319}:4319"
+    environment:
+      - WORKSPACE_CORE_DATABASE_URL=${WORKSPACE_CORE_DATABASE_URL-}
+      - WORKSPACE_CORE_SERVICE_TOKEN=${WORKSPACE_CORE_SERVICE_TOKEN-}
+      - WORKSPACE_CORE_AGENT_REGISTRY_URL=http://host.docker.internal:8000
+      - WORKSPACE_CORE_AGENT_REGISTRY_TOKEN=${WORKSPACE_CORE_AGENT_REGISTRY_TOKEN-}
+      - WORKSPACE_CORE_AGENT_REGISTRY_TIMEOUT_SECONDS=5
+      - WORKSPACE_CORE_PROVIDER_WEBHOOK_URL=http://host.docker.internal:8000/internal/v1/workspace-core/provider
+      - WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN=${WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN-}
+      - WORKSPACE_CORE_PROVIDER_EVENT_TOKEN=${WORKSPACE_CORE_PROVIDER_EVENT_TOKEN-}
+      - WORKSPACE_CORE_PROVIDER_CALLBACK_TIMEOUT_MS=3600000
+      - WORKSPACE_CORE_PLAN_DISPATCH_URL=http://host.docker.internal:8000/internal/v1/workspace-core/plan-dispatch
+      - WORKSPACE_CORE_PLAN_DISPATCH_TIMEOUT_SECONDS=10
+      - WORKSPACE_CORE_MODE=cloud
+      - AVERNET_SECRET_PRINCIPAL_SIGNING_KEY_VALUE=${AVERNET_SECRET_PRINCIPAL_SIGNING_KEY_VALUE-}
+      - BCS_SECRET_WORKSPACE_CORE_GROUP_SESSION_WS_JWT=${BCS_SECRET_WORKSPACE_CORE_GROUP_SESSION_WS_JWT-}
+      - RUST_LOG=${WORKSPACE_CORE_LOG_LEVEL:-info}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - workspace_core_files:/var/lib/memstack-workspace-core:rw
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "http://127.0.0.1:4319/health",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # Neo4j Graph Database
   neo4j:
@@ -191,3 +256,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  workspace_core_files:

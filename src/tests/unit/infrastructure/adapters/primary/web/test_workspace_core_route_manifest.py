@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[7]
 GENERATOR_PATH = REPO_ROOT / "scripts/workspace-core/generate-route-manifest.py"
 MANIFEST_PATH = REPO_ROOT / "docs/architecture/workspace-core-route-manifest.json"
 
-EXPECTED_CONTRACT_SHA256 = "a20b3f3a5065b9ff4fad23310b4fa6c4eb6cc4f666be7957ec6c4b1ad65a9623"
+EXPECTED_CONTRACT_SHA256 = "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
 EXPECTED_MODULE_COUNTS = {
     "src.infrastructure.adapters.primary.web.routers.blackboard": 19,
     "src.infrastructure.adapters.primary.web.routers.cyber_genes": 5,
@@ -64,13 +64,32 @@ def test_checked_in_manifest_matches_runtime_routes() -> None:
         env={
             **os.environ,
             "PYTHONDONTWRITEBYTECODE": "1",
-            "WORKSPACE_CORE_BACKEND": "avernet",
             "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
             "WORKSPACE_CORE_SERVICE_TOKEN": "manifest-service-token",
             "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "manifest-webhook-token",
             "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "manifest-event-token",
             "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "manifest-registry-token",
         },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_manifest_generator_is_independent_of_operator_core_credentials() -> None:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("WORKSPACE_CORE_")
+    }
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+
+    result = subprocess.run(
+        [sys.executable, str(GENERATOR_PATH), "--check"],
+        cwd=REPO_ROOT,
+        env=environment,
         capture_output=True,
         text=True,
         check=False,

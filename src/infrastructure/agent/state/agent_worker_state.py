@@ -506,14 +506,10 @@ async def get_or_create_tools(
     # 14. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
-    # 15. Add planner contract terminal tool. This must not depend on
-    # multi-agent orchestration being configured yet.
-    _add_workspace_planning_contract_tool(tools)
-
-    # 16. Add Multi-Agent tools (behind feature flag)
+    # 15. Add Multi-Agent tools (behind feature flag)
     _add_agent_tools(tools, project_id)
 
-    # 17. Add Workspace Chat tools
+    # 16. Add Workspace Chat tools
     await _add_workspace_chat_tools(tools, tenant_id, project_id)
 
     return tools
@@ -855,9 +851,6 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         from src.infrastructure.agent.tools.workspace_leader_wtp import (
             configure_workspace_leader_wtp,
         )
-        from src.infrastructure.agent.tools.workspace_planning_contract import (
-            workspace_submit_planning_contract_tool,
-        )
         from src.infrastructure.agent.tools.workspace_wtp import configure_workspace_wtp
 
         configure_agent_spawn(orchestrator=orchestrator)
@@ -871,7 +864,6 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         configure_workspace_leader_wtp(orchestrator=orchestrator)
         configure_workspace_clarification(orchestrator=orchestrator)
         _ = workspace_health_verdict_tool
-        _ = workspace_submit_planning_contract_tool
 
         registry = get_registered_tools()
         agent_tool_names = (
@@ -890,11 +882,6 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_assign_task",
             "workspace_cancel_task",
             "workspace_health_verdict",
-            "workspace_submit_planning_contract",
-            "workspace_submit_verification_judgment",
-            "workspace_submit_iteration_review",
-            "workspace_submit_supervisor_decision",
-            "workspace_submit_worktree_preparation",
         )
         for name in agent_tool_names:
             if name in registry:
@@ -903,44 +890,6 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
-
-
-def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
-    """Register builtin workspace plan terminal tools in every agent toolset."""
-    try:
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
-            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
-            WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME,
-            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
-            WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME,
-            workspace_submit_iteration_review_tool,
-            workspace_submit_supervisor_decision_tool,
-            workspace_submit_verification_judgment_tool,
-            workspace_submit_worktree_preparation_tool,
-        )
-        from src.infrastructure.agent.tools.workspace_planning_contract import (
-            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
-            workspace_submit_planning_contract_tool,
-        )
-
-        _ = workspace_submit_planning_contract_tool
-        _ = workspace_submit_verification_judgment_tool
-        _ = workspace_submit_iteration_review_tool
-        _ = workspace_submit_supervisor_decision_tool
-        _ = workspace_submit_worktree_preparation_tool
-        fallback_tools = {
-            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME: workspace_submit_planning_contract_tool,
-            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME: workspace_submit_verification_judgment_tool,
-            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME: workspace_submit_iteration_review_tool,
-            WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME: workspace_submit_supervisor_decision_tool,
-            WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME: workspace_submit_worktree_preparation_tool,
-        }
-        registry = get_registered_tools()
-        for tool_name, fallback_tool in fallback_tools.items():
-            tools[tool_name] = registry.get(tool_name, fallback_tool)
-    except Exception as e:
-        logger.warning("Agent Worker: Failed to add workspace plan contract tools: %s", e)
 
 
 def _add_model_awareness_tools(
@@ -1660,67 +1609,9 @@ async def _add_workspace_chat_tools(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure and register workspace chat tools if a workspace exists."""
-    try:
-        from src.application.services.workspace_message_service import (
-            WorkspaceMessageService,
-        )
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-            SqlWorkspaceAgentRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-            SqlWorkspaceMemberRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
-            SqlWorkspaceMessageRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-            SqlWorkspaceRepository,
-        )
-        from src.infrastructure.agent.tools.workspace_chat_tool import (
-            configure_workspace_chat,
-            workspace_chat_read_tool,
-            workspace_chat_send_tool,
-        )
-
-        async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
-            workspaces = await workspace_repo.find_by_project(
-                tenant_id=tenant_id,
-                project_id=project_id,
-                limit=1,
-            )
-            if not workspaces:
-                return
-
-            workspace = workspaces[0]
-
-            message_repo = SqlWorkspaceMessageRepository(db)
-            member_repo = SqlWorkspaceMemberRepository(db)
-            agent_repo = SqlWorkspaceAgentRepository(db)
-
-            service = WorkspaceMessageService(
-                message_repo=message_repo,
-                member_repo=member_repo,
-                agent_repo=agent_repo,
-            )
-            configure_workspace_chat(service, workspace.id)
-
-        tools[workspace_chat_send_tool.name] = workspace_chat_send_tool
-        tools[workspace_chat_read_tool.name] = workspace_chat_read_tool
-        logger.info(
-            "Agent Worker: Workspace chat tools added for project %s (workspace %s)",
-            project_id,
-            workspace.id,
-        )
-    except Exception as e:
-        logger.warning(
-            "Agent Worker: Failed to add workspace chat tools: %s",
-            e,
-        )
+    """Leave Workspace chat registration to the Core-owned tool provider."""
+    del tools, tenant_id, project_id
+    logger.debug("Agent Worker: legacy Python Workspace chat tools are retired")
 
 
 def _add_session_status_tool(

@@ -1,8 +1,8 @@
 //! Atomic persistence for structured Workspace Autonomy tick verdicts.
 
 use bcs_db_api::{
-    DbCountExpectation, DbError, DbPlugin, DbRow, DbSqlFlavor, DbStatement,
-    DbStatementBuilder, DbTransactionStep, DbTransactionStepResult,
+    DbCountExpectation, DbError, DbPlugin, DbRow, DbSqlFlavor, DbStatement, DbStatementBuilder,
+    DbTransactionStep, DbTransactionStepResult,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -112,7 +112,12 @@ impl<'a> WorkspaceAutonomyStore<'a> {
             response: Value::Null,
             created_at: String::new(),
         };
-        if self.db.query(workspace_exists(self.flavor, scope)).await?.is_empty() {
+        if self
+            .db
+            .query(workspace_exists(self.flavor, scope))
+            .await?
+            .is_empty()
+        {
             return Err(WorkspaceAutonomyStoreError::NotFound);
         }
         if self
@@ -148,8 +153,7 @@ impl<'a> WorkspaceAutonomyStore<'a> {
         let revision = row
             .get_i64("revision")?
             .ok_or(WorkspaceAutonomyStoreError::InvalidRecord("revision"))?;
-        u64::try_from(revision)
-            .map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("revision"))
+        u64::try_from(revision).map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("revision"))
     }
 
     /// Read the newest persisted tick timestamp for one root Task.
@@ -224,9 +228,8 @@ impl<'a> WorkspaceAutonomyStore<'a> {
         let response = serde_json::from_str(&required_string(row, "response_json")?)
             .map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("response_json"))?;
         Ok(Some(WorkspaceAutonomyMutationOutcome {
-            committed_revision: u64::try_from(committed_revision).map_err(|_| {
-                WorkspaceAutonomyStoreError::InvalidRecord("committed_revision")
-            })?,
+            committed_revision: u64::try_from(committed_revision)
+                .map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("committed_revision"))?,
             response,
             outbox_id: required_string(row, "outbox_id")?,
             receipt_id: required_string(row, "receipt_id")?,
@@ -243,7 +246,11 @@ impl<'a> WorkspaceAutonomyStore<'a> {
         if let Some(outcome) = self.read_receipt(mutation, lookup.clone(), true).await? {
             return Ok(outcome);
         }
-        let results = match self.db.transaction(mutation_steps(self.flavor, mutation)?).await {
+        let results = match self
+            .db
+            .transaction(mutation_steps(self.flavor, mutation)?)
+            .await
+        {
             Ok(results) => results,
             Err(error) => {
                 if error.is_duplicate_key()
@@ -339,10 +346,7 @@ fn mutation_steps(
     Ok(steps)
 }
 
-fn editor_access_check(
-    flavor: DbSqlFlavor,
-    mutation: &WorkspaceAutonomyMutation,
-) -> DbStatement {
+fn editor_access_check(flavor: DbSqlFlavor, mutation: &WorkspaceAutonomyMutation) -> DbStatement {
     if mutation.actor_is_superuser {
         return workspace_exists(flavor, &mutation.scope);
     }
@@ -505,7 +509,12 @@ fn tick_insert(flavor: DbSqlFlavor, mutation: &WorkspaceAutonomyMutation) -> DbS
         .push_static(", ")
         .bind(mutation.reason.as_str())
         .push_static(", ")
-        .bind(mutation.judgment.as_ref().map(|audit| audit.audit_id.clone()))
+        .bind(
+            mutation
+                .judgment
+                .as_ref()
+                .map(|audit| audit.audit_id.clone()),
+        )
         .push_static(", ")
         .bind(mutation.created_at.as_str())
         .push_static(")")

@@ -2,12 +2,21 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityNotFoundError,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_current_user,
+)
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    get_workspace_authority,
+    workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import (
@@ -20,8 +29,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     NodeCardModel,
     ObservabilityDeadLetterModel,
     User as DBUser,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -46,47 +53,42 @@ def _ws_filter(model: object, tenant_id: str, workspace_id: str) -> tuple[Any, .
 
 
 async def _require_observability_access(
-    db: AsyncSession,
+    request: Request,
     current_user: DBUser,
     tenant_id: str,
     workspace_id: str,
     *,
     require_editor: bool = False,
 ) -> None:
-    workspace = (
-        await db.execute(
-            refresh_select_statement(
-                select(WorkspaceModel).where(
-                    WorkspaceModel.id == workspace_id,
-                    WorkspaceModel.tenant_id == tenant_id,
-                )
-            )
+    is_superuser = bool(getattr(current_user, "is_superuser", False))
+    try:
+        profiles = await get_workspace_authority(request).resolve_profiles(
+            workspace_ids={workspace_id},
+            user_id=str(current_user.id),
+            is_superuser=is_superuser,
         )
-    ).scalar_one_or_none()
-    if workspace is None:
+    except WorkspaceAuthorityNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Workspace not found"),
-        )
-
-    if getattr(current_user, "is_superuser", False):
-        return
-
-    role = (
-        await db.execute(
-            refresh_select_statement(
-                select(WorkspaceMemberModel.role).where(
-                    WorkspaceMemberModel.workspace_id == workspace_id,
-                    WorkspaceMemberModel.user_id == current_user.id,
-                )
-            )
-        )
-    ).scalar_one_or_none()
-    if role is None:
+        ) from exc
+    except WorkspaceAuthorityAccessDeniedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Workspace access required"),
-        )
+        ) from exc
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
+    profile = profiles.get(workspace_id)
+    if profile is None:
+        status_code = status.HTTP_404_NOT_FOUND if is_superuser else status.HTTP_403_FORBIDDEN
+        detail = _("Workspace not found") if is_superuser else _("Workspace access required")
+        raise HTTPException(status_code=status_code, detail=detail)
+    if profile.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail=_("Workspace not found"))
+    role = profile.member_role
+    if is_superuser:
+        return
     if require_editor and role not in {"owner", "editor"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -99,10 +101,11 @@ async def get_message_trace(
     tenant_id: str,
     workspace_id: str,
     trace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     q = (
         select(EventLogModel)
         .where(*_ws_filter(EventLogModel, tenant_id, workspace_id))
@@ -129,10 +132,11 @@ async def get_message_trace(
 async def get_message_metrics(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(MessageQueueItemModel, tenant_id, workspace_id)
     queue_q = select(func.count()).select_from(select(MessageQueueItemModel).where(*wf).subquery())
     queue_depth = (await db.execute(refresh_select_statement(queue_q))).scalar() or 0
@@ -154,10 +158,11 @@ async def get_node_metrics(
     tenant_id: str,
     workspace_id: str,
     node_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(EventLogModel, tenant_id, workspace_id)
     sent_q = select(func.count()).select_from(
         select(EventLogModel).where(*wf, EventLogModel.source_node_id == node_id).subquery()
@@ -195,10 +200,11 @@ async def get_node_metrics(
 async def get_message_heatmap(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(EventLogModel, tenant_id, workspace_id)
     q = (
         select(
@@ -227,11 +233,12 @@ async def get_message_heatmap(
 async def list_dead_letters(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(ObservabilityDeadLetterModel, tenant_id, workspace_id)
     q = (
         select(ObservabilityDeadLetterModel)
@@ -262,11 +269,12 @@ async def retry_dead_letter(
     tenant_id: str,
     workspace_id: str,
     dead_letter_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await _require_observability_access(
-        db,
+        request,
         current_user,
         tenant_id,
         workspace_id,
@@ -304,10 +312,11 @@ async def retry_dead_letter(
 async def list_circuit_breakers(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(CircuitStateModel, tenant_id, workspace_id)
     q = select(CircuitStateModel).where(*wf)
     rows = (await db.execute(refresh_select_statement(q))).scalars().all()
@@ -328,12 +337,13 @@ async def list_circuit_breakers(
 async def list_events(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     event_type: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(EventLogModel, tenant_id, workspace_id)
     q = select(EventLogModel).where(*wf)
     if event_type:
@@ -360,10 +370,11 @@ async def reconstruct_message(
     tenant_id: str,
     workspace_id: str,
     message_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(EventLogModel, tenant_id, workspace_id)
     events_q = (
         select(EventLogModel)
@@ -425,10 +436,11 @@ async def reconstruct_message(
 async def get_queue_stats(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(MessageQueueItemModel, tenant_id, workspace_id)
     q = (
         select(
@@ -447,10 +459,11 @@ async def get_node_card(
     tenant_id: str,
     workspace_id: str,
     node_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(NodeCardModel, tenant_id, workspace_id)
     q = select(NodeCardModel).where(*wf, NodeCardModel.node_id == node_id)
     row = (await db.execute(refresh_select_statement(q))).scalar_one_or_none()
@@ -477,13 +490,14 @@ async def get_node_card(
 async def discover_nodes(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     node_type: str | None = None,
     tag: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     wf = _ws_filter(NodeCardModel, tenant_id, workspace_id)
     q = select(NodeCardModel).where(*wf)
     if node_type:
@@ -513,11 +527,12 @@ async def update_node_card(
     workspace_id: str,
     node_id: str,
     body: dict[str, Any],
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await _require_observability_access(
-        db,
+        request,
         current_user,
         tenant_id,
         workspace_id,
@@ -558,11 +573,12 @@ async def post_node_message(
     workspace_id: str,
     node_id: str,
     body: dict[str, Any],
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await _require_observability_access(
-        db,
+        request,
         current_user,
         tenant_id,
         workspace_id,
@@ -588,10 +604,11 @@ async def post_node_message(
 async def list_node_types(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, str]]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     return [
         {"type": "agent", "label": "Agent"},
         {"type": "tool", "label": "Tool"},
@@ -606,10 +623,11 @@ async def list_node_types(
 async def get_alerts(
     tenant_id: str,
     workspace_id: str,
+    request: Request,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await _require_observability_access(db, current_user, tenant_id, workspace_id)
+    await _require_observability_access(request, current_user, tenant_id, workspace_id)
     cb_wf = _ws_filter(CircuitStateModel, tenant_id, workspace_id)
     open_cb_q = select(func.count()).select_from(
         select(CircuitStateModel).where(*cb_wf, CircuitStateModel.state == "open").subquery()

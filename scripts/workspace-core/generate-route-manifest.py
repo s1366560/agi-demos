@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi.routing import APIRoute
+from pydantic import HttpUrl, SecretStr
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -51,17 +52,38 @@ def _create_application() -> FastAPI:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
 
-    # This artifact freezes the legacy client contract that every replacement
-    # must preserve, independent of the operator's currently selected backend.
-    os.environ["WORKSPACE_CORE_BACKEND"] = "legacy"
+    # Importing ``main`` constructs its ASGI application at module scope. Supply
+    # manifest-only credentials for that import, then restore the caller's
+    # environment so this evidence command never mutates operator state.
+    environment = {
+        "WORKSPACE_CORE_BASE_URL": "http://workspace-core.manifest.invalid",
+        "WORKSPACE_CORE_SERVICE_TOKEN": "manifest-service-token",
+        "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "manifest-webhook-token",
+        "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "manifest-event-token",
+        "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "manifest-registry-token",
+    }
+    original = {name: os.environ.get(name) for name in environment}
+    os.environ.update(environment)
+    try:
+        from src.infrastructure.adapters.primary.web.main import create_app
+    finally:
+        for name, value in original.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
-    from src.configuration.workspace_core import get_workspace_core_settings
+    from src.configuration.workspace_core import WorkspaceCoreSettings
 
-    get_workspace_core_settings.cache_clear()
-
-    from src.infrastructure.adapters.primary.web.main import create_app
-
-    return create_app()
+    return create_app(
+        workspace_core_settings=WorkspaceCoreSettings(
+            WORKSPACE_CORE_BASE_URL=HttpUrl("http://workspace-core.manifest.invalid"),
+            WORKSPACE_CORE_SERVICE_TOKEN=SecretStr("manifest-service-token"),
+            WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN=SecretStr("manifest-webhook-token"),
+            WORKSPACE_CORE_PROVIDER_EVENT_TOKEN=SecretStr("manifest-event-token"),
+            WORKSPACE_CORE_AGENT_REGISTRY_TOKEN=SecretStr("manifest-registry-token"),
+        )
+    )
 
 
 def _iter_refs(value: object) -> Iterator[str]:
@@ -133,7 +155,11 @@ def build_manifest() -> dict[str, Any]:
         if not isinstance(route, APIRoute):
             continue
         endpoint = route.endpoint
-        module = getattr(endpoint, "__module__", "")
+        module = getattr(
+            endpoint,
+            "__workspace_contract_module__",
+            getattr(endpoint, "__module__", ""),
+        )
         if module not in WORKSPACE_ROUTER_MODULES:
             continue
 

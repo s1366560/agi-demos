@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Never
 
 from fastapi import (
     APIRouter,
@@ -25,15 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
-from src.application.services.workspace_execution_diagnostics_service import (
-    WorkspaceExecutionDiagnosticsService,
-)
 from src.application.services.workspace_surface_contract import (
     AUTHORITY_CLASS_KEY,
     BLACKBOARD_OWNERSHIP_METADATA,
     SURFACE_BOUNDARY_KEY,
 )
-from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
 from src.domain.model.workspace.actor_identity import ActorIdentity
 from src.domain.model.workspace.blackboard_file import BlackboardFile
@@ -46,15 +42,11 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.primary.web.routers.http_headers import (
     content_disposition_attachment,
 )
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_outbox_repository import (
-    SqlBlackboardOutboxRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
-    SqlWorkspacePlanOutboxRepository,
-)
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
@@ -64,33 +56,19 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    app_container = request.app.state.container
-    return DIContainer(
-        db=db,
-        graph_service=app_container.graph_service,
-        redis_client=app_container.redis_client,
-    )
-
-
 def _service_from_request(request: Request, db: AsyncSession) -> BlackboardService:
-    return get_container_with_db(request, db).blackboard_service()
+    """Reject direct invocation; the registered public route is an Avernet Core proxy."""
+    _ = (request, db)
+    raise workspace_core_unavailable_error()
 
 
 def _execution_diagnostics_service_from_request(
     request: Request,
     db: AsyncSession,
-) -> WorkspaceExecutionDiagnosticsService:
-    container = get_container_with_db(request, db)
-    return WorkspaceExecutionDiagnosticsService(
-        workspace_repo=container.workspace_repository(),
-        workspace_member_repo=container.workspace_member_repository(),
-        workspace_task_repo=container.workspace_task_repository(),
-        attempt_repo=container.workspace_task_session_attempt_repository(),
-        tool_execution_record_repo=container.tool_execution_record_repository(),
-        workspace_plan_outbox_repo=SqlWorkspacePlanOutboxRepository(db),
-        workspace_plan_repo=SqlPlanRepository(db),
-    )
+) -> Never:
+    """Reject the retired platform Workspace diagnostics composition."""
+    _ = (request, db)
+    raise workspace_core_unavailable_error()
 
 
 def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any]:
@@ -101,20 +79,6 @@ def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any
     }
 
 
-# Blackboard event publishing — transactional outbox.
-#
-# The router enqueues a row to ``workspace_blackboard_outbox`` inside the
-# same DB transaction as the originating mutation (post/reply/file
-# create/update/delete). A background dispatcher (started by
-# ``initialize_blackboard_outbox_dispatcher``) drains the table and
-# publishes events to the Redis workspace bus, guaranteeing that the
-# persisted state and the published event stay consistent even when
-# Redis is unavailable at request time.
-#
-# Callers MUST invoke this BEFORE ``db.commit()``. The
-# ``BLACKBOARD_OUTBOX_ENABLED`` env flag controls the *dispatcher*; when
-# off, outbox rows accumulate until the dispatcher is re-enabled (still
-# no data loss).
 async def _publish_blackboard_event(
     db: AsyncSession,
     *,
@@ -126,17 +90,18 @@ async def _publish_blackboard_event(
     metadata: dict[str, Any],
     correlation_id: str | None = None,
 ) -> None:
-    """Enqueue a blackboard SSE event in the outbox within the current tx."""
-    repo = SqlBlackboardOutboxRepository(db)
-    _ = await repo.enqueue(
-        workspace_id=workspace_id,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        event_type=event_type.value,
-        payload=payload,
-        metadata=metadata,
-        correlation_id=correlation_id,
+    """Reject the retired platform Blackboard outbox publisher."""
+    _ = (
+        db,
+        tenant_id,
+        project_id,
+        workspace_id,
+        event_type,
+        payload,
+        metadata,
+        correlation_id,
     )
+    raise workspace_core_unavailable_error()
 
 
 # Backwards-compat alias retained for tests that monkeypatch this symbol.
@@ -152,6 +117,8 @@ def _blackboard_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _map_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, HTTPException):
+        return exc
     if isinstance(exc, PermissionError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
     if isinstance(exc, ValueError):
@@ -526,8 +493,9 @@ class CopyFileRequest(BaseModel):
 
 
 def _file_service_from_request(request: Request, db: AsyncSession) -> BlackboardFileService:
-    container = get_container_with_db(request, db)
-    return container.blackboard_file_service()
+    """Reject direct invocation; the registered public route is an Avernet Core proxy."""
+    _ = (request, db)
+    raise workspace_core_unavailable_error()
 
 
 def _to_file_response(f: BlackboardFile) -> BlackboardFileResponse:

@@ -45,6 +45,8 @@ mod public_policy;
 mod public_task_dispatch;
 mod public_tasks;
 mod public_topology;
+mod structured_tasks;
+mod task_session;
 
 pub use public_agents::{
     PublicBindWorkspaceAgentInput, PublicUnbindWorkspaceAgentInput,
@@ -150,6 +152,16 @@ pub use public_topology::{
     PublicUpdateTopologyNodeFields, PublicWorkspaceTopologyContext, PublicWorkspaceTopologyEdge,
     PublicWorkspaceTopologyError, PublicWorkspaceTopologyErrorKind, PublicWorkspaceTopologyNode,
     PublicWorkspaceTopologyOutcome, PublicWorkspaceTopologyService,
+};
+pub use structured_tasks::{
+    StructuredTaskActor, StructuredTaskContext, StructuredTaskDeleteOutcome, StructuredTaskError,
+    StructuredTaskErrorKind, StructuredTaskMutationFields, StructuredTaskMutationOutcome,
+    StructuredTaskService, StructuredWorkspaceTask,
+};
+pub use task_session::{
+    CreateTaskSessionError, CreateTaskSessionErrorKind, CreateTaskSessionInput,
+    CreateTaskSessionOutcome, CreateTaskSessionService, TaskSessionContext,
+    TaskSessionMessageInput, TaskSessionPolicyInput, TaskSessionWorkspaceInput,
 };
 
 pub(crate) const CONTRACT_VERSION: &str = "2.0.0";

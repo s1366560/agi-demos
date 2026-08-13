@@ -33,30 +33,6 @@ from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_message import WorkspaceMessage
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
-    SqlBlackboardRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_cyber_objective_repository import (
-    SqlCyberObjectiveRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-    SqlWorkspaceAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-    SqlWorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
-    SqlWorkspaceMessageRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
-    SqlWorkspaceTaskSessionAttemptRepository,
-)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
@@ -64,6 +40,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REMEDIATION_STATUS,
     TASK_ROLE,
 )
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +72,11 @@ async def build_workspace_context(
     """
     if not project_id or not tenant_id:
         return None
+    legacy_workspace_runtime_retired("dynamic Workspace context builder")
 
-    try:
+    try:  # pragma: no cover - unreachable compatibility body
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
             workspaces = await workspace_repo.find_by_project(
                 tenant_id=tenant_id,
                 project_id=project_id,
@@ -109,13 +87,13 @@ async def build_workspace_context(
 
             workspace = workspaces[0]
 
-            member_repo = SqlWorkspaceMemberRepository(db)
-            agent_repo = SqlWorkspaceAgentRepository(db)
-            message_repo = SqlWorkspaceMessageRepository(db)
-            blackboard_repo = SqlBlackboardRepository(db)
-            task_repo = SqlWorkspaceTaskRepository(db)
-            attempt_repo = SqlWorkspaceTaskSessionAttemptRepository(db)
-            objective_repo = SqlCyberObjectiveRepository(db)
+            member_repo = legacy_workspace_runtime_retired(db)
+            agent_repo = legacy_workspace_runtime_retired(db)
+            message_repo = legacy_workspace_runtime_retired(db)
+            blackboard_repo = legacy_workspace_runtime_retired(db)
+            task_repo = legacy_workspace_runtime_retired(db)
+            attempt_repo = legacy_workspace_runtime_retired(db)
+            objective_repo = legacy_workspace_runtime_retired(db)
 
             members = await member_repo.find_by_workspace(
                 workspace.id,

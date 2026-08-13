@@ -366,6 +366,29 @@ def _validate_envelope_and_delivery(manifest: Mapping[str, Any]) -> None:
     ):
         raise EventParityError("Workspace event ordering/idempotency/replay contract is incomplete")
 
+    delivery_evidence = delivery.get("evidence")
+    if not isinstance(delivery_evidence, Mapping):
+        raise EventParityError("Workspace event delivery evidence is missing")
+    for proof in ("publish", "consumeDedup", "crashReplay"):
+        item = delivery_evidence.get(proof)
+        if not isinstance(item, Mapping):
+            raise EventParityError(f"Workspace event delivery evidence is missing {proof}")
+        relative_path = item.get("testPath")
+        needle = item.get("testContains")
+        if not isinstance(relative_path, str) or not isinstance(needle, str) or not needle:
+            raise EventParityError(f"Workspace event delivery evidence is invalid for {proof}")
+        test_path = (REPO_ROOT / relative_path).resolve()
+        try:
+            test_path.relative_to(REPO_ROOT.resolve())
+        except ValueError as error:
+            raise EventParityError(
+                f"Workspace event delivery evidence escapes repository for {proof}"
+            ) from error
+        if not test_path.is_file() or needle not in test_path.read_text(encoding="utf-8"):
+            raise EventParityError(
+                f"Workspace event delivery evidence no longer proves {proof}"
+            )
+
 
 def _manifest_events(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     raw_events = manifest.get("events")
@@ -404,6 +427,69 @@ def _validate_event_evidence(event: Mapping[str, Any], *, repo_root: Path, name:
         raise EventParityError(f"source evidence escapes repository for {name}") from error
     if not evidence_path.is_file() or needle not in evidence_path.read_text(encoding="utf-8"):
         raise EventParityError(f"source evidence no longer proves {name}")
+    legacy_test_path = evidence.get("testPath")
+    legacy_test_contains = evidence.get("testContains")
+    if legacy_test_path is not None or legacy_test_contains is not None:
+        if (
+            not isinstance(legacy_test_path, str)
+            or not isinstance(legacy_test_contains, str)
+            or not legacy_test_contains
+        ):
+            raise EventParityError(f"invalid transaction test evidence for {name}")
+        legacy_path = (repo_root / legacy_test_path).resolve()
+        try:
+            legacy_path.relative_to(repo_root.resolve())
+        except ValueError as error:
+            raise EventParityError(
+                f"transaction test evidence escapes repository for {name}"
+            ) from error
+        if (
+            not legacy_path.is_file()
+            or legacy_test_contains not in legacy_path.read_text(encoding="utf-8")
+        ):
+            raise EventParityError(f"transaction test evidence no longer proves {name}")
+    strict_evidence = evidence.get("evidenceLevel")
+    if strict_evidence is None:
+        return
+    if strict_evidence != "transaction-delivery":
+        raise EventParityError(f"invalid evidence level for {name}")
+    if event.get("authority") != "avernet-core":
+        raise EventParityError(f"transaction-delivery evidence requires Avernet Core for {name}")
+    runtime_root = (repo_root / "third_party/avernet-bcs/crates").resolve()
+    try:
+        evidence_path.relative_to(runtime_root)
+    except ValueError as error:
+        raise EventParityError(f"Avernet Core evidence must bind runtime source for {name}") from error
+    if "/tests/" in evidence_path.as_posix():
+        raise EventParityError(f"Avernet Core evidence must bind runtime source for {name}")
+
+    evidence_pairs = (
+        ("transaction", "transactionTestPath", "transactionTestContains"),
+        ("delivery", "deliveryTestPath", "deliveryTestContains"),
+    )
+    if any(
+        not isinstance(evidence.get(path_key), str)
+        or not isinstance(evidence.get(contains_key), str)
+        or not evidence.get(contains_key)
+        for _, path_key, contains_key in evidence_pairs
+    ):
+        raise EventParityError(
+            f"Avernet Core evidence must include transaction and delivery tests for {name}"
+        )
+    for evidence_kind, path_key, contains_key in evidence_pairs:
+        test_relative_path = cast("str", evidence[path_key])
+        test_needle = cast("str", evidence[contains_key])
+        test_path = (repo_root / test_relative_path).resolve()
+        try:
+            test_path.relative_to(repo_root.resolve())
+        except ValueError as error:
+            raise EventParityError(
+                f"{evidence_kind} test evidence escapes repository for {name}"
+            ) from error
+        if not test_path.is_file() or test_needle not in test_path.read_text(encoding="utf-8"):
+            raise EventParityError(
+                f"{evidence_kind} test evidence no longer proves {name}"
+            )
 
 
 def _validate_event_contracts(

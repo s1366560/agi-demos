@@ -104,6 +104,7 @@ const SIDECAR_COMMANDS = new Set([
   'local_trusted_session_clear',
   'local_runtime_status',
   'local_runtime_configure',
+  'workspace_core_status',
   'browser_bridge_install',
   'browser_bridge_uninstall',
   'browser_bridge_status',
@@ -397,10 +398,52 @@ async function openWebControlPlane(args: DesktopCommandArgs): Promise<void> {
   await shell.openExternal(target, { activate: true });
 }
 
-function desktopNativeCapabilities(): DesktopNativeCapabilitySnapshot {
+async function workspaceCoreCapabilitySnapshot(): Promise<
+  DesktopNativeCapabilitySnapshot['workspaceCore']
+> {
+  if (!sidecarSupervisor) {
+    return Object.freeze({
+      state: 'failed',
+      healthy: false,
+      restartAttempts: 0,
+      restartGeneration: 0,
+      cutoverState: 'core-unavailable',
+      terminalFailureReason: 'desktop_sidecar_unavailable',
+    });
+  }
+  try {
+    const value = await sidecarSupervisor.invoke<{
+      state: DesktopNativeCapabilitySnapshot['workspaceCore']['state'];
+      restartAttempts: number;
+      restartGeneration: number;
+      failureReason: string | null;
+      cutoverState: DesktopNativeCapabilitySnapshot['workspaceCore']['cutoverState'];
+    }>('workspace_core_status');
+    return Object.freeze({
+      state: value.state,
+      healthy: value.state === 'running' && value.cutoverState === 'core-authoritative',
+      restartAttempts: value.restartAttempts,
+      restartGeneration: value.restartGeneration,
+      cutoverState: value.cutoverState,
+      terminalFailureReason: value.state === 'failed' ? value.failureReason : null,
+    });
+  } catch {
+    return Object.freeze({
+      state: 'failed',
+      healthy: false,
+      restartAttempts: 0,
+      restartGeneration: 0,
+      cutoverState: 'core-unavailable',
+      terminalFailureReason: 'workspace_core_status_unavailable',
+    });
+  }
+}
+
+async function desktopNativeCapabilities(): Promise<DesktopNativeCapabilitySnapshot> {
   return Object.freeze({
     contractVersion: 1,
     webControlPlane: webControlPlaneConfiguration.capability,
+    workspaceCore: await workspaceCoreCapabilitySnapshot(),
   });
 }
 
@@ -568,7 +611,7 @@ async function executeDesktopCommand(
     case 'frontend_ready':
       return undefined;
     case 'get_desktop_capabilities':
-      return desktopNativeCapabilities();
+      return await desktopNativeCapabilities();
     case 'open_device_authorization_url':
       await shell.openExternal(validateDeviceAuthorizationUrl(args), {
         activate: true,

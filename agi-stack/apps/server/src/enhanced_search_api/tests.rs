@@ -47,7 +47,6 @@ use crate::support_api::{DevSupportService, SharedSupport};
 use crate::tenant_skill_config_api::{DevTenantSkillConfigService, SharedTenantSkillConfigs};
 use crate::tenant_webhooks_api::{DevTenantWebhookService, SharedTenantWebhooks};
 use crate::trust_api::{DevTrustService, SharedTrust};
-use crate::workspace_api::{DevWorkspaceService, SharedWorkspaces};
 
 fn identity() -> Identity {
     Identity {
@@ -78,7 +77,6 @@ fn test_state() -> AppState {
     let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
     let tenant_skill_configs: SharedTenantSkillConfigs =
         Arc::new(DevTenantSkillConfigService::new("dev-tenant"));
-    let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
     let channels: SharedChannels = Arc::new(DevChannelService::new());
     let events: Arc<dyn EventStream> = Arc::new(InMemoryEventStream::new());
     let agent_events: SharedAgentEvents =
@@ -138,7 +136,7 @@ fn test_state() -> AppState {
         skills,
         skill_evolution_worker: None,
         tenant_skill_configs,
-        workspaces,
+        workspace_authority: Arc::new(crate::workspace_authority::UnavailableWorkspaceAuthority),
         channels,
         channel_outbox_delivery_worker: None,
         hitl,
@@ -167,7 +165,6 @@ fn test_state() -> AppState {
         genes,
         graph_stores,
         retrieval_stores,
-        workspace_plan_outbox_worker: None,
         graph: Arc::new(InMemoryGraphStore::new()),
         sandboxes: Arc::new(ProjectSandboxService::new(
             Arc::new(InMemoryContainerRuntime::new()),

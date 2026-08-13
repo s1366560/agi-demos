@@ -66,6 +66,64 @@ async fn repeated_import_allows_authoritative_project_membership_metadata_refres
 }
 
 #[tokio::test]
+async fn repeated_import_preserves_workspace_core_changes_after_cutover() -> TestResult {
+    let fixture = Fixture::new().await?;
+    import_legacy_workspace_snapshot(&fixture.db, &fixture.snapshot_path, &fixture.snapshot_hash)
+        .await?;
+    fixture
+        .db
+        .execute(DbStatement::new(
+            "UPDATE workspace_profiles SET name = 'Workspace A renamed', \
+             updated_at = '2026-08-13T09:00:00Z' WHERE workspace_id = 'workspace-a'",
+        ))
+        .await?;
+    fixture
+        .db
+        .execute(DbStatement::new(
+            "UPDATE workspace_authorities SET revision = 7 WHERE workspace_id = 'workspace-a'",
+        ))
+        .await?;
+    fixture
+        .db
+        .execute(DbStatement::new(
+            "UPDATE bcs_group_sessions SET current_msg_seq = 3 \
+             WHERE group_id = 'group-workspace-a' AND env = 'memstack'",
+        ))
+        .await?;
+
+    import_legacy_workspace_snapshot(&fixture.db, &fixture.snapshot_path, &fixture.snapshot_hash)
+        .await?;
+
+    assert_eq!(
+        scalar_string(
+            &fixture.db,
+            "SELECT name AS value FROM workspace_profiles WHERE workspace_id = 'workspace-a'",
+        )
+        .await?,
+        "Workspace A renamed"
+    );
+    assert_eq!(
+        scalar_i64(
+            &fixture.db,
+            "SELECT revision AS value FROM workspace_authorities \
+             WHERE workspace_id = 'workspace-a'",
+        )
+        .await?,
+        7
+    );
+    assert_eq!(
+        scalar_i64(
+            &fixture.db,
+            "SELECT current_msg_seq AS value FROM bcs_group_sessions \
+             WHERE group_id = 'group-workspace-a' AND env = 'memstack'",
+        )
+        .await?,
+        3
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn target_content_conflict_fails_closed() -> TestResult {
     let fixture = Fixture::new().await?;
     fixture
@@ -397,6 +455,16 @@ async fn count(db: &dyn DbPlugin, table: &str) -> Result<i64, Box<dyn Error>> {
         )))
         .await?;
     Ok(db_get_column::<i64>(&rows[0], "count")?)
+}
+
+async fn scalar_string(db: &dyn DbPlugin, sql: &str) -> Result<String, Box<dyn Error>> {
+    let rows = db.query(DbStatement::new(sql)).await?;
+    Ok(db_get_column::<String>(&rows[0], "value")?)
+}
+
+async fn scalar_i64(db: &dyn DbPlugin, sql: &str) -> Result<i64, Box<dyn Error>> {
+    let rows = db.query(DbStatement::new(sql)).await?;
+    Ok(db_get_column::<i64>(&rows[0], "value")?)
 }
 
 fn source_hash(value: &Value) -> String {

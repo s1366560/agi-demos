@@ -24,6 +24,14 @@ class WorkspaceCoreNotFoundError(WorkspaceCoreClientError):
     """Workspace Core could not find the requested private resource."""
 
 
+class WorkspaceCoreForbiddenError(WorkspaceCoreClientError):
+    """Workspace Core rejected the caller's canonical scope."""
+
+
+class WorkspaceCoreConflictError(WorkspaceCoreClientError):
+    """Workspace Core rejected an idempotency or revision precondition."""
+
+
 class WorkspaceCoreCompatibilityError(WorkspaceCoreClientError):
     """Workspace Core cannot serve the gateway's frozen public API contract."""
 
@@ -114,6 +122,117 @@ class WorkspaceCoreSnapshot(BaseModel):
     revision: NonNegativeInt
     counts: dict[str, NonNegativeInt]
     canonical_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class WorkspaceCoreProfile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    tenant_id: str
+    project_id: str
+    name: str
+    created_by: str
+    is_archived: bool
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceCoreMember(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    workspace_id: str
+    user_id: str
+    role: str
+
+
+class WorkspaceCoreAgent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    workspace_id: str
+    agent_id: str
+    display_name: str | None = None
+    label: str | None = None
+    status: str = "idle"
+    is_active: bool = True
+
+
+class WorkspaceCoreTask(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    workspace_id: str
+    title: str
+
+
+class WorkspaceAuthorityActor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    is_superuser: StrictBool = False
+
+
+class WorkspaceAuthorityTaskRef(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_id: str
+    task_id: str
+
+
+class WorkspaceAuthorityQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    actor: WorkspaceAuthorityActor
+    workspace_ids: list[str]
+    task_refs: list[WorkspaceAuthorityTaskRef] = Field(default_factory=list)
+
+
+class WorkspaceAuthorityQueryProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_id: str
+    tenant_id: str
+    project_id: str
+    name: str
+    created_by: str
+    is_archived: StrictBool
+    metadata: dict[str, Any]
+    member_role: str | None
+
+
+class WorkspaceAuthorityTaskLink(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_id: str
+    task_id: str
+    linked: StrictBool
+
+
+class WorkspaceAuthorityQueryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    profiles: list[WorkspaceAuthorityQueryProfile]
+    task_links: list[WorkspaceAuthorityTaskLink]
+
+
+class WorkspaceCoreTaskSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace: dict[str, Any]
+    conversation_id: str
+    initial_message: dict[str, Any]
+    workspace_policy: dict[str, Any] | None = None
+    capability_mode: Literal["work", "code"]
+
+
+class WorkspaceCoreTaskSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    receipt_id: str
+    replayed: StrictBool
+    workspace: dict[str, Any]
+    initial_message: dict[str, Any]
+    policy: dict[str, Any] | None
+    capability_version: str
 
 
 class _WorkspaceAccessResponse(BaseModel):
@@ -307,8 +426,6 @@ class WorkspaceCoreClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         super().__init__()
-        if not settings.connection_enabled:
-            raise ValueError("Workspace Core client requires an enabled connection")
         if settings.base_url is None or settings.service_token is None:
             raise ValueError("Workspace Core client requires connection credentials")
         self._base_url = str(settings.base_url)
@@ -355,6 +472,140 @@ class WorkspaceCoreClient:
         )
         response = self._validate(_WorkspaceAccessResponse, payload, path=path)
         return response.allowed
+
+    async def read_workspace_profile(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        is_superuser: bool = False,
+    ) -> WorkspaceCoreProfile:
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}"
+        )
+        payload = await self._get(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+        )
+        return self._validate(WorkspaceCoreProfile, payload, path=path)
+
+    async def list_workspace_members(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        is_superuser: bool = False,
+    ) -> list[WorkspaceCoreMember]:
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}/members"
+        )
+        payload = await self._get_json(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+        )
+        try:
+            return [WorkspaceCoreMember.model_validate(item) for item in payload]
+        except ValidationError as exc:
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned invalid members for GET {path}"
+            ) from exc
+
+    async def list_workspace_agents(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        workspace_id: str,
+        user_id: str,
+        is_superuser: bool = False,
+        active_only: bool = True,
+    ) -> list[WorkspaceCoreAgent]:
+        path = (
+            f"/api/v1/tenants/{_path_segment(tenant_id)}/projects/{_path_segment(project_id)}"
+            f"/workspaces/{_path_segment(workspace_id)}/agents"
+        )
+        payload = await self._get_json(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+            params={"active_only": str(active_only).lower(), "limit": "1000", "offset": "0"},
+        )
+        try:
+            return [WorkspaceCoreAgent.model_validate(item) for item in payload]
+        except ValidationError as exc:
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned invalid agents for GET {path}"
+            ) from exc
+
+    async def read_workspace_task(
+        self,
+        *,
+        workspace_id: str,
+        task_id: str,
+        user_id: str,
+        is_superuser: bool = False,
+    ) -> WorkspaceCoreTask:
+        path = (
+            f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks/{_path_segment(task_id)}"
+        )
+        payload = await self._get(
+            path,
+            headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
+        )
+        return self._validate(WorkspaceCoreTask, payload, path=path)
+
+    async def query_workspace_authority(
+        self,
+        request: WorkspaceAuthorityQueryRequest,
+    ) -> WorkspaceAuthorityQueryResponse:
+        """Batch canonical Workspace profiles, member roles, and task linkage."""
+        path = "/internal/v1/workspace-authority/query"
+        payload = await self._post(
+            path,
+            headers={},
+            json_body=request.model_dump(mode="json"),
+        )
+        return self._validate(
+            WorkspaceAuthorityQueryResponse,
+            payload,
+            path=path,
+            method="POST",
+        )
+
+    async def create_task_session(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        user_id: str,
+        user_email: str,
+        idempotency_key: str,
+        request: WorkspaceCoreTaskSessionRequest,
+    ) -> WorkspaceCoreTaskSessionResponse:
+        path = (
+            f"/internal/v1/tenants/{_path_segment(tenant_id)}/projects/"
+            f"{_path_segment(project_id)}/task-sessions"
+        )
+        payload = await self._post(
+            path,
+            headers={
+                "X-MemStack-User-ID": user_id,
+                "X-MemStack-User-Email": user_email,
+                "X-Idempotency-Key": idempotency_key,
+            },
+            json_body=request.model_dump(exclude_none=True),
+        )
+        return self._validate(
+            WorkspaceCoreTaskSessionResponse,
+            payload,
+            path=path,
+            method="POST",
+        )
 
     async def record_runtime_correlation(
         self,
@@ -480,6 +731,50 @@ class WorkspaceCoreClient:
         headers: Mapping[str, str] | None = None,
         params: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
+        payload = await self._request_json("GET", path, headers=headers, params=params)
+        if not isinstance(payload, dict):
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned a non-object response for GET {path}"
+            )
+        return cast("dict[str, Any]", payload)
+
+    async def _get_json(
+        self,
+        path: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        payload = await self._request_json("GET", path, headers=headers, params=params)
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned a non-list response for GET {path}"
+            )
+        return cast("list[dict[str, Any]]", payload)
+
+    async def _post(
+        self,
+        path: str,
+        *,
+        headers: Mapping[str, str],
+        json_body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        payload = await self._request_json("POST", path, headers=headers, json_body=json_body)
+        if not isinstance(payload, dict):
+            raise WorkspaceCoreClientError(
+                f"Workspace Core returned a non-object response for POST {path}"
+            )
+        return cast("dict[str, Any]", payload)
+
+    async def _request_json(
+        self,
+        method: Literal["GET", "POST"],
+        path: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, str] | None = None,
+        json_body: Mapping[str, Any] | None = None,
+    ) -> object:
         request_headers = {
             "Authorization": f"Bearer {self._service_token.get_secret_value()}",
             "Accept": "application/json",
@@ -492,54 +787,25 @@ class WorkspaceCoreClient:
                 timeout=self._timeout,
                 transport=self._transport,
             ) as client:
-                response = await client.get(path, params=params)
+                response = await client.request(method, path, params=params, json=json_body)
                 _ = response.raise_for_status()
                 payload = response.json()
         except httpx.HTTPStatusError as exc:
+            error_message = f"Workspace Core request failed for {method} {path}"
+            if exc.response.status_code == 403:
+                raise WorkspaceCoreForbiddenError(error_message) from exc
             if exc.response.status_code == 404:
                 raise WorkspaceCoreNotFoundError(
-                    f"Workspace Core resource was not found for GET {path}"
+                    f"Workspace Core resource was not found for {method} {path}"
                 ) from exc
-            raise WorkspaceCoreClientError(f"Workspace Core request failed for GET {path}") from exc
-        except (httpx.HTTPError, ValueError) as exc:
-            raise WorkspaceCoreClientError(f"Workspace Core request failed for GET {path}") from exc
-        if not isinstance(payload, dict):
-            raise WorkspaceCoreClientError(
-                f"Workspace Core returned a non-object response for GET {path}"
-            )
-        return cast("dict[str, Any]", payload)
-
-    async def _post(
-        self,
-        path: str,
-        *,
-        headers: Mapping[str, str],
-        json_body: Mapping[str, Any],
-    ) -> dict[str, Any]:
-        request_headers = {
-            "Authorization": f"Bearer {self._service_token.get_secret_value()}",
-            "Accept": "application/json",
-            **dict(headers),
-        }
-        try:
-            async with httpx.AsyncClient(
-                base_url=self._base_url,
-                headers=request_headers,
-                timeout=self._timeout,
-                transport=self._transport,
-            ) as client:
-                response = await client.post(path, json=json_body)
-                _ = response.raise_for_status()
-                payload = response.json()
+            if exc.response.status_code == 409:
+                raise WorkspaceCoreConflictError(error_message) from exc
+            raise WorkspaceCoreClientError(error_message) from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise WorkspaceCoreClientError(
-                f"Workspace Core request failed for POST {path}"
+                f"Workspace Core request failed for {method} {path}"
             ) from exc
-        if not isinstance(payload, dict):
-            raise WorkspaceCoreClientError(
-                f"Workspace Core returned a non-object response for POST {path}"
-            )
-        return cast("dict[str, Any]", payload)
+        return payload
 
     @staticmethod
     def _validate[ResponseT: BaseModel](
@@ -547,12 +813,13 @@ class WorkspaceCoreClient:
         payload: dict[str, Any],
         *,
         path: str,
+        method: str = "GET",
     ) -> ResponseT:
         try:
             return response_type.model_validate(payload)
         except ValidationError as exc:
             raise WorkspaceCoreClientError(
-                f"Workspace Core returned an invalid response for GET {path}"
+                f"Workspace Core returned an invalid response for {method} {path}"
             ) from exc
 
 
@@ -578,17 +845,32 @@ def _path_segment(value: str) -> str:
     return quote(value, safe="")
 
 
+def _caller_headers(*, user_id: str, is_superuser: bool) -> dict[str, str]:
+    return {
+        "X-MemStack-User-ID": user_id,
+        "X-MemStack-User-Is-Superuser": "true" if is_superuser else "false",
+    }
+
+
 __all__ = [
     "AvernetWorkspaceAccessVerifier",
+    "WorkspaceAuthorityActor",
+    "WorkspaceAuthorityQueryRequest",
+    "WorkspaceAuthorityQueryResponse",
+    "WorkspaceAuthorityTaskRef",
     "WorkspaceCoreClient",
     "WorkspaceCoreClientError",
     "WorkspaceCoreCompatibilityError",
+    "WorkspaceCoreConflictError",
+    "WorkspaceCoreForbiddenError",
     "WorkspaceCoreHealth",
     "WorkspaceCoreNotFoundError",
     "WorkspaceCoreProxyResponse",
     "WorkspaceCorePublicApiCapabilities",
     "WorkspaceCorePublicRoute",
     "WorkspaceCoreSnapshot",
+    "WorkspaceCoreTaskSessionRequest",
+    "WorkspaceCoreTaskSessionResponse",
     "WorkspaceRuntimeCorrelationRequest",
     "WorkspaceRuntimeCorrelationResponse",
     "WorkspaceRuntimeTerminalReadResponse",

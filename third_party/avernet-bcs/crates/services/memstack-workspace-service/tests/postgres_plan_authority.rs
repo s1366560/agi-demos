@@ -64,9 +64,10 @@ impl WorkspacePlanJudgePort for ProceedingJudge {
 
 #[tokio::test]
 #[ignore = "requires BCS_TEST_POSTGRES_URL and the Alembic-owned Avernet schema"]
-async fn postgres_plan_authority_replays_cas_and_commits_judge_event_outbox_atomically()
+async fn postgres_plan_update_transaction_commits_state_event_compatibility_outbox_and_replays()
 -> Result<(), Box<dyn Error>> {
     let db = postgres_db().await?;
+    acquire_contract_lock(&db).await?;
     cleanup(&db).await?;
     seed_plan(&db, "blocked").await?;
     let judge = ProceedingJudge::new();
@@ -100,7 +101,13 @@ async fn postgres_plan_authority_replays_cas_and_commits_judge_event_outbox_atom
     assert_eq!(node_status(&db).await?, "pending");
     assert_eq!(workspace_count(&db, "workspace_judge_audits").await?, 1);
     assert_eq!(workspace_count(&db, "workspace_plan_events").await?, 1);
-    assert_eq!(plan_outbox_count(&db).await?, 1);
+    assert_eq!(plan_outbox_count(&db).await?, 2);
+    assert_eq!(compatibility_outbox_count(&db).await?, 1);
+    let compatibility_payload = compatibility_outbox_payload(&db).await?;
+    assert_eq!(compatibility_payload["workspace_id"], WORKSPACE_ID);
+    assert_eq!(compatibility_payload["plan_id"], PLAN_ID);
+    assert_eq!(compatibility_payload["revision"], 2);
+    assert_eq!(compatibility_payload["action"], "operator_replan_requested");
 
     let stale = match service
         .act(&action(
@@ -117,21 +124,23 @@ async fn postgres_plan_authority_replays_cas_and_commits_judge_event_outbox_atom
     assert_eq!(stale.kind(), PublicWorkspacePlanErrorKind::Conflict);
     assert_eq!(plan_revision(&db).await?, 2);
     assert_eq!(workspace_count(&db, "workspace_plan_events").await?, 1);
-    assert_eq!(plan_outbox_count(&db).await?, 1);
+    assert_eq!(plan_outbox_count(&db).await?, 2);
     cleanup(&db).await?;
+    release_contract_lock(&db).await?;
     Ok(())
 }
 
 #[tokio::test]
 #[ignore = "requires BCS_TEST_POSTGRES_URL and permission to create a fault-injection trigger"]
-async fn postgres_plan_outbox_failure_rolls_back_transition_event_and_revision()
+async fn postgres_plan_compatibility_outbox_failure_rolls_back_state_event_and_both_outboxes()
 -> Result<(), Box<dyn Error>> {
     let db = postgres_db().await?;
+    acquire_contract_lock(&db).await?;
     cleanup(&db).await?;
     seed_plan(&db, "pending").await?;
     drop_fault_trigger(&db).await?;
     db.execute(DbStatement::new(
-        "CREATE FUNCTION avernet.reject_workspace_plan_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.workspace_id = 'workspace-plan-pg-contract' AND NEW.aggregate_type = 'workspace_plan' THEN RAISE EXCEPTION 'injected plan outbox failure'; END IF; RETURN NEW; END $$",
+        "CREATE FUNCTION avernet.reject_workspace_plan_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.workspace_id = 'workspace-plan-pg-contract' AND NEW.event_type = 'workspace_plan_updated' THEN RAISE EXCEPTION 'injected compatibility outbox failure'; END IF; RETURN NEW; END $$",
     ))
     .await?;
     db.execute(DbStatement::new(
@@ -162,6 +171,7 @@ async fn postgres_plan_outbox_failure_rolls_back_transition_event_and_revision()
     assert_eq!(workspace_count(&db, "workspace_judge_audits").await?, 0);
     assert_eq!(plan_outbox_count(&db).await?, 0);
     cleanup(&db).await?;
+    release_contract_lock(&db).await?;
     Ok(())
 }
 
@@ -196,6 +206,22 @@ fn action(
 async fn postgres_db() -> Result<PostgresDbPlugin, Box<dyn Error>> {
     let database_url = std::env::var("BCS_TEST_POSTGRES_URL")?;
     Ok(PostgresDbPlugin::connect_no_tls(&database_url, 1).await?)
+}
+
+async fn acquire_contract_lock(db: &dyn DbPlugin) -> Result<(), Box<dyn Error>> {
+    db.query(DbStatement::new(
+        "SELECT pg_advisory_lock(731984513)::TEXT AS locked",
+    ))
+    .await?;
+    Ok(())
+}
+
+async fn release_contract_lock(db: &dyn DbPlugin) -> Result<(), Box<dyn Error>> {
+    db.query(DbStatement::new(
+        "SELECT pg_advisory_unlock(731984513) AS unlocked",
+    ))
+    .await?;
+    Ok(())
 }
 
 async fn seed_plan(db: &dyn DbPlugin, node_status: &str) -> Result<(), Box<dyn Error>> {
@@ -295,6 +321,25 @@ async fn plan_outbox_count(db: &dyn DbPlugin) -> Result<i64, Box<dyn Error>> {
         "SELECT COUNT(*) AS value FROM workspace_outbox WHERE workspace_id = $1 AND aggregate_type = 'workspace_plan'",
     )
     .await
+}
+
+async fn compatibility_outbox_count(db: &dyn DbPlugin) -> Result<i64, Box<dyn Error>> {
+    query_i64(
+        db,
+        "SELECT COUNT(*) AS value FROM workspace_outbox WHERE workspace_id = $1 AND event_type = 'workspace_plan_updated'",
+    )
+    .await
+}
+
+async fn compatibility_outbox_payload(
+    db: &dyn DbPlugin,
+) -> Result<serde_json::Value, Box<dyn Error>> {
+    let payload = query_string(
+        db,
+        "SELECT payload_json::TEXT AS value FROM workspace_outbox WHERE workspace_id = $1 AND event_type = 'workspace_plan_updated'",
+    )
+    .await?;
+    Ok(serde_json::from_str(&payload)?)
 }
 
 async fn plan_revision(db: &dyn DbPlugin) -> Result<i64, Box<dyn Error>> {

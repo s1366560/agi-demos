@@ -57,32 +57,8 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
 from src.domain.model.workspace_plan import Plan
 from src.domain.model.workspace_plan.plan import PlanStatus
 from src.domain.model.workspace_plan.plan_node import PlanNodeKind, TaskExecution, TaskIntent
+from src.domain.ports.repositories import WorkspaceTaskRepository
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
-    SqlBlackboardRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_cyber_objective_repository import (
-    SqlCyberObjectiveRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-    SqlWorkspaceAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-    SqlWorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
-    SqlWorkspaceMessageRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
-    SqlWorkspaceTaskSessionAttemptRepository,
-)
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
@@ -102,12 +78,13 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
-from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
-from src.infrastructure.agent.workspace_plan.run_controller import (
-    WorkspaceRunController,
-    completion_gate_for_plan,
-)
 from src.infrastructure.agent.workspace_plan.system_actor import persisted_attempt_leader_agent_id
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
+
+__all__ = [
+    "_active_plan_is_effectively_complete",
+    "_effectively_complete_plan_tail_allows_root_completion",
+]
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -253,9 +230,7 @@ def _select_existing_root_candidate(
     return ranked_candidates[0][0]
 
 
-async def _user_preferred_language_from_db(
-    db: AsyncSession, user_id: str | None
-) -> str | None:
+async def _user_preferred_language_from_db(db: AsyncSession, user_id: str | None) -> str | None:
     """Look up the stored preferred_language for a user. Returns None on any failure."""
     if not isinstance(user_id, str) or not user_id:
         return None
@@ -264,9 +239,7 @@ async def _user_preferred_language_from_db(
 
         from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
-        result = await db.execute(
-            select(DBUser.preferred_language).where(DBUser.id == user_id)
-        )
+        result = await db.execute(select(DBUser.preferred_language).where(DBUser.id == user_id))
         value = result.scalar_one_or_none()
         if isinstance(value, str) and value in {"en-US", "zh-CN"}:
             return value
@@ -291,6 +264,7 @@ async def maybe_materialize_workspace_goal_candidate(
     V2 workspace plan. Decomposition and execution are no longer performed by
     this module.
     """
+    legacy_workspace_runtime_retired("Workspace goal materialization")
     if not project_id or not tenant_id or not user_id:
         return None
 
@@ -302,7 +276,7 @@ async def maybe_materialize_workspace_goal_candidate(
 
     try:
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
             workspaces = await workspace_repo.find_by_project(
                 tenant_id=tenant_id,
                 project_id=project_id,
@@ -312,11 +286,11 @@ async def maybe_materialize_workspace_goal_candidate(
                 return None
 
             workspace = workspaces[0]
-            task_repo = SqlWorkspaceTaskRepository(db)
+            task_repo = legacy_workspace_runtime_retired(db)
             task_service = WorkspaceTaskService(
                 workspace_repo=workspace_repo,
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_member_repo=legacy_workspace_runtime_retired(db),
+                workspace_agent_repo=legacy_workspace_runtime_retired(db),
                 workspace_task_repo=task_repo,
             )
             tasks = await task_service.list_tasks(
@@ -325,15 +299,15 @@ async def maybe_materialize_workspace_goal_candidate(
                 limit=100,
                 offset=0,
             )
-            objectives = await SqlCyberObjectiveRepository(db).find_by_workspace(
+            objectives = await legacy_workspace_runtime_retired(db).find_by_workspace(
                 workspace.id,
                 limit=50,
             )
-            posts = await SqlBlackboardRepository(db).list_posts_by_workspace(
+            posts = await legacy_workspace_runtime_retired(db).list_posts_by_workspace(
                 workspace.id,
                 limit=20,
             )
-            messages = await SqlWorkspaceMessageRepository(db).find_by_workspace(
+            messages = await legacy_workspace_runtime_retired(db).find_by_workspace(
                 workspace.id,
                 limit=50,
             )
@@ -351,7 +325,7 @@ async def maybe_materialize_workspace_goal_candidate(
 
             command_service = WorkspaceTaskCommandService(task_service)
             materializer = WorkspaceGoalMaterializationService(
-                objective_repo=SqlCyberObjectiveRepository(db),
+                objective_repo=legacy_workspace_runtime_retired(db),
                 task_repo=task_repo,
                 task_service=task_service,
                 task_command_service=command_service,
@@ -361,9 +335,7 @@ async def maybe_materialize_workspace_goal_candidate(
             # the language hint into downstream planning + worker conversations.
             resolved_preferred_language = preferred_language
             if resolved_preferred_language is None:
-                resolved_preferred_language = await _user_preferred_language_from_db(
-                    db, user_id
-                )
+                resolved_preferred_language = await _user_preferred_language_from_db(db, user_id)
             task = await materializer.materialize_candidate(
                 workspace_id=workspace.id,
                 actor_user_id=user_id,
@@ -417,7 +389,7 @@ async def maybe_materialize_workspace_goal_candidate(
 async def _ensure_root_goal_evidence(
     *,
     root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
     generated_by_agent_id: str,
 ) -> tuple[bool, str | None]:
     metadata = dict(getattr(root_task, "metadata", {}) or {})
@@ -470,7 +442,7 @@ async def _ensure_root_goal_evidence(
 
 async def _load_current_root_progress_children(
     *,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
     workspace_id: str,
     root_task_id: str,
 ) -> list[WorkspaceTask]:
@@ -518,7 +490,7 @@ def _existing_goal_evidence_allows_completion(
 
 async def _load_workspace_metadata_for_task(
     *,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
     workspace_id: object,
 ) -> dict[str, Any]:
     if not isinstance(workspace_id, str) or not workspace_id:
@@ -527,7 +499,7 @@ async def _load_workspace_metadata_for_task(
     if session is None:
         return {}
     try:
-        workspace_result = SqlWorkspaceRepository(session).find_by_id(workspace_id)
+        workspace_result = legacy_workspace_runtime_retired(session).find_by_id(workspace_id)
         workspace = await workspace_result if inspect.isawaitable(workspace_result) else None
     except Exception:
         logger.warning("workspace_goal_runtime.load_workspace_metadata_failed", exc_info=True)
@@ -539,53 +511,11 @@ async def _load_workspace_metadata_for_task(
 async def _workspace_run_gate_allows_root_completion(
     *,
     workspace_id: str,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
 ) -> tuple[bool, str | None]:
-    session = getattr(task_repo, "_session", None)
-    if not isinstance(session, AsyncSession):
-        return True, None
-
-    plan = await SqlPlanRepository(session).get_by_workspace(workspace_id)
-    if plan is None:
-        return True, None
-
-    workspace_metadata = await _load_workspace_metadata_for_task(
-        task_repo=task_repo,
-        workspace_id=workspace_id,
-    )
-    try:
-        root_metadata = plan.goal_node.metadata
-    except ValueError:
-        root_metadata = {}
-    contract = WorkspaceRunContract.from_sources(
-        workspace_metadata=workspace_metadata,
-        root_metadata=root_metadata,
-    )
-    controller = WorkspaceRunController(session)
-    retry_queue = await controller.retry_queue(workspace_id, plan_id=plan.id)
-    active_attempts = await controller.active_attempts(workspace_id, plan_id=plan.id)
-    gate = completion_gate_for_plan(
-        plan,
-        retry_queue=retry_queue,
-        active_attempts=active_attempts,
-        contract=contract,
-    )
-    if gate.get("allowed") is True:
-        return True, None
-    reasons = gate.get("blocked_reasons")
-    if _effectively_complete_plan_tail_allows_root_completion(
-        plan=plan,
-        gate=gate,
-        retry_queue=retry_queue,
-        active_attempts=active_attempts,
-    ):
-        return True, None
-    reason = (
-        str(reasons[0])
-        if isinstance(reasons, list) and reasons
-        else "workspace run completion gate blocked"
-    )
-    return False, reason
+    """Do not consult retired Workspace Plan SQL when evaluating Core-owned work."""
+    _ = (workspace_id, task_repo)
+    return True, None
 
 
 def _active_plan_is_effectively_complete(plan: Plan) -> bool:
@@ -639,7 +569,7 @@ def _effectively_complete_plan_tail_allows_root_completion(
 async def _record_root_auto_complete_failure(
     *,
     root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
     reason: str,
 ) -> None:
     try:
@@ -690,7 +620,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     workspace_id: str,
     actor_user_id: str,
     root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
+    task_repo: WorkspaceTaskRepository,
     command_service: WorkspaceTaskCommandService,
     leader_agent_id: str | None,
 ) -> WorkspaceTask | None:
@@ -700,6 +630,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     Best-effort: swallows exceptions and logs a warning so caller sites
     (e.g. autonomy ticks) remain resilient.
     """
+    legacy_workspace_runtime_retired("Workspace root auto-completion")
     try:
         children = await _load_current_root_progress_children(
             task_repo=task_repo,
@@ -710,9 +641,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
         logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
         return None
     execution_children = [
-        c
-        for c in children
-        if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
+        c for c in children if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
     ]
     if not execution_children:
         return None
@@ -823,106 +752,17 @@ async def _mark_workspace_plan_node_reported(
     worker_agent_id: str,
     leader_agent_id: str | None,
 ) -> None:
-    """Mirror terminal workspace worker reports into the durable V2 plan state."""
-    plan_id = task_metadata.get(WORKSPACE_PLAN_ID)
-    node_id = task_metadata.get(WORKSPACE_PLAN_NODE_ID)
-    if not isinstance(plan_id, str) or not plan_id:
-        return
-    if not isinstance(node_id, str) or not node_id:
-        return
-
-    try:
-        from src.infrastructure.adapters.secondary.persistence.models import (
-            PlanNodeModel,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
-            SqlWorkspacePlanEventRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
-            SqlWorkspacePlanOutboxRepository,
-        )
-        from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
-        from src.infrastructure.agent.workspace_plan.outbox_handlers import (
-            SUPERVISOR_TICK_EVENT,
-        )
-
-        summary = task_metadata.get(LAST_WORKER_REPORT_SUMMARY)
-        reported_at = task_metadata.get("last_worker_reported_at")
-        await SqlWorkspacePlanEventRepository(db).append(
-            plan_id=plan_id,
-            workspace_id=workspace_id,
-            node_id=node_id,
-            attempt_id=attempt_id,
-            actor_id=worker_agent_id,
-            event_type="worker_report_terminal",
-            source="worker_report",
-            payload={
-                "report_type": task_metadata.get("last_worker_report_type"),
-                "summary": summary,
-                "artifacts": task_metadata.get("last_worker_report_artifacts", []),
-                "verifications": task_metadata.get("last_worker_report_verifications", []),
-                "reported_at": reported_at,
-            },
-        )
-        node = await db.get(PlanNodeModel, node_id)
-        if node is not None:
-            existing_progress = dict(node.progress or {})
-            note = summary if isinstance(summary, str) and summary.strip() else None
-            if note:
-                node.progress = {
-                    "percent": float(existing_progress.get("percent") or 0.0),
-                    "confidence": float(existing_progress.get("confidence") or 1.0),
-                    "note": note.strip(),
-                }
-            metadata = dict(node.metadata_json or {})
-            report_event = {
-                "event_type": "worker_report_terminal",
-                "source_event_type": "worker_report_terminal",
-                "summary": note or "",
-                "attempt_id": attempt_id,
-                "worker_agent_id": worker_agent_id,
-                "reported_at": reported_at,
-            }
-            progress_events = metadata.get("progress_events")
-            if not isinstance(progress_events, list):
-                progress_events = []
-            progress_events.append(report_event)
-            metadata["progress_events"] = progress_events[-25:]
-            metadata["latest_worker_progress"] = report_event
-            node.metadata_json = metadata
-        orchestrator = build_sql_orchestrator(db)
-        await orchestrator.mark_worker_reported(
-            workspace_id=workspace_id,
-            node_id=node_id,
-            attempt_id=attempt_id,
-        )
-        _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
-            plan_id=plan_id,
-            workspace_id=workspace_id,
-            event_type=SUPERVISOR_TICK_EVENT,
-            payload={
-                "workspace_id": workspace_id,
-                "root_task_id": root_goal_task_id,
-                "actor_user_id": actor_user_id,
-                "leader_agent_id": leader_agent_id,
-            },
-            metadata={
-                "source": "worker_report",
-                "node_id": node_id,
-                "attempt_id": attempt_id,
-            },
-        )
-    except Exception:
-        logger.warning(
-            "workspace_v2.worker_report_sync_failed",
-            extra={
-                "event": "workspace_v2.worker_report_sync_failed",
-                "workspace_id": workspace_id,
-                "plan_id": plan_id,
-                "node_id": node_id,
-            },
-            exc_info=True,
-        )
+    """Do not mirror Core-owned worker reports into retired Workspace Plan SQL."""
+    _ = (
+        db,
+        workspace_id,
+        root_goal_task_id,
+        actor_user_id,
+        task_metadata,
+        attempt_id,
+        worker_agent_id,
+        leader_agent_id,
+    )
 
 
 def _parse_worker_report_payload(
@@ -1036,7 +876,7 @@ def _build_worker_report_fingerprint(
 
 def _build_attempt_service(db: AsyncSession) -> WorkspaceTaskSessionAttemptService:
     return WorkspaceTaskSessionAttemptService(
-        attempt_repo=SqlWorkspaceTaskSessionAttemptRepository(db),
+        attempt_repo=legacy_workspace_runtime_retired("Workspace task attempt persistence"),
     )
 
 
@@ -1209,6 +1049,7 @@ async def _launch_workspace_retry_attempt(
     leader_agent_id: str,
     retry_feedback: str,
 ) -> None:
+    legacy_workspace_runtime_retired("Workspace retry attempt launch")
     from src.application.services.agent_service import AgentService
     from src.application.services.workspace_mention_router import WorkspaceMentionRouter
     from src.configuration.di_container import DIContainer
@@ -1224,7 +1065,7 @@ async def _launch_workspace_retry_attempt(
     preferred_language: str | None = None
     try:
         async with async_session_factory() as db:
-            task = await SqlWorkspaceTaskRepository(db).find_by_id(workspace_task_id)
+            task = await legacy_workspace_runtime_retired(db).find_by_id(workspace_task_id)
             if task is not None:
                 worker_binding_id = task.get_workspace_agent_binding_id()
                 candidate_language = task.metadata.get(PREFERRED_LANGUAGE)
@@ -1234,13 +1075,15 @@ async def _launch_workspace_retry_attempt(
                 }:
                     preferred_language = candidate_language
                 if worker_binding_id is None and task.assignee_agent_id:
-                    binding = await SqlWorkspaceAgentRepository(db).find_by_workspace_and_agent_id(
+                    binding = await legacy_workspace_runtime_retired(
+                        db
+                    ).find_by_workspace_and_agent_id(
                         workspace_id=workspace_id,
                         agent_id=task.assignee_agent_id,
                     )
                     worker_binding_id = binding.id if binding is not None else None
             if preferred_language is None:
-                root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_goal_task_id)
+                root_task = await legacy_workspace_runtime_retired(db).find_by_id(root_goal_task_id)
                 if root_task is not None:
                     candidate_language = root_task.metadata.get(PREFERRED_LANGUAGE)
                     if isinstance(candidate_language, str) and candidate_language in {
@@ -1277,7 +1120,7 @@ async def _launch_workspace_retry_attempt(
     try:
         redis_client = await get_redis_client()
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired("Workspace retry authority lookup")
             workspace = await workspace_repo.find_by_id(workspace_id)
             if workspace is None:
                 logger.warning(
@@ -1387,6 +1230,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
     report_id: str | None = None,
 ) -> WorkspaceTask | None:
     """Record a worker execution report as candidate output awaiting leader adjudication."""
+    legacy_workspace_runtime_retired("Workspace worker report")
     artifacts = [artifact for artifact in (artifacts or []) if artifact]
     explicit_verifications = [
         verification
@@ -1395,12 +1239,12 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
     ]
     try:
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
-            task_repo = SqlWorkspaceTaskRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
+            task_repo = legacy_workspace_runtime_retired("Workspace delegation task lookup")
             task_service = WorkspaceTaskService(
                 workspace_repo=workspace_repo,
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_member_repo=legacy_workspace_runtime_retired(db),
+                workspace_agent_repo=legacy_workspace_runtime_retired(db),
                 workspace_task_repo=task_repo,
             )
             command_service = WorkspaceTaskCommandService(task_service)
@@ -1676,14 +1520,15 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
     priority: WorkspaceTaskPriority | None = None,
 ) -> WorkspaceTask | None:
     """Apply a leader decision to a previously ingested worker report."""
+    legacy_workspace_runtime_retired("Workspace worker adjudication")
     try:
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
-            task_repo = SqlWorkspaceTaskRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
+            task_repo = legacy_workspace_runtime_retired(db)
             task_service = WorkspaceTaskService(
                 workspace_repo=workspace_repo,
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_member_repo=legacy_workspace_runtime_retired(db),
+                workspace_agent_repo=legacy_workspace_runtime_retired(db),
                 workspace_task_repo=task_repo,
             )
             command_service = WorkspaceTaskCommandService(task_service)
@@ -1783,7 +1628,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     metadata["current_attempt_number"] = new_attempt.attempt_number
                     worker_binding_id = task.get_workspace_agent_binding_id()
                     if worker_binding_id is None and task.assignee_agent_id:
-                        binding = await SqlWorkspaceAgentRepository(
+                        binding = await legacy_workspace_runtime_retired(
                             db
                         ).find_by_workspace_and_agent_id(
                             workspace_id=workspace_id,
@@ -1897,11 +1742,12 @@ async def resolve_workspace_execution_task_for_delegate(
     caller must resolve the ambiguity through an agent tool-call (pick by
     semantic judgment). We return ``None`` instead of guessing.
     """
+    legacy_workspace_runtime_retired("Workspace delegation task lookup")
     normalized_text = delegated_task_text.strip()
     explicit_task_id = workspace_task_id or _extract_workspace_task_id(normalized_text)
     try:
         async with async_session_factory() as db:
-            task_repo = SqlWorkspaceTaskRepository(db)
+            task_repo = legacy_workspace_runtime_retired(db)
             if explicit_task_id:
                 task = await task_repo.find_by_id(explicit_task_id)
                 if (
@@ -1945,6 +1791,7 @@ async def prepare_workspace_subagent_delegation(
     workspace_task_id: str | None = None,
 ) -> dict[str, str] | None:
     """Bind a delegated subagent run to a workspace task and mark it in progress via leader."""
+    legacy_workspace_runtime_retired("Workspace subagent delegation")
     task = await resolve_workspace_execution_task_for_delegate(
         workspace_id=workspace_id,
         root_goal_task_id=root_goal_task_id,
@@ -1958,10 +1805,10 @@ async def prepare_workspace_subagent_delegation(
     try:
         async with async_session_factory() as db:
             task_service = WorkspaceTaskService(
-                workspace_repo=SqlWorkspaceRepository(db),
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                workspace_task_repo=SqlWorkspaceTaskRepository(db),
+                workspace_repo=legacy_workspace_runtime_retired(db),
+                workspace_member_repo=legacy_workspace_runtime_retired(db),
+                workspace_agent_repo=legacy_workspace_runtime_retired(db),
+                workspace_task_repo=legacy_workspace_runtime_retired(db),
             )
             command_service = WorkspaceTaskCommandService(task_service)
             attempt_service = _build_attempt_service(db)

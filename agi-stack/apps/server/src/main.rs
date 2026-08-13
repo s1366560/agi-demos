@@ -82,8 +82,7 @@ mod system_api;
 mod tenant_skill_config_api;
 mod tenant_webhooks_api;
 mod trust_api;
-mod workspace_api;
-mod workspace_outbox_worker;
+mod workspace_authority;
 
 use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
@@ -104,7 +103,7 @@ use agistack_adapters_postgres::{
     PgRetrievalStoreRepository, PgSchemaRepository, PgShareRepository, PgSkillEvolutionRepository,
     PgSkillRepository, PgSubagentTemplateRepository, PgSupportRepository, PgTenantRepository,
     PgTenantSkillConfigRepository, PgTenantWebhookRepository, PgTrustRepository, PgUserStore,
-    PgVectorIndex, PgWorkspaceContextRepository, PgWorkspaceRepository,
+    PgVectorIndex, PgWorkspaceContextRepository,
 };
 use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
@@ -185,16 +184,7 @@ use crate::tenant_webhooks_api::{
     DevTenantWebhookService, PgTenantWebhookService, SharedTenantWebhooks,
 };
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
-use crate::workspace_api::{
-    DevWorkspaceService, PgWorkspaceService, SharedAutonomyCooldownStore, SharedWorkspaces,
-};
-use crate::workspace_outbox_worker::{
-    worker_launch_event_stream_source, workspace_agent_mention_runtime_from_env,
-    workspace_plan_outbox_handlers_with_runtime_state_and_streams, PgWorkspacePlanOutboxStore,
-    ProjectSandboxPipelineStageRunner, SharedWorkspacePlanOutboxWorker,
-    WorkerLaunchRuntimeStateStore, WorkspacePipelineStageRunner, WorkspacePlanOutboxWorker,
-    WorkspacePlanOutboxWorkerConfig,
-};
+use crate::workspace_authority::{CoreWorkspaceAuthority, SharedWorkspaceAuthority};
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
 /// field is a shared handle, so all routes operate on the same registry, memory
@@ -236,9 +226,8 @@ pub(crate) struct AppState {
     /// P5 tenant skill disable/override config over Python-owned
     /// `tenant_skill_configs`.
     pub(crate) tenant_skill_configs: SharedTenantSkillConfigs,
-    /// P6 workspace/task/topology/blackboard foundation over Python-owned
-    /// workspace tables.
-    pub(crate) workspaces: SharedWorkspaces,
+    /// Workspace scope and ACL authority. Production startup requires Avernet Core.
+    pub(crate) workspace_authority: SharedWorkspaceAuthority,
     /// P5 channel configuration read/status, Feishu webhook EventStream fanout,
     /// and local lifecycle status markers over Python-owned channel tables. Live
     /// provider sessions and full workspace/session routing remain Python-owned.
@@ -331,9 +320,6 @@ pub(crate) struct AppState {
     /// P7 retrieval-store read surface over Python-owned `retrieval_stores`.
     /// Store writes and connection tests remain Python-owned.
     pub(crate) retrieval_stores: SharedRetrievalStores,
-    /// P6 server-only outbox worker foundation. It is wired for explicit
-    /// one-shot/loop use once handlers are migrated, but is not auto-started.
-    pub(crate) workspace_plan_outbox_worker: Option<SharedWorkspacePlanOutboxWorker>,
     /// P4 knowledge-graph store. Server composition picks Neo4j when configured,
     /// otherwise an in-memory dev/test backend behind the same portable port.
     pub(crate) graph: Arc<dyn GraphStore>,
@@ -379,7 +365,6 @@ type MemoryAndAuth = (
     SharedTrust,
     SharedSkills,
     SharedTenantSkillConfigs,
-    SharedWorkspaces,
     Option<PgPool>,
     Option<PgProjectSandboxRepository>,
     Option<PgProjectReadRepository>,
@@ -546,8 +531,6 @@ async fn build_object_store() -> Arc<dyn ObjectStore> {
 async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
-    object_store: Arc<dyn ObjectStore>,
-    autonomy_cooldown: Option<SharedAutonomyCooldownStore>,
     database_url: &DatabaseUrl,
 ) -> ServerResult<MemoryAndAuth> {
     let email = select_email_sender();
@@ -603,11 +586,6 @@ async fn build_memory_and_auth(
             let tenant_skill_configs: SharedTenantSkillConfigs = Arc::new(
                 PgTenantSkillConfigService::new(PgTenantSkillConfigRepository::new(pool.clone())),
             );
-            let workspaces: SharedWorkspaces = Arc::new(PgWorkspaceService::new(
-                PgWorkspaceRepository::new(pool.clone()),
-                object_store,
-                autonomy_cooldown,
-            ));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
             eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
@@ -620,7 +598,6 @@ async fn build_memory_and_auth(
                 trust,
                 skills,
                 tenant_skill_configs,
-                workspaces,
                 Some(pool),
                 sandbox_repo,
                 project_sandbox_config_repo,
@@ -652,10 +629,6 @@ async fn build_memory_and_auth(
             let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
             let tenant_skill_configs: SharedTenantSkillConfigs =
                 Arc::new(DevTenantSkillConfigService::new("dev-tenant"));
-            let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::with_object_store(
-                "dev-user",
-                object_store,
-            ));
             eprintln!("[agistack] persistence: in-memory (isolated tests)");
             Ok((
                 memory,
@@ -666,7 +639,6 @@ async fn build_memory_and_auth(
                 trust,
                 skills,
                 tenant_skill_configs,
-                workspaces,
                 None,
                 None,
                 None,
@@ -696,30 +668,6 @@ async fn build_event_stream() -> Arc<dyn EventStream> {
     }
 }
 
-async fn build_workspace_autonomy_cooldown_store() -> Option<SharedAutonomyCooldownStore> {
-    match std::env::var("REDIS_URL") {
-        Ok(url) if !url.is_empty() => {
-            match agistack_adapters_redis::RedisWorkspaceAutonomyCooldownStore::connect(&url).await
-            {
-                Ok(store) => {
-                    eprintln!("[agistack] workspace autonomy cooldown: Redis TTL via REDIS_URL");
-                    Some(Arc::new(store))
-                }
-                Err(err) => {
-                    eprintln!(
-                        "[agistack] workspace autonomy cooldown: Redis unavailable ({err}); skipping cooldown"
-                    );
-                    None
-                }
-            }
-        }
-        _ => {
-            eprintln!("[agistack] workspace autonomy cooldown: disabled (no REDIS_URL)");
-            None
-        }
-    }
-}
-
 async fn build_sandbox_http_service_registry() -> SharedHttpServiceRegistry {
     match std::env::var("REDIS_URL") {
         Ok(url) if !url.is_empty() => {
@@ -739,30 +687,6 @@ async fn build_sandbox_http_service_registry() -> SharedHttpServiceRegistry {
         _ => {
             eprintln!("[agistack] sandbox HTTP services: in-memory (dev)");
             in_memory_http_service_registry()
-        }
-    }
-}
-
-async fn build_worker_launch_runtime_state_store() -> Option<Arc<dyn WorkerLaunchRuntimeStateStore>>
-{
-    match std::env::var("REDIS_URL") {
-        Ok(url) if !url.is_empty() => {
-            match agistack_adapters_redis::RedisWorkerLaunchStateStore::connect(&url).await {
-                Ok(store) => {
-                    eprintln!("[agistack] worker launch state: Redis markers via REDIS_URL");
-                    Some(Arc::new(store))
-                }
-                Err(err) => {
-                    eprintln!(
-                        "[agistack] worker launch state: Redis unavailable ({err}); duplicate launch guard disabled"
-                    );
-                    None
-                }
-            }
-        }
-        _ => {
-            eprintln!("[agistack] worker launch state: no Redis cooldown guard (dev)");
-            None
         }
     }
 }
@@ -854,8 +778,9 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     let (llm, embedding) = select_llm_and_embedding();
 
     let registry = build_registry();
+    let workspace_authority: SharedWorkspaceAuthority =
+        Arc::new(CoreWorkspaceAuthority::from_env()?);
     let object_store = build_object_store().await;
-    let autonomy_cooldown = build_workspace_autonomy_cooldown_store().await;
 
     // Native startup always binds Postgres from the validated repository `.env`.
     // The in-memory composition remains reachable only through isolated tests.
@@ -868,18 +793,10 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         trust,
         skills,
         tenant_skill_configs,
-        workspaces,
         workspace_plan_pool,
         sandbox_repo,
         project_config_repo,
-    ) = build_memory_and_auth(
-        llm.clone(),
-        embedding,
-        Arc::clone(&object_store),
-        autonomy_cooldown,
-        database_url,
-    )
-    .await?;
+    ) = build_memory_and_auth(llm.clone(), embedding, database_url).await?;
     let events = build_event_stream().await;
     let agent_event_writer = workspace_plan_pool
         .clone()
@@ -1043,8 +960,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
     let sandbox_http_registry = build_sandbox_http_service_registry().await;
-    let worker_launch_runtime_state = build_worker_launch_runtime_state_store().await;
-    let workspace_mention_runtime = workspace_agent_mention_runtime_from_env(Arc::clone(&llm));
     let sandbox_image = std::env::var("AGISTACK_SANDBOX_IMAGE")
         .unwrap_or_else(|_| DEFAULT_SANDBOX_IMAGE.to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
@@ -1078,37 +993,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
             .with_tool_host(Arc::clone(&tool_host))
             .with_ws_mcp_connector(),
     );
-    let workspace_plan_outbox_worker = workspace_plan_pool.clone().map(|pool| {
-        let stage_runner: Arc<dyn WorkspacePipelineStageRunner> = Arc::new(
-            ProjectSandboxPipelineStageRunner::new(Arc::clone(&sandboxes)),
-        );
-        let worker_stream_events = worker_launch_event_stream_source(Arc::clone(&events));
-        let handlers = match worker_launch_runtime_state.clone() {
-            Some(runtime_state) => workspace_plan_outbox_handlers_with_runtime_state_and_streams(
-                Arc::new(PgWorkspaceRepository::new(pool.clone())),
-                Some(Arc::clone(&stage_runner)),
-                Some(runtime_state),
-                Some(Arc::clone(&worker_stream_events)),
-                workspace_mention_runtime.clone(),
-                Some(Arc::clone(&events)),
-            ),
-            None => workspace_plan_outbox_handlers_with_runtime_state_and_streams(
-                Arc::new(PgWorkspaceRepository::new(pool.clone())),
-                Some(Arc::clone(&stage_runner)),
-                None,
-                Some(worker_stream_events),
-                workspace_mention_runtime.clone(),
-                Some(Arc::clone(&events)),
-            ),
-        };
-        Arc::new(WorkspacePlanOutboxWorker::new(
-            Arc::new(PgWorkspacePlanOutboxStore::new(PgWorkspaceRepository::new(
-                pool.clone(),
-            ))),
-            WorkspacePlanOutboxWorkerConfig::from_env(),
-            handlers,
-        ))
-    });
     let engine = Arc::new(ReActEngine::new(
         llm,
         Arc::clone(&tool_host),
@@ -1142,7 +1026,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         skills,
         skill_evolution_worker,
         tenant_skill_configs,
-        workspaces,
+        workspace_authority,
         channels,
         channel_outbox_delivery_worker,
         hitl,
@@ -1171,7 +1055,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         genes,
         graph_stores,
         retrieval_stores,
-        workspace_plan_outbox_worker,
         graph,
         sandboxes,
     })
@@ -1182,10 +1065,6 @@ async fn main() -> ServerResult<()> {
     let addr = std::env::var("AGISTACK_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
     let database_url = repository_database_url()?;
     let state = build_state(&database_url).await?;
-    let _workspace_plan_outbox_runtime = state
-        .workspace_plan_outbox_worker
-        .as_ref()
-        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
     let _skill_evolution_runtime = state
         .skill_evolution_worker
         .as_ref()
@@ -1249,6 +1128,25 @@ mod runtime_mode_tests {
     fn default_sandbox_image_provides_the_sandbox_runtime() {
         assert_eq!(DEFAULT_SANDBOX_IMAGE, "sandbox-mcp-server:latest");
         assert_ne!(DEFAULT_SANDBOX_IMAGE, "redis:7-alpine");
+    }
+
+    #[test]
+    fn production_composition_excludes_legacy_workspace_authority() {
+        let production_source = include_str!("main.rs")
+            .split("#[cfg(test)]\nmod runtime_mode_tests")
+            .next()
+            .expect("production source prefix");
+
+        for forbidden in [
+            ["PgWorkspace", "Repository"].concat(),
+            ["workspace_plan_", "outbox_worker"].concat(),
+            ["build_workspace_", "autonomy_cooldown_store"].concat(),
+        ] {
+            assert!(
+                !production_source.contains(&forbidden),
+                "production composition still contains {forbidden}"
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,120 @@
+{
+  "evidenceVersion": 2,
+  "schemaRevision": "f0a1b2c3d4e6",
+  "implementationSourcePatterns": [
+    "src/domain/ports/services/workspace_authority_port.py",
+    "src/infrastructure/adapters/primary/web/workspace_authority.py",
+    "src/infrastructure/adapters/primary/web/workspace_core_*.py",
+    "src/infrastructure/workspace_core/**/*.py",
+    "agi-stack/apps/server/src/workspace_authority.rs",
+    "agi-stack/apps/server/src/agent_ws/**/*.rs",
+    "agi-stack/apps/desktop/sidecar/src/workspace_core_*.rs",
+    "agi-stack/apps/desktop/sidecar/src/local_runtime/workspace_core_bridge/**/*.rs",
+    "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/**/*.rs",
+    "third_party/avernet-bcs/crates/services/memstack-workspace-service/src/**/*.rs",
+    "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/**/*.rs"
+  ],
+  "suites": [
+    {
+      "id": "desktop-route-contracts",
+      "command": "scripts/avernet-bcs/cargo.sh test -p memstack-workspace-core --locked",
+      "gates": [
+        "status",
+        "permission",
+        "cas",
+        "idempotency",
+        "events",
+        "desktopSqlite"
+      ],
+      "sourcePatterns": [
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_schema.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/desktop_workspace_schema*.sql",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/*_http_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/desktop_schema.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_*worker.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_outbox_ownership.rs"
+      ]
+    },
+    {
+      "id": "cross-store-authority-scenarios",
+      "command": "uv run python scripts/workspace-core/verify-cross-store-scenarios.py",
+      "gates": [
+        "permission",
+        "cas",
+        "idempotency",
+        "events",
+        "cloudPostgres",
+        "desktopSqlite"
+      ],
+      "sourcePatterns": [
+        "scripts/workspace-core/verify-cross-store-scenarios.py",
+        "docs/architecture/workspace-core-cross-store-allowlist.json",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/*_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/outbox_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/runtime_postgres_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_*_authority.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_*_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/postgres_*_mutations.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/postgres_*_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/cross_store_state_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/sqlite_context_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-service/tests/workspace_tasks.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/sqlite_message_contract.rs",
+        "third_party/avernet-bcs/crates/services/memstack-workspace-store/tests/sqlite_mutation_contract.rs"
+      ]
+    },
+    {
+      "id": "current-head-migration",
+      "command": "uv run python scripts/avernet-bcs/verify-postgres-schema.py --skip-cargo-contract && uv run python scripts/avernet-bcs/verify-workspace-migration.py",
+      "gates": [
+        "cloudPostgres",
+        "idempotency"
+      ],
+      "sourcePatterns": [
+        "alembic/versions/a9c0d1e2f3a4_create_avernet_bcs_schema.py",
+        "alembic/versions/a0b1c2d3e4f5_create_avernet_workspace_domain.py",
+        "alembic/versions/e42b8c6d0f53_create_avernet_workspace_execution.py",
+        "alembic/versions/e9f0a1b2c3d5_relax_conversation_workspace_links.py",
+        "alembic/versions/f0a1b2c3d4e6_add_task_session_saga_journal.py",
+        "scripts/avernet-bcs/verify-postgres-schema.py",
+        "scripts/avernet-bcs/verify-workspace-migration.py",
+        "scripts/workspace_core_legacy_sentinel.py"
+      ]
+    },
+    {
+      "id": "event-routing-parity",
+      "command": "uv run python scripts/workspace-core/verify-event-parity.py",
+      "gates": [
+        "events"
+      ],
+      "sourcePatterns": [
+        "docs/architecture/workspace-core-event-parity-manifest.json",
+        "scripts/workspace-core/verify-event-parity.py"
+      ]
+    },
+    {
+      "id": "event-delivery-runtime",
+      "command": "uv run python scripts/workspace-core/verify-event-delivery.py",
+      "gates": [
+        "events"
+      ],
+      "sourcePatterns": [
+        "scripts/workspace-core/verify-event-delivery.py",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/outbox.rs",
+        "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/tests/plan_update_outbox_delivery.rs"
+      ]
+    },
+    {
+      "id": "legacy-runtime-reference-guard",
+      "command": "uv run python scripts/workspace-core/verify-legacy-workspace-references.py",
+      "gates": [
+        "status",
+        "permission"
+      ],
+      "sourcePatterns": [
+        "docs/architecture/workspace-core-legacy-reference-allowlist.json",
+        "scripts/workspace-core/verify-legacy-workspace-references.py"
+      ]
+    }
+  ]
+}

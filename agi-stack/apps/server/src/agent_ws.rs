@@ -391,28 +391,31 @@ async fn handle_client_message(
             tenant_id,
             last_event_id,
         } => {
-            let workspace_tenant_id = app
-                .workspaces
-                .authorize_workspace_event_subscription(
-                    &identity.user_id,
-                    &workspace_id,
-                    &project_id,
-                    tenant_id.as_deref(),
-                )
+            let workspace_scope = app
+                .workspace_authority
+                .authorize(&identity.user_id, &workspace_id)
                 .await;
-            let resolved_tenant_id = match workspace_tenant_id {
-                Ok(workspace_tenant_id) => app
-                    .auth
-                    .authorize_project_event_subscription(
-                        &identity.user_id,
-                        &project_id,
-                        Some(&workspace_tenant_id),
-                    )
-                    .await
-                    .ok()
-                    .flatten()
-                    .filter(|project_tenant_id| project_tenant_id == &workspace_tenant_id),
+            let resolved_tenant_id = match workspace_scope {
+                Ok(Some(scope))
+                    if !scope.is_archived
+                        && scope.project_id == project_id
+                        && tenant_id
+                            .as_deref()
+                            .is_none_or(|value| value == scope.tenant_id) =>
+                {
+                    app.auth
+                        .authorize_project_event_subscription(
+                            &identity.user_id,
+                            &project_id,
+                            Some(&scope.tenant_id),
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                        .filter(|project_tenant_id| project_tenant_id == &scope.tenant_id)
+                }
                 Err(_) => None,
+                _ => None,
             };
             match register_workspace_subscription(
                 resolved_tenant_id,

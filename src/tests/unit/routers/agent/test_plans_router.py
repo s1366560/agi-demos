@@ -1,17 +1,20 @@
 """Tests for plan-mode route hardening."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web.routers.agent.plans import (
     ApprovePlanAndStartRequest,
     SwitchModeRequest,
@@ -31,6 +34,19 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.workspace_core.client import WorkspaceCoreClient
+
+
+def _workspace_core_settings() -> WorkspaceCoreSettings:
+    return WorkspaceCoreSettings.model_validate(
+        {
+            "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
+            "WORKSPACE_CORE_SERVICE_TOKEN": "service-token",
+            "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "webhook-token",
+            "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "event-token",
+            "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "registry-token",
+        }
+    )
 
 
 async def _add_conversation_task(
@@ -100,6 +116,83 @@ def test_approve_plan_environment_rejects_renderer_authority_fields() -> None:
                 },
             }
         )
+
+
+@pytest.mark.unit
+async def test_workspace_policy_snapshot_comes_from_core_and_ignores_renderer_profile() -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path.endswith("/workspaces/workspace-1/agent-policy")
+        assert request.headers["authorization"] == "Bearer service-token"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        return httpx.Response(
+            200,
+            content=json.dumps(
+                {
+                    "tenant_id": "tenant-1",
+                    "project_id": "project-1",
+                    "workspace_id": "workspace-1",
+                    "revision": 4,
+                    "roles": {
+                        "default": {"provider_id": "provider-1", "model_id": "model-1"},
+                        "fast": None,
+                        "coding": None,
+                        "vision": None,
+                    },
+                    "fallbacks": [],
+                    "reasoning_effort": "high",
+                    "permission_mode": "automatic",
+                    "capability_version": "workspace-agent-policy-v1",
+                    "updated_at": "2026-08-13T00:00:00Z",
+                }
+            ).encode(),
+            headers={"content-type": "application/json"},
+        )
+
+    client = WorkspaceCoreClient(
+        _workspace_core_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(workspace_core_client=client)))
+    conversation = SimpleNamespace(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    snapshot, permission_profile = await plans_router._load_workspace_policy_snapshot(
+        request,
+        conversation=conversation,
+        current_user=SimpleNamespace(id="user-1", is_superuser=False),
+    )
+
+    assert snapshot["revision"] == 4
+    assert snapshot["permission_mode"] == "automatic"
+    assert permission_profile == "workspace_write"
+
+
+@pytest.mark.unit
+async def test_workspace_policy_snapshot_fails_closed_without_core() -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    conversation = SimpleNamespace(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await plans_router._load_workspace_policy_snapshot(
+            request,
+            conversation=conversation,
+            current_user=SimpleNamespace(id="user-1", is_superuser=False),
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail["code"] == "WORKSPACE_CORE_UNAVAILABLE"
 
 
 @pytest.mark.unit

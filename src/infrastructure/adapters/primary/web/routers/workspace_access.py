@@ -1,20 +1,13 @@
-"""Shared workspace access checks for path-scoped workspace routers."""
+"""Fail-closed compatibility guard for Core-proxied Workspace routers."""
 
 from __future__ import annotations
 
-from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.models import (
-    User as DBUser,
-    WorkspaceMemberModel,
-    WorkspaceModel,
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
 )
-from src.infrastructure.i18n import gettext as _
-
-_EDITOR_ROLES = {"owner", "editor", "admin"}
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
 
 async def require_workspace_access(
@@ -26,44 +19,6 @@ async def require_workspace_access(
     *,
     require_editor: bool = False,
 ) -> None:
-    """Require the requested workspace to match the path scope and caller membership."""
-    workspace = (
-        await db.execute(
-            refresh_select_statement(
-                select(WorkspaceModel.id).where(
-                    WorkspaceModel.id == workspace_id,
-                    WorkspaceModel.tenant_id == tenant_id,
-                    WorkspaceModel.project_id == project_id,
-                )
-            )
-        )
-    ).scalar_one_or_none()
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Workspace not found"),
-        )
-
-    if getattr(current_user, "is_superuser", False):
-        return
-
-    role = (
-        await db.execute(
-            refresh_select_statement(
-                select(WorkspaceMemberModel.role).where(
-                    WorkspaceMemberModel.workspace_id == workspace_id,
-                    WorkspaceMemberModel.user_id == current_user.id,
-                )
-            )
-        )
-    ).scalar_one_or_none()
-    if role is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Workspace access required"),
-        )
-    if require_editor and str(role) not in _EDITOR_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Workspace editor access required"),
-        )
+    """Reject direct execution because public callers must use the Core proxy."""
+    del db, current_user, tenant_id, project_id, workspace_id, require_editor
+    raise workspace_core_unavailable_error()

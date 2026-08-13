@@ -1,6 +1,6 @@
 """Scoped cloud conversation session projection endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.conversation_session_projection import (
@@ -10,7 +10,14 @@ from src.application.services.conversation_session_projection_service import (
     ConversationSessionNotFoundError,
     ConversationSessionProjectionService,
 )
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    get_workspace_authority,
+    workspace_core_unavailable_error,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_session_projection_reader import (
@@ -27,6 +34,7 @@ router = APIRouter()
 )
 async def get_conversation_session_projection(
     conversation_id: str,
+    request: Request,
     tenant_id: str = Query(...),
     project_id: str = Query(...),
     workspace_id: str | None = Query(default=None),
@@ -35,7 +43,13 @@ async def get_conversation_session_projection(
 ) -> ConversationSessionProjectionResponse:
     """Return one exact-scope persisted session projection for the current user."""
 
-    service = ConversationSessionProjectionService(SqlConversationSessionProjectionReader(db))
+    service = ConversationSessionProjectionService(
+        SqlConversationSessionProjectionReader(
+            db,
+            get_workspace_authority(request),
+            is_superuser=current_user.is_superuser,
+        )
+    )
     try:
         return await service.get_projection(
             conversation_id=conversation_id,
@@ -46,6 +60,8 @@ async def get_conversation_session_projection(
         )
     except ConversationSessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
 
 
 __all__ = ["router"]

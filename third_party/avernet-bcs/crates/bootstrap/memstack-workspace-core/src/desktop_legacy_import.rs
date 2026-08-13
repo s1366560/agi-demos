@@ -40,8 +40,9 @@ pub enum DesktopLegacyImportError {
 /// Import one immutable Sidecar snapshot into the Desktop-local BCS authority.
 ///
 /// First import checks every target for collisions and commits all projections in one
-/// transaction. A retry for the same snapshot verifies every projected table before returning.
-/// Historical messages deliberately do not create outbox rows.
+/// transaction. A retry for the same snapshot verifies the immutable migration ledger and target
+/// anchors without comparing mutable Workspace Core state to the legacy snapshot. Historical
+/// messages deliberately do not create outbox rows.
 ///
 /// # Errors
 ///
@@ -73,7 +74,7 @@ pub async fn import_legacy_workspace_snapshot(
         return Ok(());
     }
     verify_ledger(&import, &ledger_rows)?;
-    verify_import(db, &import).await
+    verify_import_anchors(db, &import).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -887,6 +888,104 @@ async fn verify_import(
         }
     }
     Ok(())
+}
+
+async fn verify_import_anchors(
+    db: &dyn DbPlugin,
+    import: &ValidatedImport,
+) -> Result<(), DesktopLegacyImportError> {
+    for workspace in &import.workspaces {
+        for (target, query) in workspace_import_anchor_queries(workspace) {
+            query_one(db, query, target).await?;
+        }
+    }
+    for message in &import.messages {
+        for (target, query) in message_import_anchor_queries(message) {
+            query_one(db, query, target).await?;
+        }
+    }
+    Ok(())
+}
+
+fn workspace_import_anchor_queries(
+    workspace: &WorkspaceProjection,
+) -> Vec<(&'static str, DbStatement)> {
+    vec![
+        (
+            "bcs_groups",
+            statement(
+                "SELECT 1 AS present FROM bcs_groups WHERE group_id = ?",
+                vec![workspace.group_id.as_str().into()],
+            ),
+        ),
+        (
+            "workspace_profiles",
+            statement(
+                "SELECT 1 AS present FROM workspace_profiles WHERE workspace_id = ? \
+                 AND tenant_id = ? AND project_id = ? AND group_id = ? AND source_hash = ?",
+                vec![
+                    workspace.id.as_str().into(),
+                    workspace.tenant_id.as_str().into(),
+                    workspace.project_id.as_str().into(),
+                    workspace.group_id.as_str().into(),
+                    workspace.source_hash.as_str().into(),
+                ],
+            ),
+        ),
+        (
+            "workspace_authorities",
+            statement(
+                "SELECT 1 AS present FROM workspace_authorities WHERE workspace_id = ? \
+                 AND tenant_id = ? AND project_id = ?",
+                vec![
+                    workspace.id.as_str().into(),
+                    workspace.tenant_id.as_str().into(),
+                    workspace.project_id.as_str().into(),
+                ],
+            ),
+        ),
+        (
+            "bcs_group_sessions",
+            statement(
+                "SELECT 1 AS present FROM bcs_group_sessions WHERE session_id = ? \
+                 AND group_id = ? AND env = ?",
+                vec![
+                    workspace.session_id.as_str().into(),
+                    workspace.group_id.as_str().into(),
+                    BCS_ENVIRONMENT.into(),
+                ],
+            ),
+        ),
+    ]
+}
+
+fn message_import_anchor_queries(message: &MessageProjection) -> Vec<(&'static str, DbStatement)> {
+    vec![
+        (
+            "bcs_messages",
+            statement(
+                "SELECT 1 AS present FROM bcs_messages WHERE message_id = ? \
+                 AND workspace_id = ? AND source_hash = ?",
+                vec![
+                    message.id.as_str().into(),
+                    message.workspace_id.as_str().into(),
+                    message.source_hash.as_str().into(),
+                ],
+            ),
+        ),
+        (
+            "workspace_message_correlations",
+            statement(
+                "SELECT 1 AS present FROM workspace_message_correlations \
+                 WHERE legacy_message_id = ? AND workspace_id = ? AND bcs_message_id = ?",
+                vec![
+                    message.id.as_str().into(),
+                    message.workspace_id.as_str().into(),
+                    message.id.as_str().into(),
+                ],
+            ),
+        ),
+    ]
 }
 
 async fn verify_project_membership(

@@ -230,23 +230,6 @@ async fn main() -> Result<()> {
     let db = infrastructure
         .db()
         .context("Avernet database plugin is unavailable")?;
-    if matches!(args.mode, WorkspaceCoreMode::DesktopLocal) {
-        memstack_workspace_core::desktop_schema::run_desktop_workspace_schema_migrations(
-            db.as_ref(),
-        )
-        .await
-        .context("initialize Desktop Workspace extension schema")?;
-        let (legacy_import_path, legacy_import_sha256) = desktop_legacy_import
-            .as_ref()
-            .context("Desktop legacy Workspace import contract is unavailable")?;
-        memstack_workspace_core::desktop_legacy_import::import_legacy_workspace_snapshot(
-            db.as_ref(),
-            legacy_import_path,
-            legacy_import_sha256,
-        )
-        .await
-        .context("import legacy Desktop Workspace authority")?;
-    }
     let instance_id = outbox_instance_id(args.instance_id.as_deref());
     let workspace_object_store = build_workspace_object_store(
         &config,
@@ -428,6 +411,23 @@ async fn main() -> Result<()> {
     set_health_version(HEALTH_VERSION);
     tracing::info!(version = HEALTH_VERSION, "starting MemStack Workspace Core");
     let server = BcsServer::new_with_infrastructure(config, infrastructure, extensions).await?;
+    if matches!(args.mode, WorkspaceCoreMode::DesktopLocal) {
+        memstack_workspace_core::desktop_schema::run_desktop_workspace_schema_migrations(
+            db.as_ref(),
+        )
+        .await
+        .context("initialize Desktop Workspace extension schema")?;
+        let (legacy_import_path, legacy_import_sha256) = desktop_legacy_import
+            .as_ref()
+            .context("Desktop legacy Workspace import contract is unavailable")?;
+        memstack_workspace_core::desktop_legacy_import::import_legacy_workspace_snapshot(
+            db.as_ref(),
+            legacy_import_path,
+            legacy_import_sha256,
+        )
+        .await
+        .context("import legacy Desktop Workspace authority")?;
+    }
     drop(principal_signing_key);
     drop(group_session_ws_signing_key);
     let runtime = message_runtime

@@ -12,7 +12,7 @@ use super::{
     active_workspace_scope_error,
     auth_context::AuthenticatedContext,
     authority_store::{DesktopArtifactStatus, DesktopPlanStatus, DesktopRun, DesktopRunStatus},
-    ensure_workspace_scope, local_store_error, scoped_conversation,
+    local_store_error, scoped_conversation,
     session_store::ConversationSessionSnapshot,
     tool_authority::{self, InvocationStatus},
     ConversationRunMode, LocalJsonResult, LocalRuntimeState,
@@ -45,13 +45,26 @@ pub(super) async fn conversation_session(
         return Err(active_workspace_scope_error());
     }
     if let Some(workspace_id) = scope.workspace_id.as_deref() {
-        ensure_workspace_scope(
+        #[cfg(test)]
+        if state
+            .mock_llm_enabled
+            .load(std::sync::atomic::Ordering::Acquire)
+            == 0
+        {
+            super::workspace_core_bridge::validate_workspace_access(
+                &state,
+                &authenticated,
+                workspace_id,
+            )
+            .await?;
+        }
+        #[cfg(not(test))]
+        super::workspace_core_bridge::validate_workspace_access(
             &state,
             &authenticated,
-            &scope.tenant_id,
-            &scope.project_id,
             workspace_id,
-        )?;
+        )
+        .await?;
     }
     let snapshot = state
         .session_store

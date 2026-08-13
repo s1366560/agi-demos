@@ -6,7 +6,7 @@ use memstack_workspace_service::{
     PublicCreateWorkspaceTaskInput, PublicWorkspaceTaskContext, PublicWorkspaceTaskDispatchService,
     PublicWorkspaceTaskErrorKind, PublicWorkspaceTaskRecoveryInput, PublicWorkspaceTaskService,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[tokio::test]
 async fn task_service_create_list_replay_assign_and_transition_are_atomic()
@@ -116,6 +116,173 @@ async fn task_service_projects_execution_experience_and_recovery() -> Result<(),
 }
 
 #[tokio::test]
+async fn recovery_action_commits_ordered_events_and_replays_without_duplicates()
+-> Result<(), Box<dyn Error>> {
+    let db = seeded_task_db().await?;
+    let service = PublicWorkspaceTaskService::new(&db, DbSqlFlavor::Sqlite);
+    let created = service
+        .create(&PublicCreateWorkspaceTaskInput {
+            context: task_context("create-recovery-events", Some(0)),
+            title: "Recover with durable events".to_string(),
+            description: None,
+            assignee_user_id: None,
+            metadata: Some(json!({})),
+            preferred_language: None,
+            priority: None,
+            estimated_effort: None,
+            blocker_reason: None,
+        })
+        .await?;
+    let recovery_context = task_context("recovery-events", Some(1));
+    let recovery_input = PublicWorkspaceTaskRecoveryInput {
+        action: "new_attempt".to_string(),
+        reason: Some("Operator approved a new attempt".to_string()),
+        workspace_agent_id: None,
+    };
+
+    let committed = service
+        .recovery_action_with_authority(
+            &recovery_context,
+            created.task.id.as_str(),
+            &recovery_input,
+        )
+        .await?;
+    assert!(!committed.replayed);
+    let events = task_outbox_events(&db, created.task.id.as_str()).await?;
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "workspace_task_created",
+            "task_recovery_action_started",
+            "task_execution_session_updated",
+            "task_execution_incident_opened",
+            "task_recovery_action_completed",
+        ]
+    );
+    assert!(
+        events
+            .windows(2)
+            .all(|pair| pair[0].event_sequence < pair[1].event_sequence)
+    );
+    assert_eq!(
+        committed.response.outbox_id.as_deref(),
+        Some(events[1].outbox_id.as_str())
+    );
+    assert_eq!(events[2].payload["workspace_id"], "workspace-1");
+    assert_eq!(events[2].payload["task_id"], created.task.id);
+    assert_eq!(events[2].payload["session"]["attempt_status"], "pending");
+    assert_eq!(
+        events[3].payload["incident"]["type"],
+        "recovery_action_requested"
+    );
+    assert_eq!(events[3].payload["incident"]["action"], "new_attempt");
+    assert_eq!(events[4].payload["action"], "new_attempt");
+    assert_eq!(committed.committed_revision, 5);
+
+    let replayed = service
+        .recovery_action_with_authority(
+            &recovery_context,
+            created.task.id.as_str(),
+            &recovery_input,
+        )
+        .await?;
+    assert!(replayed.replayed);
+    assert_eq!(replayed.response, committed.response);
+    assert_eq!(
+        task_outbox_events(&db, created.task.id.as_str()).await?,
+        events
+    );
+    assert_eq!(table_count(&db, "workspace_task_receipts").await?, 2);
+    assert_eq!(authority_revision(&db).await?, 5);
+
+    let conflicting_input = PublicWorkspaceTaskRecoveryInput {
+        reason: Some("A different recovery intent".to_string()),
+        ..recovery_input
+    };
+    let conflict = service
+        .recovery_action_with_authority(
+            &recovery_context,
+            created.task.id.as_str(),
+            &conflicting_input,
+        )
+        .await
+        .expect_err("one idempotency key accepted a different recovery intent");
+    assert_eq!(conflict.kind(), PublicWorkspaceTaskErrorKind::Conflict);
+    assert_eq!(
+        task_outbox_events(&db, created.task.id.as_str()).await?,
+        events
+    );
+
+    let transitioned = service
+        .transition(
+            &task_context(
+                "post-recovery-transition",
+                Some(committed.committed_revision),
+            ),
+            created.task.id.as_str(),
+            "in_progress",
+        )
+        .await?;
+    assert_eq!(transitioned.committed_revision, 6);
+    let events_after_transition = task_outbox_events(&db, created.task.id.as_str()).await?;
+    assert_eq!(events_after_transition.len(), 6);
+    assert_eq!(events_after_transition[5].event_sequence, 6);
+    Ok(())
+}
+
+#[tokio::test]
+async fn recovery_event_failure_rolls_back_task_attempt_receipt_revision_and_all_events()
+-> Result<(), Box<dyn Error>> {
+    let db = seeded_task_db().await?;
+    let service = PublicWorkspaceTaskService::new(&db, DbSqlFlavor::Sqlite);
+    let created = service
+        .create(&PublicCreateWorkspaceTaskInput {
+            context: task_context("create-recovery-rollback", Some(0)),
+            title: "Rollback recovery events".to_string(),
+            description: None,
+            assignee_user_id: None,
+            metadata: Some(json!({})),
+            preferred_language: None,
+            priority: None,
+            estimated_effort: None,
+            blocker_reason: None,
+        })
+        .await?;
+    db.execute(DbStatement::new(
+        "CREATE TRIGGER reject_recovery_incident BEFORE INSERT ON workspace_outbox WHEN NEW.event_type = 'task_execution_incident_opened' BEGIN SELECT RAISE(ABORT, 'injected recovery event failure'); END",
+    ))
+    .await?;
+
+    let error = service
+        .recovery_action(
+            &task_context("recovery-rollback", Some(1)),
+            created.task.id.as_str(),
+            &PublicWorkspaceTaskRecoveryInput {
+                action: "new_attempt".to_string(),
+                reason: Some("This transaction must roll back".to_string()),
+                workspace_agent_id: None,
+            },
+        )
+        .await
+        .expect_err("one rejected recovery event did not abort the Task transaction");
+
+    assert_eq!(error.kind(), PublicWorkspaceTaskErrorKind::Unavailable);
+    assert_eq!(table_count(&db, "workspace_task_receipts").await?, 1);
+    assert_eq!(table_count(&db, "workspace_outbox").await?, 1);
+    assert_eq!(table_count(&db, "workspace_task_attempts").await?, 0);
+    assert_eq!(authority_revision(&db).await?, 1);
+    let persisted = service
+        .get(&task_context("read", None), created.task.id.as_str())
+        .await?;
+    assert!(persisted.metadata.get("recovery_actions").is_none());
+    assert!(persisted.metadata.get("current_attempt_id").is_none());
+    Ok(())
+}
+
+#[tokio::test]
 async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
 -> Result<(), Box<dyn Error>> {
     let db = seeded_task_db().await?;
@@ -206,7 +373,7 @@ async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
     );
 
     let new_attempt = tasks
-        .recovery_action(
+        .recovery_action_with_authority(
             &task_context("new-attempt-execution", Some(2)),
             created.task.id.as_str(),
             &PublicWorkspaceTaskRecoveryInput {
@@ -216,12 +383,15 @@ async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
             },
         )
         .await?;
-    assert!(new_attempt.attempt_id.is_some());
+    assert!(new_attempt.response.attempt_id.is_some());
     assert_eq!(table_count(&db, "workspace_task_dispatch_outbox").await?, 2);
 
-    tasks
-        .recovery_action(
-            &task_context("retry-launch-execution", Some(3)),
+    let retry_launch = tasks
+        .recovery_action_with_authority(
+            &task_context(
+                "retry-launch-execution",
+                Some(new_attempt.committed_revision),
+            ),
             created.task.id.as_str(),
             &PublicWorkspaceTaskRecoveryInput {
                 action: "retry_launch".to_string(),
@@ -267,7 +437,10 @@ async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
 
     tasks
         .recovery_action(
-            &task_context("human-block-execution", Some(4)),
+            &task_context(
+                "human-block-execution",
+                Some(retry_launch.committed_revision),
+            ),
             created.task.id.as_str(),
             &PublicWorkspaceTaskRecoveryInput {
                 action: "mark_human_blocked".to_string(),
@@ -410,6 +583,7 @@ async fn table_count(db: &dyn DbPlugin, table: &str) -> Result<i64, Box<dyn Erro
         "workspace_task_dispatch_outbox" => {
             "SELECT COUNT(*) AS value FROM workspace_task_dispatch_outbox"
         }
+        "workspace_task_attempts" => "SELECT COUNT(*) AS value FROM workspace_task_attempts",
         "workspace_agent_runtime_correlations" => {
             "SELECT COUNT(*) AS value FROM workspace_agent_runtime_correlations"
         }
@@ -422,6 +596,46 @@ async fn table_count(db: &dyn DbPlugin, table: &str) -> Result<i64, Box<dyn Erro
         .ok_or("missing count")?
         .get_i64("value")?
         .ok_or("missing count value")?)
+}
+
+#[derive(Debug, PartialEq)]
+struct TaskOutboxEvent {
+    outbox_id: String,
+    event_type: String,
+    event_sequence: i64,
+    payload: Value,
+}
+
+async fn task_outbox_events(
+    db: &dyn DbPlugin,
+    task_id: &str,
+) -> Result<Vec<TaskOutboxEvent>, Box<dyn Error>> {
+    let rows = db
+        .query(DbStatement::with_params(
+            "SELECT outbox_id, event_type, event_sequence, payload_json FROM workspace_outbox WHERE aggregate_id = ? ORDER BY event_sequence, outbox_id",
+            vec![task_id.into()],
+        ))
+        .await?;
+    rows.iter()
+        .map(|row| {
+            let outbox_id = row.get_string("outbox_id")?.ok_or("missing outbox_id")?;
+            let event_type = row.get_string("event_type")?.ok_or("missing event_type")?;
+            let event_sequence = row
+                .get_i64("event_sequence")?
+                .ok_or("missing event_sequence")?;
+            let payload = serde_json::from_str(
+                row.get_string("payload_json")?
+                    .ok_or("missing payload_json")?
+                    .as_str(),
+            )?;
+            Ok(TaskOutboxEvent {
+                outbox_id,
+                event_type,
+                event_sequence,
+                payload,
+            })
+        })
+        .collect()
 }
 
 async fn authority_revision(db: &dyn DbPlugin) -> Result<i64, Box<dyn Error>> {

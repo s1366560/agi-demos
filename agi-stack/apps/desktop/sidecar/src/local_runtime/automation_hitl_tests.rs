@@ -406,6 +406,9 @@ mod tests {
             store.clone(),
         )
         .expect("local runtime state");
+        state
+            .mock_llm_enabled
+            .store(1, std::sync::atomic::Ordering::Release);
         store
             .insert_conversation(&LocalConversation {
                 id: CONVERSATION_ID.to_string(),

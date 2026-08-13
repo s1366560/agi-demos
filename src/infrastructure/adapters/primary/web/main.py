@@ -28,7 +28,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
-from src.configuration.workspace_core import get_workspace_core_settings
+from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -81,7 +81,6 @@ from src.infrastructure.adapters.primary.web.routers import (
     subagents,
     support,
     system,
-    task_sessions,
     tasks,
     tenant_skill_configs,
     tenant_webhooks,
@@ -96,9 +95,6 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
 )
 from src.infrastructure.adapters.primary.web.startup import (
     initialize_artifact_content_orphan_gc_worker,
-    initialize_attempt_recovery,
-    initialize_autonomy_idle_waker,
-    initialize_blackboard_outbox_dispatcher,
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
@@ -107,21 +103,14 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_sandbox_idle_reaper,
-    initialize_task_execution_session_recovery,
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
-    initialize_workspace_plan_outbox_worker,
     shutdown_artifact_content_orphan_gc_worker,
-    shutdown_attempt_recovery,
-    shutdown_autonomy_idle_waker,
-    shutdown_blackboard_outbox_dispatcher,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
-    shutdown_task_execution_session_recovery,
     shutdown_telemetry_services,
-    shutdown_workspace_plan_outbox_worker,
     sync_health_checker_providers,
 )
 from src.infrastructure.adapters.primary.web.startup.graph import (
@@ -138,6 +127,9 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
     install_workspace_core_runtime,
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
+)
+from src.infrastructure.adapters.primary.web.workspace_core_task_sessions import (
+    register_task_session_routes,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -234,31 +226,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Initialize sandbox idle reaper (opt-in; disabled by default)
     await initialize_sandbox_idle_reaper(container)
 
-    # Initialize workspace autonomy idle waker (opt-in; disabled by default)
-    await initialize_autonomy_idle_waker()
-
-    # Initialize Workspace Supervisor (WTP fan-in consumer, Phase 2).
-    workspace_supervisor_enabled = os.getenv(
-        "WORKSPACE_SUPERVISOR_ENABLED", "true"
-    ).strip().lower() in {"1", "true", "yes", "on"}
-    if workspace_supervisor_enabled:
-        try:
-            from src.infrastructure.agent.workspace.workspace_supervisor import (
-                WorkspaceSupervisor,
-                configure_wtp_publisher,
-                set_workspace_supervisor,
-            )
-
-            redis_for_wtp: Any = redis_client
-            configure_wtp_publisher(redis_for_wtp)
-            workspace_supervisor = WorkspaceSupervisor(redis_for_wtp)
-            await workspace_supervisor.start()
-            set_workspace_supervisor(workspace_supervisor)
-            app.state.workspace_supervisor = workspace_supervisor
-        except Exception:
-            logger.exception("Failed to start WorkspaceSupervisor -- WTP fan-in disabled")
-    else:
-        logger.info("WorkspaceSupervisor startup disabled by WORKSPACE_SUPERVISOR_ENABLED")
+    # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
+    app.state.workspace_supervisor = None
 
     # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
     try:
@@ -273,27 +242,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     except Exception:
         logger.exception("Failed to start skill evolution plugin")
 
-    # Start Workspace Plan V2 durable outbox worker before recovery sweeps so
-    # recovered/queued plan jobs keep draining even if a sweep performs slow
-    # runtime reconciliation.
-    await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
-
     # Resume bounded cleanup of provisional Artifact objects after process restarts.
     await initialize_artifact_content_orphan_gc_worker(
         storage_service=container.storage_service(),
-    )
-
-    # Start attempt recovery service (restart-safe orphaned-attempt watchdog)
-    await initialize_attempt_recovery()
-
-    # Start Blackboard transactional outbox dispatcher
-    await initialize_blackboard_outbox_dispatcher(redis_client=cast(Redis | None, redis_client))
-
-    # Start task/conversation execution-session recovery after the outbox worker
-    # is available to drain any queued retry launches from the startup sweep.
-    await initialize_task_execution_session_recovery(
-        container=container,
-        redis_client=cast(Redis | None, redis_client),
     )
 
     # Start Avernet recovery only after DB-backed DI services are ready.
@@ -468,39 +419,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Stop sandbox idle reaper
     await shutdown_sandbox_idle_reaper()
 
-    # Stop workspace autonomy idle waker
-    await shutdown_autonomy_idle_waker()
-
-    # Stop task execution session recovery service
-    await shutdown_task_execution_session_recovery()
-
-    # Stop Workspace Plan V2 durable outbox worker
-    await shutdown_workspace_plan_outbox_worker()
-
     # Stop Artifact content orphan GC after current bounded work.
     await shutdown_artifact_content_orphan_gc_worker()
-
-    # Stop Blackboard transactional outbox dispatcher
-    await shutdown_blackboard_outbox_dispatcher()
-
-    # Stop attempt recovery service
-    await shutdown_attempt_recovery()
-
-    # Stop Workspace Supervisor (WTP fan-in consumer)
-    try:
-        from src.infrastructure.agent.workspace.workspace_supervisor import (
-            configure_wtp_publisher,
-            get_workspace_supervisor,
-            set_workspace_supervisor,
-        )
-
-        supervisor = get_workspace_supervisor()
-        if supervisor is not None:
-            await supervisor.stop()
-        set_workspace_supervisor(None)
-        configure_wtp_publisher(None)
-    except Exception:
-        logger.exception("Error stopping WorkspaceSupervisor")
 
     # Close MCP websocket clients owned by sandbox adapters without
     # terminating containers; they are recovered from Docker on startup.
@@ -549,7 +469,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         await shutdown_graph_service(graph_service)
 
 
-def create_app() -> FastAPI:  # noqa: PLR0915
+def create_app(  # noqa: PLR0915
+    *,
+    workspace_core_settings: WorkspaceCoreSettings | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="MemStack API",
         description="""
@@ -724,11 +647,11 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
     # Register Routers
-    workspace_core_settings = get_workspace_core_settings()
+    workspace_core_settings = workspace_core_settings or get_workspace_core_settings()
     app.state.workspace_core_settings = workspace_core_settings
 
     app.include_router(auth.router, prefix="/api/v1")
-    register_workspace_core_static_routes(app, workspace_core_settings.backend)
+    register_workspace_core_static_routes(app)
     app.include_router(tenants.router)
     # Register project sandbox routes before the generic project routes so
     # /api/v1/projects/sandboxes is not captured as a project id.
@@ -757,9 +680,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(data_export.router)
     app.include_router(maintenance.router)
     app.include_router(tasks.router)
-    register_workspace_core_routes(app, workspace_core_settings.backend)
+    register_workspace_core_routes(app)
     install_workspace_core_runtime(app, workspace_core_settings)
-    app.include_router(task_sessions.router)
+    register_task_session_routes(app)
     app.include_router(cron.router)
     app.include_router(ai_tools.router)
     app.include_router(background_tasks.router)

@@ -143,13 +143,8 @@ pub(super) async fn reauthorize_workspace_subscriptions(
         let allowed = match scope.as_ref() {
             Some(scope) => {
                 let workspace_access = app
-                    .workspaces
-                    .authorize_workspace_event_subscription(
-                        user_id,
-                        &workspace_id,
-                        &scope.project_id,
-                        Some(&scope.tenant_id),
-                    )
+                    .workspace_authority
+                    .authorize(user_id, &workspace_id)
                     .await;
                 let project_access = app
                     .auth
@@ -159,7 +154,7 @@ pub(super) async fn reauthorize_workspace_subscriptions(
                         Some(&scope.tenant_id),
                     )
                     .await;
-                matches!(workspace_access, Ok(resolved_tenant_id) if resolved_tenant_id == scope.tenant_id)
+                matches!(workspace_access, Ok(Some(resolved)) if !resolved.is_archived && resolved.tenant_id == scope.tenant_id && resolved.project_id == scope.project_id)
                     && matches!(project_access, Ok(Some(resolved_tenant_id)) if resolved_tenant_id == scope.tenant_id)
             }
             None => false,

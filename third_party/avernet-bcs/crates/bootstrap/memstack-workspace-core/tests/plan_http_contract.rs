@@ -297,7 +297,7 @@ async fn idempotency_replays_once_and_rejects_same_key_with_new_payload()
     let replay = response_json(send(state.clone(), replay_request).await?).await?;
     assert_eq!(replay, first);
     assert_eq!(table_count(db.as_ref(), "workspace_plan_events").await?, 1);
-    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 2);
+    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 3);
 
     let conflict_request = proxy_request(
         "POST",

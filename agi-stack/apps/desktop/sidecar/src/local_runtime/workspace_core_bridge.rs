@@ -29,10 +29,14 @@ mod registry;
 
 const CALLBACK_TIMEOUT_SECONDS: u64 = 10;
 const MAX_PROXY_REQUEST_BYTES: usize = 64 * 1024 * 1024;
+const LOCAL_DESKTOP_USER_ID: &str = "local-user";
+pub(super) const CUTOVER_GENERATION_BIT: u64 = 1 << 63;
+const AUTHORITY_GENERATION_MASK: u64 = CUTOVER_GENERATION_BIT - 1;
 const FORWARDED_REQUEST_HEADERS: &[&str] = &[
     "accept",
     "content-type",
     "idempotency-key",
+    "x-idempotency-key",
     "if-match",
     "range",
     "x-expected-revision",
@@ -43,6 +47,7 @@ const FORWARDED_REQUEST_HEADERS: &[&str] = &[
 
 pub(super) type BridgeError = (StatusCode, Json<Value>);
 pub(super) type BridgeResult = Result<Json<Value>, BridgeError>;
+type WorkspaceProxyScope<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>);
 
 pub(super) struct WorkspaceCoreAuthority {
     generation: u64,
@@ -70,13 +75,14 @@ pub(super) fn install_authority(
         &provider_webhook_token,
         &provider_event_token,
     )?;
-    let generation = state
+    let previous_generation = state
         .workspace_core_generation
         .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-            current.checked_add(1)
+            let next = (current & AUTHORITY_GENERATION_MASK).checked_add(1)?;
+            (next <= AUTHORITY_GENERATION_MASK).then_some(next | CUTOVER_GENERATION_BIT)
         })
-        .map_err(|_| "Workspace Core authority generation is exhausted".to_string())?
-        + 1;
+        .map_err(|_| "Workspace Core authority generation is exhausted".to_string())?;
+    let generation = (previous_generation & AUTHORITY_GENERATION_MASK) + 1;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(CALLBACK_TIMEOUT_SECONDS))
         .build()
@@ -103,7 +109,8 @@ pub(super) async fn proxy_workspace_if_authoritative(
     request: Request<Body>,
     next: Next,
 ) -> Response {
-    if core_authority_is_installed(&state) && workspace_proxy_scope(request.uri().path()).is_ok() {
+    if workspace_core_cutover_started(&state) && workspace_proxy_scope(request.uri().path()).is_ok()
+    {
         return proxy_installed_workspace_request(&state, request).await;
     }
     next.run(request).await
@@ -113,18 +120,20 @@ pub(super) async fn proxy_workspace_fallback(
     State(state): State<Arc<LocalRuntimeState>>,
     request: Request<Body>,
 ) -> Response {
-    if core_authority_is_installed(&state) && workspace_proxy_scope(request.uri().path()).is_ok() {
+    if workspace_proxy_scope(request.uri().path()).is_ok() {
         return proxy_installed_workspace_request(&state, request).await;
     }
     not_found("Local runtime route is not available").into_response()
 }
 
-pub(super) fn core_authority_is_installed(state: &LocalRuntimeState) -> bool {
+pub(super) fn workspace_core_cutover_started(state: &LocalRuntimeState) -> bool {
+    state.workspace_core_generation.load(Ordering::Acquire) & CUTOVER_GENERATION_BIT != 0
+}
+
+pub(super) fn mark_workspace_core_cutover(state: &LocalRuntimeState) {
     state
-        .workspace_core_authority
-        .lock()
-        .expect("Workspace Core authority")
-        .is_some()
+        .workspace_core_generation
+        .fetch_or(CUTOVER_GENERATION_BIT, Ordering::AcqRel);
 }
 
 async fn proxy_installed_workspace_request(
@@ -138,7 +147,7 @@ async fn proxy_installed_workspace_request(
 
 async fn proxy_workspace_request_inner(
     state: &LocalRuntimeState,
-    request: Request<Body>,
+    mut request: Request<Body>,
 ) -> Result<Response, BridgeError> {
     let authenticated = request
         .extensions()
@@ -151,8 +160,8 @@ async fn proxy_workspace_request_inner(
         .expect("Workspace Core authority")
         .clone()
         .ok_or_else(|| unavailable("Workspace Core Desktop authority is not installed"))?;
-    let path = request.uri().path();
-    let (tenant_id, project_id, _) = workspace_proxy_scope(path)?;
+    let path = request.uri().path().to_string();
+    let (tenant_id, project_id, _) = workspace_proxy_scope(&path)?;
     if tenant_id.is_some_and(|tenant_id| tenant_id != authenticated.workspace.tenant_id)
         || project_id.is_some_and(|project_id| project_id != authenticated.workspace.project_id)
     {
@@ -160,7 +169,11 @@ async fn proxy_workspace_request_inner(
             "Request is outside the trusted Workspace Core scope",
         ));
     }
-    let upstream_url = format!("{}{}", authority.core_api_base_url, request.uri());
+    if is_task_session_scope(&path) {
+        prepare_task_session_request(&mut request)?;
+    }
+    let upstream_path = workspace_core_upstream_path(request.uri())?;
+    let upstream_url = format!("{}{}", authority.core_api_base_url, upstream_path);
     let mut upstream = authority
         .client
         .request(request.method().clone(), upstream_url)
@@ -203,6 +216,16 @@ async fn proxy_workspace_request_inner(
         tracing::warn!(error = %error, "Workspace Core Desktop proxy response failed");
         unavailable("Workspace Core response is unavailable")
     })?;
+    if is_task_session_scope(&path)
+        && matches!(
+            status,
+            StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
+        )
+    {
+        return Err(unavailable(
+            "Workspace Core task-session authority is unavailable",
+        ));
+    }
     let mut response = Response::builder().status(status);
     for (name, value) in &response_headers {
         if !is_hop_by_hop_header(name) {
@@ -214,9 +237,7 @@ async fn proxy_workspace_request_inner(
         .map_err(|_| unavailable("Workspace Core response could not be constructed"))
 }
 
-fn workspace_proxy_scope(
-    path: &str,
-) -> Result<(Option<&str>, Option<&str>, Option<&str>), BridgeError> {
+fn workspace_proxy_scope(path: &str) -> Result<WorkspaceProxyScope<'_>, BridgeError> {
     let segments = path.trim_matches('/').split('/').collect::<Vec<_>>();
     match segments.as_slice() {
         ["api", "v1", "tenants", tenant_id, "projects", project_id, "workspaces"] => {
@@ -225,9 +246,202 @@ fn workspace_proxy_scope(
         ["api", "v1", "tenants", tenant_id, "projects", project_id, "workspaces", workspace_id, ..] => {
             Ok((Some(tenant_id), Some(project_id), Some(workspace_id)))
         }
+        ["api", "v1", "tenants", tenant_id, "projects", project_id, "task-sessions", ..] => {
+            Ok((Some(tenant_id), Some(project_id), None))
+        }
+        ["api", "v1", "llm-providers", "routing-policy"] => Ok((None, None, None)),
         ["api", "v1", "workspaces", workspace_id, ..] => Ok((None, None, Some(workspace_id))),
         _ => Err(not_found("Workspace Core route is not available")),
     }
+}
+
+fn is_task_session_scope(path: &str) -> bool {
+    let segments = path.trim_matches('/').split('/').collect::<Vec<_>>();
+    matches!(
+        segments.as_slice(),
+        [
+            "api",
+            "v1",
+            "tenants",
+            _,
+            "projects",
+            _,
+            "task-sessions",
+            ..
+        ]
+    )
+}
+
+fn workspace_core_upstream_path(uri: &axum::http::Uri) -> Result<String, BridgeError> {
+    if !is_task_session_scope(uri.path()) {
+        return Ok(uri.to_string());
+    }
+    let segments = uri.path().trim_matches('/').split('/').collect::<Vec<_>>();
+    let ["api", "v1", "tenants", tenant_id, "projects", project_id, "task-sessions"] =
+        segments.as_slice()
+    else {
+        return Err(not_found("Workspace Core route is not available"));
+    };
+    Ok(format!(
+        "/internal/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions"
+    ))
+}
+
+fn prepare_task_session_request(request: &mut Request<Body>) -> Result<(), BridgeError> {
+    let idempotency_key = request
+        .headers()
+        .get("x-idempotency-key")
+        .or_else(|| request.headers().get("idempotency-key"))
+        .cloned();
+    if let Some(idempotency_key) = idempotency_key {
+        request
+            .headers_mut()
+            .insert("x-idempotency-key", idempotency_key);
+    }
+    Ok(())
+}
+
+pub(super) async fn validate_workspace_access(
+    state: &LocalRuntimeState,
+    authenticated: &super::AuthenticatedContext,
+    workspace_id: &str,
+) -> Result<(), BridgeError> {
+    let authority = state
+        .workspace_core_authority
+        .lock()
+        .expect("Workspace Core authority")
+        .clone()
+        .ok_or_else(|| unavailable("Workspace Core Desktop authority is not installed"))?;
+    let mut url = Url::parse(&authority.core_api_base_url)
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?;
+    url.path_segments_mut()
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?
+        .extend([
+            "api",
+            "v1",
+            "tenants",
+            authenticated.workspace.tenant_id.as_str(),
+            "projects",
+            authenticated.workspace.project_id.as_str(),
+            "workspaces",
+            workspace_id,
+        ]);
+    let response = authority
+        .client
+        .get(url)
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-memstack-user-id", authenticated.user.user_id.as_str())
+        .header(
+            "x-memstack-user-is-superuser",
+            authenticated.user.is_superuser.to_string(),
+        )
+        .header("x-memstack-user-email", authenticated.user.email.as_str())
+        .header(
+            "x-memstack-tenant-id",
+            authenticated.workspace.tenant_id.as_str(),
+        )
+        .header(
+            "x-memstack-project-membership-role",
+            authenticated.membership_role.as_str(),
+        )
+        .send()
+        .await
+        .map_err(|_| unavailable("Workspace Core is unavailable"))?;
+    match response.status() {
+        StatusCode::OK => {}
+        StatusCode::NOT_FOUND => return Err(not_found("Workspace not found")),
+        StatusCode::FORBIDDEN => return Err(forbidden("Workspace access is denied")),
+        _ => {
+            return Err(unavailable(
+                "Workspace Core workspace authority is unavailable",
+            ))
+        }
+    }
+    let value: Value = response
+        .json()
+        .await
+        .map_err(|_| unavailable("Workspace Core workspace authority is invalid"))?;
+    if value.get("id").and_then(Value::as_str) != Some(workspace_id)
+        || value.get("tenant_id").and_then(Value::as_str)
+            != Some(authenticated.workspace.tenant_id.as_str())
+        || value.get("project_id").and_then(Value::as_str)
+            != Some(authenticated.workspace.project_id.as_str())
+    {
+        return Err(unavailable("Workspace Core workspace authority is invalid"));
+    }
+    Ok(())
+}
+
+pub(super) async fn workspace_policy(
+    state: &LocalRuntimeState,
+    tenant_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+) -> Result<Value, BridgeError> {
+    let authority = state
+        .workspace_core_authority
+        .lock()
+        .expect("Workspace Core authority")
+        .clone()
+        .ok_or_else(|| unavailable("Workspace Core Desktop authority is not installed"))?;
+    let mut url = Url::parse(&authority.core_api_base_url)
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?;
+    url.path_segments_mut()
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?
+        .extend([
+            "api",
+            "v1",
+            "tenants",
+            tenant_id,
+            "projects",
+            project_id,
+            "workspaces",
+            workspace_id,
+            "agent-policy",
+        ]);
+    let response = authority
+        .client
+        .get(url)
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-memstack-user-id", LOCAL_DESKTOP_USER_ID)
+        .send()
+        .await
+        .map_err(|_| unavailable("Workspace Core is unavailable"))?;
+    match response.status() {
+        StatusCode::OK => {}
+        StatusCode::NOT_FOUND => return Err(not_found("Workspace not found")),
+        StatusCode::FORBIDDEN => return Err(forbidden("Workspace access is denied")),
+        _ => {
+            return Err(unavailable(
+                "Workspace Core policy authority is unavailable",
+            ))
+        }
+    }
+    let policy: Value = response
+        .json()
+        .await
+        .map_err(|_| unavailable("Workspace Core policy authority is invalid"))?;
+    if policy.get("tenant_id").and_then(Value::as_str) != Some(tenant_id)
+        || policy.get("project_id").and_then(Value::as_str) != Some(project_id)
+        || policy.get("workspace_id").and_then(Value::as_str) != Some(workspace_id)
+        || !policy.get("roles").is_some_and(Value::is_object)
+        || !policy.get("fallbacks").is_some_and(Value::is_array)
+    {
+        return Err(unavailable("Workspace Core policy authority is invalid"));
+    }
+    Ok(policy)
+}
+
+pub(super) async fn validate_workspace_scope(
+    state: &LocalRuntimeState,
+    tenant_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+) -> Result<(), &'static str> {
+    workspace_policy(state, tenant_id, project_id, workspace_id)
+        .await
+        .map(|_| ())
+        .map_err(|_| "local_automation_workspace_core_unavailable")
 }
 
 fn is_hop_by_hop_header(name: &HeaderName) -> bool {
@@ -384,27 +598,15 @@ pub(super) fn claim_request(
 }
 
 pub(super) fn ensure_workspace_scope(
-    state: &LocalRuntimeState,
+    _state: &LocalRuntimeState,
     tenant_id: &str,
     project_id: &str,
     workspace_id: &str,
 ) -> Result<(), BridgeError> {
-    let actual_project = state
-        .session_store
-        .workspace_project_id(workspace_id)
-        .map_err(store_error)?;
-    let actual_tenant = state
-        .session_store
-        .workspace_tenant_id(workspace_id)
-        .map_err(store_error)?;
-    if actual_project.is_none() || actual_tenant.is_none() {
-        return Err(not_found("Workspace not found"));
-    }
-    if actual_project.as_deref() != Some(project_id) || actual_tenant.as_deref() != Some(tenant_id)
-    {
-        return Err(forbidden(
-            "Request is outside the trusted Workspace Core scope",
-        ));
+    for value in [tenant_id, project_id, workspace_id] {
+        if value.trim().is_empty() || value.len() > 255 {
+            return Err(bad_request("Workspace Core callback scope is invalid"));
+        }
     }
     Ok(())
 }
@@ -478,7 +680,10 @@ pub(super) fn conflict(detail: &str) -> BridgeError {
 pub(super) fn unavailable(detail: &str) -> BridgeError {
     (
         StatusCode::SERVICE_UNAVAILABLE,
-        Json(json!({ "detail": detail })),
+        Json(json!({
+            "detail": detail,
+            "reason_code": "workspace_core_unavailable",
+        })),
     )
 }
 

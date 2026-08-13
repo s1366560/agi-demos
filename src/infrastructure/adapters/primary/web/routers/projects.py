@@ -46,8 +46,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
     UserTenant,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
     SqlGraphStoreRepository,
@@ -269,8 +267,6 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
     )
     conversation_ids = select(Conversation.id).where(Conversation.project_id == project_id)
     message_ids = select(Message.id).where(Message.conversation_id.in_(conversation_ids))
-    workspace_ids = select(WorkspaceModel.id).where(WorkspaceModel.project_id == project_id)
-
     if Message.__tablename__ in existing_tables:
         _result = await db.execute(
             update(Message).where(Message.reply_to_id.in_(message_ids)).values(reply_to_id=None)
@@ -312,23 +308,10 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
 
     await _delete_rows_referencing(
         db,
-        target_table_name="workspaces",
-        target_column_name="id",
-        target_ids=workspace_ids,
-        skip_tables={"workspaces", "conversations"},
-        existing_tables=existing_tables,
-    )
-    if WorkspaceModel.__tablename__ in existing_tables:
-        _result = await db.execute(
-            delete(WorkspaceModel).where(WorkspaceModel.project_id == project_id)
-        )
-
-    await _delete_rows_referencing(
-        db,
         target_table_name="projects",
         target_column_name="id",
         target_ids=[project_id],
-        skip_tables={"projects", "conversations", "messages", "workspaces"},
+        skip_tables={"projects", "conversations", "messages"},
         existing_tables=existing_tables,
     )
 
@@ -360,21 +343,6 @@ async def _lock_project_delete_scopes(
     )
     user_project_result.scalars().all()
 
-    workspace_result = await db.execute(
-        select(WorkspaceModel.id)
-        .where(WorkspaceModel.project_id.in_(locked_project_ids))
-        .order_by(WorkspaceModel.id)
-        .with_for_update()
-    )
-    workspace_ids = sorted(set(workspace_result.scalars().all()))
-    if workspace_ids:
-        workspace_member_result = await db.execute(
-            select(WorkspaceMemberModel.id)
-            .where(WorkspaceMemberModel.workspace_id.in_(workspace_ids))
-            .order_by(WorkspaceMemberModel.workspace_id, WorkspaceMemberModel.id)
-            .with_for_update()
-        )
-        workspace_member_result.scalars().all()
     return locked_project_ids
 
 

@@ -43,9 +43,20 @@ from src.domain.model.agent.conversation.errors import (
     SenderNotInRosterError,
 )
 from src.domain.model.project.project import Project
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityAgent,
+    WorkspaceAuthorityNotFoundError,
+    WorkspaceAuthorityScope,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    get_workspace_authority,
+    workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -186,24 +197,60 @@ async def _assert_read_permission(
     project: Project,
     current_user: User,
     request: Request,
-    db: AsyncSession,
 ) -> None:
+    workspace_id = getattr(conversation, "workspace_id", None)
+    if workspace_id:
+        try:
+            await get_workspace_authority(request).get_profile(
+                _workspace_authority_scope(conversation, current_user)
+            )
+        except (WorkspaceAuthorityAccessDeniedError, WorkspaceAuthorityNotFoundError) as exc:
+            raise HTTPException(status_code=403, detail=_("Forbidden")) from exc
+        except WorkspaceAuthorityUnavailableError as exc:
+            raise workspace_core_unavailable_error() from exc
+        else:
+            return
+
     if conversation.user_id == current_user.id:
         return
     if getattr(project, "owner_id", None) == current_user.id:
         return
 
-    workspace_id = getattr(conversation, "workspace_id", None)
-    if workspace_id:
-        member_repo = get_container_with_db(request, db).workspace_member_repository()
-        member = await member_repo.find_by_workspace_and_user(
-            workspace_id=workspace_id,
-            user_id=current_user.id,
-        )
-        if member is not None:
-            return
-
     raise HTTPException(status_code=403, detail=_("Forbidden"))
+
+
+def _workspace_authority_scope(
+    conversation: Conversation,
+    current_user: User,
+) -> WorkspaceAuthorityScope:
+    workspace_id = conversation.workspace_id
+    if workspace_id is None:
+        raise ValueError("workspace authority scope requires a workspace-linked conversation")
+    return WorkspaceAuthorityScope(
+        tenant_id=conversation.tenant_id,
+        project_id=conversation.project_id,
+        workspace_id=workspace_id,
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
+    )
+
+
+async def _list_workspace_agents(
+    conversation: Conversation,
+    current_user: User,
+    request: Request,
+    *,
+    active_only: bool,
+) -> tuple[WorkspaceAuthorityAgent, ...]:
+    try:
+        return await get_workspace_authority(request).list_agents(
+            _workspace_authority_scope(conversation, current_user),
+            active_only=active_only,
+        )
+    except (WorkspaceAuthorityAccessDeniedError, WorkspaceAuthorityNotFoundError) as exc:
+        raise HTTPException(status_code=403, detail=_("Forbidden")) from exc
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
 
 
 def _resolve_effective_mode(conversation: Conversation, project: Project) -> ConversationMode:
@@ -252,28 +299,30 @@ def _assert_write_permission(
 async def _roster_response(
     conversation: Conversation,
     effective_mode: ConversationMode,
-    request: Request | None = None,
-    db: AsyncSession | None = None,
+    *,
+    request: Request,
+    current_user: User,
 ) -> RosterResponse:
     participant_bindings: list[RosterParticipantResponse] = []
     workspace_id = getattr(conversation, "workspace_id", None)
-    workspace_agent_repo = None
-    if request is not None and db is not None:
-        workspace_agent_repo = get_container_with_db(
-            request, db
-        ).workspace_agent_repository()
+    workspace_agents = (
+        await _list_workspace_agents(
+            conversation,
+            current_user,
+            request,
+            active_only=False,
+        )
+        if workspace_id
+        else ()
+    )
+    bindings_by_agent_id = {binding.agent_id: binding for binding in workspace_agents}
 
     for agent_id in conversation.participant_agents:
-        binding = None
-        if workspace_id and workspace_agent_repo is not None:
-            binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
-                workspace_id=workspace_id,
-                agent_id=agent_id,
-            )
+        binding = bindings_by_agent_id.get(agent_id)
         participant_bindings.append(
             RosterParticipantResponse(
                 agent_id=agent_id,
-                workspace_agent_id=binding.id if binding is not None else None,
+                workspace_agent_id=binding.binding_id if binding is not None else None,
                 display_name=binding.display_name if binding is not None else None,
                 label=binding.label if binding is not None else None,
                 is_active=binding.is_active if binding is not None else True,
@@ -298,8 +347,8 @@ async def _roster_response(
 
 async def _assert_workspace_roster_projection(
     conversation: Conversation,
+    current_user: User,
     request: Request,
-    db: AsyncSession,
 ) -> None:
     """Ensure workspace-linked roster entries remain a valid projection.
 
@@ -307,20 +356,23 @@ async def _assert_workspace_roster_projection(
     conversation routes so participant mutations cannot drift from the
     canonical workspace agent roster.
     """
-    from src.application.services.agent.workspace_roster_validator import (
-        WorkspaceRosterValidator,
-    )
-
     if not conversation.workspace_id or not conversation.participant_agents:
         return
 
-    validator = WorkspaceRosterValidator(
-        workspace_agent_repository=get_container_with_db(request, db).workspace_agent_repository()
-    )
-    try:
-        await validator.assert_valid(conversation)
-    except ParticipantNotPresentError as exc:
-        raise HTTPException(status_code=422, detail=_("Invalid workspace roster")) from exc
+    workspace_agent_ids = {
+        binding.agent_id
+        for binding in await _list_workspace_agents(
+            conversation,
+            current_user,
+            request,
+            active_only=True,
+        )
+    }
+    if not set(conversation.participant_agents).issubset(workspace_agent_ids):
+        raise HTTPException(
+            status_code=422,
+            detail=_("Invalid workspace roster"),
+        )
 
 
 # === Endpoints ===
@@ -342,12 +394,12 @@ async def list_participants(
         request, db, conversation_id
     )
     _assert_tenant_scope(conversation, project, tenant_id)
-    await _assert_read_permission(conversation, project, current_user, request, db)
+    await _assert_read_permission(conversation, project, current_user, request)
     return await _roster_response(
         conversation,
         _resolve_effective_mode(conversation, project),
         request=request,
-        db=db,
+        current_user=current_user,
     )
 
 
@@ -391,10 +443,15 @@ async def add_participant(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
-    await _assert_workspace_roster_projection(conversation, request, db)
+    await _assert_workspace_roster_projection(conversation, current_user, request)
     await conv_repo.save(conversation)
     await db.commit()
-    return await _roster_response(conversation, effective_mode, request=request, db=db)
+    return await _roster_response(
+        conversation,
+        effective_mode,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @router.delete(
@@ -426,10 +483,15 @@ async def remove_participant(
     except CoordinatorRequiredError as e:
         raise HTTPException(status_code=422, detail=_("Coordinator is required")) from e
 
-    await _assert_workspace_roster_projection(conversation, request, db)
+    await _assert_workspace_roster_projection(conversation, current_user, request)
     await conv_repo.save(conversation)
     await db.commit()
-    return await _roster_response(conversation, effective_mode, request=request, db=db)
+    return await _roster_response(
+        conversation,
+        effective_mode,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @router.patch(
@@ -462,10 +524,15 @@ async def set_coordinator(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
-    await _assert_workspace_roster_projection(conversation, request, db)
+    await _assert_workspace_roster_projection(conversation, current_user, request)
     await conv_repo.save(conversation)
     await db.commit()
-    return await _roster_response(conversation, effective_mode, request=request, db=db)
+    return await _roster_response(
+        conversation,
+        effective_mode,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @router.patch(
@@ -493,10 +560,15 @@ async def set_focused_agent(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
-    await _assert_workspace_roster_projection(conversation, request, db)
+    await _assert_workspace_roster_projection(conversation, current_user, request)
     await conv_repo.save(conversation)
     await db.commit()
-    return await _roster_response(conversation, effective_mode, request=request, db=db)
+    return await _roster_response(
+        conversation,
+        effective_mode,
+        request=request,
+        current_user=current_user,
+    )
 
 
 # === Mention candidates (Phase-5 G7) ===
@@ -543,36 +615,44 @@ async def list_mention_candidates(
     the result is a bounded set — the frontend filters by substring
     *over this set* and never parses free-form text to guess an agent.
     """
-    from src.application.services.agent.workspace_mention_candidates import (
-        WorkspaceMentionCandidatesResolver,
-    )
-
     _conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
     _assert_tenant_scope(conversation, project, tenant_id)
-    await _assert_read_permission(conversation, project, current_user, request, db)
-
-    container = get_container_with_db(request, db)
-    resolver = WorkspaceMentionCandidatesResolver(container.workspace_agent_repository())
-    candidates = await resolver.resolve(conversation, include_inactive=include_inactive)
+    await _assert_read_permission(conversation, project, current_user, request)
 
     workspace_id = getattr(conversation, "workspace_id", None)
     source = "workspace" if workspace_id else "conversation"
+    if workspace_id:
+        workspace_agents = await _list_workspace_agents(
+            conversation,
+            current_user,
+            request,
+            active_only=not include_inactive,
+        )
+        candidates = [
+            MentionCandidateResponse(
+                agent_id=agent.agent_id,
+                workspace_agent_id=agent.binding_id,
+                display_name=agent.display_name,
+                label=agent.label,
+                status=agent.status,
+                is_active=agent.is_active,
+                source="workspace",
+            )
+            for agent in workspace_agents
+        ]
+    else:
+        candidates = [
+            MentionCandidateResponse(
+                agent_id=agent_id,
+                source="conversation",
+            )
+            for agent_id in conversation.participant_agents
+        ]
     return MentionCandidatesResponse(
         conversation_id=conversation.id,
         workspace_id=workspace_id,
         source=source,
-        candidates=[
-            MentionCandidateResponse(
-                agent_id=c.agent_id,
-                workspace_agent_id=c.workspace_agent_id,
-                display_name=c.display_name,
-                label=c.label,
-                status=c.status,
-                is_active=c.is_active,
-                source=c.source,
-            )
-            for c in candidates
-        ],
+        candidates=candidates,
     )

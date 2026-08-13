@@ -1,0 +1,113 @@
+bind = "0.0.0.0"
+port = 4319
+bots_base_dir = "/var/lib/memstack-workspace-core/bots"
+
+max_history_per_session = 1000
+store_messages = false
+strict_container_validation = true
+max_groups_as_driver = 20
+max_group_members = 20
+max_groups_as_member = 100
+max_group_messages = 1000
+group_chat_delay_min_ms = 0
+group_chat_delay_max_ms = 0
+bcs_endpoint = "http://memstack-workspace-core:4319"
+botchat_url = "http://api:8000"
+register_path = "/bcn/register"
+default_visibility = "protected"
+onboard_binding_enabled = false
+dingtalk_accounts = []
+api_keys = []
+allowed_switch_provider_ids = []
+
+[gateway_principal]
+issuer = "gateway"
+audience = "bcs"
+key_id = "bare"
+signing_key_env = "AVERNET_SECRET_PRINCIPAL_SIGNING_KEY_VALUE"
+
+[group_session_ws]
+signing_key_secret = "workspace-core-group-session-ws-jwt"
+
+[secret]
+provider = "env"
+
+[secret.providers.env]
+prefix = "BCS_SECRET_"
+
+[auth]
+chain = []
+require_authentication = true
+allow_mock_headers = false
+
+[database]
+type = "postgresql"
+
+[database.postgres]
+url = "${WORKSPACE_CORE_DATABASE_URL}"
+max_connections = 20
+tls_required = false
+
+[cache]
+type = "redis"
+
+[cache.redis]
+timeout_secs = 5
+key_prefix = "workspace-core:"
+
+[cache.redis.connection]
+type = "direct"
+host = "redis"
+port = 6379
+auth_mode = "disabled"
+
+[leader_election]
+enabled = false
+
+[llm]
+type = "none"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+model = "disabled"
+timeout_ms = 120000
+temperature = 0
+max_tokens = 4096
+structured_output = "json_schema"
+
+[metrics]
+enabled = true
+mode = "pull"
+endpoint_path = "/metrics"
+
+[telemetry]
+enabled = false
+
+[logging]
+default_level = "info"
+console = true
+
+[logging.modules]
+hyper = "warn"
+tower_http = "warn"
+
+[user_directory]
+enabled = false
+
+[security_gateway]
+provider = "noop"
+
+[security.outbound_url]
+block_private_networks = true
+allow_loopback = false
+
+[session_files]
+storage_backend = "local"
+multipart_threshold = 104857600
+max_file_size = 5368709120
+share_link_ttl = 3600
+
+[session_files.backend]
+data_dir = "/var/lib/memstack-workspace-core/files"
+
+[manifest]
+schema_version = 1

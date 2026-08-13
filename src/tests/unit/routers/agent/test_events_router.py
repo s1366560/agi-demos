@@ -6,6 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.routers.agent.events import (
     get_conversation_events,
     get_execution_status,
@@ -16,9 +20,20 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     UserProject,
     UserTenant,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
+
+
+class _WorkspaceAuthority:
+    def __init__(self, role: str | None = None, *, unavailable: bool = False) -> None:
+        self.role = role
+        self.unavailable = unavailable
+
+    async def get_membership_role(self, _scope: object) -> str:
+        if self.unavailable:
+            raise WorkspaceAuthorityUnavailableError
+        if self.role is None:
+            raise WorkspaceAuthorityAccessDeniedError
+        return self.role
 
 
 @pytest.mark.unit
@@ -47,9 +62,19 @@ class TestAgentEventsRouter:
         await test_db.commit()
         return conversation_id
 
-    def _request_with_container(self, container: object) -> MagicMock:
+    def _request_with_container(
+        self,
+        container: object,
+        *,
+        workspace_role: str | None = None,
+        workspace_unavailable: bool = False,
+    ) -> MagicMock:
         request = MagicMock()
         request.app.state.container.with_db.return_value = container
+        request.app.state.workspace_authority = _WorkspaceAuthority(
+            workspace_role,
+            unavailable=workspace_unavailable,
+        )
         return request
 
     @pytest.mark.asyncio
@@ -228,30 +253,12 @@ class TestAgentEventsRouter:
             )
         )
         test_db.add(
-            WorkspaceModel(
-                id=workspace_id,
-                tenant_id=test_tenant_db.id,
-                project_id=test_project_db.id,
-                name="Workspace Events Member",
-                created_by=test_user.id,
-            )
-        )
-        test_db.add(
             UserTenant(
                 id="ut-events-router-workspace-member",
                 user_id=another_user.id,
                 tenant_id=test_tenant_db.id,
                 role="member",
                 permissions={"read": True},
-            )
-        )
-        test_db.add(
-            WorkspaceMemberModel(
-                id="wm-events-router-workspace-member",
-                user_id=another_user.id,
-                workspace_id=workspace_id,
-                role="viewer",
-                invited_by=test_user.id,
             )
         )
         await test_db.commit()
@@ -264,7 +271,7 @@ class TestAgentEventsRouter:
 
         response = await get_conversation_events(
             conversation_id,
-            request=self._request_with_container(container),
+            request=self._request_with_container(container, workspace_role="viewer"),
             from_time_us=0,
             from_counter=0,
             limit=1000,
@@ -274,6 +281,50 @@ class TestAgentEventsRouter:
 
         assert response.events == []
         event_repo.get_events.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_workspace_conversation_fails_closed_when_core_is_unavailable(
+        self,
+        test_db,
+        test_project_db,
+        test_tenant_db,
+        test_user,
+        another_user,
+    ) -> None:
+        conversation_id = "workspace-chat:workspace-events-offline"
+        test_db.add(
+            Conversation(
+                id=conversation_id,
+                project_id=test_project_db.id,
+                tenant_id=test_tenant_db.id,
+                user_id=test_user.id,
+                title="Workspace events offline",
+                status="active",
+                workspace_id="workspace-events-offline",
+            )
+        )
+        test_db.add(
+            UserTenant(
+                id="ut-events-router-offline",
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            )
+        )
+        await test_db.commit()
+        container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_conversation_events(
+                conversation_id,
+                request=self._request_with_container(container, workspace_unavailable=True),
+                current_user=another_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail["code"] == "WORKSPACE_CORE_UNAVAILABLE"
 
     @pytest.mark.asyncio
     async def test_get_execution_status_rejects_before_event_repo_access(

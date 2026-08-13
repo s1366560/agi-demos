@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1.91.1-bookworm AS builder
+
+WORKDIR /build/avernet-bcs
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY third_party/avernet-bcs/Cargo.toml third_party/avernet-bcs/Cargo.lock ./
+COPY third_party/avernet-bcs/crates ./crates
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo build --locked --release --package memstack-workspace-core
+
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gettext-base \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 workspace-core \
+    && useradd --system --uid 10001 --gid workspace-core --home-dir /var/lib/memstack-workspace-core workspace-core \
+    && install -d -o workspace-core -g workspace-core /etc/memstack-workspace-core /var/lib/memstack-workspace-core
+
+COPY --from=builder /build/avernet-bcs/target/release/memstack-workspace-core /usr/local/bin/memstack-workspace-core
+COPY docker/workspace-core/entrypoint.sh /usr/local/bin/workspace-core-entrypoint
+COPY docker/workspace-core/bcs-config.toml.template /usr/local/share/memstack-workspace-core/bcs-config.toml.template
+
+RUN chmod 0555 /usr/local/bin/memstack-workspace-core /usr/local/bin/workspace-core-entrypoint \
+    && chmod 0444 /usr/local/share/memstack-workspace-core/bcs-config.toml.template
+
+USER workspace-core
+WORKDIR /var/lib/memstack-workspace-core
+
+EXPOSE 4319
+
+ENTRYPOINT ["/usr/local/bin/workspace-core-entrypoint"]

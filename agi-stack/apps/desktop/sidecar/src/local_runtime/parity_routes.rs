@@ -38,9 +38,6 @@ mod tenant_overview_tests;
 mod tenant_projects;
 #[cfg(test)]
 mod tenant_projects_tests;
-mod workspace_roster;
-#[cfg(test)]
-mod workspace_roster_tests;
 
 const LOCAL_ROUTE_CONTRACT_VERSION: &str = "desktop-local-route-parity-v1";
 
@@ -56,7 +53,6 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .merge(tenant_agent_bindings::router())
         .merge(tenant_projects::router())
         .merge(search::router())
-        .merge(workspace_roster::router())
         .merge(managed_resources::router())
         .route(
             "/api/v1/agent/workflows/patterns",

@@ -219,6 +219,7 @@ pub struct WorkspacePlanTransition {
     pub idempotency_key: String,
     pub request_hash: String,
     pub mutation_outbox_id: String,
+    pub compatibility_outbox_id: String,
     pub event_id: String,
     pub reason: Option<String>,
     pub evidence_refs: Vec<String>,
@@ -389,7 +390,7 @@ impl<'a> WorkspacePlanStore<'a> {
         if let Some(replay) = self.read_replay(transition).await? {
             return Ok(replay);
         }
-        let mut steps = Vec::with_capacity(10);
+        let mut steps = Vec::with_capacity(11);
         let access_step = steps.len();
         steps.push(DbTransactionStep::query_checked(
             access_check(self.flavor, &transition.scope, true),
@@ -421,6 +422,10 @@ impl<'a> WorkspacePlanStore<'a> {
         let outbox_step = steps.len();
         steps.push(DbTransactionStep::execute_checked(
             self.mutation_outbox_insert(transition),
+            DbCountExpectation::exactly(1),
+        ));
+        steps.push(DbTransactionStep::execute_checked(
+            self.compatibility_outbox_insert(transition),
             DbCountExpectation::exactly(1),
         ));
         steps.push(DbTransactionStep::query_checked(
@@ -778,6 +783,58 @@ impl<'a> WorkspacePlanStore<'a> {
             .bind(metadata.to_string())
             .push_static(", NULL, ")
             .bind(transition.idempotency_key.as_str())
+            .push_static(", 'pending', 0, 10, ")
+            .bind(transition.persisted_at.as_str())
+            .push_static(", ")
+            .bind(transition.persisted_at.as_str())
+            .push_static(")")
+            .build()
+    }
+
+    fn compatibility_outbox_insert(&self, transition: &WorkspacePlanTransition) -> DbStatement {
+        let event_type = "workspace_plan_updated";
+        let stream_name = format!("workspace:{}:{event_type}", transition.scope.workspace_id);
+        let payload = serde_json::json!({
+            "workspace_id": &transition.scope.workspace_id,
+            "plan_id": &transition.plan_id,
+            "revision": transition.expected_revision.saturating_add(1),
+            "action": transition.kind.event_type(),
+            "node_id": &transition.node_id,
+            "reason": &transition.reason,
+        });
+        let metadata = serde_json::json!({
+            "source": "memstack-workspace-core.plan",
+            "request_hash": &transition.request_hash,
+            "compatibility_event": true,
+        });
+        let compatibility_idempotency_key = format!("{}:{event_type}", transition.idempotency_key);
+        DbStatementBuilder::new(self.flavor)
+            .push_static("INSERT INTO workspace_outbox (outbox_id, tenant_id, project_id, workspace_id, aggregate_type, aggregate_id, event_type, stream_name, event_sequence, payload_json, metadata_json, correlation_id, idempotency_key, status, attempt_count, max_attempts, created_at, updated_at) VALUES (")
+            .bind(transition.compatibility_outbox_id.as_str())
+            .push_static(", ")
+            .bind(transition.scope.tenant_id.as_str())
+            .push_static(", ")
+            .bind(transition.scope.project_id.as_str())
+            .push_static(", ")
+            .bind(transition.scope.workspace_id.as_str())
+            .push_static(", 'workspace_plan', ")
+            .bind(transition.plan_id.as_str())
+            .push_static(", ")
+            .bind(event_type)
+            .push_static(", ")
+            .bind(stream_name.as_str())
+            .push_static(", (SELECT COALESCE(MAX(event_sequence), -1) + 1 FROM workspace_outbox WHERE workspace_id = ")
+            .bind(transition.scope.workspace_id.as_str())
+            .push_static(" AND stream_name = ")
+            .bind(stream_name.as_str())
+            .push_static("), ")
+            .bind(payload.to_string())
+            .push_static(", ")
+            .bind(metadata.to_string())
+            .push_static(", ")
+            .bind(transition.plan_id.as_str())
+            .push_static(", ")
+            .bind(compatibility_idempotency_key)
             .push_static(", 'pending', 0, 10, ")
             .bind(transition.persisted_at.as_str())
             .push_static(", ")

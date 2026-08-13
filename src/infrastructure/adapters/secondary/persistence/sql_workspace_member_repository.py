@@ -1,110 +1,13 @@
-"""SQLAlchemy repository for WorkspaceMember persistence."""
+"""Compatibility import for the retired SQL Workspace member repository."""
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.domain.model.workspace.workspace_member import WorkspaceMember
-from src.domain.model.workspace.workspace_role import WorkspaceRole
-from src.domain.ports.repositories.workspace.workspace_member_repository import (
-    WorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.common.base_repository import (
-    BaseRepository,
-    refresh_select_statement,
-)
-from src.infrastructure.adapters.secondary.persistence.models import WorkspaceMemberModel
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 
-class SqlWorkspaceMemberRepository(
-    BaseRepository[WorkspaceMember, WorkspaceMemberModel], WorkspaceMemberRepository
-):
-    """SQLAlchemy implementation of WorkspaceMemberRepository."""
+class LegacyWorkspaceMemberRepository:
+    """Reject all construction after Avernet became the sole Workspace authority."""
 
-    _model_class = WorkspaceMemberModel
+    def __init__(self, _session: object) -> None:
+        legacy_workspace_runtime_retired("member repository")
 
-    def __init__(self, session: AsyncSession) -> None:
-        super().__init__(session)
 
-    async def find_by_workspace(
-        self,
-        workspace_id: str,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[WorkspaceMember]:
-        query = (
-            select(WorkspaceMemberModel)
-            .where(WorkspaceMemberModel.workspace_id == workspace_id)
-            .order_by(WorkspaceMemberModel.created_at.asc())
-            .offset(offset)
-            .limit(limit)
-        )
-        result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(query))
-        )
-        rows = result.scalars().all()
-        return [m for row in rows if (m := self._to_domain(row)) is not None]
-
-    async def find_by_workspace_and_user(
-        self,
-        workspace_id: str,
-        user_id: str,
-    ) -> WorkspaceMember | None:
-        query = select(WorkspaceMemberModel).where(
-            WorkspaceMemberModel.workspace_id == workspace_id,
-            WorkspaceMemberModel.user_id == user_id,
-        )
-        result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(query))
-        )
-        row = result.scalar_one_or_none()
-        return self._to_domain(row) if row else None
-
-    async def count_by_workspace_and_role(
-        self,
-        workspace_id: str,
-        role: WorkspaceRole,
-    ) -> int:
-        query = (
-            select(func.count())
-            .select_from(WorkspaceMemberModel)
-            .where(
-                WorkspaceMemberModel.workspace_id == workspace_id,
-                WorkspaceMemberModel.role == role.value,
-            )
-        )
-        result = await self._session.execute(refresh_select_statement(query))
-        return int(result.scalar_one())
-
-    def _to_domain(self, db_member: WorkspaceMemberModel | None) -> WorkspaceMember | None:
-        if db_member is None:
-            return None
-
-        return WorkspaceMember(
-            id=db_member.id,
-            workspace_id=db_member.workspace_id,
-            user_id=db_member.user_id,
-            role=WorkspaceRole(db_member.role),
-            invited_by=db_member.invited_by,
-            created_at=db_member.created_at,
-            updated_at=db_member.updated_at,
-        )
-
-    def _to_db(self, domain_entity: WorkspaceMember) -> WorkspaceMemberModel:
-        return WorkspaceMemberModel(
-            id=domain_entity.id,
-            workspace_id=domain_entity.workspace_id,
-            user_id=domain_entity.user_id,
-            role=domain_entity.role.value,
-            invited_by=domain_entity.invited_by,
-            created_at=domain_entity.created_at,
-            updated_at=domain_entity.updated_at,
-        )
-
-    def _update_fields(
-        self,
-        db_model: WorkspaceMemberModel,
-        domain_entity: WorkspaceMember,
-    ) -> None:
-        db_model.role = domain_entity.role.value
-        db_model.invited_by = domain_entity.invited_by
-        db_model.updated_at = domain_entity.updated_at
+__all__ = ["LegacyWorkspaceMemberRepository"]

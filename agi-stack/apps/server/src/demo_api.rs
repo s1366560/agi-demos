@@ -22,7 +22,7 @@ use crate::{
     events_api, gene_api, graph_api, graph_stores_api, hitl_api, identity_api, instance_api,
     llm_providers_api, maintenance_api, notifications_api, prod_api, retrieval_stores_api,
     sandbox_api, schema_api, shares_api, skill_api, subagents_api, support_api, system_api,
-    tenant_skill_config_api, tenant_webhooks_api, trust_api, workspace_api, AppState,
+    tenant_skill_config_api, tenant_webhooks_api, trust_api, AppState,
 };
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -279,11 +279,7 @@ async fn tools_call(
     Ok(Json(json!({ "tool": req.tool, "output": output })))
 }
 
-async fn health(State(app): State<AppState>) -> &'static str {
-    let _ = app
-        .workspace_plan_outbox_worker
-        .as_ref()
-        .map(|worker| worker.handler_count());
+async fn health(State(_app): State<AppState>) -> &'static str {
     "ok"
 }
 
@@ -351,7 +347,6 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(skill_api::router())
         .merge(tenant_skill_config_api::router())
         .merge(trust_api::router_authed())
-        .merge(workspace_api::router())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth::require_api_key,

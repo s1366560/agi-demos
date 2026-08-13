@@ -16,7 +16,11 @@ from src.domain.model.agent.conversation.errors import (
     ParticipantNotPresentError,
     SenderNotInRosterError,
 )
-from src.domain.model.workspace.workspace_agent import WorkspaceAgent
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityAgent,
+    WorkspaceAuthorityProfile,
+)
 from src.infrastructure.adapters.primary.web.routers.agent.participants import (
     CoordinatorSetRequest,
     FocusedAgentSetRequest,
@@ -47,76 +51,75 @@ def _conversation() -> Conversation:
     )
 
 
-def _binding() -> WorkspaceAgent:
-    return WorkspaceAgent(
-        id="binding-1",
+def _binding() -> WorkspaceAuthorityAgent:
+    return WorkspaceAuthorityAgent(
+        binding_id="binding-1",
         workspace_id="ws-1",
         agent_id="agent-1",
         display_name="Worker A",
+        label="alpha",
+        status="idle",
         is_active=True,
-        created_at=datetime.now(UTC),
     )
+
+
+def _request_with_authority(
+    *,
+    agents: tuple[WorkspaceAuthorityAgent, ...] = (_binding(),),
+    profile_error: Exception | None = None,
+) -> tuple[MagicMock, SimpleNamespace]:
+    request = MagicMock()
+    profile = WorkspaceAuthorityProfile(
+        workspace_id="ws-1",
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        name="Workspace",
+        created_by="user-1",
+        is_archived=False,
+        metadata={},
+    )
+    authority = SimpleNamespace(
+        get_profile=AsyncMock(
+            return_value=profile,
+            side_effect=profile_error,
+        ),
+        list_agents=AsyncMock(return_value=agents),
+    )
+    request.app.state.workspace_authority = authority
+    return request, authority
 
 
 @pytest.mark.asyncio
 async def test_roster_response_includes_workspace_binding_projection() -> None:
     conversation = _conversation()
-    workspace_agent_repo = MagicMock()
-    workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
-    container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
-    request = MagicMock()
-    db = MagicMock()
+    request, authority = _request_with_authority()
 
-    with patch(
-        "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-        return_value=container,
-    ):
-        response = await _roster_response(
-            conversation,
-            ConversationMode.MULTI_AGENT_SHARED,
-            request=request,
-            db=db,
-        )
+    response = await _roster_response(
+        conversation,
+        ConversationMode.MULTI_AGENT_SHARED,
+        request=request,
+        current_user=SimpleNamespace(id="user-1"),
+    )
 
     assert response.participant_agents == ["agent-1"]
     assert response.participant_bindings[0].workspace_agent_id == "binding-1"
     assert response.participant_bindings[0].display_name == "Worker A"
     assert response.participant_bindings[0].source == "workspace"
+    authority.list_agents.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_list_mention_candidates_includes_workspace_binding_projection() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="user-1")
-    request = MagicMock()
+    request, authority = _request_with_authority()
     db = MagicMock()
     current_user = SimpleNamespace(id="user-1")
-    mention_candidate = SimpleNamespace(
-        agent_id="agent-1",
-        workspace_agent_id="binding-1",
-        display_name="Worker A",
-        label="alpha",
-        status="idle",
-        is_active=True,
-        source="workspace",
-    )
-    container = SimpleNamespace(workspace_agent_repository=lambda: MagicMock())
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
-            AsyncMock(return_value=(MagicMock(), conversation, project)),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
-        patch(
-            "src.application.services.agent.workspace_mention_candidates.WorkspaceMentionCandidatesResolver",
-        ) as resolver_cls,
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+        AsyncMock(return_value=(MagicMock(), conversation, project)),
     ):
-        resolver_cls.return_value.resolve = AsyncMock(return_value=[mention_candidate])
-
         response = await list_mention_candidates(
             conversation_id="conv-1",
             request=request,
@@ -129,35 +132,21 @@ async def test_list_mention_candidates_includes_workspace_binding_projection() -
     assert response.workspace_id == "ws-1"
     assert response.source == "workspace"
     assert response.candidates[0].workspace_agent_id == "binding-1"
+    authority.get_profile.assert_awaited_once()
+    authority.list_agents.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_list_participants_allows_workspace_member_reader() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
-    request = MagicMock()
+    request, authority = _request_with_authority()
     db = MagicMock()
     current_user = SimpleNamespace(id="member-1")
-    workspace_member_repo = MagicMock()
-    workspace_member_repo.find_by_workspace_and_user = AsyncMock(
-        return_value=SimpleNamespace(id="member-binding")
-    )
-    workspace_agent_repo = MagicMock()
-    workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
-    container = SimpleNamespace(
-        workspace_member_repository=lambda: workspace_member_repo,
-        workspace_agent_repository=lambda: workspace_agent_repo,
-    )
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
-            AsyncMock(return_value=(MagicMock(), conversation, project)),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+        AsyncMock(return_value=(MagicMock(), conversation, project)),
     ):
         response = await list_participants(
             conversation_id="conv-1",
@@ -168,52 +157,21 @@ async def test_list_participants_allows_workspace_member_reader() -> None:
         )
 
     assert response.participant_bindings[0].display_name == "Worker A"
-    workspace_member_repo.find_by_workspace_and_user.assert_awaited_once_with(
-        workspace_id="ws-1",
-        user_id="member-1",
-    )
+    assert authority.get_profile.await_args.args[0].user_id == "member-1"
 
 
 @pytest.mark.asyncio
 async def test_list_mention_candidates_allows_workspace_member_reader() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
-    request = MagicMock()
+    request, authority = _request_with_authority()
     db = MagicMock()
     current_user = SimpleNamespace(id="member-1")
-    workspace_member_repo = MagicMock()
-    workspace_member_repo.find_by_workspace_and_user = AsyncMock(
-        return_value=SimpleNamespace(id="member-binding")
-    )
-    mention_candidate = SimpleNamespace(
-        agent_id="agent-1",
-        workspace_agent_id="binding-1",
-        display_name="Worker A",
-        label="alpha",
-        status="idle",
-        is_active=True,
-        source="workspace",
-    )
-    container = SimpleNamespace(
-        workspace_member_repository=lambda: workspace_member_repo,
-        workspace_agent_repository=lambda: MagicMock(),
-    )
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
-            AsyncMock(return_value=(MagicMock(), conversation, project)),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
-        patch(
-            "src.application.services.agent.workspace_mention_candidates.WorkspaceMentionCandidatesResolver",
-        ) as resolver_cls,
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+        AsyncMock(return_value=(MagicMock(), conversation, project)),
     ):
-        resolver_cls.return_value.resolve = AsyncMock(return_value=[mention_candidate])
-
         response = await list_mention_candidates(
             conversation_id="conv-1",
             request=request,
@@ -224,34 +182,27 @@ async def test_list_mention_candidates_allows_workspace_member_reader() -> None:
         )
 
     assert response.candidates[0].display_name == "Worker A"
-    workspace_member_repo.find_by_workspace_and_user.assert_awaited_once_with(
-        workspace_id="ws-1",
-        user_id="member-1",
-    )
+    assert authority.get_profile.await_args.args[0].user_id == "member-1"
 
 
 @pytest.mark.asyncio
 async def test_list_participants_rejects_non_workspace_member_reader() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
-    workspace_member_repo = MagicMock()
-    workspace_member_repo.find_by_workspace_and_user = AsyncMock(return_value=None)
-    container = SimpleNamespace(workspace_member_repository=lambda: workspace_member_repo)
+    request, _authority = _request_with_authority(
+        profile_error=WorkspaceAuthorityAccessDeniedError()
+    )
 
     with (
         patch(
             "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
             AsyncMock(return_value=(MagicMock(), conversation, project)),
         ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
         pytest.raises(HTTPException) as exc_info,
     ):
         await list_participants(
             conversation_id="conv-1",
-            request=MagicMock(),
+            request=request,
             current_user=SimpleNamespace(id="member-1"),
             tenant_id="tenant-1",
             db=MagicMock(),
@@ -265,26 +216,16 @@ async def test_list_participants_rejects_non_workspace_member_reader() -> None:
 async def test_set_focused_agent_updates_conversation_and_returns_roster() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="user-1")
-    request = MagicMock()
+    request, authority = _request_with_authority()
     db = MagicMock()
     db.commit = AsyncMock()
     current_user = SimpleNamespace(id="user-1")
     conv_repo = MagicMock()
     conv_repo.save = AsyncMock()
-    workspace_agent_repo = MagicMock()
-    workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
-    workspace_agent_repo.find_by_workspace = AsyncMock(return_value=[_binding()])
-    container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
-            AsyncMock(return_value=(conv_repo, conversation, project)),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+        AsyncMock(return_value=(conv_repo, conversation, project)),
     ):
         response = await set_focused_agent(
             conversation_id="conv-1",
@@ -299,26 +240,21 @@ async def test_set_focused_agent_updates_conversation_and_returns_roster() -> No
     db.commit.assert_awaited_once()
     assert conversation.focused_agent_id == "agent-1"
     assert response.focused_agent_id == "agent-1"
+    assert authority.list_agents.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_workspace_roster_projection_raises_http_422_for_unbound_participant() -> None:
     conversation = _conversation()
     conversation.participant_agents = ["agent-1", "ghost"]
-    workspace_agent_repo = MagicMock()
-    workspace_agent_repo.find_by_workspace = AsyncMock(return_value=[_binding()])
-    container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
-    request = MagicMock()
-    db = MagicMock()
+    request, _authority = _request_with_authority()
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
-            return_value=container,
-        ),
-        pytest.raises(HTTPException) as exc_info,
-    ):
-        await _assert_workspace_roster_projection(conversation, request, db)
+    with pytest.raises(HTTPException) as exc_info:
+        await _assert_workspace_roster_projection(
+            conversation,
+            SimpleNamespace(id="user-1"),
+            request,
+        )
 
     assert isinstance(exc_info.value, HTTPException)
     assert exc_info.value.status_code == 422

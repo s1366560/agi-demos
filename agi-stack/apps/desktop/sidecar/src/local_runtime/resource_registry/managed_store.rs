@@ -9,7 +9,6 @@ use super::{
         query_stored_managed_resource, resolve_mutation_value, stamp_managed_resource_value,
         validate_managed_resource_mutation, validate_mutation_authority,
     },
-    routing_policy::ensure_provider_policy_compatible,
     schema::iso_from_millis,
     DesktopSessionStore, ManagedResourceKind, ManagedResourceMutationCommand,
     ManagedResourceMutationReceipt, ManagedResourceVersion, ResourceRegistryError,
@@ -124,9 +123,6 @@ impl DesktopSessionStore {
                     actual: actual_revision,
                 });
             }
-        }
-        if kind == ManagedResourceKind::Provider && scope_kind == "tenant" {
-            ensure_provider_policy_compatible(&transaction, scope_id, id, status, &value)?;
         }
         let next_revision = current_revision.map_or(0, |revision| revision.saturating_add(1));
         let updated_at = iso_from_millis(now_ms);

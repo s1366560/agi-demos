@@ -35,18 +35,15 @@ def configure_workspace_access_verifier(verifier: WorkspaceAccessVerifier | None
 
 async def _has_workspace_member(context: MessageContext, workspace_id: str) -> bool:
     """Check whether the current websocket user still belongs to the workspace."""
-    if _workspace_access_verifier is not None:
-        return await _workspace_access_verifier.has_access(
-            WorkspaceAccessRequest(
-                tenant_id=context.tenant_id,
-                user_id=context.user_id,
-                workspace_id=workspace_id,
-            )
+    if _workspace_access_verifier is None:
+        return False
+    return await _workspace_access_verifier.has_access(
+        WorkspaceAccessRequest(
+            tenant_id=context.tenant_id,
+            user_id=context.user_id,
+            workspace_id=workspace_id,
         )
-    async with context.fresh_db_context() as scoped_context:
-        member_repo = scoped_context.get_scoped_container().workspace_member_repository()
-        member = await member_repo.find_by_workspace_and_user(workspace_id, scoped_context.user_id)
-    return member is not None
+    )
 
 
 async def _ensure_workspace_member(context: MessageContext, workspace_id: str) -> bool:

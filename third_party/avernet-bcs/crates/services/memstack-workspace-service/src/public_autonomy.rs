@@ -129,7 +129,8 @@ impl PublicWorkspaceAutonomyJudgment {
         output: Value,
         latency_ms: u64,
     ) -> Result<Self, PublicWorkspaceAutonomyJudgeContractError> {
-        if rationale.trim().is_empty() || agent_id.trim().is_empty() || tool_name.trim().is_empty() {
+        if rationale.trim().is_empty() || agent_id.trim().is_empty() || tool_name.trim().is_empty()
+        {
             return Err(PublicWorkspaceAutonomyJudgeContractError::BlankAuditField);
         }
         if let Some(selected) = selected_root_task_id.as_deref()
@@ -336,11 +337,7 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
         validate_context(context)?;
         let scope = autonomy_scope(context);
         self.store
-            .require_editor(
-                &scope,
-                context.user_id.as_str(),
-                context.is_superuser,
-            )
+            .require_editor(&scope, context.user_id.as_str(), context.is_superuser)
             .await?;
         let revision = match context.expected_revision {
             Some(revision) => revision,
@@ -393,7 +390,11 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
                 .await;
         }
 
-        if !force && self.all_candidates_cooling_down(&scope, &candidates).await? {
+        if !force
+            && self
+                .all_candidates_cooling_down(&scope, &candidates)
+                .await?
+        {
             return self
                 .commit(
                     context,
@@ -507,11 +508,8 @@ impl<'a> PublicWorkspaceAutonomyService<'a> {
         let response_value = serde_json::to_value(&response)?;
         let tick_id = deterministic_tick_id(context, idempotency_key.as_str());
         let audit = judgment.map(|judgment| WorkspaceAutonomyJudgmentAudit {
-            audit_id: Uuid::new_v5(
-                &AUTONOMY_NAMESPACE,
-                format!("audit\0{tick_id}").as_bytes(),
-            )
-            .to_string(),
+            audit_id: Uuid::new_v5(&AUTONOMY_NAMESPACE, format!("audit\0{tick_id}").as_bytes())
+                .to_string(),
             agent_id: judgment.agent_id().to_string(),
             tool_name: judgment.tool_name().to_string(),
             input: judgment.input().clone(),

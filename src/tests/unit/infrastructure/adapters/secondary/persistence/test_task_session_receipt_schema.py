@@ -40,27 +40,35 @@ class _OperationRecorder:
         self.events.append(("drop_table", name))
 
 
-def test_receipt_orm_keeps_ledger_at_root_and_tombstones_children() -> None:
+def test_receipt_orm_is_a_core_saga_journal_without_legacy_workspace_links() -> None:
     table = TaskSessionCreationReceiptModel.__table__
     assert table.columns["conversation_id"].nullable is True
     assert table.columns["initial_message_id"].nullable is True
+    assert table.columns["workspace_id"].foreign_keys == set()
+    assert table.columns["initial_message_id"].foreign_keys == set()
+    assert table.columns["core_receipt_id"].type.length == 128
+    assert table.columns["status"].server_default.arg == "pending"
+    assert table.columns["last_error"].nullable is True
+    assert table.columns["updated_at"].nullable is False
 
     delete_actions = {
         column_name: next(iter(table.columns[column_name].foreign_keys)).ondelete
         for column_name in (
             "tenant_id",
             "project_id",
-            "workspace_id",
             "conversation_id",
-            "initial_message_id",
         )
     }
     assert delete_actions == {
         "tenant_id": "CASCADE",
         "project_id": "CASCADE",
-        "workspace_id": "CASCADE",
         "conversation_id": "SET NULL",
-        "initial_message_id": "SET NULL",
+    }
+    assert "ix_task_session_receipts_status_updated" in {
+        index.name for index in table.indexes
+    }
+    assert "ck_task_session_receipts_status" in {
+        constraint.name for constraint in table.constraints
     }
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,17 +20,21 @@ from src.application.schemas.trust_schemas import (
 )
 from src.application.services.trust_service import TrustService
 from src.domain.model.auth.user import User
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityNotFoundError,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
-from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
-    _require_workspace_access,
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    get_workspace_authority,
+    require_workspace_scope,
+    workspace_core_unavailable_error,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    TrustPolicyModel,
-    WorkspaceModel,
-)
+from src.infrastructure.adapters.secondary.persistence.models import TrustPolicyModel
 from src.infrastructure.adapters.secondary.persistence.sql_decision_record_repository import (
     SqlDecisionRecordRepository,
 )
@@ -77,19 +81,23 @@ async def _require_tenant_access(
 
 
 async def _require_workspace_in_tenant(
-    db: AsyncSession,
+    request: Request,
+    current_user: User,
     tenant_id: str,
     workspace_id: str,
 ) -> None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(WorkspaceModel.id).where(
-                WorkspaceModel.id == workspace_id,
-                WorkspaceModel.tenant_id == tenant_id,
-            )
+    try:
+        profiles = await get_workspace_authority(request).resolve_profiles(
+            workspace_ids={workspace_id},
+            user_id=str(current_user.id),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
         )
-    )
-    if result.scalar_one_or_none() is None:
+    except (WorkspaceAuthorityNotFoundError, WorkspaceAuthorityAccessDeniedError) as exc:
+        raise HTTPException(status_code=404, detail=_("Workspace not found")) from exc
+    except WorkspaceAuthorityUnavailableError as exc:
+        raise workspace_core_unavailable_error() from exc
+    profile = profiles.get(workspace_id)
+    if profile is None or profile.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail=_("Workspace not found"))
 
 
@@ -101,13 +109,14 @@ async def _require_workspace_in_tenant(
 @router.get("/policies", response_model=TrustPolicyListResponse)
 async def list_trust_policies(
     tenant_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
     agent_instance_id: str | None = Query(default=None),
 ) -> TrustPolicyListResponse:
     await _require_tenant_access(db, current_user, tenant_id)
-    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, workspace_id)
     service = _build_service(db)
     items = await service.list_policies(workspace_id, agent_instance_id=agent_instance_id)
     return TrustPolicyListResponse(items=[_policy_response(p) for p in items])
@@ -117,11 +126,12 @@ async def list_trust_policies(
 async def create_trust_policy(
     tenant_id: str,
     body: TrustPolicyCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TrustPolicyResponse:
     await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
-    await _require_workspace_in_tenant(db, tenant_id, body.workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, body.workspace_id)
     service = _build_service(db)
     policy = await service.create_policy(
         tenant_id=tenant_id,
@@ -139,12 +149,13 @@ async def create_trust_policy(
 async def revoke_trust_policy(
     tenant_id: str,
     policy_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
 ) -> TrustPolicyResponse:
     await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
-    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, workspace_id)
     scoped_policy = await db.execute(
         refresh_select_statement(
             select(TrustPolicyModel.id).where(
@@ -169,16 +180,17 @@ async def list_workspace_tool_grants(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TrustPolicyListResponse:
-    await _require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_manager=False,
+    await require_workspace_scope(
+        request,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
     )
     policies = await _build_service(db).list_policies(workspace_id)
     return TrustPolicyListResponse(
@@ -192,16 +204,18 @@ async def revoke_workspace_tool_grant(
     project_id: str,
     workspace_id: str,
     policy_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TrustPolicyResponse:
-    await _require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_manager=True,
+    await require_workspace_scope(
+        request,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        allowed_roles=frozenset({"manager", "owner"}),
     )
     result = await db.execute(
         refresh_select_statement(
@@ -226,6 +240,7 @@ async def revoke_workspace_tool_grant(
 @router.get("/policies/check", response_model=TrustCheckResponse)
 async def check_trust(
     tenant_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
@@ -233,7 +248,7 @@ async def check_trust(
     action_type: str = Query(...),
 ) -> TrustCheckResponse:
     await _require_tenant_access(db, current_user, tenant_id)
-    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, workspace_id)
     service = _build_service(db)
     trusted = await service.check_trust(workspace_id, agent_instance_id, action_type)
     return TrustCheckResponse(trusted=trusted)
@@ -252,11 +267,12 @@ async def check_trust(
 async def submit_approval_request(
     tenant_id: str,
     body: ApprovalRequestCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DecisionRecordResponse:
     await _require_tenant_access(db, current_user, tenant_id)
-    await _require_workspace_in_tenant(db, tenant_id, body.workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, body.workspace_id)
     service = _build_service(db)
     record = await service.submit_approval(
         tenant_id=tenant_id,
@@ -299,6 +315,7 @@ async def resolve_approval_request(
 @router.get("/decision-records", response_model=DecisionRecordListResponse)
 async def list_decision_records(
     tenant_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
@@ -306,7 +323,7 @@ async def list_decision_records(
     decision_type: str | None = Query(default=None),
 ) -> DecisionRecordListResponse:
     await _require_tenant_access(db, current_user, tenant_id)
-    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, workspace_id)
     service = _build_service(db)
     items = await service.list_decision_records(
         workspace_id, agent_id=agent_id, decision_type=decision_type
@@ -321,12 +338,13 @@ async def list_decision_records(
 async def get_decision_record(
     tenant_id: str,
     record_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
 ) -> DecisionRecordResponse:
     await _require_tenant_access(db, current_user, tenant_id)
-    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
+    await _require_workspace_in_tenant(request, current_user, tenant_id, workspace_id)
     service = _build_service(db)
     record = await service.get_decision_record(record_id)
     if record is None or record.tenant_id != tenant_id or record.workspace_id != workspace_id:

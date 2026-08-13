@@ -7,8 +7,6 @@ from unittest.mock import Mock
 import pytest
 
 from src.configuration.di_container import DIContainer
-from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
-from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
 
 
 @pytest.mark.unit
@@ -44,10 +42,8 @@ class TestDIContainer:
         assert container._graph_service == mock_graph
 
     @pytest.mark.asyncio
-    async def test_workspace_orchestrator_uses_sql_repository_when_scoped_with_db(self, test_db):
-        """Workspace V2 should use the durable SQL path in request-scoped containers."""
+    async def test_workspace_orchestrator_is_retired_when_scoped_with_db(self, test_db):
         scoped_container = DIContainer().with_db(test_db)
-        orchestrator = scoped_container.workspace_orchestrator()
 
-        assert isinstance(orchestrator._repo, SqlPlanRepository)
-        assert not isinstance(orchestrator._repo, InMemoryPlanRepository)
+        with pytest.raises(RuntimeError, match="Avernet Workspace Core"):
+            scoped_container.workspace_orchestrator()

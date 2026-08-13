@@ -1,4 +1,4 @@
-"""Regression coverage for workspace planner terminal tool registration."""
+"""Regression coverage for retired legacy Workspace Plan tool registration."""
 
 from __future__ import annotations
 
@@ -7,17 +7,22 @@ from types import SimpleNamespace
 import pytest
 
 from src.infrastructure.agent.state import agent_worker_state
-from src.infrastructure.agent.tools.workspace_planning_contract import (
-    WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+
+_RETIRED_WORKSPACE_PLAN_TOOLS = frozenset(
+    {
+        "workspace_submit_iteration_review",
+        "workspace_submit_planning_contract",
+        "workspace_submit_supervisor_decision",
+        "workspace_submit_verification_judgment",
+        "workspace_submit_worktree_preparation",
+    }
 )
 
 
 @pytest.mark.unit
-async def test_get_or_create_tools_exposes_planner_contract_without_agent_orchestrator(
+async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Planner kickoff must see its terminal contract tool before multi-agent bootstraps."""
-
     async def _async_noop(*args: object, **kwargs: object) -> None:
         return None
 
@@ -63,7 +68,7 @@ async def test_get_or_create_tools_exposes_planner_contract_without_agent_orches
         redis_client=object(),
     )
 
-    assert WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME in tools
+    assert _RETIRED_WORKSPACE_PLAN_TOOLS.isdisjoint(tools)
 
 
 @pytest.mark.unit

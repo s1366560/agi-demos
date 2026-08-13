@@ -17,6 +17,7 @@ from src.application.services.project_my_work_service import (
     HITLRequestAuthority,
     WorkspaceAttemptAuthority,
 )
+from src.domain.ports.services.workspace_authority_port import WorkspaceAuthorityPort
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
@@ -27,19 +28,23 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     UserProject,
     UserTenant,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-    WorkspaceTaskModel,
-    WorkspaceTaskSessionAttemptModel,
 )
 
 
 class SqlProjectMyWorkReader:
-    """Read only authorities within the caller's complete resource scope."""
+    """Read platform authorities and resolve Workspace metadata through Avernet Core."""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        workspace_authority: WorkspaceAuthorityPort,
+        *,
+        is_superuser: bool = False,
+    ) -> None:
         super().__init__()
         self._db = db
+        self._workspace_authority = workspace_authority
+        self._is_superuser = is_superuser
 
     async def has_project_access(self, *, project_id: str, user_id: str) -> bool:
         statement = (
@@ -70,125 +75,8 @@ class SqlProjectMyWorkReader:
         project_id: str,
         user_id: str,
     ) -> list[WorkspaceAttemptAuthority]:
-        attempt = WorkspaceTaskSessionAttemptModel
-        task = WorkspaceTaskModel
-        workspace = WorkspaceModel
-        conversation = Conversation
-        latest_plan_tasks = (
-            select(AgentPlanVersionModel.tasks_json)
-            .where(AgentPlanVersionModel.conversation_id == conversation.id)
-            .order_by(AgentPlanVersionModel.version.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-
-        ranked_attempts = select(
-            attempt.id.label("authority_id"),
-            attempt.workspace_task_id,
-            attempt.conversation_id,
-            attempt.workspace_id,
-            attempt.status,
-            attempt.attempt_number,
-            attempt.created_at,
-            attempt.updated_at,
-            func.row_number()
-            .over(
-                partition_by=attempt.workspace_task_id,
-                order_by=(
-                    attempt.attempt_number.desc(),
-                    attempt.created_at.desc(),
-                    attempt.id.asc(),
-                ),
-            )
-            .label("authority_rank"),
-        ).subquery()
-        statement = (
-            select(
-                ranked_attempts.c.authority_id,
-                ranked_attempts.c.conversation_id,
-                ranked_attempts.c.workspace_id,
-                workspace.project_id,
-                task.title,
-                ranked_attempts.c.status,
-                ranked_attempts.c.attempt_number,
-                conversation.agent_config.label("conversation_agent_config"),
-                workspace.metadata_json.label("workspace_metadata"),
-                workspace.name.label("workspace_name"),
-                latest_plan_tasks.label("plan_tasks"),
-                ranked_attempts.c.created_at,
-                ranked_attempts.c.updated_at,
-            )
-            .select_from(ranked_attempts)
-            .join(
-                task,
-                and_(
-                    task.id == ranked_attempts.c.workspace_task_id,
-                    task.workspace_id == ranked_attempts.c.workspace_id,
-                ),
-            )
-            .join(workspace, workspace.id == ranked_attempts.c.workspace_id)
-            .join(
-                conversation,
-                and_(
-                    conversation.id == ranked_attempts.c.conversation_id,
-                    conversation.project_id == workspace.project_id,
-                    conversation.tenant_id == workspace.tenant_id,
-                    conversation.workspace_id == workspace.id,
-                    conversation.linked_workspace_task_id == task.id,
-                    conversation.user_id == user_id,
-                ),
-            )
-            .join(
-                Project,
-                and_(
-                    Project.id == workspace.project_id,
-                    Project.tenant_id == workspace.tenant_id,
-                ),
-            )
-            .where(
-                ranked_attempts.c.authority_rank == 1,
-                Project.id == project_id,
-                workspace.is_archived.is_(False),
-                task.archived_at.is_(None),
-                exists(
-                    select(UserProject.id).where(
-                        UserProject.project_id == Project.id,
-                        UserProject.user_id == user_id,
-                    )
-                ),
-                exists(
-                    select(UserTenant.id).where(
-                        UserTenant.tenant_id == Project.tenant_id,
-                        UserTenant.user_id == user_id,
-                    )
-                ),
-                exists(
-                    select(WorkspaceMemberModel.id).where(
-                        WorkspaceMemberModel.workspace_id == workspace.id,
-                        WorkspaceMemberModel.user_id == user_id,
-                    )
-                ),
-            )
-        )
-        result = await self._db.execute(refresh_select_statement(statement))
-        return [
-            WorkspaceAttemptAuthority(
-                id=row.authority_id,
-                conversation_id=row.conversation_id,
-                workspace_id=row.workspace_id,
-                project_id=row.project_id,
-                title=row.title,
-                status=row.status,
-                attempt_number=row.attempt_number,
-                conversation_agent_config=self._json_object(row.conversation_agent_config),
-                workspace_metadata=self._json_object(row.workspace_metadata),
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                workspace_name=row.workspace_name,
-                plan_tasks=self._json_task_list(row.plan_tasks),
-            )
-            for row in result.all()
-        ]
+        """Legacy SQL attempt projections are no longer a Workspace authority."""
+        return []
 
     async def list_pending_hitl_requests(
         self,
@@ -198,7 +86,6 @@ class SqlProjectMyWorkReader:
         now: datetime,
     ) -> list[HITLRequestAuthority]:
         conversation = Conversation
-        workspace = WorkspaceModel
         latest_plan_tasks = (
             select(AgentPlanVersionModel.tasks_json)
             .where(AgentPlanVersionModel.conversation_id == conversation.id)
@@ -213,11 +100,10 @@ class SqlProjectMyWorkReader:
                 HITLRequest.conversation_id,
                 conversation.workspace_id,
                 HITLRequest.project_id,
+                HITLRequest.tenant_id,
                 conversation.title,
                 conversation.agent_config.label("conversation_agent_config"),
                 HITLRequest.request_metadata,
-                workspace.metadata_json.label("workspace_metadata"),
-                workspace.name.label("workspace_name"),
                 latest_plan_tasks.label("plan_tasks"),
                 HITLRequest.created_at,
                 HITLRequest.expires_at,
@@ -233,23 +119,15 @@ class SqlProjectMyWorkReader:
                 ),
             )
             .join(
-                workspace,
-                and_(
-                    workspace.id == conversation.workspace_id,
-                    workspace.project_id == conversation.project_id,
-                    workspace.tenant_id == conversation.tenant_id,
-                ),
-            )
-            .join(
                 Project,
                 and_(
-                    Project.id == workspace.project_id,
-                    Project.tenant_id == workspace.tenant_id,
+                    Project.id == conversation.project_id,
+                    Project.tenant_id == conversation.tenant_id,
                 ),
             )
             .where(
                 Project.id == project_id,
-                workspace.is_archived.is_(False),
+                conversation.workspace_id.is_not(None),
                 HITLRequest.status == "pending",
                 HITLRequest.expires_at > now,
                 or_(HITLRequest.user_id.is_(None), HITLRequest.user_id == user_id),
@@ -265,16 +143,16 @@ class SqlProjectMyWorkReader:
                         UserTenant.user_id == user_id,
                     )
                 ),
-                exists(
-                    select(WorkspaceMemberModel.id).where(
-                        WorkspaceMemberModel.workspace_id == workspace.id,
-                        WorkspaceMemberModel.user_id == user_id,
-                    )
-                ),
             )
             .order_by(HITLRequest.created_at.desc(), HITLRequest.id.desc())
         )
         result = await self._db.execute(refresh_select_statement(statement))
+        rows = result.all()
+        profiles = await self._workspace_authority.resolve_profiles(
+            workspace_ids={str(row.workspace_id) for row in rows if row.workspace_id},
+            user_id=user_id,
+            is_superuser=self._is_superuser,
+        )
         return [
             HITLRequestAuthority(
                 id=row.authority_id,
@@ -285,13 +163,16 @@ class SqlProjectMyWorkReader:
                 title=row.title,
                 conversation_agent_config=self._json_object(row.conversation_agent_config),
                 request_metadata=self._json_object(row.request_metadata),
-                workspace_metadata=self._json_object(row.workspace_metadata),
+                workspace_metadata=profiles[row.workspace_id].metadata,
                 created_at=row.created_at,
                 expires_at=row.expires_at,
-                workspace_name=row.workspace_name,
+                workspace_name=profiles[row.workspace_id].name,
                 plan_tasks=self._json_task_list(row.plan_tasks),
             )
-            for row in result.all()
+            for row in rows
+            if row.workspace_id in profiles
+            and profiles[row.workspace_id].tenant_id == row.tenant_id
+            and profiles[row.workspace_id].project_id == row.project_id
         ]
 
     async def list_agent_runs(
@@ -301,7 +182,6 @@ class SqlProjectMyWorkReader:
         user_id: str,
     ) -> list[AgentRunAuthority]:
         """Return the latest visible run per conversation with its persisted summary."""
-
         run = AgentPlanRunModel
         ranked_runs = (
             select(
@@ -327,7 +207,6 @@ class SqlProjectMyWorkReader:
             .subquery()
         )
         conversation = Conversation
-        workspace = WorkspaceModel
         summary = AgentRunSummaryModel
         statement = (
             select(
@@ -336,7 +215,6 @@ class SqlProjectMyWorkReader:
                 conversation.agent_config,
                 conversation.tenant_id,
                 conversation.workspace_id,
-                workspace.name.label("workspace_name"),
                 summary.summary_state,
                 summary.reason_code,
                 summary.status.label("summary_status"),
@@ -366,12 +244,11 @@ class SqlProjectMyWorkReader:
                     conversation.user_id == user_id,
                 ),
             )
-            .outerjoin(
-                workspace,
+            .join(
+                Project,
                 and_(
-                    workspace.id == conversation.workspace_id,
-                    workspace.project_id == conversation.project_id,
-                    workspace.tenant_id == conversation.tenant_id,
+                    Project.id == conversation.project_id,
+                    Project.tenant_id == conversation.tenant_id,
                 ),
             )
             .outerjoin(summary, summary.run_id == ranked_runs.c.run_id)
@@ -380,34 +257,34 @@ class SqlProjectMyWorkReader:
                 ranked_runs.c.project_id == project_id,
                 exists(
                     select(UserProject.id).where(
-                        UserProject.project_id == project_id,
+                        UserProject.project_id == Project.id,
                         UserProject.user_id == user_id,
                     )
                 ),
                 exists(
                     select(UserTenant.id).where(
-                        UserTenant.tenant_id == conversation.tenant_id,
+                        UserTenant.tenant_id == Project.tenant_id,
                         UserTenant.user_id == user_id,
                     )
-                ),
-                or_(
-                    conversation.workspace_id.is_(None),
-                    and_(
-                        workspace.id.is_not(None),
-                        workspace.is_archived.is_(False),
-                        exists(
-                            select(WorkspaceMemberModel.id).where(
-                                WorkspaceMemberModel.workspace_id == workspace.id,
-                                WorkspaceMemberModel.user_id == user_id,
-                            )
-                        ),
-                    ),
                 ),
             )
         )
         result = await self._db.execute(refresh_select_statement(statement))
+        rows = result.all()
+        profiles = await self._workspace_authority.resolve_profiles(
+            workspace_ids={str(row.workspace_id) for row in rows if row.workspace_id},
+            user_id=user_id,
+            is_superuser=self._is_superuser,
+        )
         authorities: list[AgentRunAuthority] = []
-        for row in result.all():
+        for row in rows:
+            profile = profiles.get(row.workspace_id) if row.workspace_id else None
+            if row.workspace_id and (
+                profile is None
+                or profile.tenant_id != row.tenant_id
+                or profile.project_id != row.project_id
+            ):
+                continue
             config = self._json_object(row.agent_config) or {}
             mode = config.get("capability_mode")
             capability_mode = mode if mode in {"work", "code"} else None
@@ -440,7 +317,7 @@ class SqlProjectMyWorkReader:
                     created_at=row.created_at,
                     updated_at=row.updated_at,
                     completed_at=row.completed_at,
-                    workspace_name=row.workspace_name,
+                    workspace_name=profile.name if profile else None,
                     capability_mode=cast(MyWorkCapabilityMode | None, capability_mode),
                     summary_state=row.summary_state or "partial",
                     summary_reason_code=row.reason_code

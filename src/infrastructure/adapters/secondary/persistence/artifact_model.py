@@ -64,7 +64,6 @@ class ArtifactModel(Base):
     )
     workspace_id: Mapped[str | None] = mapped_column(
         String(64),
-        ForeignKey("workspaces.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

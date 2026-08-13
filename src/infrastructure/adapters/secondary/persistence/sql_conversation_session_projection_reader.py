@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.conversation_session_projection_service import (
@@ -24,9 +24,14 @@ from src.application.services.conversation_session_projection_service import (
     ToolExecutionPageAuthority,
     WorkspaceAttemptAuthority,
     WorkspacePlanContextAuthority,
-    WorkspacePlanNodeAuthority,
 )
 from src.application.services.hitl_response_contract import HITL_PENDING_AUTHORITY_REVISION
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityNotFoundError,
+    WorkspaceAuthorityPort,
+    WorkspaceAuthorityScope,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -35,16 +40,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentTaskModel,
     Conversation,
     HITLRequest,
-    PlanModel,
-    PlanNodeModel,
     Project,
     ToolExecutionRecord,
     UserProject,
     UserTenant,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-    WorkspaceTaskModel,
-    WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.agent.hitl.utils import (
     contains_secret_like_text,
@@ -61,9 +60,17 @@ class SqlConversationSessionProjectionReader:
     _HITL_KINDS = frozenset({"clarification", "decision", "env_var", "permission", "a2ui_action"})
     _OPTION_KEYS = frozenset({"id", "label", "description", "recommended", "is_default"})
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        workspace_authority: WorkspaceAuthorityPort,
+        *,
+        is_superuser: bool = False,
+    ) -> None:
         super().__init__()
         self._db = db
+        self._workspace_authority = workspace_authority
+        self._is_superuser = is_superuser
 
     async def load(
         self,
@@ -122,15 +129,6 @@ class SqlConversationSessionProjectionReader:
         workspace_id: str | None,
         user_id: str,
     ) -> ConversationAuthority | None:
-        workspace_name = (
-            select(WorkspaceModel.name)
-            .where(
-                WorkspaceModel.id == Conversation.workspace_id,
-                WorkspaceModel.tenant_id == Conversation.tenant_id,
-                WorkspaceModel.project_id == Conversation.project_id,
-            )
-            .scalar_subquery()
-        )
         conditions = [
             Conversation.id == conversation_id,
             Conversation.tenant_id == tenant_id,
@@ -154,57 +152,54 @@ class SqlConversationSessionProjectionReader:
                     UserTenant.user_id == user_id,
                 )
             ),
-            or_(
-                Conversation.linked_workspace_task_id.is_(None),
-                exists(
-                    select(WorkspaceTaskModel.id).where(
-                        WorkspaceTaskModel.id == Conversation.linked_workspace_task_id,
-                        WorkspaceTaskModel.workspace_id == Conversation.workspace_id,
-                        WorkspaceTaskModel.archived_at.is_(None),
-                    )
-                ),
-            ),
         ]
         if workspace_id is None:
             conditions.append(Conversation.workspace_id.is_(None))
         else:
-            conditions.extend(
-                [
-                    Conversation.workspace_id == workspace_id,
-                    exists(
-                        select(WorkspaceModel.id).where(
-                            WorkspaceModel.id == workspace_id,
-                            WorkspaceModel.tenant_id == tenant_id,
-                            WorkspaceModel.project_id == project_id,
-                            WorkspaceModel.is_archived.is_(False),
-                        )
-                    ),
-                    exists(
-                        select(WorkspaceMemberModel.id).where(
-                            WorkspaceMemberModel.workspace_id == workspace_id,
-                            WorkspaceMemberModel.user_id == user_id,
-                        )
-                    ),
-                ]
-            )
+            conditions.append(Conversation.workspace_id == workspace_id)
         result = await self._db.execute(
-            refresh_select_statement(
-                select(Conversation, workspace_name.label("workspace_name"))
-                .where(*conditions)
-                .limit(1)
-            )
+            refresh_select_statement(select(Conversation).where(*conditions).limit(1))
         )
-        row = result.one_or_none()
-        if row is None:
+        record = result.scalar_one_or_none()
+        if record is None:
             return None
-        record = row[0]
+        workspace_name: str | None = None
+        if workspace_id is not None:
+            scope = WorkspaceAuthorityScope(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                is_superuser=self._is_superuser,
+            )
+            try:
+                profile = await self._workspace_authority.get_profile(scope)
+                task_linked = (
+                    True
+                    if record.linked_workspace_task_id is None
+                    else await self._workspace_authority.has_task(
+                        scope,
+                        record.linked_workspace_task_id,
+                    )
+                )
+            except (WorkspaceAuthorityAccessDeniedError, WorkspaceAuthorityNotFoundError):
+                return None
+            if (
+                profile.workspace_id != workspace_id
+                or profile.tenant_id != tenant_id
+                or profile.project_id != project_id
+                or profile.is_archived
+                or not task_linked
+            ):
+                return None
+            workspace_name = profile.name
         return ConversationAuthority(
             id=record.id,
             tenant_id=record.tenant_id,
             project_id=record.project_id,
             workspace_id=record.workspace_id,
             linked_workspace_task_id=record.linked_workspace_task_id,
-            workspace_name=row.workspace_name,
+            workspace_name=workspace_name,
             user_id=record.user_id,
             title=record.title,
             summary=record.summary,
@@ -223,46 +218,9 @@ class SqlConversationSessionProjectionReader:
     async def _load_attempts(
         self, conversation: ConversationAuthority
     ) -> tuple[WorkspaceAttemptAuthority, ...]:
-        if conversation.workspace_id is None or conversation.linked_workspace_task_id is None:
-            return ()
-        attempt = WorkspaceTaskSessionAttemptModel
-        result = await self._db.execute(
-            refresh_select_statement(
-                select(attempt)
-                .where(
-                    attempt.conversation_id == conversation.id,
-                    attempt.workspace_id == conversation.workspace_id,
-                    attempt.workspace_task_id == conversation.linked_workspace_task_id,
-                )
-                .order_by(
-                    attempt.attempt_number.desc(),
-                    attempt.created_at.desc(),
-                    attempt.id.desc(),
-                )
-            )
-        )
-        return tuple(
-            WorkspaceAttemptAuthority(
-                id=item.id,
-                workspace_task_id=item.workspace_task_id,
-                root_goal_task_id=item.root_goal_task_id,
-                workspace_id=item.workspace_id,
-                conversation_id=cast(str, item.conversation_id),
-                attempt_number=item.attempt_number,
-                status=item.status,
-                worker_agent_id=item.worker_agent_id,
-                leader_agent_id=item.leader_agent_id,
-                candidate_summary=item.candidate_summary,
-                candidate_artifact_refs=self._string_tuple(item.candidate_artifacts_json),
-                candidate_verification_refs=self._string_tuple(item.candidate_verifications_json),
-                leader_feedback=item.leader_feedback,
-                adjudication_reason=item.adjudication_reason,
-                created_at=item.created_at,
-                updated_at=item.updated_at,
-                completed_at=item.completed_at,
-            )
-            for item in result.scalars().all()
-        )
+        """Do not consult the retired platform Workspace attempt table."""
+        _ = conversation
+        return ()
 
     async def _load_runs(
         self, conversation: ConversationAuthority
@@ -362,48 +320,9 @@ class SqlConversationSessionProjectionReader:
     async def _load_workspace_plan_context(
         self, conversation: ConversationAuthority
     ) -> WorkspacePlanContextAuthority | None:
-        if conversation.workspace_id is None or conversation.linked_workspace_task_id is None:
-            return None
-        plan_result = await self._db.execute(
-            refresh_select_statement(
-                select(PlanModel)
-                .where(
-                    PlanModel.workspace_id == conversation.workspace_id,
-                    exists(
-                        select(PlanNodeModel.id).where(
-                            PlanNodeModel.plan_id == PlanModel.id,
-                            PlanNodeModel.workspace_task_id
-                            == conversation.linked_workspace_task_id,
-                        )
-                    ),
-                )
-                .order_by(PlanModel.created_at.desc(), PlanModel.id.desc())
-                .limit(1)
-            )
-        )
-        plan = plan_result.scalar_one_or_none()
-        if plan is None:
-            return None
-        node_result = await self._db.execute(
-            refresh_select_statement(
-                select(PlanNodeModel)
-                .where(
-                    PlanNodeModel.plan_id == plan.id,
-                    PlanNodeModel.workspace_task_id == conversation.linked_workspace_task_id,
-                )
-                .order_by(PlanNodeModel.created_at.asc(), PlanNodeModel.id.asc())
-            )
-        )
-        nodes = tuple(self._plan_node(item) for item in node_result.scalars().all())
-        return WorkspacePlanContextAuthority(
-            id=plan.id,
-            workspace_id=plan.workspace_id,
-            goal_id=plan.goal_id,
-            status=plan.status,
-            created_at=plan.created_at,
-            updated_at=plan.updated_at,
-            linked_nodes=nodes,
-        )
+        """Do not query the retired platform Workspace Plan projection."""
+        _ = conversation
+        return None
 
     async def _load_pending_hitl(
         self,
@@ -542,25 +461,6 @@ class SqlConversationSessionProjectionReader:
             items=items,
             total=int(rows[0].record_total) if rows else 0,
             failed_total=int(rows[0].failed_total) if rows else 0,
-        )
-
-    @staticmethod
-    def _plan_node(record: PlanNodeModel) -> WorkspacePlanNodeAuthority:
-        return WorkspacePlanNodeAuthority(
-            id=record.id,
-            plan_id=record.plan_id,
-            workspace_task_id=cast(str, record.workspace_task_id),
-            kind=record.kind,
-            title=record.title,
-            description=record.description,
-            intent=record.intent,
-            execution=record.execution,
-            progress=dict(record.progress),
-            assignee_agent_id=record.assignee_agent_id,
-            current_attempt_id=record.current_attempt_id,
-            created_at=record.created_at,
-            updated_at=record.updated_at,
-            completed_at=record.completed_at,
         )
 
     @classmethod

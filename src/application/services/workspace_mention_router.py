@@ -19,9 +19,6 @@ from src.domain.ports.repositories.workspace.workspace_agent_repository import (
 from src.domain.ports.repositories.workspace.workspace_member_repository import (
     WorkspaceMemberRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_LEADER,
     WORKSPACE_SESSION_ROLE_KEY,
@@ -33,7 +30,6 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REMEDIATION_STATUS,
     ROOT_GOAL_TASK_ID,
-    TASK_ROLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,51 +106,8 @@ async def _resolve_workspace_authority_context(
     workspace_id: str,
     conversation_scope: str | None,
 ) -> dict[str, Any] | None:
-    async with db_session_factory() as meta_db:
-        try:
-            objective_id: str | None = None
-            if conversation_scope and conversation_scope.startswith("objective:"):
-                objective_id = conversation_scope.split(":", 1)[1].strip() or None
-            root_goal_task_id: str | None = None
-            task_repo = SqlWorkspaceTaskRepository(meta_db)
-            if objective_id:
-                root_task = await task_repo.find_root_by_objective_id(workspace_id, objective_id)
-                if root_task is not None:
-                    root_goal_task_id = root_task.id
-            if root_goal_task_id is None:
-                tasks = await task_repo.find_by_workspace(
-                    workspace_id=workspace_id,
-                    limit=100,
-                    offset=0,
-                )
-                root_tasks = [
-                    task
-                    for task in tasks
-                    if task.metadata.get(TASK_ROLE) == "goal_root"
-                    and task.archived_at is None
-                    and getattr(task.status, "value", task.status) != "done"
-                ]
-                if len(root_tasks) == 1:
-                    root_goal_task_id = root_tasks[0].id
-        except Exception:
-            logger.warning(
-                "Workspace authority context resolution failed",
-                exc_info=True,
-                extra={"workspace_id": workspace_id, "conversation_scope": conversation_scope},
-            )
-            return None
-        if root_goal_task_id:
-            workspace_binding = {
-                "workspace_id": workspace_id,
-                ROOT_GOAL_TASK_ID: root_goal_task_id,
-            }
-            return {
-                "context_type": "workspace_worker_runtime",
-                "workspace_binding": workspace_binding,
-                "workspace_id": workspace_id,
-                ROOT_GOAL_TASK_ID: root_goal_task_id,
-                "task_authority": "workspace",
-            }
+    del db_session_factory, workspace_id, conversation_scope
+    logger.debug("Legacy Workspace mention authority context is retired; Core owns task linkage")
     return None
 
 

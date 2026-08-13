@@ -14,9 +14,7 @@ Migration Benefits:
 - Bulk operations support
 """
 
-import logging
 import re
-import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import cast, override
@@ -34,16 +32,11 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent as DBAgentExecutionEvent,
     Conversation as DBConversation,
-    PlanNodeModel,
-    WorkspacePlanEventModel,
 )
 
-logger = logging.getLogger(__name__)
+__all__ = ["SqlAgentExecutionEventRepository", "_workspace_progress_summary"]
 
 _MESSAGE_EVENT_TYPES = ("user_message", "assistant_message")
-_WORKSPACE_PROGRESS_SOURCE_EVENT_TYPES = frozenset(
-    {"assistant_message", "act", "observe", "error", "complete"}
-)
 _WORKSPACE_PROGRESS_NOTE_MAX = 320
 _WORKSPACE_PROGRESS_MARKER_CONTEXT = 180
 _WORKSPACE_PROGRESS_MARKER_LEAD = 80
@@ -83,9 +76,7 @@ _PROGRESS_ERROR_MARKERS = (
 )
 type JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
-_JWT_PATTERN = re.compile(
-    r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
-)
+_JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")
 _MEMSTACK_API_KEY_PATTERN = re.compile(r"\bms_sk_[A-Za-z0-9_-]{32,}\b")
 _BEARER_TOKEN_PATTERN = re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]{20,}")
 
@@ -104,10 +95,7 @@ def _sanitize_json_for_postgres(value: object) -> JsonValue:
     if isinstance(value, list):
         return [_sanitize_json_for_postgres(item) for item in value]
     if isinstance(value, Mapping):
-        return {
-            str(key): _sanitize_json_for_postgres(item)
-            for key, item in value.items()
-        }
+        return {str(key): _sanitize_json_for_postgres(item) for key, item in value.items()}
     return cast(JsonValue, value)
 
 
@@ -141,7 +129,9 @@ async def apply_conversation_event_projection_delta(
         return
 
     _ = await session.execute(
-        refresh_select_statement(update(DBConversation).where(DBConversation.id == conversation_id).values(**values))
+        refresh_select_statement(
+            update(DBConversation).where(DBConversation.id == conversation_id).values(**values)
+        )
     )
 
 
@@ -155,185 +145,12 @@ async def apply_workspace_event_progress_projection(
     event_time_us: int | None,
     created_at: datetime,
 ) -> None:
-    """Mirror live workspace agent events into the durable plan progress surface."""
-    if event_type not in _WORKSPACE_PROGRESS_SOURCE_EVENT_TYPES:
-        return
-    summary = _workspace_progress_summary(event_type, event_data)
-    if not summary:
-        return
+    """Do not mirror platform Agent events into retired Workspace SQL tables.
 
-    try:
-        async with session.begin_nested():
-            await _apply_workspace_event_progress_projection(
-                session,
-                conversation_id=conversation_id,
-                event_id=event_id,
-                event_type=event_type,
-                event_time_us=event_time_us,
-                created_at=created_at,
-                summary=summary,
-            )
-    except Exception:
-        logger.warning(
-            "Failed to project workspace agent event progress "
-            "(conversation_id=%s event_id=%s event_type=%s)",
-            conversation_id,
-            event_id,
-            event_type,
-            exc_info=True,
-        )
-
-
-async def _apply_workspace_event_progress_projection(
-    session: AsyncSession,
-    *,
-    conversation_id: str,
-    event_id: str,
-    event_type: str,
-    event_time_us: int | None,
-    created_at: datetime,
-    summary: str,
-) -> None:
-    conversation = await _workspace_projection_conversation(session, conversation_id)
-    if conversation is None:
-        return
-    conversation_meta = _mapping_or_empty(conversation.meta)
-    workspace_id = _string_or_none(conversation.workspace_id) or _string_or_none(
-        conversation_meta.get("workspace_id")
-    )
-    task_id = _string_or_none(conversation.linked_workspace_task_id) or _string_or_none(
-        conversation_meta.get("linked_workspace_task_id")
-        or conversation_meta.get("workspace_task_id")
-    )
-    if not workspace_id or not task_id:
-        return
-
-    attempt_id = _string_or_none(
-        conversation_meta.get("attempt_id") or conversation_meta.get("current_attempt_id")
-    )
-    node = await _workspace_projection_node(
-        session,
-        task_id=task_id,
-        attempt_id=attempt_id,
-    )
-    if node is None:
-        return
-
-    node_metadata = dict(node.metadata_json or {})
-    if node_metadata.get("latest_agent_event_progress_id") == event_id:
-        return
-
-    now = _aware_datetime(created_at)
-    existing_progress = dict(node.progress or {})
-    percent = _bounded_percent(existing_progress.get("percent"))
-    actor_id = _workspace_projection_actor_id(conversation, conversation_meta)
-    progress_event = {
-        "event_type": "worker_progress",
-        "source": "agent_execution_event_projection",
-        "source_event_id": event_id,
-        "source_event_type": event_type,
-        "source_conversation_id": conversation_id,
-        "source_event_time_us": event_time_us,
-        "workspace_task_id": task_id,
-        "attempt_id": attempt_id or node.current_attempt_id,
-        "actor_id": actor_id,
-        "phase": event_type,
-        "percent": percent,
-        "summary": summary,
-        "created_at": now.isoformat(),
-    }
-
-    progress_events = node_metadata.get("progress_events")
-    if not isinstance(progress_events, list):
-        progress_events = []
-    progress_events.append(progress_event)
-    node_metadata["progress_events"] = progress_events[-25:]
-    node_metadata["latest_agent_event_progress_id"] = event_id
-    if _should_promote_workspace_progress_note(event_type, existing_progress, node_metadata):
-        node.progress = {
-            "percent": percent,
-            "confidence": _bounded_confidence(existing_progress.get("confidence")),
-            "note": summary,
-        }
-        node_metadata["latest_worker_progress"] = progress_event
-    node.metadata_json = node_metadata
-    node.updated_at = now
-
-    session.add(
-        WorkspacePlanEventModel(
-            id=str(uuid.uuid4()),
-            plan_id=node.plan_id,
-            workspace_id=workspace_id,
-            node_id=node.id,
-            attempt_id=progress_event["attempt_id"],
-            event_type="worker_progress",
-            source="agent_execution_event_projection",
-            actor_id=actor_id,
-            payload_json=progress_event,
-            created_at=now,
-        )
-    )
-
-
-async def _workspace_projection_conversation(
-    session: AsyncSession,
-    conversation_id: str,
-) -> DBConversation | None:
-    result = await session.execute(
-        refresh_select_statement(
-            select(DBConversation).where(DBConversation.id == conversation_id)
-        )
-    )
-    conversation = cast(DBConversation | None, result.scalar_one_or_none())
-    if conversation is None:
-        return None
-    meta = _mapping_or_empty(conversation.meta)
-    if not _string_or_none(conversation.workspace_id) and not _string_or_none(
-        meta.get("workspace_id")
-    ):
-        return None
-    return conversation
-
-
-async def _workspace_projection_node(
-    session: AsyncSession,
-    *,
-    task_id: str,
-    attempt_id: str | None,
-) -> PlanNodeModel | None:
-    base_stmt = select(PlanNodeModel).where(PlanNodeModel.workspace_task_id == task_id)
-    if attempt_id:
-        result = await session.execute(
-            refresh_select_statement(
-                base_stmt.where(PlanNodeModel.current_attempt_id == attempt_id)
-                .order_by(PlanNodeModel.updated_at.desc(), PlanNodeModel.created_at.desc())
-                .limit(1)
-            )
-        )
-        node = cast(PlanNodeModel | None, result.scalar_one_or_none())
-        if node is not None:
-            return node
-    result = await session.execute(
-        refresh_select_statement(
-            base_stmt.order_by(
-                PlanNodeModel.updated_at.desc(),
-                PlanNodeModel.created_at.desc(),
-            ).limit(1)
-        )
-    )
-    return cast(PlanNodeModel | None, result.scalar_one_or_none())
-
-
-def _workspace_projection_actor_id(
-    conversation: DBConversation,
-    metadata: Mapping[str, object],
-) -> str | None:
-    agent_config = _mapping_or_empty(conversation.agent_config)
-    return _string_or_none(
-        agent_config.get("selected_agent_id")
-        or metadata.get("selected_agent_id")
-        or metadata.get("agent_id")
-    )
+    Avernet Workspace Core owns Workspace progress, receipts, and outbox events. Platform Agent
+    events remain durable in ``agent_execution_events`` and are correlated by Core callbacks.
+    """
+    _ = (session, conversation_id, event_id, event_type, event_data, event_time_us, created_at)
 
 
 def _workspace_progress_summary(
@@ -354,9 +171,7 @@ def _workspace_progress_summary(
         tool_name = _string_or_none(event_data.get("tool_name")) or "tool"
         status = _string_or_none(event_data.get("status")) or "completed"
         error = _string_or_none(event_data.get("error"))
-        observation = _string_or_none(
-            event_data.get("observation") or event_data.get("result")
-        )
+        observation = _string_or_none(event_data.get("observation") or event_data.get("result"))
         if not error and (
             _is_noop_observation(observation)
             or _is_low_signal_observation(tool_name=tool_name, observation=observation)
@@ -387,19 +202,6 @@ def _workspace_progress_summary(
     return _trim_progress_text(summary)
 
 
-def _should_promote_workspace_progress_note(
-    event_type: str,
-    existing_progress: Mapping[str, object],
-    node_metadata: Mapping[str, object],
-) -> bool:
-    if event_type != "act":
-        return True
-    existing_note = _string_or_none(existing_progress.get("note"))
-    latest_progress = _mapping_or_empty(node_metadata.get("latest_worker_progress"))
-    latest_event_type = _string_or_none(latest_progress.get("source_event_type"))
-    return not existing_note or latest_event_type in {None, "act"}
-
-
 def _trim_progress_text(value: str) -> str:
     collapsed = " ".join(str(value or "").split())
     if len(collapsed) <= _WORKSPACE_PROGRESS_NOTE_MAX:
@@ -407,9 +209,7 @@ def _trim_progress_text(value: str) -> str:
     marker_index = _progress_focus_index(collapsed)
     if marker_index > _WORKSPACE_PROGRESS_NOTE_MAX:
         prefix = collapsed[: _WORKSPACE_PROGRESS_NOTE_MAX - _WORKSPACE_PROGRESS_MARKER_CONTEXT - 8]
-        detail = collapsed[
-            marker_index : marker_index + _WORKSPACE_PROGRESS_MARKER_CONTEXT
-        ]
+        detail = collapsed[marker_index : marker_index + _WORKSPACE_PROGRESS_MARKER_CONTEXT]
         return f"{prefix.rstrip()} ... {detail.rstrip()}..."
     return f"{collapsed[: _WORKSPACE_PROGRESS_NOTE_MAX - 3].rstrip()}..."
 
@@ -454,9 +254,7 @@ def _workspace_harness_heartbeat_summary(
         return None
     if observation is None:
         return None
-    if _progress_focus_index(observation) >= 0 or _has_high_signal_bash_marker(
-        observation
-    ):
+    if _progress_focus_index(observation) >= 0 or _has_high_signal_bash_marker(observation):
         return None
     return "command still running (workspace harness heartbeat)"
 
@@ -472,10 +270,7 @@ def _is_low_signal_bash_observation(value: str | None) -> bool:
     return (
         _is_pure_workspace_harness_heartbeat(normalized)
         or re.fullmatch(r"(?:[a-z0-9_-]+\s+)?(?:pid=)?\d+", normalized) is not None
-        or (
-            normalized.startswith("tool execution failed ")
-            and normalized.endswith("(no output)")
-        )
+        or (normalized.startswith("tool execution failed ") and normalized.endswith("(no output)"))
         or ".next/build_id" in normalized
         or _looks_like_search_result_listing(value)
         or normalized in _LOW_SIGNAL_BASH_OBSERVATIONS
@@ -520,32 +315,6 @@ def _string_or_none(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _mapping_or_empty(value: object) -> Mapping[str, object]:
-    return value if isinstance(value, Mapping) else {}
-
-
-def _bounded_percent(value: object) -> float:
-    try:
-        numeric = float(str(value))
-    except (TypeError, ValueError):
-        numeric = 0.0
-    return max(0.0, min(100.0, numeric))
-
-
-def _bounded_confidence(value: object) -> float:
-    try:
-        numeric = float(str(value))
-    except (TypeError, ValueError):
-        numeric = 1.0
-    return max(0.0, min(1.0, numeric))
-
-
-def _aware_datetime(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 class SqlAgentExecutionEventRepository(
@@ -597,7 +366,9 @@ class SqlAgentExecutionEventRepository(
                 DBAgentExecutionEvent.event_time_us,
             )
         )
-        insert_result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        insert_result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
         inserted_row = insert_result.one_or_none()
         if inserted_row is not None:
             inserted_event_type, inserted_event_time_us = inserted_row
@@ -658,7 +429,9 @@ class SqlAgentExecutionEventRepository(
                 DBAgentExecutionEvent.created_at,
             )
         )
-        insert_result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        insert_result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
         projection_deltas: dict[str, dict[str, int]] = {}
         event_data_by_id = {str(item["id"]): item["event_data"] for item in values_list}
         for event_id, conversation_id, event_type, event_time_us, created_at in insert_result.all():
@@ -724,7 +497,9 @@ class SqlAgentExecutionEventRepository(
 
             query = query.order_by(time_col.desc(), counter_col.desc()).limit(limit)
 
-            result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+            result = await self._session.execute(
+                refresh_select_statement(self._refresh_statement(query))
+            )
             db_events = list(reversed(result.scalars().all()))
         else:
             # Forward pagination
@@ -739,7 +514,9 @@ class SqlAgentExecutionEventRepository(
 
             query = query.order_by(time_col.asc(), counter_col.asc()).limit(limit)
 
-            result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+            result = await self._session.execute(
+                refresh_select_statement(self._refresh_statement(query))
+            )
             db_events = list(result.scalars().all())
 
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
@@ -748,18 +525,20 @@ class SqlAgentExecutionEventRepository(
     async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
         """Get the last (event_time_us, event_counter) for a conversation."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(
-                    DBAgentExecutionEvent.event_time_us,
-                    DBAgentExecutionEvent.event_counter,
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(
+                        DBAgentExecutionEvent.event_time_us,
+                        DBAgentExecutionEvent.event_counter,
+                    )
+                    .where(DBAgentExecutionEvent.conversation_id == conversation_id)
+                    .order_by(
+                        DBAgentExecutionEvent.event_time_us.desc(),
+                        DBAgentExecutionEvent.event_counter.desc(),
+                    )
+                    .limit(1)
                 )
-                .where(DBAgentExecutionEvent.conversation_id == conversation_id)
-                .order_by(
-                    DBAgentExecutionEvent.event_time_us.desc(),
-                    DBAgentExecutionEvent.event_counter.desc(),
-                )
-                .limit(1)
-            ))
+            )
         )
         row = result.one_or_none()
         if row is None:
@@ -774,17 +553,19 @@ class SqlAgentExecutionEventRepository(
     ) -> list[AgentExecutionEvent]:
         """Get all events for a specific message."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBAgentExecutionEvent)
-                .where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id,
-                    DBAgentExecutionEvent.message_id == message_id,
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBAgentExecutionEvent)
+                    .where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id,
+                        DBAgentExecutionEvent.message_id == message_id,
+                    )
+                    .order_by(
+                        DBAgentExecutionEvent.event_time_us.asc(),
+                        DBAgentExecutionEvent.event_counter.asc(),
+                    )
                 )
-                .order_by(
-                    DBAgentExecutionEvent.event_time_us.asc(),
-                    DBAgentExecutionEvent.event_counter.asc(),
-                )
-            ))
+            )
         )
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
@@ -800,18 +581,20 @@ class SqlAgentExecutionEventRepository(
             return {}
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBAgentExecutionEvent)
-                .where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id,
-                    DBAgentExecutionEvent.message_id.in_(message_ids),
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBAgentExecutionEvent)
+                    .where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id,
+                        DBAgentExecutionEvent.message_id.in_(message_ids),
+                    )
+                    .order_by(
+                        DBAgentExecutionEvent.message_id.asc(),
+                        DBAgentExecutionEvent.event_time_us.asc(),
+                        DBAgentExecutionEvent.event_counter.asc(),
+                    )
                 )
-                .order_by(
-                    DBAgentExecutionEvent.message_id.asc(),
-                    DBAgentExecutionEvent.event_time_us.asc(),
-                    DBAgentExecutionEvent.event_counter.asc(),
-                )
-            ))
+            )
         )
 
         events_by_message_id: dict[str, list[AgentExecutionEvent]] = {}
@@ -827,11 +610,13 @@ class SqlAgentExecutionEventRepository(
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all events for a conversation."""
         await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                delete(DBAgentExecutionEvent).where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id
+            refresh_select_statement(
+                self._refresh_statement(
+                    delete(DBAgentExecutionEvent).where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id
+                    )
                 )
-            ))
+            )
         )
         await self._session.flush()
 
@@ -856,18 +641,20 @@ class SqlAgentExecutionEventRepository(
     ) -> list[AgentExecutionEvent]:
         """Get message events (user_message + assistant_message) for LLM context."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBAgentExecutionEvent)
-                .where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id,
-                    DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBAgentExecutionEvent)
+                    .where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id,
+                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                    )
+                    .order_by(
+                        DBAgentExecutionEvent.event_time_us.desc(),
+                        DBAgentExecutionEvent.event_counter.desc(),
+                    )
+                    .limit(limit)
                 )
-                .order_by(
-                    DBAgentExecutionEvent.event_time_us.desc(),
-                    DBAgentExecutionEvent.event_counter.desc(),
-                )
-                .limit(limit)
-            ))
+            )
         )
         db_events = list(reversed(result.scalars().all()))
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
@@ -881,19 +668,21 @@ class SqlAgentExecutionEventRepository(
     ) -> list[AgentExecutionEvent]:
         """Get message events after a given event_time_us cutoff."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBAgentExecutionEvent)
-                .where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id,
-                    DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
-                    DBAgentExecutionEvent.event_time_us > after_time_us,
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBAgentExecutionEvent)
+                    .where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id,
+                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                        DBAgentExecutionEvent.event_time_us > after_time_us,
+                    )
+                    .order_by(
+                        DBAgentExecutionEvent.event_time_us.asc(),
+                        DBAgentExecutionEvent.event_counter.asc(),
+                    )
+                    .limit(limit)
                 )
-                .order_by(
-                    DBAgentExecutionEvent.event_time_us.asc(),
-                    DBAgentExecutionEvent.event_counter.asc(),
-                )
-                .limit(limit)
-            ))
+            )
         )
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
@@ -902,14 +691,16 @@ class SqlAgentExecutionEventRepository(
     async def count_messages(self, conversation_id: str) -> int:
         """Count message events in a conversation."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(func.count())
-                .select_from(DBAgentExecutionEvent)
-                .where(
-                    DBAgentExecutionEvent.conversation_id == conversation_id,
-                    DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(func.count())
+                    .select_from(DBAgentExecutionEvent)
+                    .where(
+                        DBAgentExecutionEvent.conversation_id == conversation_id,
+                        DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                    )
                 )
-            ))
+            )
         )
         return result.scalar() or 0
 

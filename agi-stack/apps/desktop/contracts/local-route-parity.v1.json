@@ -37,8 +37,8 @@
       "uri": "/api/v1/agent/conversations?project_id=local-project&workspace_id=local-workspace&status=active&limit=1&offset=0",
       "source": "client",
       "source_marker": "/api/v1/agent/conversations?${conversationParameters.toString()}",
-      "authority": "local_conversation_store",
-      "expected_status": 200,
+      "authority": "avernet_workspace_core",
+      "expected_status": 503,
       "body": {}
     },
     {
@@ -47,8 +47,8 @@
       "uri": "/api/v1/agent/conversations/route-parity-artifact-conversation/session?tenant_id=local&project_id=local-project&workspace_id=local-workspace",
       "source": "client",
       "source_marker": "${conversationPath}/session?${sessionParameters.toString()}",
-      "authority": "local_session_projection",
-      "expected_status": 200,
+      "authority": "avernet_workspace_core_acl",
+      "expected_status": 503,
       "body": {}
     },
     {
@@ -1164,8 +1164,8 @@
       "uri": "/api/v1/workspaces/local-workspace/plan",
       "source": "client",
       "source_marker": "this.workspaceRoot('/plan')",
-      "authority": "local_plan_ledger",
-      "expected_status": 200,
+      "authority": "avernet_workspace_core",
+      "expected_status": 503,
       "body": {}
     },
     {
@@ -1269,8 +1269,8 @@
       "uri": "/api/v1/llm-providers/routing-policy?project_id=local-project&workspace_id=local-workspace",
       "source": "client",
       "source_marker": "/api/v1/llm-providers/routing-policy?${params.toString()}",
-      "authority": "local_provider_registry",
-      "expected_status": 200,
+      "authority": "avernet_workspace_core",
+      "expected_status": 503,
       "body": {}
     },
     {
@@ -1279,8 +1279,8 @@
       "uri": "/api/v1/llm-providers/routing-policy",
       "source": "client",
       "source_marker": "'/api/v1/llm-providers/routing-policy'",
-      "authority": "local_provider_registry",
-      "expected_status": 422,
+      "authority": "avernet_workspace_core",
+      "expected_status": 503,
       "body": {
         "project_id": "local-project",
         "workspace_id": "local-workspace",
@@ -2098,16 +2098,6 @@
     {
       "method": "POST",
       "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
-      "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/agent-policy",
       "reason_code": "executable_fixture_registered_route_not_catalogued"
     },
     {

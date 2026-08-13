@@ -15,9 +15,7 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +36,7 @@ async def ensure_workspace_llm_conversation(
     """Persist a workspace-scoped Conversation row for an LLM-backed runtime turn."""
     try:
         async with async_session_factory() as db:
-            workspace = await SqlWorkspaceRepository(db).find_by_id(workspace_id)
+            workspace = legacy_workspace_runtime_retired("Workspace LLM session linkage")
             if workspace is None:
                 logger.warning(
                     "workspace_llm_session.workspace_not_found",

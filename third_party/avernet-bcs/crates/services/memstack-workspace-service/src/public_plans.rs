@@ -343,6 +343,7 @@ impl<'a> PublicWorkspacePlanService<'a> {
             idempotency_key,
             request_hash,
             mutation_outbox_id: ids.outbox_id,
+            compatibility_outbox_id: ids.compatibility_outbox_id,
             event_id: ids.event_id,
             reason: input.reason.clone(),
             evidence_refs: input.evidence_refs.clone(),

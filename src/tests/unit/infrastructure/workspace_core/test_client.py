@@ -11,6 +11,9 @@ from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.domain.ports.services.workspace_access_verifier_port import WorkspaceAccessRequest
 from src.infrastructure.workspace_core.client import (
     AvernetWorkspaceAccessVerifier,
+    WorkspaceAuthorityActor,
+    WorkspaceAuthorityQueryRequest,
+    WorkspaceAuthorityTaskRef,
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
     WorkspaceCoreNotFoundError,
@@ -26,9 +29,11 @@ from src.infrastructure.workspace_core.client import (
 def _settings() -> WorkspaceCoreSettings:
     return WorkspaceCoreSettings.model_validate(
         {
-            "WORKSPACE_CORE_SHADOW_READ_ENABLED": True,
             "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
             "WORKSPACE_CORE_SERVICE_TOKEN": "internal-test-token",
+            "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "webhook-test-token",
+            "WORKSPACE_CORE_PROVIDER_EVENT_TOKEN": "event-test-token",
+            "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN": "registry-test-token",
         }
     )
 
@@ -69,6 +74,88 @@ async def test_get_keeps_server_failure_as_generic_client_error() -> None:
         await client.health()
 
     assert not isinstance(error.value, WorkspaceCoreNotFoundError)
+
+
+@pytest.mark.unit
+async def test_workspace_authority_query_uses_one_service_authenticated_batch() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/internal/v1/workspace-authority/query"
+        assert request.headers["authorization"] == "Bearer internal-test-token"
+        assert request.headers.get("x-memstack-user-id") is None
+        assert request.read().decode() == (
+            '{"actor":{"user_id":"user-1","is_superuser":false},'
+            '"workspace_ids":["workspace-1","workspace-2"],'
+            '"task_refs":[{"workspace_id":"workspace-1","task_id":"task-1"}]}'
+        )
+        return httpx.Response(
+            200,
+            json={
+                "profiles": [
+                    {
+                        "workspace_id": "workspace-1",
+                        "tenant_id": "tenant-1",
+                        "project_id": "project-1",
+                        "name": "Workspace 1",
+                        "created_by": "owner-1",
+                        "is_archived": False,
+                        "metadata": {"kind": "delivery"},
+                        "member_role": "editor",
+                    }
+                ],
+                "task_links": [
+                    {"workspace_id": "workspace-1", "task_id": "task-1", "linked": True}
+                ],
+            },
+        )
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+    result = await client.query_workspace_authority(
+        WorkspaceAuthorityQueryRequest(
+            actor=WorkspaceAuthorityActor(user_id="user-1"),
+            workspace_ids=["workspace-1", "workspace-2"],
+            task_refs=[WorkspaceAuthorityTaskRef(workspace_id="workspace-1", task_id="task-1")],
+        )
+    )
+
+    assert result.profiles[0].member_role == "editor"
+    assert result.task_links[0].linked is True
+
+
+@pytest.mark.unit
+async def test_list_workspace_agents_uses_scoped_public_read_contract() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == (
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/agents"
+        )
+        assert str(request.url.params) == "active_only=true&limit=1000&offset=0"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "binding-1",
+                    "workspace_id": "workspace-1",
+                    "agent_id": "agent-1",
+                    "display_name": "Worker",
+                    "label": "worker",
+                    "status": "idle",
+                    "is_active": True,
+                }
+            ],
+        )
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    agents = await client.list_workspace_agents(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+    )
+
+    assert agents[0].id == "binding-1"
+    assert agents[0].agent_id == "agent-1"
 
 
 @pytest.mark.unit

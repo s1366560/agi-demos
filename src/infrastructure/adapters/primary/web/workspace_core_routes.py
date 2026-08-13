@@ -11,7 +11,11 @@ from fastapi.routing import APIRoute, request_response
 from pydantic import BaseModel
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
-from src.configuration.workspace_core import WorkspaceCoreBackend
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_actor,
+    get_current_user,
+    verify_api_key_dependency,
+)
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
     cyber_genes,
@@ -25,7 +29,9 @@ from src.infrastructure.adapters.primary.web.routers import (
     workspace_tasks,
     workspaces,
 )
-from src.infrastructure.i18n import gettext as _
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_detail,
+)
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
@@ -57,6 +63,13 @@ _LEGACY_ROUTERS: tuple[APIRouter, ...] = (
 )
 
 _PROXY_REQUEST_PARAM = "__workspace_core_request"
+_PROXY_AUTH_DEPENDENCIES = frozenset(
+    {
+        get_current_actor,
+        get_current_user,
+        verify_api_key_dependency,
+    }
+)
 _REQUEST_HEADER_ALLOWLIST = frozenset(
     {
         "accept",
@@ -93,16 +106,6 @@ _CONTEXT_HEADER_NAMES = {
     "task_id": "X-MemStack-Task-ID",
     "plan_node_id": "X-MemStack-Plan-Node-ID",
 }
-
-
-def _routers_for_backend(
-    backend: WorkspaceCoreBackend,
-    *,
-    static: bool,
-) -> tuple[APIRouter, ...]:
-    if backend is WorkspaceCoreBackend.LEGACY:
-        return _LEGACY_STATIC_ROUTERS if static else _LEGACY_ROUTERS
-    return ()
 
 
 def _register_avernet_proxy_routes(
@@ -152,9 +155,15 @@ def _clone_as_avernet_proxy(source: APIRoute, app: FastAPI) -> APIRoute:
 
     proxy_endpoint.__name__ = f"avernet_proxy_{source.name}"
     proxy_endpoint.__qualname__ = proxy_endpoint.__name__
+    cast(Any, proxy_endpoint).__workspace_contract_module__ = source.endpoint.__module__
     proxy_route.endpoint = proxy_endpoint
     proxy_route.dependant.call = proxy_endpoint
     proxy_route.dependant.request_param_name = _PROXY_REQUEST_PARAM
+    proxy_route.dependant.dependencies = [
+        dependency
+        for dependency in proxy_route.dependant.dependencies
+        if dependency.call in _PROXY_AUTH_DEPENDENCIES
+    ]
     proxy_route.dependant.body_params.clear()
     openapi_body_field = proxy_route.body_field
     proxy_route.body_field = None
@@ -271,26 +280,15 @@ def _workspace_context_values(
 def _workspace_core_unavailable() -> JSONResponse:
     return JSONResponse(
         status_code=503,
-        content={"detail": _("Workspace Core is unavailable")},
+        content={"detail": workspace_core_unavailable_detail()},
     )
 
 
-def register_workspace_core_static_routes(
-    app: FastAPI,
-    backend: WorkspaceCoreBackend,
-) -> None:
-    """Register static Workspace routes that must precede dynamic routers."""
-    if backend is WorkspaceCoreBackend.AVERNET:
-        _register_avernet_proxy_routes(app, _LEGACY_STATIC_ROUTERS)
-        return
-    for router in _routers_for_backend(backend, static=True):
-        app.include_router(router)
+def register_workspace_core_static_routes(app: FastAPI) -> None:
+    """Register static Workspace compatibility routes as Avernet proxies."""
+    _register_avernet_proxy_routes(app, _LEGACY_STATIC_ROUTERS)
 
 
-def register_workspace_core_routes(app: FastAPI, backend: WorkspaceCoreBackend) -> None:
-    """Register exactly one complete Workspace compatibility route group."""
-    if backend is WorkspaceCoreBackend.AVERNET:
-        _register_avernet_proxy_routes(app, _LEGACY_ROUTERS)
-        return
-    for router in _routers_for_backend(backend, static=False):
-        app.include_router(router)
+def register_workspace_core_routes(app: FastAPI) -> None:
+    """Register the complete Workspace compatibility surface as Avernet proxies."""
+    _register_avernet_proxy_routes(app, _LEGACY_ROUTERS)

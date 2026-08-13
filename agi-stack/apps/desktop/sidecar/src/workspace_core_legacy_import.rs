@@ -45,6 +45,22 @@ struct LegacyWorkspaceMessageRecord {
     source_hash: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct DesktopLegacyWorkspaceRow {
+    id: String,
+    project_id: String,
+    value: Value,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct DesktopLegacyWorkspaceMessageRow {
+    id: String,
+    workspace_id: String,
+    position: i64,
+    value: Value,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct StagedLegacyWorkspaceSnapshot {
     pub(crate) path: PathBuf,
     pub(crate) sha256: String,
@@ -54,7 +70,8 @@ pub(crate) async fn stage_legacy_workspace_snapshot(
     runtime: &LocalRuntimeService,
     runtime_directory: &Path,
 ) -> Result<StagedLegacyWorkspaceSnapshot, String> {
-    let (workspace_rows, message_rows) = runtime.legacy_workspace_rows()?;
+    let (workspace_rows, message_rows) =
+        runtime.with_offline_workspace_import_connection(read_legacy_workspace_rows)?;
     let mut workspace_ids = HashSet::with_capacity(workspace_rows.len());
     let mut workspaces = Vec::with_capacity(workspace_rows.len());
     for row in workspace_rows {
@@ -160,6 +177,93 @@ pub(crate) async fn stage_legacy_workspace_snapshot(
     Ok(StagedLegacyWorkspaceSnapshot { path, sha256 })
 }
 
+fn read_legacy_workspace_rows(
+    connection: &rusqlite::Connection,
+) -> Result<
+    (
+        Vec<DesktopLegacyWorkspaceRow>,
+        Vec<DesktopLegacyWorkspaceMessageRow>,
+    ),
+    String,
+> {
+    if !legacy_table_exists(connection, "desktop_workspaces")?
+        && !legacy_table_exists(connection, "desktop_workspace_messages")?
+    {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    if !legacy_table_exists(connection, "desktop_workspaces")?
+        || !legacy_table_exists(connection, "desktop_workspace_messages")?
+    {
+        return Err("legacy Workspace SQLite schema is incomplete".to_string());
+    }
+    let workspaces = {
+        let mut statement = connection
+            .prepare("SELECT id, project_id, value_json FROM desktop_workspaces ORDER BY rowid ASC")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?
+            .map(|row| {
+                let (id, project_id, raw) = row.map_err(|error| error.to_string())?;
+                let value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                Ok(DesktopLegacyWorkspaceRow {
+                    id,
+                    project_id,
+                    value,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        rows
+    };
+    let messages = {
+        let mut statement = connection
+            .prepare(
+                "SELECT id, workspace_id, position, value_json \
+                 FROM desktop_workspace_messages ORDER BY workspace_id ASC, position ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?
+            .map(|row| {
+                let (id, workspace_id, position, raw) = row.map_err(|error| error.to_string())?;
+                let value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+                Ok(DesktopLegacyWorkspaceMessageRow {
+                    id,
+                    workspace_id,
+                    position,
+                    value,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        rows
+    };
+    Ok((workspaces, messages))
+}
+
+fn legacy_table_exists(connection: &rusqlite::Connection, name: &str) -> Result<bool, String> {
+    connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [name],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+}
+
 fn source_hash(value: &Value) -> Result<String, String> {
     serde_json::to_vec(&canonical_json(value))
         .map(|encoded| hex_sha256(&encoded))
@@ -191,6 +295,84 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_reader_returns_empty_without_legacy_tables() {
+        let connection = rusqlite::Connection::open_in_memory().expect("database");
+
+        assert_eq!(
+            read_legacy_workspace_rows(&connection).expect("empty legacy snapshot"),
+            (Vec::new(), Vec::new())
+        );
+    }
+
+    #[test]
+    fn legacy_reader_rejects_partial_schema() {
+        let connection = rusqlite::Connection::open_in_memory().expect("database");
+        connection
+            .execute_batch(
+                "CREATE TABLE desktop_workspaces (
+                   id TEXT PRIMARY KEY,
+                   project_id TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );",
+            )
+            .expect("partial legacy schema");
+
+        assert_eq!(
+            read_legacy_workspace_rows(&connection).expect_err("partial schema must fail"),
+            "legacy Workspace SQLite schema is incomplete"
+        );
+    }
+
+    #[test]
+    fn legacy_reader_is_the_only_sqlite_workspace_table_reader() {
+        let connection = rusqlite::Connection::open_in_memory().expect("database");
+        connection
+            .execute_batch(
+                "CREATE TABLE desktop_workspaces (
+                   id TEXT PRIMARY KEY,
+                   project_id TEXT NOT NULL,
+                   value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE desktop_workspace_messages (
+                   id TEXT PRIMARY KEY,
+                   workspace_id TEXT NOT NULL,
+                   position INTEGER NOT NULL,
+                   value_json TEXT NOT NULL,
+                   UNIQUE(workspace_id, position)
+                 );",
+            )
+            .expect("legacy schema");
+        let workspace = serde_json::json!({
+            "id": "workspace-1",
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+        });
+        let message = serde_json::json!({
+            "id": "message-1",
+            "workspace_id": "workspace-1",
+            "content": "hello",
+        });
+        connection
+            .execute(
+                "INSERT INTO desktop_workspaces(id, project_id, value_json) VALUES (?1, ?2, ?3)",
+                rusqlite::params!["workspace-1", "project-1", workspace.to_string()],
+            )
+            .expect("workspace");
+        connection
+            .execute(
+                "INSERT INTO desktop_workspace_messages(id, workspace_id, position, value_json)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params!["message-1", "workspace-1", 1, message.to_string()],
+            )
+            .expect("message");
+
+        let (workspaces, messages) =
+            read_legacy_workspace_rows(&connection).expect("legacy snapshot");
+        assert_eq!(workspaces[0].value, workspace);
+        assert_eq!(messages[0].value, message);
+    }
 
     #[test]
     fn source_hash_is_independent_of_json_object_order() {

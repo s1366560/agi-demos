@@ -42,27 +42,18 @@ async def test_project_delete_scope_uses_shared_stable_lock_order() -> None:
         [
             ["project-1"],
             ["membership-2", "membership-1"],
-            ["workspace-b", "workspace-a", "workspace-a"],
-            ["member-2", "member-1"],
         ]
     )
 
     assert await projects._lock_project_delete_scope(session, "project-1") is True  # type: ignore[arg-type]
 
     statements = session.statements
-    assert len(statements) == 4
+    assert len(statements) == 2
     rendered = [_postgres_sql(statement) for statement in statements]
     assert "FROM projects" in rendered[0]
     assert "FROM user_projects" in rendered[1]
     assert "ORDER BY user_projects.id" in rendered[1]
-    assert "FROM workspaces" in rendered[2]
-    assert "ORDER BY workspaces.id" in rendered[2]
-    assert "FROM workspace_members" in rendered[3]
-    assert "ORDER BY workspace_members.workspace_id, workspace_members.id" in rendered[3]
     assert all("FOR UPDATE" in sql for sql in rendered)
-
-    workspace_member_params = statements[3].compile(dialect=postgresql.dialect()).params
-    assert workspace_member_params["workspace_id_1"] == ["workspace-a", "workspace-b"]
 
 
 @pytest.mark.unit
@@ -86,7 +77,6 @@ async def test_project_dependent_delete_preserves_receipts_until_root_cleanup(
             return [
                 "messages",
                 "conversations",
-                "workspaces",
                 projects.TASK_SESSION_RECEIPT_TABLE,
             ]
 
@@ -103,10 +93,8 @@ async def test_project_dependent_delete_preserves_receipts_until_root_cleanup(
     assert [call["target_table_name"] for call in calls] == [
         "messages",
         "conversations",
-        "workspaces",
         "projects",
     ]
     assert projects.TASK_SESSION_RECEIPT_TABLE in calls[0]["skip_tables"]
     assert projects.TASK_SESSION_RECEIPT_TABLE in calls[1]["skip_tables"]
     assert projects.TASK_SESSION_RECEIPT_TABLE not in calls[2]["skip_tables"]
-    assert projects.TASK_SESSION_RECEIPT_TABLE not in calls[3]["skip_tables"]

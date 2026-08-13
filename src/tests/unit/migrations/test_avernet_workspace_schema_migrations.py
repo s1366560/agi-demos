@@ -30,6 +30,8 @@ _GENE_CONTRACT_REVISION = "a17c3e5f7b9d"
 _FILE_AUTHORITY_REVISION = "b28d4f6a8c0e"
 _OBJECTIVE_AUTONOMY_REVISION = "c39e5a7b1d2f"
 _AUTHORITY_BACKFILL_REVISION = "727ce1982b0f"
+_CONVERSATION_LINK_RELAXATION_REVISION = "e9f0a1b2c3d5"
+_TASK_SESSION_SAGA_REVISION = "f0a1b2c3d4e6"
 
 _DOMAIN_TABLES = {
     "workspace_profiles",
@@ -91,6 +93,15 @@ def _repository_root() -> Path:
         for parent in Path(__file__).resolve().parents
         if (parent / "alembic" / "versions").is_dir()
     )
+
+
+def _load_migration_rehearsal() -> ModuleType:
+    path = _repository_root() / "scripts/avernet-bcs/verify-workspace-migration.py"
+    spec = importlib.util.spec_from_file_location("verify_workspace_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_migration(revision: str, filename: str) -> ModuleType:
@@ -179,6 +190,20 @@ def _authority_backfill_migration() -> ModuleType:
     )
 
 
+def _conversation_link_relaxation_migration() -> ModuleType:
+    return _load_migration(
+        _CONVERSATION_LINK_RELAXATION_REVISION,
+        "e9f0a1b2c3d5_relax_conversation_workspace_links.py",
+    )
+
+
+def _task_session_saga_migration() -> ModuleType:
+    return _load_migration(
+        _TASK_SESSION_SAGA_REVISION,
+        "f0a1b2c3d4e6_add_task_session_saga_journal.py",
+    )
+
+
 def _tombstone_migration() -> ModuleType:
     return _load_migration(
         _TOMBSTONE_REVISION,
@@ -249,12 +274,122 @@ def test_workspace_migrations_form_one_linear_chain() -> None:
         (_file_authority_migration, _FILE_AUTHORITY_REVISION, _GENE_CONTRACT_REVISION),
         (_objective_autonomy_migration, _OBJECTIVE_AUTONOMY_REVISION, _FILE_AUTHORITY_REVISION),
         (_authority_backfill_migration, _AUTHORITY_BACKFILL_REVISION, _OBJECTIVE_AUTONOMY_REVISION),
+        (
+            _conversation_link_relaxation_migration,
+            _CONVERSATION_LINK_RELAXATION_REVISION,
+            _AUTHORITY_BACKFILL_REVISION,
+        ),
+        (
+            _task_session_saga_migration,
+            _TASK_SESSION_SAGA_REVISION,
+            _CONVERSATION_LINK_RELAXATION_REVISION,
+        ),
     )
 
     for load_migration, revision, down_revision in chain:
         migration = load_migration()
         assert migration.revision == revision
         assert migration.down_revision == down_revision
+
+
+def test_conversation_link_relaxation_accepts_only_known_historical_foreign_keys() -> None:
+    migration = _conversation_link_relaxation_migration()
+    statement = migration._DROP_WORKSPACE_LINK_FOREIGN_KEYS_SQL
+
+    for constraint_name in (
+        "fk_conversations_workspace_id",
+        "conversations_workspace_id_fkey",
+        "fk_conversations_linked_workspace_task_id",
+        "conversations_linked_workspace_task_id_fkey",
+    ):
+        assert constraint_name in statement
+    assert "unexpected legacy conversation Workspace FK" in statement
+    assert "missing legacy conversation Workspace FK" in statement
+    assert "confdeltype = 'n'" in statement
+    assert "cardinality(candidate_names) <> 1" in statement
+
+    recorder = _Recorder()
+    migration.op = recorder
+    migration.upgrade()
+    assert recorder.statements == ["SET LOCAL lock_timeout = '10s'", statement]
+
+
+def test_conversation_link_relaxation_downgrade_restores_canonical_historical_names() -> None:
+    migration = _conversation_link_relaxation_migration()
+    recorder = _Recorder()
+    migration.op = recorder
+
+    migration.downgrade()
+
+    rendered = "\n".join(recorder.statements)
+    assert "fk_conversations_workspace_id" in rendered
+    assert "fk_conversations_linked_workspace_task_id" in rendered
+    assert "conversations_workspace_id_fkey" not in rendered
+    assert "cannot restore legacy conversation Workspace FKs" in rendered
+
+
+def test_task_session_saga_upgrade_is_fail_closed_and_adds_recovery_contract() -> None:
+    migration = _task_session_saga_migration()
+    foreign_key_statement = migration._DROP_LEGACY_RECEIPT_FOREIGN_KEYS_SQL
+
+    for constraint_name in (
+        "fk_task_session_receipts_workspace_id",
+        "task_session_creation_receipts_workspace_id_fkey",
+        "fk_task_session_receipts_initial_message_id",
+        "task_session_creation_receipts_initial_message_id_fkey",
+    ):
+        assert constraint_name in foreign_key_statement
+    assert "unexpected legacy task-session receipt FK" in foreign_key_statement
+    assert "ambiguous legacy task-session receipt FK" in foreign_key_statement
+    assert "invalid legacy task-session receipt FK" in foreign_key_statement
+    assert "cardinality(candidate_names) > 1" in foreign_key_statement
+    assert "IF cardinality(candidate_names) = 1" in foreign_key_statement
+
+    recorder = _Recorder()
+    migration.op = recorder
+    migration.upgrade()
+
+    rendered = "\n".join(recorder.statements)
+    assert "core_receipt_id VARCHAR(128)" in rendered
+    assert "status VARCHAR(32) NOT NULL DEFAULT 'pending'" in rendered
+    assert "last_error TEXT" in rendered
+    assert "updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP" in rendered
+    for status in ("pending", "core_committed", "completed", "retryable_error"):
+        assert status in rendered
+    assert "uq_avn_workspace_task_receipts_task_session_scope" in rendered
+    assert "tenant_id, project_id, actor_id, idempotency_key" in rendered
+    assert "WHERE action = 'create_task_session'" in rendered
+    assert "DROP CONSTRAINT uq_workspace_task_receipts_intent" not in rendered
+
+
+def test_task_session_saga_downgrade_restores_legacy_contract() -> None:
+    migration = _task_session_saga_migration()
+    recorder = _Recorder()
+    migration.op = recorder
+
+    migration.downgrade()
+
+    rendered = "\n".join(recorder.statements)
+    assert "cannot restore legacy task-session receipt FKs" in rendered
+    assert "fk_task_session_receipts_workspace_id" in rendered
+    assert "fk_task_session_receipts_initial_message_id" in rendered
+    assert "CREATE TRIGGER trg_task_session_receipt_message_delete" in rendered
+    assert "DROP COLUMN core_receipt_id" in rendered
+    assert "DROP INDEX avernet.uq_avn_workspace_task_receipts_task_session_scope" in rendered
+
+
+def test_migration_rehearsal_reconstructs_historical_task_session_receipt_shape() -> None:
+    rehearsal = _load_migration_rehearsal()
+    rendered = "\n".join(rehearsal._RESTORE_TASK_SESSION_RECEIPT_LEGACY_SHAPE_SQL)
+
+    assert "DROP CONSTRAINT ck_task_session_receipts_status" in rendered
+    assert "DROP INDEX ix_task_session_receipts_status_updated" in rendered
+    for column in ("core_receipt_id", "status", "last_error", "updated_at"):
+        assert f"DROP COLUMN {column}" in rendered
+    assert "fk_task_session_receipts_workspace_id" in rendered
+    assert "FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE" in rendered
+    assert "fk_task_session_receipts_initial_message_id" in rendered
+    assert "REFERENCES workspace_messages (id) ON DELETE SET NULL" in rendered
 
 
 def test_workspace_authority_backfill_is_explicit_idempotent_and_non_destructive() -> None:

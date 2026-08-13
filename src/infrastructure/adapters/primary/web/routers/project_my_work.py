@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from src.application.services.project_my_work_service import (
     ProjectMyWorkService,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.workspace_authority import get_workspace_authority
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -79,12 +80,19 @@ async def _require_project_scope(
 @router.get("/{project_id}/my-work", response_model=ProjectMyWorkResponse)
 async def list_project_my_work(
     project_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectMyWorkResponse:
     """List current persisted execution authorities visible to the caller."""
 
-    service = ProjectMyWorkService(SqlProjectMyWorkReader(db))
+    service = ProjectMyWorkService(
+        SqlProjectMyWorkReader(
+            db,
+            get_workspace_authority(request),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        )
+    )
     try:
         return await service.list_for_project(project_id=project_id, user_id=current_user.id)
     except ProjectMyWorkAccessDeniedError as error:
@@ -143,6 +151,7 @@ async def get_activity_read_state(
 async def put_activity_read_state(
     project_id: str,
     body: UpdateActivityReadStateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ActivityReadStateResponse:
@@ -173,9 +182,15 @@ async def put_activity_read_state(
     entry_ids = [item.entry_id for item in body.entries]
     if len(entry_ids) != len(set(entry_ids)):
         raise HTTPException(status_code=422, detail=_("Activity entry IDs must be unique"))
-    known_projection = await ProjectMyWorkService(SqlProjectMyWorkReader(db)).list_for_project(
+    known_projection = await ProjectMyWorkService(
+        SqlProjectMyWorkReader(
+            db,
+            get_workspace_authority(request),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        )
+    ).list_for_project(
         project_id=project.id,
-        user_id=current_user.id,
+        user_id=str(current_user.id),
     )
     known_entry_ids = {item.id for item in known_projection.items}
     if set(entry_ids) - known_entry_ids:

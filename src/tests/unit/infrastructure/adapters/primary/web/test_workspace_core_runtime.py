@@ -34,41 +34,6 @@ def _settings(**overrides: object) -> WorkspaceCoreSettings:
 
 
 @pytest.mark.unit
-def test_legacy_without_shadow_has_no_core_client() -> None:
-    app = FastAPI()
-
-    with patch(
-        "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-        "configure_workspace_access_verifier"
-    ) as configure_verifier:
-        install_workspace_core_runtime(app, WorkspaceCoreSettings.model_validate({}))
-
-    assert app.state.workspace_core_client is None
-    assert app.state.workspace_core_provider_adapter is None
-    assert app.state.workspace_core_runtime_recovery_worker is None
-    assert app.state.workspace_core_autonomy_judge is None
-    configure_verifier.assert_called_once_with(None)
-
-
-@pytest.mark.unit
-def test_legacy_shadow_installs_client_but_keeps_legacy_access_authority() -> None:
-    app = FastAPI()
-
-    with patch(
-        "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-        "configure_workspace_access_verifier"
-    ) as configure_verifier:
-        install_workspace_core_runtime(
-            app,
-            _settings(WORKSPACE_CORE_SHADOW_READ_ENABLED=True),
-        )
-
-    assert app.state.workspace_core_client is not None
-    assert app.state.workspace_core_runtime_recovery_worker is None
-    configure_verifier.assert_called_once_with(None)
-
-
-@pytest.mark.unit
 def test_avernet_installs_backend_access_verifier() -> None:
     app = FastAPI()
 
@@ -78,7 +43,7 @@ def test_avernet_installs_backend_access_verifier() -> None:
     ) as configure_verifier:
         install_workspace_core_runtime(
             app,
-            _settings(WORKSPACE_CORE_BACKEND="avernet"),
+            _settings(),
         )
 
     verifier = configure_verifier.call_args.args[0]
@@ -105,27 +70,8 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
         patch(
             "src.infrastructure.adapters.primary.web.workspace_core_runtime.AvernetProviderAdapter"
         ) as provider_adapter_type,
-        patch(
-            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-            "AvernetRuntimeRecoveryWorker"
-        ) as recovery_worker_type,
-        patch(
-            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-            "AgentRuntimeRecoveryJudge"
-        ) as judge_type,
-        patch(
-            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-            "MemStackRuntimeRecoveryEvidence"
-        ) as evidence_type,
-        patch(
-            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
-            "default_runtime_recovery_config"
-        ) as config_factory,
     ):
-        install_workspace_core_runtime(
-            app,
-            _settings(WORKSPACE_CORE_BACKEND="avernet"),
-        )
+        install_workspace_core_runtime(app, _settings())
 
     provider_type.assert_called_once_with(workspace_core_client=app.state.workspace_core_client)
     provider_adapter_type.assert_called_once_with(
@@ -133,39 +79,17 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
         event_sink_type.return_value,
         app.state.workspace_core_client,
     )
-    recovery_worker_type.assert_called_once_with(
-        core_client=app.state.workspace_core_client,
-        event_sink=event_sink_type.return_value,
-        judge=judge_type.return_value,
-        evidence=evidence_type.return_value,
-        config=config_factory.return_value,
-    )
     assert app.state.workspace_core_event_sink is event_sink_type.return_value
     assert app.state.workspace_core_provider_adapter is provider_adapter_type.return_value
-    assert app.state.workspace_core_runtime_recovery_worker is recovery_worker_type.return_value
+    assert getattr(app.state, "workspace_core_runtime_recovery_worker", None) is None
 
 
 @pytest.mark.unit
-async def test_start_workspace_core_runtime_starts_only_installed_worker() -> None:
+async def test_avernet_start_verifies_capabilities() -> None:
     app = FastAPI()
-    worker = MagicMock()
-    app.state.workspace_core_settings = WorkspaceCoreSettings.model_validate({})
-    app.state.workspace_core_runtime_recovery_worker = worker
-
-    await start_workspace_core_runtime(app)
-
-    worker.start.assert_called_once_with()
-
-
-@pytest.mark.unit
-async def test_avernet_start_verifies_capabilities_before_recovery() -> None:
-    app = FastAPI()
-    client = WorkspaceCoreClient(_settings(WORKSPACE_CORE_BACKEND="avernet"))
+    client = WorkspaceCoreClient(_settings())
     read_capabilities = AsyncMock(return_value=MagicMock())
-    worker = MagicMock()
-    app.state.workspace_core_settings = _settings(WORKSPACE_CORE_BACKEND="avernet")
     app.state.workspace_core_client = client
-    app.state.workspace_core_runtime_recovery_worker = worker
 
     with (
         patch.object(client, "read_public_api_capabilities", read_capabilities),
@@ -178,18 +102,14 @@ async def test_avernet_start_verifies_capabilities_before_recovery() -> None:
 
     read_capabilities.assert_awaited_once_with()
     require_capabilities.assert_called_once_with(read_capabilities.return_value)
-    worker.start.assert_called_once_with()
 
 
 @pytest.mark.unit
-async def test_avernet_start_does_not_start_recovery_when_capabilities_are_incomplete() -> None:
+async def test_avernet_start_fails_when_capabilities_are_incomplete() -> None:
     app = FastAPI()
-    client = WorkspaceCoreClient(_settings(WORKSPACE_CORE_BACKEND="avernet"))
+    client = WorkspaceCoreClient(_settings())
     read_capabilities = AsyncMock(return_value=MagicMock())
-    worker = MagicMock()
-    app.state.workspace_core_settings = _settings(WORKSPACE_CORE_BACKEND="avernet")
     app.state.workspace_core_client = client
-    app.state.workspace_core_runtime_recovery_worker = worker
 
     with (
         patch.object(client, "read_public_api_capabilities", read_capabilities),
@@ -202,20 +122,13 @@ async def test_avernet_start_does_not_start_recovery_when_capabilities_are_incom
     ):
         await start_workspace_core_runtime(app)
 
-    worker.start.assert_not_called()
-
-
 @pytest.mark.unit
-async def test_shutdown_workspace_core_runtime_stops_recovery_before_provider_drain() -> None:
+async def test_shutdown_workspace_core_runtime_drains_provider() -> None:
     app = FastAPI()
-    operations: list[str] = []
-    worker = MagicMock()
-    worker.stop = AsyncMock(side_effect=lambda: operations.append("stop"))
     provider_adapter = MagicMock()
-    provider_adapter.wait_until_idle = AsyncMock(side_effect=lambda: operations.append("drain"))
-    app.state.workspace_core_runtime_recovery_worker = worker
+    provider_adapter.wait_until_idle = AsyncMock()
     app.state.workspace_core_provider_adapter = provider_adapter
 
     await shutdown_workspace_core_runtime(app)
 
-    assert operations == ["stop", "drain"]
+    provider_adapter.wait_until_idle.assert_awaited_once_with()

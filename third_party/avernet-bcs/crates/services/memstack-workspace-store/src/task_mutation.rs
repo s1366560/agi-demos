@@ -16,13 +16,22 @@ pub(super) fn mutation_steps(
     flavor: DbSqlFlavor,
     mutation: &WorkspaceTaskMutation,
 ) -> Result<Vec<DbTransactionStep>, WorkspaceTaskStoreError> {
+    let event_count = u64::try_from(mutation.additional_events.len())
+        .ok()
+        .and_then(|count| count.checked_add(1))
+        .ok_or(WorkspaceTaskStoreError::Conflict)?;
     let committed_revision = mutation
+        .expected_revision
+        .checked_add(event_count)
+        .ok_or(WorkspaceTaskStoreError::Conflict)?;
+    let primary_event_sequence = mutation
         .expected_revision
         .checked_add(1)
         .ok_or(WorkspaceTaskStoreError::Conflict)?;
     let receipt_id = deterministic_id("task-receipt", mutation);
     let outbox_id = deterministic_id("task-outbox", mutation);
-    let mut steps = Vec::with_capacity(8 + mutation.auxiliary_writes.len());
+    let mut steps =
+        Vec::with_capacity(8 + mutation.auxiliary_writes.len() + mutation.additional_events.len());
     steps.push(DbTransactionStep::query_checked(
         access_check(flavor, mutation),
         DbCountExpectation::exactly(1),
@@ -46,13 +55,41 @@ pub(super) fn mutation_steps(
         ));
     }
     steps.push(DbTransactionStep::execute_checked(
-        authority_cas(flavor, mutation),
+        authority_cas(flavor, mutation, event_count),
         DbCountExpectation::exactly(1),
     ));
     steps.push(DbTransactionStep::execute_checked(
-        outbox_insert(flavor, mutation, &outbox_id, committed_revision),
+        outbox_insert(
+            flavor,
+            mutation,
+            &outbox_id,
+            mutation.idempotency_key.as_str(),
+            mutation.event_type.as_str(),
+            &mutation.event_payload,
+            primary_event_sequence,
+        ),
         DbCountExpectation::exactly(1),
     ));
+    for (ordinal, event) in mutation.additional_events.iter().enumerate() {
+        let additional_outbox_id = deterministic_event_id(mutation, ordinal, &event.event_type);
+        let event_sequence = u64::try_from(ordinal)
+            .ok()
+            .and_then(|value| primary_event_sequence.checked_add(value))
+            .and_then(|value| value.checked_add(1))
+            .ok_or(WorkspaceTaskStoreError::Conflict)?;
+        steps.push(DbTransactionStep::execute_checked(
+            outbox_insert(
+                flavor,
+                mutation,
+                additional_outbox_id.as_str(),
+                additional_outbox_id.as_str(),
+                event.event_type.as_str(),
+                &event.payload,
+                event_sequence,
+            ),
+            DbCountExpectation::exactly(1),
+        ));
+    }
     steps.push(DbTransactionStep::execute_checked(
         receipt_finalize(
             flavor,
@@ -403,9 +440,15 @@ fn auxiliary_statement(
     }
 }
 
-fn authority_cas(flavor: DbSqlFlavor, mutation: &WorkspaceTaskMutation) -> DbStatement {
+fn authority_cas(
+    flavor: DbSqlFlavor,
+    mutation: &WorkspaceTaskMutation,
+    event_count: u64,
+) -> DbStatement {
     DbStatementBuilder::new(flavor)
-        .push_static("UPDATE workspace_authorities SET revision = revision + 1, updated_at = ")
+        .push_static("UPDATE workspace_authorities SET revision = revision + ")
+        .bind(event_count)
+        .push_static(", updated_at = ")
         .push_static(flavor.now())
         .push_static(" WHERE tenant_id = ")
         .bind(mutation.scope.tenant_id.as_str())
@@ -422,7 +465,10 @@ fn outbox_insert(
     flavor: DbSqlFlavor,
     mutation: &WorkspaceTaskMutation,
     outbox_id: &str,
-    committed_revision: u64,
+    idempotency_key: &str,
+    event_type: &str,
+    event_payload: &Value,
+    event_sequence: u64,
 ) -> DbStatement {
     let (receipt_action, receipt_surface, contract_version) = mutation
         .receipt_authority
@@ -458,19 +504,19 @@ fn outbox_insert(
         .push_static(", 'workspace_task', ")
         .bind(mutation.task_id.as_str())
         .push_static(", ")
-        .bind(mutation.event_type.as_str())
+        .bind(event_type)
         .push_static(", ")
         .bind(format!("workspace:{}", mutation.scope.workspace_id))
         .push_static(", ")
-        .bind(committed_revision)
+        .bind(event_sequence)
         .push_static(", ")
-        .bind(mutation.event_payload.to_string())
+        .bind(event_payload.to_string())
         .push_static(", ")
         .bind(metadata.to_string())
         .push_static(", ")
         .bind(outbox_id)
         .push_static(", ")
-        .bind(mutation.idempotency_key.as_str())
+        .bind(idempotency_key)
         .push_static(")")
         .build()
 }
@@ -576,4 +622,16 @@ fn deterministic_id(namespace: &str, mutation: &WorkspaceTaskMutation) -> String
         digest.update(part.as_bytes());
     }
     format!("{namespace}-{}", hex::encode(digest.finalize()))
+}
+
+fn deterministic_event_id(
+    mutation: &WorkspaceTaskMutation,
+    ordinal: usize,
+    event_type: &str,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(deterministic_id("task-outbox-seed", mutation));
+    digest.update(u64::try_from(ordinal).unwrap_or(u64::MAX).to_be_bytes());
+    digest.update(event_type.as_bytes());
+    format!("task-outbox-{}", hex::encode(digest.finalize()))
 }

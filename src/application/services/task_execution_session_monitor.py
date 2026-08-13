@@ -18,6 +18,7 @@ from src.application.services.workspace_task_service import (
 from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
+from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
@@ -31,21 +32,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     Conversation,
     MessageExecutionStatus,
-    WorkspaceMemberModel,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
-    SqlWorkspacePlanOutboxRepository,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     ROOT_GOAL_TASK_ID,
-    WORKSPACE_PLAN_ID,
-    WORKSPACE_PLAN_NODE_ID,
 )
-from src.infrastructure.agent.workspace_plan.outbox_handlers import (
-    ATTEMPT_RETRY_EVENT,
-    WORKER_LAUNCH_EVENT,
-)
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 TaskRecoveryAction = Literal[
     "retry_launch",
@@ -59,8 +51,6 @@ _NO_ASSISTANT_RESPONSE_SECONDS = 30
 _STALE_PROCESSING_SECONDS = 15 * 60
 _MAX_RECOVERY_LEDGER_ITEMS = 20
 _MAX_AUTOMATIC_RECOVERY_ATTEMPTS = 3
-_EDITOR_ROLES = frozenset({"owner", "editor", "admin"})
-
 _ASSISTANT_OUTPUT_EVENT_TYPES = frozenset(
     {
         "assistant_message",
@@ -448,21 +438,12 @@ class TaskExecutionSessionMonitor:
     ) -> None:
         if system_recovery:
             return
-        await self._require_editor_role(workspace_id=workspace_id, actor_user_id=actor_user_id)
-
-    async def _require_editor_role(self, *, workspace_id: str, actor_user_id: str) -> None:
-        role = (
-            await self._db.execute(
-                refresh_select_statement(
-                    select(WorkspaceMemberModel.role).where(
-                        WorkspaceMemberModel.workspace_id == workspace_id,
-                        WorkspaceMemberModel.user_id == actor_user_id,
-                    )
-                )
-            )
-        ).scalar_one_or_none()
-        if str(role) not in _EDITOR_ROLES:
-            raise PermissionError("Insufficient permission to recover workspace task execution")
+        await self._task_service._require_minimum_role(
+            workspace_id=workspace_id,
+            user_id=actor_user_id,
+            minimum=WorkspaceRole.EDITOR,
+            error_message="Insufficient permission to recover workspace task execution",
+        )
 
     async def _load_conversation(self, conversation_id: str | None) -> Conversation | None:
         if not conversation_id:
@@ -730,30 +711,8 @@ class TaskExecutionSessionMonitor:
         reason: str,
         previous_attempt_id: str | None,
     ) -> str:
-        metadata = _metadata(task)
-        outbox = await SqlWorkspacePlanOutboxRepository(self._db).enqueue(
-            plan_id=_text(metadata.get(WORKSPACE_PLAN_ID)),
-            workspace_id=task.workspace_id,
-            event_type=ATTEMPT_RETRY_EVENT,
-            payload={
-                "workspace_id": task.workspace_id,
-                "task_id": task.id,
-                "worker_agent_id": task.assignee_agent_id,
-                "actor_user_id": actor_user_id,
-                "leader_agent_id": _text(metadata.get("leader_agent_id")),
-                "node_id": _text(metadata.get(WORKSPACE_PLAN_NODE_ID)),
-                "root_goal_task_id": _root_goal_task_id(task),
-                "previous_attempt_id": previous_attempt_id,
-                "reason": "retry",
-                "force_schedule": True,
-                "extra_instructions": (
-                    "Recover this workspace task after a silent or failed execution session. "
-                    f"Recovery reason: {reason}"
-                ),
-            },
-            metadata={"source": "task_execution_session.recovery", "action": "new_attempt"},
-        )
-        return str(outbox.id)
+        del task, actor_user_id, reason, previous_attempt_id
+        legacy_workspace_runtime_retired("task execution retry outbox")
 
     async def _enqueue_worker_launch(
         self,
@@ -763,27 +722,8 @@ class TaskExecutionSessionMonitor:
         attempt_id: str | None,
         reason: str,
     ) -> str:
-        metadata = _metadata(task)
-        outbox = await SqlWorkspacePlanOutboxRepository(self._db).enqueue(
-            plan_id=_text(metadata.get(WORKSPACE_PLAN_ID)),
-            workspace_id=task.workspace_id,
-            event_type=WORKER_LAUNCH_EVENT,
-            payload={
-                "workspace_id": task.workspace_id,
-                "task_id": task.id,
-                "worker_agent_id": task.assignee_agent_id,
-                "actor_user_id": actor_user_id,
-                "leader_agent_id": _text(metadata.get("leader_agent_id")),
-                "node_id": _text(metadata.get(WORKSPACE_PLAN_NODE_ID)),
-                "attempt_id": attempt_id,
-                "extra_instructions": (
-                    "Retry this workspace task launch after a silent or failed execution session. "
-                    f"Recovery reason: {reason}"
-                ),
-            },
-            metadata={"source": "task_execution_session.recovery", "action": "retry_launch"},
-        )
-        return str(outbox.id)
+        del task, actor_user_id, attempt_id, reason
+        legacy_workspace_runtime_retired("task execution worker-launch outbox")
 
 
 def _current_attempt(

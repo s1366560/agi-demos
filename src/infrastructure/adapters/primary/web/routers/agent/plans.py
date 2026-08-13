@@ -23,6 +23,12 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_db,
 )
+from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
+    WorkspaceAgentPolicyResponse,
+)
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
 from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
@@ -36,12 +42,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project as ProjectModel,
     UserProject as UserProjectModel,
     UserTenant as UserTenantModel,
-    WorkspaceAgentPolicyModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_plan_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.workspace_core.client import (
+    WorkspaceCoreClient,
+    WorkspaceCoreClientError,
+)
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -235,6 +244,82 @@ class ApprovePlanAndStartRequest(BaseModel):
     message_id: str = Field(min_length=1, max_length=255)
     idempotency_key: str = Field(min_length=1, max_length=255)
     environment: ApprovePlanEnvironmentRequest
+
+
+async def _load_workspace_policy_snapshot(
+    request: Request,
+    *,
+    conversation: ConversationModel,
+    current_user: User,
+) -> tuple[dict[str, Any], str]:
+    workspace_id = conversation.workspace_id
+    if not workspace_id:
+        return (
+            {
+                "revision": 0,
+                "roles": {},
+                "fallbacks": [],
+                "reasoning_effort": "medium",
+                "permission_mode": "ask",
+            },
+            "read_only",
+        )
+
+    client = getattr(request.app.state, "workspace_core_client", None)
+    if not isinstance(client, WorkspaceCoreClient):
+        raise workspace_core_unavailable_error()
+    path = (
+        f"/api/v1/tenants/{conversation.tenant_id}/projects/{conversation.project_id}"
+        f"/workspaces/{workspace_id}/agent-policy"
+    )
+    try:
+        upstream = await client.proxy_request(
+            method="GET",
+            path=path,
+            query=b"",
+            body=b"",
+            headers=[
+                ("Accept", "application/json"),
+                ("X-MemStack-Tenant-ID", conversation.tenant_id),
+                ("X-MemStack-Project-ID", conversation.project_id),
+                ("X-MemStack-Workspace-ID", workspace_id),
+                ("X-MemStack-User-ID", str(current_user.id)),
+                (
+                    "X-MemStack-User-Is-Superuser",
+                    "true" if bool(getattr(current_user, "is_superuser", False)) else "false",
+                ),
+            ],
+        )
+        payload = b"".join([chunk async for chunk in upstream.aiter_raw()])
+        if upstream.status_code != 200:
+            raise WorkspaceCoreClientError("Workspace Core policy read failed")
+        policy = WorkspaceAgentPolicyResponse.model_validate_json(payload)
+    except Exception as exc:
+        if isinstance(exc, HTTPException) and exc.status_code == 503:
+            raise
+        raise workspace_core_unavailable_error() from exc
+    if (
+        policy.tenant_id != conversation.tenant_id
+        or policy.project_id != conversation.project_id
+        or policy.workspace_id != workspace_id
+    ):
+        raise workspace_core_unavailable_error()
+    snapshot = {
+        "revision": policy.revision,
+        "roles": {
+            role: target.model_dump() if target is not None else None
+            for role, target in policy.roles.items()
+        },
+        "fallbacks": [target.model_dump() for target in policy.fallbacks],
+        "reasoning_effort": policy.reasoning_effort,
+        "permission_mode": policy.permission_mode,
+    }
+    permission_profile = {
+        "ask": "read_only",
+        "automatic": "workspace_write",
+        "full_access": "full_access",
+    }[policy.permission_mode]
+    return snapshot, permission_profile
 
 
 # === Task List Endpoints ===
@@ -465,16 +550,11 @@ async def approve_plan_and_start(
     ):
         raise HTTPException(status_code=409, detail=_("Plan version conflict"))
 
-    policy = (
-        await db.get(WorkspaceAgentPolicyModel, conversation.workspace_id)
-        if conversation.workspace_id
-        else None
+    policy_snapshot, permission_profile = await _load_workspace_policy_snapshot(
+        request,
+        conversation=conversation,
+        current_user=current_user,
     )
-    permission_profile = {
-        "ask": "read_only",
-        "automatic": "workspace_write",
-        "full_access": "full_access",
-    }.get(policy.permission_mode if policy else "ask", "read_only")
     now = datetime.now(UTC)
     base_container = cast(DIContainer, request.app.state.container)
     environment = await _resolve_cloud_run_environment(
@@ -484,13 +564,6 @@ async def approve_plan_and_start(
         kind=body.environment.kind,
         bound_at=now,
     )
-    policy_snapshot = {
-        "revision": policy.revision if policy else 0,
-        "roles": dict(policy.roles_json) if policy else {},
-        "fallbacks": list(policy.fallbacks_json) if policy else [],
-        "reasoning_effort": policy.reasoning_effort if policy else "medium",
-        "permission_mode": policy.permission_mode if policy else "ask",
-    }
     plan.status = "approved"
     plan.policy_revision = policy_snapshot["revision"]
     plan.approved_at = now

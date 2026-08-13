@@ -2,6 +2,16 @@
 
 type DesktopInvoke = <T = string>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
+type DesktopWorkspaceCoreHelperStatus = Readonly<{
+  state: 'starting' | 'running' | 'restartScheduled' | 'failed' | 'stopped';
+  pid: number | null;
+  apiBaseUrl: string | null;
+  restartAttempts: number;
+  restartGeneration: number;
+  failureReason: string | null;
+  cutoverState: 'legacy-only' | 'importing' | 'core-authoritative' | 'core-unavailable';
+}>;
+
 type WebControlPlaneDestination =
   | 'tenant-overview'
   | 'agent-workspace'
@@ -31,6 +41,14 @@ type WebControlPlaneCapability = {
 type DesktopNativeCapabilitySnapshot = {
   contractVersion: 1;
   webControlPlane: WebControlPlaneCapability;
+  workspaceCore: Readonly<{
+    state: DesktopWorkspaceCoreHelperStatus['state'];
+    healthy: boolean;
+    restartAttempts: number;
+    restartGeneration: number;
+    cutoverState: DesktopWorkspaceCoreHelperStatus['cutoverState'];
+    terminalFailureReason: string | null;
+  }>;
 };
 
 type DesktopDisplayCapture = {

@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
-from collections.abc import AsyncIterator, Mapping, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.events.types import AgentEventType
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import WorkspaceModel
 from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_WORKSPACE_PLANNER_ID
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
@@ -24,8 +19,6 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     require_workspace_session_role,
     runtime_context_string,
 )
-
-logger = logging.getLogger(__name__)
 
 PLANNING_CONTRACT_SOURCE = "planner_agent_code_analysis"
 WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME = "workspace_submit_planning_contract"
@@ -155,7 +148,12 @@ async def persist_workspace_planning_contract(
     commit: bool = True,
     publish: bool = True,
 ) -> dict[str, Any]:
-    """Persist planner delivery metadata when services are present."""
+    """Capture a planning contract without mutating platform-owned Workspace state.
+
+    Avernet Core owns Workspace metadata and Plan state. The normalized contract
+    is returned in the tool result so the authenticated Core-to-Agent dispatch
+    can persist it through Core's receipt/outbox boundary.
+    """
 
     payload = normalize_workspace_planning_contract(
         task_graph=task_graph,
@@ -165,135 +163,9 @@ async def persist_workspace_planning_contract(
         confidence=confidence,
         actor_user_id=actor_user_id,
     )
-    services = payload["delivery_cicd"].get("services")
-    if not services:
-        payload["metadata_written"] = False
-        return payload
-
-    if session is None:
-        async with _session_scope() as scoped_session:
-            await _write_workspace_metadata(
-                scoped_session,
-                workspace_id=workspace_id,
-                payload=payload,
-                commit=commit,
-            )
-    else:
-        await _write_workspace_metadata(
-            session,
-            workspace_id=workspace_id,
-            payload=payload,
-            commit=commit,
-        )
-
-    payload["metadata_written"] = True
-    if publish:
-        await _publish_workspace_updated_event(
-            workspace_id=workspace_id,
-            payload={
-                "workspace_id": workspace_id,
-                "metadata": {"delivery_cicd": payload["delivery_cicd"]},
-                "source": PLANNING_CONTRACT_SOURCE,
-            },
-        )
+    _ = workspace_id, session, commit, publish
+    payload["metadata_written"] = False
     return payload
-
-
-@asynccontextmanager
-async def _session_scope() -> AsyncIterator[AsyncSession]:
-    async with async_session_factory() as session:
-        yield session
-
-
-async def _write_workspace_metadata(
-    session: AsyncSession,
-    *,
-    workspace_id: str,
-    payload: dict[str, Any],
-    commit: bool,
-) -> None:
-    workspace_model = await session.get(WorkspaceModel, workspace_id)
-    if workspace_model is None:
-        raise WorkspacePlanningContractValidationError(f"workspace {workspace_id} not found")
-    metadata = dict(workspace_model.metadata_json or {})
-    metadata["delivery_cicd"] = _merge_delivery_cicd(
-        metadata.get("delivery_cicd"),
-        payload["delivery_cicd"],
-    )
-    workspace_model.metadata_json = metadata
-    workspace_model.updated_at = datetime.now(UTC)
-    await session.flush()
-    if commit:
-        await session.commit()
-
-
-def _merge_delivery_cicd(existing: object, incoming: Mapping[str, Any]) -> dict[str, Any]:
-    """Merge planner-discovered services without dropping workspace-owned provider config."""
-
-    existing_delivery = dict(existing) if isinstance(existing, Mapping) else {}
-    incoming_delivery = dict(incoming)
-    merged = dict(existing_delivery)
-    merged.update(incoming_delivery)
-
-    existing_provider = _optional_string(existing_delivery.get("provider"))
-    if existing_provider == "drone":
-        merged["provider"] = "drone"
-
-    existing_drone = existing_delivery.get("drone")
-    if isinstance(existing_drone, Mapping):
-        incoming_drone = incoming_delivery.get("drone")
-        if isinstance(incoming_drone, Mapping):
-            merged["drone"] = _merge_existing_preferred_mapping(
-                existing=existing_drone,
-                incoming=incoming_drone,
-            )
-        else:
-            merged["drone"] = dict(existing_drone)
-    return merged
-
-
-def _merge_existing_preferred_mapping(
-    *,
-    existing: Mapping[str, Any],
-    incoming: Mapping[str, Any],
-) -> dict[str, Any]:
-    merged = dict(incoming)
-    for key, value in existing.items():
-        incoming_value = merged.get(key)
-        if isinstance(value, Mapping) and isinstance(incoming_value, Mapping):
-            merged[key] = _merge_existing_preferred_mapping(
-                existing=value,
-                incoming=incoming_value,
-            )
-        else:
-            merged[key] = value
-    return merged
-
-
-async def _publish_workspace_updated_event(
-    *,
-    workspace_id: str,
-    payload: dict[str, Any],
-) -> None:
-    try:
-        from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event_with_retry,
-        )
-        from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-
-        redis_client = getattr(get_app_container(), "redis_client", None)
-        await publish_workspace_event_with_retry(
-            redis_client,
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_UPDATED,
-            payload=payload,
-        )
-    except Exception:
-        logger.warning(
-            "workspace_planner_contract: failed to publish workspace_updated",
-            extra={"workspace_id": workspace_id},
-            exc_info=True,
-        )
 
 
 def _normalize_task_graph(task_graph: Mapping[str, Any]) -> dict[str, Any]:

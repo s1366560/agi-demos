@@ -1,29 +1,7 @@
-"""Workspace repository exports."""
+"""Retired platform Workspace persistence adapter namespace.
 
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
-    SqlBlackboardRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_topology_repository import (
-    SqlTopologyRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-    SqlWorkspaceAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-    SqlWorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
+Runtime Workspace data is owned exclusively by Avernet Workspace Core. Offline migration and
+verification tooling imports its adapters from the dedicated ``workspace_core.migration`` package.
+"""
 
-__all__ = [
-    "SqlBlackboardRepository",
-    "SqlTopologyRepository",
-    "SqlWorkspaceAgentRepository",
-    "SqlWorkspaceMemberRepository",
-    "SqlWorkspaceRepository",
-    "SqlWorkspaceTaskRepository",
-]
+__all__: list[str] = []

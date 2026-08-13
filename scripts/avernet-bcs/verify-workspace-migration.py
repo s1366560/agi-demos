@@ -29,9 +29,20 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPOSITORY_ROOT))
 
 import src.configuration.config as config_module  # noqa: E402
-from src.infrastructure.adapters.secondary.persistence.models import Base  # noqa: E402
+from scripts.workspace_core_legacy_sentinel import (  # noqa: E402
+    DISPOSABLE_CLEANUP_CONFIRMATION,
+    assert_legacy_workspace_objects_removed,
+    assert_write_rejected,
+    assert_zero_stat_delta,
+    cleanup_disposable_legacy_workspace_tables,
+    install_write_sentinel,
+    workspace_stats,
+)
 from src.infrastructure.workspace_core.migration.contracts import (  # noqa: E402
     SOURCE_COLUMN_CONTRACTS,
+)
+from src.infrastructure.workspace_core.migration.legacy_models import (  # noqa: E402
+    legacy_workspace_metadata,
 )
 from src.infrastructure.workspace_core.migration.model import (  # noqa: E402
     MigrationCommand,
@@ -49,6 +60,60 @@ if TYPE_CHECKING:
 
 _PARENT_REVISION = "b4e6f8a0c2d4"
 _DATABASE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+_RESTORE_TASK_SESSION_RECEIPT_LEGACY_SHAPE_SQL = (
+    """
+    ALTER TABLE task_session_creation_receipts
+        DROP CONSTRAINT ck_task_session_receipts_status
+    """,
+    "DROP INDEX ix_task_session_receipts_status_updated",
+    """
+    ALTER TABLE task_session_creation_receipts
+        DROP COLUMN updated_at,
+        DROP COLUMN last_error,
+        DROP COLUMN status,
+        DROP COLUMN core_receipt_id,
+        ADD CONSTRAINT fk_task_session_receipts_workspace_id
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE,
+        ADD CONSTRAINT fk_task_session_receipts_initial_message_id
+            FOREIGN KEY (initial_message_id)
+            REFERENCES workspace_messages (id) ON DELETE SET NULL
+    """,
+    """
+CREATE FUNCTION tombstone_task_session_creation_receipt()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'conversations' THEN
+        UPDATE task_session_creation_receipts
+        SET conversation_id = NULL,
+            initial_message_id = NULL,
+            response_json = json_build_object('tombstone', true)
+        WHERE conversation_id = OLD.id;
+    ELSIF TG_TABLE_NAME = 'workspace_messages' THEN
+        UPDATE task_session_creation_receipts
+        SET conversation_id = NULL,
+            initial_message_id = NULL,
+            response_json = json_build_object('tombstone', true)
+        WHERE initial_message_id = OLD.id;
+    END IF;
+    RETURN OLD;
+END;
+$$
+    """,
+    """
+CREATE TRIGGER trg_task_session_receipt_conversation_delete
+BEFORE DELETE ON conversations
+FOR EACH ROW
+EXECUTE FUNCTION tombstone_task_session_creation_receipt()
+    """,
+    """
+CREATE TRIGGER trg_task_session_receipt_message_delete
+BEFORE DELETE ON workspace_messages
+FOR EACH ROW
+EXECUTE FUNCTION tombstone_task_session_creation_receipt()
+    """,
+)
 
 
 def _postgres_dsn(url: URL) -> str:
@@ -72,7 +137,10 @@ async def _drop_database(admin_dsn: str, database_name: str) -> None:
 
 
 def _legacy_tables() -> list[Table]:
-    selected = {Base.metadata.tables[name] for name in SOURCE_COLUMN_CONTRACTS}
+    selected = {
+        legacy_workspace_metadata.tables[name]
+        for name in (*SOURCE_COLUMN_CONTRACTS, "task_session_creation_receipts")
+    }
     pending = list(selected)
     while pending:
         table = pending.pop()
@@ -81,7 +149,7 @@ def _legacy_tables() -> list[Table]:
             if dependency not in selected:
                 selected.add(dependency)
                 pending.append(dependency)
-    return [table for table in Base.metadata.sorted_tables if table in selected]
+    return [table for table in legacy_workspace_metadata.sorted_tables if table in selected]
 
 
 async def _create_legacy_schema(test_url: URL) -> None:
@@ -92,8 +160,26 @@ async def _create_legacy_schema(test_url: URL) -> None:
         async with engine.begin() as connection:
             tables = _legacy_tables()
             await connection.run_sync(
-                lambda sync_connection: Base.metadata.create_all(sync_connection, tables=tables)
+                lambda sync_connection: legacy_workspace_metadata.create_all(
+                    sync_connection,
+                    tables=tables,
+                )
             )
+            await connection.exec_driver_sql(
+                "ALTER TABLE conversations ADD CONSTRAINT fk_conversations_workspace_id "
+                "FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE SET NULL"
+            )
+            await connection.exec_driver_sql(
+                "ALTER TABLE conversations "
+                "ADD CONSTRAINT fk_conversations_linked_workspace_task_id "
+                "FOREIGN KEY (linked_workspace_task_id) "
+                "REFERENCES workspace_tasks (id) ON DELETE SET NULL"
+            )
+            # Offline metadata reflects the current saga journal. Reconstruct the
+            # exact pre-f0a1b2c3d4e6 shape before stamping the historical parent
+            # so the rehearsal cannot pass by pretending current ORM is legacy.
+            for statement in _RESTORE_TASK_SESSION_RECEIPT_LEGACY_SHAPE_SQL:
+                await connection.exec_driver_sql(statement)
     finally:
         await engine.dispose()
 
@@ -103,7 +189,7 @@ async def _insert_fixture(test_url: URL) -> None:
         test_url.set(drivername="postgresql+asyncpg").render_as_string(hide_password=False)
     )
     now = datetime(2026, 8, 10, 8, 0, tzinfo=UTC)
-    table = Base.metadata.tables
+    table = legacy_workspace_metadata.tables
     try:
         async with engine.begin() as connection:
             _ = await connection.execute(
@@ -781,6 +867,21 @@ def main() -> None:
         with TemporaryDirectory(prefix="avernet-migration-") as directory:
             export_path = Path(directory) / "reverse-export.ndjson"
             asyncio.run(_migration_contract(test_dsn, export_path))
+        asyncio.run(install_write_sentinel(test_dsn))
+        baseline = asyncio.run(workspace_stats(test_dsn))
+        asyncio.run(assert_write_rejected(test_dsn))
+        current = asyncio.run(workspace_stats(test_dsn))
+        # The deliberate rejected write is a trigger-level probe and cannot mutate
+        # the table counters. Any scan or mutation delta means runtime authority leaked.
+        assert_zero_stat_delta(baseline, current)
+        asyncio.run(
+            cleanup_disposable_legacy_workspace_tables(
+                test_dsn,
+                baseline=current,
+                confirm=DISPOSABLE_CLEANUP_CONFIRMATION,
+            )
+        )
+        asyncio.run(assert_legacy_workspace_objects_removed(test_dsn))
     finally:
         asyncio.run(_drop_database(admin_dsn, database_name))
     print("Avernet Workspace migration contract passed")

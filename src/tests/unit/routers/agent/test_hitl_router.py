@@ -214,6 +214,7 @@ async def test_respond_to_hitl_sanitizes_internal_errors(
 
     with pytest.raises(HTTPException) as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=SimpleNamespace(),
             request=HITLResponseRequest(
                 request_id="hitl-1",
                 hitl_type="clarification",
@@ -234,6 +235,7 @@ async def test_respond_to_hitl_sanitizes_internal_errors(
 async def test_respond_to_hitl_sanitizes_invalid_type() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=SimpleNamespace(),
             request=HITLResponseRequest(
                 request_id="hitl-secret",
                 hitl_type="secret_type",
@@ -273,6 +275,7 @@ async def test_respond_to_hitl_sanitizes_update_conflict(
     )
 
     response = await hitl_router.respond_to_hitl(
+        http_request=SimpleNamespace(),
         request=HITLResponseRequest(
             request_id="hitl-secret",
             hitl_type="clarification",

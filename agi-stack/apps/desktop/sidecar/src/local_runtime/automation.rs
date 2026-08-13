@@ -190,13 +190,18 @@ pub(super) async fn capabilities(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let durable_execution = workspace_id.is_some_and(|workspace_id| {
-        state.automation_runtime_available_for_workspace(
-            &authenticated.workspace.tenant_id,
-            &project_id,
-            workspace_id,
-        )
-    });
+    let durable_execution = match workspace_id {
+        Some(workspace_id) => {
+            state
+                .automation_runtime_available_for_workspace(
+                    &authenticated.workspace.tenant_id,
+                    &project_id,
+                    workspace_id,
+                )
+                .await
+        }
+        None => false,
+    };
     let reason_code = if durable_execution {
         Value::Null
     } else if workspace_id.is_none() {
@@ -265,7 +270,8 @@ pub(super) async fn create(
         &authenticated.workspace.tenant_id,
         &project_id,
         &job,
-    )?;
+    )
+    .await?;
     let outcome = automation_store::create(
         &state.session_store,
         &authenticated.user.user_id,
@@ -426,12 +432,15 @@ pub(super) async fn run(
     }
     let job = automation_store::get(&state.session_store, &project_id, &automation_id)
         .map_err(store_error)?;
-    if let Err(reason_code) = state.validate_automation_execution_authority(
-        &authenticated.workspace.tenant_id,
-        &project_id,
-        &job,
-        request.conversation_id.as_deref(),
-    ) {
+    if let Err(reason_code) = state
+        .validate_automation_execution_authority(
+            &authenticated.workspace.tenant_id,
+            &project_id,
+            &job,
+            request.conversation_id.as_deref(),
+        )
+        .await
+    {
         return Err(error_with_code(
             StatusCode::SERVICE_UNAVAILABLE,
             reason_code,
@@ -447,7 +456,7 @@ pub(super) async fn run(
     Ok((StatusCode::ACCEPTED, Json(receipt)).into_response())
 }
 
-fn validate_explicit_target_scope(
+async fn validate_explicit_target_scope(
     state: &LocalRuntimeState,
     tenant_id: &str,
     project_id: &str,
@@ -465,6 +474,7 @@ fn validate_explicit_target_scope(
         return Ok(());
     }
     automation_executor::execution_workspace_id(state, tenant_id, project_id, job, None)
+        .await
         .map(|_| ())
         .map_err(|reason_code| {
             error_with_code(

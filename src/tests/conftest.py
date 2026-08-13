@@ -1,5 +1,14 @@
 """Pytest configuration and shared fixtures for testing."""
 
+import os
+
+# The module-level production app must always use Avernet and fail closed.
+os.environ.setdefault("WORKSPACE_CORE_BASE_URL", "http://workspace-core.test")
+os.environ.setdefault("WORKSPACE_CORE_SERVICE_TOKEN", "test-core-service-token")
+os.environ.setdefault("WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN", "test-provider-webhook-token")
+os.environ.setdefault("WORKSPACE_CORE_PROVIDER_EVENT_TOKEN", "test-provider-event-token")
+os.environ.setdefault("WORKSPACE_CORE_AGENT_REGISTRY_TOKEN", "test-agent-registry-token")
+
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -15,6 +24,9 @@ from sqlalchemy.ext.compiler import compiles
 from src.configuration.di_container import DIContainer
 from src.domain.model.auth.api_key import APIKey
 from src.domain.model.auth.user import User as DomainUser
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityResolvedProfile,
+)
 
 # Domain models
 from src.domain.model.task.task_log import TaskLog
@@ -509,9 +521,7 @@ def mock_graph_service(mock_neo4j_client):  # noqa: PLR0915
     service.get_entity_types = AsyncMock(return_value=[])
     service.get_entity = AsyncMock(return_value=None)
     service.get_community = AsyncMock(return_value=None)
-    service.get_entity_relationships = AsyncMock(
-        return_value={"relationships": [], "total": 0}
-    )
+    service.get_entity_relationships = AsyncMock(return_value={"relationships": [], "total": 0})
     service.get_community_members = AsyncMock(return_value={"members": [], "total": 0})
     service.get_graph_visualization = AsyncMock(return_value=[])
     service.get_subgraph = AsyncMock(return_value=[])
@@ -542,9 +552,7 @@ def mock_graph_service(mock_neo4j_client):  # noqa: PLR0915
             "expected_dimension": 0,
         }
     )
-    service.rebuild_embeddings = AsyncMock(
-        return_value={"processed": 0, "updated": 0, "failed": 0}
-    )
+    service.rebuild_embeddings = AsyncMock(return_value={"processed": 0, "updated": 0, "failed": 0})
     service.clear_entity_embeddings = AsyncMock(return_value=0)
     service.get_vector_index_dimension = AsyncMock(return_value=None)
     service.create_vector_index = AsyncMock(return_value=None)
@@ -649,6 +657,7 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     """Create a test FastAPI application."""
 
     from src.configuration.di_container import DIContainer
+    from src.configuration.workspace_core import WorkspaceCoreSettings
     from src.infrastructure.adapters.primary.web.dependencies import (
         get_current_user,
         get_graph_service,
@@ -659,7 +668,34 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     from src.infrastructure.adapters.secondary.persistence.database import get_db
     from src.infrastructure.adapters.secondary.persistence.models import User
 
-    app = create_app()
+    app = create_app(
+        workspace_core_settings=WorkspaceCoreSettings.model_validate({}),
+    )
+
+    class TestWorkspaceAuthority:
+        async def resolve_profiles(
+            self,
+            *,
+            workspace_ids: set[str],
+            user_id: str,
+            is_superuser: bool = False,
+        ) -> dict[str, WorkspaceAuthorityResolvedProfile]:
+            del user_id, is_superuser
+            return {
+                workspace_id: WorkspaceAuthorityResolvedProfile(
+                    workspace_id=workspace_id,
+                    tenant_id=TEST_TENANT_ID,
+                    project_id=TEST_PROJECT_ID,
+                    name=workspace_id,
+                    created_by=TEST_USER_ID,
+                    is_archived=False,
+                    metadata={},
+                    member_role="owner",
+                )
+                for workspace_id in workspace_ids
+            }
+
+    app.state.workspace_authority = TestWorkspaceAuthority()
 
     # Add workflow_engine to app state
     app.state.workflow_engine = mock_workflow_engine

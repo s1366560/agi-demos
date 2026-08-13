@@ -4,13 +4,57 @@ on:
   pull_request:
     paths:
       - '.github/workflows/avernet-bcs.yml'
+      - '.env.example'
+      - 'Dockerfile.workspace-core'
+      - 'Makefile'
+      - 'agi-stack/apps/desktop/**'
+      - 'agi-stack/apps/server/**'
+      - 'alembic/versions/**'
+      - 'docker-compose.yml'
+      - 'docker/workspace-core/**'
+      - 'docs/architecture/workspace-core-*.json'
       - 'scripts/avernet-bcs/**'
+      - 'scripts/workspace-core/**'
+      - 'scripts/workspace_core_legacy_sentinel.py'
+      - 'src/configuration/**'
+      - 'src/domain/events/**'
+      - 'src/domain/ports/services/workspace_authority_port.py'
+      - 'src/infrastructure/adapters/primary/web/**'
+      - 'src/infrastructure/adapters/secondary/persistence/**'
+      - 'src/infrastructure/agent/**'
+      - 'src/infrastructure/workspace_core/**'
+      - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
+      - 'src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py'
+      - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
+      - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
       - 'third_party/avernet-bcs/**'
   push:
     branches: [main, develop]
     paths:
       - '.github/workflows/avernet-bcs.yml'
+      - '.env.example'
+      - 'Dockerfile.workspace-core'
+      - 'Makefile'
+      - 'agi-stack/apps/desktop/**'
+      - 'agi-stack/apps/server/**'
+      - 'alembic/versions/**'
+      - 'docker-compose.yml'
+      - 'docker/workspace-core/**'
+      - 'docs/architecture/workspace-core-*.json'
       - 'scripts/avernet-bcs/**'
+      - 'scripts/workspace-core/**'
+      - 'scripts/workspace_core_legacy_sentinel.py'
+      - 'src/configuration/**'
+      - 'src/domain/events/**'
+      - 'src/domain/ports/services/workspace_authority_port.py'
+      - 'src/infrastructure/adapters/primary/web/**'
+      - 'src/infrastructure/adapters/secondary/persistence/**'
+      - 'src/infrastructure/agent/**'
+      - 'src/infrastructure/workspace_core/**'
+      - 'src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py'
+      - 'src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py'
+      - 'src/tests/unit/scripts/test_workspace_core_evidence_gates.py'
+      - 'src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py'
       - 'third_party/avernet-bcs/**'
 
 permissions:
@@ -57,6 +101,96 @@ jobs:
 
       - name: Run full BCS test suite
         run: make -C third_party/avernet-bcs test
+
+  workspace-authority-gates:
+    name: Current-head schema, migration, and evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d memstack"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@162b8acf397cb069dec09a3f5a9847cf71cfa46a # v1.0.7
+
+      - name: Install Python dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Configure repository test database
+        env:
+          DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+
+      - name: Verify frozen Workspace route contract
+        run: uv run python scripts/workspace-core/generate-route-manifest.py --check
+
+      - name: Execute revision-bound implementation evidence
+        env:
+          BCS_TEST_REDIS_PORT: '6379'
+        run: uv run python scripts/workspace-core/verify-implementation-evidence.py
+
+      - name: Verify revision-bound implementation evidence
+        run: uv run python scripts/workspace-core/generate-implementation-ledger.py --check
+
+      - name: Reject legacy Workspace runtime references
+        run: uv run python scripts/workspace-core/verify-legacy-workspace-references.py
+
+      - name: Verify PostgreSQL schema and protected migration history
+        run: uv run python scripts/avernet-bcs/verify-postgres-schema.py --skip-cargo-contract
+
+      - name: Verify migration, reverse export, sentinel, and disposable cleanup
+        run: uv run python scripts/avernet-bcs/verify-workspace-migration.py
+
+      - name: Verify paired SQLite and PostgreSQL authority state
+        run: uv run python scripts/workspace-core/verify-cross-store-scenarios.py
+
+      - name: Verify Workspace event authority and replay evidence
+        run: uv run python scripts/workspace-core/verify-event-parity.py
+
+      - name: Check retired Rust Server surface
+        run: cargo check --manifest-path agi-stack/Cargo.toml -p agistack-server
+
+      - name: Test Desktop authority and cutover surface
+        run: cargo test --manifest-path agi-stack/Cargo.toml -p agistack-desktop-sidecar
+
+      - name: Verify migration and evidence unit contracts
+        run: >-
+          uv run pytest
+          src/tests/unit/migrations/test_avernet_workspace_schema_migrations.py
+          src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_implementation_ledger.py
+          src/tests/unit/scripts/test_workspace_core_compose_lifecycle.py
+          src/tests/unit/scripts/test_workspace_core_evidence_gates.py
+          -q
 
   dependency-audit:
     name: RustSec dependency audit

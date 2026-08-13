@@ -21,21 +21,6 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_topology_repository import (
-    SqlTopologyRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-    SqlWorkspaceAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-    SqlWorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     PREFERRED_LANGUAGE,
@@ -43,6 +28,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     TASK_ROLE,
     WORKSPACE_HARNESS,
 )
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +102,10 @@ async def create_workspace_for_goal(
 
     async with async_session_factory() as db:
         workspace_service = WorkspaceService(
-            workspace_repo=SqlWorkspaceRepository(db),
-            workspace_member_repo=SqlWorkspaceMemberRepository(db),
-            workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-            topology_repo=SqlTopologyRepository(db),
+            workspace_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_member_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_agent_repo=legacy_workspace_runtime_retired("goal command"),
+            topology_repo=legacy_workspace_runtime_retired("goal command topology"),
         )
         workspace = await workspace_service.create_workspace(
             tenant_id=tenant_id,
@@ -161,11 +147,11 @@ async def create_workspace_goal(
     """Create a human-defined workspace root goal and schedule its first tick."""
 
     async with async_session_factory() as db:
-        task_repo = SqlWorkspaceTaskRepository(db)
+        task_repo = legacy_workspace_runtime_retired("goal command")
         task_service = WorkspaceTaskService(
-            workspace_repo=SqlWorkspaceRepository(db),
-            workspace_member_repo=SqlWorkspaceMemberRepository(db),
-            workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+            workspace_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_member_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_agent_repo=legacy_workspace_runtime_retired("goal command"),
             workspace_task_repo=task_repo,
         )
         command_service = WorkspaceTaskCommandService(task_service)
@@ -212,12 +198,12 @@ async def list_workspace_goals(
 ) -> list[GoalStatusItem]:
     """List visible workspace root goals for the current user."""
 
-    async with async_session_factory() as db:
+    async with async_session_factory():
         task_service = WorkspaceTaskService(
-            workspace_repo=SqlWorkspaceRepository(db),
-            workspace_member_repo=SqlWorkspaceMemberRepository(db),
-            workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-            workspace_task_repo=SqlWorkspaceTaskRepository(db),
+            workspace_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_member_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_agent_repo=legacy_workspace_runtime_retired("goal command"),
+            workspace_task_repo=legacy_workspace_runtime_retired("goal command"),
         )
         tasks = await task_service.list_tasks(
             workspace_id=workspace_id,

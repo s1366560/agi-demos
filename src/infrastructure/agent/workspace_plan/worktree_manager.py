@@ -9,22 +9,9 @@ from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from typing import Any, Protocol, SupportsInt, cast
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTask
-from src.domain.model.workspace.workspace_task_session_attempt import (
-    WorkspaceTaskSessionAttemptStatus,
-)
-from src.infrastructure.adapters.secondary.persistence.models import (
-    WorkspaceTaskSessionAttemptModel,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
 from src.infrastructure.agent.workspace.code_context import load_workspace_code_context
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ACTIVE_EXECUTION_ROOT,
@@ -33,6 +20,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKTREE_SETUP,
 )
 from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 _GENERATED_DIRTY_PATH_PATTERNS = (
     "ITERATION-REPORT-*.md",
@@ -243,7 +231,7 @@ class WorkspaceWorktreeManager:
                 base_ref=base_ref,
             )
 
-        workspace = await SqlWorkspaceRepository(self._session).find_by_id(workspace_id)
+        workspace = legacy_workspace_runtime_retired("worktree Workspace lookup")
         if workspace is None:
             return _context(
                 setup_status="skipped",
@@ -255,7 +243,7 @@ class WorkspaceWorktreeManager:
         root_metadata: Mapping[str, Any] = {}
         root_task_id = _mapping_string(metadata, ROOT_GOAL_TASK_ID)
         if root_task_id:
-            root_task = await SqlWorkspaceTaskRepository(self._session).find_by_id(root_task_id)
+            root_task = legacy_workspace_runtime_retired("worktree root task lookup")
             if root_task is not None and root_task.workspace_id == workspace_id:
                 root_metadata = dict(root_task.metadata or {})
 
@@ -425,20 +413,8 @@ class WorkspaceWorktreeManager:
         )
 
     async def active_attempt_worktree_names(self, workspace_id: str) -> tuple[str, ...]:
-        rows = await self._session.execute(
-            select(WorkspaceTaskSessionAttemptModel.id)
-            .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
-            .where(
-                WorkspaceTaskSessionAttemptModel.status.in_(
-                    [
-                        WorkspaceTaskSessionAttemptStatus.PENDING.value,
-                        WorkspaceTaskSessionAttemptStatus.RUNNING.value,
-                        WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value,
-                    ]
-                )
-            )
-        )
-        return tuple(sorted(str(row[0]) for row in rows.all() if row[0]))
+        del workspace_id
+        return ()
 
     async def _collect_post_setup_diagnostics(
         self,

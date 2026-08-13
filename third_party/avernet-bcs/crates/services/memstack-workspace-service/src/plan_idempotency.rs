@@ -52,6 +52,7 @@ pub(super) fn action_request_hash(
 
 pub(super) struct TransitionIds {
     pub(super) outbox_id: String,
+    pub(super) compatibility_outbox_id: String,
     pub(super) event_id: String,
     pub(super) audit_id: String,
 }
@@ -60,6 +61,7 @@ pub(super) fn transition_ids(workspace_id: &str, idempotency_key: &str) -> Trans
     let seed = format!("{workspace_id}:{idempotency_key}");
     TransitionIds {
         outbox_id: deterministic_id("outbox", &seed),
+        compatibility_outbox_id: deterministic_id("compatibility-outbox", &seed),
         event_id: deterministic_id("event", &seed),
         audit_id: deterministic_id("audit", &seed),
     }

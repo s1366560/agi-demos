@@ -10,8 +10,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from src.configuration.workspace_core import WorkspaceCoreBackend, WorkspaceCoreSettings
+from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_api_key_from_header,
+    get_current_actor,
     get_current_user,
     verify_api_key_dependency,
 )
@@ -57,10 +59,21 @@ def _avernet_routes(app: FastAPI) -> list[APIRoute]:
     ]
 
 
+def _dependency_calls(route: APIRoute) -> list[Callable[..., object]]:
+    calls: list[Callable[..., object]] = []
+
+    def walk(dependency: object) -> None:
+        for child in dependency.dependencies:
+            calls.append(child.call)
+            walk(child)
+
+    walk(route.dependant)
+    return calls
+
+
 def _avernet_settings() -> WorkspaceCoreSettings:
     return WorkspaceCoreSettings.model_validate(
         {
-            "WORKSPACE_CORE_BACKEND": "avernet",
             "WORKSPACE_CORE_BASE_URL": "http://workspace-core.test",
             "WORKSPACE_CORE_SERVICE_TOKEN": "internal-test-token",
             "WORKSPACE_CORE_PROVIDER_WEBHOOK_TOKEN": "provider-webhook-token",
@@ -90,37 +103,38 @@ def _override_proxy_dependencies(app: FastAPI) -> None:
 
 
 @pytest.mark.unit
-def test_legacy_registers_complete_workspace_route_group() -> None:
-    app = FastAPI()
-
-    register_workspace_core_static_routes(app, WorkspaceCoreBackend.LEGACY)
-    register_workspace_core_routes(app, WorkspaceCoreBackend.LEGACY)
-
-    assert len(_workspace_routes(app)) == 92
-
-
-@pytest.mark.unit
 def test_avernet_registers_complete_proxy_group_without_legacy_handlers() -> None:
     app = FastAPI()
 
-    register_workspace_core_static_routes(app, WorkspaceCoreBackend.AVERNET)
-    register_workspace_core_routes(app, WorkspaceCoreBackend.AVERNET)
+    register_workspace_core_static_routes(app)
+    register_workspace_core_routes(app)
 
     assert _workspace_routes(app) == []
     assert len(_avernet_routes(app)) == 92
 
 
 @pytest.mark.unit
-def test_avernet_openapi_contract_matches_legacy_route_group() -> None:
-    legacy = FastAPI()
-    avernet = FastAPI()
-    register_workspace_core_static_routes(legacy, WorkspaceCoreBackend.LEGACY)
-    register_workspace_core_routes(legacy, WorkspaceCoreBackend.LEGACY)
-    register_workspace_core_static_routes(avernet, WorkspaceCoreBackend.AVERNET)
-    register_workspace_core_routes(avernet, WorkspaceCoreBackend.AVERNET)
+def test_avernet_proxy_routes_keep_only_platform_authentication_dependencies() -> None:
+    app = FastAPI()
 
-    assert avernet.openapi()["paths"] == legacy.openapi()["paths"]
-    assert avernet.openapi()["components"] == legacy.openapi()["components"]
+    register_workspace_core_static_routes(app)
+    register_workspace_core_routes(app)
+
+    routes = _avernet_routes(app)
+    allowed_root_dependencies = {
+        get_api_key_from_header,
+        get_current_actor,
+        get_current_user,
+        get_db,
+        verify_api_key_dependency,
+    }
+    dependency_calls = [call for route in routes for call in _dependency_calls(route)]
+    assert get_current_user in dependency_calls
+    assert get_current_actor in dependency_calls
+    assert all(
+        dependency_call in allowed_root_dependencies
+        for dependency_call in dependency_calls
+    )
 
 
 @pytest.mark.unit
@@ -148,7 +162,7 @@ async def test_avernet_proxy_separates_service_and_user_authorization() -> None:
         _avernet_settings(),
         transport=httpx.MockTransport(handler),
     )
-    register_workspace_core_static_routes(app, WorkspaceCoreBackend.AVERNET)
+    register_workspace_core_static_routes(app)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -172,7 +186,7 @@ async def test_avernet_proxy_separates_service_and_user_authorization() -> None:
 async def test_avernet_proxy_fails_with_503_without_runtime_client() -> None:
     app = FastAPI()
     _override_proxy_dependencies(app)
-    register_workspace_core_static_routes(app, WorkspaceCoreBackend.AVERNET)
+    register_workspace_core_static_routes(app)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -185,7 +199,13 @@ async def test_avernet_proxy_fails_with_503_without_runtime_client() -> None:
         )
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "Workspace Core is unavailable"}
+    assert response.json() == {
+        "detail": {
+            "code": "WORKSPACE_CORE_UNAVAILABLE",
+            "reason": "workspace_core_unavailable",
+            "detail": "Workspace Core is unavailable",
+        }
+    }
 
 
 @pytest.mark.unit
@@ -213,7 +233,7 @@ async def test_avernet_context_proxy_forwards_api_key_identity() -> None:
         _avernet_settings(),
         transport=httpx.MockTransport(handler),
     )
-    register_workspace_core_static_routes(app, WorkspaceCoreBackend.AVERNET)
+    register_workspace_core_static_routes(app)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -272,7 +292,7 @@ async def test_avernet_file_proxy_streams_multipart_and_download_headers() -> No
         _avernet_settings(),
         transport=_StreamingHandlerTransport(handler),
     )
-    register_workspace_core_routes(app, WorkspaceCoreBackend.AVERNET)
+    register_workspace_core_routes(app)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),

@@ -4,7 +4,8 @@ use bcs_db_api::{DbPlugin, DbSqlFlavor};
 use memstack_workspace_service_api::WorkspaceMutationAuthority;
 use memstack_workspace_store::{
     WorkspaceTaskAttemptRecord, WorkspaceTaskAuxiliaryWrite, WorkspaceTaskDomainWrite,
-    WorkspaceTaskMutationOutcome, WorkspaceTaskRecord, WorkspaceTaskStore, WorkspaceTaskStoreError,
+    WorkspaceTaskMutationOutcome, WorkspaceTaskOutboxEvent, WorkspaceTaskRecord,
+    WorkspaceTaskStore, WorkspaceTaskStoreError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -646,6 +647,7 @@ impl<'a> PublicWorkspaceTaskService<'a> {
         let attempts = self.store.attempts(&scope, task_id, 5).await?;
         let execution = self.store.execution(&scope, task_id).await?;
         let mut auxiliary = Vec::new();
+        let mut projected_attempt = attempts.first().cloned();
         let mut attempt_id = attempts.first().map(|attempt| attempt.attempt_id.clone());
         let reason = nonblank(input.reason.as_deref())
             .unwrap_or_else(|| format!("Explicit recovery action: {}", input.action));
@@ -694,26 +696,26 @@ impl<'a> PublicWorkspaceTaskService<'a> {
                     .and_then(Value::as_str)
                     .unwrap_or(task_id)
                     .to_string();
-                auxiliary.push(WorkspaceTaskAuxiliaryWrite::CreateAttempt(
-                    WorkspaceTaskAttemptRecord {
-                        attempt_id: new_attempt_id.clone(),
-                        task_id: task_id.to_string(),
-                        root_goal_task_id,
-                        attempt_number,
-                        status: "pending".to_string(),
-                        conversation_id: None,
-                        worker_agent_id: record.assignee_agent_id.clone(),
-                        leader_agent_id: None,
-                        candidate_summary: None,
-                        candidate_artifacts: json!([]),
-                        candidate_verifications: json!([]),
-                        leader_feedback: None,
-                        adjudication_reason: None,
-                        created_at: created_at.clone(),
-                        updated_at: Some(created_at),
-                        completed_at: None,
-                    },
-                ));
+                let attempt = WorkspaceTaskAttemptRecord {
+                    attempt_id: new_attempt_id.clone(),
+                    task_id: task_id.to_string(),
+                    root_goal_task_id,
+                    attempt_number,
+                    status: "pending".to_string(),
+                    conversation_id: None,
+                    worker_agent_id: record.assignee_agent_id.clone(),
+                    leader_agent_id: None,
+                    candidate_summary: None,
+                    candidate_artifacts: json!([]),
+                    candidate_verifications: json!([]),
+                    leader_feedback: None,
+                    adjudication_reason: None,
+                    created_at: created_at.clone(),
+                    updated_at: Some(created_at),
+                    completed_at: None,
+                };
+                projected_attempt = Some(attempt.clone());
+                auxiliary.push(WorkspaceTaskAuxiliaryWrite::CreateAttempt(attempt));
                 record.metadata["current_attempt_id"] = Value::String(new_attempt_id.clone());
                 record.metadata["current_attempt_number"] = Value::from(attempt_number);
                 attempt_id = Some(new_attempt_id);
@@ -729,6 +731,42 @@ impl<'a> PublicWorkspaceTaskService<'a> {
             None,
             input.workspace_agent_id.as_deref(),
         );
+        let session =
+            execution_session_value(&record, projected_attempt.as_ref(), execution.clone());
+        let incident = json!({
+            "type": "recovery_action_requested",
+            "action": &input.action,
+            "reason": &reason,
+            "source": "operator",
+            "conversation_id": execution.as_ref().map(|value| value.conversation_id.as_str()),
+            "attempt_id": &attempt_id,
+        });
+        let additional_events = vec![
+            WorkspaceTaskOutboxEvent {
+                event_type: "task_execution_session_updated".to_string(),
+                payload: json!({
+                    "workspace_id": &context.workspace_id,
+                    "task_id": task_id,
+                    "session": session,
+                }),
+            },
+            WorkspaceTaskOutboxEvent {
+                event_type: "task_execution_incident_opened".to_string(),
+                payload: json!({
+                    "workspace_id": &context.workspace_id,
+                    "task_id": task_id,
+                    "incident": incident,
+                }),
+            },
+            WorkspaceTaskOutboxEvent {
+                event_type: "task_recovery_action_completed".to_string(),
+                payload: json!({
+                    "workspace_id": &context.workspace_id,
+                    "task_id": task_id,
+                    "action": &input.action,
+                }),
+            },
+        ];
         let response = PublicWorkspaceTaskRecoveryOutcome {
             workspace_id: context.workspace_id.clone(),
             task_id: task_id.to_string(),
@@ -747,7 +785,7 @@ impl<'a> PublicWorkspaceTaskService<'a> {
         let response_value =
             serde_json::to_value(&response).map_err(PublicWorkspaceTaskError::Json)?;
         let outcome = self
-            .commit_value(
+            .commit_value_with_events(
                 context,
                 "recovery_action",
                 task_id,
@@ -756,6 +794,12 @@ impl<'a> PublicWorkspaceTaskService<'a> {
                 response_value.clone(),
                 "task_recovery_action_started",
                 response_value,
+                additional_events,
+                Some(json!({
+                    "action": &input.action,
+                    "reason": &input.reason,
+                    "workspace_agent_id": &input.workspace_agent_id,
+                })),
             )
             .await?;
         let mut response: PublicWorkspaceTaskRecoveryOutcome =

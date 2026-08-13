@@ -4,9 +4,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import status
-from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityAccessDeniedError,
+    WorkspaceAuthorityProfile,
+    WorkspaceAuthorityUnavailableError,
+)
 from src.infrastructure.adapters.secondary.persistence.artifact_model import ArtifactModel
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
@@ -14,17 +18,50 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentTaskModel,
     Conversation,
     HITLRequest,
-    PlanModel,
-    PlanNodeModel,
     ToolExecutionRecord,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-    WorkspaceTaskModel,
-    WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_plan_run_authority,
 )
+
+
+class _ProjectionWorkspaceAuthority:
+    def __init__(
+        self,
+        *,
+        profiles: dict[str, WorkspaceAuthorityProfile] | None = None,
+        task_links: set[tuple[str, str]] | None = None,
+    ) -> None:
+        self.profiles = profiles or {}
+        self.task_links = task_links or set()
+
+    async def get_profile(self, scope: object) -> WorkspaceAuthorityProfile:
+        profile = self.profiles.get(str(scope.workspace_id))
+        if profile is None:
+            raise WorkspaceAuthorityAccessDeniedError
+        return profile
+
+    async def has_task(self, scope: object, task_id: str) -> bool:
+        return (str(scope.workspace_id), task_id) in self.task_links
+
+
+def _workspace_profile(
+    *,
+    workspace_id: str,
+    tenant_id: str,
+    project_id: str,
+    workspace_name: str,
+    created_by: str,
+) -> WorkspaceAuthorityProfile:
+    return WorkspaceAuthorityProfile(
+        workspace_id=workspace_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=workspace_name,
+        created_by=created_by,
+        is_archived=False,
+        metadata={"authority": "avernet"},
+    )
 
 
 async def _commit_plan_run_authority(
@@ -42,15 +79,14 @@ def _assert_current_run(
     payload: dict[str, Any],
     *,
     plan_run: AgentPlanRunModel,
-    attempt_id: str,
     conversation_id: str,
     project_id: str,
     plan_version_id: str,
 ) -> None:
     assert payload["schema_version"] == 2
     assert payload["projection_kind"] == "workspace_session"
-    assert payload["authority_kind"] == "workspace_attempt"
-    assert payload["authority_id"] == attempt_id
+    assert payload["authority_kind"] == "conversation_record"
+    assert payload["authority_id"] == conversation_id
     current_run = payload["execution"]["current_run"]
     assert current_run == payload["execution"]["run_history"][0]
     assert current_run["id"] == plan_run.id
@@ -85,36 +121,78 @@ def _assert_agent_plan_projection(
     }
 
 
+def _assert_sensitive_runtime_fields_omitted(serialized: str) -> None:
+    secrets = (
+        "raw input secret",
+        "raw output secret",
+        "response secret must not leak",
+        "ciphertext must not leak",
+        "not projected",
+        "raw context secret",
+        "raw-option-secret",
+        "raw-tool-error-secret",
+    )
+    assert all(secret not in serialized for secret in secrets)
+    assert '"artifact_version"' not in serialized
+    assert '"raw_authorization_secret"' not in serialized
+
+
+async def _assert_projection_scopes_are_enforced(
+    client: Any,
+    *,
+    conversation_id: str,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+) -> None:
+    bad_scopes = (
+        {"tenant_id": "wrong-tenant", "project_id": project_id, "workspace_id": workspace_id},
+        {"tenant_id": tenant_id, "project_id": "wrong-project", "workspace_id": workspace_id},
+        {"tenant_id": tenant_id, "project_id": project_id, "workspace_id": "wrong-workspace"},
+        {"tenant_id": tenant_id, "project_id": project_id},
+    )
+    for bad_scope in bad_scopes:
+        denied = await client.get(
+            f"/api/v1/agent/conversations/{conversation_id}/session",
+            params=bad_scope,
+        )
+        assert denied.status_code == status.HTTP_404_NOT_FOUND
+
+
+def _projection_authority(
+    *,
+    workspace_id: str,
+    tenant_id: str,
+    project_id: str,
+    workspace_name: str,
+    created_by: str,
+    task_id: str,
+) -> _ProjectionWorkspaceAuthority:
+    return _ProjectionWorkspaceAuthority(
+        profiles={
+            workspace_id: _workspace_profile(
+                workspace_id=workspace_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_name=workspace_name,
+                created_by=created_by,
+            )
+        },
+        task_links={(workspace_id, task_id)},
+    )
+
+
 async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtime_fields(
     authenticated_async_client,
+    test_app,
     test_db,
     test_project_db,
     test_user,
 ) -> None:
     now = datetime.now(UTC)
-    workspace = WorkspaceModel(
-        id="session-projection-workspace",
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Session projection workspace",
-        created_by=test_user.id,
-        metadata_json={},
-    )
-    member = WorkspaceMemberModel(
-        id="session-projection-member",
-        workspace_id=workspace.id,
-        user_id=test_user.id,
-        role="owner",
-        invited_by=test_user.id,
-    )
-    task = WorkspaceTaskModel(
-        id="session-projection-task",
-        workspace_id=workspace.id,
-        title="Project one conversation",
-        created_by=test_user.id,
-        status="in_progress",
-        metadata_json={},
-    )
+    workspace_id = "session-projection-workspace"
+    workspace_name = "Session projection workspace"
+    task_id = "session-projection-task"
     conversation = Conversation(
         id="session-projection-conversation",
         project_id=test_project_db.id,
@@ -127,8 +205,8 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         message_count=2,
         current_mode="build",
         conversation_mode="autonomous",
-        workspace_id=workspace.id,
-        linked_workspace_task_id=task.id,
+        workspace_id=workspace_id,
+        linked_workspace_task_id=task_id,
         participant_agents=["agent-worker"],
         coordinator_agent_id="agent-leader",
         focused_agent_id="agent-worker",
@@ -173,36 +251,6 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         created_at=now - timedelta(minutes=3),
         updated_at=now - timedelta(seconds=10),
     )
-    attempts = [
-        WorkspaceTaskSessionAttemptModel(
-            id="session-projection-attempt-1",
-            workspace_task_id=task.id,
-            root_goal_task_id=task.id,
-            workspace_id=workspace.id,
-            attempt_number=1,
-            status="rejected",
-            conversation_id=conversation.id,
-            candidate_artifacts_json=["artifact://old"],
-            candidate_verifications_json=["check://old"],
-            created_at=now - timedelta(minutes=5),
-        ),
-        WorkspaceTaskSessionAttemptModel(
-            id="session-projection-attempt-2",
-            workspace_task_id=task.id,
-            root_goal_task_id=task.id,
-            workspace_id=workspace.id,
-            attempt_number=2,
-            status="running",
-            conversation_id=conversation.id,
-            worker_agent_id="agent-worker",
-            leader_agent_id="agent-leader",
-            candidate_summary="Current candidate",
-            candidate_artifacts_json=["artifact://current"],
-            candidate_verifications_json=["check://tests", "check://lint"],
-            leader_feedback="Continue with the scoped implementation",
-            created_at=now - timedelta(minutes=2),
-        ),
-    ]
     checklist = AgentTaskModel(
         id="session-projection-checklist",
         conversation_id=conversation.id,
@@ -211,28 +259,6 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         status="in_progress",
         priority="high",
         order_index=0,
-    )
-    plan = PlanModel(
-        id="session-projection-plan",
-        workspace_id=workspace.id,
-        goal_id="session-projection-goal",
-        status="active",
-        created_at=now - timedelta(minutes=10),
-    )
-    linked_node = PlanNodeModel(
-        id="session-projection-node",
-        plan_id=plan.id,
-        parent_id=plan.goal_id,
-        kind="task",
-        title="Project one conversation",
-        description="Keep authority scoped",
-        depends_on=[],
-        acceptance_criteria=[{"kind": "command", "description": "Focused tests pass"}],
-        intent="in_progress",
-        execution="running",
-        progress={"percent": 50},
-        current_attempt_id=attempts[-1].id,
-        workspace_task_id=task.id,
     )
     pending_hitl = HITLRequest(
         id="session-projection-hitl",
@@ -290,7 +316,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         project_id=test_project_db.id,
         tenant_id=test_project_db.tenant_id,
         conversation_id=conversation.id,
-        workspace_id=workspace.id,
+        workspace_id=workspace_id,
         filename="report.md",
         mime_type="text/markdown",
         category="document",
@@ -313,16 +339,10 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
     )
     test_db.add_all(
         [
-            workspace,
-            member,
-            task,
             conversation,
             approved_plan,
             plan_run,
-            *attempts,
             checklist,
-            plan,
-            linked_node,
             pending_hitl,
             expired_hitl,
             tool_record,
@@ -335,28 +355,33 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         plan_run=plan_run,
         tenant_id=test_project_db.tenant_id,
     )
+    authority = _projection_authority(
+        workspace_id=workspace_id,
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        workspace_name=workspace_name,
+        created_by=test_user.id,
+        task_id=task_id,
+    )
+    test_app.state.workspace_authority = authority
 
     response = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
         params={
             "tenant_id": test_project_db.tenant_id,
             "project_id": test_project_db.id,
-            "workspace_id": workspace.id,
+            "workspace_id": workspace_id,
         },
     )
 
     assert response.status_code == status.HTTP_200_OK
     payload = response.json()
     assert payload["conversation"]["capability_mode"] == "code"
-    assert payload["conversation"]["workspace_name"] == workspace.name
-    assert [item["id"] for item in payload["execution"]["attempt_history"]] == [
-        attempts[-1].id,
-        attempts[0].id,
-    ]
+    assert payload["conversation"]["workspace_name"] == workspace_name
+    assert payload["execution"]["attempt_history"] == []
     _assert_current_run(
         payload,
         plan_run=plan_run,
-        attempt_id=attempts[-1].id,
         conversation_id=conversation.id,
         project_id=test_project_db.id,
         plan_version_id=approved_plan.id,
@@ -367,23 +392,7 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         plan=approved_plan,
         conversation_id=conversation.id,
     )
-    assert payload["workspace_plan_context"]["id"] == plan.id
-    assert payload["workspace_plan_context"]["linked_nodes"][0] == {
-        "id": linked_node.id,
-        "plan_id": plan.id,
-        "workspace_task_id": task.id,
-        "kind": "task",
-        "title": "Project one conversation",
-        "description": "Keep authority scoped",
-        "intent": "in_progress",
-        "execution": "running",
-        "progress": {"percent": 50},
-        "assignee_agent_id": None,
-        "current_attempt_id": attempts[-1].id,
-        "created_at": linked_node.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
-        "updated_at": None,
-        "completed_at": None,
-    }
+    assert payload["workspace_plan_context"] is None
     assert [item["id"] for item in payload["pending_hitl"]] == [pending_hitl.id]
     assert payload["pending_hitl"][0]["request_type"] == "decision"
     assert payload["pending_hitl"][0]["question"] == "Choose the reviewed option"
@@ -408,59 +417,85 @@ async def test_workspace_session_projection_is_scoped_and_omits_sensitive_runtim
         "completed_at": tool_record.completed_at.isoformat().replace("+00:00", "Z"),
         "duration_ms": 1000,
     }
-    serialized = response.text
-    for secret in (
-        "raw input secret",
-        "raw output secret",
-        "response secret must not leak",
-        "ciphertext must not leak",
-        "not projected",
-        "raw context secret",
-        "raw-option-secret",
-        "raw-tool-error-secret",
-    ):
-        assert secret not in serialized
-    for fabricated in ('"artifact_version"', '"raw_authorization_secret"'):
-        assert fabricated not in serialized
+    _assert_sensitive_runtime_fields_omitted(response.text)
+    await _assert_projection_scopes_are_enforced(
+        authenticated_async_client,
+        conversation_id=conversation.id,
+        tenant_id=test_project_db.tenant_id,
+        project_id=test_project_db.id,
+        workspace_id=workspace_id,
+    )
 
-    for bad_scope in (
-        {
-            "tenant_id": "wrong-tenant",
-            "project_id": test_project_db.id,
-            "workspace_id": workspace.id,
-        },
-        {
-            "tenant_id": test_project_db.tenant_id,
-            "project_id": "wrong-project",
-            "workspace_id": workspace.id,
-        },
-        {
+    core_access_does_not_depend_on_legacy_members = await authenticated_async_client.get(
+        f"/api/v1/agent/conversations/{conversation.id}/session",
+        params={
             "tenant_id": test_project_db.tenant_id,
             "project_id": test_project_db.id,
-            "workspace_id": "wrong-workspace",
+            "workspace_id": workspace_id,
         },
-        {
-            "tenant_id": test_project_db.tenant_id,
-            "project_id": test_project_db.id,
-        },
-    ):
-        denied = await authenticated_async_client.get(
-            f"/api/v1/agent/conversations/{conversation.id}/session",
-            params=bad_scope,
-        )
-        assert denied.status_code == status.HTTP_404_NOT_FOUND
+    )
+    assert core_access_does_not_depend_on_legacy_members.status_code == status.HTTP_200_OK
 
-    await test_db.execute(delete(WorkspaceMemberModel).where(WorkspaceMemberModel.id == member.id))
-    await test_db.commit()
+    authority.profiles.clear()
     denied = await authenticated_async_client.get(
         f"/api/v1/agent/conversations/{conversation.id}/session",
         params={
             "tenant_id": test_project_db.tenant_id,
             "project_id": test_project_db.id,
-            "workspace_id": workspace.id,
+            "workspace_id": workspace_id,
         },
     )
     assert denied.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_workspace_session_projection_fails_closed_when_core_is_unavailable(
+    authenticated_async_client,
+    test_app,
+    test_db,
+    test_project_db,
+    test_user,
+) -> None:
+    workspace_id = "session-projection-core-unavailable-workspace"
+    conversation = Conversation(
+        id="session-projection-core-unavailable-conversation",
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+        title="Core unavailable",
+        status="active",
+        agent_config={},
+        message_count=0,
+        current_mode="plan",
+        conversation_mode="single_agent",
+        workspace_id=workspace_id,
+        linked_workspace_task_id=None,
+    )
+    test_db.add(conversation)
+    await test_db.commit()
+
+    class _UnavailableAuthority:
+        async def get_profile(self, _scope: object) -> WorkspaceAuthorityProfile:
+            raise WorkspaceAuthorityUnavailableError
+
+    test_app.state.workspace_authority = _UnavailableAuthority()
+
+    response = await authenticated_async_client.get(
+        f"/api/v1/agent/conversations/{conversation.id}/session",
+        params={
+            "tenant_id": test_project_db.tenant_id,
+            "project_id": test_project_db.id,
+            "workspace_id": workspace_id,
+        },
+    )
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert response.json() == {
+        "detail": {
+            "code": "WORKSPACE_CORE_UNAVAILABLE",
+            "reason": "workspace_core_unavailable",
+            "detail": "Workspace Core is unavailable",
+        }
+    }
 
 
 async def test_standalone_session_projection_allows_omitted_workspace(

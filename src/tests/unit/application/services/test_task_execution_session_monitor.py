@@ -24,8 +24,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Project,
     User,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 
 _NOW = datetime(2020, 1, 1, 9, 0, tzinfo=UTC)
@@ -86,33 +84,13 @@ class TestTaskExecutionSessionMonitor:
 
         assert action == "new_attempt"
 
-    async def test_recovery_action_requires_workspace_editor(
+    async def test_recovery_action_uses_task_service_authority(
         self,
         db_session: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
         task = _task()
-        db_session.add(
-            WorkspaceModel(
-                id=task.workspace_id,
-                tenant_id=test_project_db.tenant_id,
-                project_id=test_project_db.id,
-                name="Session Monitor Workspace",
-                created_by=test_user.id,
-                metadata_json={},
-            )
-        )
-        db_session.add(
-            WorkspaceMemberModel(
-                id="wm-session-monitor-viewer",
-                workspace_id=task.workspace_id,
-                user_id=test_user.id,
-                role="viewer",
-                invited_by=test_user.id,
-            )
-        )
-        await db_session.flush()
         state = TaskExecutionSessionState(
             workspace_id=task.workspace_id,
             task_id=task.id,
@@ -133,6 +111,9 @@ class TestTaskExecutionSessionMonitor:
             available_interventions=("new_attempt",),
         )
         task_service = AsyncMock()
+        task_service._require_minimum_role.side_effect = PermissionError(
+            "Insufficient permission to recover workspace task execution"
+        )
         command_service = AsyncMock()
         attempt_repo = AsyncMock()
         service = TaskExecutionSessionMonitor(
@@ -152,6 +133,12 @@ class TestTaskExecutionSessionMonitor:
             )
 
         command_service.update_task.assert_not_awaited()
+        task_service._require_minimum_role.assert_awaited_once_with(
+            workspace_id=task.workspace_id,
+            user_id=test_user.id,
+            minimum=monitor_module.WorkspaceRole.EDITOR,
+            error_message="Insufficient permission to recover workspace task execution",
+        )
 
     async def test_retry_launch_on_terminal_failed_attempt_queues_fresh_attempt(
         self,

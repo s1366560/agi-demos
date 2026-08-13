@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     SendMessageHandler,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentRunAuthorityModel,
     Conversation,
     Project,
     User,
@@ -31,6 +32,22 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
 )
 
 pytestmark = pytest.mark.unit
+
+
+class _RunAuthorityDb:
+    def __init__(self) -> None:
+        self.get_calls: list[tuple[type[object], str]] = []
+        self.added: list[object] = []
+
+    async def get(self, model: type[object], identifier: str) -> None:
+        self.get_calls.append((model, identifier))
+        return None
+
+    def add(self, row: object) -> None:
+        self.added.append(row)
+
+    async def commit(self) -> None:
+        return None
 
 
 class _ConversationRepository:
@@ -587,6 +604,43 @@ async def test_chat_run_authority_persists_requested_permission_snapshot(
     assert run.authorization_snapshot["effective_permission_mode"] == "automatic"
     assert run.authorization_snapshot["requested_permission_mode"] == "automatic"
     assert run.authorization_snapshot["policy"]["permission_mode"] == "ask"
+
+
+async def test_workspace_chat_run_authority_defaults_closed_without_legacy_policy_lookup() -> None:
+    db = _RunAuthorityDb()
+    conversation = Conversation(
+        id="conversation-avernet-run-authority",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        workspace_id="workspace-1",
+        user_id="user-1",
+        title="Avernet run authority",
+        status="active",
+        agent_config={},
+        meta={},
+        message_count=0,
+        current_mode="build",
+        merge_strategy="result_only",
+        participant_agents=[],
+    )
+
+    run = await ensure_chat_run_authority(
+        db,  # type: ignore[arg-type]
+        conversation=conversation,
+        run_id="chat-run-avernet-authority",
+        request_message="Use canonical Workspace authority",
+        client_message_id="client-turn-avernet-authority",
+        app_model_context=None,
+    )
+
+    assert db.get_calls == [(AgentRunAuthorityModel, "chat-run-avernet-authority")]
+    assert db.added == [run]
+    assert run.permission_profile == "read_only"
+    assert run.authorization_snapshot["effective_permission_mode"] == "ask"
+    assert run.authorization_snapshot["policy"] == {
+        "revision": 0,
+        "permission_mode": "ask",
+    }
 
 
 async def test_missing_conversation_error_echoes_valid_message_id(

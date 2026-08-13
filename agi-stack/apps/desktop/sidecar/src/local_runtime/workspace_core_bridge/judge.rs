@@ -14,7 +14,6 @@ use super::{
 use crate::local_runtime::{LlmWorkloadRole, LocalRuntimeState};
 
 const JUDGE_AGENT_ID: &str = "builtin:all-access";
-const CONTEXT_TOOL: &str = "judge_workspace_context";
 const PLAN_TOOL: &str = "judge_workspace_plan";
 const AUTONOMY_TOOL: &str = "judge_workspace_autonomy";
 
@@ -30,45 +29,9 @@ pub(super) async fn context(
     for candidate in &request.candidates {
         ensure_project_scope(&state, &candidate.tenant_id, &candidate.project_id)?;
     }
-    let (tenant_id, project_id, workspace_id) = context_runtime_scope(&state, &request)?;
-    ensure_agent_available(&state, &project_id, JUDGE_AGENT_ID)?;
-    let input = serde_json::to_value(&request)
-        .map_err(|_| unavailable("Workspace Context judge input is unavailable"))?;
-    let schema = "Call judge_workspace_context exactly once with JSON fields: selected \
-                  {tenant_id, project_id, membership_role}, rationale, evidence (string array).";
-    let (output, latency_ms) = structured_judgment(
-        &state,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-        CONTEXT_TOOL,
-        schema,
-        &input,
-    )
-    .await?;
-    let selected = output
-        .get("selected")
-        .cloned()
-        .ok_or_else(|| unavailable("Workspace Context judge omitted its selection"))?;
-    let selected_candidate = serde_json::from_value(selected.clone())
-        .map_err(|_| unavailable("Workspace Context judge selection is invalid"))?;
-    if !request.candidates.contains(&selected_candidate) {
-        return Err(unavailable(
-            "Workspace Context judge selected an unauthorized candidate",
-        ));
-    }
-    let rationale = required_string(&output, "rationale")?;
-    let evidence = string_array(&output, "evidence")?;
-    Ok(Json(json!({
-        "selected": selected,
-        "rationale": rationale,
-        "evidence": evidence,
-        "agent_id": JUDGE_AGENT_ID,
-        "tool_name": CONTEXT_TOOL,
-        "input_json": input,
-        "output_json": output,
-        "latency_ms": latency_ms
-    })))
+    Err(unavailable(
+        "Workspace Context judge requires an explicit Workspace Core runtime scope",
+    ))
 }
 
 pub(super) async fn plan(
@@ -209,12 +172,15 @@ async fn structured_judgment(
         "You are an auditable Workspace judge. Base the verdict only on the supplied structured \
          request. {schema}\n\nStructured request:\n{input}"
     );
-    let llm = state.llm_for_scope(
-        tenant_id,
-        project_id,
-        workspace_id,
-        LlmWorkloadRole::Default,
-    );
+    let llm = state
+        .llm_for_scope(
+            tenant_id,
+            project_id,
+            workspace_id,
+            LlmWorkloadRole::Default,
+        )
+        .await
+        .map_err(|_| unavailable("Workspace judge Agent is unavailable"))?;
     let started = Instant::now();
     let action = llm
         .decide(&prompt, 0, &[], &[tool_name.to_string()])
@@ -237,44 +203,6 @@ async fn structured_judgment(
         return Err(unavailable("Workspace judge tool output must be an object"));
     }
     Ok((output, latency_ms))
-}
-
-fn context_runtime_scope(
-    state: &LocalRuntimeState,
-    request: &ContextJudgeRequest,
-) -> Result<(String, String, String), super::BridgeError> {
-    let scopes = request
-        .current
-        .iter()
-        .map(|current| (&current.tenant_id, &current.project_id))
-        .chain(
-            request
-                .candidates
-                .iter()
-                .map(|candidate| (&candidate.tenant_id, &candidate.project_id)),
-        );
-    for (tenant_id, project_id) in scopes {
-        let workspace = state
-            .session_store
-            .list_workspaces(project_id)
-            .map_err(super::store_error)?
-            .into_iter()
-            .find(|workspace| workspace["tenant_id"] == *tenant_id);
-        if let Some(workspace_id) = workspace
-            .as_ref()
-            .and_then(|workspace| workspace.get("id"))
-            .and_then(Value::as_str)
-        {
-            return Ok((
-                tenant_id.clone(),
-                project_id.clone(),
-                workspace_id.to_string(),
-            ));
-        }
-    }
-    Err(unavailable(
-        "Workspace Context judge has no configured Agent runtime scope",
-    ))
 }
 
 fn validate_plan_request(request: &PlanJudgeRequest) -> Result<(), super::BridgeError> {
@@ -318,24 +246,4 @@ fn optional_string(value: &Value, field: &str) -> Result<Option<String>, super::
         }
         _ => Err(unavailable("Workspace judge optional output is invalid")),
     }
-}
-
-fn string_array(value: &Value, field: &str) -> Result<Vec<String>, super::BridgeError> {
-    let values = value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| unavailable("Workspace judge evidence is invalid"))?;
-    if values.len() > 128 {
-        return Err(unavailable("Workspace judge evidence is too large"));
-    }
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .filter(|value| !value.trim().is_empty() && value.len() <= 4096)
-                .map(ToString::to_string)
-                .ok_or_else(|| unavailable("Workspace judge evidence is invalid"))
-        })
-        .collect()
 }

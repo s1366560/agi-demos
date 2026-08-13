@@ -1,0 +1,13 @@
+{
+  "allowlistVersion": 2,
+  "categories": {
+    "offline_import": {
+      "agi-stack/apps/desktop/sidecar/src/workspace_core_legacy_import.rs": [
+        "desktop_workspace_messages",
+        "desktop_workspaces"
+      ]
+    },
+    "verification": {},
+    "reverse_export": {}
+  }
+}

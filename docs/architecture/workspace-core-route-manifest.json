@@ -10433,6 +10433,7 @@
           },
           "capability_version": {
             "type": "string",
+            "const": "workspace-agent-policy-v1",
             "title": "Capability Version"
           },
           "updated_at": {
@@ -10440,6 +10441,7 @@
             "title": "Updated At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "tenant_id",
@@ -14533,5 +14535,5 @@
     },
     "securitySchemes": {}
   },
-  "contractSha256": "a20b3f3a5065b9ff4fad23310b4fa6c4eb6cc4f666be7957ec6c4b1ad65a9623"
+  "contractSha256": "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
 }

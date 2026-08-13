@@ -367,7 +367,9 @@ where
                     .push_static(source.table_name())
                     .push_static(" WHERE ");
                 let builder = claim_ready_filter(builder, source, self.sql_flavor)
-                    .push_static(" ORDER BY created_at, outbox_id FOR UPDATE SKIP LOCKED LIMIT ")
+                    .push_static(
+                        " ORDER BY event_sequence, created_at, outbox_id FOR UPDATE SKIP LOCKED LIMIT ",
+                    )
                     .bind(u64::from(limit))
                     .push_static(") UPDATE ")
                     .push_static(source.table_name())
@@ -398,7 +400,7 @@ where
                     .push_static(source.table_name())
                     .push_static(" WHERE ");
                 claim_ready_filter(builder, source, self.sql_flavor)
-                    .push_static(" ORDER BY created_at, outbox_id LIMIT ")
+                    .push_static(" ORDER BY event_sequence, created_at, outbox_id LIMIT ")
                     .bind(u64::from(limit))
                     .push_static(") RETURNING ")
                     .push_static(returned_columns)
@@ -868,6 +870,36 @@ mod tests {
         ]))
     }
 
+    fn recovery_outbox_row(
+        outbox_id: &str,
+        event_type: &str,
+        event_sequence: i64,
+        payload_json: &str,
+    ) -> DbRow {
+        DbRow::new(BTreeMap::from([
+            ("outbox_id".to_string(), DbValue::from(outbox_id)),
+            ("tenant_id".to_string(), DbValue::from("tenant-1")),
+            ("project_id".to_string(), DbValue::from("project-1")),
+            ("workspace_id".to_string(), DbValue::from("workspace-1")),
+            ("user_id".to_string(), DbValue::Null),
+            ("event_type".to_string(), DbValue::from(event_type)),
+            (
+                "stream_name".to_string(),
+                DbValue::from("workspace:workspace-1"),
+            ),
+            ("event_sequence".to_string(), DbValue::from(event_sequence)),
+            ("payload_json".to_string(), DbValue::from(payload_json)),
+            ("metadata_json".to_string(), DbValue::from("{}")),
+            ("correlation_id".to_string(), DbValue::from(outbox_id)),
+            ("attempt_count".to_string(), DbValue::from(1_i64)),
+            ("max_attempts".to_string(), DbValue::from(3_i64)),
+            (
+                "created_at".to_string(),
+                DbValue::from("2026-08-13T00:00:00Z"),
+            ),
+        ]))
+    }
+
     fn dispatcher(
         attempt_count: i64,
         max_attempts: i64,
@@ -983,6 +1015,72 @@ mod tests {
                 .contains("UPDATE workspace_context_outbox")
         );
         assert!(statements[0].sql().contains("status = 'dispatched'"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn recovery_events_are_published_in_sequence_and_finalized() -> Result<()> {
+        let rows = vec![
+            recovery_outbox_row(
+                "recovery-session",
+                "task_execution_session_updated",
+                3,
+                r#"{"workspace_id":"workspace-1","task_id":"task-1","session":{}}"#,
+            ),
+            recovery_outbox_row(
+                "recovery-incident",
+                "task_execution_incident_opened",
+                4,
+                r#"{"workspace_id":"workspace-1","task_id":"task-1","incident":{}}"#,
+            ),
+            recovery_outbox_row(
+                "recovery-completed",
+                "task_recovery_action_completed",
+                5,
+                r#"{"workspace_id":"workspace-1","task_id":"task-1","action":"new_attempt"}"#,
+            ),
+        ];
+        let (db, dispatcher) = dispatcher_with_rows(rows, Vec::new(), false)?;
+
+        let outcome = dispatcher.dispatch_once().await?;
+
+        assert_eq!(outcome.dispatched, 3);
+        let published = dispatcher
+            .publisher
+            .published
+            .lock()
+            .map_err(|error| anyhow!("recovery publish assertion lock: {error}"))?;
+        assert_eq!(
+            published
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "task_execution_session_updated",
+                "task_execution_incident_opened",
+                "task_recovery_action_completed",
+            ]
+        );
+        assert!(
+            published
+                .windows(2)
+                .all(|pair| pair[0].event_sequence < pair[1].event_sequence)
+        );
+        assert_eq!(published[0].payload["session"], json!({}));
+        assert_eq!(published[1].payload["incident"], json!({}));
+        assert_eq!(published[2].payload["action"], "new_attempt");
+        drop(published);
+
+        let statements = db
+            .executed
+            .lock()
+            .map_err(|error| anyhow!("recovery finalize assertion lock: {error}"))?;
+        assert_eq!(statements.len(), 3);
+        assert!(
+            statements
+                .iter()
+                .all(|statement| statement.sql().contains("status = 'dispatched'"))
+        );
         Ok(())
     }
 

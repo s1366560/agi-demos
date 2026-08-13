@@ -2257,149 +2257,13 @@ def _task_harness_context(task: WorkspaceTask) -> dict[str, Any] | None:
     }
 
 
-async def _latest_pipeline_evidence_for_task(
-    db: AsyncSession,
-    task: WorkspaceTask,
-    *,
-    plan_id: str | None,
-) -> list[dict[str, Any]]:
-    from sqlalchemy import select
-
-    from src.infrastructure.adapters.secondary.persistence.models import (
-        WorkspacePipelineRunModel,
-    )
-
-    stmt = select(WorkspacePipelineRunModel).where(
-        WorkspacePipelineRunModel.workspace_id == task.workspace_id
-    )
-    if plan_id:
-        stmt = stmt.where(WorkspacePipelineRunModel.plan_id == plan_id)
-    result = await db.execute(
-        stmt.order_by(
-            WorkspacePipelineRunModel.created_at.desc(),
-            WorkspacePipelineRunModel.id.desc(),
-        ).limit(WORKER_LAUNCH_PIPELINE_EVIDENCE_LIMIT)
-    )
-    return [_pipeline_run_evidence_payload(run) for run in result.scalars().all()]
-
-
-def _pipeline_run_evidence_payload(run: object) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in {
-            "id": _metadata_text(getattr(run, "id", None)),
-            "provider": _metadata_text(getattr(run, "provider", None)),
-            "status": _metadata_text(getattr(run, "status", None)),
-            "commit_ref": _metadata_text(getattr(run, "commit_ref", None)),
-            "reason": _metadata_text(getattr(run, "reason", None)),
-            "created_at": _pipeline_datetime(getattr(run, "created_at", None)),
-            "started_at": _pipeline_datetime(getattr(run, "started_at", None)),
-            "completed_at": _pipeline_datetime(getattr(run, "completed_at", None)),
-            "metadata": _safe_pipeline_metadata(getattr(run, "metadata_json", None)),
-        }.items()
-        if value not in (None, "", {})
-    }
-
-
-def _pipeline_datetime(value: object) -> str | None:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return None
-
-
-def _safe_pipeline_metadata(metadata: object) -> dict[str, Any]:
-    if not isinstance(metadata, Mapping):
-        return {}
-    safe_keys = {
-        "deploy_enabled",
-        "deploy_mode",
-        "deploy_stage",
-        "deploy_validation",
-        "deploy_validation_failure",
-        "deploy_validation_issues",
-        "deployment_status",
-        "drone_build_number",
-        "drone_link",
-        "drone_repo",
-        "drone_status",
-        "external_id",
-        "external_provider",
-        "external_url",
-        "pipeline_failed_stage",
-        "pipeline_failure_summary",
-        "pipeline_last_summary",
-        "service_count",
-        "source_publish_branch",
-        "source_publish_commit_ref",
-        "source_publish_source_commit_ref",
-        "stage_count",
-    }
-    return {key: value for key, value in metadata.items() if key in safe_keys}
-
-
 async def _load_plan_node_metadata_for_task(
     db: AsyncSession,
     task: WorkspaceTask,
 ) -> dict[str, Any]:
-    metadata = task.metadata if isinstance(task.metadata, Mapping) else {}
-    node_id = metadata.get("workspace_plan_node_id")
-    if not isinstance(node_id, str) or not node_id:
-        return {}
-    plan_id = metadata.get("workspace_plan_id")
-
-    from sqlalchemy import select
-
-    from src.infrastructure.adapters.secondary.persistence.models import PlanNodeModel
-
-    stmt = select(PlanNodeModel.metadata_json).where(PlanNodeModel.id == node_id)
-    if isinstance(plan_id, str) and plan_id:
-        stmt = stmt.where(PlanNodeModel.plan_id == plan_id)
-    result = await db.execute(stmt)
-    value = result.scalar_one_or_none()
-    node_metadata = dict(value) if isinstance(value, Mapping) else {}
-    if not node_metadata:
-        return {}
-
-    source_metadata: dict[str, Any] = {}
-    source_node_id = _metadata_text(node_metadata.get("repair_for_node_id"))
-    seen_source_ids: set[str] = set()
-    for _ in range(WORKER_REPAIR_SOURCE_METADATA_MAX_DEPTH):
-        if not source_node_id or source_node_id in seen_source_ids:
-            break
-        seen_source_ids.add(source_node_id)
-        source_stmt = select(PlanNodeModel.metadata_json).where(PlanNodeModel.id == source_node_id)
-        if isinstance(plan_id, str) and plan_id:
-            source_stmt = source_stmt.where(PlanNodeModel.plan_id == plan_id)
-        source_result = await db.execute(source_stmt)
-        source_value = source_result.scalar_one_or_none()
-        candidate = dict(source_value) if isinstance(source_value, Mapping) else {}
-        if not candidate:
-            break
-        source_metadata = candidate
-        source_node_id = _metadata_text(candidate.get("repair_for_node_id"))
-    effective_metadata = _effective_repair_plan_node_metadata(node_metadata, source_metadata)
-    try:
-        pipeline_evidence = await _latest_pipeline_evidence_for_task(
-            db,
-            task,
-            plan_id=plan_id if isinstance(plan_id, str) else None,
-        )
-    except Exception:
-        logger.debug(
-            "workspace_worker_launch.pipeline_evidence_context_failed",
-            extra={
-                "event": "workspace_worker_launch.pipeline_evidence_context_failed",
-                "workspace_id": task.workspace_id,
-                "task_id": task.id,
-                "plan_id": plan_id,
-            },
-            exc_info=True,
-        )
-    else:
-        if pipeline_evidence:
-            effective_metadata[_LATEST_PIPELINE_EVIDENCE_KEY] = pipeline_evidence[0]
-            effective_metadata[_RECENT_PIPELINE_EVIDENCE_KEY] = pipeline_evidence
-    return effective_metadata
+    """Do not load metadata from the retired platform Workspace Plan tables."""
+    _ = (db, task)
+    return {}
 
 
 def _effective_repair_plan_node_metadata(
@@ -3190,6 +3054,9 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     ``error`` is reported as ``blocked`` immediately so launcher-owned
     heartbeats cannot mask the dead worker session from recovery.
     """
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
+
+    legacy_workspace_runtime_retired("Workspace worker launch")
     if not worker_agent_id:
         return {
             "launched": False,
@@ -3221,23 +3088,14 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-        SqlWorkspaceAgentRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-        SqlWorkspaceMemberRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-        SqlWorkspaceRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-        SqlWorkspaceTaskRepository,
-    )
     from src.infrastructure.agent.state.agent_worker_state import get_redis_client
     from src.infrastructure.agent.workspace.workspace_goal_runtime import (
         _build_attempt_service,
         _ensure_execution_attempt,
         apply_workspace_worker_report,
+    )
+    from src.infrastructure.workspace_core.legacy_runtime import (
+        legacy_workspace_runtime_retired,
     )
 
     redis_client = await get_redis_client()
@@ -3261,7 +3119,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     try:
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
             workspace = await workspace_repo.find_by_id(workspace_id)
             if workspace is None:
                 logger.warning(
@@ -3282,7 +3140,9 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             root_metadata: Mapping[str, Any] = {}
             if root_goal_task_id:
                 try:
-                    root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_goal_task_id)
+                    root_task = await legacy_workspace_runtime_retired(db).find_by_id(
+                        root_goal_task_id
+                    )
                 except Exception:
                     logger.debug(
                         "workspace_worker_launch.root_profile_lookup_failed",
@@ -3373,11 +3233,11 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             # Defensive membership check: the worker_agent_id MUST be an
             # active workspace binding. This guards against races where a
             # binding is deactivated between task assignment and launch.
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-                SqlWorkspaceAgentRepository,
+            from src.infrastructure.workspace_core.legacy_runtime import (
+                legacy_workspace_runtime_retired,
             )
 
-            workspace_agent_repo = SqlWorkspaceAgentRepository(db)
+            workspace_agent_repo = legacy_workspace_runtime_retired(db)
             worker_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
                 workspace_id=workspace_id,
                 agent_id=worker_agent_id,
@@ -3614,9 +3474,9 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             # link without adding a new /attempts API surface.
             task_service = WorkspaceTaskService(
                 workspace_repo=workspace_repo,
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                workspace_task_repo=SqlWorkspaceTaskRepository(db),
+                workspace_member_repo=legacy_workspace_runtime_retired(db),
+                workspace_agent_repo=legacy_workspace_runtime_retired(db),
+                workspace_task_repo=legacy_workspace_runtime_retired(db),
             )
             command_service = WorkspaceTaskCommandService(task_service)
             try:
@@ -3785,7 +3645,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             name=f"workspace-worker-heartbeat:{resolved_attempt_id or task.id}",
         )
         async with async_session_factory() as db:
-            workspace_repo = SqlWorkspaceRepository(db)
+            workspace_repo = legacy_workspace_runtime_retired(db)
             workspace = await workspace_repo.find_by_id(workspace_id)
             if workspace is None:
                 return {
@@ -4141,60 +4001,10 @@ async def _patch_task_launch_state(
     leader_agent_id: str | None,
     launch_state: str,
 ) -> None:
-    try:
-        from src.application.services.workspace_task_command_service import (
-            WorkspaceTaskCommandService,
-        )
-        from src.application.services.workspace_task_service import (
-            WorkspaceTaskAuthorityContext,
-            WorkspaceTaskService,
-        )
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-            SqlWorkspaceAgentRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-            SqlWorkspaceMemberRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-            SqlWorkspaceRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-            SqlWorkspaceTaskRepository,
-        )
+    del workspace_id, task_id, actor_user_id, leader_agent_id, launch_state
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-        async with async_session_factory() as db:
-            task_service = WorkspaceTaskService(
-                workspace_repo=SqlWorkspaceRepository(db),
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                workspace_task_repo=SqlWorkspaceTaskRepository(db),
-            )
-            launch_actor_id = _launch_authority_actor_id(leader_agent_id)
-            await WorkspaceTaskCommandService(task_service).update_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-                metadata={"launch_state": launch_state},
-                actor_type="agent",
-                actor_agent_id=launch_actor_id,
-                reason=f"workspace_worker_launch.{launch_state}",
-                authority=WorkspaceTaskAuthorityContext.leader(launch_actor_id),
-            )
-            await db.commit()
-    except Exception:
-        logger.warning(
-            "workspace_worker_launch.launch_state_patch_failed",
-            extra={
-                "event": "workspace_worker_launch.launch_state_patch_failed",
-                "workspace_id": workspace_id,
-                "task_id": task_id,
-                "launch_state": launch_state,
-            },
-            exc_info=True,
-        )
+    legacy_workspace_runtime_retired("Workspace task launch-state projection")
 
 
 async def _report_terminal(
@@ -4357,54 +4167,10 @@ async def _terminal_report_recorded_for_attempt(
 ) -> bool:
     if not attempt_id:
         return False
-    try:
-        from src.application.services.workspace_task_service import WorkspaceTaskService
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-            SqlWorkspaceAgentRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-            SqlWorkspaceMemberRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-            SqlWorkspaceRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-            SqlWorkspaceTaskRepository,
-        )
+    del workspace_id, task_id, actor_user_id, report_type
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-        async with async_session_factory() as db:
-            task_service = WorkspaceTaskService(
-                workspace_repo=SqlWorkspaceRepository(db),
-                workspace_member_repo=SqlWorkspaceMemberRepository(db),
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                workspace_task_repo=SqlWorkspaceTaskRepository(db),
-            )
-            task = await task_service.get_task(
-                workspace_id=workspace_id,
-                task_id=task_id,
-                actor_user_id=actor_user_id,
-            )
-            return _terminal_report_metadata_matches_attempt(
-                getattr(task, "metadata", None),
-                attempt_id=attempt_id,
-                report_type=report_type,
-            )
-    except Exception:
-        logger.warning(
-            "workspace_worker_launch.terminal_report_state_check_failed",
-            extra={
-                "event": "workspace_worker_launch.terminal_report_state_check_failed",
-                "workspace_id": workspace_id,
-                "task_id": task_id,
-                "attempt_id": attempt_id,
-                "report_type": report_type,
-            },
-            exc_info=True,
-        )
-        return True
+    legacy_workspace_runtime_retired("Workspace terminal-report projection lookup")
 
 
 def schedule_worker_session(
@@ -4484,6 +4250,8 @@ __all__ = [
     "_build_worker_system_context",
     "_conversation_id_for_worker",
     "_conversation_scope_for_task",
+    "_effective_repair_plan_node_metadata",
+    "_terminal_report_metadata_matches_attempt",
     "launch_worker_session",
     "schedule_worker_session",
 ]

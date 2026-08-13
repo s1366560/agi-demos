@@ -29,19 +29,13 @@ async def resolve_workspace_actor_user_id(
     if isinstance(actor_user_id, str) and actor_user_id.strip():
         return actor_user_id.strip()
 
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-        SqlWorkspaceRepository,
-    )
+    from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-    async with async_session_factory() as session:
-        workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
-        if workspace is None:
-            return None
-        created_by = getattr(workspace, "created_by", None)
-        return created_by.strip() if isinstance(created_by, str) and created_by.strip() else None
+    workspace = legacy_workspace_runtime_retired("contract agent Workspace owner lookup")
+    if workspace is None:
+        return None
+    created_by = getattr(workspace, "created_by", None)
+    return created_by.strip() if isinstance(created_by, str) and created_by.strip() else None
 
 
 def workspace_contract_conversation_id(

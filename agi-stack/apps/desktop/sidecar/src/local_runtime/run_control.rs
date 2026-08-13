@@ -162,6 +162,7 @@ pub(super) async fn resume_run(
     }
     let engine = state
         .agent_engine(&conversation, Some(&run))
+        .await
         .map_err(execution_environment_error)?;
     let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
         return Err((
@@ -448,7 +449,7 @@ pub(super) async fn fork_recovery_run(
             "run": forked,
         })));
     }
-    let engine = match state.agent_engine(&conversation, Some(&forked)) {
+    let engine = match state.agent_engine(&conversation, Some(&forked)).await {
         Ok(engine) => engine,
         Err(error) => {
             state.release_agent_run_if_control(&conversation.id, &control);
@@ -691,6 +692,7 @@ pub(super) async fn cancel_run(
         })?;
     let engine = state
         .agent_engine(&conversation, Some(&run))
+        .await
         .map_err(execution_environment_error)?;
     let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
         return Err((
@@ -811,6 +813,7 @@ pub(super) async fn review_run(
                 })?;
             let engine = state
                 .agent_engine(&conversation, Some(&run))
+                .await
                 .map_err(execution_environment_error)?;
             let Some(control) = state.claim_agent_run(&conversation.id, Some(&run.id)) else {
                 return Err((

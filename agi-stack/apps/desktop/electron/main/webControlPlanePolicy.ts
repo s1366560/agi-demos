@@ -33,6 +33,16 @@ export type WebControlPlaneCapability = Readonly<{
 export type DesktopNativeCapabilitySnapshot = Readonly<{
   contractVersion: 1;
   webControlPlane: WebControlPlaneCapability;
+  workspaceCore: DesktopWorkspaceCoreCapability;
+}>;
+
+export type DesktopWorkspaceCoreCapability = Readonly<{
+  state: 'starting' | 'running' | 'restartScheduled' | 'failed' | 'stopped';
+  healthy: boolean;
+  restartAttempts: number;
+  restartGeneration: number;
+  cutoverState: 'legacy-only' | 'importing' | 'core-authoritative' | 'core-unavailable';
+  terminalFailureReason: string | null;
 }>;
 
 export type WebControlPlaneConfiguration = Readonly<{

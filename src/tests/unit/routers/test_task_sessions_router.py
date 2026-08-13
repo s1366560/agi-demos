@@ -2,239 +2,46 @@
 
 from __future__ import annotations
 
-import uuid
-
 import pytest
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from src.infrastructure.adapters.primary.web import workspace_core_task_sessions
 from src.infrastructure.adapters.primary.web.routers import task_sessions
-from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
-    WorkspaceAgentPolicyResponse,
-)
-from src.infrastructure.adapters.secondary.persistence.models import (
-    Project,
-    Tenant,
-    UserProject,
-    UserTenant,
-    WorkspaceAgentPolicyModel,
-    WorkspaceMemberModel,
-    WorkspaceModel,
-)
-from src.infrastructure.persistence.llm_providers_models import (
-    LLMProvider,
-    TenantProviderMapping,
-)
 
 TENANT_ID = "tenant-task-session"
 PROJECT_ID = "project-task-session"
-WORKSPACE_ID = "workspace-task-session"
-USER_ID = "550e8400-e29b-41d4-a716-446655440000"
-PROVIDER_ID = uuid.UUID("d9e5b8e7-a691-4fe8-9605-b9f0b6276186")
 
 
-async def _seed_task_session_scope(test_db) -> None:
-    test_db.add_all(
-        [
-            Tenant(
-                id=TENANT_ID,
-                name="Task Session Tenant",
-                slug="task-session-tenant",
-                owner_id=USER_ID,
-            ),
-            Project(
-                id=PROJECT_ID,
-                tenant_id=TENANT_ID,
-                name="Task Session Project",
-                owner_id=USER_ID,
-            ),
-            UserTenant(
-                id="ut-task-session",
-                user_id=USER_ID,
-                tenant_id=TENANT_ID,
-                role="owner",
-            ),
-            UserProject(
-                id="up-task-session",
-                user_id=USER_ID,
-                project_id=PROJECT_ID,
-                role="owner",
-            ),
-            WorkspaceModel(
-                id=WORKSPACE_ID,
-                tenant_id=TENANT_ID,
-                project_id=PROJECT_ID,
-                name="Task Session Workspace",
-                created_by=USER_ID,
-            ),
-            WorkspaceMemberModel(
-                id="wm-task-session",
-                workspace_id=WORKSPACE_ID,
-                user_id=USER_ID,
-                role="owner",
-                invited_by=USER_ID,
-            ),
-        ]
-    )
-    await test_db.commit()
-
-
-def _stub_default_policy(monkeypatch) -> None:
-    async def policy_response(_db, workspace, _policy) -> WorkspaceAgentPolicyResponse:
-        return WorkspaceAgentPolicyResponse(
-            tenant_id=workspace.tenant_id,
-            project_id=workspace.project_id,
-            workspace_id=workspace.id,
-            revision=0,
-            roles={"default": None, "fast": None, "coding": None, "vision": None},
-            fallbacks=[],
-            reasoning_effort="medium",
-            permission_mode="ask",
-            capability_version="workspace-agent-policy-v1",
-            updated_at="2026-07-21T00:00:00+00:00",
-        )
-
-    monkeypatch.setattr(task_sessions, "_policy_response", policy_response)
-
-
-@pytest.mark.unit
-async def test_create_cloud_task_session_accepts_and_persists_composer_context(
-    test_db,
-    client,
-    test_user,
-    monkeypatch,
-) -> None:
-    await _seed_task_session_scope(test_db)
-    _stub_default_policy(monkeypatch)
-    context_items = [
-        {
-            "kind": "plugin",
-            "resource_id": "plugin-review",
-            "label": "Review plugin",
-            "metadata": {"enabled": True, "priority": 1},
-        }
+def _task_session_routes(app: FastAPI) -> list[APIRoute]:
+    return [
+        route
+        for route in app.routes
+        if isinstance(route, APIRoute) and "task-sessions" in route.path
     ]
 
-    response = client.post(
-        f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
-        json={
-            "idempotency_key": "desktop-cloud-session-context-1",
-            "workspace": {"kind": "existing", "workspace_id": WORKSPACE_ID},
-            "conversation": {"title": "Review the release", "capability_mode": "work"},
-            "initial_message": {
-                "content": "Review the release plan",
-                "context_items": context_items,
-            },
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["initial_message"]["metadata"]["context_items"] == context_items
-
 
 @pytest.mark.unit
-async def test_create_cloud_task_session_accepts_empty_composer_context(
-    test_db,
-    client,
-    test_user,
-    monkeypatch,
-) -> None:
-    await _seed_task_session_scope(test_db)
-    _stub_default_policy(monkeypatch)
+def test_avernet_task_session_gateway_registers_real_core_saga_without_legacy_routes() -> None:
+    app = FastAPI()
+    workspace_core_task_sessions.register_task_session_routes(app)
 
-    response = client.post(
-        f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
-        json={
-            "idempotency_key": "desktop-cloud-session-empty-context-1",
-            "workspace": {"kind": "existing", "workspace_id": WORKSPACE_ID},
-            "conversation": {"title": "Start cloud work", "capability_mode": "work"},
-            "initial_message": {
-                "content": "Start cloud work",
-                "context_items": [],
-            },
-        },
+    response = TestClient(app).get(
+        f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions/capabilities"
     )
 
     assert response.status_code == 200
-    assert response.json()["initial_message"]["metadata"]["context_items"] == []
-
-
-@pytest.mark.unit
-async def test_create_cloud_task_session_refreshes_updated_workspace_policy(
-    test_db,
-    client,
-    test_user,
-) -> None:
-    await _seed_task_session_scope(test_db)
-    test_db.add_all(
-        [
-            LLMProvider(
-                id=PROVIDER_ID,
-                name="Task session provider",
-                provider_type="minimax",
-                operation_type="llm",
-                api_key_encrypted="encrypted",
-                llm_model="MiniMax-M3",
-                is_active=True,
-                is_enabled=True,
-            ),
-            TenantProviderMapping(
-                id=uuid.UUID("3666e92c-facf-4c0a-9004-b3b9698da77e"),
-                tenant_id=TENANT_ID,
-                operation_type="llm",
-                provider_id=PROVIDER_ID,
-                priority=0,
-            ),
-            WorkspaceAgentPolicyModel(
-                workspace_id=WORKSPACE_ID,
-                tenant_id=TENANT_ID,
-                project_id=PROJECT_ID,
-                revision=1,
-                roles_json={
-                    "default": {
-                        "provider_id": str(PROVIDER_ID),
-                        "model_id": "MiniMax-M3",
-                    },
-                    "fast": None,
-                    "coding": None,
-                    "vision": None,
-                },
-                fallbacks_json=[],
-                reasoning_effort="medium",
-                permission_mode="ask",
-                updated_by=USER_ID,
-            ),
-        ]
+    assert response.json()["atomic_creation"] is True
+    assert response.json()["workspace_authority"] == "avernet"
+    assert all(
+        route.endpoint.__module__
+        == "src.infrastructure.adapters.primary.web.workspace_core_task_sessions"
+        for route in _task_session_routes(app)
     )
-    await test_db.commit()
-
-    response = client.post(
-        f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
-        json={
-            "idempotency_key": "desktop-cloud-session-policy-1",
-            "workspace": {"kind": "existing", "workspace_id": WORKSPACE_ID},
-            "conversation": {"title": "Start cloud work", "capability_mode": "work"},
-            "initial_message": {
-                "content": "Start cloud work",
-                "context_items": [],
-            },
-            "workspace_policy": {
-                "expected_revision": 1,
-                "route": {
-                    "provider_id": str(PROVIDER_ID),
-                    "model_id": "MiniMax-M3",
-                },
-                "reasoning_effort": "high",
-                "permission_mode": "automatic",
-            },
-        },
-    )
-
-    assert response.status_code == 200
-    policy = response.json()["policy"]
-    assert policy["revision"] == 2
-    assert policy["reasoning_effort"] == "high"
-    assert policy["permission_mode"] == "automatic"
+    assert not hasattr(task_sessions, "router")
+    assert not hasattr(task_sessions, "create_task_session")
 
 
 @pytest.mark.unit

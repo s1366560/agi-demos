@@ -16,6 +16,11 @@ const DESKTOP_SCHEMA_MIGRATIONS: &[DesktopSchemaMigration] = &[
         checksum: "1bccb0c64aedf17d7edb722f319ae5cbcdff508ec4bb20d33740f0f91300a10e",
         ddl: include_str!("desktop_workspace_schema_v2.sql"),
     },
+    DesktopSchemaMigration {
+        version: 3,
+        checksum: "8fde1ee0543ce14bf24b9f987d3931f55828651239f685f1be6889029f94c86e",
+        ddl: include_str!("desktop_workspace_schema_v3.sql"),
+    },
 ];
 
 struct DesktopSchemaMigration {

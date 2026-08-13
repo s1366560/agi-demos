@@ -1,37 +1,16 @@
 """DI sub-container for project domain."""
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Never
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.blackboard_file_service import BlackboardFileService
-from src.application.services.blackboard_service import BlackboardService
 from src.application.services.project_service import ProjectService
 from src.application.services.tenant_service import TenantService
-from src.application.services.topology_service import TopologyService
 from src.application.services.workspace_message_service import WorkspaceMessageService
-from src.application.services.workspace_task_session_attempt_service import (
-    WorkspaceTaskSessionAttemptService,
-)
 from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.tenant_repository import TenantRepository
 from src.domain.ports.repositories.user_repository import UserRepository
-from src.domain.ports.repositories.workspace.blackboard_file_repository import (
-    BlackboardFileRepository,
-)
-from src.domain.ports.repositories.workspace.blackboard_repository import (
-    BlackboardRepository,
-)
-from src.domain.ports.repositories.workspace.cyber_gene_repository import (
-    CyberGeneRepository,
-)
-from src.domain.ports.repositories.workspace.cyber_objective_repository import (
-    CyberObjectiveRepository,
-)
-from src.domain.ports.repositories.workspace.topology_repository import (
-    TopologyRepository,
-)
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
@@ -47,45 +26,10 @@ from src.domain.ports.repositories.workspace.workspace_repository import (
 from src.domain.ports.repositories.workspace.workspace_task_repository import (
     WorkspaceTaskRepository,
 )
-from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repository import (
-    WorkspaceTaskSessionAttemptRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_file_repository import (
-    SqlBlackboardFileRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
-    SqlBlackboardRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_cyber_gene_repository import (
-    SqlCyberGeneRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_cyber_objective_repository import (
-    SqlCyberObjectiveRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
     SqlProjectRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_topology_repository import (
-    SqlTopologyRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-    SqlWorkspaceAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-    SqlWorkspaceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
-    SqlWorkspaceMessageRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-    SqlWorkspaceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-    SqlWorkspaceTaskRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
-    SqlWorkspaceTaskSessionAttemptRepository,
-)
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 
 class ProjectContainer:
@@ -129,89 +73,63 @@ class ProjectContainer:
         return TenantService(tenant_repo=tenant_repo, user_repo=user_repo)
 
     def workspace_repository(self) -> WorkspaceRepository:
-        """Get WorkspaceRepository for workspace persistence."""
-        assert self._db is not None
-        return SqlWorkspaceRepository(self._db)
+        """Reject the retired platform SQL Workspace repository."""
+        legacy_workspace_runtime_retired("DI workspace repository")
 
     def workspace_member_repository(self) -> WorkspaceMemberRepository:
         """Get WorkspaceMemberRepository for workspace membership persistence."""
-        assert self._db is not None
-        return SqlWorkspaceMemberRepository(self._db)
+        legacy_workspace_runtime_retired("DI member repository")
 
     def workspace_agent_repository(self) -> WorkspaceAgentRepository:
         """Get WorkspaceAgentRepository for workspace-agent relation persistence."""
-        assert self._db is not None
-        return SqlWorkspaceAgentRepository(self._db)
+        legacy_workspace_runtime_retired("DI agent repository")
 
-    def blackboard_repository(self) -> BlackboardRepository:
-        """Get BlackboardRepository for workspace blackboard persistence."""
-        assert self._db is not None
-        return SqlBlackboardRepository(self._db)
+    def blackboard_repository(self) -> Never:
+        """Reject the retired platform SQL Blackboard repository."""
+        legacy_workspace_runtime_retired("DI blackboard repository")
 
-    def blackboard_service(self) -> BlackboardService:
-        """Get BlackboardService for blackboard post/reply operations."""
-        return BlackboardService(
-            blackboard_repo=self.blackboard_repository(),
-            workspace_repo=self.workspace_repository(),
-            workspace_member_repo=self.workspace_member_repository(),
-        )
+    def blackboard_service(self) -> Never:
+        """Reject the retired platform SQL Blackboard service."""
+        legacy_workspace_runtime_retired("DI blackboard service")
 
-    def blackboard_file_repository(self) -> BlackboardFileRepository:
-        """Get BlackboardFileRepository for workspace file persistence."""
-        assert self._db is not None
-        return SqlBlackboardFileRepository(self._db)
+    def blackboard_file_repository(self) -> Never:
+        """Reject the retired platform SQL Blackboard file repository."""
+        legacy_workspace_runtime_retired("DI blackboard file repository")
 
-    def blackboard_file_service(self) -> BlackboardFileService:
-        """Get BlackboardFileService for workspace file operations."""
-        return BlackboardFileService(
-            file_repo=self.blackboard_file_repository(),
-            workspace_repo=self.workspace_repository(),
-            workspace_member_repo=self.workspace_member_repository(),
-        )
+    def blackboard_file_service(self) -> Never:
+        """Reject the retired platform SQL Blackboard file service."""
+        legacy_workspace_runtime_retired("DI blackboard file service")
 
     def workspace_task_repository(self) -> WorkspaceTaskRepository:
         """Get WorkspaceTaskRepository for workspace task persistence."""
-        assert self._db is not None
-        return SqlWorkspaceTaskRepository(self._db)
+        legacy_workspace_runtime_retired("DI task repository")
 
     def workspace_task_session_attempt_repository(
         self,
-    ) -> WorkspaceTaskSessionAttemptRepository:
-        """Get WorkspaceTaskSessionAttemptRepository for attempt persistence."""
-        assert self._db is not None
-        return SqlWorkspaceTaskSessionAttemptRepository(self._db)
+    ) -> Never:
+        """Reject the retired platform SQL Workspace attempt repository."""
+        legacy_workspace_runtime_retired("DI attempt repository")
 
-    def workspace_task_session_attempt_service(self) -> WorkspaceTaskSessionAttemptService:
-        """Get WorkspaceTaskSessionAttemptService for attempt lifecycle."""
-        return WorkspaceTaskSessionAttemptService(
-            attempt_repo=self.workspace_task_session_attempt_repository(),
-        )
+    def workspace_task_session_attempt_service(self) -> Never:
+        """Reject the retired platform SQL Workspace attempt service."""
+        legacy_workspace_runtime_retired("DI attempt service")
 
-    def topology_repository(self) -> TopologyRepository:
-        """Get TopologyRepository for workspace topology persistence."""
-        assert self._db is not None
-        return SqlTopologyRepository(self._db)
+    def topology_repository(self) -> Never:
+        """Reject the retired platform SQL Topology repository."""
+        legacy_workspace_runtime_retired("DI topology repository")
 
-    def topology_service(self) -> TopologyService:
-        """Get TopologyService for workspace topology operations."""
-        return TopologyService(
-            workspace_repo=self.workspace_repository(),
-            workspace_member_repo=self.workspace_member_repository(),
-            topology_repo=self.topology_repository(),
-            workspace_agent_repo=self.workspace_agent_repository(),
-        )
+    def topology_service(self) -> Never:
+        """Reject the retired platform SQL Topology service."""
+        legacy_workspace_runtime_retired("DI topology service")
 
-    def cyber_objective_repository(self) -> CyberObjectiveRepository:
-        assert self._db is not None
-        return SqlCyberObjectiveRepository(self._db)
+    def cyber_objective_repository(self) -> Never:
+        legacy_workspace_runtime_retired("DI cyber objective repository")
 
-    def cyber_gene_repository(self) -> CyberGeneRepository:
-        assert self._db is not None
-        return SqlCyberGeneRepository(self._db)
+    def cyber_gene_repository(self) -> Never:
+        legacy_workspace_runtime_retired("DI cyber gene repository")
 
     def workspace_message_repository(self) -> WorkspaceMessageRepository:
-        assert self._db is not None
-        return SqlWorkspaceMessageRepository(self._db)
+        legacy_workspace_runtime_retired("DI message repository")
 
     def workspace_message_service(
         self,

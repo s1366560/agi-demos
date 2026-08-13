@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const mainSource = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
+const preloadSource = readFileSync(new URL('../electron/preload/index.ts', import.meta.url), 'utf8');
 const supervisorSource = readFileSync(
   new URL('../electron/main/sidecarSupervisor.ts', import.meta.url),
   'utf8',
@@ -49,6 +50,12 @@ test('Sidecar owns private helper credentials, capped recovery, and redacted sta
   assert.match(sidecarHelperSource, /kill_on_drop\(true\)/u);
   assert.doesNotMatch(sidecarHelperSource, /service_token.*Serialize/iu);
   assert.doesNotMatch(sidecarHelperSource, /provider_.*token.*Serialize/iu);
+  assert.match(sidecarHelperSource, /cutover_state/u);
+  assert.match(sidecarHelperSource, /restart_generation/u);
+  assert.match(mainSource, /SIDECAR_COMMANDS[\s\S]*workspace_core_status/u);
+  assert.match(preloadSource, /allowedCommands[\s\S]*workspace_core_status/u);
+  assert.match(mainSource, /workspaceCore:\s*await workspaceCoreCapabilitySnapshot/u);
+  assert.match(mainSource, /terminalFailureReason/u);
 });
 
 test('Sidecar freezes the exact Registry, Provider, and Plan runtime endpoints', () => {

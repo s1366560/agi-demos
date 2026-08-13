@@ -45,8 +45,6 @@ import json
 import logging
 import os
 import time
-from collections.abc import Mapping
-from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from sqlalchemy.orm.exc import StaleDataError
@@ -487,37 +485,9 @@ class WorkspaceSupervisor:
             )
 
     async def _attempt_is_still_running(self, attempt_id: str) -> bool:
-        """Return whether durable state still considers this attempt running."""
-        if not attempt_id:
-            return False
-        try:
-            from sqlalchemy import select
-
-            from src.domain.model.workspace.workspace_task_session_attempt import (
-                WorkspaceTaskSessionAttemptStatus,
-            )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
-            from src.infrastructure.adapters.secondary.persistence.models import (
-                WorkspaceTaskSessionAttemptModel,
-            )
-
-            async with async_session_factory() as session:
-                result = await session.execute(
-                    select(WorkspaceTaskSessionAttemptModel.status).where(
-                        WorkspaceTaskSessionAttemptModel.id == attempt_id
-                    )
-                )
-                status = result.scalar_one_or_none()
-            return status == WorkspaceTaskSessionAttemptStatus.RUNNING.value
-        except Exception:
-            logger.warning(
-                "workspace_supervisor.watchdog attempt status lookup failed",
-                exc_info=True,
-                extra={"attempt_id": attempt_id},
-            )
-            return True
+        """Fail closed: Core owns durable attempt state."""
+        del attempt_id
+        return False
 
     async def _apply_progress(self, envelope: WtpEnvelope) -> None:
         """Project a worker progress envelope into durable plan state."""
@@ -559,81 +529,7 @@ class WorkspaceSupervisor:
                 return
 
     async def _persist_progress_once(self, envelope: WtpEnvelope, summary: str) -> None:
-        from sqlalchemy import select
-
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.models import (
-            PlanNodeModel,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
-            SqlWorkspacePlanEventRepository,
-        )
-
-        payload = dict(envelope.payload or {})
-        async with async_session_factory() as session:
-            node = None
-            if envelope.attempt_id:
-                stmt = (
-                    select(PlanNodeModel)
-                    .where(PlanNodeModel.workspace_task_id == envelope.task_id)
-                    .where(PlanNodeModel.current_attempt_id == envelope.attempt_id)
-                    .order_by(PlanNodeModel.updated_at.desc(), PlanNodeModel.created_at.desc())
-                    .limit(1)
-                )
-                result = await session.execute(stmt)
-                node = result.scalar_one_or_none()
-            else:
-                fallback = (
-                    select(PlanNodeModel)
-                    .where(PlanNodeModel.workspace_task_id == envelope.task_id)
-                    .order_by(
-                        PlanNodeModel.updated_at.desc(),
-                        PlanNodeModel.created_at.desc(),
-                    )
-                    .limit(1)
-                )
-                result = await session.execute(fallback)
-                node = result.scalar_one_or_none()
-            if node is None:
-                return
-
-            now = datetime.now(UTC)
-            percent = _progress_percent(payload.get("percent"), node.progress)
-            existing_progress = dict(node.progress or {})
-            node.progress = {
-                "percent": percent,
-                "confidence": float(existing_progress.get("confidence", 1.0) or 1.0),
-                "note": summary,
-            }
-            metadata = dict(node.metadata_json or {})
-            progress_event = _progress_event_payload(
-                envelope,
-                summary=summary,
-                percent=percent,
-                created_at=now,
-            )
-            progress_events = metadata.get("progress_events")
-            if not isinstance(progress_events, list):
-                progress_events = []
-            progress_events.append(progress_event)
-            metadata["progress_events"] = progress_events[-25:]
-            metadata["latest_worker_progress"] = progress_event
-            node.metadata_json = metadata
-            node.updated_at = now
-
-            await SqlWorkspacePlanEventRepository(session).append(
-                plan_id=node.plan_id,
-                workspace_id=envelope.workspace_id,
-                event_type="worker_progress",
-                node_id=node.id,
-                attempt_id=envelope.attempt_id,
-                actor_id=_metadata_string(envelope.extra_metadata, "worker_agent_id"),
-                source="workspace_worker_progress",
-                payload=progress_event,
-            )
-            await session.commit()
+        del envelope, summary
 
     async def _apply_terminal(self, envelope: WtpEnvelope) -> None:
         """Invoke :func:`apply_workspace_worker_report` for terminal verbs."""
@@ -733,55 +629,6 @@ def get_wtp_publisher_redis() -> _RedisLike | None:
 async def publish_envelope_default(envelope: WtpEnvelope) -> str | None:
     """Convenience wrapper used by the worker WTP tools."""
     return await publish_envelope(_publish_redis, envelope)
-
-
-def _metadata_string(metadata: dict[str, Any], key: str) -> str | None:
-    value = metadata.get(key)
-    return value if isinstance(value, str) and value.strip() else None
-
-
-def _progress_percent(value: object, current: Mapping[str, object] | None) -> float:
-    parsed = _float_or_none(value)
-    if parsed is None:
-        parsed = _float_or_none((current or {}).get("percent")) or 0.0
-    return max(0.0, min(100.0, parsed))
-
-
-def _float_or_none(value: object) -> float | None:
-    if isinstance(value, bool) or value is None:
-        return None
-    if not isinstance(value, int | float | str):
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
-
-
-def _progress_event_payload(
-    envelope: WtpEnvelope,
-    *,
-    summary: str,
-    percent: float,
-    created_at: datetime,
-) -> dict[str, Any]:
-    payload = dict(envelope.payload or {})
-    event: dict[str, Any] = {
-        "event_id": envelope.correlation_id,
-        "event_type": "worker_progress",
-        "summary": summary,
-        "task_id": envelope.task_id,
-        "attempt_id": envelope.attempt_id,
-        "percent": percent,
-        "created_at": created_at.isoformat().replace("+00:00", "Z"),
-    }
-    phase = payload.get("phase")
-    if isinstance(phase, str) and phase.strip():
-        event["phase"] = phase.strip()
-    conversation_id = _metadata_string(envelope.extra_metadata, "worker_conversation_id")
-    if conversation_id:
-        event["conversation_id"] = conversation_id
-    return event
 
 
 def _is_deadlock_error(exc: Exception) -> bool:

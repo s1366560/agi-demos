@@ -1,272 +1,46 @@
-"""Unit tests for P0 autonomy helpers in workspace_leader_bootstrap."""
+"""Contracts for the retired platform Workspace autonomy scheduler surface."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any
+from typing import cast
 
 import pytest
+from fastapi import HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.primary.web.routers import (
-    workspace_leader_bootstrap as bootstrap,
-)
-
-
-@dataclass
-class _FakeRootTask:
-    id: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class _FakeChildTask:
-    id: str = "child-1"
-    status: str = "in_progress"
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-class _FakeTaskRepo:
-    def __init__(self, children_map: dict[str, list[Any]]) -> None:
-        self._children_map = children_map
-
-    async def find_by_root_goal_task_id(self, workspace_id: str, root_task_id: str) -> list[Any]:
-        return self._children_map.get(root_task_id, [])
-
-
-class _ScalarResult:
-    def __init__(self, value: object) -> None:
-        self._value = value
-
-    def scalar_one_or_none(self) -> object:
-        return self._value
-
-
-class _RoleDb:
-    def __init__(self, role: str | None) -> None:
-        self.role = role
-
-    async def execute(self, _statement: object) -> _ScalarResult:
-        return _ScalarResult(self.role)
-
-
-class _SessionContext:
-    def __init__(self, db: object) -> None:
-        self._db = db
-
-    async def __aenter__(self) -> object:
-        return self._db
-
-    async def __aexit__(self, *_args: object) -> None:
-        return None
+from src.infrastructure.adapters.primary.web.routers import workspace_leader_bootstrap as bootstrap
+from src.infrastructure.adapters.secondary.persistence.models import User
 
 
 @pytest.mark.unit
-class TestAutonomyTickAuthorization:
-    async def test_editor_role_can_trigger_manual_autonomy_tick(self) -> None:
-        await bootstrap._require_autonomy_tick_editor(
-            db=_RoleDb("editor"),  # type: ignore[arg-type]
-            workspace_id="ws-1",
-            user_id="user-1",
-        )
-
-    async def test_viewer_role_cannot_trigger_manual_autonomy_tick(self) -> None:
-        with pytest.raises(PermissionError, match="trigger workspace autonomy"):
-            await bootstrap._require_autonomy_tick_editor(
-                db=_RoleDb("viewer"),  # type: ignore[arg-type]
-                workspace_id="ws-1",
-                user_id="user-1",
-            )
-
-    async def test_background_autonomy_tick_uses_system_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        captured: dict[str, Any] = {}
-
-        class _Db:
-            async def get(self, _model: object, user_id: str) -> object:
-                return SimpleNamespace(id=user_id)
-
-        async def _fake_trigger(**kwargs: Any) -> dict[str, Any]:
-            captured.update(kwargs)
-            return {"triggered": False, "reason": "no_open_root", "root_task_id": None}
-
-        monkeypatch.setattr(bootstrap, "async_session_factory", lambda: _SessionContext(_Db()))
-        monkeypatch.setattr(bootstrap, "maybe_auto_trigger_existing_root_execution", _fake_trigger)
-
-        await bootstrap._run_autonomy_tick("ws-1", "user-1")
-
-        assert captured["workspace_id"] == "ws-1"
-        assert captured["current_user"].id == "user-1"
-        assert captured["system_tick"] is True
-
-
-@pytest.mark.unit
-class TestRootTaskSortKey:
-    def test_ready_for_completion_has_highest_priority(self) -> None:
-        ready = _FakeRootTask(id="r1", metadata={"remediation_status": "ready_for_completion"})
-        replan = _FakeRootTask(id="r2", metadata={"remediation_status": "replan_required"})
-        none = _FakeRootTask(id="r3", metadata={"remediation_status": "none"})
-        sorted_tasks = sorted([none, replan, ready], key=bootstrap._root_task_sort_key)
-        assert [t.id for t in sorted_tasks] == ["r1", "r2", "r3"]
-
-    def test_missing_metadata_defaults_to_lowest_priority(self) -> None:
-        a = _FakeRootTask(id="r1", metadata={})
-        b = _FakeRootTask(id="r2", metadata={"remediation_status": "replan_required"})
-        sorted_tasks = sorted([a, b], key=bootstrap._root_task_sort_key)
-        assert [t.id for t in sorted_tasks] == ["r2", "r1"]
-
-
-@pytest.mark.unit
-class TestSelectRootTaskNeedingProgress:
-    async def test_prefers_root_without_children(self) -> None:
-        with_kids = _FakeRootTask(id="r-kids", metadata={"remediation_status": "none"})
-        no_kids = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo(
-            {
-                "r-kids": [_FakeChildTask(status="in_progress")],
-                "r-empty": [],
-            }
-        )
-
-        task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo,
-            workspace_id="ws-1",
-            root_tasks=[with_kids, no_kids],
-        )
-        assert task is not None and task.id == "r-empty"
-        assert has_children is False
-
-    async def test_ready_for_completion_beats_empty_root(self) -> None:
-        ready = _FakeRootTask(id="r-ready", metadata={"remediation_status": "ready_for_completion"})
-        empty = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo(
-            {
-                "r-ready": [_FakeChildTask(status="done")],
-                "r-empty": [],
-            }
-        )
-
-        task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo, workspace_id="ws-1", root_tasks=[empty, ready]
-        )
-        assert task is not None and task.id == "r-ready"
-        assert has_children is True
-
-    async def test_returns_none_when_all_stable(self) -> None:
-        stable_a = _FakeRootTask(id="a", metadata={"remediation_status": "none"})
-        stable_b = _FakeRootTask(id="b", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo(
-            {
-                "a": [_FakeChildTask(status="in_progress")],
-                "b": [_FakeChildTask(status="done")],
-            }
-        )
-
-        task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo, workspace_id="ws-1", root_tasks=[stable_a, stable_b]
-        )
-        assert task is None
-        assert has_children is False
-
-    async def test_returns_root_when_children_in_todo(self) -> None:
-        """Root with TODO children needs progress (worker sessions must launch)."""
-        root = _FakeRootTask(id="r-todo", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo(
-            {
-                "r-todo": [
-                    _FakeChildTask(id="c1", status="todo"),
-                    _FakeChildTask(id="c2", status="in_progress"),
-                ],
-            }
-        )
-        task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo, workspace_id="ws-1", root_tasks=[root]
-        )
-        assert task is not None and task.id == "r-todo"
-        assert has_children is True
-
-    async def test_force_returns_root_even_when_stable(self) -> None:
-        """force=True overrides the 'all children active' check."""
-        root = _FakeRootTask(id="r-stable", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo(
-            {
-                "r-stable": [_FakeChildTask(status="in_progress")],
-            }
-        )
-        task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo,
-            workspace_id="ws-1",
-            root_tasks=[root],
+async def test_autonomy_compatibility_call_fails_closed_for_workspace_core() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await bootstrap.maybe_auto_trigger_existing_root_execution(
+            db=cast(AsyncSession, SimpleNamespace()),
+            workspace_id="core-authoritative-workspace",
+            current_user=cast(User, SimpleNamespace(id="user-1")),
+            request=cast(Request, SimpleNamespace()),
             force=True,
+            system_tick=True,
         )
-        assert task is not None and task.id == "r-stable"
-        assert has_children is True
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "WORKSPACE_CORE_UNAVAILABLE",
+        "reason": "workspace_core_unavailable",
+        "detail": "Workspace Core is unavailable",
+    }
 
 
 @pytest.mark.unit
-class TestCooldownHelpers:
-    async def test_cooldown_read_and_write_roundtrip(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        store: dict[str, str] = {}
-        expirations: dict[str, int | None] = {}
+def test_obsolete_autonomy_tick_scheduler_is_a_noop() -> None:
+    assert bootstrap.schedule_autonomy_tick("workspace-1", "actor-1") is None
 
-        class _FakeRedis:
-            async def exists(self, key: str) -> int:
-                return 1 if key in store else 0
 
-            async def set(self, key: str, value: str, ex: int | None = None) -> None:
-                store[key] = value
-                expirations[key] = ex
-
-        async def _fake_get_redis_client() -> _FakeRedis:
-            return _FakeRedis()
-
-        monkeypatch.setattr(bootstrap, "get_redis_client", _fake_get_redis_client)
-
-        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is False
-        await bootstrap._mark_cooldown("ws-1", "root-1")
-        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is True
-        assert await bootstrap._is_on_cooldown("ws-1", "root-2") is False
-        key = bootstrap._AUTO_TRIGGER_COOLDOWN_KEY.format(
-            workspace_id="ws-1",
-            root_task_id="root-1",
-        )
-        assert expirations[key] == bootstrap.AUTO_TRIGGER_COOLDOWN_SECONDS
-
-    async def test_replan_trigger_uses_longer_cooldown(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        expirations: dict[str, int | None] = {}
-
-        class _FakeRedis:
-            async def set(self, key: str, value: str, ex: int | None = None) -> None:
-                expirations[key] = ex
-
-        async def _fake_get_redis_client() -> _FakeRedis:
-            return _FakeRedis()
-
-        monkeypatch.setattr(bootstrap, "get_redis_client", _fake_get_redis_client)
-
-        await bootstrap._mark_autonomy_trigger_cooldown(
-            "ws-1",
-            "root-1",
-            remediation_status="replan_required",
-        )
-
-        key = bootstrap._AUTO_TRIGGER_COOLDOWN_KEY.format(
-            workspace_id="ws-1",
-            root_task_id="root-1",
-        )
-        assert expirations[key] == bootstrap.REPLAN_TRIGGER_COOLDOWN_SECONDS
-
-    async def test_cooldown_fails_open_when_redis_unavailable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        async def _boom() -> Any:
-            raise RuntimeError("redis unavailable")
-
-        monkeypatch.setattr(bootstrap, "get_redis_client", _boom)
-
-        # Should not raise, and must report not-on-cooldown so autonomy can proceed
-        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is False
-        await bootstrap._mark_cooldown("ws-1", "root-1")  # must not raise
+@pytest.mark.unit
+def test_autonomy_compatibility_module_exports_only_core_owned_surfaces() -> None:
+    assert bootstrap.__all__ == [
+        "maybe_auto_trigger_existing_root_execution",
+        "schedule_autonomy_tick",
+    ]

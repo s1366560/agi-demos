@@ -1,8 +1,8 @@
 # Avernet Workspace Core 迁移契约
 
-状态：Phase 1、Phase 2 数据底座与 Phase 3 gateway/Runtime 基座已落地；生产权威尚未切换。
+状态：Phase 1、Phase 2 数据底座与 Phase 3 gateway/Runtime 基座已落地；Cloud 默认权威已切换到 Avernet，生产发布门禁仍需逐项验收。
 
-本文是实施契约，不表示 24–32 周迁移已经完成。当前交付建立了固定上游、隔离工具链、PostgreSQL/领域 schema、迁移 CLI、整组 gateway、Agent Provider、终态恢复、公开 API 能力握手和后续阶段的硬门禁。默认配置仍由 legacy 服务 Cloud、Web 与 Desktop；Rust Core 已声明并验证冻结清单中的 92/92 条公开兼容 handler，`implemented_contract_sha256` 与完整 OpenAPI 契约一致，route-key hash 也与冻结 manifest 一致，`complete=true`。固定导入完整性、全事件 parity、Live Agent/Core/Ray E2E 和 Desktop helper 本地进程链已经闭环，但这不授权生产切换；生产规模迁移演练、正式签名/公证和真实更新频道回滚仍是硬门禁。
+本文是实施契约，不表示 24–32 周迁移已经完成。当前交付建立了固定上游、隔离工具链、PostgreSQL/领域 schema、迁移 CLI、整组 gateway、Agent Provider、终态恢复、公开 API 能力握手和后续阶段的硬门禁。Cloud 默认配置选择 Avernet；缺少 Core 连接与独立服务凭据时启动失败，legacy 只能由隔离迁移或回滚进程显式选择。Rust Core 已声明并验证冻结清单中的 92/92 条公开兼容 handler，`implemented_contract_sha256` 与完整 OpenAPI 契约一致，route-key hash 也与冻结 manifest 一致，`complete=true`。固定导入完整性、全事件 parity、Live Agent/Core/Ray E2E 和 Desktop helper 本地进程链已经闭环，但生产规模迁移演练、正式签名/公证和真实更新频道回滚仍是硬门禁。
 
 ## 已落地基线
 
@@ -55,13 +55,15 @@ flowchart LR
 
 当前 gateway 使用独立、不可变的 `WorkspaceCoreSettings`，不扩张全局 `Settings`：
 
-- `WORKSPACE_CORE_BACKEND=legacy|avernet` 只允许整组切换；默认 `legacy`。
+- `WORKSPACE_CORE_BACKEND=legacy|avernet` 只允许整组切换；默认 `avernet`，legacy 必须显式选择。
 - `WORKSPACE_CORE_SHADOW_READ_ENABLED=true` 可在 legacy 仍为唯一写权威时启用
   `health/read_snapshot` 对比客户端。
 - backend 为 `avernet` 或启用 shadow read 时，必须同时配置
   `WORKSPACE_CORE_BASE_URL` 与轮换的 `WORKSPACE_CORE_SERVICE_TOKEN`。
 - Avernet 模式已经按同一份 FastAPI/OpenAPI 契约注册全部 92 条 proxy route，并只转发白名单 header、
   结构化 scope 与用户凭证；Core 不可达时统一返回 503，绝不回落 legacy。
+- Cloud `task-sessions` 不属于冻结的 92 条公开路由；在 Core 提供等价的原子 command 前，Avernet
+  模式稳定返回 503，禁止回落后写入旧 Workspace、Member、Policy 或 Message 表。
 - Rust Core 除 snapshot、成员权限、Runtime correlation/terminal/recovery 等私有 handler 外，已实现
   冻结 manifest 中 Workspace、Task、Plan、Message、Blackboard/File、Topology、Collaboration、Objective、
   Gene、Autonomy、Policy 与 Context 全部 92 条公开 handler。

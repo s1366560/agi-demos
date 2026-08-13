@@ -107,6 +107,13 @@ pub enum WorkspaceTaskAuxiliaryWrite {
     CreateObjectiveProjection(WorkspaceObjectiveTaskProjectionWrite),
 }
 
+/// One additional Task event committed beside the mutation's primary event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceTaskOutboxEvent {
+    pub event_type: String,
+    pub payload: Value,
+}
+
 /// Complete Task mutation transaction input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceTaskMutation {
@@ -122,6 +129,7 @@ pub struct WorkspaceTaskMutation {
     pub response: Value,
     pub event_type: String,
     pub event_payload: Value,
+    pub additional_events: Vec<WorkspaceTaskOutboxEvent>,
     pub receipt_authority: Option<WorkspaceMutationAuthority>,
 }
 

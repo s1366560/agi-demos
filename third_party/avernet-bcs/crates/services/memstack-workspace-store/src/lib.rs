@@ -29,6 +29,7 @@ mod repository;
 mod task;
 mod task_dispatch;
 mod task_mutation;
+mod task_session;
 mod topology;
 mod topology_mutation;
 
@@ -103,10 +104,15 @@ pub use task::{
     WorkspaceObjectiveTaskProjection, WorkspaceObjectiveTaskProjectionWrite,
     WorkspaceTaskAttemptRecord, WorkspaceTaskAuxiliaryWrite, WorkspaceTaskDomainWrite,
     WorkspaceTaskExecutionRecord, WorkspaceTaskMutation, WorkspaceTaskMutationOutcome,
-    WorkspaceTaskRecord, WorkspaceTaskScope, WorkspaceTaskStore, WorkspaceTaskStoreError,
+    WorkspaceTaskOutboxEvent, WorkspaceTaskRecord, WorkspaceTaskScope, WorkspaceTaskStore,
+    WorkspaceTaskStoreError,
 };
 pub use task_dispatch::{
     WorkspaceTaskDispatchClaim, WorkspaceTaskDispatchFailureOutcome, WorkspaceTaskDispatchWrite,
+};
+pub use task_session::{
+    TaskSessionPolicyWrite, TaskSessionStore, TaskSessionStoreError, TaskSessionWorkspaceCreate,
+    TaskSessionWrite, TaskSessionWriteOutcome,
 };
 pub use topology::{
     WorkspaceTopologyDomainWrite, WorkspaceTopologyEdgeRecord, WorkspaceTopologyMutation,

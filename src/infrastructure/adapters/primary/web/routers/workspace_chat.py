@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, cast
 
@@ -9,7 +8,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.application.services.workspace_surface_contract import (
     SIGNAL_ROLE_KEY,
@@ -209,96 +207,8 @@ def _fire_mention_routing(
     project_id: str,
     user_id: str,
 ) -> None:
-    from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-        SqlConversationRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-        SqlUserRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
-        SqlWorkspaceAgentRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
-        SqlWorkspaceMemberRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
-        SqlWorkspaceMessageRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
-        SqlWorkspaceRepository,
-    )
-
-    container = request.app.state.container if request is not None else get_app_container()
-    if container is None:
-        return
-    redis_client = container.redis_client
-
-    async def _publish_event(ws_id: str, event_name: str, event_payload: dict[str, Any]) -> None:
-        from src.domain.events.types import AgentEventType
-        from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event_with_retry,
-        )
-
-        event_type = AgentEventType(event_name)
-        await publish_workspace_event_with_retry(
-            redis_client,
-            workspace_id=ws_id,
-            event_type=event_type,
-            payload=event_payload,
-        )
-
-    event_publisher = _publish_event if redis_client is not None else None
-
-    def agent_repo_factory(db: AsyncSession) -> SqlWorkspaceAgentRepository:
-        return SqlWorkspaceAgentRepository(db)
-
-    def member_repo_factory(db: AsyncSession) -> SqlWorkspaceMemberRepository:
-        return SqlWorkspaceMemberRepository(db)
-
-    def conversation_repo_factory(db: AsyncSession) -> SqlConversationRepository:
-        return SqlConversationRepository(db)
-
-    def workspace_repo_factory(db: AsyncSession) -> SqlWorkspaceRepository:
-        return SqlWorkspaceRepository(db)
-
-    def agent_service_factory(db: AsyncSession, llm: object) -> object:
-        return container.with_db(db).agent_service(cast(Any, llm))
-
-    def message_service_factory(
-        db: AsyncSession,
-        publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]] | None,
-    ) -> WorkspaceMessageService:
-        return WorkspaceMessageService(
-            message_repo=SqlWorkspaceMessageRepository(db),
-            member_repo=SqlWorkspaceMemberRepository(db),
-            agent_repo=SqlWorkspaceAgentRepository(db),
-            workspace_event_publisher=publisher,
-            user_repo=SqlUserRepository(db),
-            allow_legacy_text_mentions=True,
-        )
-
-    mention_router = WorkspaceMentionRouter(
-        agent_repo_factory=agent_repo_factory,
-        member_repo_factory=member_repo_factory,
-        agent_service_factory=agent_service_factory,
-        message_service_factory=message_service_factory,
-        conversation_repo_factory=conversation_repo_factory,
-        db_session_factory=async_session_factory,
-        workspace_repo_factory=workspace_repo_factory,
-    )
-
-    mention_router.fire_and_forget(
-        workspace_id=workspace_id,
-        message=message,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        user_id=user_id,
-        event_publisher=event_publisher,
-    )
+    del request, workspace_id, message, tenant_id, project_id, user_id
+    logger.debug("Legacy Python Workspace mention routing is retired; Core owns dispatch")
 
 
 @router.get("", response_model=MessageListResponse)

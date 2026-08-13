@@ -12,12 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.trust_schemas import ApprovalResolveRequest
+from src.domain.ports.services.workspace_authority_port import WorkspaceAuthorityResolvedProfile
 from src.infrastructure.adapters.primary.web.routers import trust
 from src.infrastructure.adapters.secondary.persistence.models import (
     DecisionRecordModel,
     Project,
     User,
-    WorkspaceModel,
 )
 
 
@@ -67,15 +67,26 @@ async def test_list_trust_policies_rejects_workspace_from_other_tenant(
     async def allow_access(*_args: object, **_kwargs: object) -> None:
         return None
 
-    workspace = WorkspaceModel(
-        id=str(uuid4()),
-        tenant_id="tenant-other",
-        project_id=test_project_db.id,
-        name="Other tenant workspace",
-        created_by=test_user.id,
+    workspace_id = "workspace-other-tenant"
+    authority = SimpleNamespace(
+        resolve_profiles=AsyncMock(
+            return_value={
+                workspace_id: WorkspaceAuthorityResolvedProfile(
+                    workspace_id=workspace_id,
+                    tenant_id="tenant-other",
+                    project_id=test_project_db.id,
+                    name="Other tenant workspace",
+                    created_by=test_user.id,
+                    is_archived=False,
+                    metadata={},
+                    member_role="owner",
+                )
+            }
+        )
     )
-    test_db.add(workspace)
-    await test_db.commit()
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(workspace_authority=authority))
+    )
 
     monkeypatch.setattr(trust, "_require_tenant_access", allow_access)
     monkeypatch.setattr(trust, "_build_service", lambda _db: _UnexpectedTrustService())
@@ -83,9 +94,10 @@ async def test_list_trust_policies_rejects_workspace_from_other_tenant(
     with pytest.raises(HTTPException) as exc_info:
         await trust.list_trust_policies(
             tenant_id=test_project_db.tenant_id,
+            request=request,
             current_user=SimpleNamespace(id=test_user.id, is_superuser=False),
             db=test_db,
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
         )
 
     assert exc_info.value.status_code == 404
@@ -102,15 +114,28 @@ async def test_get_decision_record_rejects_record_outside_requested_workspace(
     async def allow_access(*_args: object, **_kwargs: object) -> None:
         return None
 
-    workspace = WorkspaceModel(
-        id=str(uuid4()),
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Requested workspace",
-        created_by=test_user.id,
+    workspace_id = "workspace-requested"
+    authority = SimpleNamespace(
+        resolve_profiles=AsyncMock(
+            return_value={
+                workspace_id: WorkspaceAuthorityResolvedProfile(
+                    workspace_id=workspace_id,
+                    tenant_id=test_project_db.tenant_id,
+                    project_id=test_project_db.id,
+                    name="Requested workspace",
+                    created_by=test_user.id,
+                    is_archived=False,
+                    metadata={},
+                    member_role="owner",
+                )
+            }
+        )
+    )
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(workspace_authority=authority))
     )
     record = DecisionRecordModel(
-        id=str(uuid4()),
+        id="decision-outside-workspace",
         tenant_id=test_project_db.tenant_id,
         workspace_id="other-workspace",
         agent_instance_id="agent-1",
@@ -118,7 +143,7 @@ async def test_get_decision_record_rejects_record_outside_requested_workspace(
         proposal={"tool": "shell"},
         outcome="pending",
     )
-    test_db.add_all([workspace, record])
+    test_db.add(record)
     await test_db.commit()
 
     monkeypatch.setattr(trust, "_require_tenant_access", allow_access)
@@ -127,9 +152,10 @@ async def test_get_decision_record_rejects_record_outside_requested_workspace(
         await trust.get_decision_record(
             tenant_id=test_project_db.tenant_id,
             record_id=record.id,
+            request=request,
             current_user=SimpleNamespace(id=test_user.id, is_superuser=False),
             db=test_db,
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
         )
 
     assert exc_info.value.status_code == 404
@@ -171,7 +197,9 @@ async def test_resolve_approval_request_rejects_record_from_other_tenant(
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Approval request not found"
-    result = await test_db.execute(select(DecisionRecordModel).where(DecisionRecordModel.id == record.id))
+    result = await test_db.execute(
+        select(DecisionRecordModel).where(DecisionRecordModel.id == record.id)
+    )
     persisted = result.scalar_one()
     assert persisted.outcome == "pending"
     assert persisted.reviewer_id is None

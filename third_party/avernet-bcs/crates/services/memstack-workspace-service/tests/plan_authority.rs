@@ -82,7 +82,8 @@ async fn snapshot_is_tenant_scoped_and_has_legacy_top_level_contract() -> Result
 }
 
 #[tokio::test]
-async fn pause_commits_plan_cas_event_and_outbox_and_replays() -> Result<(), Box<dyn Error>> {
+async fn plan_update_transaction_commits_state_event_compatibility_outbox_and_replays()
+-> Result<(), Box<dyn Error>> {
     let db = seeded_db("pending").await?;
     let judge = ProceedingJudge::new();
     let service = PublicWorkspacePlanService::new(&db, DbSqlFlavor::Sqlite, &judge);
@@ -107,9 +108,65 @@ async fn pause_commits_plan_cas_event_and_outbox_and_replays() -> Result<(), Box
     );
     assert_eq!(
         scalar_i64(&db, "SELECT COUNT(*) AS value FROM workspace_outbox").await?,
+        2
+    );
+    assert_eq!(
+        scalar_i64(
+            &db,
+            "SELECT COUNT(*) AS value FROM workspace_outbox WHERE event_type = 'workspace_plan_updated'",
+        )
+        .await?,
         1
     );
+    let compatibility_payload = scalar_string(
+        &db,
+        "SELECT payload_json AS value FROM workspace_outbox WHERE event_type = 'workspace_plan_updated'",
+    )
+    .await?;
+    let compatibility_payload: serde_json::Value = serde_json::from_str(&compatibility_payload)?;
+    assert_eq!(compatibility_payload["workspace_id"], "workspace-1");
+    assert_eq!(compatibility_payload["plan_id"], "plan-1");
+    assert_eq!(compatibility_payload["revision"], 2);
     assert_eq!(judge.calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn plan_update_transaction_rolls_back_state_event_and_both_outboxes_on_compatibility_failure()
+-> Result<(), Box<dyn Error>> {
+    let db = seeded_db("pending").await?;
+    db.execute(DbStatement::new(
+        "CREATE TRIGGER reject_workspace_plan_updated BEFORE INSERT ON workspace_outbox WHEN NEW.event_type = 'workspace_plan_updated' BEGIN SELECT RAISE(ABORT, 'injected compatibility outbox failure'); END",
+    ))
+    .await?;
+    let judge = ProceedingJudge::new();
+    let service = PublicWorkspacePlanService::new(&db, DbSqlFlavor::Sqlite, &judge);
+
+    let result = service
+        .act(&action(
+            PublicWorkspacePlanAction::PauseIteration,
+            None,
+            "pause-rollback",
+        ))
+        .await;
+
+    assert!(result.is_err());
+    assert_eq!(
+        scalar_string(&db, "SELECT status AS value FROM workspace_plans").await?,
+        "active"
+    );
+    assert_eq!(
+        scalar_i64(&db, "SELECT revision AS value FROM workspace_plans").await?,
+        1
+    );
+    assert_eq!(
+        scalar_i64(&db, "SELECT COUNT(*) AS value FROM workspace_plan_events").await?,
+        0
+    );
+    assert_eq!(
+        scalar_i64(&db, "SELECT COUNT(*) AS value FROM workspace_outbox").await?,
+        0
+    );
     Ok(())
 }
 
@@ -144,7 +201,7 @@ async fn replan_requires_judge_and_commits_audit_node_event_and_outbox()
     );
     assert_eq!(
         scalar_i64(&db, "SELECT COUNT(*) AS value FROM workspace_outbox").await?,
-        1
+        2
     );
     Ok(())
 }

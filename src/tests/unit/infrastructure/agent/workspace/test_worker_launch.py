@@ -18,6 +18,7 @@ from src.infrastructure.agent.workspace.code_context import (
     AgentsInstructionFile,
     WorkspaceCodeContext,
 )
+from src.infrastructure.workspace_core.legacy_runtime import LegacyWorkspaceRuntimeRetiredError
 
 
 def _make_task(
@@ -1667,32 +1668,12 @@ services:
         assert "workspace_verification_integrity" not in system_context
 
     async def test_load_plan_node_metadata_follows_nested_repair_source_chain(self) -> None:
-        class _Result:
-            def __init__(self, value: dict) -> None:
-                self._value = value
-
-            def scalar_one_or_none(self) -> dict:
-                return self._value
-
         class _Db:
             def __init__(self) -> None:
-                self.values = [
-                    {
-                        "iteration_phase": "implement",
-                        "repair_for_node_id": "node-repair-2",
-                    },
-                    {
-                        "iteration_phase": "implement",
-                        "repair_for_node_id": "node-source",
-                    },
-                    {"iteration_phase": "test"},
-                ]
                 self.calls = 0
 
-            async def execute(self, _stmt: object) -> _Result:
-                value = self.values[self.calls]
+            async def execute(self, _stmt: object) -> None:
                 self.calls += 1
-                return _Result(value)
 
         task = _make_task(
             metadata={
@@ -1701,11 +1682,11 @@ services:
             },
         )
 
-        metadata = await wl._load_plan_node_metadata_for_task(_Db(), task)  # type: ignore[arg-type]
+        db = _Db()
+        metadata = await wl._load_plan_node_metadata_for_task(db, task)  # type: ignore[arg-type]
 
-        assert metadata["iteration_phase"] == "test"
-        assert "allow_verification_script_changes" not in metadata
-        assert metadata["repair_source_iteration_phase"] == "test"
+        assert metadata == {}
+        assert db.calls == 0
 
     def test_system_context_extracts_repair_brief_verification_script_allowlist(self) -> None:
         task = _make_task()
@@ -2153,162 +2134,41 @@ services:
 
 class TestLaunchWorkerSession:
     @pytest.mark.asyncio
-    async def test_missing_worker_agent_id(self) -> None:
+    async def test_retired_worker_launch_fails_closed_before_validation(self) -> None:
         task = _make_task()
-        out = await wl.launch_worker_session(
-            workspace_id="w",
-            task=task,
-            worker_agent_id="",
-            actor_user_id="u1",
-        )
-        assert out == {
-            "launched": False,
-            "conversation_id": None,
-            "attempt_id": None,
-            "reason": "worker_agent_id_missing",
-        }
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
+            await wl.launch_worker_session(
+                workspace_id="w",
+                task=task,
+                worker_agent_id="",
+                actor_user_id="u1",
+            )
 
     @pytest.mark.asyncio
-    async def test_workspace_not_found_short_circuits(
-        self, monkeypatch: pytest.MonkeyPatch
+    async def test_retired_worker_launch_does_not_open_platform_db_session(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When the workspace does not exist we must not attempt to stream."""
         task = _make_task()
+        platform_db_opened = False
 
-        class _Repo:
-            def __init__(self, db: object) -> None:
-                pass
+        def _fail_if_platform_db_opens() -> None:
+            nonlocal platform_db_opened
+            platform_db_opened = True
+            raise AssertionError("retired worker launch opened a platform DB session")
 
-            async def find_by_id(self, _wid: str) -> None:
-                return None
-
-        class _Session:
-            async def __aenter__(self) -> object:
-                return object()
-
-            async def __aexit__(self, *_: object) -> None:
-                return None
-
-        def _fake_session_factory() -> _Session:
-            return _Session()
-
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.secondary.persistence."
-            "sql_workspace_repository.SqlWorkspaceRepository",
-            _Repo,
-        )
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            _fake_session_factory,
+            _fail_if_platform_db_opens,
         )
-
-        async def _fake_redis() -> None:
-            return None
-
-        monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            _fake_redis,
-        )
-        out = await wl.launch_worker_session(
-            workspace_id="w",
-            task=task,
-            worker_agent_id="agent-X",
-            actor_user_id="u1",
-        )
-        assert out["launched"] is False
-        assert out["reason"] == "workspace_not_found"
-        assert out["conversation_id"] is None
-
-    @pytest.mark.asyncio
-    async def test_rejects_when_worker_equals_leader(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Leader must never be dispatched as a worker for its own tasks.
-
-        Regression: a workspace leader could self-assign a task (via
-        ``todowrite``) or be picked up by the heal sweep, causing a
-        "Workspace Worker - ..." conversation to be opened for the leader.
-        ``worker_launch`` is the single enforcement point.
-        """
-        task = _make_task()
-
-        class _Workspace:
-            id = "w"
-            project_id = "p"
-            tenant_id = "t"
-
-        class _WorkspaceRepo:
-            def __init__(self, db: object) -> None:
-                pass
-
-            async def find_by_id(self, _wid: str) -> _Workspace:
-                return _Workspace()
-
-        class _Binding:
-            is_active = True
-
-        class _AgentRepo:
-            def __init__(self, db: object) -> None:
-                pass
-
-            async def find_by_workspace_and_agent_id(
-                self, *, workspace_id: str, agent_id: str
-            ) -> _Binding:
-                return _Binding()
-
-        class _Session:
-            async def __aenter__(self) -> object:
-                return object()
-
-            async def __aexit__(self, *_: object) -> None:
-                return None
-
-        def _fake_session_factory() -> _Session:
-            return _Session()
-
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.secondary.persistence."
-            "sql_workspace_repository.SqlWorkspaceRepository",
-            _WorkspaceRepo,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.secondary.persistence."
-            "sql_workspace_agent_repository.SqlWorkspaceAgentRepository",
-            _AgentRepo,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            _fake_session_factory,
-        )
-
-        async def _fake_redis() -> None:
-            return None
-
-        monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            _fake_redis,
-        )
-
-        # Sentinels: if the guard fails, these would be imported/invoked and
-        # raise, making the test fail loudly instead of silently creating a
-        # Conversation row.
-        def _boom(*_a: object, **_kw: object) -> None:
-            raise AssertionError("worker_is_leader guard failed: downstream code invoked")
-
-        monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime._build_attempt_service",
-            _boom,
-        )
-
-        leader_id = "builtin:sisyphus"
-        out = await wl.launch_worker_session(
-            workspace_id="w",
-            task=task,
-            worker_agent_id=leader_id,
-            actor_user_id="u1",
-            leader_agent_id=leader_id,
-        )
-        assert out["launched"] is False
-        assert out["reason"] == "worker_is_leader"
-        assert out["conversation_id"] is None
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
+            await wl.launch_worker_session(
+                workspace_id="w",
+                task=task,
+                worker_agent_id="agent-X",
+                actor_user_id="u1",
+            )
+        assert platform_db_opened is False
 
 
 class TestRepairConversationReuse:

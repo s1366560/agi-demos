@@ -21,6 +21,7 @@ use sha2::{Digest, Sha256};
 
 pub mod agent_registry;
 mod agents;
+mod authority_query;
 mod autonomy;
 pub mod autonomy_judge;
 mod blackboard;
@@ -51,8 +52,10 @@ pub mod provider_registry;
 mod public_api;
 mod runtime;
 mod runtime_recovery;
+mod structured_tasks;
 pub mod task_dispatch;
 pub mod task_dispatch_worker;
+mod task_sessions;
 mod tasks;
 mod topology;
 pub mod workspace_provider_events;
@@ -366,6 +369,15 @@ pub fn workspace_router(state: Arc<WorkspaceCoreState>) -> Router {
             "/internal/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
             post(creation::create_workspace),
         )
+        .route(
+            "/internal/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions",
+            post(task_sessions::create_task_session),
+        )
+        .route(
+            "/internal/v1/workspace-authority/query",
+            post(authority_query::query_workspace_authority),
+        )
+        .merge(structured_tasks::router())
         .route(
             "/internal/v1/workspaces/{workspace_id}/members/{user_id}",
             get(has_workspace_access),
@@ -1180,7 +1192,7 @@ mod tests {
         assert_eq!(payload["implemented_route_count"], 92);
         assert_eq!(
             payload["implemented_contract_sha256"],
-            "a20b3f3a5065b9ff4fad23310b4fa6c4eb6cc4f666be7957ec6c4b1ad65a9623"
+            "a09965a43986fa5c23cc21a4f876b1e94fab475fefe1f9d679e41bf617660768"
         );
         assert_eq!(
             payload["implemented_route_keys_sha256"],

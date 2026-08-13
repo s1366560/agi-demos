@@ -67,10 +67,8 @@ from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_upl
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_collaboration_authority_repository import (
-    SqlWorkspaceCollaborationAuthorityRepository,
-)
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 router = APIRouter(prefix="/{workspace_id}/collaboration", tags=["workspace-collaboration"])
 
@@ -140,8 +138,9 @@ class WorkspaceCollaborationMutationReceiptResponse(BaseModel):
 def get_workspace_collaboration_mutation_service(
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceCollaborationMutationService:
-    """Build a request-scoped authority service."""
-    return WorkspaceCollaborationMutationService(SqlWorkspaceCollaborationAuthorityRepository(db))
+    """Reject the retired platform Collaboration mutation authority."""
+    del db
+    legacy_workspace_runtime_retired("Collaboration mutation service")
 
 
 @router.get(

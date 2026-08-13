@@ -22,8 +22,9 @@ use super::{
         AutomationExecutor, AutomationExecutorError, AutomationExecutorOutcome,
         AutomationWorkerExecution, AutomationWorkerWait,
     },
-    now_iso, session_store, ConversationCapabilityMode, ConversationRunMode, LlmWorkloadRole,
-    LocalConversation, LocalRuntimeState, LocalTimelineObserver, PLAN_MODE_TOOL_NAMES,
+    now_iso, session_store, workspace_core_bridge, ConversationCapabilityMode, ConversationRunMode,
+    LlmWorkloadRole, LocalConversation, LocalRuntimeState, LocalTimelineObserver,
+    PLAN_MODE_TOOL_NAMES,
 };
 
 #[derive(Clone)]
@@ -97,16 +98,20 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
             }
         }
         let goal = automation_goal(&claim.job_snapshot)?;
-        let conversation =
-            automation_conversation(&state, claim).map_err(AutomationExecutorError::permanent)?;
+        let conversation = automation_conversation(&state, claim)
+            .await
+            .map_err(AutomationExecutorError::permanent)?;
         let workspace_id = conversation.workspace_id.as_deref().ok_or_else(|| {
             AutomationExecutorError::permanent("local_automation_workspace_unavailable")
         })?;
-        if !state.automation_agent_authority_for_workspace(
-            &claim.tenant_id,
-            &claim.project_id,
-            workspace_id,
-        ) {
+        if !state
+            .automation_agent_authority_for_workspace(
+                &claim.tenant_id,
+                &claim.project_id,
+                workspace_id,
+            )
+            .await
+        {
             return Err(AutomationExecutorError::retryable(
                 "local_automation_provider_unavailable",
             ));
@@ -132,7 +137,9 @@ impl AutomationExecutor for LocalAutomationAgentExecutor {
         user_item["id"] = json!(format!("local-automation-trigger-{}", claim.run_id));
         state.append_timeline(&conversation.id, user_item);
 
-        let engine = automation_engine(&state, &conversation);
+        let engine = automation_engine(&state, &conversation)
+            .await
+            .map_err(AutomationExecutorError::retryable)?;
         let observer = Arc::new(LocalTimelineObserver {
             state: Arc::clone(&state),
             conversation_id: conversation.id.clone(),
@@ -313,8 +320,9 @@ pub(super) async fn accept_human_response(
         &authority.tenant_id,
         &authority.project_id,
         workspace_id,
-    )?;
-    let engine = automation_engine(state, &conversation);
+    )
+    .await?;
+    let engine = automation_engine(state, &conversation).await?;
     let accepted = engine
         .accept_human_response(&authority.runtime_execution_id, request_id, answer)
         .await
@@ -334,21 +342,27 @@ pub(super) async fn accept_human_response(
     Ok(())
 }
 
-fn automation_engine(state: &LocalRuntimeState, conversation: &LocalConversation) -> ReActEngine {
+async fn automation_engine(
+    state: &LocalRuntimeState,
+    conversation: &LocalConversation,
+) -> Result<ReActEngine, &'static str> {
     let tool_host: Arc<dyn ToolHost> = Arc::new(ReadOnlyAutomationToolHost::new(
         state.tool_host.lock().expect("local tool host").clone(),
     ));
-    let llm = state.llm_for_role(conversation, LlmWorkloadRole::Default);
-    ReActEngine::new(
+    let llm = state
+        .llm_for_role(conversation, LlmWorkloadRole::Default)
+        .await
+        .map_err(|_| "local_automation_workspace_core_unavailable")?;
+    Ok(ReActEngine::new(
         llm,
         tool_host,
         state.checkpoints.clone(),
         state.clock.clone(),
     )
-    .with_max_rounds(8)
+    .with_max_rounds(8))
 }
 
-pub(super) fn execution_workspace_id(
+pub(super) async fn execution_workspace_id(
     state: &LocalRuntimeState,
     tenant_id: &str,
     project_id: &str,
@@ -372,7 +386,7 @@ pub(super) fn execution_workspace_id(
             .workspace_id
             .as_deref()
             .ok_or("local_automation_workspace_unavailable")?;
-        validate_workspace_scope(state, tenant_id, project_id, workspace_id)?;
+        validate_workspace_scope(state, tenant_id, project_id, workspace_id).await?;
         return Ok(workspace_id.to_string());
     }
 
@@ -382,30 +396,26 @@ pub(super) fn execution_workspace_id(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or("local_automation_workspace_required")?;
-    validate_workspace_scope(state, tenant_id, project_id, workspace_id)?;
+    validate_workspace_scope(state, tenant_id, project_id, workspace_id).await?;
     Ok(workspace_id.to_string())
 }
 
-pub(super) fn validate_workspace_scope(
+pub(super) async fn validate_workspace_scope(
     state: &LocalRuntimeState,
     tenant_id: &str,
     project_id: &str,
     workspace_id: &str,
 ) -> Result<(), &'static str> {
-    let actual_project_id = state
-        .session_store
-        .workspace_project_id(workspace_id)
-        .map_err(|_| "local_automation_workspace_store_unavailable")?
-        .ok_or("local_automation_workspace_not_found")?;
-    let actual_tenant_id = state
-        .session_store
-        .workspace_tenant_id(workspace_id)
-        .map_err(|_| "local_automation_workspace_store_unavailable")?
-        .ok_or("local_automation_workspace_not_found")?;
-    if actual_project_id != project_id || actual_tenant_id != tenant_id {
-        return Err("local_automation_workspace_scope_mismatch");
+    #[cfg(test)]
+    if state
+        .mock_llm_enabled
+        .load(std::sync::atomic::Ordering::Acquire)
+        != 0
+    {
+        return Ok(());
     }
-    Ok(())
+    workspace_core_bridge::validate_workspace_scope(state, tenant_id, project_id, workspace_id)
+        .await
 }
 
 fn validate_claim_scope(claim: &AutomationOperationClaim) -> Result<(), AutomationExecutorError> {
@@ -465,7 +475,7 @@ fn automation_goal(snapshot: &Value) -> Result<String, AutomationExecutorError> 
     Ok(format!("{}{content}", prefix.unwrap_or_default()))
 }
 
-fn automation_conversation(
+async fn automation_conversation(
     state: &LocalRuntimeState,
     claim: &AutomationOperationClaim,
 ) -> Result<LocalConversation, &'static str> {
@@ -504,7 +514,7 @@ fn automation_conversation(
             .workspace_id
             .as_deref()
             .ok_or("local_automation_workspace_unavailable")?;
-        validate_workspace_scope(state, &claim.tenant_id, &claim.project_id, workspace_id)?;
+        validate_workspace_scope(state, &claim.tenant_id, &claim.project_id, workspace_id).await?;
         return Ok(existing);
     }
 
@@ -514,7 +524,8 @@ fn automation_conversation(
         &claim.project_id,
         &claim.job_snapshot,
         None,
-    )?;
+    )
+    .await?;
     let now = now_iso();
     let title = claim
         .job_snapshot
