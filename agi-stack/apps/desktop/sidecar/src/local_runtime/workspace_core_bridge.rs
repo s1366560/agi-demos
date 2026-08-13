@@ -45,6 +45,15 @@ const FORWARDED_REQUEST_HEADERS: &[&str] = &[
     "x-memstack-workspace-id",
 ];
 
+#[derive(Debug, Serialize)]
+pub(super) struct WorkspaceCoreTaskSessionRequest {
+    pub(super) workspace: Value,
+    pub(super) conversation_id: String,
+    pub(super) initial_message: Value,
+    pub(super) workspace_policy: Option<Value>,
+    pub(super) capability_mode: super::task_session::TaskSessionCapabilityMode,
+}
+
 pub(super) type BridgeError = (StatusCode, Json<Value>);
 pub(super) type BridgeResult = Result<Json<Value>, BridgeError>;
 type WorkspaceProxyScope<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>);
@@ -109,7 +118,9 @@ pub(super) async fn proxy_workspace_if_authoritative(
     request: Request<Body>,
     next: Next,
 ) -> Response {
-    if workspace_core_cutover_started(&state) && workspace_proxy_scope(request.uri().path()).is_ok()
+    if workspace_core_cutover_started(&state)
+        && workspace_proxy_scope(request.uri().path()).is_ok()
+        && !is_task_session_scope(request.uri().path())
     {
         return proxy_installed_workspace_request(&state, request).await;
     }
@@ -147,7 +158,7 @@ async fn proxy_installed_workspace_request(
 
 async fn proxy_workspace_request_inner(
     state: &LocalRuntimeState,
-    mut request: Request<Body>,
+    request: Request<Body>,
 ) -> Result<Response, BridgeError> {
     let authenticated = request
         .extensions()
@@ -168,9 +179,6 @@ async fn proxy_workspace_request_inner(
         return Err(forbidden(
             "Request is outside the trusted Workspace Core scope",
         ));
-    }
-    if is_task_session_scope(&path) {
-        prepare_task_session_request(&mut request)?;
     }
     let upstream_path = workspace_core_upstream_path(request.uri())?;
     let upstream_url = format!("{}{}", authority.core_api_base_url, upstream_path);
@@ -287,18 +295,85 @@ fn workspace_core_upstream_path(uri: &axum::http::Uri) -> Result<String, BridgeE
     ))
 }
 
-fn prepare_task_session_request(request: &mut Request<Body>) -> Result<(), BridgeError> {
-    let idempotency_key = request
-        .headers()
-        .get("x-idempotency-key")
-        .or_else(|| request.headers().get("idempotency-key"))
-        .cloned();
-    if let Some(idempotency_key) = idempotency_key {
-        request
-            .headers_mut()
-            .insert("x-idempotency-key", idempotency_key);
+pub(super) async fn create_task_session(
+    state: &LocalRuntimeState,
+    authenticated: &super::AuthenticatedContext,
+    tenant_id: &str,
+    project_id: &str,
+    idempotency_key: &str,
+    request: WorkspaceCoreTaskSessionRequest,
+) -> Result<Value, BridgeError> {
+    let authority = state
+        .workspace_core_authority
+        .lock()
+        .expect("Workspace Core authority")
+        .clone()
+        .ok_or_else(|| unavailable("Workspace Core Desktop authority is not installed"))?;
+    let mut url = Url::parse(&authority.core_api_base_url)
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?;
+    url.path_segments_mut()
+        .map_err(|_| unavailable("Workspace Core Desktop authority is invalid"))?
+        .extend([
+            "internal",
+            "v1",
+            "tenants",
+            tenant_id,
+            "projects",
+            project_id,
+            "task-sessions",
+        ]);
+    let response = authority
+        .client
+        .post(url)
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-idempotency-key", idempotency_key)
+        .header("x-memstack-user-id", authenticated.user.user_id.as_str())
+        .header(
+            "x-memstack-user-is-superuser",
+            authenticated.user.is_superuser.to_string(),
+        )
+        .header("x-memstack-user-email", authenticated.user.email.as_str())
+        .header("x-memstack-tenant-id", tenant_id)
+        .header(
+            "x-memstack-project-membership-role",
+            authenticated.membership_role.as_str(),
+        )
+        .json(&request)
+        .send()
+        .await
+        .map_err(|_| unavailable("Workspace Core is unavailable"))?;
+    let status = response.status();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|_| unavailable("Workspace Core response is unavailable"))?;
+    let value = serde_json::from_slice(&body).unwrap_or_else(|_| {
+        json!({
+            "detail": String::from_utf8_lossy(&body),
+        })
+    });
+    if status.is_success() {
+        return Ok(value);
     }
-    Ok(())
+    match status {
+        StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => Err((status, Json(value))),
+        StatusCode::FORBIDDEN => Err(forbidden("Workspace access is denied")),
+        StatusCode::NOT_FOUND
+            if value.get("detail").and_then(Value::as_str) == Some("Workspace not found") =>
+        {
+            Err(not_found("Workspace not found"))
+        }
+        StatusCode::NOT_FOUND => Err(unavailable(
+            "Workspace Core task-session authority is unavailable",
+        )),
+        StatusCode::CONFLICT => Err((status, Json(value))),
+        StatusCode::METHOD_NOT_ALLOWED => Err(unavailable(
+            "Workspace Core task-session authority is unavailable",
+        )),
+        _ => Err(unavailable(
+            "Workspace Core task-session authority is unavailable",
+        )),
+    }
 }
 
 pub(super) async fn validate_workspace_access(

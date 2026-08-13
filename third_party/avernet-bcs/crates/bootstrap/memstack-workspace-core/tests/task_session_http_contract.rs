@@ -116,6 +116,9 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
         .oneshot(task_session_request("Changed objective")?)
         .await?;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let conflict: Value =
+        serde_json::from_slice(&to_bytes(conflict.into_body(), usize::MAX).await?)?;
+    assert_eq!(conflict["code"], "TASK_SESSION_IDEMPOTENCY_CONFLICT");
     assert_eq!(table_count(db.as_ref(), "bcs_messages").await?, 2);
     assert_eq!(
         table_count(db.as_ref(), "workspace_task_receipts").await?,

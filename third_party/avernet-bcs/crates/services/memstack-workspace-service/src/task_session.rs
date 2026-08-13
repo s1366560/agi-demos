@@ -93,6 +93,7 @@ pub enum CreateTaskSessionErrorKind {
     NotFound,
     Forbidden,
     Conflict,
+    IdempotencyConflict,
     Unavailable,
 }
 
@@ -141,11 +142,13 @@ impl CreateTaskSessionError {
             Self::Store(TaskSessionStoreError::AccessDenied) => {
                 CreateTaskSessionErrorKind::Forbidden
             }
+            Self::Store(TaskSessionStoreError::IdempotencyConflict) => {
+                CreateTaskSessionErrorKind::IdempotencyConflict
+            }
             Self::PolicyRevisionConflict
-            | Self::Store(
-                TaskSessionStoreError::IdempotencyConflict
-                | TaskSessionStoreError::AuthorityConflict,
-            ) => CreateTaskSessionErrorKind::Conflict,
+            | Self::Store(TaskSessionStoreError::AuthorityConflict) => {
+                CreateTaskSessionErrorKind::Conflict
+            }
             Self::WorkspaceNotFound => CreateTaskSessionErrorKind::NotFound,
             Self::Provider(_)
             | Self::Profile(_)

@@ -132,27 +132,103 @@ async fn create_status_proxy_server(status: StatusCode) -> String {
     url
 }
 
-async fn create_path_proxy_server() -> (String, mpsc::Receiver<(String, HeaderMap)>) {
+type TaskSessionObservation = (String, HeaderMap, Vec<u8>);
+
+#[derive(Clone, Copy)]
+enum TaskSessionProxyBehavior {
+    Success,
+    Failure(StatusCode),
+    IdempotencyConflict,
+    MalformedSuccess,
+}
+
+async fn create_task_session_proxy_server_with(
+    behavior: TaskSessionProxyBehavior,
+) -> (String, mpsc::Receiver<TaskSessionObservation>) {
     let (sender, receiver) = mpsc::channel(1);
     async fn respond(
-        State(sender): State<mpsc::Sender<(String, HeaderMap)>>,
+        State((sender, behavior)): State<(
+            mpsc::Sender<TaskSessionObservation>,
+            TaskSessionProxyBehavior,
+        )>,
         request: Request<Body>,
-    ) -> Json<Value> {
+    ) -> Response {
+        let path = request.uri().path().to_string();
+        let headers = request.headers().clone();
+        let body = to_bytes(request.into_body(), 1024 * 1024)
+            .await
+            .expect("task-session body")
+            .to_vec();
+        let command: Value = serde_json::from_slice(&body).expect("task-session command JSON");
         sender
-            .send((request.uri().path().to_string(), request.headers().clone()))
+            .send((path, headers, body.clone()))
             .await
             .expect("proxy observation receiver");
-        Json(json!({ "replayed": false }))
+        if let TaskSessionProxyBehavior::Failure(status) = behavior {
+            return (status, Json(json!({ "detail": "Core failure" }))).into_response();
+        }
+        if matches!(behavior, TaskSessionProxyBehavior::IdempotencyConflict) {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "code": "TASK_SESSION_IDEMPOTENCY_CONFLICT",
+                    "detail": "Core failure",
+                })),
+            )
+                .into_response();
+        }
+        let mut response = json!({
+            "receipt_id": "core-receipt-1",
+            "replayed": false,
+            "workspace": {
+                "id": "local-workspace",
+                "tenant_id": "local",
+                "project_id": "local-project",
+                "name": "Existing workspace",
+                "description": null,
+                "status": "open",
+                "is_archived": false,
+                "created_at": "2026-08-13T00:00:00Z",
+                "updated_at": "2026-08-13T00:00:00Z",
+                "metadata": { "runtime": "local" }
+            },
+            "initial_message": {
+                "id": command["initial_message"]["message_id"],
+                "workspace_id": "local-workspace",
+                "sender_id": "local-user",
+                "sender_type": "human",
+                "content": command["initial_message"]["content"],
+                "mentions": [],
+                "parent_message_id": null,
+                "metadata": {
+                    "source": "task_session",
+                    "conversation_id": command["conversation_id"],
+                    "runtime": "workspace_core",
+                    "context_items": []
+                },
+                "created_at": "2026-08-13T00:00:00Z"
+            },
+            "policy": null,
+            "capability_version": "avernet-task-session-v1"
+        });
+        if matches!(behavior, TaskSessionProxyBehavior::MalformedSuccess) {
+            response["initial_message"]["content"] = json!("Unexpected objective");
+        }
+        Json(response).into_response()
     }
     let app = Router::new()
         .fallback(axum::routing::any(respond))
-        .with_state(sender);
+        .with_state((sender, behavior));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind path proxy server");
     let url = format!("http://{}", listener.local_addr().expect("address"));
     tokio::spawn(async move { axum::serve(listener, app).await.expect("path proxy server") });
     (url, receiver)
+}
+
+async fn create_task_session_proxy_server() -> (String, mpsc::Receiver<TaskSessionObservation>) {
+    create_task_session_proxy_server_with(TaskSessionProxyBehavior::Success).await
 }
 
 type RoutingPolicyObservation = (String, String, HeaderMap, Vec<u8>);
@@ -1140,7 +1216,7 @@ async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let (core_url, mut observations) = create_workspace_proxy_server().await;
+    let (core_url, mut observations) = create_task_session_proxy_server().await;
     let generation = install(&state, &core_url);
     let app = local_router(Arc::clone(&state));
     let path = "/api/v1/tenants/local/projects/local-project/task-sessions";
@@ -1154,12 +1230,26 @@ async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
                 .header("x-agistack-launch", "launch-token")
                 .header(AUTHORIZATION, "Bearer desktop-session")
                 .header("content-type", "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-cutover",
+                        "workspace": {
+                            "kind": "existing",
+                            "workspace_id": "local-workspace"
+                        },
+                        "conversation": {
+                            "title": "Cutover thread",
+                            "capability_mode": "work"
+                        },
+                        "initial_message": { "content": "Verify fail-closed cutover" }
+                    })
+                    .to_string(),
+                ))
                 .expect("request"),
         )
         .await
         .expect("response");
-    assert_eq!(proxied.status(), StatusCode::OK);
+    assert_eq!(proxied.status(), StatusCode::CREATED);
     observations
         .recv()
         .await
@@ -1174,7 +1264,21 @@ async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
                 .header("x-agistack-launch", "launch-token")
                 .header(AUTHORIZATION, "Bearer desktop-session")
                 .header("content-type", "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-after-cutover",
+                        "workspace": {
+                            "kind": "existing",
+                            "workspace_id": "local-workspace"
+                        },
+                        "conversation": {
+                            "title": "Unavailable thread",
+                            "capability_mode": "work"
+                        },
+                        "initial_message": { "content": "Must fail without authority" }
+                    })
+                    .to_string(),
+                ))
                 .expect("request"),
         )
         .await
@@ -1190,10 +1294,10 @@ async fn task_sessions_use_the_private_core_atomic_command_contract() {
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let (core_url, mut observations) = create_path_proxy_server().await;
+    let (core_url, mut observations) = create_task_session_proxy_server().await;
     install(&state, &core_url);
 
-    let response = local_router(state)
+    let response = local_router(Arc::clone(&state))
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -1201,15 +1305,56 @@ async fn task_sessions_use_the_private_core_atomic_command_contract() {
                 .header("x-agistack-launch", "launch-token")
                 .header(AUTHORIZATION, "Bearer desktop-session")
                 .header("content-type", "application/json")
-                .header("idempotency-key", "desktop-task-session-1")
-                .body(Body::from("{}"))
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-1",
+                        "workspace": {
+                            "kind": "existing",
+                            "workspace_id": "local-workspace"
+                        },
+                        "conversation": {
+                            "title": "Local thread",
+                            "capability_mode": "work"
+                        },
+                        "initial_message": {
+                            "content": "Create a reviewable plan",
+                            "context_items": []
+                        }
+                    })
+                    .to_string(),
+                ))
                 .expect("request"),
         )
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let (path, headers) = observations.recv().await.expect("Core request");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let response_body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("task-session response body");
+    let response_value: Value =
+        serde_json::from_slice(&response_body).expect("task-session response JSON");
+    assert_eq!(response_value["conversation"]["title"], "Local thread");
+    assert_eq!(response_value["conversation"]["message_count"], 1);
+    assert_eq!(
+        response_value["conversation"]["workspace_id"],
+        "local-workspace"
+    );
+    assert_eq!(
+        response_value["initial_message"]["metadata"]["conversation_id"],
+        response_value["conversation"]["id"]
+    );
+    assert!(state
+        .session_store
+        .conversation(
+            response_value["conversation"]["id"]
+                .as_str()
+                .expect("conversation id")
+        )
+        .expect("conversation projection")
+        .is_some());
+
+    let (path, headers, body) = observations.recv().await.expect("Core request");
     assert_eq!(
         path,
         "/internal/v1/tenants/local/projects/local-project/task-sessions"
@@ -1220,6 +1365,276 @@ async fn task_sessions_use_the_private_core_atomic_command_contract() {
             .and_then(|value| value.to_str().ok()),
         Some("desktop-task-session-1")
     );
+    let core_request: Value = serde_json::from_slice(&body).expect("Core request JSON");
+    assert_eq!(core_request["workspace"]["kind"], "existing");
+    assert_eq!(core_request["workspace"]["workspace_id"], "local-workspace");
+    assert_eq!(core_request["capability_mode"], "work");
+    assert_eq!(
+        core_request["initial_message"]["content"],
+        "Create a reviewable plan"
+    );
+    assert!(core_request["conversation_id"].as_str().is_some());
+    assert!(core_request["initial_message"]["message_id"]
+        .as_str()
+        .is_some());
+    assert!(core_request.get("idempotency_key").is_none());
+    assert!(core_request.get("conversation").is_none());
+}
+
+#[tokio::test]
+async fn task_session_core_failure_does_not_create_a_local_conversation_projection() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_task_session_proxy_server_with(
+        TaskSessionProxyBehavior::Failure(StatusCode::SERVICE_UNAVAILABLE),
+    )
+    .await;
+    install(&state, &core_url);
+
+    let response = local_router(Arc::clone(&state))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-core-failure",
+                        "workspace": {
+                            "kind": "existing",
+                            "workspace_id": "local-workspace"
+                        },
+                        "conversation": {
+                            "title": "Must not persist",
+                            "capability_mode": "work"
+                        },
+                        "initial_message": { "content": "Do not persist this request" }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    observations.recv().await.expect("Core request");
+    assert!(state
+        .session_store
+        .list_conversations("local-project", Some("local-workspace"))
+        .expect("conversation projections")
+        .is_empty());
+}
+
+#[tokio::test]
+async fn task_session_replay_reuses_the_local_conversation_projection() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_task_session_proxy_server().await;
+    let generation = install(&state, &core_url);
+    let app = local_router(Arc::clone(&state));
+    let body = json!({
+        "idempotency_key": "desktop-task-session-replay",
+        "workspace": {
+            "kind": "existing",
+            "workspace_id": "local-workspace"
+        },
+        "conversation": {
+            "title": "Replay local thread",
+            "capability_mode": "work"
+        },
+        "initial_message": { "content": "Create one local projection" }
+    })
+    .to_string();
+
+    let request = || {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+            .header("x-agistack-launch", "launch-token")
+            .header(AUTHORIZATION, "Bearer desktop-session")
+            .header("content-type", "application/json")
+            .body(Body::from(body.clone()))
+            .expect("request")
+    };
+    let first = app
+        .clone()
+        .oneshot(request())
+        .await
+        .expect("first response");
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first_body = to_bytes(first.into_body(), 1024 * 1024)
+        .await
+        .expect("first body");
+    let first_value: Value = serde_json::from_slice(&first_body).expect("first response JSON");
+    observations.recv().await.expect("first Core request");
+    clear_authority(&state, generation);
+
+    let second = app.oneshot(request()).await.expect("second response");
+    assert_eq!(second.status(), StatusCode::OK);
+    let second_body = to_bytes(second.into_body(), 1024 * 1024)
+        .await
+        .expect("second body");
+    let second_value: Value = serde_json::from_slice(&second_body).expect("second response JSON");
+
+    assert_eq!(second_value["replayed"], true);
+    assert_eq!(
+        second_value["capability_version"],
+        "avernet-task-session-v1"
+    );
+    assert_eq!(
+        second_value["conversation"]["id"],
+        first_value["conversation"]["id"]
+    );
+    assert_eq!(
+        state
+            .session_store
+            .list_conversations("local-project", Some("local-workspace"))
+            .expect("conversation projections")
+            .len(),
+        1
+    );
+    assert!(observations.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn task_session_core_conflict_maps_to_the_desktop_idempotency_contract() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) =
+        create_task_session_proxy_server_with(TaskSessionProxyBehavior::IdempotencyConflict).await;
+    install(&state, &core_url);
+
+    let response = local_router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-conflict",
+                        "workspace": { "kind": "existing", "workspace_id": "local-workspace" },
+                        "conversation": { "title": "Conflict thread", "capability_mode": "work" },
+                        "initial_message": { "content": "Conflicting objective" }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("response body");
+    let body: Value = serde_json::from_slice(&body).expect("response JSON");
+
+    observations.recv().await.expect("Core request");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "TASK_SESSION_IDEMPOTENCY_CONFLICT");
+    assert_eq!(body["detail"], "Core failure");
+}
+
+#[tokio::test]
+async fn task_session_non_idempotency_conflict_remains_distinct() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) = create_task_session_proxy_server_with(
+        TaskSessionProxyBehavior::Failure(StatusCode::CONFLICT),
+    )
+    .await;
+    install(&state, &core_url);
+
+    let response = local_router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-policy-conflict",
+                        "workspace": { "kind": "existing", "workspace_id": "local-workspace" },
+                        "conversation": { "title": "Policy conflict", "capability_mode": "work" },
+                        "initial_message": { "content": "Preserve conflict semantics" }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("response body");
+    let body: Value = serde_json::from_slice(&body).expect("response JSON");
+
+    observations.recv().await.expect("Core request");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(body.get("code").is_none());
+    assert_eq!(body["detail"], "Core failure");
+}
+
+#[tokio::test]
+async fn malformed_core_task_session_does_not_poison_the_local_receipt() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, mut observations) =
+        create_task_session_proxy_server_with(TaskSessionProxyBehavior::MalformedSuccess).await;
+    install(&state, &core_url);
+
+    let response = local_router(Arc::clone(&state))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-malformed-core",
+                        "workspace": { "kind": "existing", "workspace_id": "local-workspace" },
+                        "conversation": { "title": "Reject malformed", "capability_mode": "work" },
+                        "initial_message": { "content": "Expected objective" }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    observations.recv().await.expect("Core request");
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(state
+        .session_store
+        .list_conversations("local-project", Some("local-workspace"))
+        .expect("conversation projections")
+        .is_empty());
 }
 
 #[tokio::test]
@@ -1240,7 +1655,21 @@ async fn unavailable_core_task_session_contract_maps_to_stable_service_unavailab
                     .header("x-agistack-launch", "launch-token")
                     .header(AUTHORIZATION, "Bearer desktop-session")
                     .header("content-type", "application/json")
-                    .body(Body::from("{}"))
+                    .body(Body::from(
+                        json!({
+                            "idempotency_key": "desktop-task-session-missing-contract",
+                            "workspace": {
+                                "kind": "existing",
+                                "workspace_id": "local-workspace"
+                            },
+                            "conversation": {
+                                "title": "Unavailable contract",
+                                "capability_mode": "work"
+                            },
+                            "initial_message": { "content": "Verify unavailable contract" }
+                        })
+                        .to_string(),
+                    ))
                     .expect("request"),
             )
             .await

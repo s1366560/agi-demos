@@ -625,6 +625,7 @@ enum ApiError {
     NotFound,
     Forbidden(&'static str),
     Conflict(String),
+    IdempotencyConflict(&'static str),
     Database(bcs_db_api::DbError),
     InvalidDatabase(String),
     Json(serde_json::Error),
@@ -639,6 +640,16 @@ impl IntoResponse for ApiError {
             )
                 .into_response();
         }
+        if let Self::IdempotencyConflict(code) = self {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "code": code,
+                    "detail": "Task session idempotency conflict",
+                })),
+            )
+                .into_response();
+        }
         let (status, detail) = match self {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
             Self::InvalidRequest(detail) => (StatusCode::BAD_REQUEST, detail),
@@ -646,6 +657,9 @@ impl IntoResponse for ApiError {
             Self::NotFound => (StatusCode::NOT_FOUND, "Workspace not found".to_string()),
             Self::Forbidden(detail) => (StatusCode::FORBIDDEN, detail.to_string()),
             Self::Conflict(detail) => (StatusCode::CONFLICT, detail),
+            Self::IdempotencyConflict(_) => {
+                unreachable!("idempotency conflict responses return before this match")
+            }
             Self::Database(error) => {
                 tracing::error!(error = %error, "Workspace database request failed");
                 (

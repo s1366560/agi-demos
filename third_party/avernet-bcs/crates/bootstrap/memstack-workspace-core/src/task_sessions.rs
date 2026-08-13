@@ -190,6 +190,9 @@ fn map_service_error(error: CreateTaskSessionError) -> ApiError {
         CreateTaskSessionErrorKind::NotFound => ApiError::NotFound,
         CreateTaskSessionErrorKind::Forbidden => ApiError::Forbidden("Workspace access required"),
         CreateTaskSessionErrorKind::Conflict => ApiError::Conflict(error.to_string()),
+        CreateTaskSessionErrorKind::IdempotencyConflict => {
+            ApiError::IdempotencyConflict("TASK_SESSION_IDEMPOTENCY_CONFLICT")
+        }
         CreateTaskSessionErrorKind::Unavailable => ApiError::InvalidDatabase(error.to_string()),
     }
 }

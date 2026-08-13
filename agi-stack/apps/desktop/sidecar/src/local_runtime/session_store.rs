@@ -163,6 +163,7 @@ pub(super) struct DesktopWorkspaceCoreTerminalCallback {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum DesktopTaskSessionError {
+    IdempotencyConflict,
     ScopeMismatch,
     Storage(String),
 }
@@ -170,12 +171,47 @@ pub(super) enum DesktopTaskSessionError {
 impl std::fmt::Display for DesktopTaskSessionError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::IdempotencyConflict => formatter
+                .write_str("task session idempotency key is already bound to a different request"),
             Self::ScopeMismatch => {
                 formatter.write_str("resource is outside the active workspace context")
             }
             Self::Storage(error) => formatter.write_str(error),
         }
     }
+}
+
+pub(super) struct ProjectTaskSessionInput {
+    pub(super) user_id: String,
+    pub(super) expected_context_revision: u64,
+    pub(super) tenant_id: String,
+    pub(super) project_id: String,
+    pub(super) idempotency_key: String,
+    pub(super) payload_hash: String,
+    pub(super) workspace: Value,
+    pub(super) conversation: LocalConversation,
+    pub(super) initial_message: Value,
+    pub(super) policy: Value,
+    pub(super) capability_version: String,
+    pub(super) now: String,
+}
+
+pub(super) struct ProjectTaskSessionOutcome {
+    pub(super) replayed: bool,
+    pub(super) workspace: Value,
+    pub(super) conversation: Value,
+    pub(super) initial_message: Value,
+    pub(super) policy: Value,
+    pub(super) capability_version: String,
+}
+
+pub(super) struct ReplayTaskSessionInput {
+    pub(super) user_id: String,
+    pub(super) expected_context_revision: u64,
+    pub(super) tenant_id: String,
+    pub(super) project_id: String,
+    pub(super) idempotency_key: String,
+    pub(super) payload_hash: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1101,6 +1137,187 @@ impl DesktopSessionStore {
     ) -> Result<(), String> {
         let connection = self.connection()?;
         insert_conversation_record(&connection, conversation)
+    }
+
+    pub(super) fn project_task_session(
+        &self,
+        input: ProjectTaskSessionInput,
+    ) -> Result<ProjectTaskSessionOutcome, DesktopTaskSessionError> {
+        let ProjectTaskSessionInput {
+            user_id,
+            expected_context_revision,
+            tenant_id,
+            project_id,
+            idempotency_key,
+            payload_hash,
+            workspace,
+            conversation,
+            initial_message,
+            policy,
+            capability_version,
+            now,
+        } = input;
+        let mut connection = self
+            .connection()
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        validate_task_session_context(
+            &transaction,
+            &user_id,
+            expected_context_revision,
+            &tenant_id,
+            &project_id,
+        )?;
+        if let Some(receipt) = query_task_session_receipt(
+            &transaction,
+            &user_id,
+            &tenant_id,
+            &project_id,
+            &idempotency_key,
+        )? {
+            if receipt.payload_hash != payload_hash {
+                return Err(DesktopTaskSessionError::IdempotencyConflict);
+            }
+            validate_task_session_receipt(&receipt, &user_id, &tenant_id, &project_id)?;
+            let TaskSessionResponseSnapshot {
+                workspace,
+                conversation,
+                initial_message,
+                policy,
+                capability_version,
+            } = receipt.response;
+            transaction
+                .commit()
+                .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+            return Ok(ProjectTaskSessionOutcome {
+                replayed: true,
+                workspace,
+                conversation,
+                initial_message,
+                policy,
+                capability_version,
+            });
+        }
+
+        validate_workspace_scope_value(&workspace, &tenant_id, &project_id)?;
+        let workspace_id =
+            required_string(&workspace, "id").map_err(DesktopTaskSessionError::Storage)?;
+        if conversation.tenant_id != tenant_id
+            || conversation.project_id != project_id
+            || conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
+            || conversation.current_mode != super::ConversationRunMode::Plan
+        {
+            return Err(DesktopTaskSessionError::ScopeMismatch);
+        }
+        let initial_message_id =
+            required_string(&initial_message, "id").map_err(DesktopTaskSessionError::Storage)?;
+        let initial_workspace_id = required_string(&initial_message, "workspace_id")
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let message_conversation_id = initial_message
+            .get("metadata")
+            .and_then(Value::as_object)
+            .and_then(|metadata| metadata.get("conversation_id"))
+            .and_then(Value::as_str)
+            .ok_or(DesktopTaskSessionError::ScopeMismatch)?;
+        if initial_workspace_id != workspace_id || message_conversation_id != conversation.id {
+            return Err(DesktopTaskSessionError::ScopeMismatch);
+        }
+        insert_conversation_record(&transaction, &conversation)
+            .map_err(DesktopTaskSessionError::Storage)?;
+        let conversation_response =
+            task_session_conversation_value(&conversation, &workspace, &user_id);
+        let response = TaskSessionResponseSnapshot {
+            workspace: workspace.clone(),
+            conversation: conversation_response.clone(),
+            initial_message: initial_message.clone(),
+            policy: policy.clone(),
+            capability_version: capability_version.clone(),
+        };
+        let response_json = serde_json::to_string(&response)
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        transaction
+            .execute(
+                "INSERT INTO desktop_new_task_sessions(
+                   user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
+                   conversation_id, initial_message_id, response_json, created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    user_id,
+                    tenant_id,
+                    project_id,
+                    idempotency_key,
+                    payload_hash,
+                    workspace_id,
+                    conversation.id,
+                    initial_message_id,
+                    response_json,
+                    now,
+                ],
+            )
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        Ok(ProjectTaskSessionOutcome {
+            replayed: false,
+            workspace,
+            conversation: conversation_response,
+            initial_message,
+            policy,
+            capability_version,
+        })
+    }
+
+    pub(super) fn replay_task_session(
+        &self,
+        input: ReplayTaskSessionInput,
+    ) -> Result<Option<ProjectTaskSessionOutcome>, DesktopTaskSessionError> {
+        let connection = self
+            .connection()
+            .map_err(DesktopTaskSessionError::Storage)?;
+        validate_task_session_context(
+            &connection,
+            &input.user_id,
+            input.expected_context_revision,
+            &input.tenant_id,
+            &input.project_id,
+        )?;
+        let Some(receipt) = query_task_session_receipt(
+            &connection,
+            &input.user_id,
+            &input.tenant_id,
+            &input.project_id,
+            &input.idempotency_key,
+        )?
+        else {
+            return Ok(None);
+        };
+        if receipt.payload_hash != input.payload_hash {
+            return Err(DesktopTaskSessionError::IdempotencyConflict);
+        }
+        validate_task_session_receipt(
+            &receipt,
+            &input.user_id,
+            &input.tenant_id,
+            &input.project_id,
+        )?;
+        let TaskSessionResponseSnapshot {
+            workspace,
+            conversation,
+            initial_message,
+            policy,
+            capability_version,
+        } = receipt.response;
+        Ok(Some(ProjectTaskSessionOutcome {
+            replayed: true,
+            workspace,
+            conversation,
+            initial_message,
+            policy,
+            capability_version,
+        }))
     }
 
     pub(super) fn update_conversation(
@@ -4479,6 +4696,12 @@ struct TaskSessionResponseSnapshot {
     initial_message: Value,
     #[serde(default)]
     policy: Value,
+    #[serde(default = "default_task_session_capability_version")]
+    capability_version: String,
+}
+
+fn default_task_session_capability_version() -> String {
+    "avernet-task-session-v1".to_string()
 }
 
 struct LegacyTaskSessionReceipt {
@@ -4497,6 +4720,43 @@ struct SqliteColumnInfo {
     name: String,
     not_null: bool,
     primary_key_position: i64,
+}
+
+fn validate_task_session_context(
+    connection: &Connection,
+    user_id: &str,
+    expected_revision: u64,
+    tenant_id: &str,
+    project_id: &str,
+) -> Result<(), DesktopTaskSessionError> {
+    let context = connection
+        .query_row(
+            "SELECT tenant_id, project_id, revision
+             FROM desktop_workspace_contexts WHERE user_id = ?1",
+            [user_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+    let Some((active_tenant_id, active_project_id, active_revision)) = context else {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    };
+    let active_revision = u64::try_from(active_revision).map_err(|_| {
+        DesktopTaskSessionError::Storage("workspace context revision is invalid".to_string())
+    })?;
+    if active_tenant_id != tenant_id
+        || active_project_id != project_id
+        || active_revision != expected_revision
+    {
+        return Err(DesktopTaskSessionError::ScopeMismatch);
+    }
+    Ok(())
 }
 
 fn migrate_task_session_receipt_scope(connection: &mut Connection) -> Result<(), String> {
@@ -4717,7 +4977,6 @@ fn sqlite_table_exists(connection: &Connection, table_name: &str) -> Result<bool
         .map_err(|error| error.to_string())
 }
 
-#[cfg(test)]
 fn query_task_session_receipt(
     connection: &Connection,
     user_id: &str,
@@ -4844,6 +5103,43 @@ fn validate_workspace_scope_value(
         return Err(DesktopTaskSessionError::ScopeMismatch);
     }
     Ok(())
+}
+
+fn task_session_conversation_value(
+    conversation: &LocalConversation,
+    workspace: &Value,
+    user_id: &str,
+) -> Value {
+    json!({
+        "id": conversation.id,
+        "project_id": conversation.project_id,
+        "tenant_id": conversation.tenant_id,
+        "user_id": user_id,
+        "title": conversation.title,
+        "status": "active",
+        "message_count": 1,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+        "summary": Value::Null,
+        "agent_config": {
+            "selected_agent_id": "builtin:all-access",
+            "capability_mode": conversation.capability_mode,
+        },
+        "metadata": {
+            "runtime": "local",
+            "capability_mode": conversation.capability_mode,
+            "run": Value::Null,
+            "environment": { "kind": "local", "label": "Local runtime" },
+        },
+        "conversation_mode": "workspace",
+        "current_mode": conversation.current_mode,
+        "workspace_id": conversation.workspace_id,
+        "linked_workspace_task_id": Value::Null,
+        "workspace_name": workspace.get("name").and_then(Value::as_str),
+        "participant_agents": ["local-agent"],
+        "coordinator_agent_id": "local-agent",
+        "focused_agent_id": "local-agent",
+    })
 }
 
 fn insert_conversation_record(
@@ -5133,6 +5429,7 @@ mod tests {
                 "content": format!("Objective {suffix}"),
             }),
             policy: Value::Null,
+            capability_version: default_task_session_capability_version(),
         }
     }
 
