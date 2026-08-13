@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gettext-base \
+        libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 workspace-core \
     && useradd --system --uid 10001 --gid workspace-core --home-dir /var/lib/memstack-workspace-core workspace-core \

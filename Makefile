@@ -19,7 +19,7 @@
 
 .PHONY: help install update clean init reset fresh restart stop logs status
 .PHONY: dev dev-all dev-stop dev-backend dev-web dev-web-stop
-.PHONY: workspace-core-build workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
+.PHONY: workspace-core-build workspace-core-configure workspace-core-start workspace-core-health workspace-core-status workspace-core-logs workspace-core-stop
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
 .PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
@@ -480,7 +480,10 @@ workspace-core-build: ## Build the independent Avernet Workspace Core image
 	@echo " Building Avernet Workspace Core..."
 	@$(COMPOSE_CMD) build $(WORKSPACE_CORE_SERVICE)
 
-workspace-core-start: ## Build, start and health-check Avernet Workspace Core
+workspace-core-configure: ## Fill missing private local Workspace Core settings
+	@uv run python scripts/workspace-core/bootstrap-local-env.py --env-file .env
+
+workspace-core-start: workspace-core-configure ## Build, start and health-check Avernet Workspace Core
 	@echo " Starting Avernet Workspace Core..."
 	@$(COMPOSE_CMD) up -d --build $(WORKSPACE_CORE_SERVICE)
 	@$(MAKE) workspace-core-health

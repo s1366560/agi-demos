@@ -1,4 +1,7 @@
 import re
+import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -10,6 +13,7 @@ ENTRYPOINT_PATH = REPOSITORY_ROOT / "docker" / "workspace-core" / "entrypoint.sh
 CONFIG_TEMPLATE_PATH = REPOSITORY_ROOT / "docker" / "workspace-core" / "bcs-config.toml.template"
 MAKEFILE_PATH = REPOSITORY_ROOT / "Makefile"
 ENV_EXAMPLE_PATH = REPOSITORY_ROOT / ".env.example"
+BOOTSTRAP_PATH = REPOSITORY_ROOT / "scripts" / "workspace-core" / "bootstrap-local-env.py"
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "avernet-bcs.yml"
 
 CORE_SERVICE = "memstack-workspace-core"
@@ -51,6 +55,16 @@ def _make_recipe(makefile: str, target: str) -> str:
 def _env_example_values() -> dict[str, str]:
     values: dict[str, str] = {}
     for line in ENV_EXAMPLE_PATH.read_text(encoding="utf-8").splitlines():
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", maxsplit=1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _dotenv_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
         if not line or line.lstrip().startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", maxsplit=1)
@@ -107,6 +121,7 @@ def test_workspace_core_image_is_locked_non_root_and_runtime_only() -> None:
     assert "FROM rust:1.91.1-bookworm AS builder" in dockerfile
     assert "cargo build --locked --release --package memstack-workspace-core" in dockerfile
     assert "FROM debian:bookworm-slim AS runtime" in dockerfile
+    assert "libsqlite3-0" in dockerfile
     assert (
         "COPY --from=builder /build/avernet-bcs/target/release/memstack-workspace-core"
         in dockerfile
@@ -167,6 +182,69 @@ def test_workspace_core_make_lifecycle_is_complete_and_non_destructive() -> None
     assert "$(WORKSPACE_CORE_SERVICE)" in _make_recipe(makefile, "status")
     assert "down" not in _make_recipe(makefile, "workspace-core-stop")
     assert "-v" not in _make_recipe(makefile, "workspace-core-stop")
+
+
+def test_workspace_core_start_bootstraps_missing_local_credentials() -> None:
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+
+    assert _make_recipe(makefile, "workspace-core-configure")
+    assert "workspace-core-start: workspace-core-configure" in makefile
+    assert "bootstrap-local-env.py --env-file .env" in _make_recipe(
+        makefile,
+        "workspace-core-configure",
+    )
+
+
+def test_workspace_core_local_bootstrap_is_secure_idempotent_and_preserves_values(
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            (
+                "POSTGRES_USER=local-user",
+                "POSTGRES_PASSWORD=p@ss word",
+                "POSTGRES_DB=local-db",
+                "WORKSPACE_CORE_SERVICE_TOKEN=existing-service-token",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    first = subprocess.run(
+        [sys.executable, str(BOOTSTRAP_PATH), "--env-file", str(env_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    first_content = env_path.read_text(encoding="utf-8")
+    values = _dotenv_values(env_path)
+
+    assert values["WORKSPACE_CORE_BASE_URL"] == "http://127.0.0.1:4319"
+    assert values["WORKSPACE_CORE_DATABASE_URL"] == (
+        "postgresql://local-user:p%40ss%20word@postgres:5432/local-db"
+    )
+    assert values["WORKSPACE_CORE_SERVICE_TOKEN"] == "existing-service-token"
+    credentials = [values[key] for key in CORE_SECRET_ENV if key != "WORKSPACE_CORE_DATABASE_URL"]
+    generated = [
+        values[key]
+        for key in CORE_SECRET_ENV
+        if key not in {"WORKSPACE_CORE_DATABASE_URL", "WORKSPACE_CORE_SERVICE_TOKEN"}
+    ]
+    assert len(credentials) == len(set(credentials))
+    assert all(len(value) >= 32 for value in generated)
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+    assert all(value not in first.stdout for value in generated)
+
+    subprocess.run(
+        [sys.executable, str(BOOTSTRAP_PATH), "--env-file", str(env_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert env_path.read_text(encoding="utf-8") == first_content
 
 
 def test_workspace_core_example_credentials_have_no_repository_defaults() -> None:
