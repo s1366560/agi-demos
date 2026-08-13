@@ -101,6 +101,53 @@ async fn message_append_is_atomic_replayable_and_oldest_first() -> Result<(), Bo
 }
 
 #[tokio::test]
+async fn message_sequence_advances_past_task_session_events() -> Result<(), Box<dyn Error>> {
+    let db = seeded_db().await?;
+    let store = WorkspaceMessageStore::new(&db, DbSqlFlavor::Sqlite);
+
+    store
+        .create(&write("message-1", "message-key-1", 'a', "[]", 1_000))
+        .await?;
+    store
+        .create(&write("message-2", "message-key-2", 'b', "[]", 2_000))
+        .await?;
+    db.execute(
+        DbStatementBuilder::new(DbSqlFlavor::Sqlite)
+            .push_static(
+                "INSERT INTO workspace_outbox (outbox_id, tenant_id, project_id, workspace_id, \
+                 aggregate_type, aggregate_id, event_type, stream_name, event_sequence, \
+                 payload_json, metadata_json, correlation_id, idempotency_key) VALUES (",
+            )
+            .bind("task-session-outbox")
+            .push_static(", 'tenant-1', 'project-1', 'workspace-1', 'workspace_message', ")
+            .bind("task-session-message")
+            .push_static(
+                ", 'workspace_message_created', 'workspace:workspace-1:events', ",
+            )
+            .bind(MESSAGE_EVENT_SEQUENCE_BASE + 3)
+            .push_static(", '{}', '{}', 'task-session-correlation', 'task-session-key')")
+            .build(),
+    )
+    .await?;
+
+    let third = store
+        .create(&write("message-3", "message-key-3", 'c', "[]", 3_000))
+        .await?;
+
+    assert!(!third.replayed);
+    assert_eq!(third.message.id, "message-3");
+    assert_eq!(
+        scalar_i64(
+            &db,
+            "SELECT MAX(event_sequence) AS value FROM workspace_outbox"
+        )
+        .await?,
+        MESSAGE_EVENT_SEQUENCE_BASE + 4
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn invalid_mention_rolls_back_every_message_write() -> Result<(), Box<dyn Error>> {
     let db = seeded_db().await?;
     let store = WorkspaceMessageStore::new(&db, DbSqlFlavor::Sqlite);

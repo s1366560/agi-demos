@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const SERVICE_TOKEN: &str = "task-session-http-contract-token";
+const MESSAGE_EVENT_SEQUENCE_BASE: i64 = 1_i64 << 62;
 
 struct StaticProviderRegistry;
 struct StaticAgentRegistry;
@@ -96,6 +97,18 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
     );
     assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 2);
 
+    db.execute(DbStatement::new(format!(
+        "INSERT INTO workspace_outbox (outbox_id, tenant_id, project_id, workspace_id, \
+         aggregate_type, aggregate_id, event_type, stream_name, event_sequence, payload_json, \
+         metadata_json, correlation_id, idempotency_key) VALUES \
+         ('ordinary-message-outbox', 'tenant-1', 'project-1', 'workspace-task-session-1', \
+          'workspace_message', 'ordinary-message', 'workspace_message_created', \
+          'workspace:workspace-task-session-1:events', {}, '{{}}', '{{}}', \
+          'ordinary-message-correlation', 'ordinary-message-key')",
+        MESSAGE_EVENT_SEQUENCE_BASE + 2
+    )))
+    .await?;
+
     let existing = workspace_router(state.clone())
         .oneshot(task_session_request_for_existing("Follow-up objective")?)
         .await?;
@@ -110,7 +123,7 @@ async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn E
         table_count(db.as_ref(), "workspace_task_receipts").await?,
         2
     );
-    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 3);
+    assert_eq!(table_count(db.as_ref(), "workspace_outbox").await?, 4);
 
     let conflict = workspace_router(state)
         .oneshot(task_session_request("Changed objective")?)
