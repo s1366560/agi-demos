@@ -413,12 +413,15 @@ fn resolved_transport_allowed(
     let transport_allowed = if all_loopback {
         endpoint.scheme() == "https"
             || (endpoint.scheme() == "http"
-                && provider_type == "openai_compatible"
-                && auth_method == "none")
+                && matches!(provider_type, "openai" | "openai_compatible")
+                && matches!(auth_method, "api_key" | "none"))
     } else {
         endpoint.scheme() == "https" && all_authorized_remote
     };
-    transport_allowed && (auth_method != "api_key" || endpoint.scheme() == "https")
+    transport_allowed
+        && (auth_method != "api_key"
+            || endpoint.scheme() == "https"
+            || (endpoint.scheme() == "http" && all_loopback))
 }
 
 fn is_proxy_fake_ip(address: IpAddr) -> bool {
@@ -567,6 +570,21 @@ mod tests {
             "openai_compatible",
             "api_key",
             &[SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 80)],
+        ));
+
+        let loopback = Url::parse("http://127.0.0.1:18081/v1/models").expect("loopback URL");
+        let loopback_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18081);
+        assert!(resolved_transport_allowed(
+            &loopback,
+            "openai",
+            "api_key",
+            &[loopback_address],
+        ));
+        assert!(!resolved_transport_allowed(
+            &loopback,
+            "anthropic",
+            "api_key",
+            &[loopback_address],
         ));
 
         assert!(!resolved_transport_allowed(

@@ -500,10 +500,10 @@ fn mutate_llm_provider(
     let previous_binding = runtime.bindings.get(&key).cloned();
     let previous_credential = if let Some(credential) = runtime.credentials.get(&key).cloned() {
         Some(credential)
-    } else if runtime.configured_credentials.contains(&key) {
-        let binding_digest = previous_credential_binding.as_deref().ok_or_else(|| {
-            provider_credential_store_error(ProviderCredentialStoreError::InvalidRecord)
-        })?;
+    } else if let Some(binding_digest) = previous_credential_binding
+        .as_deref()
+        .filter(|_| runtime.configured_credentials.contains(&key))
+    {
         let credential = state
             .provider_credentials
             .load(

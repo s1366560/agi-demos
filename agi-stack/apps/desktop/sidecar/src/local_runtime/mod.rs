@@ -4948,8 +4948,9 @@ fn normalized_provider_environment_variable(
     base_url: &str,
     value: &str,
 ) -> Result<String, (StatusCode, Json<Value>)> {
-    // A process credential may only be sent to the official origin associated with its provider.
-    // Custom endpoints must use an explicit credential stored in the provider vault.
+    // A process credential may be sent only to the official origin associated with its provider
+    // or to a loopback provider used by the local runtime. Other custom endpoints must use an
+    // explicit credential stored in the provider vault.
     let value = normalized_environment_variable_name(value)?;
     let official_credential = match provider_type {
         "openai" => Some(("OPENAI_API_KEY", "api.openai.com", None)),
@@ -4957,22 +4958,26 @@ fn normalized_provider_environment_variable(
         "openai_compatible" => Some(("KIMI_API_KEY", "api.kimi.com", Some("/coding/v1"))),
         _ => None,
     };
-    let official_origin = Url::parse(base_url).ok().is_some_and(|url| {
+    let credential_destination = Url::parse(base_url).ok().is_some_and(|url| {
         let Some((expected_variable, expected_host, expected_path)) = official_credential else {
             return false;
         };
-        url.scheme() == "https"
-            && value == expected_variable
+        if value != expected_variable {
+            return false;
+        }
+        let official_origin = url.scheme() == "https"
             && url
                 .host_str()
                 .is_some_and(|host| host.eq_ignore_ascii_case(expected_host))
             && url.port_or_known_default() == Some(443)
-            && expected_path.map_or(true, |path| url.path().trim_end_matches('/') == path)
+            && expected_path.map_or(true, |path| url.path().trim_end_matches('/') == path);
+        official_origin || (matches!(url.scheme(), "http" | "https") && local_provider_host(&url))
     });
-    if !official_origin {
-        return Err(provider_probe_request_error(
-            "environment credentials require the provider standard variable and official endpoint",
-        ));
+    if !credential_destination {
+        return Err(provider_probe_request_error(concat!(
+            "environment credentials require the provider standard variable and an ",
+            "official HTTPS or loopback endpoint"
+        )));
     }
     Ok(value)
 }
@@ -10165,6 +10170,73 @@ mod tests {
         (format!("http://{address}/v1"), shutdown_tx)
     }
 
+    async fn spawn_authorized_provider_model_server(
+        expected_credential: &str,
+        model_ids: &[&str],
+    ) -> (
+        String,
+        Arc<Mutex<Vec<String>>>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let payload = Arc::new(json!({
+            "data": model_ids
+                .iter()
+                .map(|id| json!({ "id": id }))
+                .collect::<Vec<_>>()
+        }));
+        let expected_authorization = format!("Bearer {expected_credential}");
+        let observed_authorizations = Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new().route(
+            "/v1/models",
+            get({
+                let payload = Arc::clone(&payload);
+                let expected_authorization = expected_authorization.clone();
+                let observed_authorizations = Arc::clone(&observed_authorizations);
+                move |headers: HeaderMap| {
+                    let payload = Arc::clone(&payload);
+                    let expected_authorization = expected_authorization.clone();
+                    let observed_authorizations = Arc::clone(&observed_authorizations);
+                    async move {
+                        let authorization = headers
+                            .get(AUTHORIZATION)
+                            .and_then(|value| value.to_str().ok())
+                            .unwrap_or_default()
+                            .to_string();
+                        if authorization != expected_authorization {
+                            return (
+                                StatusCode::UNAUTHORIZED,
+                                Json(json!({ "error": "unauthorized" })),
+                            );
+                        }
+                        observed_authorizations
+                            .lock()
+                            .expect("observed provider authorizations")
+                            .push(authorization);
+                        (StatusCode::OK, Json((*payload).clone()))
+                    }
+                }
+            }),
+        );
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("authorized provider model listener");
+        let address = listener.local_addr().expect("authorized provider address");
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    shutdown_rx.await.ok();
+                })
+                .await
+                .ok();
+        });
+        (
+            format!("http://{address}/v1"),
+            observed_authorizations,
+            shutdown_tx,
+        )
+    }
+
     fn timeline_test_item(id: &str, time_us: i64, counter: i64) -> Value {
         json!({
             "id": id,
@@ -12146,6 +12218,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn loopback_environment_provider_probe_sends_resolved_credential() {
+        const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
+        let environment_value = "test-loopback-environment-provider-secret";
+        let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
+        let _environment = ScopedEnvironmentVariable::set(ENVIRONMENT_VARIABLE, environment_value);
+        let (provider_base_url, observed_authorizations, provider_shutdown) =
+            spawn_authorized_provider_model_server(environment_value, &["model-a"]).await;
+        let state = test_state("provider-loopback-environment-secret");
+        let app = local_router(state);
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/llm-providers/test-connection",
+                "provider-loopback-environment-secret",
+                json!({
+                    "name": "Loopback environment draft",
+                    "provider_type": "openai",
+                    "base_url": provider_base_url,
+                    "auth_method": "environment",
+                    "environment_variable": ENVIRONMENT_VARIABLE,
+                }),
+            ))
+            .await
+            .expect("loopback environment draft response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = response_json(response).await;
+        assert_eq!(response["status"], "healthy");
+        assert_eq!(response["probed"], true);
+        assert_eq!(response["catalog"]["models"]["chat"], json!(["model-a"]));
+        assert!(!response.to_string().contains(environment_value));
+        assert_eq!(
+            observed_authorizations
+                .lock()
+                .expect("observed loopback provider authorizations")
+                .as_slice(),
+            [format!("Bearer {environment_value}")]
+        );
+        provider_shutdown.send(()).ok();
+    }
+
+    #[tokio::test]
     async fn environment_provider_reference_never_persists_the_resolved_value() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
@@ -12161,7 +12276,7 @@ mod tests {
                 "provider-environment-secret",
                 json!({
                     "provider_type": "openai",
-                    "base_url": "https://api.openai.com/v1",
+                    "base_url": "http://127.0.0.1:9/v1",
                     "auth_method": "environment",
                     "environment_variable": ENVIRONMENT_VARIABLE,
                     "llm_model": "model-a",
@@ -12197,6 +12312,94 @@ mod tests {
             tenant_id: "local".to_string(),
             provider_id: "local-runtime".to_string(),
         };
+        let runtime = state.provider_runtime.lock().expect("provider runtime");
+        assert_eq!(
+            runtime.credentials.get(&key).map(String::as_str),
+            Some(environment_value)
+        );
+        assert!(runtime.configured_credentials.contains(&key));
+    }
+
+    #[tokio::test]
+    async fn environment_provider_can_be_re_enabled_after_disable() {
+        const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
+        let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
+        let environment_value = "test-environment-provider-re-enable-secret";
+        let _environment = ScopedEnvironmentVariable::set(ENVIRONMENT_VARIABLE, environment_value);
+        let state = test_state("provider-environment-re-enable");
+        let app = local_router(Arc::clone(&state));
+        let mutation = |expected_revision: u64, is_active: bool| {
+            json!({
+                "name": "QA OpenAI Environment",
+                "provider_type": "openai",
+                "base_url": "http://127.0.0.1:9/v1",
+                "auth_method": "environment",
+                "environment_variable": ENVIRONMENT_VARIABLE,
+                "llm_model": "model-a",
+                "allowed_models": ["model-a"],
+                "is_active": is_active,
+                "expected_revision": expected_revision,
+            })
+        };
+
+        let enable = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-environment-re-enable",
+                mutation(0, true),
+            ))
+            .await
+            .expect("enable environment provider response");
+        assert_eq!(enable.status(), StatusCode::OK);
+        let enabled = response_json(enable).await;
+        assert_eq!(enabled["revision"], 1);
+        assert_eq!(enabled["is_active"], true);
+        assert_eq!(enabled["credential_configured"], true);
+
+        let disable = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-environment-re-enable",
+                mutation(1, false),
+            ))
+            .await
+            .expect("disable environment provider response");
+        assert_eq!(disable.status(), StatusCode::OK);
+        let disabled = response_json(disable).await;
+        assert_eq!(disabled["revision"], 2);
+        assert_eq!(disabled["is_active"], false);
+        assert_eq!(disabled["credential_configured"], true);
+
+        let key = ProviderRuntimeKey {
+            tenant_id: "local".to_string(),
+            provider_id: "local-runtime".to_string(),
+        };
+        {
+            let runtime = state.provider_runtime.lock().expect("provider runtime");
+            assert!(!runtime.credentials.contains_key(&key));
+            assert!(runtime.configured_credentials.contains(&key));
+        }
+
+        let re_enable = app
+            .oneshot(authenticated_json_request(
+                "PUT",
+                "/api/v1/llm-providers/local-runtime",
+                "provider-environment-re-enable",
+                mutation(2, true),
+            ))
+            .await
+            .expect("re-enable environment provider response");
+        assert_eq!(re_enable.status(), StatusCode::OK);
+        let re_enabled = response_json(re_enable).await;
+        assert_eq!(re_enabled["revision"], 3);
+        assert_eq!(re_enabled["is_active"], true);
+        assert_eq!(re_enabled["credential_configured"], true);
+        assert!(!re_enabled.to_string().contains(environment_value));
+
         let runtime = state.provider_runtime.lock().expect("provider runtime");
         assert_eq!(
             runtime.credentials.get(&key).map(String::as_str),

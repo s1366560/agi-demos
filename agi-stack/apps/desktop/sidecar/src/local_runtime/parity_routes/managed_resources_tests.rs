@@ -460,6 +460,89 @@ async fn local_agent_subagent_and_prompt_template_mutations_are_scope_and_revisi
 }
 
 #[tokio::test]
+async fn local_agent_definition_trigger_fields_round_trip() {
+    let credential = "managed-agent-trigger-secret";
+    let app = local_router(test_state(credential));
+    let create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/agent/definitions?tenant_id=local",
+            credential,
+            mutation(
+                "agent-trigger-create",
+                0,
+                Some("trigger-agent"),
+                Some(json!({
+                    "name": "trigger-agent",
+                    "display_name": "Trigger Agent",
+                    "system_prompt": "Route meaningful requests.",
+                    "trigger_description": "Use for acceptance testing.",
+                    "trigger_keywords": ["acceptance"],
+                    "trigger_examples": ["Verify this acceptance flow"],
+                })),
+            ),
+        ))
+        .await
+        .expect("create Agent definition");
+    assert_eq!(create.status(), StatusCode::OK);
+    let created = json_response(create).await;
+    assert_eq!(created["revision"], 0);
+    assert_eq!(
+        created["trigger"],
+        json!({
+            "description": "Use for acceptance testing.",
+            "keywords": ["acceptance"],
+            "examples": ["Verify this acceptance flow"],
+        })
+    );
+    assert!(created.get("trigger_description").is_none());
+
+    let update = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            "/api/v1/agent/definitions/trigger-agent?tenant_id=local",
+            credential,
+            mutation(
+                "agent-trigger-update",
+                0,
+                None,
+                Some(json!({
+                    "trigger_description": "Use for edited acceptance testing.",
+                    "trigger_keywords": ["acceptance", "edited"],
+                    "trigger_examples": ["Verify this edited acceptance flow"],
+                })),
+            ),
+        ))
+        .await
+        .expect("update Agent definition");
+    assert_eq!(update.status(), StatusCode::OK);
+    let updated = json_response(update).await;
+    assert_eq!(updated["revision"], 1);
+    assert_eq!(
+        updated["trigger"],
+        json!({
+            "description": "Use for edited acceptance testing.",
+            "keywords": ["acceptance", "edited"],
+            "examples": ["Verify this edited acceptance flow"],
+        })
+    );
+
+    let fetched = app
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/agent/definitions/trigger-agent?tenant_id=local",
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("read Agent definition");
+    assert_eq!(fetched.status(), StatusCode::OK);
+    assert_eq!(json_response(fetched).await["trigger"], updated["trigger"]);
+}
+
+#[tokio::test]
 async fn local_subagents_are_structurally_scoped_to_the_active_project() {
     let credential = "managed-subagent-scope-secret";
     let state = test_state(credential);

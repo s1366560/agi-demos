@@ -13,11 +13,20 @@ pub(super) fn update_resource(
     ensure_project_scope(authenticated, query.project_id.as_deref())?;
     ensure_managed_resource_manager(authenticated)?;
     let (scope_kind, scope_id, current) = find_resource(state, authenticated, kind, resource_id)?;
-    let incoming = envelope.value.take().ok_or_else(|| {
+    let mut incoming = envelope.value.take().ok_or_else(|| {
         resource_registry_error(ResourceRegistryError::InvalidMutation(
             "managed resource update value is required".to_string(),
         ))
     })?;
+    if matches!(
+        kind,
+        ManagedResourceKind::Agent | ManagedResourceKind::SubAgent
+    ) {
+        let object = incoming
+            .as_object_mut()
+            .ok_or_else(invalid_resource_object)?;
+        normalize_subagent_trigger(object);
+    }
     let mut merged = merge_resource_values(current, incoming)?;
     if kind == ManagedResourceKind::SubAgent {
         let object = merged.as_object_mut().ok_or_else(invalid_resource_object)?;
@@ -321,6 +330,7 @@ pub(super) fn normalize_resource_value(
             object
                 .entry("enabled".to_string())
                 .or_insert_with(|| json!(true));
+            normalize_subagent_trigger(object);
         }
         ManagedResourceKind::SubAgent => {
             normalize_subagent_project_scope(object, &authenticated.workspace.project_id)?;
