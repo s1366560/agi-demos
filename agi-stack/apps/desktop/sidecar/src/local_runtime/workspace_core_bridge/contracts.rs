@@ -53,9 +53,15 @@ pub(super) struct ProviderExtensions {
     #[serde(default)]
     pub(super) task_id: Option<String>,
     #[serde(default)]
+    pub(super) attempt_id: Option<String>,
+    #[serde(default)]
     pub(super) plan_id: Option<String>,
     #[serde(default)]
     pub(super) plan_node_id: Option<String>,
+    #[serde(default)]
+    pub(super) workspace_agent_binding_id: Option<String>,
+    #[serde(default)]
+    pub(super) delivery_request_id: Option<String>,
     #[serde(default)]
     pub(super) bcs_message_id: Option<String>,
     #[serde(default)]
@@ -199,6 +205,7 @@ pub(super) struct AutonomyJudgeRequest {
     pub(super) workspace_revision: u64,
     pub(super) force: bool,
     pub(super) candidates: Vec<AutonomyCandidate>,
+    pub(super) agent_candidates: Vec<AutonomyAgentCandidate>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -210,4 +217,25 @@ pub(super) struct AutonomyCandidate {
     pub(super) description: Option<String>,
     pub(super) status: String,
     pub(super) metadata: Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AutonomyAgentCandidate {
+    pub(super) workspace_agent_binding_id: String,
+    pub(super) agent_id: String,
+    #[serde(default)]
+    pub(super) display_name: Option<String>,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    pub(super) status: String,
+    pub(super) config: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AutonomyNextAction {
+    pub(super) title: String,
+    pub(super) description: String,
+    pub(super) workspace_agent_binding_id: String,
 }

@@ -16,8 +16,8 @@ use crate::application_vault::ApplicationCredentialVault;
 
 use super::{
     remote_common::{
-        credential_reference, elicitation_unavailable, server_request_rejection,
-        unsupported_client_request, InitializedServer,
+        credential_reference, credential_reference_is_scoped, elicitation_unavailable,
+        server_request_rejection, unsupported_client_request, InitializedServer,
     },
     McpCredentialKind, McpResult, McpScope, McpServerDefinition, McpSupervisorError,
     SupervisorLimits, MCP_PROTOCOL_VERSION,
@@ -312,7 +312,7 @@ fn spawn_child(
             McpCredentialKind::Env,
             name,
         )?;
-        if reference != &expected {
+        if !credential_reference_is_scoped(&expected, reference) {
             return Err(McpSupervisorError::new(
                 "local_mcp_remote_credential_scope_invalid",
                 "MCP credential reference is outside its tenant, project, server, or target scope",

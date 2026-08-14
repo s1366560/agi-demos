@@ -429,6 +429,186 @@ async fn authenticated_routes_drive_real_stdio_tools_resources_and_receipts() {
 }
 
 #[tokio::test]
+async fn server_management_routes_update_toggle_delete_and_replay_mutations() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create lifecycle route root");
+    let credential = "mcp-lifecycle-route-secret";
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let app = local_router(test_state(&root, credential));
+
+    let create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "lifecycle-server",
+                "description": "before update",
+                "server_type": "stdio",
+                "transport_config": {
+                    "command": python,
+                    "args": [script, "normal"],
+                    "cwd": ".",
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "idempotency_key": "create-lifecycle-server",
+            }),
+        ))
+        .await
+        .expect("create lifecycle MCP response");
+    assert_eq!(create.status(), StatusCode::OK);
+    let created = response_json(create).await;
+    let server_id = created["id"].as_str().expect("lifecycle server id");
+    assert_eq!(created["runtime_metadata"]["revision"], 1);
+
+    let update_body = json!({
+        "name": "lifecycle-server-edited",
+        "description": "after update",
+        "server_type": "stdio",
+        "transport_config": {
+            "command": python,
+            "args": [script, "normal"],
+            "cwd": ".",
+        },
+        "enabled": false,
+        "project_id": "local-project",
+        "expected_revision": 1,
+        "idempotency_key": "update-lifecycle-server",
+    });
+    let update = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            update_body.clone(),
+        ))
+        .await
+        .expect("update lifecycle MCP response");
+    assert_eq!(update.status(), StatusCode::OK);
+    let updated = response_json(update).await;
+    assert_eq!(updated["name"], "lifecycle-server-edited");
+    assert_eq!(updated["description"], "after update");
+    assert_eq!(updated["runtime_metadata"]["revision"], 2);
+
+    let update_replay = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            update_body,
+        ))
+        .await
+        .expect("replay lifecycle MCP update");
+    assert_eq!(update_replay.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(update_replay).await["runtime_metadata"]["revision"],
+        2
+    );
+
+    for (enabled, expected_revision, idempotency_key, next_revision) in [
+        (true, 2, "enable-lifecycle-server", 3),
+        (false, 3, "disable-lifecycle-server", 4),
+    ] {
+        let toggle = app
+            .clone()
+            .oneshot(request(
+                Method::PUT,
+                &format!("/api/v1/mcp/{server_id}"),
+                credential,
+                json!({
+                    "enabled": enabled,
+                    "project_id": "local-project",
+                    "expected_revision": expected_revision,
+                    "idempotency_key": idempotency_key,
+                }),
+            ))
+            .await
+            .expect("toggle lifecycle MCP response");
+        assert_eq!(toggle.status(), StatusCode::OK);
+        let toggled = response_json(toggle).await;
+        assert_eq!(toggled["enabled"], enabled);
+        assert_eq!(toggled["runtime_metadata"]["revision"], next_revision);
+    }
+
+    let stale = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            json!({
+                "enabled": true,
+                "project_id": "local-project",
+                "expected_revision": 3,
+                "idempotency_key": "stale-lifecycle-server",
+            }),
+        ))
+        .await
+        .expect("stale lifecycle MCP response");
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(stale).await["reason_code"],
+        "local_mcp_revision_conflict"
+    );
+
+    let delete_body = json!({
+        "project_id": "local-project",
+        "expected_revision": 4,
+        "idempotency_key": "delete-lifecycle-server",
+    });
+    for duplicate in [false, true] {
+        let deleted = app
+            .clone()
+            .oneshot(request(
+                Method::DELETE,
+                &format!("/api/v1/mcp/{server_id}"),
+                credential,
+                delete_body.clone(),
+            ))
+            .await
+            .expect("delete lifecycle MCP response");
+        assert_eq!(deleted.status(), StatusCode::OK);
+        let deleted = response_json(deleted).await;
+        assert_eq!(deleted["deleted"], true);
+        assert_eq!(deleted["duplicate"], duplicate);
+    }
+
+    let missing = app
+        .clone()
+        .oneshot(request(
+            Method::GET,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("get deleted lifecycle MCP response");
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    let new_delete = app
+        .oneshot(request(
+            Method::DELETE,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            json!({
+                "project_id": "local-project",
+                "expected_revision": 4,
+                "idempotency_key": "delete-missing-lifecycle-server",
+            }),
+        ))
+        .await
+        .expect("delete missing lifecycle MCP response");
+    assert_eq!(new_delete.status(), StatusCode::NOT_FOUND);
+
+    fs::remove_dir_all(root).expect("remove lifecycle route root");
+}
+
+#[tokio::test]
 async fn every_tool_call_route_rejects_a_missing_idempotency_key_before_dispatch() {
     let root = test_root();
     fs::create_dir_all(&root).expect("create idempotency route root");
@@ -668,6 +848,345 @@ async fn remote_registration_derives_header_refs_and_never_exposes_reference_val
 }
 
 #[tokio::test]
+async fn staged_credential_conflicts_preserve_active_secret_and_startup_cleans_orphans() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create staged conflict route root");
+    let credential = "mcp-staged-conflict-route-secret";
+    let endpoint = "http://127.0.0.1:12345/mcp";
+    let vault_root = root.join("app-data");
+    let vault = ApplicationCredentialVault::open(&vault_root).expect("open staged conflict vault");
+    let vault_probe = vault.clone();
+    let state = persistent_test_state(&root, credential, vault, true);
+    let app = local_router(Arc::clone(&state));
+
+    let legacy_provision = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {"url": endpoint},
+                "credential_kind": "header",
+                "credential_name": "authorization",
+                "secret": "Bearer active-secret",
+                "idempotency_key": "legacy-active-secret",
+            }),
+        ))
+        .await
+        .expect("provision active legacy credential");
+    assert_eq!(legacy_provision.status(), StatusCode::OK);
+    let create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {
+                    "url": endpoint,
+                    "credential_header_names": ["authorization"],
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "idempotency_key": "create-active-server",
+            }),
+        ))
+        .await
+        .expect("create active credential server");
+    assert_eq!(create.status(), StatusCode::OK);
+    let server_id = response_json(create).await["id"]
+        .as_str()
+        .expect("active credential server id")
+        .to_string();
+    let scope = mcp_supervisor::McpScope {
+        tenant_id: "local".to_string(),
+        project_id: "local-project".to_string(),
+    };
+    let active_reference = mcp_supervisor::remote_credential_reference(
+        &scope,
+        "staged-conflict",
+        mcp_supervisor::McpTransport::Http,
+        endpoint,
+        "authorization",
+    )
+    .expect("derive active credential reference");
+
+    let staged_create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {"url": endpoint},
+                "credential_kind": "header",
+                "credential_name": "authorization",
+                "secret": "Bearer staged-create-secret",
+                "idempotency_key": "stage-conflicting-create",
+                "mutation_idempotency_key": "create-conflicting-server",
+            }),
+        ))
+        .await
+        .expect("stage conflicting create credential");
+    assert_eq!(staged_create.status(), StatusCode::OK);
+    let staged_create_reference = state
+        .mcp_supervisor
+        .staged_credential_reference_for_test(&scope, "stage-conflicting-create")
+        .expect("read conflicting create stage")
+        .expect("conflicting create stage exists");
+    assert_eq!(
+        vault_probe
+            .get(&active_reference)
+            .expect("read active credential before create conflict")
+            .as_deref(),
+        Some("Bearer active-secret")
+    );
+    assert_eq!(
+        vault_probe
+            .get(&staged_create_reference)
+            .expect("read staged create credential")
+            .as_deref(),
+        Some("Bearer staged-create-secret")
+    );
+
+    let conflicting_create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {
+                    "url": endpoint,
+                    "credential_header_names": ["authorization"],
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "idempotency_key": "create-conflicting-server",
+            }),
+        ))
+        .await
+        .expect("attempt conflicting staged create");
+    assert_eq!(conflicting_create.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        vault_probe
+            .get(&active_reference)
+            .expect("read active credential after create conflict")
+            .as_deref(),
+        Some("Bearer active-secret")
+    );
+    state
+        .mcp_supervisor
+        .prepare_startup_recovery()
+        .expect("clean conflicting create stage on startup");
+    assert_eq!(
+        vault_probe
+            .get(&staged_create_reference)
+            .expect("read abandoned create stage"),
+        None
+    );
+
+    let staged_update = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            json!({
+                "project_id": "local-project",
+                "server_name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {"url": endpoint},
+                "credential_kind": "header",
+                "credential_name": "authorization",
+                "secret": "Bearer staged-update-secret",
+                "idempotency_key": "stage-conflicting-update",
+                "mutation_idempotency_key": "update-conflicting-server",
+            }),
+        ))
+        .await
+        .expect("stage conflicting update credential");
+    assert_eq!(staged_update.status(), StatusCode::OK);
+    let staged_update_reference = state
+        .mcp_supervisor
+        .staged_credential_reference_for_test(&scope, "stage-conflicting-update")
+        .expect("read conflicting update stage")
+        .expect("conflicting update stage exists");
+    let conflicting_update = app
+        .oneshot(request(
+            Method::PUT,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            json!({
+                "name": "staged-conflict",
+                "server_type": "http",
+                "transport_config": {
+                    "url": endpoint,
+                    "credential_header_names": ["authorization"],
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "expected_revision": 2,
+                "idempotency_key": "update-conflicting-server",
+            }),
+        ))
+        .await
+        .expect("attempt conflicting staged update");
+    assert_eq!(conflicting_update.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        vault_probe
+            .get(&active_reference)
+            .expect("read active credential after update conflict")
+            .as_deref(),
+        Some("Bearer active-secret")
+    );
+    state
+        .mcp_supervisor
+        .prepare_startup_recovery()
+        .expect("clean conflicting update stage on startup");
+    assert_eq!(
+        vault_probe
+            .get(&staged_update_reference)
+            .expect("read abandoned update stage"),
+        None
+    );
+    assert_eq!(
+        vault_probe
+            .get(&active_reference)
+            .expect("read active credential after staged cleanup")
+            .as_deref(),
+        Some("Bearer active-secret")
+    );
+    fs::remove_dir_all(root).expect("remove staged conflict route root");
+}
+
+#[tokio::test]
+async fn staged_credential_replays_cannot_overwrite_ready_or_active_secrets() {
+    let root = test_root();
+    fs::create_dir_all(&root).expect("create staged replay route root");
+    let credential = "mcp-staged-replay-route-secret";
+    let endpoint = "http://127.0.0.1:12345/mcp";
+    let vault_root = root.join("app-data");
+    let vault = ApplicationCredentialVault::open(&vault_root).expect("open staged replay vault");
+    let vault_probe = vault.clone();
+    let state = persistent_test_state(&root, credential, vault, true);
+    let app = local_router(Arc::clone(&state));
+    let scope = mcp_supervisor::McpScope {
+        tenant_id: "local".to_string(),
+        project_id: "local-project".to_string(),
+    };
+    let provision_body = |secret: &str| {
+        json!({
+            "project_id": "local-project",
+            "server_name": "staged-replay",
+            "server_type": "http",
+            "transport_config": {"url": endpoint},
+            "credential_kind": "header",
+            "credential_name": "authorization",
+            "secret": secret,
+            "idempotency_key": "stage-replay-authorization",
+            "mutation_idempotency_key": "create-staged-replay",
+        })
+    };
+
+    let provision = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            provision_body("Bearer original-secret"),
+        ))
+        .await
+        .expect("stage original replay credential");
+    assert_eq!(provision.status(), StatusCode::OK);
+    let staged_reference = state
+        .mcp_supervisor
+        .staged_credential_reference_for_test(&scope, "stage-replay-authorization")
+        .expect("read replay stage")
+        .expect("replay stage exists");
+
+    let ready_replay = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            provision_body("Bearer ready-overwrite"),
+        ))
+        .await
+        .expect("replay ready credential with a different secret");
+    assert_eq!(ready_replay.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(ready_replay).await["reason_code"],
+        "local_mcp_idempotency_conflict"
+    );
+    assert_eq!(
+        vault_probe
+            .get(&staged_reference)
+            .expect("read ready replay credential")
+            .as_deref(),
+        Some("Bearer original-secret")
+    );
+
+    let create = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp",
+            credential,
+            json!({
+                "name": "staged-replay",
+                "server_type": "http",
+                "transport_config": {
+                    "url": endpoint,
+                    "credential_header_names": ["authorization"],
+                },
+                "enabled": false,
+                "project_id": "local-project",
+                "idempotency_key": "create-staged-replay",
+            }),
+        ))
+        .await
+        .expect("activate staged replay credential");
+    assert_eq!(create.status(), StatusCode::OK);
+
+    let active_replay = app
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/mcp/credentials/provision",
+            credential,
+            provision_body("Bearer active-overwrite"),
+        ))
+        .await
+        .expect("replay active credential with a different secret");
+    assert_eq!(active_replay.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(active_replay).await["reason_code"],
+        "local_mcp_idempotency_conflict"
+    );
+    assert_eq!(
+        vault_probe
+            .get(&staged_reference)
+            .expect("read active replay credential")
+            .as_deref(),
+        Some("Bearer original-secret")
+    );
+    fs::remove_dir_all(root).expect("remove staged replay route root");
+}
+
+#[tokio::test]
 async fn credential_provisioning_survives_restart_and_authenticates_without_exposing_secret_refs() {
     let root = test_root();
     fs::create_dir_all(&root).expect("create provisioned route root");
@@ -834,6 +1353,7 @@ async fn credential_provisioning_survives_restart_and_authenticates_without_expo
                 "credential_name": "authorization",
                 "secret": remote_secret,
                 "idempotency_key": "restore-route-authorization",
+                "mutation_idempotency_key": "create-provisioned-route",
             }),
         ))
         .await
@@ -866,6 +1386,22 @@ async fn credential_provisioning_survives_restart_and_authenticates_without_expo
         .as_str()
         .expect("provisioned server id")
         .to_string();
+    let active_reference = first_state
+        .mcp_supervisor
+        .server(
+            &mcp_supervisor::McpScope {
+                tenant_id: "local".to_string(),
+                project_id: "local-project".to_string(),
+            },
+            &server_id,
+        )
+        .expect("read staged provisioned server")
+        .expect("staged provisioned server exists")
+        .vault_env_refs
+        .get("authorization")
+        .expect("staged authorization reference")
+        .clone();
+    assert_ne!(active_reference, reference);
     assert!(!server.to_string().contains(remote_secret));
     assert!(!server.to_string().contains("mcp-remote-credential"));
 
@@ -874,6 +1410,7 @@ async fn credential_provisioning_survives_restart_and_authenticates_without_expo
 
     let reopened_vault =
         ApplicationCredentialVault::open(&vault_root).expect("reopen provisioned vault");
+    let reopened_vault_probe = reopened_vault.clone();
     let reopened_state = persistent_test_state(&root, credential, reopened_vault, false);
     reopened_state
         .mcp_supervisor
@@ -908,6 +1445,7 @@ async fn credential_provisioning_survives_restart_and_authenticates_without_expo
     );
     let reopened_app = local_router(reopened_state);
     let sync = reopened_app
+        .clone()
         .oneshot(request(
             Method::POST,
             &format!("/api/v1/mcp/{server_id}/sync"),
@@ -917,6 +1455,28 @@ async fn credential_provisioning_survives_restart_and_authenticates_without_expo
         .await
         .expect("sync provisioned MCP after restart");
     assert_eq!(sync.status(), StatusCode::OK);
+
+    let deleted = reopened_app
+        .oneshot(request(
+            Method::DELETE,
+            &format!("/api/v1/mcp/{server_id}"),
+            credential,
+            json!({
+                "project_id": "local-project",
+                "expected_revision": 1,
+                "idempotency_key": "delete-provisioned-route",
+            }),
+        ))
+        .await
+        .expect("delete provisioned MCP after restart");
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert_eq!(
+        reopened_vault_probe
+            .get(&active_reference)
+            .expect("read deleted MCP credential reference"),
+        None,
+        "deleting an MCP server must clear its application-vault credential",
+    );
 
     remote_task.abort();
     fs::remove_dir_all(root).expect("remove provisioned route root");
@@ -953,6 +1513,7 @@ async fn stdio_environment_credential_is_scope_derived_and_injected_only_by_the_
                 "credential_name": "ROUTE_TOKEN",
                 "secret": "route-env-secret",
                 "idempotency_key": "provision-stdio-route-token",
+                "mutation_idempotency_key": "create-stdio-with-env",
             }),
         ))
         .await

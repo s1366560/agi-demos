@@ -568,6 +568,12 @@ pub(super) async fn replay_pending_terminal_callbacks(
     provider::replay_pending_terminal_callbacks(state).await
 }
 
+pub(super) async fn resume_recovered_workspace_task_runs(
+    state: Arc<LocalRuntimeState>,
+) -> Result<usize, String> {
+    provider::resume_recovered_workspace_task_runs(state).await
+}
+
 pub(super) fn router(state: Arc<LocalRuntimeState>) -> Router {
     Router::new()
         .route(

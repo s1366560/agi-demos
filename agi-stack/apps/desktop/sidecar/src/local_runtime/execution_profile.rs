@@ -74,7 +74,7 @@ impl ExecutionProfile {
             let allowed_subagents = agent
                 .pointer("/spawn_policy/allowed_subagents")
                 .ok_or_else(|| "agent spawn_policy.allowed_subagents is required".to_string())
-                .and_then(|value| string_set(value, "agent spawn_policy.allowed_subagents"))?;
+                .and_then(subagent_allowlist)?;
             if !set_allows(&allowed_subagents, &identity.id)
                 && !set_allows(&allowed_subagents, &identity.name)
             {
@@ -190,6 +190,13 @@ fn string_set(value: &Value, field: &str) -> Result<BTreeSet<String>, String> {
         .collect()
 }
 
+fn subagent_allowlist(value: &Value) -> Result<BTreeSet<String>, String> {
+    if value.is_null() {
+        return Ok(BTreeSet::from(["*".to_string()]));
+    }
+    string_set(value, "agent spawn_policy.allowed_subagents")
+}
+
 fn set_allows(values: &BTreeSet<String>, candidate: &str) -> bool {
     values.contains("*") || values.contains(candidate)
 }
@@ -230,15 +237,31 @@ impl ProfiledToolHost {
 #[async_trait]
 impl ToolHost for ProfiledToolHost {
     fn list_tools(&self) -> Vec<String> {
-        self.inner
+        let mut advertised = self
+            .inner
             .list_tools()
             .into_iter()
             .filter(|tool| self.allows(tool))
-            .collect()
+            .collect::<Vec<_>>();
+        if self.allowed_tools.contains("*") {
+            return advertised;
+        }
+        let mut seen = advertised.iter().cloned().collect::<BTreeSet<_>>();
+        for tool in &self.allowed_tools {
+            if !seen.contains(tool) && self.inner.can_dispatch(tool) {
+                seen.insert(tool.clone());
+                advertised.push(tool.clone());
+            }
+        }
+        advertised
+    }
+
+    fn can_dispatch(&self, tool: &str) -> bool {
+        self.allows(tool) && self.inner.can_dispatch(tool)
     }
 
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        if !self.allows(tool) || !self.inner.list_tools().iter().any(|name| name == tool) {
+        if !self.can_dispatch(tool) {
             return Err(CoreError::Tool(format!(
                 "tool '{tool}' is not allowed by the selected execution profile"
             )));
@@ -369,6 +392,31 @@ mod tests {
     }
 
     #[test]
+    fn null_subagent_allowlist_is_unrestricted() {
+        let mut agent = all_access_agent();
+        agent["spawn_policy"]["allowed_subagents"] = Value::Null;
+        let subagent = json!({
+            "id": "qa-reviewer",
+            "name": "qa-reviewer",
+            "enabled": true,
+            "status": "active",
+            "allowed_tools": ["read"],
+            "allowed_skills": [],
+            "allowed_mcp_servers": []
+        });
+
+        let profile =
+            ExecutionProfile::resolve("builtin:all-access", &agent, None, Some(&subagent))
+                .expect("null SubAgent allow-list must authorize every visible SubAgent");
+
+        assert_eq!(
+            profile.subagent.as_ref().map(|item| item.id.as_str()),
+            Some("qa-reviewer")
+        );
+        assert_eq!(profile.allowed_tools, ["read"]);
+    }
+
+    #[test]
     fn selected_skill_and_subagent_require_explicit_agent_authority() {
         let mut agent = all_access_agent();
         agent["allowed_skills"] = json!([]);
@@ -444,6 +492,27 @@ mod tests {
         }
     }
 
+    struct HiddenAliasToolHost;
+
+    #[async_trait]
+    impl ToolHost for HiddenAliasToolHost {
+        fn list_tools(&self) -> Vec<String> {
+            vec!["mcp__readable".to_string()]
+        }
+
+        fn can_dispatch(&self, tool: &str) -> bool {
+            matches!(tool, "mcp__readable" | "mcp__legacy")
+        }
+
+        async fn call(&self, tool: &str, _input_json: &str) -> CoreResult<String> {
+            if self.can_dispatch(tool) {
+                Ok(tool.to_string())
+            } else {
+                Err(CoreError::Tool(format!("unknown tool: {tool}")))
+            }
+        }
+    }
+
     struct RecordingLlm {
         goal: std::sync::Mutex<Option<String>>,
     }
@@ -484,6 +553,31 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("not allowed"));
+    }
+
+    #[tokio::test]
+    async fn profiled_tool_host_keeps_hidden_alias_dispatchable_without_wildcard_duplication() {
+        let mut profile =
+            ExecutionProfile::resolve("builtin:all-access", &all_access_agent(), None, None)
+                .unwrap();
+        profile.allowed_tools = vec!["*".to_string()];
+        let host = ProfiledToolHost::new(Arc::new(HiddenAliasToolHost), &profile);
+
+        assert_eq!(host.list_tools(), ["mcp__readable"]);
+        assert_eq!(host.call("mcp__legacy", "{}").await.unwrap(), "mcp__legacy");
+    }
+
+    #[tokio::test]
+    async fn profiled_tool_host_advertises_an_explicitly_allowlisted_hidden_alias() {
+        let mut profile =
+            ExecutionProfile::resolve("builtin:all-access", &all_access_agent(), None, None)
+                .unwrap();
+        profile.allowed_tools = vec!["mcp__legacy".to_string()];
+        let host = ProfiledToolHost::new(Arc::new(HiddenAliasToolHost), &profile);
+
+        assert_eq!(host.list_tools(), ["mcp__legacy"]);
+        assert_eq!(host.call("mcp__legacy", "{}").await.unwrap(), "mcp__legacy");
+        assert!(host.call("mcp__readable", "{}").await.is_err());
     }
 
     #[tokio::test]

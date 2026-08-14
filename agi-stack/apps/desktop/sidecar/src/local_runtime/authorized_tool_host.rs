@@ -2,13 +2,14 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    future::Future,
     sync::{Arc, LazyLock},
 };
 
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use async_trait::async_trait;
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::{
     authority_store::{DesktopPermissionProfile, DesktopRun},
@@ -20,6 +21,31 @@ use super::{
 };
 
 const PROFILE_GRANT_TTL_MS: i64 = 5 * 60 * 1_000;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct AuthorizedInvocationContext {
+    pub(super) invocation_id: String,
+    pub(super) run_id: String,
+    pub(super) run_revision: u64,
+}
+
+tokio::task_local! {
+    static AUTHORIZED_INVOCATION_CONTEXT: AuthorizedInvocationContext;
+}
+
+pub(super) fn current_authorized_invocation_context() -> Option<AuthorizedInvocationContext> {
+    AUTHORIZED_INVOCATION_CONTEXT.try_with(Clone::clone).ok()
+}
+
+pub(super) async fn with_authorized_invocation_context<F>(
+    context: AuthorizedInvocationContext,
+    future: F,
+) -> F::Output
+where
+    F: Future,
+{
+    AUTHORIZED_INVOCATION_CONTEXT.scope(context, future).await
+}
 
 #[derive(Clone)]
 pub(super) struct AuthorizedRunToolHost {
@@ -140,6 +166,11 @@ impl ToolHost for AuthorizedRunToolHost {
         });
         let identity_digest = canonical_json_digest(&identity).map_err(authority_error)?;
         let invocation_id = format!("local-invocation-{identity_digest}");
+        let invocation_context = AuthorizedInvocationContext {
+            invocation_id: invocation_id.clone(),
+            run_id: request.run_id.clone(),
+            run_revision: request.run_revision,
+        };
         let now_ms = Utc::now().timestamp_millis();
         let workspace_granted = self.run.authorization_snapshot["mode"].as_str() == Some("build")
             && self
@@ -210,7 +241,12 @@ impl ToolHost for AuthorizedRunToolHost {
         self.session_store
             .transition_tool_invocation(&invocation_id, InvocationStatus::Executing, now_ms)
             .map_err(CoreError::Tool)?;
-        match self.inner.call(tool, input_json).await {
+        let output = with_authorized_invocation_context(
+            invocation_context,
+            self.inner.call(tool, input_json),
+        )
+        .await;
+        match output {
             Ok(output) => {
                 self.session_store
                     .transition_tool_invocation(
@@ -253,11 +289,15 @@ pub(super) fn tool_metadata(tool: &str) -> Option<ToolMetadata> {
     Some(ToolMetadata {
         name: tool.to_string(),
         effect: tool_effect(tool)?,
-        sensitive_input_fields: SENSITIVE_INPUT_FIELDS
-            .iter()
-            .map(|field| (*field).to_string())
-            .collect(),
+        sensitive_input_fields: sensitive_input_fields(),
     })
+}
+
+pub(super) fn sensitive_input_fields() -> BTreeSet<String> {
+    SENSITIVE_INPUT_FIELDS
+        .iter()
+        .map(|field| (*field).to_string())
+        .collect()
 }
 
 pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
@@ -265,6 +305,7 @@ pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
         && tool != "submit_plan"
         && !tool.starts_with("mcp__")
         && !tool.starts_with("skill__")
+        && tool != "subagent"
         && !tool.starts_with("subagent__")
     {
         return "[UNAVAILABLE]".to_string();
@@ -272,11 +313,48 @@ pub(super) fn redact_tool_payload(tool: &str, payload: &str) -> String {
     let Ok(value) = serde_json::from_str::<Value>(payload) else {
         return "[UNPARSEABLE]".to_string();
     };
-    serde_json::to_string(&super::tool_authority::redact_sensitive_fields(
-        &value,
-        &SENSITIVE_INPUT_FIELDS,
-    ))
-    .unwrap_or_else(|_| "[UNAVAILABLE]".to_string())
+    let redacted = if tool == "subagent" {
+        redact_subagent_payload(&value)
+    } else {
+        super::tool_authority::redact_sensitive_fields(&value, &SENSITIVE_INPUT_FIELDS)
+    };
+    serde_json::to_string(&redacted).unwrap_or_else(|_| "[UNAVAILABLE]".to_string())
+}
+
+fn redact_subagent_payload(value: &Value) -> Value {
+    let mut safe = Map::new();
+    let payload_kind = if value.get("task").is_some() {
+        "input"
+    } else if value.get("content").is_some() {
+        "output"
+    } else if value.get("error").is_some() {
+        "error"
+    } else {
+        "unknown"
+    };
+    safe.insert("payload_kind".to_string(), json!(payload_kind));
+    safe.insert("redacted".to_string(), json!(true));
+    insert_payload_size(&mut safe, "payload", value);
+    for field in ["subagent_id", "subagent_name", "task", "content", "error"] {
+        if let Some(field_value) = value.get(field) {
+            safe.insert(field.to_string(), json!("[REDACTED]"));
+            insert_payload_size(&mut safe, field, field_value);
+        }
+    }
+    if let Some(success) = value.get("success").and_then(Value::as_bool) {
+        safe.insert("success".to_string(), json!(success));
+    }
+    Value::Object(safe)
+}
+
+fn insert_payload_size(target: &mut Map<String, Value>, field: &str, value: &Value) {
+    let bytes = value.as_str().map_or_else(
+        || serde_json::to_vec(value).ok().map(|value| value.len()),
+        |value| Some(value.len()),
+    );
+    if let Some(bytes) = bytes {
+        target.insert(format!("{field}_bytes"), json!(bytes));
+    }
 }
 
 fn is_workspace_write_tool(tool: &str) -> bool {
@@ -571,6 +649,158 @@ mod tests {
 
         async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
             Ok("{}".to_string())
+        }
+    }
+
+    #[derive(Default)]
+    struct StubSubagentHost {
+        invocations: std::sync::Mutex<Vec<AuthorizedInvocationContext>>,
+    }
+
+    #[async_trait]
+    impl ToolHost for StubSubagentHost {
+        fn list_tools(&self) -> Vec<String> {
+            vec!["subagent".to_string()]
+        }
+
+        async fn call(&self, _tool: &str, _input_json: &str) -> CoreResult<String> {
+            let invocation = current_authorized_invocation_context().ok_or_else(|| {
+                CoreError::Tool("authorized invocation context was not propagated".to_string())
+            })?;
+            self.invocations
+                .lock()
+                .map_err(|_| CoreError::Tool("invocation recorder lock poisoned".to_string()))?
+                .push(invocation);
+            Ok(json!({
+                "subagent_id": "qa-path-reader",
+                "status": "completed",
+                "content": "verified",
+            })
+            .to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn dynamic_read_only_subagent_metadata_is_ledgered_and_dispatched() -> Result<(), String>
+    {
+        let (root, store, run, _inner) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let metadata = BTreeMap::from([(
+            "subagent".to_string(),
+            ToolMetadata {
+                name: "subagent".to_string(),
+                effect: ToolEffect::Read,
+                sensitive_input_fields: BTreeSet::from([
+                    "subagent_id".to_string(),
+                    "subagent_name".to_string(),
+                    "task".to_string(),
+                ]),
+            },
+        )]);
+        let inner = Arc::new(StubSubagentHost::default());
+        let host = AuthorizedRunToolHost::with_dynamic_metadata(
+            inner.clone(),
+            store.clone(),
+            run.clone(),
+            metadata,
+        );
+
+        assert!(host.list_tools().iter().any(|tool| tool == "subagent"));
+        let input = r#"{"subagent_id":"qa-path-reader","task":"inspect README task-secret-one"}"#;
+        let output = host
+            .call("subagent", input)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        assert!(output.contains("qa-path-reader"));
+        let invocations = store.list_tool_invocations(&run.conversation_id)?;
+        assert_eq!(invocations.len(), 1);
+        assert_eq!(invocations[0].tool_name, "subagent");
+        assert_eq!(invocations[0].effect, ToolEffect::Read);
+        assert_eq!(invocations[0].status, InvocationStatus::Completed);
+        assert!(invocations[0].grant_id.is_none());
+        assert_eq!(invocations[0].redacted_input["subagent_id"], "[REDACTED]");
+        assert_eq!(invocations[0].redacted_input["task"], "[REDACTED]");
+        assert!(!invocations[0]
+            .redacted_input
+            .to_string()
+            .contains("task-secret-one"));
+
+        let replay = host
+            .call("subagent", input)
+            .await
+            .map_err(|error| error.to_string())?;
+        assert!(replay.contains("already completed"));
+        assert_eq!(
+            inner
+                .invocations
+                .lock()
+                .map_err(|_| "invocation recorder lock poisoned".to_string())?
+                .len(),
+            1
+        );
+
+        host.call(
+            "subagent",
+            r#"{"subagent_id":"qa-path-reader","task":" inspect README task-secret-one "}"#,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        let propagated = inner
+            .invocations
+            .lock()
+            .map_err(|_| "invocation recorder lock poisoned".to_string())?;
+        assert_eq!(propagated.len(), 2);
+        assert_ne!(propagated[0].invocation_id, propagated[1].invocation_id);
+        assert!(propagated
+            .iter()
+            .all(|context| context.run_id == run.id && context.run_revision == run.revision));
+        drop(propagated);
+
+        let redacted = redact_tool_payload(
+            "subagent",
+            r#"{"subagent_id":"qa-path-reader","task":"inspect README","api_key":"must-not-persist"}"#,
+        );
+        assert_ne!(redacted, "[UNAVAILABLE]");
+        assert!(!redacted.contains("must-not-persist"));
+        assert!(redacted.contains("[REDACTED]"));
+        assert!(!redacted.contains("digest"));
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[test]
+    fn subagent_payload_redaction_never_exposes_content_or_unsalted_digests() {
+        for (payload, secret) in [
+            (
+                json!({
+                    "subagent_id": "qa-path-reader",
+                    "task": "task-secret-low-entropy",
+                }),
+                "task-secret-low-entropy",
+            ),
+            (
+                json!({
+                    "subagent_id": "qa-path-reader",
+                    "status": "completed",
+                    "content": "answer-secret-low-entropy",
+                    "success": true,
+                }),
+                "answer-secret-low-entropy",
+            ),
+            (
+                json!({
+                    "subagent_id": "qa-path-reader",
+                    "error": "error-secret-low-entropy",
+                    "success": false,
+                }),
+                "error-secret-low-entropy",
+            ),
+        ] {
+            let redacted = redact_tool_payload("subagent", &payload.to_string());
+            assert!(!redacted.contains(secret));
+            assert!(!redacted.contains("digest"));
+            assert!(redacted.contains("[REDACTED]"));
+            assert!(redacted.contains("_bytes"));
         }
     }
 

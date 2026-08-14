@@ -8,7 +8,7 @@ use crate::local_runtime::search_projection;
 
 const PROJECT_OVERVIEW_CAPABILITY: &str = "project_overview";
 const PROJECT_OVERVIEW_SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
-const PROJECT_OVERVIEW_CONTRACT_VERSION: &str = "3.0.0";
+const PROJECT_OVERVIEW_CONTRACT_VERSION: &str = "4.0.0";
 const PROJECT_OVERVIEW_DEGRADED_REASON: &str = "local_project_overview_timeline_projection_only";
 const PROJECT_GRAPH_UNAVAILABLE_REASON: &str = "local_project_graph_projection_unavailable";
 const PROJECT_STORAGE_NOT_APPLICABLE_REASON: &str = "local_project_storage_quota_not_applicable";
@@ -53,16 +53,14 @@ async fn project_overview(
         ));
     };
 
-    let conversation_count = state
-        .session_store
-        .list_conversations(&project_id, None)
-        .map_err(project_overview_store_error)?
-        .len();
-
     let mut connection = state
         .session_store
         .connection()
         .map_err(project_overview_store_error)?;
+    let conversation_status_summary =
+        conversation_status_summary(&connection, &authenticated.workspace.tenant_id, &project_id)
+            .map_err(project_overview_store_error)?;
+    let conversation_count = conversation_status_summary.total;
     let projection = search_projection::refresh_projection(
         &mut connection,
         &authenticated.workspace.tenant_id,
@@ -90,6 +88,7 @@ async fn project_overview(
         backfill_cursor: projection.backfill_cursor,
         project: AvailableField::new(ProjectSummary::from(project)),
         conversation_count: AvailableField::new(conversation_count),
+        conversation_status_summary: AvailableField::new(conversation_status_summary),
         recent_knowledge_items: RecentKnowledgeField {
             availability: "degraded",
             reason_code: PROJECT_OVERVIEW_DEGRADED_REASON,
@@ -107,6 +106,67 @@ async fn project_overview(
     serde_json::to_value(response)
         .map(Json)
         .map_err(|error| project_overview_store_error(error.to_string()))
+}
+
+fn conversation_status_summary(
+    connection: &Connection,
+    tenant_id: &str,
+    project_id: &str,
+) -> Result<ConversationStatusSummary, String> {
+    connection
+        .query_row(
+            "WITH latest_runs AS (
+               SELECT conversation_id, status,
+                      ROW_NUMBER() OVER (
+                        PARTITION BY conversation_id
+                        ORDER BY julianday(created_at) DESC, created_at DESC, rowid DESC
+                      ) AS ordinal
+               FROM desktop_runs
+               WHERE project_id = ?2
+             ), classified AS (
+               SELECT CASE
+                 WHEN latest.status IS NULL THEN 'idle'
+                 WHEN latest.status = 'queued' THEN 'queued'
+                 WHEN latest.status = 'running' THEN 'running'
+                 WHEN latest.status IN (
+                   'needs_input', 'needs_approval', 'paused', 'ready_review',
+                   'disconnected', 'interrupted'
+                 ) THEN 'attention'
+                 WHEN latest.status = 'completed' THEN 'completed'
+                 WHEN latest.status = 'failed' THEN 'failed'
+                 WHEN latest.status = 'cancelled' THEN 'cancelled'
+                 ELSE 'attention'
+               END AS bucket
+               FROM desktop_conversations AS conversation
+               LEFT JOIN latest_runs AS latest
+                 ON latest.conversation_id = conversation.id AND latest.ordinal = 1
+               WHERE json_extract(conversation.value_json, '$.tenant_id') = ?1
+                 AND conversation.project_id = ?2
+             )
+             SELECT COUNT(*),
+                    COALESCE(SUM(bucket = 'idle'), 0),
+                    COALESCE(SUM(bucket = 'queued'), 0),
+                    COALESCE(SUM(bucket = 'running'), 0),
+                    COALESCE(SUM(bucket = 'attention'), 0),
+                    COALESCE(SUM(bucket = 'completed'), 0),
+                    COALESCE(SUM(bucket = 'failed'), 0),
+                    COALESCE(SUM(bucket = 'cancelled'), 0)
+             FROM classified",
+            params![tenant_id, project_id],
+            |row| {
+                Ok(ConversationStatusSummary {
+                    total: row.get(0)?,
+                    idle: row.get(1)?,
+                    queued: row.get(2)?,
+                    running: row.get(3)?,
+                    attention: row.get(4)?,
+                    completed: row.get(5)?,
+                    failed: row.get(6)?,
+                    cancelled: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|error| error.to_string())
 }
 
 fn reject_query_fields(uri: &OriginalUri) -> Result<(), (StatusCode, Json<Value>)> {
@@ -218,10 +278,23 @@ struct ProjectOverviewResponse {
     backfill_cursor: Option<String>,
     project: AvailableField<ProjectSummary>,
     conversation_count: AvailableField<usize>,
+    conversation_status_summary: AvailableField<ConversationStatusSummary>,
     recent_knowledge_items: RecentKnowledgeField,
     active_nodes: NullField,
     storage_quota: NullField,
     collaborators: NullField,
+}
+
+#[derive(Serialize)]
+struct ConversationStatusSummary {
+    total: usize,
+    idle: usize,
+    queued: usize,
+    running: usize,
+    attention: usize,
+    completed: usize,
+    failed: usize,
+    cancelled: usize,
 }
 
 #[derive(Serialize)]

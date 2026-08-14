@@ -460,6 +460,186 @@ async fn local_agent_subagent_and_prompt_template_mutations_are_scope_and_revisi
 }
 
 #[tokio::test]
+async fn local_subagents_are_structurally_scoped_to_the_active_project() {
+    let credential = "managed-subagent-scope-secret";
+    let state = test_state(credential);
+    for (id, project_id, status, enabled) in [
+        ("tenant-reviewer", Value::Null, "active", true),
+        ("project-reviewer", json!("local-project"), "active", true),
+        (
+            "disabled-project-reviewer",
+            json!("local-project"),
+            "disabled",
+            false,
+        ),
+        (
+            "foreign-project-reviewer",
+            json!("desktop-client"),
+            "active",
+            true,
+        ),
+        ("malformed-project-reviewer", json!(7), "active", true),
+    ] {
+        state
+            .session_store
+            .put_managed_resource(
+                ManagedResourceKind::SubAgent,
+                "tenant",
+                "local",
+                id,
+                status,
+                None,
+                json!({
+                    "id": id,
+                    "tenant_id": "local",
+                    "project_id": project_id,
+                    "name": id,
+                    "display_name": id,
+                    "system_prompt": "Review the active project.",
+                    "enabled": enabled,
+                    "status": status,
+                    "source": "database",
+                    "allowed_tools": ["read"],
+                    "allowed_skills": [],
+                    "allowed_mcp_servers": [],
+                }),
+                Utc::now().timestamp_millis(),
+            )
+            .expect("seed scoped SubAgent");
+    }
+    let app = local_router(Arc::clone(&state));
+
+    let listed = app
+        .clone()
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/subagents/?tenant_id=local",
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("list scoped SubAgents");
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed_payload = json_response(listed).await;
+    let mut listed_ids = listed_payload["items"]
+        .as_array()
+        .expect("SubAgent items")
+        .iter()
+        .filter_map(|item| item["id"].as_str())
+        .collect::<Vec<_>>();
+    listed_ids.sort_unstable();
+    assert_eq!(
+        listed_ids,
+        [
+            "disabled-project-reviewer",
+            "project-reviewer",
+            "tenant-reviewer",
+        ]
+    );
+
+    for (key, project_id) in [
+        ("cross-project-create", json!("desktop-client")),
+        ("malformed-project-create", json!(7)),
+    ] {
+        let rejected = app
+            .clone()
+            .oneshot(request(
+                Method::POST,
+                "/api/v1/subagents/?tenant_id=local",
+                credential,
+                mutation(
+                    key,
+                    0,
+                    Some(key),
+                    Some(json!({
+                        "name": key,
+                        "display_name": key,
+                        "system_prompt": "Must not cross project authority.",
+                        "project_id": project_id,
+                        "enabled": true,
+                    })),
+                ),
+            ))
+            .await
+            .expect("reject invalid SubAgent project scope");
+        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    let rejected_update = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            "/api/v1/subagents/project-reviewer?tenant_id=local",
+            credential,
+            mutation(
+                "cross-project-update",
+                0,
+                None,
+                Some(json!({
+                    "display_name": "Rebound reviewer",
+                    "project_id": "desktop-client",
+                })),
+            ),
+        ))
+        .await
+        .expect("reject SubAgent project rebind");
+    assert_eq!(rejected_update.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let foreign_get = app
+        .clone()
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/subagents/foreign-project-reviewer?tenant_id=local",
+            credential,
+            json!({}),
+        ))
+        .await
+        .expect("reject cross-project SubAgent read");
+    assert_eq!(foreign_get.status(), StatusCode::NOT_FOUND);
+
+    let foreign_delete = app
+        .clone()
+        .oneshot(request(
+            Method::DELETE,
+            "/api/v1/subagents/foreign-project-reviewer?tenant_id=local",
+            credential,
+            mutation("cross-project-delete", 0, None, None),
+        ))
+        .await
+        .expect("reject cross-project SubAgent delete");
+    assert_eq!(foreign_delete.status(), StatusCode::NOT_FOUND);
+
+    let foreign_toggle = app
+        .oneshot(request(
+            Method::PATCH,
+            "/api/v1/subagents/foreign-project-reviewer/enable?tenant_id=local&enabled=false",
+            credential,
+            mutation(
+                "cross-project-toggle",
+                0,
+                None,
+                Some(json!({ "enabled": false })),
+            ),
+        ))
+        .await
+        .expect("reject cross-project SubAgent toggle");
+    assert_eq!(foreign_toggle.status(), StatusCode::NOT_FOUND);
+
+    let persisted = state
+        .session_store
+        .managed_resource(
+            ManagedResourceKind::SubAgent,
+            "tenant",
+            "local",
+            "project-reviewer",
+        )
+        .expect("load scoped SubAgent")
+        .expect("scoped SubAgent");
+    assert_eq!(persisted["project_id"], "local-project");
+    assert_eq!(persisted["revision"], 0);
+}
+
+#[tokio::test]
 async fn managed_resource_v2_rejects_builtin_mutation_and_malformed_or_rebound_commands() {
     let credential = "managed-resource-guard-secret";
     let app = local_router(test_state(credential));

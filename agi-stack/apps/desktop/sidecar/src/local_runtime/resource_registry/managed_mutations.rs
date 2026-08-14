@@ -367,7 +367,21 @@ pub(super) fn persist_managed_resource(
             ],
         )
         .map(|_| ())
-        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))
+        .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    if command.kind == ManagedResourceKind::Provider
+        && command.scope_kind == "tenant"
+        && command.operation == ManagedResourceMutationOperation::Delete
+    {
+        transaction
+            .execute(
+                "DELETE FROM desktop_llm_provider_selections
+                 WHERE tenant_id = ?1 AND provider_id = ?2",
+                params![command.scope_id, command.resource_id],
+            )
+            .map(|_| ())
+            .map_err(|error| ResourceRegistryError::Storage(error.to_string()))?;
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

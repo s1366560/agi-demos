@@ -32,7 +32,10 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/mcp/tools/all", get(list_all_tools))
         .route("/api/v1/mcp/tools/call", post(call_tool_by_server_id))
         .route("/api/v1/mcp/reconcile/:project_id", post(reconcile_project))
-        .route("/api/v1/mcp/:server_id", get(get_server))
+        .route(
+            "/api/v1/mcp/:server_id",
+            get(get_server).put(update_server).delete(delete_server),
+        )
         .route("/api/v1/mcp/:server_id/sync", post(sync_server))
         .route("/api/v1/mcp/:server_id/test", post(test_server))
         .route("/api/v1/mcp/:server_id/health", get(server_health))
@@ -128,6 +131,27 @@ struct CreateServerBody {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct UpdateServerBody {
+    name: Option<String>,
+    description: Option<String>,
+    server_type: Option<McpTransport>,
+    transport_config: Option<TransportConfigBody>,
+    enabled: Option<bool>,
+    project_id: String,
+    expected_revision: u64,
+    idempotency_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeleteServerBody {
+    project_id: String,
+    expected_revision: u64,
+    idempotency_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TransportConfigBody {
     command: Option<Value>,
     #[serde(default)]
@@ -153,6 +177,7 @@ struct ProvisionCredentialBody {
     credential_name: String,
     secret: String,
     idempotency_key: String,
+    mutation_idempotency_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -250,6 +275,7 @@ async fn provision_credential(
         credential_name,
         secret,
         idempotency_key,
+        mutation_idempotency_key,
     } = body;
     let input = credential_provision_input(
         server_name,
@@ -257,6 +283,7 @@ async fn provision_credential(
         transport_config,
         credential_kind,
         credential_name,
+        mutation_idempotency_key,
     )?;
     let secret = Zeroizing::new(secret);
     let outcome = state
@@ -315,6 +342,99 @@ async fn get_server(
             )
         })?;
     Ok(Json(server_response(&server)))
+}
+
+async fn update_server(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(server_id): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateServerBody>,
+) -> LocalJsonResult {
+    ensure_project_scope(&authenticated, Some(&body.project_id))?;
+    ensure_managed_resource_manager(&authenticated)?;
+    if body
+        .transport_config
+        .as_ref()
+        .is_some_and(|config| config.environment.is_some() || config.env.is_some())
+    {
+        return mcp_error(McpSupervisorError::new(
+            "local_mcp_plaintext_environment_rejected",
+            "MCP environment values must use application-vault references",
+        ));
+    }
+    let idempotency_key = body
+        .idempotency_key
+        .clone()
+        .or_else(|| header_text(&headers, "idempotency-key").map(ToString::to_string))
+        .ok_or_else(|| {
+            mcp_error_tuple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "local_mcp_idempotency_key_required",
+                "MCP server mutations require an idempotency key",
+            )
+        })?;
+    let scope = active_scope(&authenticated);
+    let current = state
+        .mcp_supervisor
+        .server(&scope, &server_id)
+        .map_err(mcp_error_tuple_for)?
+        .ok_or_else(|| {
+            mcp_error_tuple(
+                StatusCode::NOT_FOUND,
+                "local_mcp_server_not_found",
+                "MCP server was not found",
+            )
+        })?;
+    let expected_revision = body.expected_revision;
+    let input = update_definition_input(body, current, &scope)?;
+    let server = state
+        .mcp_supervisor
+        .update_server(
+            &scope,
+            &server_id,
+            input,
+            expected_revision,
+            &idempotency_key,
+        )
+        .map_err(mcp_error_tuple_for)?;
+    Ok(Json(server_response(&server)))
+}
+
+async fn delete_server(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(server_id): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<DeleteServerBody>,
+) -> LocalJsonResult {
+    ensure_project_scope(&authenticated, Some(&body.project_id))?;
+    ensure_managed_resource_manager(&authenticated)?;
+    let idempotency_key = body
+        .idempotency_key
+        .or_else(|| header_text(&headers, "idempotency-key").map(ToString::to_string))
+        .ok_or_else(|| {
+            mcp_error_tuple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "local_mcp_idempotency_key_required",
+                "MCP server mutations require an idempotency key",
+            )
+        })?;
+    let outcome = state
+        .mcp_supervisor
+        .delete_server(
+            &active_scope(&authenticated),
+            &server_id,
+            body.expected_revision,
+            &idempotency_key,
+        )
+        .map_err(mcp_error_tuple_for)?;
+    Ok(Json(json!({
+        "deleted": true,
+        "id": outcome.id,
+        "revision": outcome.revision,
+        "duplicate": outcome.duplicate,
+    })))
 }
 
 async fn sync_server(
@@ -772,12 +892,59 @@ fn definition_input(
     })
 }
 
+fn update_definition_input(
+    body: UpdateServerBody,
+    current: McpServerDefinition,
+    scope: &McpScope,
+) -> Result<McpServerDefinitionInput, (StatusCode, Json<Value>)> {
+    let UpdateServerBody {
+        name,
+        description,
+        server_type,
+        transport_config,
+        enabled,
+        project_id,
+        expected_revision: _,
+        idempotency_key: _,
+    } = body;
+    if let Some(transport_config) = transport_config {
+        return definition_input(
+            CreateServerBody {
+                name: name.unwrap_or(current.name),
+                description,
+                server_type: server_type.unwrap_or(current.transport),
+                transport_config,
+                enabled: enabled.unwrap_or(current.enabled),
+                project_id,
+                idempotency_key: None,
+            },
+            scope,
+        );
+    }
+    if name.is_some() || description.is_some() || server_type.is_some() || enabled.is_none() {
+        return Err(malformed(
+            "local_mcp_update_config_required",
+            "MCP configuration updates require a complete transport configuration",
+        ));
+    }
+    Ok(McpServerDefinitionInput {
+        name: current.name,
+        description: current.description,
+        transport: current.transport,
+        command: current.command,
+        cwd: current.cwd,
+        vault_env_refs: current.vault_env_refs,
+        enabled: enabled.unwrap_or(current.enabled),
+    })
+}
+
 fn credential_provision_input(
     server_name: String,
     server_type: McpTransport,
     transport_config: TransportConfigBody,
     kind: McpCredentialKind,
     name: String,
+    mutation_idempotency_key: Option<String>,
 ) -> Result<McpCredentialProvisionInput, (StatusCode, Json<Value>)> {
     if transport_config.environment.is_some()
         || transport_config.env.is_some()
@@ -828,6 +995,7 @@ fn credential_provision_input(
         cwd,
         kind,
         name,
+        mutation_idempotency_key,
     })
 }
 
@@ -1000,6 +1168,7 @@ pub(super) fn mcp_error_tuple_for(error: McpSupervisorError) -> (StatusCode, Jso
         "local_mcp_server_not_found" | "local_mcp_app_not_found" => StatusCode::NOT_FOUND,
         "local_mcp_idempotency_conflict"
         | "local_mcp_server_name_conflict"
+        | "local_mcp_revision_conflict"
         | "local_mcp_tool_call_in_progress"
         | "local_mcp_tool_call_lease_lost"
         | "local_mcp_tool_call_indeterminate" => StatusCode::CONFLICT,

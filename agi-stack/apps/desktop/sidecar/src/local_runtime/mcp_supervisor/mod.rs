@@ -35,7 +35,7 @@ use remote_common::{
     validate_remote_input, InitializedServer,
 };
 use stdio::StdioRuntime;
-use store::McpStore;
+use store::{CredentialStageStatus, McpStore};
 use websocket::WebSocketRuntime;
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -114,10 +114,18 @@ pub(super) struct McpCredentialProvisionInput {
     pub(super) cwd: Option<String>,
     pub(super) kind: McpCredentialKind,
     pub(super) name: String,
+    pub(super) mutation_idempotency_key: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct McpCredentialProvisionOutcome {
+    pub(super) duplicate: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct McpServerDeletionOutcome {
+    pub(super) id: String,
+    pub(super) revision: u64,
     pub(super) duplicate: bool,
 }
 
@@ -350,8 +358,77 @@ impl McpSupervisor {
         validate_remote_credential_bindings(scope, &input)?;
         validate_idempotency_key(idempotency_key)?;
         let request_hash = definition_hash(scope, &input);
+        let _credential_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
         self.store
             .create_server(scope, &input, idempotency_key, &request_hash)
+    }
+
+    pub(super) fn update_server(
+        &self,
+        scope: &McpScope,
+        server_id: &str,
+        input: McpServerDefinitionInput,
+        expected_revision: u64,
+        idempotency_key: &str,
+    ) -> McpResult<McpServerDefinition> {
+        validate_scope(scope)?;
+        validate_identifier(server_id, "local_mcp_server_id_invalid")?;
+        validate_definition(&input)?;
+        validate_remote_credential_bindings(scope, &input)?;
+        validate_expected_revision(expected_revision)?;
+        validate_idempotency_key(idempotency_key)?;
+        let vault_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
+        let request_hash = server_update_hash(scope, server_id, expected_revision, &input);
+        let stored = self.store.update_server(
+            scope,
+            server_id,
+            &input,
+            expected_revision,
+            idempotency_key,
+            &request_hash,
+        )?;
+        self.evict_runtime(server_id)?;
+        if let Err(error) = self.drain_pending_credential_cleanup_locked(vault_guard.as_ref()) {
+            tracing::warn!(
+                reason_code = error.reason_code(),
+                "deferred MCP credential cleanup after server update"
+            );
+        }
+        Ok(stored.server)
+    }
+
+    pub(super) fn delete_server(
+        &self,
+        scope: &McpScope,
+        server_id: &str,
+        expected_revision: u64,
+        idempotency_key: &str,
+    ) -> McpResult<McpServerDeletionOutcome> {
+        validate_scope(scope)?;
+        validate_identifier(server_id, "local_mcp_server_id_invalid")?;
+        validate_expected_revision(expected_revision)?;
+        validate_idempotency_key(idempotency_key)?;
+        let request_hash = server_delete_hash(scope, server_id, expected_revision);
+        let vault_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
+        let stored = self.store.delete_server(
+            scope,
+            server_id,
+            expected_revision,
+            idempotency_key,
+            &request_hash,
+        )?;
+        self.evict_runtime(server_id)?;
+        if let Err(error) = self.drain_pending_credential_cleanup_locked(vault_guard.as_ref()) {
+            tracing::warn!(
+                reason_code = error.reason_code(),
+                "deferred MCP credential cleanup after server deletion"
+            );
+        }
+        Ok(McpServerDeletionOutcome {
+            id: stored.server.id,
+            revision: stored.server.revision,
+            duplicate: stored.duplicate,
+        })
     }
 
     pub(super) fn list_servers(&self, scope: &McpScope) -> McpResult<Vec<McpServerDefinition>> {
@@ -437,6 +514,15 @@ impl McpSupervisor {
     }
 
     pub(super) fn prepare_startup_recovery(&self) -> McpResult<()> {
+        let vault_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
+        self.store.abandon_unbound_credential_stages()?;
+        if let Err(error) = self.drain_pending_credential_cleanup_locked(vault_guard.as_ref()) {
+            tracing::warn!(
+                reason_code = error.reason_code(),
+                "deferred MCP credential cleanup during startup recovery"
+            );
+        }
+        drop(vault_guard);
         self.store.mark_enabled_recovery_pending()
     }
 
@@ -491,6 +577,38 @@ impl McpSupervisor {
                 "MCP vault reference is unavailable",
             )
         })?;
+        if let Some(mutation_idempotency_key) = input.mutation_idempotency_key.as_deref() {
+            validate_idempotency_key(mutation_idempotency_key)?;
+            let staged_reference = staged_credential_reference(
+                &reference,
+                mutation_idempotency_key,
+                idempotency_key,
+                &request_hash,
+            );
+            let reservation = self.store.reserve_credential_stage(
+                scope,
+                idempotency_key,
+                mutation_idempotency_key,
+                &request_hash,
+                &reference,
+                &staged_reference,
+            )?;
+            if reservation.status.stores_secret() {
+                vault
+                    .put(&reservation.staged_reference, secret)
+                    .map_err(|_| storage_error())?;
+                if reservation.status != CredentialStageStatus::Active {
+                    self.store.mark_credential_stage_ready(
+                        scope,
+                        idempotency_key,
+                        &request_hash,
+                    )?;
+                }
+            }
+            return Ok(McpCredentialProvisionOutcome {
+                duplicate: reservation.duplicate,
+            });
+        }
         if let Some((stored_hash, stored_reference, is_current_binding)) =
             self.store.credential_receipt(scope, idempotency_key)?
         {
@@ -514,6 +632,16 @@ impl McpSupervisor {
     #[cfg(test)]
     pub(super) fn seed_route_contract_fixture(&self, scope: &McpScope) -> Result<(), String> {
         self.store.seed_route_contract_fixture(scope)
+    }
+
+    #[cfg(test)]
+    pub(in crate::local_runtime) fn staged_credential_reference_for_test(
+        &self,
+        scope: &McpScope,
+        provision_idempotency_key: &str,
+    ) -> McpResult<Option<String>> {
+        self.store
+            .staged_credential_reference(scope, provision_idempotency_key)
     }
 
     pub(super) async fn list_tools(
@@ -714,6 +842,40 @@ impl McpSupervisor {
             .map(|vault| vault.clone())
             .map_err(|_| storage_error())
     }
+
+    fn drain_pending_credential_cleanup_locked(
+        &self,
+        credential_vault: Option<&ApplicationCredentialVault>,
+    ) -> McpResult<()> {
+        for cleanup in self.store.pending_credential_cleanups()? {
+            if self.store.credential_cleanup_reference_is_live(&cleanup)? {
+                self.store.complete_credential_cleanup(&cleanup)?;
+                continue;
+            }
+            let Some(vault) = credential_vault else {
+                self.store.record_credential_cleanup_failure(
+                    &cleanup,
+                    "local_mcp_vault_reference_unavailable",
+                )?;
+                continue;
+            };
+            if vault.clear(&cleanup.binding_reference).is_ok() {
+                self.store.complete_credential_cleanup(&cleanup)?;
+            } else {
+                self.store
+                    .record_credential_cleanup_failure(&cleanup, "local_mcp_storage_unavailable")?;
+            }
+        }
+        Ok(())
+    }
+
+    fn evict_runtime(&self, server_id: &str) -> McpResult<()> {
+        self.runtimes
+            .lock()
+            .map_err(|_| storage_error())?
+            .remove(server_id);
+        Ok(())
+    }
 }
 
 fn validate_scope(scope: &McpScope) -> McpResult<()> {
@@ -847,6 +1009,16 @@ fn validate_idempotency_key(value: &str) -> McpResult<()> {
     Ok(())
 }
 
+fn validate_expected_revision(value: u64) -> McpResult<()> {
+    if value == 0 {
+        return Err(McpSupervisorError::new(
+            "local_mcp_revision_invalid",
+            "MCP server revision must be a positive integer",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_resource_uri(value: &str) -> McpResult<()> {
     if value.is_empty() || value.len() > 4096 || value.chars().any(char::is_control) {
         return Err(McpSupervisorError::new(
@@ -894,6 +1066,38 @@ fn definition_hash(scope: &McpScope, input: &McpServerDefinitionInput) -> String
     }))
 }
 
+fn server_update_hash(
+    scope: &McpScope,
+    server_id: &str,
+    expected_revision: u64,
+    input: &McpServerDefinitionInput,
+) -> String {
+    value_hash(&serde_json::json!({
+        "operation": "update_server",
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "server_id": server_id,
+        "expected_revision": expected_revision,
+        "name": input.name,
+        "description": input.description,
+        "transport": input.transport.as_str(),
+        "command": input.command,
+        "cwd": input.cwd,
+        "vault_env_refs": input.vault_env_refs,
+        "enabled": input.enabled,
+    }))
+}
+
+fn server_delete_hash(scope: &McpScope, server_id: &str, expected_revision: u64) -> String {
+    value_hash(&serde_json::json!({
+        "operation": "delete_server",
+        "tenant_id": scope.tenant_id,
+        "project_id": scope.project_id,
+        "server_id": server_id,
+        "expected_revision": expected_revision,
+    }))
+}
+
 fn value_hash(value: &Value) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.to_string());
@@ -921,6 +1125,24 @@ fn credential_provision_hash(
         "credential_name": input.name,
         "secret_hash": secret_hash,
     }))
+}
+
+fn staged_credential_reference(
+    logical_reference: &str,
+    mutation_idempotency_key: &str,
+    provision_idempotency_key: &str,
+    request_hash: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"memstack-desktop-mcp-credential-stage-v2\0");
+    hasher.update(logical_reference.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(mutation_idempotency_key.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(provision_idempotency_key.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(request_hash.as_bytes());
+    format!("{logical_reference}.stage.v2.{:x}", hasher.finalize())
 }
 
 fn server_not_found() -> McpSupervisorError {

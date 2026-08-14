@@ -331,6 +331,12 @@ async fn monitor_helper(
                 "Workspace Core pending terminal callback replay failed"
             );
         }
+        if let Err(error) = authority_lease.runtime.resume_workspace_task_runs().await {
+            tracing::error!(
+                error = %error,
+                "Workspace Task pre-launch recovery failed"
+            );
+        }
         if let Err(error) = persist_cutover_marker(
             &launch.runtime_directory,
             WorkspaceCoreCutoverState::CoreAuthoritative,

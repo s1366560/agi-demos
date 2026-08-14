@@ -1,4 +1,5 @@
 use super::*;
+use crate::local_runtime::subagent_scope;
 
 pub(super) fn update_resource(
     state: &Arc<LocalRuntimeState>,
@@ -17,7 +18,12 @@ pub(super) fn update_resource(
             "managed resource update value is required".to_string(),
         ))
     })?;
-    envelope.value = Some(merge_resource_values(current, incoming)?);
+    let mut merged = merge_resource_values(current, incoming)?;
+    if kind == ManagedResourceKind::SubAgent {
+        let object = merged.as_object_mut().ok_or_else(invalid_resource_object)?;
+        normalize_subagent_project_scope(object, &authenticated.workspace.project_id)?;
+    }
+    envelope.value = Some(merged);
     let status = envelope
         .value
         .as_ref()
@@ -134,6 +140,14 @@ pub(super) fn find_resource<'a>(
             .managed_resource(kind, scope_kind, scope_id, resource_id)
             .map_err(super::super::local_store_error)?
         {
+            if kind == ManagedResourceKind::SubAgent
+                && !subagent_scope::is_visible_in_project(
+                    &resource,
+                    &authenticated.workspace.project_id,
+                )
+            {
+                continue;
+            }
             if found.is_some() {
                 return Err(resource_registry_error(
                     ResourceRegistryError::InvalidMutation(
@@ -309,6 +323,7 @@ pub(super) fn normalize_resource_value(
                 .or_insert_with(|| json!(true));
         }
         ManagedResourceKind::SubAgent => {
+            normalize_subagent_project_scope(object, &authenticated.workspace.project_id)?;
             object.insert("source".to_string(), json!("database"));
             object
                 .entry("enabled".to_string())
@@ -329,6 +344,17 @@ pub(super) fn normalize_resource_value(
         ManagedResourceKind::Provider | ManagedResourceKind::Plugin => {}
     }
     Ok(())
+}
+
+fn normalize_subagent_project_scope(
+    object: &mut Map<String, Value>,
+    active_project_id: &str,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    subagent_scope::normalize_project_scope(object, active_project_id).map_err(|_| {
+        resource_registry_error(ResourceRegistryError::InvalidMutation(
+            "managed SubAgent project_id must be null or match the active project".to_string(),
+        ))
+    })
 }
 
 pub(super) fn normalize_skill_package(

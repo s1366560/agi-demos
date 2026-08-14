@@ -39,8 +39,8 @@ use super::{
     store::McpStore,
     tool_call_lease::ToolCallReservation,
     websocket::connect_websocket,
-    McpScope, McpServerDefinition, McpServerDefinitionInput, McpSupervisor, McpTransport,
-    SupervisorLimits,
+    McpCredentialKind, McpCredentialProvisionInput, McpScope, McpServerDefinition,
+    McpServerDefinitionInput, McpSupervisor, McpTransport, SupervisorLimits,
 };
 use crate::{
     application_vault::ApplicationCredentialVault,
@@ -526,7 +526,235 @@ fn remote_credentials_are_bound_to_mcp_scope_server_origin_and_header() {
             .and_then(|value| value.to_str().ok()),
         Some("Bearer scoped-secret")
     );
+    let staged_reference = format!("{reference}.stage.v2.{}", "a".repeat(64));
+    vault
+        .put(&staged_reference, "Bearer staged-secret")
+        .expect("store structurally scoped staged credential");
+    server
+        .vault_env_refs
+        .insert("authorization".to_string(), staged_reference.clone());
+    let staged_headers =
+        remote_headers(&server, Some(&vault)).expect("resolve scoped staged MCP credential");
+    assert_eq!(
+        staged_headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer staged-secret")
+    );
+    server.vault_env_refs.insert(
+        "authorization".to_string(),
+        format!("{reference}.stage.v2.{}", "G".repeat(64)),
+    );
+    assert_eq!(
+        remote_headers(&server, Some(&vault))
+            .expect_err("malformed staged credential suffix must be rejected")
+            .reason_code(),
+        "local_mcp_remote_credential_scope_invalid"
+    );
     fs::remove_dir_all(root).expect("remove credential scope root");
+}
+
+#[test]
+fn credential_cleanup_is_durable_evicts_runtime_and_never_clears_a_reused_reference() {
+    let root = root("durable-credential-cleanup");
+    fs::create_dir_all(&root).expect("create durable credential cleanup root");
+    let vault = ApplicationCredentialVault::open(&root).expect("open durable cleanup vault");
+    let vault_probe = vault.clone();
+    let supervisor = McpSupervisor::new(
+        DesktopSessionStore::in_memory().expect("durable cleanup session store"),
+        root.clone(),
+        Some(vault),
+        limits(),
+    )
+    .expect("durable cleanup supervisor");
+    let active_scope = scope();
+    let endpoint = "http://127.0.0.1:12345/mcp".to_string();
+    let credential_input = |server_name: &str| McpCredentialProvisionInput {
+        server_name: server_name.to_string(),
+        transport: McpTransport::Http,
+        command: vec![endpoint.clone()],
+        cwd: None,
+        kind: McpCredentialKind::Header,
+        name: "authorization".to_string(),
+        mutation_idempotency_key: None,
+    };
+    let server_input = |server_name: &str, reference: Option<&str>| McpServerDefinitionInput {
+        name: server_name.to_string(),
+        description: None,
+        transport: McpTransport::Http,
+        command: vec![endpoint.clone()],
+        cwd: None,
+        vault_env_refs: reference.map_or_else(BTreeMap::new, |reference| {
+            BTreeMap::from([("authorization".to_string(), reference.to_string())])
+        }),
+        enabled: false,
+    };
+
+    let update_reference = remote_credential_reference(
+        &active_scope,
+        "cleanup-update",
+        McpTransport::Http,
+        &endpoint,
+        "authorization",
+    )
+    .expect("derive update cleanup reference");
+    supervisor
+        .provision_credential(
+            &active_scope,
+            &credential_input("cleanup-update"),
+            "Bearer update-old",
+            "provision-cleanup-update",
+        )
+        .expect("provision update cleanup credential");
+    let update_server = supervisor
+        .create_server(
+            &active_scope,
+            server_input("cleanup-update", Some(&update_reference)),
+            "create-cleanup-update",
+        )
+        .expect("create update cleanup server");
+    supervisor
+        .runtime(&update_server)
+        .expect("seed update cleanup runtime");
+    let detached_vault = supervisor
+        .credential_vault
+        .lock()
+        .expect("lock update cleanup vault")
+        .take()
+        .expect("detach update cleanup vault");
+    let updated = supervisor
+        .update_server(
+            &active_scope,
+            &update_server.id,
+            server_input("cleanup-update", None),
+            1,
+            "remove-cleanup-update-credential",
+        )
+        .expect("update commits while credential vault is unavailable");
+    assert_eq!(updated.revision, 2);
+    assert!(updated.vault_env_refs.is_empty());
+    assert!(!supervisor
+        .runtimes
+        .lock()
+        .expect("read update cleanup runtimes")
+        .contains_key(&update_server.id));
+    assert_eq!(
+        supervisor
+            .store
+            .pending_credential_cleanup_count()
+            .expect("pending update cleanup count"),
+        1
+    );
+    assert_eq!(
+        vault_probe
+            .get(&update_reference)
+            .expect("read deferred update credential")
+            .as_deref(),
+        Some("Bearer update-old")
+    );
+    supervisor
+        .install_credential_vault(detached_vault)
+        .expect("restore update cleanup vault");
+    supervisor
+        .prepare_startup_recovery()
+        .expect("recover deferred update cleanup");
+    assert_eq!(
+        supervisor
+            .store
+            .pending_credential_cleanup_count()
+            .expect("recovered update cleanup count"),
+        0
+    );
+    assert_eq!(
+        vault_probe
+            .get(&update_reference)
+            .expect("read recovered update credential"),
+        None
+    );
+
+    let delete_reference = remote_credential_reference(
+        &active_scope,
+        "cleanup-delete",
+        McpTransport::Http,
+        &endpoint,
+        "authorization",
+    )
+    .expect("derive delete cleanup reference");
+    supervisor
+        .provision_credential(
+            &active_scope,
+            &credential_input("cleanup-delete"),
+            "Bearer delete-old",
+            "provision-cleanup-delete-old",
+        )
+        .expect("provision delete cleanup credential");
+    let delete_server = supervisor
+        .create_server(
+            &active_scope,
+            server_input("cleanup-delete", Some(&delete_reference)),
+            "create-cleanup-delete-old",
+        )
+        .expect("create delete cleanup server");
+    supervisor
+        .runtime(&delete_server)
+        .expect("seed delete cleanup runtime");
+    let detached_vault = supervisor
+        .credential_vault
+        .lock()
+        .expect("lock delete cleanup vault")
+        .take()
+        .expect("detach delete cleanup vault");
+    supervisor
+        .delete_server(&active_scope, &delete_server.id, 1, "delete-cleanup-server")
+        .expect("delete commits while credential vault is unavailable");
+    assert!(!supervisor
+        .runtimes
+        .lock()
+        .expect("read delete cleanup runtimes")
+        .contains_key(&delete_server.id));
+    assert_eq!(
+        supervisor
+            .store
+            .pending_credential_cleanup_count()
+            .expect("pending delete cleanup count"),
+        1
+    );
+    supervisor
+        .install_credential_vault(detached_vault)
+        .expect("restore delete cleanup vault");
+    supervisor
+        .provision_credential(
+            &active_scope,
+            &credential_input("cleanup-delete"),
+            "Bearer delete-new",
+            "provision-cleanup-delete-new",
+        )
+        .expect("reuse deleted credential reference");
+    assert_eq!(
+        supervisor
+            .store
+            .pending_credential_cleanup_count()
+            .expect("guarded reused cleanup count"),
+        1
+    );
+    supervisor
+        .prepare_startup_recovery()
+        .expect("run cleanup recovery after reference reuse");
+    assert_eq!(
+        supervisor
+            .store
+            .pending_credential_cleanup_count()
+            .expect("completed reused cleanup count"),
+        0
+    );
+    assert_eq!(
+        vault_probe
+            .get(&delete_reference)
+            .expect("read reused delete credential")
+            .as_deref(),
+        Some("Bearer delete-new")
+    );
+    fs::remove_dir_all(root).expect("remove durable credential cleanup root");
 }
 
 #[test]

@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{extract::State, http::HeaderMap, Json};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -10,11 +11,19 @@ use super::{
     contracts::{PlanDispatchRequest, ProviderMethod, ProviderWebhookRequest},
     ensure_workspace_scope, not_found,
     registry::ensure_agent_available,
-    store_error, BridgeResult, RequestClaim, TokenKind, WorkspaceCoreAuthority,
+    store_error, unavailable, workspace_policy, BridgeResult, RequestClaim, TokenKind,
+    WorkspaceCoreAuthority,
 };
 use crate::local_runtime::{
-    now_iso, session_store::DesktopWorkspaceCoreTerminalCallback, ConversationCapabilityMode,
-    ConversationRunMode, LocalConversation, LocalRuntimeState,
+    authority_store::{is_recovered_unstarted_run, DesktopRun, DesktopRunStatus},
+    now_iso, routing_targets_for_role,
+    session_store::DesktopWorkspaceCoreTerminalCallback,
+    workspace_task_run::{
+        ProjectWorkspaceTaskRunError, ProjectWorkspaceTaskRunInput, ProjectWorkspaceTaskRunOutcome,
+    },
+    workspace_terminal_recovery::RecoveredWorkspaceTaskTerminal,
+    ConversationCapabilityMode, ConversationRunMode, LlmWorkloadRole, LocalConversation,
+    LocalRunControl, LocalRuntimeState,
 };
 
 const WORKSPACE_PROVIDER_ID: &str = "memstack-workspace-agent-runtime";
@@ -128,6 +137,9 @@ async fn send(
         &request.extensions.project_id,
         &request.to_bot.provider_bot_ref,
     )?;
+    if request.extensions.task_id.is_some() {
+        return send_workspace_task(state, authority, request).await;
+    }
     ensure_conversation(
         &state,
         &request.extensions.conversation_id,
@@ -144,9 +156,125 @@ async fn send(
     }
     let mut events = state.events.subscribe();
     tokio::spawn(async move {
-        drive_send(state, authority, request, message, &mut events).await;
+        drive_send(state, authority, request, message, None, None, &mut events).await;
     });
     Ok(Json(response))
+}
+
+async fn send_workspace_task(
+    state: Arc<LocalRuntimeState>,
+    authority: Arc<WorkspaceCoreAuthority>,
+    request: ProviderWebhookRequest,
+) -> BridgeResult {
+    let message = message_text(request.message.as_ref())?;
+    let task_id = required_task_extension(request.extensions.task_id.as_deref(), "task_id")?;
+    let attempt_id =
+        required_task_extension(request.extensions.attempt_id.as_deref(), "attempt_id")?;
+    let workspace_agent_binding_id = required_task_extension(
+        request.extensions.workspace_agent_binding_id.as_deref(),
+        "workspace_agent_binding_id",
+    )?;
+    let delivery_request_id = required_task_extension(
+        request.extensions.delivery_request_id.as_deref(),
+        "delivery_request_id",
+    )?;
+    if delivery_request_id != request.id {
+        return Err(bad_request(
+            "Workspace Task delivery_request_id must match the Provider request id",
+        ));
+    }
+    let policy = workspace_policy(
+        &state,
+        &request.extensions.tenant_id,
+        &request.extensions.project_id,
+        &request.extensions.workspace_id,
+    )
+    .await?;
+    let llm_route = routing_targets_for_role(&policy, LlmWorkloadRole::Coding)
+        .map_err(|_| unavailable("Workspace Task LLM routing policy is invalid"))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| unavailable("Workspace Task LLM routing policy is unconfigured"))?;
+    #[cfg(test)]
+    if state
+        .mock_llm_enabled
+        .load(std::sync::atomic::Ordering::Acquire)
+        == 0
+    {
+        state
+            .validate_conversation_llm_route(&request.extensions.tenant_id, &llm_route)
+            .map_err(|_| unavailable("Workspace Task LLM route is unavailable"))?;
+    }
+    #[cfg(not(test))]
+    state
+        .validate_conversation_llm_route(&request.extensions.tenant_id, &llm_route)
+        .map_err(|_| unavailable("Workspace Task LLM route is unavailable"))?;
+    let request_payload = serde_json::to_value(&request)
+        .map_err(|_| bad_request("Workspace Task Provider request cannot be encoded"))?;
+    let request_hash = provider_request_hash(&request)?;
+    let outcome = state
+        .session_store
+        .project_workspace_task_run(ProjectWorkspaceTaskRunInput {
+            request_id: request.id.clone(),
+            request_hash,
+            request_payload,
+            tenant_id: request.extensions.tenant_id.clone(),
+            project_id: request.extensions.project_id.clone(),
+            workspace_id: request.extensions.workspace_id.clone(),
+            user_id: request.extensions.user_id.clone(),
+            task_id: task_id.to_string(),
+            attempt_id: attempt_id.to_string(),
+            plan_id: request.extensions.plan_id.clone(),
+            plan_node_id: request.extensions.plan_node_id.clone(),
+            workspace_agent_binding_id: workspace_agent_binding_id.to_string(),
+            agent_id: request.to_bot.provider_bot_ref.clone(),
+            conversation_id: request.extensions.conversation_id.clone(),
+            message: message.clone(),
+            llm_route,
+            now: now_iso(),
+        })
+        .map_err(workspace_task_projection_error)?;
+    launch_workspace_task_run(&state, authority, request, message, &outcome)?;
+    Ok(Json(outcome.response))
+}
+
+fn launch_workspace_task_run(
+    state: &Arc<LocalRuntimeState>,
+    authority: Arc<WorkspaceCoreAuthority>,
+    request: ProviderWebhookRequest,
+    message: String,
+    outcome: &ProjectWorkspaceTaskRunOutcome,
+) -> Result<bool, super::BridgeError> {
+    let run = &outcome.run;
+    let launchable = run.status == DesktopRunStatus::Queued || is_recovered_unstarted_run(run);
+    if !launchable {
+        return Ok(false);
+    }
+    if state.control_for_run(run).is_some() {
+        return Ok(false);
+    }
+    let Some(control) = state.claim_agent_run(&run.conversation_id, Some(&run.id)) else {
+        return Err(conflict(
+            "Workspace Task conversation already has another active run",
+        ));
+    };
+    state.publish_run_status(run);
+    let mut events = state.events.subscribe();
+    let runtime = Arc::clone(state);
+    let run = run.clone();
+    tokio::spawn(async move {
+        drive_send(
+            runtime,
+            authority,
+            request,
+            message,
+            Some(run),
+            Some(control),
+            &mut events,
+        )
+        .await;
+    });
+    Ok(true)
 }
 
 fn inject(state: &LocalRuntimeState, request: &ProviderWebhookRequest) -> BridgeResult {
@@ -255,6 +383,8 @@ async fn drive_send(
     authority: Arc<WorkspaceCoreAuthority>,
     request: ProviderWebhookRequest,
     message: String,
+    authoritative_run: Option<DesktopRun>,
+    claimed_control: Option<Arc<LocalRunControl>>,
     events: &mut broadcast::Receiver<Value>,
 ) {
     let conversation_id = request.extensions.conversation_id.clone();
@@ -266,6 +396,7 @@ async fn drive_send(
         .bcs_message_id
         .clone()
         .unwrap_or_else(|| request.id.clone());
+    let authoritative_run_id = authoritative_run.as_ref().map(|run| run.id.clone());
     let mut execution = tokio::spawn(async move {
         runtime
             .run_agent_message_for_role(
@@ -274,8 +405,8 @@ async fn drive_send(
                 message,
                 message_id,
                 None,
-                None,
-                None,
+                authoritative_run_id,
+                claimed_control,
             )
             .await;
     });
@@ -396,22 +527,16 @@ async fn publish_event(
             "content": [{ "type": "text", "text": text }]
         })
     });
-    let payload = json!({
-        "run_id": request.id,
-        "seq": sequence,
-        "event": "chat",
-        "message": { "text": text },
-        "payload": {
-            "run_id": request.id,
-            "bcs_group_id": request.bcn_group_id,
-            "state": state,
-            "message": message,
-            "delta_text": (state == "delta").then_some(text.clone()),
-            "errorMessage": (state == "error").then_some(text.clone()),
-            "extensions": request.extensions.callback_value()
-        }
-    });
+    let sequence = if terminal && request.extensions.task_id.is_some() {
+        event_cursor(item).ok_or_else(|| {
+            "Workspace Task terminal timeline item is missing its durable sequence".to_string()
+        })?
+    } else {
+        sequence
+    };
+    let provider_event = provider_event(request, state, sequence, &text, message);
     if !terminal {
+        let payload = provider_callback_payload(request, sequence, &text, provider_event);
         let status =
             send_callback_once(authority, &payload, &request.to_bot.provider_bot_ref).await?;
         return if (200..300).contains(&status) {
@@ -420,25 +545,108 @@ async fn publish_event(
             Err(format!("Workspace Core callback returned status {status}"))
         };
     }
-    let callback = DesktopWorkspaceCoreTerminalCallback {
-        id: Uuid::new_v5(
-            &Uuid::NAMESPACE_URL,
-            format!("memstack-workspace-terminal:{}:{sequence}", request.id).as_bytes(),
-        )
-        .to_string(),
-        run_id: request.id.clone(),
-        sequence,
-        provider_bot_ref: request.to_bot.provider_bot_ref.clone(),
-        payload,
-        created_at: now_iso(),
-        attempt_count: 0,
-        last_attempt_at: None,
-        last_error: None,
-    };
+    let callback = terminal_callback(request, item, state, sequence, &text, provider_event)?;
     runtime
         .session_store
         .enqueue_workspace_core_terminal_callback(&callback)?;
     deliver_terminal_callback(runtime, authority, &callback).await
+}
+
+fn provider_event(
+    request: &ProviderWebhookRequest,
+    state: &str,
+    sequence: u64,
+    text: &str,
+    message: Option<Value>,
+) -> Value {
+    json!({
+        "run_id": request.id,
+        "bcs_group_id": request.bcn_group_id,
+        "seq": sequence,
+        "state": state,
+        "message": message,
+        "delta_text": (state == "delta").then_some(text),
+        "errorMessage": (state == "error").then_some(text),
+        "extensions": request.extensions.callback_value()
+    })
+}
+
+fn provider_callback_payload(
+    request: &ProviderWebhookRequest,
+    sequence: u64,
+    text: &str,
+    provider_event: Value,
+) -> Value {
+    json!({
+        "run_id": request.id,
+        "seq": sequence,
+        "event": "chat",
+        "message": { "text": text },
+        "payload": provider_event,
+    })
+}
+
+fn terminal_callback(
+    request: &ProviderWebhookRequest,
+    item: &Value,
+    state: &str,
+    sequence: u64,
+    text: &str,
+    provider_event: Value,
+) -> Result<DesktopWorkspaceCoreTerminalCallback, String> {
+    let terminal_event_id = deterministic_terminal_event_id(&request.id, sequence);
+    let terminal_message_id = deterministic_terminal_message_id(&request.id, sequence);
+    let mut terminal_provider_event = provider_event.clone();
+    let terminal_payload = terminal_provider_event.as_object_mut().ok_or_else(|| {
+        "Workspace Task terminal Provider event must be a JSON object".to_string()
+    })?;
+    terminal_payload.insert(
+        "terminal_message_id".to_string(),
+        json!(terminal_message_id),
+    );
+    terminal_payload.insert("terminal_event_id".to_string(), json!(terminal_event_id));
+    terminal_payload.insert(
+        "terminal_report".to_string(),
+        json!({
+            "provider_state": state,
+            "sequence": sequence,
+            "message_text": text,
+            "provider_event": provider_event,
+        }),
+    );
+    let event_time_us = item
+        .get("event_time_us")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| {
+            "Workspace Task terminal timeline item is missing its durable timestamp".to_string()
+        })?;
+    Ok(DesktopWorkspaceCoreTerminalCallback {
+        id: terminal_event_id,
+        run_id: request.id.clone(),
+        sequence,
+        provider_bot_ref: request.to_bot.provider_bot_ref.clone(),
+        payload: provider_callback_payload(request, sequence, text, terminal_provider_event),
+        created_at: format!("timeline-{event_time_us:020}"),
+        attempt_count: 0,
+        last_attempt_at: None,
+        last_error: None,
+    })
+}
+
+fn deterministic_terminal_event_id(run_id: &str, sequence: u64) -> String {
+    Uuid::new_v5(
+        &Uuid::NAMESPACE_URL,
+        format!("memstack-workspace-terminal:{run_id}:{sequence}").as_bytes(),
+    )
+    .to_string()
+}
+
+fn deterministic_terminal_message_id(run_id: &str, sequence: u64) -> String {
+    Uuid::new_v5(
+        &Uuid::NAMESPACE_URL,
+        format!("memstack-workspace-terminal-message:{run_id}:{sequence}").as_bytes(),
+    )
+    .to_string()
 }
 
 pub(super) async fn replay_pending_terminal_callbacks(
@@ -450,6 +658,7 @@ pub(super) async fn replay_pending_terminal_callbacks(
         .map_err(|_| "Workspace Core authority lock is unavailable".to_string())?
         .clone()
         .ok_or_else(|| "Workspace Core authority is unavailable".to_string())?;
+    rebuild_missing_terminal_callbacks(&state)?;
     let callbacks = state
         .session_store
         .pending_workspace_core_terminal_callbacks(1_000)?;
@@ -475,6 +684,102 @@ pub(super) async fn replay_pending_terminal_callbacks(
     }
 }
 
+fn rebuild_missing_terminal_callbacks(state: &LocalRuntimeState) -> Result<usize, String> {
+    let recoveries = state
+        .session_store
+        .workspace_task_terminals_missing_callbacks()?;
+    let mut rebuilt = 0_usize;
+    for recovery in recoveries {
+        let callback = recovered_terminal_callback(recovery)?;
+        state
+            .session_store
+            .enqueue_workspace_core_terminal_callback(&callback)?;
+        rebuilt = rebuilt.saturating_add(1);
+    }
+    Ok(rebuilt)
+}
+
+fn recovered_terminal_callback(
+    recovery: RecoveredWorkspaceTaskTerminal,
+) -> Result<DesktopWorkspaceCoreTerminalCallback, String> {
+    let request: ProviderWebhookRequest = serde_json::from_value(recovery.request_payload)
+        .map_err(|error| format!("recovered Workspace Task request is invalid: {error}"))?;
+    validate_provider_request(&request)
+        .map_err(|_| "recovered Workspace Task request authority is invalid".to_string())?;
+    if request.id != recovery.run_id
+        || request.extensions.conversation_id != recovery.conversation_id
+    {
+        return Err(
+            "recovered Workspace Task terminal authority conflicts with its run".to_string(),
+        );
+    }
+    let Some((state, true)) = callback_state(&recovery.terminal_item) else {
+        return Err("recovered Workspace Task timeline item is not terminal".to_string());
+    };
+    let sequence = event_cursor(&recovery.terminal_item).ok_or_else(|| {
+        "recovered Workspace Task terminal is missing its durable sequence".to_string()
+    })?;
+    let text = event_text(&recovery.terminal_item, state);
+    let message = (!text.is_empty()).then(|| {
+        json!({
+            "content": [{ "type": "text", "text": text }]
+        })
+    });
+    let provider_event = provider_event(&request, state, sequence, &text, message);
+    terminal_callback(
+        &request,
+        &recovery.terminal_item,
+        state,
+        sequence,
+        &text,
+        provider_event,
+    )
+}
+
+pub(super) async fn resume_recovered_workspace_task_runs(
+    state: Arc<LocalRuntimeState>,
+) -> Result<usize, String> {
+    let authority = state
+        .workspace_core_authority
+        .lock()
+        .map_err(|_| "Workspace Core authority lock is unavailable".to_string())?
+        .clone()
+        .ok_or_else(|| "Workspace Core authority is unavailable".to_string())?;
+    let recovered = state.session_store.recovered_workspace_task_runs()?;
+    let mut launched = 0_usize;
+    for projection in recovered {
+        let request: ProviderWebhookRequest = serde_json::from_value(projection.request_payload)
+            .map_err(|error| format!("recovered Workspace Task request is invalid: {error}"))?;
+        validate_provider_request(&request)
+            .map_err(|_| "recovered Workspace Task request authority is invalid".to_string())?;
+        ensure_agent_available(
+            &state,
+            &request.extensions.project_id,
+            &request.to_bot.provider_bot_ref,
+        )
+        .map_err(|_| "recovered Workspace Task Agent is unavailable".to_string())?;
+        if request.id != projection.run.id
+            || request.extensions.conversation_id != projection.run.conversation_id
+            || message_text(request.message.as_ref())
+                .map_err(|_| "recovered Workspace Task message is invalid".to_string())?
+                != projection.run.request_message
+        {
+            return Err("recovered Workspace Task authority conflicts with its run".to_string());
+        }
+        let message = projection.run.request_message.clone();
+        let outcome = ProjectWorkspaceTaskRunOutcome {
+            run: projection.run,
+            response: json!({"ok": true, "provider_run_id": request.id}),
+        };
+        if launch_workspace_task_run(&state, Arc::clone(&authority), request, message, &outcome)
+            .map_err(|_| "recovered Workspace Task launch is unavailable".to_string())?
+        {
+            launched = launched.saturating_add(1);
+        }
+    }
+    Ok(launched)
+}
+
 async fn deliver_terminal_callback(
     runtime: &LocalRuntimeState,
     authority: &WorkspaceCoreAuthority,
@@ -482,26 +787,12 @@ async fn deliver_terminal_callback(
 ) -> Result<(), String> {
     const ATTEMPTS: usize = 3;
     for attempt in 0..ATTEMPTS {
-        let result =
-            send_callback_once(authority, &callback.payload, &callback.provider_bot_ref).await;
+        let result = deliver_terminal_attempt(authority, callback).await;
         match result {
-            Ok(status) if (200..300).contains(&status) || status == 410 => {
+            Ok(()) => {
                 return runtime
                     .session_store
                     .mark_workspace_core_terminal_callback_delivered(&callback.id, &now_iso());
-            }
-            Ok(status) => {
-                let error = format!("Workspace Core callback returned status {status}");
-                runtime
-                    .session_store
-                    .record_workspace_core_terminal_callback_failure(
-                        &callback.id,
-                        &now_iso(),
-                        &error,
-                    )?;
-                if attempt + 1 == ATTEMPTS {
-                    return Err(error);
-                }
             }
             Err(error) => {
                 runtime
@@ -520,6 +811,179 @@ async fn deliver_terminal_callback(
         tokio::time::sleep(Duration::from_millis(250_u64.saturating_mul(multiplier))).await;
     }
     Err("Workspace Core callback retry budget exhausted".to_string())
+}
+
+async fn deliver_terminal_attempt(
+    authority: &WorkspaceCoreAuthority,
+    callback: &DesktopWorkspaceCoreTerminalCallback,
+) -> Result<(), String> {
+    let Some(proof) = terminal_callback_proof(callback)? else {
+        let status =
+            send_callback_once(authority, &callback.payload, &callback.provider_bot_ref).await?;
+        return successful_status("Provider callback", status);
+    };
+    let terminal_status = send_runtime_terminal_once(authority, &proof).await?;
+    successful_status("Runtime terminal", terminal_status)?;
+    let callback_status =
+        send_callback_once(authority, &callback.payload, &callback.provider_bot_ref).await?;
+    successful_status("Provider callback", callback_status)?;
+    let acknowledgement_status = send_callback_ack_once(authority, &proof).await?;
+    successful_status("Runtime callback acknowledgement", acknowledgement_status)
+}
+
+struct TerminalCallbackProof {
+    correlation_id: String,
+    tenant_id: String,
+    project_id: String,
+    workspace_id: String,
+    execution_status: &'static str,
+    terminal_message_id: String,
+    terminal_event_id: String,
+    report: Value,
+}
+
+fn terminal_callback_proof(
+    callback: &DesktopWorkspaceCoreTerminalCallback,
+) -> Result<Option<TerminalCallbackProof>, String> {
+    let payload = callback
+        .payload
+        .get("payload")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Workspace Core terminal callback payload is invalid".to_string())?;
+    let extensions = payload
+        .get("extensions")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Workspace Core terminal callback extensions are invalid".to_string())?;
+    if extensions.get("task_id").and_then(Value::as_str).is_none() {
+        return Ok(None);
+    }
+    let required = |object: &serde_json::Map<String, Value>, field: &str| {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| format!("Workspace Task terminal callback is missing {field}"))
+    };
+    let correlation_id = required(extensions, "delivery_request_id")?;
+    let tenant_id = required(extensions, "tenant_id")?;
+    let project_id = required(extensions, "project_id")?;
+    let workspace_id = required(extensions, "workspace_id")?;
+    let provider_state = required(payload, "state")?;
+    let execution_status = match provider_state.as_str() {
+        "final" => "complete",
+        "error" => "error",
+        "aborted" => "aborted",
+        _ => return Err("Workspace Task terminal callback state is invalid".to_string()),
+    };
+    let terminal_message_id = required(payload, "terminal_message_id")?;
+    let terminal_event_id = required(payload, "terminal_event_id")?;
+    let report = payload
+        .get("terminal_report")
+        .cloned()
+        .filter(Value::is_object)
+        .ok_or_else(|| "Workspace Task terminal callback report is invalid".to_string())?;
+    let sequence = payload
+        .get("seq")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "Workspace Task terminal callback sequence is invalid".to_string())?;
+    let message_text = callback
+        .payload
+        .pointer("/message/text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Workspace Task terminal callback message is invalid".to_string())?;
+    let mut provider_event = Value::Object(payload.clone());
+    let provider_event_object = provider_event
+        .as_object_mut()
+        .expect("cloned Provider event object");
+    provider_event_object.remove("terminal_message_id");
+    provider_event_object.remove("terminal_event_id");
+    provider_event_object.remove("terminal_report");
+    let expected_report = json!({
+        "provider_state": provider_state,
+        "sequence": sequence,
+        "message_text": message_text,
+        "provider_event": provider_event,
+    });
+    if correlation_id != callback.run_id
+        || callback.payload["run_id"].as_str() != Some(callback.run_id.as_str())
+        || callback.payload["seq"].as_u64() != Some(callback.sequence)
+        || sequence != callback.sequence
+        || payload.get("run_id").and_then(Value::as_str) != Some(callback.run_id.as_str())
+        || terminal_event_id != callback.id
+        || terminal_event_id != deterministic_terminal_event_id(&callback.run_id, callback.sequence)
+        || terminal_message_id
+            != deterministic_terminal_message_id(&callback.run_id, callback.sequence)
+        || report != expected_report
+    {
+        return Err("Workspace Task terminal callback proof is inconsistent".to_string());
+    }
+    Ok(Some(TerminalCallbackProof {
+        correlation_id,
+        tenant_id,
+        project_id,
+        workspace_id,
+        execution_status,
+        terminal_message_id,
+        terminal_event_id,
+        report,
+    }))
+}
+
+async fn send_runtime_terminal_once(
+    authority: &WorkspaceCoreAuthority,
+    proof: &TerminalCallbackProof,
+) -> Result<u16, String> {
+    authority
+        .client
+        .post(format!(
+            "{}/internal/v1/runtime-correlations/{}/terminal",
+            authority.core_api_base_url, proof.correlation_id
+        ))
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-memstack-tenant-id", proof.tenant_id.as_str())
+        .json(&json!({
+            "project_id": proof.project_id,
+            "workspace_id": proof.workspace_id,
+            "execution_status": proof.execution_status,
+            "terminal_message_id": proof.terminal_message_id,
+            "terminal_event_id": proof.terminal_event_id,
+            "report": proof.report,
+        }))
+        .send()
+        .await
+        .map(|response| response.status().as_u16())
+        .map_err(|error| format!("Workspace Core Runtime terminal failed: {error}"))
+}
+
+async fn send_callback_ack_once(
+    authority: &WorkspaceCoreAuthority,
+    proof: &TerminalCallbackProof,
+) -> Result<u16, String> {
+    authority
+        .client
+        .post(format!(
+            "{}/internal/v1/runtime-correlations/{}/callback-ack",
+            authority.core_api_base_url, proof.correlation_id
+        ))
+        .bearer_auth(authority.service_token.as_str())
+        .header("x-memstack-tenant-id", proof.tenant_id.as_str())
+        .json(&json!({
+            "project_id": proof.project_id,
+            "workspace_id": proof.workspace_id,
+        }))
+        .send()
+        .await
+        .map(|response| response.status().as_u16())
+        .map_err(|error| format!("Workspace Core callback acknowledgement failed: {error}"))
+}
+
+fn successful_status(stage: &str, status: u16) -> Result<(), String> {
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(format!("Workspace Core {stage} returned status {status}"))
+    }
 }
 
 async fn send_callback_once(
@@ -566,7 +1030,74 @@ fn validate_provider_request(request: &ProviderWebhookRequest) -> Result<(), sup
             return Err(bad_request("Provider scope is invalid"));
         }
     }
+    if request.extensions.task_id.is_some() {
+        for value in [
+            request.extensions.task_id.as_deref(),
+            request.extensions.attempt_id.as_deref(),
+            request.extensions.workspace_agent_binding_id.as_deref(),
+            request.extensions.delivery_request_id.as_deref(),
+        ] {
+            if value.map_or(true, |value| !identifier(value, 512)) {
+                return Err(bad_request("Workspace Task Provider authority is invalid"));
+            }
+        }
+        for value in [
+            request.extensions.plan_id.as_deref(),
+            request.extensions.plan_node_id.as_deref(),
+        ] {
+            if value.is_some_and(|value| !identifier(value, 512)) {
+                return Err(bad_request(
+                    "Workspace Task Provider association is invalid",
+                ));
+            }
+        }
+        if request.extensions.delivery_request_id.as_deref() != Some(request.id.as_str()) {
+            return Err(bad_request(
+                "Workspace Task delivery_request_id must match the Provider request id",
+            ));
+        }
+    }
     Ok(())
+}
+
+fn required_task_extension<'a>(
+    value: Option<&'a str>,
+    field: &str,
+) -> Result<&'a str, super::BridgeError> {
+    value
+        .filter(|value| identifier(value, 512))
+        .ok_or_else(|| bad_request(&format!("Workspace Task {field} is required")))
+}
+
+fn provider_request_hash(request: &ProviderWebhookRequest) -> Result<String, super::BridgeError> {
+    let encoded = serde_json::to_vec(request)
+        .map_err(|_| bad_request("Workspace Core request cannot be encoded"))?;
+    Ok(Sha256::digest(encoded)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn workspace_task_projection_error(error: ProjectWorkspaceTaskRunError) -> super::BridgeError {
+    match error {
+        ProjectWorkspaceTaskRunError::PayloadConflict => {
+            conflict("Workspace Core request id is already bound to another payload")
+        }
+        ProjectWorkspaceTaskRunError::AuthorityConflict => {
+            conflict("Workspace Task execution authority conflicts with persisted state")
+        }
+        ProjectWorkspaceTaskRunError::InvalidRequest => {
+            bad_request("Workspace Task execution request is invalid")
+        }
+        ProjectWorkspaceTaskRunError::AuthorityMissing => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "detail": "Workspace Task execution authority is incomplete",
+                "reason_code": "workspace_task_authority_incomplete",
+            })),
+        ),
+        ProjectWorkspaceTaskRunError::Storage(error) => store_error(error),
+    }
 }
 
 fn validate_plan_dispatch(request: &PlanDispatchRequest) -> Result<(), super::BridgeError> {

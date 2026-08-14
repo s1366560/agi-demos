@@ -81,6 +81,7 @@ pub(crate) mod browser_bridge;
 mod browser_run_tool_host;
 mod changes;
 mod composer_context;
+mod conversation_llm_route;
 mod execution_profile;
 mod execution_selection;
 mod fan_out_tool_host;
@@ -96,6 +97,7 @@ mod mcp_supervisor;
 mod mcp_supervisor_tests;
 mod parity_routes;
 mod provider_credentials;
+mod provider_management;
 mod provider_probe;
 mod provider_usage_store;
 mod resource_registry;
@@ -104,10 +106,15 @@ mod search_projection;
 mod session_projection;
 mod session_store;
 mod steering;
+mod subagent_agent_tool_host;
+mod subagent_runtime;
+mod subagent_scope;
 mod task_session;
 mod timeline_presentation;
 mod tool_authority;
 mod workspace_core_bridge;
+mod workspace_task_run;
+mod workspace_terminal_recovery;
 mod worktree;
 
 const RECOVERED_CHECKPOINT_AUTHORITY_ERROR: &str =
@@ -135,18 +142,24 @@ use authority_store::{
 use authorized_tool_host::AuthorizedRunToolHost;
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
+use conversation_llm_route::{normalized_conversation_llm_route, workload_role_for_capability};
 use mcp_supervisor::{McpSupervisor, SupervisorLimits};
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
     provider_credential_binding_digest, ProviderCredentialBroker, ProviderCredentialStoreError,
 };
+use provider_management::{create_llm_provider, delete_llm_provider, update_llm_provider};
 use provider_probe::{ProviderProbeOutcome, ProviderProbeRequest, ProviderProbeService};
 use provider_usage_store::ProviderUsageRecord;
-use resource_registry::{ManagedResourceKind, ResourceRegistryError};
+use resource_registry::{
+    ManagedResourceKind, ManagedResourceMutationCommand, ManagedResourceMutationOperation,
+    ResourceRegistryError,
+};
 use session_store::{
     DesktopClientTurnClaimError, DesktopSessionStore, DesktopTimelineCursor, DesktopTimelinePage,
     HitlResponseCommit, HitlResponseCommitError, HitlResponseCommitOutcome,
+    LlmProviderCreateReceiptError,
 };
 use steering::{ChangeReferenceSide, RunInputDelivery, RunInputReference, RunInputStatus};
 use worktree::WorktreeManager;
@@ -268,6 +281,10 @@ impl LocalRuntimeService {
 
     pub(crate) async fn replay_workspace_core_terminal_callbacks(&self) -> Result<usize, String> {
         workspace_core_bridge::replay_pending_terminal_callbacks(Arc::clone(&self.state)).await
+    }
+
+    pub(crate) async fn resume_workspace_task_runs(&self) -> Result<usize, String> {
+        workspace_core_bridge::resume_recovered_workspace_task_runs(Arc::clone(&self.state)).await
     }
 
     pub(crate) fn with_offline_workspace_import_connection<T>(
@@ -988,6 +1005,20 @@ impl LocalRuntimeState {
             };
             provider_values.insert(key.clone(), provider);
             provider_bindings.insert(key, binding);
+        }
+        if let Err(error) =
+            provider_credentials.recover_pending(provider_credential_records.iter().map(
+                |(key, provider_revision, binding_digest)| {
+                    (
+                        key.tenant_id.as_str(),
+                        key.provider_id.as_str(),
+                        *provider_revision,
+                        binding_digest.as_str(),
+                    )
+                },
+            ))
+        {
+            eprintln!("failed to recover pending provider credential cleanup: {error}");
         }
         let mut provider_selections = HashMap::new();
         for (tenant_id, provider_id) in session_store.list_selected_llm_providers()? {
@@ -1977,7 +2008,7 @@ impl LocalRuntimeState {
     }
 
     async fn agent_engine(
-        &self,
+        self: &Arc<Self>,
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
     ) -> Result<ReActEngine, String> {
@@ -1985,7 +2016,7 @@ impl LocalRuntimeState {
     }
 
     async fn agent_engine_for_role(
-        &self,
+        self: &Arc<Self>,
         conversation: &LocalConversation,
         run: Option<&DesktopRun>,
         workload_role: Option<LlmWorkloadRole>,
@@ -2025,10 +2056,10 @@ impl LocalRuntimeState {
                     .map(|dir| dir.join("browser-screenshots")),
             )));
         }
-        let (combined_tool_host, dynamic_metadata): (
-            Arc<dyn ToolHost>,
-            std::collections::BTreeMap<String, tool_authority::ToolMetadata>,
-        ) = if let Some(run) = run {
+        let child_base_tool_hosts = tool_hosts.clone();
+        let mut dynamic_metadata =
+            std::collections::BTreeMap::<String, tool_authority::ToolMetadata>::new();
+        if let Some(run) = run {
             let mcp_host = mcp_agent_tool_host::McpAgentToolHost::new(
                 Arc::clone(&self.mcp_supervisor),
                 mcp_supervisor::McpScope {
@@ -2038,36 +2069,14 @@ impl LocalRuntimeState {
                 run.id.clone(),
                 Some(&profile.allowed_mcp_servers),
             )?;
-            let metadata = mcp_host.authority_metadata_by_name();
+            dynamic_metadata.extend(mcp_host.authority_metadata_by_name());
             tool_hosts.push(Arc::new(mcp_host));
-            (
-                Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts)),
-                metadata,
-            )
-        } else {
-            (
-                Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts)),
-                Default::default(),
-            )
-        };
-        let combined_tool_host: Arc<dyn ToolHost> = Arc::new(
+        }
+        let combined_tool_host: Arc<dyn ToolHost> =
+            Arc::new(fan_out_tool_host::FanOutToolHost::new(tool_hosts));
+        let profiled_tool_host: Arc<dyn ToolHost> = Arc::new(
             execution_profile::ProfiledToolHost::new(combined_tool_host, &profile),
         );
-        let tool_host: Arc<dyn ToolHost> = match conversation.current_mode {
-            ConversationRunMode::Plan => Arc::new(PlanModeToolHost::new(
-                combined_tool_host,
-                self.session_store.clone(),
-                conversation.id.clone(),
-            )),
-            ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
-                combined_tool_host,
-                self.session_store.clone(),
-                run.cloned().ok_or_else(|| {
-                    "build mode requires an authoritative run for tool execution".to_string()
-                })?,
-                dynamic_metadata,
-            )),
-        };
         let policy = if let Some(workspace_id) = conversation.workspace_id.as_deref() {
             #[cfg(test)]
             if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
@@ -2100,20 +2109,19 @@ impl LocalRuntimeState {
         };
         let role = workload_role
             .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
-        let llm: Arc<dyn LlmPort> = match policy.as_ref() {
+        let base_llm: Arc<dyn LlmPort> = match policy.as_ref() {
             Some(policy) => self.llm_for_policy(&conversation.tenant_id, policy, role),
             None => {
                 #[cfg(test)]
                 if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
                     Arc::new(MockLocalLlm)
                 } else {
-                    Arc::new(UnconfiguredLocalLlm)
+                    self.llm_for_unbound_conversation(conversation)
                 }
                 #[cfg(not(test))]
-                Arc::new(UnconfiguredLocalLlm)
+                self.llm_for_unbound_conversation(conversation)
             }
         };
-        let llm: Arc<dyn LlmPort> = Arc::new(execution_profile::ProfiledLlm::new(llm, &profile));
         let max_rounds = policy
             .as_ref()
             .and_then(|policy| {
@@ -2127,6 +2135,42 @@ impl LocalRuntimeState {
                     })
             })
             .unwrap_or(8);
+        let mut profiled_tool_hosts = vec![profiled_tool_host];
+        if conversation.current_mode == ConversationRunMode::Build {
+            let run = run.ok_or_else(|| {
+                "build mode requires an authoritative run for tool execution".to_string()
+            })?;
+            if let Some(subagent_host) = self.subagent_agent_tool_host(
+                conversation,
+                run,
+                &profile,
+                &child_base_tool_hosts,
+                Arc::clone(&base_llm),
+                max_rounds,
+            )? {
+                dynamic_metadata.extend(subagent_host.authority_metadata_by_name());
+                profiled_tool_hosts.push(Arc::new(subagent_host));
+            }
+        }
+        let combined_tool_host: Arc<dyn ToolHost> =
+            Arc::new(fan_out_tool_host::FanOutToolHost::new(profiled_tool_hosts));
+        let tool_host: Arc<dyn ToolHost> = match conversation.current_mode {
+            ConversationRunMode::Plan => Arc::new(PlanModeToolHost::new(
+                combined_tool_host,
+                self.session_store.clone(),
+                conversation.id.clone(),
+            )),
+            ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
+                combined_tool_host,
+                self.session_store.clone(),
+                run.cloned().ok_or_else(|| {
+                    "build mode requires an authoritative run for tool execution".to_string()
+                })?,
+                dynamic_metadata,
+            )),
+        };
+        let llm: Arc<dyn LlmPort> =
+            Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile));
         Ok(
             ReActEngine::new(llm, tool_host, self.checkpoints.clone(), self.clock.clone())
                 .with_max_rounds(max_rounds)
@@ -2167,22 +2211,30 @@ impl LocalRuntimeState {
             .subagent_id
             .as_deref()
             .map(|selected| {
-                self.session_store
+                let resource = self
+                    .session_store
                     .managed_resource(
                         ManagedResourceKind::SubAgent,
                         "tenant",
                         &conversation.tenant_id,
                         selected,
                     )?
-                    .ok_or_else(|| format!("selected Sub Agent was not found: {selected}"))
+                    .ok_or_else(|| format!("selected Sub Agent was not found: {selected}"))?;
+                if !subagent_scope::is_visible_in_project(&resource, &conversation.project_id) {
+                    return Err(format!("selected Sub Agent was not found: {selected}"));
+                }
+                Ok(resource)
             })
             .transpose()?;
-        execution_profile::ExecutionProfile::resolve(
-            agent_id,
-            &agent,
-            skill.as_ref(),
-            subagent.as_ref(),
-        )
+        if let Some(subagent) = subagent.as_ref() {
+            execution_profile::ExecutionProfile::resolve(
+                agent_id,
+                &agent,
+                skill.as_ref(),
+                Some(subagent),
+            )?;
+        }
+        execution_profile::ExecutionProfile::resolve(agent_id, &agent, skill.as_ref(), None)
     }
 
     fn resolve_selected_skill(
@@ -2437,7 +2489,7 @@ impl LocalRuntimeState {
             if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
                 return Ok(Arc::new(MockLocalLlm));
             }
-            return Ok(Arc::new(UnconfiguredLocalLlm));
+            return Ok(self.llm_for_unbound_conversation(conversation));
         };
         self.llm_for_scope(
             &conversation.tenant_id,
@@ -2576,6 +2628,19 @@ impl LocalRuntimeState {
             .and_then(|environment| serde_json::to_value(environment).ok())
             .unwrap_or_else(|| json!({ "kind": "local", "label": "Local runtime" }));
         let workspace_name: Option<String> = None;
+        let llm_route_override = conversation
+            .workspace_id
+            .is_none()
+            .then(|| {
+                self.session_store
+                    .conversation_llm_route(&conversation.id)
+                    .ok()
+                    .flatten()
+            })
+            .flatten();
+        let llm_model_override = llm_route_override
+            .as_ref()
+            .map(|route| route.model_id.as_str());
         json!({
             "id": conversation.id,
             "project_id": conversation.project_id,
@@ -2593,6 +2658,8 @@ impl LocalRuntimeState {
             "agent_config": {
                 "selected_agent_id": selected_agent_id,
                 "capability_mode": conversation.capability_mode,
+                "llm_model_override": llm_model_override,
+                "llm_route_override": llm_route_override,
             },
             "metadata": {
                 "runtime": "local",
@@ -2767,7 +2834,9 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route(
             "/api/v1/llm-providers/:provider_id",
-            patch(update_llm_provider).put(update_llm_provider),
+            patch(update_llm_provider)
+                .put(update_llm_provider)
+                .delete(delete_llm_provider),
         )
         .route(
             "/api/v1/llm-providers/:provider_id/health-check",
@@ -3551,7 +3620,7 @@ struct ManagedResourceListQuery {
     project_id: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct LlmProviderMutation {
     #[serde(default)]
@@ -3574,6 +3643,14 @@ struct LlmProviderMutation {
     is_active: Option<bool>,
     #[serde(default)]
     expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmProviderDeleteAction {
+    expected_revision: u64,
+    #[serde(default)]
+    idempotency_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -4086,46 +4163,6 @@ async fn list_browser_action_audit_entries(
     Ok(Json(json!({ "entries": entries })))
 }
 
-async fn create_llm_provider(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(request): Json<LlmProviderMutation>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    let provider_id = format!("provider-{}", Uuid::new_v4());
-    mutate_llm_provider_blocking(state, authenticated, provider_id, request, true).await
-}
-
-async fn update_llm_provider(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(provider_id): Path<String>,
-    Json(request): Json<LlmProviderMutation>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    if request.expected_revision.is_none() {
-        return Err((
-            StatusCode::PRECONDITION_REQUIRED,
-            Json(json!({ "detail": "expected_revision is required" })),
-        ));
-    }
-    mutate_llm_provider_blocking(state, authenticated, provider_id, request, false).await
-}
-
-async fn mutate_llm_provider_blocking(
-    state: Arc<LocalRuntimeState>,
-    authenticated: AuthenticatedContext,
-    provider_id: String,
-    request: LlmProviderMutation,
-    creating: bool,
-) -> LocalJsonResult {
-    tokio::task::spawn_blocking(move || {
-        mutate_llm_provider(state, authenticated, provider_id, request, creating)
-    })
-    .await
-    .map_err(|_| local_store_error("provider credential storage task failed".to_string()))?
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RuntimeProviderSelectionRequest {
@@ -4197,380 +4234,6 @@ async fn select_llm_provider_runtime(
     )))
 }
 
-fn mutate_llm_provider(
-    state: Arc<LocalRuntimeState>,
-    authenticated: AuthenticatedContext,
-    provider_id: String,
-    request: LlmProviderMutation,
-    creating: bool,
-) -> LocalJsonResult {
-    let tenant_id = &authenticated.workspace.tenant_id;
-    let LlmProviderMutation {
-        name,
-        provider_type,
-        base_url,
-        auth_method,
-        api_key,
-        environment_variable,
-        llm_model,
-        allowed_models,
-        is_active,
-        expected_revision,
-    } = request;
-    // Provider mutations are serialized before reading the current DB revision. This keeps the
-    // versioned credential pre-write aligned with the SQLite compare-and-swap in this process;
-    // the session store's exclusive SQLite ownership provides the cross-process boundary.
-    let mut runtime = state
-        .provider_runtime
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?;
-    let current = state
-        .session_store
-        .managed_resource(
-            ManagedResourceKind::Provider,
-            "tenant",
-            tenant_id,
-            &provider_id,
-        )
-        .map_err(local_store_error)?;
-    if !creating && current.is_none() {
-        return Err(resource_registry_error(ResourceRegistryError::NotFound));
-    }
-    if creating && current.is_some() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "provider id already exists" })),
-        ));
-    }
-    let current_revision = current
-        .as_ref()
-        .and_then(|provider| provider.get("revision"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let previous_credential_binding = current.as_ref().and_then(provider_credential_binding);
-    let mut provider = current.unwrap_or_else(|| {
-        json!({
-            "id": provider_id,
-            "name": "New provider",
-            "provider_type": "openai_compatible",
-            "tenant_id": tenant_id,
-            "is_active": false,
-            "base_url": null,
-            "auth_method": "api_key",
-            "environment_variable": null,
-            "credential_source": "application_vault",
-            "credential_configured": false,
-            "llm_model": null,
-            "allowed_models": [],
-            "secondary_models": [],
-            "health_status": "not_configured",
-            "revision": 0,
-        })
-    });
-    let object = provider
-        .as_object_mut()
-        .ok_or_else(|| local_store_error("managed provider must be an object".to_string()))?;
-    if let Some(name) = normalized_optional(name, "provider name")? {
-        object.insert("name".to_string(), json!(name));
-    }
-    if let Some(provider_type) = normalized_optional(provider_type, "provider type")? {
-        object.insert("provider_type".to_string(), json!(provider_type));
-    }
-    if let Some(base_url) = base_url {
-        let base_url = base_url.trim().trim_end_matches('/').to_string();
-        object.insert(
-            "base_url".to_string(),
-            if base_url.is_empty() {
-                Value::Null
-            } else {
-                json!(base_url)
-            },
-        );
-    }
-    if let Some(auth_method) = normalized_optional(auth_method, "auth method")? {
-        object.insert("auth_method".to_string(), json!(auth_method));
-    }
-    if let Some(model) = llm_model {
-        let model = model.trim().to_string();
-        object.insert(
-            "llm_model".to_string(),
-            if model.is_empty() {
-                Value::Null
-            } else {
-                json!(model)
-            },
-        );
-    }
-    if let Some(models) = allowed_models {
-        object.insert(
-            "allowed_models".to_string(),
-            json!(normalized_model_ids(models)),
-        );
-    }
-    if let Some(is_active) = is_active {
-        object.insert("is_active".to_string(), json!(is_active));
-    }
-    let provider_type = object
-        .get("provider_type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    if !runtime_provider_supported(&provider_type) {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider type" })),
-        ));
-    }
-    let auth_method = object
-        .get("auth_method")
-        .and_then(Value::as_str)
-        .unwrap_or("api_key")
-        .to_string();
-    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider auth method" })),
-        ));
-    }
-    if let Some(base_url) = object.get("base_url").and_then(Value::as_str) {
-        let base_url = normalized_runtime_provider_base_url(&provider_type, base_url)?;
-        object.insert("base_url".to_string(), json!(base_url));
-    }
-    let base_url = object
-        .get("base_url")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    validate_provider_auth_fields(
-        &auth_method,
-        api_key.is_some(),
-        environment_variable.is_some(),
-    )?;
-    if auth_method == "environment" {
-        let base_url = base_url
-            .as_deref()
-            .ok_or_else(|| provider_probe_request_error("provider base URL is required"))?;
-        let environment_variable = match environment_variable {
-            Some(value) => {
-                normalized_provider_environment_variable(&provider_type, base_url, &value)?
-            }
-            None => object
-                .get("environment_variable")
-                .and_then(Value::as_str)
-                .map(|value| {
-                    normalized_provider_environment_variable(&provider_type, base_url, value)
-                })
-                .transpose()?
-                .ok_or_else(|| {
-                    provider_probe_request_error("environment variable name is required")
-                })?,
-        };
-        object.insert(
-            "environment_variable".to_string(),
-            json!(environment_variable),
-        );
-    } else {
-        object.remove("environment_variable");
-    }
-    object.insert(
-        "credential_source".to_string(),
-        json!(match auth_method.as_str() {
-            "none" => "none",
-            "environment" => "environment",
-            _ => "application_vault",
-        }),
-    );
-    object.insert("credential_configured".to_string(), json!(false));
-    object.insert("health_status".to_string(), json!("not_checked"));
-
-    let is_active = object.get("is_active").and_then(Value::as_bool) == Some(true);
-    let expected_revision = if creating { Some(0) } else { expected_revision };
-    if expected_revision != Some(current_revision) {
-        return Err(resource_registry_error(
-            ResourceRegistryError::RevisionConflict {
-                expected: expected_revision.unwrap_or(0),
-                actual: current_revision,
-            },
-        ));
-    }
-    let next_revision = if creating {
-        0
-    } else {
-        current_revision.saturating_add(1)
-    };
-    let next_credential_binding = provider_credential_binding(&provider);
-    let key = ProviderRuntimeKey {
-        tenant_id: tenant_id.clone(),
-        provider_id: provider_id.clone(),
-    };
-    let previous_binding = runtime.bindings.get(&key).cloned();
-    let previous_credential = if let Some(credential) = runtime.credentials.get(&key).cloned() {
-        Some(credential)
-    } else if runtime.configured_credentials.contains(&key) {
-        let binding_digest = previous_credential_binding.as_deref().ok_or_else(|| {
-            provider_credential_store_error(ProviderCredentialStoreError::InvalidRecord)
-        })?;
-        let credential = state
-            .provider_credentials
-            .load(
-                &key.tenant_id,
-                &key.provider_id,
-                current_revision,
-                binding_digest,
-            )
-            .map_err(provider_credential_store_error)?;
-        if credential.is_none() {
-            runtime.configured_credentials.remove(&key);
-        }
-        credential
-    } else {
-        None
-    };
-    let was_selected = runtime
-        .selections
-        .get(tenant_id)
-        .is_some_and(|selected| selected == &provider_id);
-    let submitted_credential = api_key.as_deref().and_then(normalized_runtime_credential);
-    let next_binding = runtime_binding_from_provider(&provider).map(|mut next| {
-        if was_selected {
-            if let Some(previous) = previous_binding
-                .as_ref()
-                .filter(|previous| provider_supports_route_model(&provider, &previous.model))
-            {
-                next.model.clone_from(&previous.model);
-            }
-        }
-        next
-    });
-    let next_credential = if auth_method == "environment" {
-        resolved_environment_credential(&provider)
-    } else if next_credential_binding.is_none() {
-        None
-    } else if submitted_credential.is_some() {
-        submitted_credential
-    } else if previous_credential_binding == next_credential_binding {
-        previous_credential.clone()
-    } else {
-        None
-    };
-    if was_selected
-        && next_binding.is_some()
-        && auth_method == "api_key"
-        && next_credential.is_none()
-    {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({
-                "detail": "replacement credentials are required when changing a selected provider connection"
-            })),
-        ));
-    }
-    if let Some(object) = provider.as_object_mut() {
-        object.insert(
-            "credential_configured".to_string(),
-            json!(auth_method == "none" || next_credential.is_some()),
-        );
-    }
-    let wrote_next_credential = if let (Some(binding_digest), Some(credential)) = (
-        next_credential_binding.as_deref(),
-        next_credential.as_deref(),
-    ) {
-        state
-            .provider_credentials
-            .save(
-                &key.tenant_id,
-                &key.provider_id,
-                next_revision,
-                binding_digest,
-                credential,
-            )
-            .map_err(provider_credential_store_error)?;
-        true
-    } else {
-        false
-    };
-    let stored = match state.session_store.put_managed_resource(
-        ManagedResourceKind::Provider,
-        "tenant",
-        tenant_id,
-        &provider_id,
-        if is_active { "active" } else { "disabled" },
-        expected_revision,
-        provider,
-        Utc::now().timestamp_millis(),
-    ) {
-        Ok(stored) => stored,
-        Err(error) => {
-            if wrote_next_credential {
-                clear_provider_credential(
-                    &state.provider_credentials,
-                    &key,
-                    next_revision,
-                    next_credential_binding.as_deref(),
-                )?;
-            }
-            return Err(resource_registry_error(error));
-        }
-    };
-    if previous_credential.is_some() {
-        let _ = clear_provider_credential(
-            &state.provider_credentials,
-            &key,
-            current_revision,
-            previous_credential_binding.as_deref(),
-        );
-    }
-    runtime.probes.remove(&key);
-    if was_selected && next_binding.is_none() {
-        runtime.selections.remove(tenant_id);
-    }
-    if let Some(binding) = next_binding.clone() {
-        runtime.bindings.insert(key.clone(), binding);
-    } else {
-        runtime.bindings.remove(&key);
-    }
-    if let Some(credential) = next_credential {
-        runtime.configured_credentials.insert(key.clone());
-        if next_binding.is_some() {
-            runtime.credentials.insert(key.clone(), credential);
-        } else {
-            runtime.credentials.remove(&key);
-        }
-    } else {
-        runtime.credentials.remove(&key);
-        runtime.configured_credentials.remove(&key);
-    }
-    let selected = runtime
-        .selections
-        .get(tenant_id)
-        .is_some_and(|selected| selected == &provider_id);
-    let credential_configured = runtime.configured_credentials.contains(&key);
-    Ok(Json(provider_with_runtime_state(
-        stored,
-        selected,
-        next_binding.as_ref(),
-        credential_configured,
-        None,
-    )))
-}
-
-fn clear_provider_credential(
-    broker: &ProviderCredentialBroker,
-    key: &ProviderRuntimeKey,
-    provider_revision: u64,
-    binding_digest: Option<&str>,
-) -> Result<(), (StatusCode, Json<Value>)> {
-    let result = match binding_digest {
-        Some(binding_digest) => broker.clear(
-            &key.tenant_id,
-            &key.provider_id,
-            provider_revision,
-            binding_digest,
-        ),
-        None => Ok(()),
-    };
-    result.map_err(provider_credential_store_error)
-}
-
 fn provider_credential_store_error(
     error: ProviderCredentialStoreError,
 ) -> (StatusCode, Json<Value>) {
@@ -4581,11 +4244,30 @@ fn provider_credential_store_error(
         | ProviderCredentialStoreError::UnsupportedVersion
         | ProviderCredentialStoreError::CorruptRecord => StatusCode::INTERNAL_SERVER_ERROR,
     };
+    let (code, detail) = match error {
+        ProviderCredentialStoreError::Unavailable => (
+            "provider_credential_store_unavailable",
+            "the encrypted application vault is unavailable; check desktop app-data access and retry",
+        ),
+        ProviderCredentialStoreError::InvalidKey
+        | ProviderCredentialStoreError::InvalidRecord => (
+            "provider_credential_store_invalid_record",
+            "the provider credential record is invalid; reconnect the provider credential",
+        ),
+        ProviderCredentialStoreError::UnsupportedVersion => (
+            "provider_credential_store_unsupported_version",
+            "the provider credential record version is unsupported; update the desktop client and reconnect the provider credential",
+        ),
+        ProviderCredentialStoreError::CorruptRecord => (
+            "provider_credential_store_integrity_failure",
+            "the provider credential record failed integrity validation; reconnect the provider credential",
+        ),
+    };
     (
         status,
         Json(json!({
-            "code": "provider_credential_store_unavailable",
-            "detail": "the provider credential could not be saved in the encrypted application vault; check desktop app-data access and retry",
+            "code": code,
+            "detail": detail,
         })),
     )
 }
@@ -5479,15 +5161,6 @@ fn ensure_stored_route_target(target: &LlmRouteTarget) -> Result<(), String> {
     Ok(())
 }
 
-fn workload_role_for_capability(capability: ConversationCapabilityMode) -> LlmWorkloadRole {
-    match capability {
-        ConversationCapabilityMode::Code => LlmWorkloadRole::Coding,
-        ConversationCapabilityMode::Work | ConversationCapabilityMode::Unavailable => {
-            LlmWorkloadRole::Default
-        }
-    }
-}
-
 fn configured_routing_target(
     roles: &LlmRoutingRoles,
     role: LlmWorkloadRole,
@@ -5997,6 +5670,10 @@ struct CreateConversationAgentConfig {
     #[serde(default)]
     capability_mode: ConversationCapabilityMode,
     selected_agent_id: Option<String>,
+    #[serde(default)]
+    llm_model_override: Option<String>,
+    #[serde(default)]
+    llm_route_override: Option<LlmRouteTarget>,
 }
 
 async fn create_conversation(
@@ -6005,6 +5682,16 @@ async fn create_conversation(
     Json(body): Json<CreateConversationBody>,
 ) -> LocalJsonResult {
     ensure_active_project(&authenticated, &body.project_id)?;
+    let llm_route = normalized_conversation_llm_route(
+        body.agent_config.llm_model_override,
+        body.agent_config.llm_route_override,
+    )
+    .map_err(local_bad_request)?;
+    if let Some(route) = llm_route.as_ref() {
+        state
+            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
+            .map_err(local_bad_request)?;
+    }
     let now = now_iso();
     let conversation = LocalConversation {
         id: format!("local-conversation-{}", Uuid::new_v4()),
@@ -6019,7 +5706,7 @@ async fn create_conversation(
     };
     state
         .session_store
-        .insert_conversation(&conversation)
+        .insert_conversation_with_llm_route(&conversation, llm_route.as_ref())
         .map_err(local_store_error)?;
     let initial_selection = execution_selection::ExecutionSelection {
         agent_id: body.agent_config.selected_agent_id,
@@ -6764,7 +6451,10 @@ fn validate_composer_context_authority(
                         )
                         .map_err(local_store_error)?
                         .is_some_and(|resource| {
-                            resource.get("enabled").and_then(Value::as_bool) == Some(true)
+                            subagent_scope::is_visible_in_project(
+                                &resource,
+                                &authenticated.workspace.project_id,
+                            ) && resource.get("enabled").and_then(Value::as_bool) == Some(true)
                                 && resource.get("status").and_then(Value::as_str) == Some("active")
                         })
                 } else {
@@ -6784,18 +6474,32 @@ fn validate_composer_context_authority(
                         })
                 }
             }
-            ComposerContextKind::Skill => state
-                .session_store
-                .managed_resource(
-                    ManagedResourceKind::Skill,
-                    "tenant",
-                    &authenticated.workspace.tenant_id,
-                    &item.resource_id,
-                )
-                .map_err(local_store_error)?
-                .is_some_and(|resource| {
-                    resource.get("status").and_then(Value::as_str) == Some("active")
-                }),
+            ComposerContextKind::Skill => {
+                let tenant_skill = state
+                    .session_store
+                    .managed_resource(
+                        ManagedResourceKind::Skill,
+                        "tenant",
+                        &authenticated.workspace.tenant_id,
+                        &item.resource_id,
+                    )
+                    .map_err(local_store_error)?;
+                let project_skill = state
+                    .session_store
+                    .managed_resource(
+                        ManagedResourceKind::Skill,
+                        "project",
+                        &authenticated.workspace.project_id,
+                        &item.resource_id,
+                    )
+                    .map_err(local_store_error)?;
+                [tenant_skill, project_skill]
+                    .into_iter()
+                    .flatten()
+                    .any(|resource| {
+                        resource.get("status").and_then(Value::as_str) == Some("active")
+                    })
+            }
             ComposerContextKind::Plugin => state
                 .session_store
                 .managed_resource(
@@ -9492,36 +9196,6 @@ impl LocalTimelineObserver {
                 self.state.append_timeline(&self.conversation_id, item);
             }
         }
-        if let Some(subagent) = self.profile.subagent.as_ref() {
-            for (kind, payload) in [
-                (
-                    "subagent_routed",
-                    json!({
-                        "subagent_id": subagent.id,
-                        "subagent_name": subagent.name,
-                        "reason": "explicit_execution_selection",
-                    }),
-                ),
-                (
-                    "subagent_started",
-                    json!({
-                        "subagent_id": subagent.id,
-                        "subagent_name": subagent.name,
-                        "task": self.goal,
-                    }),
-                ),
-            ] {
-                let item = self.state.timeline_item(
-                    kind,
-                    self.conversation_id.clone(),
-                    None,
-                    None,
-                    None,
-                    payload,
-                );
-                self.state.append_timeline(&self.conversation_id, item);
-            }
-        }
     }
 
     fn complete_profile(&self, summary: &str, success: bool) {
@@ -9543,23 +9217,6 @@ impl LocalTimelineObserver {
                     "skill_name": skill.name,
                     "success": success,
                     "summary": summary,
-                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
-                }),
-            );
-            self.state.append_timeline(&self.conversation_id, item);
-        }
-        if let Some(subagent) = self.profile.subagent.as_ref() {
-            let item = self.state.timeline_item(
-                "subagent_completed",
-                self.conversation_id.clone(),
-                None,
-                None,
-                None,
-                json!({
-                    "subagent_id": subagent.id,
-                    "subagent_name": subagent.name,
-                    "summary": summary,
-                    "success": success,
                     "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
                 }),
             );
@@ -9685,23 +9342,6 @@ impl ReActObserver for LocalTimelineObserver {
             );
             self.state.append_timeline(&self.conversation_id, item);
         }
-        if let Some(subagent) = self.profile.subagent.as_ref() {
-            let item = self.state.timeline_item(
-                "subagent_session_update",
-                self.conversation_id.clone(),
-                None,
-                None,
-                None,
-                json!({
-                    "subagent_id": subagent.id,
-                    "subagent_name": subagent.name,
-                    "status_message": "tool_completed",
-                    "tool_name": tool,
-                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
-                }),
-            );
-            self.state.append_timeline(&self.conversation_id, item);
-        }
         if tool == SUBMIT_PLAN_TOOL_NAME {
             let item = self.state.timeline_item(
                 "assistant_message",
@@ -9806,24 +9446,6 @@ impl ReActObserver for LocalTimelineObserver {
                     "error": redacted_error,
                     "step_index": self.tool_calls.load(Ordering::Acquire),
                     "status": "failed",
-                }),
-            );
-            self.state.append_timeline(&self.conversation_id, item);
-        }
-        if let Some(subagent) = self.profile.subagent.as_ref() {
-            let item = self.state.timeline_item(
-                "subagent_session_update",
-                self.conversation_id.clone(),
-                None,
-                None,
-                None,
-                json!({
-                    "subagent_id": subagent.id,
-                    "subagent_name": subagent.name,
-                    "status_message": "tool_failed",
-                    "tool_name": tool,
-                    "error": redacted_error,
-                    "tool_calls_count": self.tool_calls.load(Ordering::Acquire),
                 }),
             );
             self.state.append_timeline(&self.conversation_id, item);
@@ -10155,8 +9777,24 @@ fn generate_capability_token() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agistack_adapters_mem::ScriptedLlm;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    mod conversation_llm_route_tests {
+        use super::*;
+        include!("conversation_llm_route_tests.rs");
+    }
+
+    mod provider_management_tests {
+        use super::*;
+        include!("provider_management_tests.rs");
+    }
+
+    mod subagent_runtime_tests {
+        use super::*;
+        include!("subagent_runtime_tests.rs");
+    }
 
     #[derive(Debug, PartialEq, Eq)]
     struct CheckpointOperationCounts {
@@ -13110,147 +12748,38 @@ mod tests {
             .is_empty());
     }
 
-    #[tokio::test]
-    async fn saved_api_key_probe_uses_the_live_runtime_credential_when_vault_read_is_empty() {
-        let credential = "write-only-provider-session";
-        let root = test_root();
-        let tool_host = LocalToolHost::new(&root).expect("tool host");
-        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
-        let session_store = DesktopSessionStore::in_memory().expect("session store");
-        let provider_credentials = ProviderCredentialBroker::new(
-            Arc::new(WriteOnlyProviderCredentialStore),
-            session_store.installation_id(),
-        )
-        .expect("write-only credential broker");
-        let state = Arc::new(
-            LocalRuntimeState::new_with_provider_credentials(
-                root,
-                tool_host,
-                checkpoints,
-                credential.to_string(),
-                session_store,
-                provider_credentials,
-            )
-            .expect("local runtime state"),
-        );
-        state
-            .session_store
-            .seed_test_session(credential)
-            .expect("authenticated test session");
-        let app = local_router(state);
-
-        let created = app
-            .clone()
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/llm-providers/",
-                credential,
-                json!({
-                    "name": "Custom provider",
-                    "provider_type": "openai_compatible",
-                    "base_url": "https://127.0.0.1:9/v1",
-                    "auth_method": "api_key",
-                    "api_key": "runtime-provider-key",
-                    "llm_model": "custom-model",
-                    "allowed_models": ["custom-model"],
-                    "is_active": true
-                }),
-            ))
-            .await
-            .expect("create provider response");
-        assert_eq!(created.status(), axum::http::StatusCode::OK);
-        let created = response_json(created).await;
-        assert_eq!(created["credential_configured"], true);
-        let provider_id = created["id"].as_str().expect("provider id");
-        let revision = created["revision"].as_u64().expect("provider revision");
-
-        let health = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                &format!("/api/v1/llm-providers/{provider_id}/health-check"),
-                credential,
-                json!({ "expected_revision": revision }),
-            ))
-            .await
-            .expect("provider health response");
-        assert_eq!(health.status(), axum::http::StatusCode::OK);
-        let health = response_json(health).await;
-        assert_eq!(health["probed"], true);
-        assert_ne!(health["status"], "needs_credentials");
-        assert_ne!(health["error_code"], "credential_unavailable");
-        assert_eq!(health["provider"]["credential_configured"], true);
-    }
-
-    #[tokio::test]
-    async fn concurrent_provider_updates_keep_the_winning_revision_and_credential_together() {
-        let state = test_state("concurrent-provider-session");
-        let app = local_router(Arc::clone(&state));
-        let request = |model: &str, api_key: &str| {
-            authenticated_json_request(
-                "PUT",
-                "/api/v1/llm-providers/local-runtime",
-                "concurrent-provider-session",
-                json!({
-                    "provider_type": "openai",
-                    "base_url": "https://api.example.test/v1",
-                    "auth_method": "api_key",
-                    "api_key": api_key,
-                    "llm_model": model,
-                    "is_active": true,
-                    "expected_revision": 0
-                }),
-            )
-        };
-
-        let (first, second) = tokio::join!(
-            app.clone()
-                .oneshot(request("winner-a-model", "winner-a-secret")),
-            app.oneshot(request("winner-b-model", "winner-b-secret")),
-        );
-        let first = first.expect("first provider response");
-        let second = second.expect("second provider response");
-        let (winner, conflict) = match (first.status(), second.status()) {
-            (StatusCode::OK, StatusCode::CONFLICT) => (first, second),
-            (StatusCode::CONFLICT, StatusCode::OK) => (second, first),
-            statuses => panic!("expected one winner and one revision conflict, got {statuses:?}"),
-        };
-        let winner = response_json(winner).await;
-        let conflict = response_json(conflict).await;
-        assert_eq!(winner["revision"], 1);
-        assert!(!winner.to_string().contains("winner-a-secret"));
-        assert!(!winner.to_string().contains("winner-b-secret"));
-        assert!(!conflict.to_string().contains("winner-a-secret"));
-        assert!(!conflict.to_string().contains("winner-b-secret"));
-
-        let expected_credential = match winner["llm_model"].as_str() {
-            Some("winner-a-model") => "winner-a-secret",
-            Some("winner-b-model") => "winner-b-secret",
-            model => panic!("unexpected winning provider model {model:?}"),
-        };
-        let key = ProviderRuntimeKey {
-            tenant_id: "local".to_string(),
-            provider_id: "local-runtime".to_string(),
-        };
-        assert_eq!(
-            state
-                .provider_runtime
-                .lock()
-                .expect("provider runtime")
-                .credentials
-                .get(&key)
-                .map(String::as_str),
-            Some(expected_credential)
-        );
-        let binding_digest =
-            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
-        assert_eq!(
-            state
-                .provider_credentials
-                .load("local", "local-runtime", 1, &binding_digest)
-                .expect("winning provider credential")
-                .as_deref(),
-            Some(expected_credential)
-        );
+    #[test]
+    fn provider_credential_store_errors_have_stable_safe_reason_codes() {
+        let cases = [
+            (
+                ProviderCredentialStoreError::Unavailable,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_credential_store_unavailable",
+            ),
+            (
+                ProviderCredentialStoreError::InvalidRecord,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "provider_credential_store_invalid_record",
+            ),
+            (
+                ProviderCredentialStoreError::UnsupportedVersion,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "provider_credential_store_unsupported_version",
+            ),
+            (
+                ProviderCredentialStoreError::CorruptRecord,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "provider_credential_store_integrity_failure",
+            ),
+        ];
+        for (error, expected_status, expected_code) in cases {
+            let (status, Json(payload)) = provider_credential_store_error(error);
+            assert_eq!(status, expected_status);
+            assert_eq!(payload["code"], expected_code);
+            assert!(payload["detail"].as_str().is_some_and(|detail| {
+                !detail.contains("credential value") && !detail.contains("secret")
+            }));
+        }
     }
 
     #[tokio::test]
@@ -14256,6 +13785,7 @@ mod tests {
                 "uncommitted-crash-window-secret",
             )
             .expect("simulate a credential pre-write before a process crash");
+        let recovered_provider_credentials = provider_credentials.clone();
 
         let store = DesktopSessionStore::open(&store_path).expect("reopen session store");
         let tool_host = LocalToolHost::new(&workspace_root).expect("restored tool host");
@@ -14270,6 +13800,19 @@ mod tests {
                 provider_credentials,
             )
             .expect("restored runtime state"),
+        );
+        assert_eq!(
+            recovered_provider_credentials
+                .load("local", "local-runtime", 2, &binding_digest)
+                .expect("load uncommitted credential after recovery"),
+            None
+        );
+        assert_eq!(
+            recovered_provider_credentials
+                .load("local", "local-runtime", 1, &binding_digest)
+                .expect("load authoritative credential after recovery")
+                .as_deref(),
+            Some("ephemeral-restart-key")
         );
         let service = LocalRuntimeService {
             state: Arc::clone(&state),
@@ -14421,7 +13964,7 @@ mod tests {
     }
 
     #[test]
-    fn session_store_migrates_execution_selection_schema_without_downgrading_future_versions() {
+    fn session_store_migrates_current_schema_without_downgrading_future_versions() {
         let root = test_root();
         std::fs::create_dir_all(&root).expect("create schema test root");
         let old_path = root.join("old.db");
@@ -14438,7 +13981,25 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("migrated schema version");
-        assert_eq!(version, 26);
+        assert_eq!(version, 28);
+        let conversation_llm_route_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_conversation_llm_routes'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("conversation LLM route table count");
+        assert_eq!(conversation_llm_route_table, 1);
+        let provider_create_receipt_table: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'desktop_llm_provider_create_receipts'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("provider create receipt table count");
+        assert_eq!(provider_create_receipt_table, 1);
         let execution_selection_table: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
@@ -14537,13 +14098,13 @@ mod tests {
             let connection =
                 rusqlite::Connection::open(&future_path).expect("open future database");
             connection
-                .execute_batch("PRAGMA user_version = 27;")
+                .execute_batch("PRAGMA user_version = 29;")
                 .expect("mark future schema version");
         }
         let error = DesktopSessionStore::open(&future_path)
             .err()
             .expect("future schema must be rejected");
-        assert!(error.contains("newer than supported schema version 26"));
+        assert!(error.contains("newer than supported schema version 28"));
 
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
@@ -15278,117 +14839,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn explicit_skill_and_subagent_execute_with_structured_lifecycle_evidence() {
-        let state = test_state("execution-profile-secret");
-        let conversation_id = "conversation-execution-profile";
-        seed_plan_conversation(&state, conversation_id);
-        state
-            .session_store
-            .put_managed_resource(
-                ManagedResourceKind::SubAgent,
-                "tenant",
-                "local",
-                "qa-reviewer",
-                "active",
-                None,
-                json!({
-                    "id": "qa-reviewer",
-                    "tenant_id": "local",
-                    "name": "qa-reviewer",
-                    "display_name": "QA Reviewer",
-                    "system_prompt": "Verify the plan using direct evidence.",
-                    "enabled": true,
-                    "status": "active",
-                    "source": "database",
-                    "allowed_tools": ["read", "glob", "grep"],
-                    "allowed_skills": ["code-exploration"],
-                    "allowed_mcp_servers": [],
-                }),
-                Utc::now().timestamp_millis(),
-            )
-            .expect("create QA Sub Agent");
-        let response = local_router(Arc::clone(&state))
-            .oneshot(authenticated_json_request(
-                "POST",
-                &format!("/api/v1/agent/conversations/{conversation_id}/messages"),
-                "execution-profile-secret",
-                json!({
-                    "project_id": "local-project",
-                    "message": "inspect and submit a plan",
-                    "message_id": "execution-profile-message",
-                    "agent_id": "builtin:all-access",
-                    "forced_skill_name": "code-exploration",
-                    "subagent_id": "qa-reviewer",
-                }),
-            ))
-            .await
-            .expect("execution profile response");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let timeline = loop {
-            let timeline = state
-                .session_store
-                .timeline(conversation_id, 100)
-                .expect("execution profile timeline");
-            let active = state
-                .agent_runs
-                .lock()
-                .expect("active agent runs")
-                .contains_key(conversation_id);
-            if !active
-                && timeline
-                    .iter()
-                    .any(|event| event["type"] == "subagent_completed")
-            {
-                break timeline;
-            }
-            tokio::task::yield_now().await;
-        };
-        for event_type in [
-            "skill_matched",
-            "skill_execution_start",
-            "skill_tool_start",
-            "skill_tool_result",
-            "skill_execution_complete",
-            "subagent_routed",
-            "subagent_started",
-            "subagent_session_update",
-            "subagent_completed",
-            "act",
-            "observe",
-            "complete",
-        ] {
-            assert!(
-                timeline.iter().any(|event| event["type"] == event_type),
-                "missing lifecycle event {event_type}"
-            );
-        }
-        assert_eq!(
-            state
-                .session_store
-                .execution_selection(conversation_id)
-                .expect("execution selection")
-                .expect("stored execution selection")
-                .subagent_id
-                .as_deref(),
-            Some("qa-reviewer")
-        );
-        assert!(timeline.iter().any(|event| {
-            event["type"] == "complete"
-                && event["message_id"] == "execution-profile-message"
-                && event["payload"]["success"] == true
-        }));
-        assert_eq!(
-            state
-                .session_store
-                .list_agent_plan_tasks(conversation_id)
-                .expect("submitted plan")
-                .len(),
-            3
-        );
-    }
-
-    #[tokio::test]
     async fn local_timeline_observer_projects_tool_failures_as_terminal_redacted_events() {
         let state = test_state("tool-failure-observer-secret");
         let conversation_id = "conversation-tool-failure-observer";
@@ -15452,60 +14902,11 @@ mod tests {
         assert!(timeline.iter().any(|event| {
             event["type"] == "skill_tool_result" && event["payload"]["status"] == "failed"
         }));
-        assert!(timeline.iter().any(|event| {
-            event["type"] == "subagent_session_update"
-                && event["payload"]["status_message"] == "tool_failed"
+        assert!(!timeline.iter().any(|event| {
+            event["type"]
+                .as_str()
+                .is_some_and(|kind| kind.starts_with("subagent_"))
         }));
-    }
-
-    #[test]
-    fn composer_context_authority_resolves_structured_subagent_slot() {
-        let state = test_state("composer-subagent-secret");
-        let authenticated = state
-            .session_store
-            .validate_session_credential("composer-subagent-secret", Utc::now().timestamp_millis())
-            .expect("validate session credential")
-            .expect("authenticated context");
-        state
-            .session_store
-            .put_managed_resource(
-                ManagedResourceKind::SubAgent,
-                "tenant",
-                "local",
-                "qa-inspector",
-                "active",
-                None,
-                json!({
-                    "id": "qa-inspector",
-                    "tenant_id": "local",
-                    "name": "qa_inspector",
-                    "display_name": "QA Inspector",
-                    "system_prompt": "Inspect the workspace using read-only tools.",
-                    "enabled": true,
-                    "status": "active",
-                    "source": "database",
-                }),
-                Utc::now().timestamp_millis(),
-            )
-            .expect("create QA Sub Agent");
-        let context = [ComposerContextItem {
-            kind: ComposerContextKind::Agent,
-            resource_id: "qa-inspector".to_string(),
-            label: "QA Inspector".to_string(),
-            metadata: Some(json!({
-                "mention_target": false,
-                "execution_slot": "subagent",
-                "execution_subagent_name": "qa_inspector",
-            })),
-        }];
-
-        assert!(validate_composer_context_authority(
-            &state,
-            &authenticated,
-            "local-workspace",
-            &context,
-        )
-        .is_ok());
     }
 
     #[test]

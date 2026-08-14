@@ -1,6 +1,7 @@
 //! Application-encrypted credential storage for local LLM providers.
 
 use std::{
+    collections::BTreeSet,
     fmt,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -12,6 +13,8 @@ use crate::application_vault::{ApplicationCredentialVault, ApplicationVaultError
 
 const PROVIDER_CREDENTIAL_RECORD_VERSION: u16 = 2;
 const APPLICATION_VAULT_KEY_PREFIX: &str = "llm-provider-credential.v2";
+const PROVIDER_CREDENTIAL_CLEANUP_JOURNAL_VERSION: u16 = 1;
+const PROVIDER_CREDENTIAL_CLEANUP_JOURNAL_KEY_PREFIX: &str = "llm-provider-credential-cleanup.v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ProviderCredentialStoreError {
@@ -46,6 +49,14 @@ struct ProviderCredentialRecord {
     provider_revision: u64,
     binding_digest: String,
     credential: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderCredentialCleanupJournal {
+    version: u16,
+    installation_id: String,
+    pending_accounts: BTreeSet<String>,
 }
 
 impl fmt::Debug for ProviderCredentialRecord {
@@ -129,7 +140,6 @@ impl ProviderCredentialBroker {
         binding_digest: &str,
         credential: &str,
     ) -> Result<(), ProviderCredentialStoreError> {
-        let _operation = self.lock_operations()?;
         let account = provider_credential_account(
             &self.installation_id,
             tenant_id,
@@ -156,6 +166,8 @@ impl ProviderCredentialBroker {
         )?;
         let serialized = serde_json::to_string(&record)
             .map_err(|_| ProviderCredentialStoreError::InvalidRecord)?;
+        let _operation = self.lock_operations()?;
+        self.schedule_account_cleanup_locked(&account)?;
         self.store.save(&account, &serialized)
     }
 
@@ -203,7 +215,6 @@ impl ProviderCredentialBroker {
         provider_revision: u64,
         binding_digest: &str,
     ) -> Result<(), ProviderCredentialStoreError> {
-        let _operation = self.lock_operations()?;
         let account = provider_credential_account(
             &self.installation_id,
             tenant_id,
@@ -211,7 +222,85 @@ impl ProviderCredentialBroker {
             provider_revision,
             binding_digest,
         )?;
-        self.store.clear(&account)
+        let _operation = self.lock_operations()?;
+        self.schedule_account_cleanup_locked(&account)?;
+        self.store.clear(&account)?;
+        self.remove_account_cleanup_locked(&account)
+    }
+
+    pub(super) fn schedule_cleanup(
+        &self,
+        tenant_id: &str,
+        provider_id: &str,
+        provider_revision: u64,
+        binding_digest: &str,
+    ) -> Result<(), ProviderCredentialStoreError> {
+        let account = provider_credential_account(
+            &self.installation_id,
+            tenant_id,
+            provider_id,
+            provider_revision,
+            binding_digest,
+        )?;
+        let _operation = self.lock_operations()?;
+        self.schedule_account_cleanup_locked(&account)
+    }
+
+    pub(super) fn mark_authoritative(
+        &self,
+        tenant_id: &str,
+        provider_id: &str,
+        provider_revision: u64,
+        binding_digest: &str,
+    ) -> Result<(), ProviderCredentialStoreError> {
+        let account = provider_credential_account(
+            &self.installation_id,
+            tenant_id,
+            provider_id,
+            provider_revision,
+            binding_digest,
+        )?;
+        let _operation = self.lock_operations()?;
+        self.remove_account_cleanup_locked(&account)
+    }
+
+    pub(super) fn recover_pending<'a, I>(
+        &self,
+        authoritative: I,
+    ) -> Result<(), ProviderCredentialStoreError>
+    where
+        I: IntoIterator<Item = (&'a str, &'a str, u64, &'a str)>,
+    {
+        let mut authoritative_accounts = BTreeSet::new();
+        for (tenant_id, provider_id, provider_revision, binding_digest) in authoritative {
+            authoritative_accounts.insert(provider_credential_account(
+                &self.installation_id,
+                tenant_id,
+                provider_id,
+                provider_revision,
+                binding_digest,
+            )?);
+        }
+
+        let _operation = self.lock_operations()?;
+        let mut pending_accounts = self.load_cleanup_journal_locked()?;
+        let scheduled_accounts = std::mem::take(&mut pending_accounts);
+        let mut first_error = None;
+        for account in scheduled_accounts {
+            if authoritative_accounts.contains(&account) {
+                continue;
+            }
+            if let Err(error) = self.store.clear(&account) {
+                pending_accounts.insert(account);
+                first_error.get_or_insert(error);
+            }
+        }
+        let persist_result = self.persist_cleanup_journal_locked(&pending_accounts);
+        match (first_error, persist_result) {
+            (Some(error), Ok(())) => Err(error),
+            (_, Err(error)) => Err(error),
+            (None, Ok(())) => Ok(()),
+        }
     }
 
     fn lock_operations(&self) -> Result<MutexGuard<'_, ()>, ProviderCredentialStoreError> {
@@ -227,6 +316,60 @@ impl ProviderCredentialBroker {
     ) -> Result<T, ProviderCredentialStoreError> {
         self.store.clear(account)?;
         Err(error)
+    }
+
+    fn schedule_account_cleanup_locked(
+        &self,
+        account: &str,
+    ) -> Result<(), ProviderCredentialStoreError> {
+        let mut pending_accounts = self.load_cleanup_journal_locked()?;
+        if pending_accounts.insert(account.to_string()) {
+            self.persist_cleanup_journal_locked(&pending_accounts)?;
+        }
+        Ok(())
+    }
+
+    fn remove_account_cleanup_locked(
+        &self,
+        account: &str,
+    ) -> Result<(), ProviderCredentialStoreError> {
+        let mut pending_accounts = self.load_cleanup_journal_locked()?;
+        if pending_accounts.remove(account) {
+            self.persist_cleanup_journal_locked(&pending_accounts)?;
+        }
+        Ok(())
+    }
+
+    fn load_cleanup_journal_locked(
+        &self,
+    ) -> Result<BTreeSet<String>, ProviderCredentialStoreError> {
+        let journal_account = provider_credential_cleanup_journal_account(&self.installation_id)?;
+        let Some(serialized) = self.store.load(&journal_account)? else {
+            return Ok(BTreeSet::new());
+        };
+        let journal = serde_json::from_str::<ProviderCredentialCleanupJournal>(&serialized)
+            .map_err(|_| ProviderCredentialStoreError::CorruptRecord)?;
+        validate_cleanup_journal(&journal, &self.installation_id)?;
+        Ok(journal.pending_accounts)
+    }
+
+    fn persist_cleanup_journal_locked(
+        &self,
+        pending_accounts: &BTreeSet<String>,
+    ) -> Result<(), ProviderCredentialStoreError> {
+        let journal_account = provider_credential_cleanup_journal_account(&self.installation_id)?;
+        if pending_accounts.is_empty() {
+            return self.store.clear(&journal_account);
+        }
+        let journal = ProviderCredentialCleanupJournal {
+            version: PROVIDER_CREDENTIAL_CLEANUP_JOURNAL_VERSION,
+            installation_id: self.installation_id.to_string(),
+            pending_accounts: pending_accounts.clone(),
+        };
+        validate_cleanup_journal(&journal, &self.installation_id)?;
+        let serialized = serde_json::to_string(&journal)
+            .map_err(|_| ProviderCredentialStoreError::InvalidRecord)?;
+        self.store.save(&journal_account, &serialized)
     }
 }
 
@@ -300,6 +443,48 @@ fn provider_credential_account(
         "{APPLICATION_VAULT_KEY_PREFIX}.{:x}",
         digest.finalize()
     ))
+}
+
+fn provider_credential_cleanup_journal_account(
+    installation_id: &str,
+) -> Result<String, ProviderCredentialStoreError> {
+    if uuid::Uuid::parse_str(installation_id).is_err() {
+        return Err(ProviderCredentialStoreError::InvalidKey);
+    }
+    let mut digest = Sha256::new();
+    digest.update(b"memstack-llm-provider-credential-cleanup-v1\0");
+    digest.update(installation_id.as_bytes());
+    Ok(format!(
+        "{PROVIDER_CREDENTIAL_CLEANUP_JOURNAL_KEY_PREFIX}.{:x}",
+        digest.finalize()
+    ))
+}
+
+fn validate_cleanup_journal(
+    journal: &ProviderCredentialCleanupJournal,
+    installation_id: &str,
+) -> Result<(), ProviderCredentialStoreError> {
+    if journal.version != PROVIDER_CREDENTIAL_CLEANUP_JOURNAL_VERSION {
+        return Err(ProviderCredentialStoreError::UnsupportedVersion);
+    }
+    if journal.installation_id != installation_id
+        || journal
+            .pending_accounts
+            .iter()
+            .any(|account| !is_provider_credential_account(account))
+    {
+        return Err(ProviderCredentialStoreError::InvalidRecord);
+    }
+    Ok(())
+}
+
+fn is_provider_credential_account(account: &str) -> bool {
+    account
+        .strip_prefix(APPLICATION_VAULT_KEY_PREFIX)
+        .and_then(|suffix| suffix.strip_prefix('.'))
+        .is_some_and(|digest| {
+            digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
 }
 
 fn map_application_vault_error(error: ApplicationVaultError) -> ProviderCredentialStoreError {
@@ -548,6 +733,61 @@ mod tests {
     const INSTALLATION_A: &str = "11111111-1111-4111-8111-111111111111";
     const INSTALLATION_B: &str = "22222222-2222-4222-8222-222222222222";
 
+    #[derive(Default)]
+    struct FailOnceProviderCredentialStore {
+        values: Mutex<std::collections::HashMap<String, String>>,
+        fail_next_clear: Mutex<Option<String>>,
+    }
+
+    impl FailOnceProviderCredentialStore {
+        fn fail_next_clear(&self, account: &str) {
+            *self
+                .fail_next_clear
+                .lock()
+                .expect("provider credential clear failure") = Some(account.to_string());
+        }
+    }
+
+    impl ProviderCredentialStore for FailOnceProviderCredentialStore {
+        fn save(
+            &self,
+            account: &str,
+            credential: &str,
+        ) -> Result<(), ProviderCredentialStoreError> {
+            self.values
+                .lock()
+                .expect("provider credential failure store")
+                .insert(account.to_string(), credential.to_string());
+            Ok(())
+        }
+
+        fn load(&self, account: &str) -> Result<Option<String>, ProviderCredentialStoreError> {
+            Ok(self
+                .values
+                .lock()
+                .expect("provider credential failure store")
+                .get(account)
+                .cloned())
+        }
+
+        fn clear(&self, account: &str) -> Result<(), ProviderCredentialStoreError> {
+            let mut fail_next_clear = self
+                .fail_next_clear
+                .lock()
+                .expect("provider credential clear failure");
+            if fail_next_clear.as_deref() == Some(account) {
+                *fail_next_clear = None;
+                return Err(ProviderCredentialStoreError::Unavailable);
+            }
+            drop(fail_next_clear);
+            self.values
+                .lock()
+                .expect("provider credential failure store")
+                .remove(account);
+            Ok(())
+        }
+    }
+
     fn test_broker() -> ProviderCredentialBroker {
         ProviderCredentialBroker::in_memory(INSTALLATION_A).expect("test credential broker")
     }
@@ -674,6 +914,230 @@ mod tests {
                 .expect("committed credential remains")
                 .as_deref(),
             Some("committed")
+        );
+    }
+
+    #[test]
+    fn restart_recovery_clears_uncommitted_generation_and_preserves_authoritative_binding() {
+        let store = Arc::new(InMemoryProviderCredentialStore::default());
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        {
+            let broker = ProviderCredentialBroker::new(store.clone(), INSTALLATION_A)
+                .expect("provider credential broker");
+            broker
+                .save("tenant", "provider", 4, &binding_digest, "authoritative")
+                .expect("save authoritative credential");
+            broker
+                .mark_authoritative("tenant", "provider", 4, &binding_digest)
+                .expect("commit authoritative credential");
+            broker
+                .save("tenant", "provider", 5, &binding_digest, "uncommitted")
+                .expect("save uncommitted credential");
+        }
+
+        let restarted = ProviderCredentialBroker::new(store, INSTALLATION_A)
+            .expect("restarted provider credential broker");
+        restarted
+            .recover_pending([("tenant", "provider", 4, binding_digest.as_str())])
+            .expect("recover pending credential cleanup");
+
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 4, &binding_digest)
+                .expect("load authoritative credential")
+                .as_deref(),
+            Some("authoritative")
+        );
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 5, &binding_digest)
+                .expect("load uncommitted credential"),
+            None
+        );
+        restarted
+            .recover_pending([("tenant", "provider", 4, binding_digest.as_str())])
+            .expect("replay pending credential recovery");
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 4, &binding_digest)
+                .expect("authoritative credential survives replay")
+                .as_deref(),
+            Some("authoritative")
+        );
+    }
+
+    #[test]
+    fn native_vault_persists_cleanup_journal_and_removes_orphan_after_reopen() {
+        let root = std::env::temp_dir().join(format!(
+            "agistack-provider-credential-gc-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).expect("create native vault test root");
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        let authoritative_account =
+            provider_credential_account(INSTALLATION_A, "tenant", "provider", 4, &binding_digest)
+                .expect("authoritative credential account");
+        let orphan_account =
+            provider_credential_account(INSTALLATION_A, "tenant", "provider", 5, &binding_digest)
+                .expect("orphan credential account");
+        let journal_account = provider_credential_cleanup_journal_account(INSTALLATION_A)
+            .expect("credential cleanup journal account");
+
+        {
+            let vault = ApplicationCredentialVault::open(&root).expect("open native vault");
+            let broker = ProviderCredentialBroker::native(vault.clone(), INSTALLATION_A)
+                .expect("native provider credential broker");
+            broker
+                .save("tenant", "provider", 4, &binding_digest, "authoritative")
+                .expect("save authoritative credential");
+            broker
+                .mark_authoritative("tenant", "provider", 4, &binding_digest)
+                .expect("commit authoritative credential");
+            broker
+                .save(
+                    "tenant",
+                    "provider",
+                    5,
+                    &binding_digest,
+                    "orphan-after-crash",
+                )
+                .expect("save orphan credential");
+            assert!(vault
+                .get(&authoritative_account)
+                .expect("read authoritative vault record")
+                .is_some());
+            assert!(vault
+                .get(&orphan_account)
+                .expect("read orphan vault record")
+                .is_some());
+            assert!(vault
+                .get(&journal_account)
+                .expect("read cleanup journal")
+                .is_some());
+        }
+
+        {
+            let vault = ApplicationCredentialVault::open(&root).expect("reopen native vault");
+            let broker = ProviderCredentialBroker::native(vault.clone(), INSTALLATION_A)
+                .expect("reopened provider credential broker");
+            broker
+                .recover_pending([("tenant", "provider", 4, binding_digest.as_str())])
+                .expect("recover native vault cleanup");
+            assert!(vault
+                .get(&authoritative_account)
+                .expect("read preserved authoritative vault record")
+                .is_some());
+            assert_eq!(
+                vault
+                    .get(&orphan_account)
+                    .expect("read cleaned orphan vault record"),
+                None
+            );
+            assert_eq!(
+                vault
+                    .get(&journal_account)
+                    .expect("read completed cleanup journal"),
+                None
+            );
+        }
+
+        std::fs::remove_dir_all(root).expect("remove native vault test root");
+    }
+
+    #[test]
+    fn failed_replaced_generation_clear_is_retried_after_restart() {
+        let store = Arc::new(FailOnceProviderCredentialStore::default());
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        let replaced_account =
+            provider_credential_account(INSTALLATION_A, "tenant", "provider", 4, &binding_digest)
+                .expect("replaced credential account");
+        {
+            let broker = ProviderCredentialBroker::new(store.clone(), INSTALLATION_A)
+                .expect("provider credential broker");
+            broker
+                .save("tenant", "provider", 4, &binding_digest, "replaced")
+                .expect("save replaced credential");
+            broker
+                .mark_authoritative("tenant", "provider", 4, &binding_digest)
+                .expect("commit replaced credential");
+            broker
+                .schedule_cleanup("tenant", "provider", 4, &binding_digest)
+                .expect("schedule replaced credential cleanup");
+            broker
+                .save("tenant", "provider", 5, &binding_digest, "authoritative")
+                .expect("save replacement credential");
+            broker
+                .mark_authoritative("tenant", "provider", 5, &binding_digest)
+                .expect("commit replacement credential");
+            store.fail_next_clear(&replaced_account);
+            assert_eq!(
+                broker.clear("tenant", "provider", 4, &binding_digest),
+                Err(ProviderCredentialStoreError::Unavailable)
+            );
+            assert_eq!(
+                broker
+                    .load("tenant", "provider", 4, &binding_digest)
+                    .expect("failed clear preserves replaced credential")
+                    .as_deref(),
+                Some("replaced")
+            );
+        }
+
+        let restarted = ProviderCredentialBroker::new(store, INSTALLATION_A)
+            .expect("restarted provider credential broker");
+        restarted
+            .recover_pending([("tenant", "provider", 5, binding_digest.as_str())])
+            .expect("retry durable credential cleanup");
+
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 4, &binding_digest)
+                .expect("load replaced credential after recovery"),
+            None
+        );
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 5, &binding_digest)
+                .expect("load replacement credential")
+                .as_deref(),
+            Some("authoritative")
+        );
+    }
+
+    #[test]
+    fn recovery_never_clears_a_pending_generation_that_became_authoritative() {
+        let store = Arc::new(InMemoryProviderCredentialStore::default());
+        let binding_digest =
+            provider_credential_binding_digest("openai", "https://api.example.test/v1", "api_key");
+        {
+            let broker = ProviderCredentialBroker::new(store.clone(), INSTALLATION_A)
+                .expect("provider credential broker");
+            broker
+                .save(
+                    "tenant",
+                    "provider",
+                    8,
+                    &binding_digest,
+                    "committed-before-crash",
+                )
+                .expect("save credential before simulated crash");
+        }
+
+        let restarted = ProviderCredentialBroker::new(store, INSTALLATION_A)
+            .expect("restarted provider credential broker");
+        restarted
+            .recover_pending([("tenant", "provider", 8, binding_digest.as_str())])
+            .expect("recover post-commit crash window");
+
+        assert_eq!(
+            restarted
+                .load("tenant", "provider", 8, &binding_digest)
+                .expect("load credential committed before crash")
+                .as_deref(),
+            Some("committed-before-crash")
         );
     }
 

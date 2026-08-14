@@ -1572,6 +1572,35 @@
       }
     },
     {
+      "area": "mcp_apps",
+      "method": "PUT",
+      "uri": "/api/v1/mcp/route-contract-mcp-server",
+      "source": "client",
+      "source_marker": "async updateMCPServer(",
+      "authority": "local_mcp_supervisor",
+      "expected_status": 200,
+      "body": {
+        "enabled": true,
+        "project_id": "local-project",
+        "expected_revision": 1,
+        "idempotency_key": "parity-mcp-update"
+      }
+    },
+    {
+      "area": "mcp_apps",
+      "method": "DELETE",
+      "uri": "/api/v1/mcp/route-contract-mcp-server",
+      "source": "client",
+      "source_marker": "async deleteMCPServer(",
+      "authority": "local_mcp_supervisor",
+      "expected_status": 200,
+      "body": {
+        "project_id": "local-project",
+        "expected_revision": 2,
+        "idempotency_key": "parity-mcp-delete"
+      }
+    },
+    {
       "area": "activity",
       "method": "GET",
       "uri": "/api/v1/projects/local-project/activity/read-state",
@@ -1815,6 +1844,19 @@
       "expected_availability": "unavailable",
       "expected_reason_code": "local_event_ledger_authority_unavailable",
       "body": {}
+    },
+    {
+      "area": "providers",
+      "method": "DELETE",
+      "uri": "/api/v1/llm-providers/local-runtime",
+      "source": "client",
+      "source_marker": "/api/v1/llm-providers/${encodeURIComponent(providerId)}",
+      "authority": "local_provider_registry",
+      "expected_status": 200,
+      "body": {
+        "expected_revision": 1,
+        "idempotency_key": "parity-provider-delete"
+      }
     }
   ],
   "manifest_pending_routes": [
@@ -2325,6 +2367,16 @@
     {
       "method": "POST",
       "path": "/api/v1/mcp/apps/resources/list",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/mcp/route-contract-mcp-server",
+      "reason_code": "executable_fixture_supporting_route_not_in_manifest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/mcp/route-contract-mcp-server",
       "reason_code": "executable_fixture_supporting_route_not_in_manifest"
     },
     {

@@ -38,6 +38,7 @@ const RESERVED_REMOTE_HEADERS: [&str; 8] = [
 ];
 const MCP_REMOTE_CREDENTIAL_PREFIX: &str = "mcp-remote-credential.v1";
 const MCP_STDIO_CREDENTIAL_PREFIX: &str = "mcp-stdio-credential.v1";
+const MCP_STAGED_CREDENTIAL_SUFFIX: &str = ".stage.v2.";
 
 #[derive(Clone)]
 pub(super) struct ResolvedEndpoint {
@@ -216,7 +217,7 @@ pub(super) fn validate_remote_credential_bindings(
             kind,
             name,
         )?;
-        if reference != &expected {
+        if !credential_reference_is_scoped(&expected, reference) {
             return Err(remote_credential_scope_invalid());
         }
     }
@@ -304,6 +305,22 @@ pub(in crate::local_runtime) fn credential_reference(
     Ok(format!("{prefix}.{:x}", digest.finalize()))
 }
 
+pub(super) fn credential_reference_is_scoped(expected: &str, candidate: &str) -> bool {
+    if candidate == expected {
+        return true;
+    }
+    let Some(generation) = candidate
+        .strip_prefix(expected)
+        .and_then(|suffix| suffix.strip_prefix(MCP_STAGED_CREDENTIAL_SUFFIX))
+    else {
+        return false;
+    };
+    generation.len() == 64
+        && generation
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 pub(super) async fn resolve_remote_endpoint(
     server: &McpServerDefinition,
     lookup_timeout: Duration,
@@ -384,7 +401,7 @@ impl McpRemoteCredentialBroker<'_> {
             endpoint,
             header_name.as_str(),
         )?;
-        if reference != expected {
+        if !credential_reference_is_scoped(&expected, reference) {
             return Err(remote_credential_scope_invalid());
         }
         self.vault

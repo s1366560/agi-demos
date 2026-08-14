@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::{
     authorize, bad_request,
-    contracts::{AutonomyJudgeRequest, ContextJudgeRequest, PlanJudgeRequest},
+    contracts::{AutonomyJudgeRequest, AutonomyNextAction, ContextJudgeRequest, PlanJudgeRequest},
     ensure_workspace_scope,
     registry::{ensure_agent_available, ensure_project_scope},
     unavailable, BridgeResult, TokenKind,
@@ -16,6 +16,7 @@ use crate::local_runtime::{LlmWorkloadRole, LocalRuntimeState};
 const JUDGE_AGENT_ID: &str = "builtin:all-access";
 const PLAN_TOOL: &str = "judge_workspace_plan";
 const AUTONOMY_TOOL: &str = "judge_workspace_autonomy";
+const MAX_AUTONOMY_ACTION_DESCRIPTION_CHARS: usize = 10_000;
 
 pub(super) async fn context(
     State(state): State<Arc<LocalRuntimeState>>,
@@ -105,7 +106,13 @@ pub(super) async fn autonomy(
         &request.project_id,
         &request.workspace_id,
     )?;
-    if request.actor_id.trim().is_empty() || request.candidates.is_empty() {
+    if request.actor_id.trim().is_empty()
+        || request.candidates.is_empty()
+        || request.agent_candidates.iter().any(|candidate| {
+            candidate.workspace_agent_binding_id.trim().is_empty()
+                || candidate.agent_id.trim().is_empty()
+        })
+    {
         return Err(bad_request(
             "Workspace Autonomy judgment request is invalid",
         ));
@@ -115,7 +122,10 @@ pub(super) async fn autonomy(
         .map_err(|_| unavailable("Workspace Autonomy judge input is unavailable"))?;
     let schema = "Call judge_workspace_autonomy exactly once with JSON fields: verdict \
                   (continue, block, or escalate), selected_root_task_id (string or null), \
-                  rationale (non-empty string).";
+                  next_action (object or null), and rationale (non-empty string). A continue \
+                  verdict requires next_action.title, next_action.description (at most 10000 \
+                  characters), and \
+                  next_action.workspace_agent_binding_id selected from agent_candidates.";
     let (output, latency_ms) = structured_judgment(
         &state,
         &request.tenant_id,
@@ -146,10 +156,31 @@ pub(super) async fn autonomy(
             "Workspace Autonomy judge omitted its required root task",
         ));
     }
+    let next_action = parse_autonomy_next_action(&output)?;
+    if verdict == "continue" && next_action.is_none() {
+        return Err(unavailable(
+            "Workspace Autonomy judge omitted its required next action",
+        ));
+    }
+    if verdict != "continue" && next_action.is_some() {
+        return Err(unavailable(
+            "Workspace Autonomy judge returned an action for a terminal verdict",
+        ));
+    }
+    if next_action.as_ref().is_some_and(|action| {
+        !request.agent_candidates.iter().any(|candidate| {
+            candidate.workspace_agent_binding_id == action.workspace_agent_binding_id
+        })
+    }) {
+        return Err(unavailable(
+            "Workspace Autonomy judge selected an unauthorized Agent binding",
+        ));
+    }
     let rationale = required_string(&output, "rationale")?;
     Ok(Json(json!({
         "verdict": verdict,
         "selected_root_task_id": selected_root_task_id,
+        "next_action": next_action,
         "rationale": rationale,
         "agent_id": JUDGE_AGENT_ID,
         "tool_name": AUTONOMY_TOOL,
@@ -157,6 +188,30 @@ pub(super) async fn autonomy(
         "output_json": output,
         "latency_ms": latency_ms
     })))
+}
+
+fn parse_autonomy_next_action(
+    output: &Value,
+) -> Result<Option<AutonomyNextAction>, super::BridgeError> {
+    let Some(value) = output.get("next_action") else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let action = serde_json::from_value::<AutonomyNextAction>(value.clone())
+        .map_err(|_| unavailable("Workspace Autonomy judge next action is invalid"))?;
+    if action.title.trim().is_empty()
+        || action.title.chars().count() > 255
+        || action.description.trim().is_empty()
+        || action.description.chars().count() > MAX_AUTONOMY_ACTION_DESCRIPTION_CHARS
+        || action.workspace_agent_binding_id.trim().is_empty()
+    {
+        return Err(unavailable(
+            "Workspace Autonomy judge next action is invalid",
+        ));
+    }
+    Ok(Some(action))
 }
 
 async fn structured_judgment(
@@ -245,5 +300,35 @@ fn optional_string(value: &Value, field: &str) -> Result<Option<String>, super::
             Ok(Some(value.clone()))
         }
         _ => Err(unavailable("Workspace judge optional output is invalid")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn autonomy_next_action_rejects_nested_extra_fields() {
+        assert!(parse_autonomy_next_action(&json!({
+            "next_action": {
+                "title": "Next",
+                "description": "Continue",
+                "workspace_agent_binding_id": "binding-1",
+                "unexpected": true,
+            }
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn autonomy_next_action_rejects_overlong_description() {
+        assert!(parse_autonomy_next_action(&json!({
+            "next_action": {
+                "title": "Next",
+                "description": "x".repeat(MAX_AUTONOMY_ACTION_DESCRIPTION_CHARS + 1),
+                "workspace_agent_binding_id": "binding-1",
+            }
+        }))
+        .is_err());
     }
 }

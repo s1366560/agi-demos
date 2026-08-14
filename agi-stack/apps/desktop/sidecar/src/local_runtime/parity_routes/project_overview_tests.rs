@@ -236,7 +236,7 @@ async fn project_overview_exposes_only_local_authoritative_and_degraded_fields()
         payload["reason_code"],
         "local_project_overview_timeline_projection_only"
     );
-    assert_eq!(payload["contract_version"], "3.0.0");
+    assert_eq!(payload["contract_version"], "4.0.0");
     assert_eq!(payload["allowed_actions"], json!(["view"]));
     assert_eq!(
         payload["scope"],
@@ -304,6 +304,215 @@ async fn project_overview_exposes_only_local_authoritative_and_degraded_fields()
 }
 
 #[tokio::test]
+async fn project_overview_partitions_every_conversation_by_its_latest_persisted_run() {
+    let launch_credential = "project-overview-run-summary-launch";
+    let runtime = test_runtime(launch_credential);
+    let app = local_router(Arc::clone(&runtime.state));
+    let session_credential = create_session(&app, launch_credential).await;
+    let statuses = [
+        ("idle", None),
+        ("queued", Some("queued")),
+        ("running", Some("running")),
+        ("attention-input", Some("needs_input")),
+        ("attention-review", Some("ready_review")),
+        ("completed", Some("completed")),
+        ("failed", Some("failed")),
+        ("cancelled", Some("cancelled")),
+    ];
+    for (ordinal, (suffix, status)) in statuses.iter().enumerate() {
+        let conversation_id = format!("project-overview-status-{suffix}");
+        runtime
+            .state
+            .session_store
+            .insert_conversation(&LocalConversation {
+                id: conversation_id.clone(),
+                project_id: ACTIVE_PROJECT_ID.to_string(),
+                tenant_id: ACTIVE_TENANT_ID.to_string(),
+                title: format!("Status {suffix}"),
+                workspace_id: Some("local-demo-desktop-client-main".to_string()),
+                capability_mode: ConversationCapabilityMode::Code,
+                current_mode: ConversationRunMode::Build,
+                created_at: format!("2099-01-01T00:{ordinal:02}:00Z"),
+                updated_at: format!("2099-01-01T00:{ordinal:02}:00Z"),
+            })
+            .expect("insert status summary conversation");
+        if let Some(status) = status {
+            let connection = runtime
+                .state
+                .session_store
+                .connection()
+                .expect("open status summary store");
+            if *suffix == "completed" {
+                connection
+                    .execute(
+                        "INSERT INTO desktop_runs (
+                           id, conversation_id, project_id, plan_version_id, idempotency_key,
+                           status, revision, created_at, updated_at, value_json
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, 'failed', 1, ?6, ?6, '{}')",
+                        rusqlite::params![
+                            "project-overview-status-completed-old",
+                            conversation_id,
+                            ACTIVE_PROJECT_ID,
+                            "plan-old",
+                            "project-overview-status-completed-old-key",
+                            "2099-01-01T00:00:00Z",
+                        ],
+                    )
+                    .expect("insert superseded run");
+            }
+            connection
+                .execute(
+                    "INSERT INTO desktop_runs (
+                       id, conversation_id, project_id, plan_version_id, idempotency_key,
+                       status, revision, created_at, updated_at, value_json
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, '{}')",
+                    rusqlite::params![
+                        format!("project-overview-status-{suffix}-run"),
+                        conversation_id,
+                        ACTIVE_PROJECT_ID,
+                        format!("plan-{suffix}"),
+                        format!("project-overview-status-{suffix}-key"),
+                        status,
+                        format!("2099-01-02T00:{ordinal:02}:00Z"),
+                    ],
+                )
+                .expect("insert current run");
+        }
+    }
+
+    let (status, payload) = load_overview(
+        &app,
+        ACTIVE_PROJECT_ID,
+        launch_credential,
+        &session_credential,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload["conversation_status_summary"],
+        json!({
+            "availability": "available",
+            "reason_code": null,
+            "value": {
+                "total": 8,
+                "idle": 1,
+                "queued": 1,
+                "running": 1,
+                "attention": 2,
+                "completed": 1,
+                "failed": 1,
+                "cancelled": 1,
+            }
+        })
+    );
+    assert_eq!(payload["conversation_count"]["value"], 8);
+}
+
+#[tokio::test]
+async fn project_overview_status_summary_is_tenant_scoped_and_uses_chronological_run_order() {
+    let launch_credential = "project-overview-status-boundary-launch";
+    let runtime = test_runtime(launch_credential);
+    let app = local_router(Arc::clone(&runtime.state));
+    let session_credential = create_session(&app, launch_credential).await;
+    for (id, tenant_id) in [
+        ("project-overview-mixed-rfc3339", ACTIVE_TENANT_ID),
+        ("project-overview-unknown-status", ACTIVE_TENANT_ID),
+        ("project-overview-off-tenant", "tenant-outside-active-scope"),
+    ] {
+        runtime
+            .state
+            .session_store
+            .insert_conversation(&LocalConversation {
+                id: id.to_string(),
+                project_id: ACTIVE_PROJECT_ID.to_string(),
+                tenant_id: tenant_id.to_string(),
+                title: id.to_string(),
+                workspace_id: Some("local-demo-desktop-client-main".to_string()),
+                capability_mode: ConversationCapabilityMode::Code,
+                current_mode: ConversationRunMode::Build,
+                created_at: "2099-01-03T00:00:00Z".to_string(),
+                updated_at: "2099-01-03T00:00:00Z".to_string(),
+            })
+            .expect("insert status boundary conversation");
+    }
+
+    {
+        let connection = runtime
+            .state
+            .session_store
+            .connection()
+            .expect("open status boundary store");
+        for (id, conversation_id, status, created_at) in [
+            (
+                "project-overview-mixed-rfc3339-old",
+                "project-overview-mixed-rfc3339",
+                "failed",
+                "2099-01-03T00:00:00Z",
+            ),
+            (
+                "project-overview-mixed-rfc3339-new",
+                "project-overview-mixed-rfc3339",
+                "completed",
+                "2099-01-03T00:00:00.100Z",
+            ),
+            (
+                "project-overview-unknown-status-run",
+                "project-overview-unknown-status",
+                "future_terminal_state",
+                "2099-01-03T00:00:01Z",
+            ),
+            (
+                "project-overview-off-tenant-run",
+                "project-overview-off-tenant",
+                "running",
+                "2099-01-03T00:00:02Z",
+            ),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO desktop_runs (
+                       id, conversation_id, project_id, plan_version_id, idempotency_key,
+                       status, revision, created_at, updated_at, value_json
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, '{}')",
+                    rusqlite::params![
+                        id,
+                        conversation_id,
+                        ACTIVE_PROJECT_ID,
+                        format!("plan-{id}"),
+                        format!("key-{id}"),
+                        status,
+                        created_at,
+                    ],
+                )
+                .expect("insert status boundary run");
+        }
+    }
+
+    let (status, payload) = load_overview(
+        &app,
+        ACTIVE_PROJECT_ID,
+        launch_credential,
+        &session_credential,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload["conversation_status_summary"]["value"],
+        json!({
+            "total": 2,
+            "idle": 0,
+            "queued": 0,
+            "running": 0,
+            "attention": 1,
+            "completed": 1,
+            "failed": 0,
+            "cancelled": 0,
+        })
+    );
+    assert_eq!(payload["conversation_count"]["value"], 2);
+}
+
+#[tokio::test]
 async fn project_overview_preserves_empty_local_state_without_fabricated_cloud_values() {
     let credential = "project-overview-empty-secret";
     let runtime = legacy_test_runtime(credential);
@@ -312,6 +521,19 @@ async fn project_overview_preserves_empty_local_state_without_fabricated_cloud_v
     let (status, payload) = load_overview(&app, LEGACY_PROJECT_ID, credential, credential).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(payload["conversation_count"]["value"], 0);
+    assert_eq!(
+        payload["conversation_status_summary"]["value"],
+        json!({
+            "total": 0,
+            "idle": 0,
+            "queued": 0,
+            "running": 0,
+            "attention": 0,
+            "completed": 0,
+            "failed": 0,
+            "cancelled": 0,
+        })
+    );
     assert_eq!(payload["recent_knowledge_items"]["total"], 0);
     assert_eq!(payload["recent_knowledge_items"]["value"], json!([]));
     assert_eq!(payload["active_nodes"]["value"], Value::Null);
@@ -407,6 +629,7 @@ async fn project_overview_rejects_unknown_query_fields_and_keeps_an_exact_schema
         "collaborators",
         "contract_version",
         "conversation_count",
+        "conversation_status_summary",
         "project",
         "reason_code",
         "recent_knowledge_items",

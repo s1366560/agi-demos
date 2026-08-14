@@ -567,6 +567,7 @@ async fn list_subagents(
     Query(query): Query<TenantQuery>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
     let items = state
         .session_store
         .list_managed_resources(
@@ -574,7 +575,15 @@ async fn list_subagents(
             "tenant",
             &authenticated.workspace.tenant_id,
         )
-        .map_err(super::super::local_store_error)?;
+        .map_err(super::super::local_store_error)?
+        .into_iter()
+        .filter(|resource| {
+            super::super::subagent_scope::is_visible_in_project(
+                resource,
+                &authenticated.workspace.project_id,
+            )
+        })
+        .collect::<Vec<_>>();
     Ok(Json(json!({ "items": items, "total": items.len() })))
 }
 
@@ -585,6 +594,7 @@ async fn create_subagent(
     Json(envelope): Json<MutationEnvelope>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
     let resource_id = require_resource_id(&envelope)?;
     let receipt = mutate(
         &state,
@@ -605,13 +615,15 @@ async fn get_subagent(
     Path(subagent_id): Path<String>,
     Query(query): Query<TenantQuery>,
 ) -> LocalJsonResult {
-    get_tenant_resource(
+    ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
+    ensure_project_scope(&authenticated, query.project_id.as_deref())?;
+    let (_, _, resource) = find_resource(
         &state,
         &authenticated,
-        &query,
         ManagedResourceKind::SubAgent,
         &subagent_id,
-    )
+    )?;
+    Ok(Json(resource))
 }
 
 async fn update_subagent(
@@ -656,16 +668,12 @@ async fn set_subagent_enabled(
     Json(mut envelope): Json<MutationEnvelope>,
 ) -> LocalJsonResult {
     ensure_tenant_scope(&authenticated, query.tenant_id.as_deref())?;
-    let current = state
-        .session_store
-        .managed_resource(
-            ManagedResourceKind::SubAgent,
-            "tenant",
-            &authenticated.workspace.tenant_id,
-            &subagent_id,
-        )
-        .map_err(super::super::local_store_error)?
-        .ok_or_else(|| resource_registry_error(ResourceRegistryError::NotFound))?;
+    let (_, _, current) = find_resource(
+        &state,
+        &authenticated,
+        ManagedResourceKind::SubAgent,
+        &subagent_id,
+    )?;
     let mut value = current;
     let object = value.as_object_mut().ok_or_else(invalid_resource_object)?;
     object.insert("enabled".to_string(), json!(query.enabled));

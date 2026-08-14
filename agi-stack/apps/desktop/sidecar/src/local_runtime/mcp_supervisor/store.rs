@@ -9,6 +9,11 @@ use super::{
 };
 use crate::local_runtime::DesktopSessionStore;
 
+mod credentials;
+mod mutations;
+
+pub(super) use credentials::CredentialStageStatus;
+
 const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS desktop_mcp_servers_v1 (
   id TEXT PRIMARY KEY,
@@ -78,6 +83,40 @@ CREATE TABLE IF NOT EXISTS desktop_mcp_credential_bindings_v1 (
   updated_at TEXT NOT NULL,
   PRIMARY KEY(tenant_id, project_id, binding_reference)
 );
+CREATE TABLE IF NOT EXISTS desktop_mcp_credential_stages_v2 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  provision_idempotency_key TEXT NOT NULL,
+  mutation_idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  logical_reference TEXT NOT NULL,
+  staged_reference TEXT NOT NULL,
+  status TEXT NOT NULL
+    CHECK(status IN ('pending', 'ready', 'active', 'abandoned', 'retired')),
+  server_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, provision_idempotency_key),
+  UNIQUE(tenant_id, project_id, mutation_idempotency_key, logical_reference),
+  UNIQUE(tenant_id, project_id, staged_reference)
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_mcp_credential_stages_mutation_v2
+  ON desktop_mcp_credential_stages_v2(
+    tenant_id, project_id, mutation_idempotency_key, status
+  );
+CREATE TABLE IF NOT EXISTS desktop_mcp_credential_cleanup_v2 (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  binding_reference TEXT NOT NULL,
+  cleanup_token TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, project_id, binding_reference, cleanup_token)
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_mcp_credential_cleanup_pending_v2
+  ON desktop_mcp_credential_cleanup_v2(tenant_id, project_id, created_at);
 CREATE TABLE IF NOT EXISTS desktop_mcp_tool_call_leases_v2 (
   tenant_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
@@ -165,8 +204,17 @@ impl McpStore {
                 }
 
                 let now = chrono::Utc::now().to_rfc3339();
+                let server_id = format!("local-mcp-{}", Uuid::new_v4());
+                let (vault_env_refs, activated_stage_references) =
+                    credentials::resolve_credential_bindings(
+                        &transaction,
+                        scope,
+                        idempotency_key,
+                        input,
+                        None,
+                    )?;
                 let server = McpServerDefinition {
-                    id: format!("local-mcp-{}", Uuid::new_v4()),
+                    id: server_id,
                     tenant_id: scope.tenant_id.clone(),
                     project_id: scope.project_id.clone(),
                     name: input.name.clone(),
@@ -174,7 +222,7 @@ impl McpStore {
                     transport: input.transport,
                     command: input.command.clone(),
                     cwd: input.cwd.clone(),
-                    vault_env_refs: input.vault_env_refs.clone(),
+                    vault_env_refs,
                     enabled: input.enabled,
                     revision: 1,
                     runtime_status: if input.enabled {
@@ -224,6 +272,13 @@ impl McpStore {
                             error.to_string()
                         }
                     })?;
+                credentials::activate_credential_stages(
+                    &transaction,
+                    scope,
+                    &server.id,
+                    &activated_stage_references,
+                    &now,
+                )?;
                 let response_json = server_internal_json(&server)?;
                 transaction
                     .execute(
@@ -895,6 +950,21 @@ fn map_store_error(error: String) -> McpSupervisorError {
         "server_name_conflict" => McpSupervisorError::new(
             "local_mcp_server_name_conflict",
             "MCP server name already exists in this project",
+        ),
+        "server_not_found" => {
+            McpSupervisorError::new("local_mcp_server_not_found", "MCP server was not found")
+        }
+        "revision_conflict" => McpSupervisorError::new(
+            "local_mcp_revision_conflict",
+            "MCP server revision does not match the current definition",
+        ),
+        "credential_stage_unavailable" => McpSupervisorError::new(
+            "local_mcp_credential_stage_unavailable",
+            "MCP credential stage is not ready for this mutation",
+        ),
+        "credential_stage_mismatch" => McpSupervisorError::new(
+            "local_mcp_credential_stage_mismatch",
+            "MCP credential stage does not match this mutation",
         ),
         _ => storage_error(),
     }

@@ -30,10 +30,10 @@ use super::{
         GrantConsumption, InvocationStatus, PermissionGrant, ToolInvocation, ToolInvocationRequest,
         ToolMetadata,
     },
-    ConversationRunMode, LocalConversation,
+    ConversationRunMode, LlmRouteTarget, LocalConversation,
 };
 
-const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 26;
+const DESKTOP_SESSION_SCHEMA_VERSION: i64 = 28;
 const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
@@ -144,6 +144,18 @@ pub(super) enum DesktopWorkspaceCoreRequestClaim {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum DesktopWorkspaceCoreRequestClaimError {
+    PayloadConflict,
+    Storage(String),
+}
+
+#[derive(Debug, PartialEq)]
+pub(super) struct LlmProviderCreateReceipt {
+    pub(super) provider_id: String,
+    pub(super) response: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum LlmProviderCreateReceiptError {
     PayloadConflict,
     Storage(String),
 }
@@ -376,12 +388,29 @@ impl DesktopSessionStore {
                    key TEXT PRIMARY KEY,
                    value_text TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS desktop_llm_provider_create_receipts (
+                   tenant_id TEXT NOT NULL,
+                   idempotency_key TEXT NOT NULL,
+                   request_hash TEXT NOT NULL,
+                   provider_id TEXT NOT NULL UNIQUE,
+                   response_json TEXT,
+                   created_at TEXT NOT NULL,
+                   PRIMARY KEY(tenant_id, idempotency_key)
+                 );
                  CREATE TABLE IF NOT EXISTS desktop_conversations (
                    id TEXT PRIMARY KEY,
                    project_id TEXT NOT NULL,
                    workspace_id TEXT,
                    updated_at TEXT NOT NULL,
                    value_json TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS desktop_conversation_llm_routes (
+                   conversation_id TEXT PRIMARY KEY,
+                   provider_id TEXT NOT NULL,
+                   model_id TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id)
+                     ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS desktop_timeline (
                    id TEXT PRIMARY KEY,
@@ -1138,6 +1167,54 @@ impl DesktopSessionStore {
     ) -> Result<(), String> {
         let connection = self.connection()?;
         insert_conversation_record(&connection, conversation)
+    }
+
+    pub(super) fn insert_conversation_with_llm_route(
+        &self,
+        conversation: &LocalConversation,
+        route: Option<&LlmRouteTarget>,
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        insert_conversation_record(&transaction, conversation)?;
+        if let Some(route) = route {
+            transaction
+                .execute(
+                    "INSERT INTO desktop_conversation_llm_routes(
+                       conversation_id, provider_id, model_id, created_at
+                     ) VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        conversation.id,
+                        route.provider_id,
+                        route.model_id,
+                        conversation.created_at,
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn conversation_llm_route(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<LlmRouteTarget>, String> {
+        self.connection()?
+            .query_row(
+                "SELECT provider_id, model_id FROM desktop_conversation_llm_routes
+                 WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| {
+                    Ok(LlmRouteTarget {
+                        provider_id: row.get(0)?,
+                        model_id: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
     }
 
     pub(super) fn project_task_session(
@@ -4286,6 +4363,108 @@ impl DesktopSessionStore {
     ) -> Result<Vec<ProviderUsageStatistic>, String> {
         let connection = self.connection()?;
         provider_usage_store::statistics(&connection, provider_id, tenant_id)
+    }
+
+    pub(super) fn claim_llm_provider_create(
+        &self,
+        tenant_id: &str,
+        idempotency_key: &str,
+        request_hash: &str,
+        proposed_provider_id: &str,
+        created_at: &str,
+    ) -> Result<LlmProviderCreateReceipt, LlmProviderCreateReceiptError> {
+        let mut connection = self
+            .connection()
+            .map_err(LlmProviderCreateReceiptError::Storage)?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| LlmProviderCreateReceiptError::Storage(error.to_string()))?;
+        let existing = transaction
+            .query_row(
+                "SELECT request_hash, provider_id, response_json
+                 FROM desktop_llm_provider_create_receipts
+                 WHERE tenant_id = ?1 AND idempotency_key = ?2",
+                params![tenant_id, idempotency_key],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| LlmProviderCreateReceiptError::Storage(error.to_string()))?;
+        let receipt = if let Some((stored_hash, provider_id, response_json)) = existing {
+            if stored_hash != request_hash {
+                return Err(LlmProviderCreateReceiptError::PayloadConflict);
+            }
+            let response = response_json
+                .map(|value| {
+                    serde_json::from_str(&value)
+                        .map_err(|error| LlmProviderCreateReceiptError::Storage(error.to_string()))
+                })
+                .transpose()?;
+            LlmProviderCreateReceipt {
+                provider_id,
+                response,
+            }
+        } else {
+            transaction
+                .execute(
+                    "INSERT INTO desktop_llm_provider_create_receipts(
+                       tenant_id, idempotency_key, request_hash, provider_id, response_json,
+                       created_at
+                     ) VALUES (?1, ?2, ?3, ?4, NULL, ?5)",
+                    params![
+                        tenant_id,
+                        idempotency_key,
+                        request_hash,
+                        proposed_provider_id,
+                        created_at,
+                    ],
+                )
+                .map_err(|error| LlmProviderCreateReceiptError::Storage(error.to_string()))?;
+            LlmProviderCreateReceipt {
+                provider_id: proposed_provider_id.to_string(),
+                response: None,
+            }
+        };
+        transaction
+            .commit()
+            .map_err(|error| LlmProviderCreateReceiptError::Storage(error.to_string()))?;
+        Ok(receipt)
+    }
+
+    pub(super) fn complete_llm_provider_create(
+        &self,
+        tenant_id: &str,
+        idempotency_key: &str,
+        request_hash: &str,
+        provider_id: &str,
+        response: &Value,
+    ) -> Result<(), String> {
+        let response_json = serde_json::to_string(response).map_err(|error| error.to_string())?;
+        let changed = self
+            .connection()?
+            .execute(
+                "UPDATE desktop_llm_provider_create_receipts
+                 SET response_json = ?5
+                 WHERE tenant_id = ?1 AND idempotency_key = ?2 AND request_hash = ?3
+                   AND provider_id = ?4",
+                params![
+                    tenant_id,
+                    idempotency_key,
+                    request_hash,
+                    provider_id,
+                    response_json,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        if changed != 1 {
+            return Err("LLM provider create receipt is unavailable".to_string());
+        }
+        Ok(())
     }
 
     pub(super) fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {

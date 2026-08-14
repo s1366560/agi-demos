@@ -6,16 +6,29 @@ use std::{
     time::Duration,
 };
 
-use agistack_core::ports::ToolHost;
+use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm};
+use agistack_core::{
+    agent::{react::ReActEngine, types::AgentAction},
+    ports::ToolHost,
+};
 use serde_json::json;
 use uuid::Uuid;
 
 use super::{
-    mcp_agent_tool_host::McpAgentToolHost,
+    authority_store::{
+        DesktopExecutionEnvironment, DesktopExecutionEnvironmentKind, DesktopPermissionProfile,
+        DesktopRun, DesktopRunStatus,
+    },
+    authorized_tool_host::AuthorizedRunToolHost,
+    execution_profile::{ExecutionProfile, ProfiledToolHost},
+    fan_out_tool_host::FanOutToolHost,
+    mcp_agent_tool_host::{legacy_exposed_tool_name, McpAgentToolHost},
     mcp_supervisor::{
         McpScope, McpServerDefinitionInput, McpSupervisor, McpTransport, SupervisorLimits,
     },
-    DesktopSessionStore,
+    session_store::ApprovePlanStartInput,
+    tool_authority::{InvocationStatus, ToolEffect},
+    ConversationCapabilityMode, ConversationRunMode, DesktopSessionStore, LocalConversation,
 };
 
 fn test_root(label: &str) -> PathBuf {
@@ -68,6 +81,207 @@ async fn discovered_mcp_tools_are_dispatchable_through_the_agent_tool_host() {
     fs::remove_dir_all(root).expect("remove MCP test root");
 }
 
+#[tokio::test]
+async fn dynamic_mcp_tools_ignore_read_only_hints_and_redact_sensitive_audit_input() {
+    let root = test_root("agent-tool-host-authority");
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor = Arc::new(
+        McpSupervisor::new(store.clone(), root.clone(), None, test_limits())
+            .expect("MCP supervisor"),
+    );
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("Untrusted Read Hint", &python, &script, "normal"),
+            "create-agent-tool-host-authority",
+        )
+        .expect("create MCP server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discover MCP tools");
+
+    let mcp_host = Arc::new(
+        McpAgentToolHost::new(
+            Arc::clone(&supervisor),
+            active_scope,
+            "run-agent-tool-host-authority".to_string(),
+            None,
+        )
+        .expect("agent MCP tool host"),
+    );
+    let tool = mcp_host.list_tools().pop().expect("discovered MCP tool");
+    let metadata = mcp_host.authority_metadata_by_name();
+    let tool_metadata = metadata.get(&tool).expect("MCP authority metadata");
+    assert_eq!(tool_metadata.effect, ToolEffect::Mutate);
+    for sensitive_field in [
+        "access_token",
+        "api_key",
+        "authorization",
+        "credential",
+        "password",
+        "refresh_token",
+        "secret",
+        "token",
+    ] {
+        assert!(tool_metadata
+            .sensitive_input_fields
+            .contains(sensitive_field));
+    }
+
+    let read_run = running_run(
+        &store,
+        &root,
+        "read-only-mcp",
+        DesktopPermissionProfile::ReadOnly,
+    )
+    .expect("read-only run");
+    let read_host = AuthorizedRunToolHost::with_dynamic_metadata(
+        mcp_host.clone(),
+        store.clone(),
+        read_run,
+        metadata.clone(),
+    );
+    assert!(!read_host.list_tools().contains(&tool));
+    let read_error = read_host
+        .call(&tool, r#"{"api_key":"fake-mcp-api-key"}"#)
+        .await
+        .expect_err("read-only profile must reject dynamic MCP tools");
+    assert!(read_error
+        .to_string()
+        .contains("outside the approved permission profile"));
+
+    let full_run = running_run(
+        &store,
+        &root,
+        "full-access-mcp",
+        DesktopPermissionProfile::FullAccess,
+    )
+    .expect("full-access run");
+    let conversation_id = full_run.conversation_id.clone();
+    let full_host =
+        AuthorizedRunToolHost::with_dynamic_metadata(mcp_host, store.clone(), full_run, metadata);
+    assert!(full_host.list_tools().contains(&tool));
+    let input = json!({
+        "api_key": "fake-mcp-api-key",
+        "password": "fake-mcp-password",
+        "nested": {"token": "fake-mcp-token"},
+    });
+    full_host
+        .call(&tool, &input.to_string())
+        .await
+        .expect("full-access MCP call");
+
+    let invocations = store
+        .list_tool_invocations(&conversation_id)
+        .expect("persisted MCP invocation");
+    assert_eq!(invocations.len(), 1);
+    assert_eq!(invocations[0].tool_name, tool);
+    assert_eq!(invocations[0].effect, ToolEffect::Mutate);
+    assert_eq!(invocations[0].status, InvocationStatus::Completed);
+    assert_eq!(invocations[0].redacted_input["api_key"], "[REDACTED]");
+    assert_eq!(invocations[0].redacted_input["password"], "[REDACTED]");
+    assert_eq!(
+        invocations[0].redacted_input["nested"]["token"],
+        "[REDACTED]"
+    );
+    let serialized = serde_json::to_string(&invocations[0]).expect("serialize invocation");
+    for secret in ["fake-mcp-api-key", "fake-mcp-password", "fake-mcp-token"] {
+        assert!(!serialized.contains(secret));
+    }
+
+    fs::remove_dir_all(root).expect("remove MCP test root");
+}
+
+#[tokio::test]
+async fn react_engine_dispatches_legacy_mcp_alias_without_advertising_it() {
+    let root = test_root("agent-tool-host-legacy-alias");
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor = Arc::new(
+        McpSupervisor::new(store, root.clone(), None, test_limits()).expect("MCP supervisor"),
+    );
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("Desktop QA Echo", &python, &script, "normal"),
+            "create-agent-tool-host-legacy-alias",
+        )
+        .expect("create MCP server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discover MCP tools");
+
+    let mcp_host = Arc::new(
+        McpAgentToolHost::new(
+            Arc::clone(&supervisor),
+            active_scope,
+            "run-agent-tool-host-legacy-alias".to_string(),
+            None,
+        )
+        .expect("agent MCP tool host"),
+    );
+    let canonical = mcp_host.list_tools().pop().expect("canonical MCP tool");
+    let legacy = legacy_exposed_tool_name(&server.id, "echo");
+    let fan_out = Arc::new(FanOutToolHost::new(vec![mcp_host]));
+    let agent = json!({
+        "id": "builtin:all-access",
+        "name": "Local Agent",
+        "system_prompt": "Coordinate the selected resources.",
+        "enabled": true,
+        "status": "active",
+        "allowed_tools": ["*"],
+        "allowed_skills": ["*"],
+        "allowed_mcp_servers": ["*"],
+        "can_spawn": true,
+        "spawn_policy": { "allowed_subagents": ["*"] }
+    });
+    let profile = ExecutionProfile::resolve("builtin:all-access", &agent, None, None)
+        .expect("all-access profile");
+    let profiled: Arc<dyn ToolHost> = Arc::new(ProfiledToolHost::new(fan_out, &profile));
+
+    assert_eq!(profiled.list_tools(), [canonical]);
+    assert!(!profiled.list_tools().contains(&legacy));
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![
+            AgentAction::CallTool {
+                tool: legacy.clone(),
+                input_json: json!({"message": "legacy engine route"}).to_string(),
+            },
+            AgentAction::Finish {
+                answer: "legacy alias completed".to_string(),
+            },
+        ])),
+        profiled,
+        Arc::new(InMemoryCheckpointStore::new()),
+        Arc::new(FixedClock(1_000)),
+    );
+
+    let state = engine
+        .run(
+            "session-agent-tool-host-legacy-alias",
+            "Call the MCP echo tool",
+            Some("local-project"),
+        )
+        .await
+        .expect("legacy alias reaches MCP host");
+
+    assert_eq!(state.completed_tool_calls.len(), 1);
+    assert_eq!(state.completed_tool_calls[0].tool, legacy);
+    assert!(state.completed_tool_calls[0]
+        .output_json
+        .contains("legacy engine route"));
+    assert_eq!(state.answer.as_deref(), Some("legacy alias completed"));
+
+    fs::remove_dir_all(root).expect("remove MCP test root");
+}
+
 fn python_executable() -> PathBuf {
     std::env::split_paths(&std::env::var_os("PATH").expect("test PATH"))
         .map(|entry| entry.join("python3"))
@@ -116,6 +330,7 @@ for raw_line in sys.stdin:
                 "name": "echo",
                 "description": "Echo structured input",
                 "inputSchema": {"type": "object"},
+                "annotations": {"readOnlyHint": True},
                 "_meta": {"ui/resourceUri": "ui://mock/index.html"},
             }]
         }
@@ -182,6 +397,75 @@ fn definition(name: &str, python: &Path, script: &Path, mode: &str) -> McpServer
         vault_env_refs: BTreeMap::new(),
         enabled: true,
     }
+}
+
+fn running_run(
+    store: &DesktopSessionStore,
+    workspace_root: &Path,
+    label: &str,
+    permission_profile: DesktopPermissionProfile,
+) -> Result<DesktopRun, String> {
+    let conversation = LocalConversation {
+        id: format!("conversation-{label}-{}", Uuid::new_v4()),
+        project_id: "local-project".to_string(),
+        tenant_id: "local".to_string(),
+        title: "MCP authority regression".to_string(),
+        workspace_id: Some("local-workspace".to_string()),
+        capability_mode: ConversationCapabilityMode::Code,
+        current_mode: ConversationRunMode::Plan,
+        created_at: super::now_iso(),
+        updated_at: super::now_iso(),
+    };
+    store.insert_conversation(&conversation)?;
+    store.replace_agent_plan_tasks(
+        &conversation.id,
+        &[json!({
+            "id": format!("task-{label}-{}", Uuid::new_v4()),
+            "conversation_id": conversation.id,
+            "content": "Exercise MCP authorization",
+            "status": "pending",
+            "priority": "high",
+            "order_index": 0,
+            "created_at": super::now_iso(),
+            "updated_at": super::now_iso(),
+        })],
+    )?;
+    let plan = store
+        .latest_draft_plan(&conversation.id)?
+        .ok_or_else(|| "plan not found".to_string())?;
+    let now = super::now_iso();
+    let outcome = store
+        .approve_plan_and_start_in_environment(ApprovePlanStartInput {
+            conversation_id: &conversation.id,
+            project_id: "local-project",
+            plan_version_id: &plan.id,
+            expected_plan_version: plan.version,
+            idempotency_key: label,
+            message_id: label,
+            request_message: "Run approved MCP tool",
+            environment: Some(DesktopExecutionEnvironment {
+                id: format!("environment-{label}"),
+                kind: DesktopExecutionEnvironmentKind::Local,
+                label: "Authorized local environment".to_string(),
+                workspace_path: workspace_root.to_string_lossy().into_owned(),
+                repository_root: None,
+                branch: None,
+                base_commit: None,
+                source_run_id: None,
+                created_at: now.clone(),
+            }),
+            requested_environment_kind: DesktopExecutionEnvironmentKind::Local,
+            permission_profile,
+            now: &now,
+        })
+        .map_err(|error| error.to_string())?;
+    let run = store
+        .prepare_run_for_execution(&outcome.run.id, &super::now_iso())?
+        .ok_or_else(|| "run did not start".to_string())?;
+    if run.status != DesktopRunStatus::Running {
+        return Err("run is not active".to_string());
+    }
+    Ok(run)
 }
 
 fn test_limits() -> SupervisorLimits {
