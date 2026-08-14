@@ -48,7 +48,7 @@ impl WorkspaceTaskRuntimeConfig {
     }
 }
 
-/// Correlated `chat.inject` runtime for one durable Task dispatch claim.
+/// Correlated `chat.send` runtime for one durable Task dispatch claim.
 pub struct WorkspaceTaskRuntime {
     bot_delivery: Arc<dyn BotDeliveryPort>,
     bot_run_context: Arc<dyn BotRunContextPort>,
@@ -91,10 +91,11 @@ impl WorkspaceTaskRuntime {
 
     /// Deliver one immutable Task snapshot with its deterministic Provider run id.
     ///
-    /// A terminal matching run context proves that a previous attempt was
-    /// accepted, so a post-acceptance crash can be ACKed without another side
-    /// effect. An open matching context is redelivered with the same request id;
-    /// the Provider owns idempotent suppression at that boundary.
+    /// A terminal matching run context proves that the Provider callback was
+    /// durably ingested, so a post-callback crash can be ACKed without another
+    /// side effect. Delivery acceptance alone leaves the context open for that
+    /// callback. An open matching context is redelivered with the same request
+    /// id; the Provider owns idempotent suppression at that boundary.
     ///
     /// # Errors
     ///
@@ -147,7 +148,7 @@ impl WorkspaceTaskRuntime {
                 },
                 run_id: run_id.clone(),
                 frame: task_frame(claim),
-                delivery_kind: BotDeliveryKind::Inject,
+                delivery_kind: BotDeliveryKind::Send,
                 provider_transport: ProviderTransportPreference::Callback,
                 provider_bypass_headers: Vec::new(),
             })
@@ -174,7 +175,6 @@ impl WorkspaceTaskRuntime {
                 bot_id: claim.bot_uuid.clone(),
             });
         }
-        let _ = self.bot_run_context.mark_terminal(&run_id).await;
         info!(
             run_id,
             task_id = %claim.task_id,
@@ -201,7 +201,7 @@ pub enum WorkspaceTaskDeliveryError {
 fn task_frame(claim: &PublicWorkspaceTaskDispatchClaim) -> BcsFrame {
     BcsFrame::Request(RequestFrame::new(
         claim.delivery_request_id.clone(),
-        "chat.inject",
+        "chat.send",
         Some(json!({
             "bcs_group_id": &claim.group_id,
             "bcs_session_id": &claim.conversation_id,
@@ -216,6 +216,7 @@ fn task_frame(claim: &PublicWorkspaceTaskDispatchClaim) -> BcsFrame {
                 "attempt_id": &claim.attempt_id,
                 "plan_id": &claim.plan_id,
                 "plan_node_id": &claim.plan_node_id,
+                "workspace_agent_binding_id": &claim.workspace_agent_binding_id,
                 "conversation_id": &claim.conversation_id,
                 "delivery_request_id": &claim.delivery_request_id,
             }

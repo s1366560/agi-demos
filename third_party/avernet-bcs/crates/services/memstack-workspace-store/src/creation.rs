@@ -39,6 +39,9 @@ pub enum WorkspaceCreationPlanError {
     #[error("Workspace creation owner email must not be blank")]
     InvalidOwnerEmail,
 
+    #[error("Workspace autonomous bootstrap snapshot is invalid")]
+    InvalidAutonomyBootstrap,
+
     #[error(transparent)]
     LegacyEvent(#[from] LegacyWorkspaceEventError),
 }
@@ -108,16 +111,72 @@ impl<'a> WorkspaceCreationOwnerIdentity<'a> {
     }
 }
 
+/// Immutable durable snapshot used to bootstrap one autonomous root Objective.
+#[derive(Debug, Clone, Copy)]
+pub struct WorkspaceAutonomyBootstrapCreation<'a> {
+    objective_title: &'a str,
+    objective_description: Option<&'a str>,
+    created_at_ms: i64,
+}
+
+impl<'a> WorkspaceAutonomyBootstrapCreation<'a> {
+    /// Validate the snapshot before it is embedded in the creation transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceCreationPlanError::InvalidAutonomyBootstrap`] for an
+    /// empty or oversized title or a negative creation timestamp.
+    pub fn new(
+        objective_title: &'a str,
+        objective_description: Option<&'a str>,
+        created_at_ms: i64,
+    ) -> Result<Self, WorkspaceCreationPlanError> {
+        if objective_title.trim().is_empty()
+            || objective_title.chars().count() > 255
+            || created_at_ms < 0
+        {
+            return Err(WorkspaceCreationPlanError::InvalidAutonomyBootstrap);
+        }
+        Ok(Self {
+            objective_title,
+            objective_description,
+            created_at_ms,
+        })
+    }
+}
+
+/// Validated identity and Objective snapshot for one autonomous Workspace creation.
+#[derive(Debug, Clone, Copy)]
+pub struct WorkspaceAutonomousCreation<'a> {
+    owner_identity: WorkspaceCreationOwnerIdentity<'a>,
+    autonomy_bootstrap: WorkspaceAutonomyBootstrapCreation<'a>,
+}
+
+impl<'a> WorkspaceAutonomousCreation<'a> {
+    #[must_use]
+    pub const fn new(
+        owner_identity: WorkspaceCreationOwnerIdentity<'a>,
+        autonomy_bootstrap: WorkspaceAutonomyBootstrapCreation<'a>,
+    ) -> Self {
+        Self {
+            owner_identity,
+            autonomy_bootstrap,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct WorkspaceCreationPersistence<'a> {
     timestamps: Option<&'a WorkspaceCreationTimestamps>,
     owner_email: Option<&'a str>,
+    autonomy_bootstrap: Option<WorkspaceAutonomyBootstrapCreation<'a>>,
 }
 
 impl WorkspaceCreationPersistence<'_> {
     const DATABASE_DEFAULTS: Self = Self {
         timestamps: None,
         owner_email: None,
+        autonomy_bootstrap: None,
     };
 
     const fn with_timestamps(
@@ -126,6 +185,7 @@ impl WorkspaceCreationPersistence<'_> {
         WorkspaceCreationPersistence {
             timestamps: Some(timestamps),
             owner_email: None,
+            autonomy_bootstrap: None,
         }
     }
 
@@ -135,6 +195,17 @@ impl WorkspaceCreationPersistence<'_> {
         WorkspaceCreationPersistence {
             timestamps: Some(owner_identity.timestamps),
             owner_email: Some(owner_identity.email),
+            autonomy_bootstrap: None,
+        }
+    }
+
+    const fn with_autonomous_creation<'a>(
+        autonomous_creation: WorkspaceAutonomousCreation<'a>,
+    ) -> WorkspaceCreationPersistence<'a> {
+        WorkspaceCreationPersistence {
+            timestamps: Some(autonomous_creation.owner_identity.timestamps),
+            owner_email: Some(autonomous_creation.owner_identity.email),
+            autonomy_bootstrap: Some(autonomous_creation.autonomy_bootstrap),
         }
     }
 }
@@ -291,6 +362,31 @@ impl WorkspaceCreationPlanner {
         )
     }
 
+    /// Build public creation plus a durable autonomous bootstrap request in
+    /// the same transaction as the Workspace profile and initial authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same structured errors as [`Self::plan_with_owner_identity`].
+    pub fn plan_with_owner_identity_and_autonomy_bootstrap(
+        self,
+        command: &WorkspaceMutationCommand,
+        profile: WorkspaceCreateProfile,
+        owner: WorkspaceCreateOwner,
+        response: Value,
+        event_payload: Value,
+        autonomous_creation: WorkspaceAutonomousCreation<'_>,
+    ) -> Result<WorkspaceCreationPlan, WorkspaceCreationPlanError> {
+        self.plan_inner(
+            command,
+            profile,
+            owner,
+            response,
+            event_payload,
+            WorkspaceCreationPersistence::with_autonomous_creation(autonomous_creation),
+        )
+    }
+
     fn plan_inner(
         self,
         command: &WorkspaceMutationCommand,
@@ -389,6 +485,13 @@ impl WorkspaceCreationPlanner {
             self.authority_insert(command),
             DbCountExpectation::exactly(1),
         ));
+        if let Some(bootstrap) = persistence.autonomy_bootstrap {
+            domain_steps.push(steps.len());
+            steps.push(DbTransactionStep::execute_checked(
+                self.autonomy_bootstrap_insert(command, &bootstrap),
+                DbCountExpectation::exactly(1),
+            ));
+        }
         steps.extend([
             DbTransactionStep::execute_checked(
                 self.outbox_insert(
@@ -587,6 +690,36 @@ impl WorkspaceCreationPlanner {
             .push_static(", 'owner', ")
             .bind(profile.bcs_environment().as_str())
             .push_static(", 'human', 'auto')")
+            .build()
+    }
+
+    fn autonomy_bootstrap_insert(
+        self,
+        command: &WorkspaceMutationCommand,
+        bootstrap: &WorkspaceAutonomyBootstrapCreation<'_>,
+    ) -> DbStatement {
+        DbStatementBuilder::new(self.flavor)
+            .push_static(
+                "INSERT INTO workspace_autonomy_bootstrap_outbox (bootstrap_id, tenant_id, \
+                 project_id, workspace_id, actor_id, objective_title, objective_description, \
+                 created_at_ms) VALUES (",
+            )
+            .bind(deterministic_creation_id("autonomy-bootstrap", command))
+            .push_static(", ")
+            .bind(command.scope().tenant_id().as_str())
+            .push_static(", ")
+            .bind(command.scope().project_id().as_str())
+            .push_static(", ")
+            .bind(command.scope().workspace_id().as_str())
+            .push_static(", ")
+            .bind(command.actor().actor_id().as_str())
+            .push_static(", ")
+            .bind(bootstrap.objective_title)
+            .push_static(", ")
+            .bind(bootstrap.objective_description)
+            .push_static(", ")
+            .bind(bootstrap.created_at_ms)
+            .push_static(")")
             .build()
     }
 

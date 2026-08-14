@@ -41,6 +41,46 @@ async fn repeated_import_is_idempotent_and_reverifies_every_target() -> TestResu
 }
 
 #[tokio::test]
+async fn autonomous_import_ensures_and_repairs_one_bootstrap_without_history_outbox() -> TestResult
+{
+    let directory = TempDir::new()?;
+    let snapshot_path = directory.path().join("autonomous-legacy.json");
+    let (snapshot, snapshot_hash) = autonomous_snapshot();
+    std::fs::write(&snapshot_path, snapshot)?;
+    let db = LocalSqliteDbPlugin::new()?;
+    bcs::migrations::run_sqlite_migrations(&db).await?;
+    run_desktop_workspace_schema_migrations(&db).await?;
+
+    import_legacy_workspace_snapshot(&db, &snapshot_path, &snapshot_hash).await?;
+    assert_eq!(count(&db, "workspace_autonomy_bootstrap_outbox").await?, 1);
+    assert_eq!(count(&db, "workspace_outbox").await?, 0);
+    assert_eq!(
+        scalar_string(
+            &db,
+            "SELECT actor_id AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        "local-user"
+    );
+    assert_eq!(
+        scalar_string(
+            &db,
+            "SELECT objective_title AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        "Autonomous Legacy Workspace"
+    );
+
+    db.execute(DbStatement::new(
+        "DELETE FROM workspace_autonomy_bootstrap_outbox",
+    ))
+    .await?;
+    import_legacy_workspace_snapshot(&db, &snapshot_path, &snapshot_hash).await?;
+    assert_eq!(count(&db, "workspace_autonomy_bootstrap_outbox").await?, 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn repeated_import_allows_authoritative_project_membership_metadata_refresh() -> TestResult {
     let fixture = Fixture::new().await?;
     import_legacy_workspace_snapshot(&fixture.db, &fixture.snapshot_path, &fixture.snapshot_hash)
@@ -330,6 +370,35 @@ fn snapshot() -> (Vec<u8>, String) {
     });
     let encoded = serde_json::to_vec(&snapshot)
         .unwrap_or_else(|error| panic!("serialize test snapshot: {error}"));
+    let hash = hex_sha256(&encoded);
+    (encoded, hash)
+}
+
+fn autonomous_snapshot() -> (Vec<u8>, String) {
+    let mut workspace = workspace_record(
+        "workspace-autonomous",
+        "tenant-a",
+        "project-a",
+        "Autonomous Legacy Workspace",
+        "2026-07-14T06:14:23.455413+00:00",
+    );
+    workspace["value"]["collaboration_mode"] = Value::String("autonomous".to_string());
+    let hash_value = json!({
+        "id": "workspace-autonomous",
+        "project_id": "project-a",
+        "value": workspace["value"].clone(),
+    });
+    workspace["sourceHash"] = Value::String(source_hash(&hash_value));
+    let snapshot = json!({
+        "schemaVersion": 1,
+        "source": "desktop-session-store",
+        "workspaceCount": 1,
+        "messageCount": 0,
+        "workspaces": [workspace],
+        "messages": [],
+    });
+    let encoded = serde_json::to_vec(&snapshot)
+        .unwrap_or_else(|error| panic!("serialize autonomous test snapshot: {error}"));
     let hash = hex_sha256(&encoded);
     (encoded, hash)
 }

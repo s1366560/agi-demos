@@ -8,6 +8,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::autonomy_attention::attention_insert_statement;
+use crate::autonomy_judgment::{audit_complete_statement, claim_apply_statement};
+
 /// Tenant/project/workspace scope for one Autonomy operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceAutonomyScope {
@@ -26,6 +29,32 @@ pub struct WorkspaceAutonomyJudgmentAudit {
     pub output: Value,
     pub rationale: String,
     pub latency_ms: u64,
+    pub status: String,
+    pub error_detail: Option<String>,
+    pub created_at: String,
+}
+
+/// Active Workspace Agent binding supplied to the structured Autonomy Judge.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceAutonomyAgentBinding {
+    pub binding_id: String,
+    pub agent_id: String,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
+    pub status: String,
+    pub config: Value,
+}
+
+/// Durable continuation selected by the Judge and inserted with the tick.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceAutonomyProgressionWrite {
+    pub progression_id: String,
+    pub root_task_id: String,
+    pub judge_agent_id: String,
+    pub workspace_agent_binding_id: String,
+    pub task_title: String,
+    pub task_description: String,
+    pub created_at_ms: i64,
 }
 
 /// Complete Autonomy tick mutation.
@@ -43,6 +72,9 @@ pub struct WorkspaceAutonomyMutation {
     pub reason: String,
     pub force: bool,
     pub judgment: Option<WorkspaceAutonomyJudgmentAudit>,
+    pub judgment_apply: Option<crate::WorkspaceAutonomyJudgmentApply>,
+    pub progression: Option<WorkspaceAutonomyProgressionWrite>,
+    pub attention: Option<crate::WorkspaceAutonomyAttentionWrite>,
     pub response: Value,
     pub created_at: String,
 }
@@ -109,6 +141,9 @@ impl<'a> WorkspaceAutonomyStore<'a> {
             reason: String::new(),
             force: false,
             judgment: None,
+            judgment_apply: None,
+            progression: None,
+            attention: None,
             response: Value::Null,
             created_at: String::new(),
         };
@@ -183,6 +218,59 @@ impl<'a> WorkspaceAutonomyStore<'a> {
         rows.first()
             .map(|row| required_string(row, "created_at"))
             .transpose()
+    }
+
+    /// List active Agent bindings as bounded structured Judge candidates.
+    pub async fn active_agent_bindings(
+        &self,
+        scope: &WorkspaceAutonomyScope,
+        limit: i64,
+    ) -> Result<Vec<WorkspaceAutonomyAgentBinding>, WorkspaceAutonomyStoreError> {
+        if !(1..=500).contains(&limit) {
+            return Err(WorkspaceAutonomyStoreError::InvalidRecord(
+                "agent binding limit",
+            ));
+        }
+        let rows = self
+            .db
+            .query(
+                DbStatementBuilder::new(self.flavor)
+                    .push_static(
+                        "SELECT binding_id, agent_id, display_name, description, status, \
+                         config_json FROM workspace_agent_bindings WHERE tenant_id = ",
+                    )
+                    .bind(scope.tenant_id.as_str())
+                    .push_static(" AND project_id = ")
+                    .bind(scope.project_id.as_str())
+                    .push_static(" AND workspace_id = ")
+                    .bind(scope.workspace_id.as_str())
+                    .push_static(
+                        " AND is_active = TRUE ORDER BY created_at ASC, binding_id ASC LIMIT ",
+                    )
+                    .bind(limit)
+                    .build(),
+            )
+            .await?;
+        rows.iter().map(agent_binding_from_row).collect()
+    }
+
+    /// List open root Tasks that have no pending continuation or unfinished execution Task.
+    pub async fn eligible_root_task_ids(
+        &self,
+        scope: &WorkspaceAutonomyScope,
+        limit: i64,
+    ) -> Result<Vec<String>, WorkspaceAutonomyStoreError> {
+        if !(1..=500).contains(&limit) {
+            return Err(WorkspaceAutonomyStoreError::InvalidRecord(
+                "eligible root limit",
+            ));
+        }
+        self.db
+            .query(eligible_root_task_ids_statement(self.flavor, scope, limit))
+            .await?
+            .iter()
+            .map(|row| required_string(row, "task_id"))
+            .collect()
     }
 
     /// Replay one committed idempotency receipt before invoking the external Judge.
@@ -294,6 +382,61 @@ impl<'a> WorkspaceAutonomyStore<'a> {
     }
 }
 
+fn eligible_root_task_ids_statement(
+    flavor: DbSqlFlavor,
+    scope: &WorkspaceAutonomyScope,
+    limit: i64,
+) -> DbStatement {
+    let builder = DbStatementBuilder::new(flavor)
+        .push_static("SELECT root.task_id FROM workspace_tasks root WHERE root.tenant_id = ")
+        .bind(scope.tenant_id.as_str())
+        .push_static(" AND root.project_id = ")
+        .bind(scope.project_id.as_str())
+        .push_static(" AND root.workspace_id = ")
+        .bind(scope.workspace_id.as_str())
+        .push_static(
+            " AND root.archived_at IS NULL AND root.status NOT IN ('done', 'blocked') AND ",
+        );
+    let builder = match flavor {
+        DbSqlFlavor::Postgres => {
+            builder.push_static("root.metadata_json ->> 'task_role' = 'goal_root'")
+        }
+        DbSqlFlavor::Sqlite => {
+            builder.push_static("json_extract(root.metadata_json, '$.task_role') = 'goal_root'")
+        }
+        DbSqlFlavor::Mysql => builder.push_static("1 = 0"),
+    };
+    let builder = builder.push_static(
+        " AND NOT EXISTS (SELECT 1 FROM workspace_autonomy_attentions attention WHERE \
+         attention.tenant_id = root.tenant_id AND attention.project_id = root.project_id AND \
+         attention.workspace_id = root.workspace_id AND attention.root_task_id = root.task_id AND \
+         attention.status = 'open') AND NOT EXISTS (SELECT 1 FROM \
+         workspace_autonomy_progression_outbox progression \
+         WHERE progression.tenant_id = root.tenant_id AND progression.project_id = \
+         root.project_id AND progression.workspace_id = root.workspace_id AND \
+         progression.root_task_id = root.task_id AND progression.status IN ('pending', \
+         'processing', 'dead_letter')) AND NOT EXISTS (SELECT 1 FROM workspace_tasks execution \
+         WHERE execution.tenant_id = root.tenant_id AND execution.project_id = root.project_id AND \
+         execution.workspace_id = root.workspace_id AND execution.archived_at IS NULL AND \
+         execution.status NOT IN ('done', 'blocked') AND ",
+    );
+    let builder = match flavor {
+        DbSqlFlavor::Postgres => builder.push_static(
+            "execution.metadata_json ->> 'task_role' = 'execution_task' AND \
+             execution.metadata_json ->> 'root_goal_task_id' = root.task_id",
+        ),
+        DbSqlFlavor::Sqlite => builder.push_static(
+            "json_extract(execution.metadata_json, '$.task_role') = 'execution_task' AND \
+             json_extract(execution.metadata_json, '$.root_goal_task_id') = root.task_id",
+        ),
+        DbSqlFlavor::Mysql => builder.push_static("1 = 0"),
+    };
+    builder
+        .push_static(") ORDER BY root.created_at ASC, root.task_id ASC LIMIT ")
+        .bind(limit)
+        .build()
+}
+
 fn mutation_steps(
     flavor: DbSqlFlavor,
     mutation: &WorkspaceAutonomyMutation,
@@ -304,7 +447,7 @@ fn mutation_steps(
         .ok_or(WorkspaceAutonomyStoreError::Conflict)?;
     let receipt_id = deterministic_id("autonomy-receipt", mutation);
     let outbox_id = deterministic_id("autonomy-outbox", mutation);
-    let mut steps = Vec::with_capacity(9);
+    let mut steps = Vec::with_capacity(12);
     steps.push(DbTransactionStep::query_checked(
         editor_access_check(flavor, mutation),
         DbCountExpectation::exactly(1),
@@ -317,20 +460,37 @@ fn mutation_steps(
         revision_check(flavor, mutation),
         DbCountExpectation::exactly(1),
     ));
-    if let Some(audit) = &mutation.judgment {
-        steps.push(DbTransactionStep::execute_checked(
-            audit_insert(flavor, mutation, audit),
-            DbCountExpectation::exactly(1),
-        ));
-    }
     steps.push(DbTransactionStep::execute_checked(
         tick_insert(flavor, mutation),
         DbCountExpectation::exactly(1),
     ));
+    if let Some(attention) = &mutation.attention {
+        steps.push(DbTransactionStep::execute_checked(
+            attention_insert_statement(flavor, &mutation.scope, attention)
+                .map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("attention"))?,
+            DbCountExpectation::exactly(1),
+        ));
+    }
+    if let Some(progression) = &mutation.progression {
+        steps.push(DbTransactionStep::execute_checked(
+            progression_insert(flavor, mutation, progression),
+            DbCountExpectation::exactly(1),
+        ));
+    }
     steps.push(DbTransactionStep::execute_checked(
         authority_cas(flavor, mutation),
         DbCountExpectation::exactly(1),
     ));
+    if let Some(apply) = &mutation.judgment_apply {
+        steps.push(DbTransactionStep::execute_checked(
+            claim_apply_statement(flavor, apply),
+            DbCountExpectation::exactly(1),
+        ));
+        steps.push(DbTransactionStep::execute_checked(
+            audit_complete_statement(flavor, apply.audit_id.as_str()),
+            DbCountExpectation::exactly(1),
+        ));
+    }
     steps.push(DbTransactionStep::execute_checked(
         outbox_insert(flavor, mutation, outbox_id.as_str(), committed_revision),
         DbCountExpectation::exactly(1),
@@ -449,42 +609,6 @@ fn revision_check(flavor: DbSqlFlavor, mutation: &WorkspaceAutonomyMutation) -> 
     }
 }
 
-fn audit_insert(
-    flavor: DbSqlFlavor,
-    mutation: &WorkspaceAutonomyMutation,
-    audit: &WorkspaceAutonomyJudgmentAudit,
-) -> DbStatement {
-    DbStatementBuilder::new(flavor)
-        .push_static(
-            "INSERT INTO workspace_judge_audits (audit_id, tenant_id, project_id, workspace_id, \
-             judgment_type, agent_id, tool_name, input_json, output_json, rationale, latency_ms, \
-             status, created_at) VALUES (",
-        )
-        .bind(audit.audit_id.as_str())
-        .push_static(", ")
-        .bind(mutation.scope.tenant_id.as_str())
-        .push_static(", ")
-        .bind(mutation.scope.project_id.as_str())
-        .push_static(", ")
-        .bind(mutation.scope.workspace_id.as_str())
-        .push_static(", 'autonomy_tick', ")
-        .bind(audit.agent_id.as_str())
-        .push_static(", ")
-        .bind(audit.tool_name.as_str())
-        .push_static(", ")
-        .bind(audit.input.to_string())
-        .push_static(", ")
-        .bind(audit.output.to_string())
-        .push_static(", ")
-        .bind(audit.rationale.as_str())
-        .push_static(", ")
-        .bind(audit.latency_ms)
-        .push_static(", 'completed', ")
-        .bind(mutation.created_at.as_str())
-        .push_static(")")
-        .build()
-}
-
 fn tick_insert(flavor: DbSqlFlavor, mutation: &WorkspaceAutonomyMutation) -> DbStatement {
     DbStatementBuilder::new(flavor)
         .push_static(
@@ -517,6 +641,45 @@ fn tick_insert(flavor: DbSqlFlavor, mutation: &WorkspaceAutonomyMutation) -> DbS
         )
         .push_static(", ")
         .bind(mutation.created_at.as_str())
+        .push_static(")")
+        .build()
+}
+
+fn progression_insert(
+    flavor: DbSqlFlavor,
+    mutation: &WorkspaceAutonomyMutation,
+    progression: &WorkspaceAutonomyProgressionWrite,
+) -> DbStatement {
+    DbStatementBuilder::new(flavor)
+        .push_static(
+            "INSERT INTO workspace_autonomy_progression_outbox (progression_id, tick_id, \
+             tenant_id, project_id, workspace_id, root_task_id, actor_id, judge_agent_id, \
+             workspace_agent_binding_id, task_title, task_description, status, attempt_count, \
+             max_attempts, next_attempt_at_ms, lease_generation, created_at_ms) VALUES (",
+        )
+        .bind(progression.progression_id.as_str())
+        .push_static(", ")
+        .bind(mutation.tick_id.as_str())
+        .push_static(", ")
+        .bind(mutation.scope.tenant_id.as_str())
+        .push_static(", ")
+        .bind(mutation.scope.project_id.as_str())
+        .push_static(", ")
+        .bind(mutation.scope.workspace_id.as_str())
+        .push_static(", ")
+        .bind(progression.root_task_id.as_str())
+        .push_static(", ")
+        .bind(mutation.actor_id.as_str())
+        .push_static(", ")
+        .bind(progression.judge_agent_id.as_str())
+        .push_static(", ")
+        .bind(progression.workspace_agent_binding_id.as_str())
+        .push_static(", ")
+        .bind(progression.task_title.as_str())
+        .push_static(", ")
+        .bind(progression.task_description.as_str())
+        .push_static(", 'pending', 0, 8, 0, 0, ")
+        .bind(progression.created_at_ms)
         .push_static(")")
         .build()
 }
@@ -628,6 +791,24 @@ fn required_string(
 ) -> Result<String, WorkspaceAutonomyStoreError> {
     row.get_string(column)?
         .ok_or(WorkspaceAutonomyStoreError::InvalidRecord(column))
+}
+
+fn agent_binding_from_row(
+    row: &DbRow,
+) -> Result<WorkspaceAutonomyAgentBinding, WorkspaceAutonomyStoreError> {
+    let config: Value = serde_json::from_str(&required_string(row, "config_json")?)
+        .map_err(|_| WorkspaceAutonomyStoreError::InvalidRecord("config_json"))?;
+    if !config.is_object() {
+        return Err(WorkspaceAutonomyStoreError::InvalidRecord("config_json"));
+    }
+    Ok(WorkspaceAutonomyAgentBinding {
+        binding_id: required_string(row, "binding_id")?,
+        agent_id: required_string(row, "agent_id")?,
+        display_name: row.get_string("display_name")?,
+        description: row.get_string("description")?,
+        status: required_string(row, "status")?,
+        config,
+    })
 }
 
 fn deterministic_id(namespace: &str, mutation: &WorkspaceAutonomyMutation) -> String {

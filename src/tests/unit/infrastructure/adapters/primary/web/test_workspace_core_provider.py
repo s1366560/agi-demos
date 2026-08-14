@@ -17,10 +17,12 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.workspace_core.autonomy_judge import (
+    WorkspaceAutonomyAgentCandidate,
     WorkspaceAutonomyCandidate,
     WorkspaceAutonomyJudgeRequest,
     WorkspaceAutonomyJudgeUnavailable,
     WorkspaceAutonomyJudgeVerdict,
+    WorkspaceAutonomyNextAction,
 )
 from src.infrastructure.workspace_core.context_judge import (
     WorkspaceContextCandidate,
@@ -169,6 +171,11 @@ class FakeAutonomyJudge:
         return WorkspaceAutonomyJudgeVerdict(
             verdict="continue",
             selected_root_task_id="task-2",
+            next_action=WorkspaceAutonomyNextAction(
+                title="Implement the next verified slice",
+                description="Advance the selected root goal",
+                workspace_agent_binding_id="binding-1",
+            ),
             rationale="The structured evidence supports task-2.",
             agent_id="provider-judge:model-judge",
             tool_name="judge_workspace_autonomy",
@@ -176,6 +183,11 @@ class FakeAutonomyJudge:
             output_json={
                 "verdict": "continue",
                 "selected_root_task_id": "task-2",
+                "next_action": {
+                    "title": "Implement the next verified slice",
+                    "description": "Advance the selected root goal",
+                    "workspace_agent_binding_id": "binding-1",
+                },
                 "rationale": "The structured evidence supports task-2.",
             },
             latency_ms=11,
@@ -601,6 +613,16 @@ def _autonomy_judge_payload() -> dict[str, object]:
                 "metadata": {},
             },
         ],
+        "agent_candidates": [
+            {
+                "workspace_agent_binding_id": "binding-1",
+                "agent_id": "agent-1",
+                "display_name": "Delivery Agent",
+                "description": "Executes verified work",
+                "status": "idle",
+                "config": {},
+            }
+        ],
     }
 
 
@@ -639,6 +661,7 @@ async def test_autonomy_judge_returns_only_structured_auditable_verdict() -> Non
     assert response.status_code == 200
     assert response.json()["verdict"] == "continue"
     assert response.json()["selected_root_task_id"] == "task-2"
+    assert response.json()["next_action"]["workspace_agent_binding_id"] == "binding-1"
     assert response.json()["tool_name"] == "judge_workspace_autonomy"
     assert len(judge.requests) == 1
     assert judge.requests[0].candidates[1] == WorkspaceAutonomyCandidate(
@@ -648,6 +671,16 @@ async def test_autonomy_judge_returns_only_structured_auditable_verdict() -> Non
         status="pending",
         metadata={},
     )
+    assert judge.requests[0].agent_candidates == [
+        WorkspaceAutonomyAgentCandidate(
+            workspace_agent_binding_id="binding-1",
+            agent_id="agent-1",
+            display_name="Delivery Agent",
+            description="Executes verified work",
+            status="idle",
+            config={},
+        )
+    ]
 
 
 @pytest.mark.unit

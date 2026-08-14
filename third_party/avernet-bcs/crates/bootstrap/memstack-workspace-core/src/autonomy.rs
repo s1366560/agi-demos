@@ -6,12 +6,15 @@ use axum::body::Bytes;
 use axum::extract::Path;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use memstack_workspace_service::{
+    PublicWorkspaceAutonomyAttention, PublicWorkspaceAutonomyAttentionError,
+    PublicWorkspaceAutonomyAttentionErrorKind, PublicWorkspaceAutonomyAttentionService,
     PublicWorkspaceAutonomyContext, PublicWorkspaceAutonomyError, PublicWorkspaceAutonomyErrorKind,
     PublicWorkspaceAutonomyService, PublicWorkspaceAutonomyTickResponse,
 };
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::public_api::caller_from_headers;
@@ -22,10 +25,108 @@ const IDEMPOTENCY_HEADER: &str = "idempotency-key";
 const IF_MATCH_HEADER: &str = "if-match";
 
 pub(super) fn router() -> Router {
-    Router::new().route(
-        "/api/v1/workspaces/{workspace_id}/autonomy/tick",
-        post(trigger_autonomy_tick),
-    )
+    Router::new()
+        .route(
+            "/api/v1/workspaces/{workspace_id}/autonomy/tick",
+            post(trigger_autonomy_tick),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/autonomy/attentions",
+            get(list_autonomy_attentions),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/retry",
+            post(retry_autonomy_attention),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/resolve",
+            post(resolve_autonomy_attention),
+        )
+}
+
+#[derive(Debug, Serialize)]
+struct AutonomyAttentionRetryResponse {
+    attention_id: String,
+    status: &'static str,
+}
+
+async fn list_autonomy_attentions(
+    Extension(state): Extension<Arc<WorkspaceCoreState>>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<PublicWorkspaceAutonomyAttention>>, Response> {
+    let context = attention_context(&state, workspace_id.as_str(), &headers).await?;
+    PublicWorkspaceAutonomyAttentionService::new(state.db.as_ref(), state.sql_flavor)
+        .list_open(&context)
+        .await
+        .map(Json)
+        .map_err(attention_error_response)
+}
+
+async fn retry_autonomy_attention(
+    Extension(state): Extension<Arc<WorkspaceCoreState>>,
+    Path((workspace_id, attention_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Json<AutonomyAttentionRetryResponse>, Response> {
+    let context = attention_context(&state, workspace_id.as_str(), &headers).await?;
+    PublicWorkspaceAutonomyAttentionService::new(state.db.as_ref(), state.sql_flavor)
+        .retry(
+            &context,
+            attention_id.as_str(),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await
+        .map_err(attention_error_response)?;
+    Ok(Json(AutonomyAttentionRetryResponse {
+        attention_id,
+        status: "retry_queued",
+    }))
+}
+
+async fn resolve_autonomy_attention(
+    Extension(state): Extension<Arc<WorkspaceCoreState>>,
+    Path((workspace_id, attention_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<
+    Json<memstack_workspace_service::PublicWorkspaceAutonomyAttentionResolveResponse>,
+    Response,
+> {
+    let mut context = attention_context(&state, workspace_id.as_str(), &headers).await?;
+    context.expected_revision =
+        Some(required_revision(&headers).map_err(IntoResponse::into_response)?);
+    context.idempotency_key = Some(
+        super::required_header(&headers, IDEMPOTENCY_HEADER)
+            .map_err(IntoResponse::into_response)?,
+    );
+    PublicWorkspaceAutonomyAttentionService::new(state.db.as_ref(), state.sql_flavor)
+        .resolve_judge_attention(
+            &context,
+            attention_id.as_str(),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await
+        .map(Json)
+        .map_err(attention_error_response)
+}
+
+async fn attention_context(
+    state: &WorkspaceCoreState,
+    workspace_id: &str,
+    headers: &HeaderMap,
+) -> Result<PublicWorkspaceAutonomyContext, Response> {
+    let caller = caller_from_headers(headers).map_err(IntoResponse::into_response)?;
+    let scope = resolve_workspace_scope(state, workspace_id, caller.user_id.as_str())
+        .await
+        .map_err(scope_error_response)?;
+    Ok(PublicWorkspaceAutonomyContext {
+        tenant_id: scope.tenant_id,
+        project_id: scope.project_id,
+        workspace_id: scope.workspace_id,
+        user_id: caller.user_id,
+        is_superuser: caller.is_superuser,
+        expected_revision: None,
+        idempotency_key: None,
+    })
 }
 
 async fn trigger_autonomy_tick(
@@ -115,6 +216,11 @@ fn optional_revision(headers: &HeaderMap) -> Result<Option<u64>, ApiError> {
         .transpose()
 }
 
+fn required_revision(headers: &HeaderMap) -> Result<u64, ApiError> {
+    optional_revision(headers)?
+        .ok_or_else(|| ApiError::InvalidRequest("missing If-Match header".to_string()))
+}
+
 fn optional_header(headers: &HeaderMap, name: &'static str) -> Result<Option<String>, ApiError> {
     headers
         .get(name)
@@ -155,6 +261,27 @@ fn autonomy_error_response(error: PublicWorkspaceAutonomyError) -> Response {
         PublicWorkspaceAutonomyErrorKind::Unavailable => (
             StatusCode::SERVICE_UNAVAILABLE,
             "Workspace autonomy unavailable",
+        ),
+    }
+    .into_response()
+}
+
+fn attention_error_response(error: PublicWorkspaceAutonomyAttentionError) -> Response {
+    match error.kind() {
+        PublicWorkspaceAutonomyAttentionErrorKind::InvalidRequest => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Invalid Workspace autonomy attention request",
+        ),
+        PublicWorkspaceAutonomyAttentionErrorKind::Forbidden => {
+            (StatusCode::FORBIDDEN, "Workspace editor access required")
+        }
+        PublicWorkspaceAutonomyAttentionErrorKind::Conflict => (
+            StatusCode::CONFLICT,
+            "Workspace autonomy attention conflict",
+        ),
+        PublicWorkspaceAutonomyAttentionErrorKind::Unavailable => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Workspace autonomy attention unavailable",
         ),
     }
     .into_response()

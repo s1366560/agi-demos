@@ -52,6 +52,113 @@ async fn update_workspace_commits_revision_outbox_and_idempotent_response()
 }
 
 #[tokio::test]
+async fn autonomous_update_ensures_one_bootstrap_and_skips_an_existing_goal_root()
+-> Result<(), Box<dyn Error>> {
+    let db = seeded_db().await?;
+    for ddl in [
+        "CREATE TABLE workspace_tasks (task_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, \
+         project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, metadata_json TEXT NOT NULL)",
+        "CREATE TABLE workspace_autonomy_bootstrap_outbox (bootstrap_id TEXT PRIMARY KEY, \
+         tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL UNIQUE, \
+         actor_id TEXT NOT NULL, objective_title TEXT NOT NULL, objective_description TEXT, \
+         status TEXT NOT NULL DEFAULT 'pending', attempt_count INTEGER NOT NULL DEFAULT 0, \
+         max_attempts INTEGER NOT NULL DEFAULT 8, next_attempt_at_ms INTEGER NOT NULL DEFAULT 0, \
+         lease_generation INTEGER NOT NULL DEFAULT 0, created_at_ms INTEGER NOT NULL)",
+    ] {
+        db.execute(DbStatement::new(ddl)).await?;
+    }
+    let service = PublicWorkspaceMutationService::new(&db, DbSqlFlavor::Sqlite);
+    let transition = PublicUpdateWorkspaceInput {
+        context: mutation_context("autonomous-transition", Some(1), "owner-1"),
+        name: Some("Autonomous Space".to_string()),
+        description: Some("Advance the root objective".to_string()),
+        is_archived: None,
+        metadata: Some(json!({
+            "workspace_type": "general",
+            "collaboration_mode": "autonomous"
+        })),
+    };
+
+    service.update(&transition).await?;
+    service.update(&transition).await?;
+    assert_eq!(
+        scalar_i64(
+            &db,
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        1
+    );
+    assert_eq!(
+        scalar_string(
+            &db,
+            "SELECT actor_id AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        "owner-1"
+    );
+    assert_eq!(
+        scalar_string(
+            &db,
+            "SELECT objective_title AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        "Autonomous Space"
+    );
+
+    db.execute(DbStatement::new(
+        "DELETE FROM workspace_autonomy_bootstrap_outbox",
+    ))
+    .await?;
+    service
+        .update(&PublicUpdateWorkspaceInput {
+            context: mutation_context("autonomous-repair", Some(2), "owner-1"),
+            name: Some("Autonomous Space Repaired".to_string()),
+            description: None,
+            is_archived: None,
+            metadata: None,
+        })
+        .await?;
+    assert_eq!(
+        scalar_i64(
+            &db,
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        1
+    );
+
+    db.execute(DbStatement::new(
+        "DELETE FROM workspace_autonomy_bootstrap_outbox",
+    ))
+    .await?;
+    db.execute(DbStatement::new(
+        "INSERT INTO workspace_tasks (task_id, tenant_id, project_id, workspace_id, metadata_json) \
+         VALUES ('root-1', 'tenant-1', 'project-1', 'workspace-1', \
+         '{\"task_role\":\"goal_root\",\"objective_id\":\"objective-1\"}')",
+    ))
+    .await?;
+    service
+        .update(&PublicUpdateWorkspaceInput {
+            context: mutation_context("autonomous-existing-root", Some(3), "owner-1"),
+            name: Some("Autonomous Space With Root".to_string()),
+            description: None,
+            is_archived: None,
+            metadata: None,
+        })
+        .await?;
+    assert_eq!(
+        scalar_i64(
+            &db,
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        0
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn update_workspace_rejects_stale_revision_without_partial_writes()
 -> Result<(), Box<dyn Error>> {
     let db = seeded_db().await?;

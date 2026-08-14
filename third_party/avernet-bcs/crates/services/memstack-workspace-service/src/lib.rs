@@ -17,6 +17,7 @@ use memstack_workspace_service_api::{
 };
 pub use memstack_workspace_service_api::{WorkspaceMemberRole, WorkspaceMutationAuthority};
 use memstack_workspace_store::{
+    WorkspaceAutonomousCreation, WorkspaceAutonomyBootstrapCreation,
     WorkspaceCreationOwnerIdentity, WorkspaceCreationPlanError, WorkspaceCreationPlanner,
     WorkspaceCreationTimestamps, WorkspaceMutationStore, WorkspaceMutationStoreError,
 };
@@ -27,6 +28,10 @@ use thiserror::Error;
 mod plan_idempotency;
 mod public_agents;
 mod public_autonomy;
+mod public_autonomy_attention;
+mod public_autonomy_bootstrap;
+mod public_autonomy_progression;
+mod public_autonomy_schedule;
 mod public_blackboard;
 mod public_context;
 mod public_creation;
@@ -42,6 +47,7 @@ mod public_plan_delivery;
 mod public_plan_snapshot;
 mod public_plans;
 mod public_policy;
+mod public_runtime_terminal;
 mod public_task_dispatch;
 mod public_tasks;
 mod public_topology;
@@ -53,12 +59,31 @@ pub use public_agents::{
     PublicUpdateWorkspaceAgentInput, PublicWorkspaceAgentMutationService,
 };
 pub use public_autonomy::{
-    PublicWorkspaceAutonomyCandidate, PublicWorkspaceAutonomyContext, PublicWorkspaceAutonomyError,
-    PublicWorkspaceAutonomyErrorKind, PublicWorkspaceAutonomyJudgeContractError,
-    PublicWorkspaceAutonomyJudgePort, PublicWorkspaceAutonomyJudgePortError,
-    PublicWorkspaceAutonomyJudgment, PublicWorkspaceAutonomyJudgmentRequest,
+    PublicWorkspaceAutonomyAgentCandidate, PublicWorkspaceAutonomyCandidate,
+    PublicWorkspaceAutonomyContext, PublicWorkspaceAutonomyError, PublicWorkspaceAutonomyErrorKind,
+    PublicWorkspaceAutonomyJudgeContractError, PublicWorkspaceAutonomyJudgePort,
+    PublicWorkspaceAutonomyJudgePortError, PublicWorkspaceAutonomyJudgment,
+    PublicWorkspaceAutonomyJudgmentRequest, PublicWorkspaceAutonomyNextAction,
     PublicWorkspaceAutonomyService, PublicWorkspaceAutonomyTickOutcome,
     PublicWorkspaceAutonomyTickResponse, PublicWorkspaceAutonomyVerdictKind,
+    WORKSPACE_AUTONOMY_COOLDOWN_SECONDS,
+};
+pub use public_autonomy_attention::{
+    PublicWorkspaceAutonomyAttention, PublicWorkspaceAutonomyAttentionError,
+    PublicWorkspaceAutonomyAttentionErrorKind, PublicWorkspaceAutonomyAttentionResolveResponse,
+    PublicWorkspaceAutonomyAttentionService,
+};
+pub use public_autonomy_bootstrap::{
+    PublicWorkspaceAutonomyBootstrapClaim, PublicWorkspaceAutonomyBootstrapError,
+    PublicWorkspaceAutonomyBootstrapFailureOutcome, PublicWorkspaceAutonomyBootstrapService,
+};
+pub use public_autonomy_progression::{
+    PublicWorkspaceAutonomyProgressionClaim, PublicWorkspaceAutonomyProgressionError,
+    PublicWorkspaceAutonomyProgressionFailureOutcome, PublicWorkspaceAutonomyProgressionService,
+};
+pub use public_autonomy_schedule::{
+    PublicWorkspaceAutonomyScheduleCandidate, PublicWorkspaceAutonomyScheduleError,
+    PublicWorkspaceAutonomyScheduleService,
 };
 pub use public_blackboard::{
     PublicCreateBlackboardPostInput, PublicCreateBlackboardReplyInput,
@@ -135,6 +160,11 @@ pub use public_policy::{
     PublicPatchWorkspacePolicyInput, PublicPolicyRouteTarget, PublicPutWorkspacePolicyInput,
     PublicWorkspacePolicyContext, PublicWorkspacePolicyError, PublicWorkspacePolicyErrorKind,
     PublicWorkspacePolicyService,
+};
+pub use public_runtime_terminal::{
+    PublicWorkspaceRuntimeTerminalContext, PublicWorkspaceRuntimeTerminalError,
+    PublicWorkspaceRuntimeTerminalErrorKind, PublicWorkspaceRuntimeTerminalInput,
+    PublicWorkspaceRuntimeTerminalOutcome, PublicWorkspaceRuntimeTerminalService,
 };
 pub use public_task_dispatch::{
     PublicWorkspaceTaskDispatchClaim, PublicWorkspaceTaskDispatchFailureOutcome,
@@ -286,7 +316,7 @@ impl<'a> WorkspaceCreationService<'a> {
         &self,
         input: &CreateWorkspaceInput,
     ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
-        self.create_inner(input, None).await
+        self.create_inner(input, None, false).await
     }
 
     /// Atomically create a public Workspace and its authenticated owner identity mirror.
@@ -299,13 +329,28 @@ impl<'a> WorkspaceCreationService<'a> {
         input: &CreateWorkspaceInput,
         owner_email: &str,
     ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
-        self.create_inner(input, Some(owner_email)).await
+        self.create_inner(input, Some(owner_email), false).await
+    }
+
+    /// Atomically create a public Workspace, owner identity, and durable
+    /// autonomous root bootstrap request.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same structured errors as [`Self::create_with_owner_identity`].
+    pub async fn create_with_owner_identity_and_autonomy_bootstrap(
+        &self,
+        input: &CreateWorkspaceInput,
+        owner_email: &str,
+    ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
+        self.create_inner(input, Some(owner_email), true).await
     }
 
     async fn create_inner(
         &self,
         input: &CreateWorkspaceInput,
         owner_email: Option<&str>,
+        bootstrap_autonomy: bool,
     ) -> Result<CreateWorkspaceOutcome, CreateWorkspaceServiceError> {
         let now = Utc::now();
         let persisted_at = now.to_rfc3339_opts(SecondsFormat::Micros, false);
@@ -343,7 +388,25 @@ impl<'a> WorkspaceCreationService<'a> {
         let response = creation_response(input, &response_at);
         let event_payload = owner_event_payload(input, &persisted_at);
         let planner = WorkspaceCreationPlanner::new(self.flavor);
-        let plan = if let Some(owner_email) = owner_email {
+        let plan = if let Some(owner_email) = owner_email
+            && bootstrap_autonomy
+        {
+            planner.plan_with_owner_identity_and_autonomy_bootstrap(
+                &command,
+                profile,
+                owner,
+                response,
+                event_payload,
+                WorkspaceAutonomousCreation::new(
+                    WorkspaceCreationOwnerIdentity::new(owner_email, &timestamps)?,
+                    WorkspaceAutonomyBootstrapCreation::new(
+                        input.content.name.as_str(),
+                        input.content.description.as_deref(),
+                        now.timestamp_millis(),
+                    )?,
+                ),
+            )?
+        } else if let Some(owner_email) = owner_email {
             planner.plan_with_owner_identity(
                 &command,
                 profile,

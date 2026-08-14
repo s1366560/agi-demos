@@ -138,6 +138,21 @@ impl<'a> StructuredTaskService<'a> {
         }
     }
 
+    /// Derive the stable execution Task identifier before attempting its idempotent create.
+    pub fn execution_task_id(
+        context: &StructuredTaskContext,
+    ) -> Result<String, StructuredTaskError> {
+        validate_context(context)?;
+        if context
+            .idempotency_key
+            .as_deref()
+            .is_some_and(|key| key.trim().is_empty() || key.chars().count() > 256)
+        {
+            return Err(StructuredTaskError::InvalidRequest);
+        }
+        Ok(deterministic_task_id(context))
+    }
+
     pub async fn get(
         &self,
         context: &StructuredTaskContext,
@@ -198,7 +213,7 @@ impl<'a> StructuredTaskService<'a> {
         if root_goal_task_id.trim().is_empty() {
             return Err(StructuredTaskError::InvalidRequest);
         }
-        let task_id = deterministic_task_id(context);
+        let task_id = Self::execution_task_id(context)?;
         let now = now_string();
         let mut metadata = metadata_object(fields.metadata.clone())?;
         metadata.insert("autonomy_schema_version".to_string(), Value::from(1));
@@ -763,4 +778,28 @@ fn deterministic_task_id(context: &StructuredTaskContext) -> String {
 
 fn now_string() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_task_id_is_stable_across_revision_retries() -> Result<(), StructuredTaskError> {
+        let mut context = StructuredTaskContext {
+            tenant_id: "tenant-1".to_string(),
+            project_id: "project-1".to_string(),
+            workspace_id: "workspace-1".to_string(),
+            actor: StructuredTaskActor {
+                user_id: "user-1".to_string(),
+                leader_agent_id: "judge-1".to_string(),
+            },
+            expected_revision: Some(3),
+            idempotency_key: Some("autonomy-progression:progression-1:create".to_string()),
+        };
+        let first = StructuredTaskService::execution_task_id(&context)?;
+        context.expected_revision = Some(4);
+        assert_eq!(first, StructuredTaskService::execution_task_id(&context)?);
+        Ok(())
+    }
 }

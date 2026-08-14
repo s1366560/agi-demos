@@ -74,7 +74,8 @@ pub async fn import_legacy_workspace_snapshot(
         return Ok(());
     }
     verify_ledger(&import, &ledger_rows)?;
-    verify_import_anchors(db, &import).await
+    verify_import_anchors(db, &import).await?;
+    ensure_autonomy_bootstraps(db, &import).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -357,6 +358,21 @@ impl WorkspaceProjection {
             current_msg_seq: 0,
         })
     }
+
+    fn is_autonomous(&self) -> bool {
+        serde_json::from_str::<Value>(&self.metadata_json).is_ok_and(|metadata| {
+            metadata
+                .get("collaboration_mode")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    metadata
+                        .get("legacy_desktop")
+                        .and_then(|legacy| legacy.get("collaboration_mode"))
+                        .and_then(Value::as_str)
+                })
+                == Some("autonomous")
+        })
+    }
 }
 
 impl MessageProjection {
@@ -422,15 +438,43 @@ impl MessageProjection {
 }
 
 fn workspace_steps(workspace: &WorkspaceProjection) -> Vec<DbTransactionStep> {
-    vec![
+    let mut steps = vec![
         checked(insert_group(workspace)),
         checked(insert_profile(workspace)),
         checked(insert_member(workspace)),
         checked(insert_identity(workspace)),
         checked(insert_group_participant(workspace)),
         checked(insert_authority(workspace)),
-        checked(insert_session(workspace)),
-    ]
+    ];
+    if workspace.is_autonomous() {
+        steps.push(DbTransactionStep::execute_checked(
+            insert_autonomy_bootstrap(workspace),
+            DbCountExpectation::at_most(1),
+        ));
+    }
+    steps.push(checked(insert_session(workspace)));
+    steps
+}
+
+async fn ensure_autonomy_bootstraps(
+    db: &dyn DbPlugin,
+    import: &ValidatedImport,
+) -> Result<(), DesktopLegacyImportError> {
+    let steps = import
+        .workspaces
+        .iter()
+        .filter(|workspace| workspace.is_autonomous())
+        .map(|workspace| {
+            DbTransactionStep::execute_checked(
+                insert_autonomy_bootstrap(workspace),
+                DbCountExpectation::at_most(1),
+            )
+        })
+        .collect::<Vec<_>>();
+    if !steps.is_empty() {
+        db.transaction(steps).await?;
+    }
+    Ok(())
 }
 
 fn message_steps(message: &MessageProjection) -> Vec<DbTransactionStep> {
@@ -505,6 +549,30 @@ fn insert_profile(workspace: &WorkspaceProjection) -> DbStatement {
             workspace.source_hash.as_str().into(),
             workspace.created_at.as_str().into(),
             workspace.updated_at.as_str().into(),
+        ],
+    )
+}
+
+fn insert_autonomy_bootstrap(workspace: &WorkspaceProjection) -> DbStatement {
+    statement(
+        "INSERT OR IGNORE INTO workspace_autonomy_bootstrap_outbox (bootstrap_id, tenant_id, \
+         project_id, workspace_id, actor_id, objective_title, objective_description, \
+         created_at_ms) SELECT ?, ?, ?, ?, ?, ?, ?, \
+         CAST(strftime('%s', 'now') AS INTEGER) * 1000 WHERE NOT EXISTS (SELECT 1 FROM \
+         workspace_tasks root WHERE root.tenant_id = ? AND root.project_id = ? AND \
+         root.workspace_id = ? AND \
+         json_extract(root.metadata_json, '$.task_role') = 'goal_root')",
+        vec![
+            format!("autonomy-bootstrap-recovery:{}", workspace.id).into(),
+            workspace.tenant_id.as_str().into(),
+            workspace.project_id.as_str().into(),
+            workspace.id.as_str().into(),
+            LOCAL_USER_ID.into(),
+            workspace.name.as_str().into(),
+            workspace.description.as_deref().into(),
+            workspace.tenant_id.as_str().into(),
+            workspace.project_id.as_str().into(),
+            workspace.id.as_str().into(),
         ],
     )
 }

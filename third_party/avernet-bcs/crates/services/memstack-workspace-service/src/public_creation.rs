@@ -133,8 +133,31 @@ impl<'a> PublicWorkspaceCreationService<'a> {
         &self,
         input: &PublicCreateWorkspaceInput,
     ) -> Result<CreateWorkspaceOutcome, PublicWorkspaceCreationError> {
+        self.create_inner(input, false).await
+    }
+
+    /// Create a public Workspace and atomically enqueue autonomous root
+    /// bootstrap when the resolved collaboration mode is autonomous.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same structured errors as [`Self::create`].
+    pub async fn create_with_autonomy_bootstrap(
+        &self,
+        input: &PublicCreateWorkspaceInput,
+    ) -> Result<CreateWorkspaceOutcome, PublicWorkspaceCreationError> {
+        self.create_inner(input, true).await
+    }
+
+    async fn create_inner(
+        &self,
+        input: &PublicCreateWorkspaceInput,
+        enqueue_autonomy_bootstrap: bool,
+    ) -> Result<CreateWorkspaceOutcome, PublicWorkspaceCreationError> {
         let identifiers = creation_identifiers(input);
         let metadata = compose_workspace_metadata(input)?;
+        let is_autonomous =
+            metadata.get("collaboration_mode").and_then(Value::as_str) == Some("autonomous");
         let command = CreateWorkspaceInput {
             scope: CreateWorkspaceScopeInput {
                 tenant_id: input.tenant_id.clone(),
@@ -157,10 +180,21 @@ impl<'a> PublicWorkspaceCreationService<'a> {
             },
             idempotency_key: identifiers.idempotency_key,
         };
-        WorkspaceCreationService::new(self.db, self.flavor)
-            .create_with_owner_identity(&command, input.owner_email.as_str())
-            .await
-            .map_err(PublicWorkspaceCreationError::Create)
+        let creation = WorkspaceCreationService::new(self.db, self.flavor);
+        if enqueue_autonomy_bootstrap && is_autonomous {
+            creation
+                .create_with_owner_identity_and_autonomy_bootstrap(
+                    &command,
+                    input.owner_email.as_str(),
+                )
+                .await
+                .map_err(PublicWorkspaceCreationError::Create)
+        } else {
+            creation
+                .create_with_owner_identity(&command, input.owner_email.as_str())
+                .await
+                .map_err(PublicWorkspaceCreationError::Create)
+        }
     }
 }
 

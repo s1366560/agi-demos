@@ -1,6 +1,6 @@
 //! Restricted Provider callback bridge for Workspace Agent Runtime deliveries.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use bcs_db_api::{
@@ -12,6 +12,9 @@ use bcs_service_api::{
     MessageFlowService, ProviderBotCoordinationCommand, ProviderBotCoordinationOutcome,
     ProviderBotEventCommand, ProviderBotEventCredential, ProviderBotEventError,
     ProviderBotEventOutcome, ProviderBotEventService, ServiceResult,
+};
+use memstack_workspace_service::{
+    PublicWorkspaceRuntimeTerminalError, PublicWorkspaceRuntimeTerminalService,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -102,6 +105,68 @@ impl WorkspaceRunContextRecoveryPort for DbWorkspaceRunContextRecovery {
     }
 }
 
+#[async_trait]
+trait WorkspaceRuntimeTerminalVerifierPort: Send + Sync {
+    async fn verify(
+        &self,
+        run_id: &str,
+        state: &ChatEventState,
+        callback: &WorkspaceTerminalCallback,
+    ) -> Result<bool, PublicWorkspaceRuntimeTerminalError>;
+
+    async fn mark_ingested(
+        &self,
+        run_id: &str,
+        provider_event_hash: &str,
+    ) -> Result<(), PublicWorkspaceRuntimeTerminalError>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct WorkspaceTerminalCallback {
+    terminal_message_id: String,
+    terminal_event_id: String,
+    report: Value,
+    event_payload: Value,
+    provider_event_hash: String,
+}
+
+struct DbWorkspaceRuntimeTerminalVerifier {
+    db: Arc<dyn DbPlugin>,
+    sql_flavor: DbSqlFlavor,
+}
+
+#[async_trait]
+impl WorkspaceRuntimeTerminalVerifierPort for DbWorkspaceRuntimeTerminalVerifier {
+    async fn verify(
+        &self,
+        run_id: &str,
+        state: &ChatEventState,
+        callback: &WorkspaceTerminalCallback,
+    ) -> Result<bool, PublicWorkspaceRuntimeTerminalError> {
+        let outcome = PublicWorkspaceRuntimeTerminalService::new(self.db.as_ref(), self.sql_flavor)
+            .verify_provider_terminal(
+                run_id,
+                state_name(state),
+                callback.terminal_message_id.as_str(),
+                callback.terminal_event_id.as_str(),
+                &callback.report,
+                callback.provider_event_hash.as_str(),
+            )
+            .await?;
+        Ok(outcome.provider_event_ingested)
+    }
+
+    async fn mark_ingested(
+        &self,
+        run_id: &str,
+        provider_event_hash: &str,
+    ) -> Result<(), PublicWorkspaceRuntimeTerminalError> {
+        PublicWorkspaceRuntimeTerminalService::new(self.db.as_ref(), self.sql_flavor)
+            .mark_provider_event_ingested(run_id, provider_event_hash)
+            .await
+    }
+}
+
 /// Wraps the upstream Provider event service with one fail-closed Workspace
 /// branch. All non-Workspace providers retain the original BCS behavior.
 pub struct WorkspaceProviderBotEventService {
@@ -111,6 +176,7 @@ pub struct WorkspaceProviderBotEventService {
     run_context_recovery: Arc<dyn WorkspaceRunContextRecoveryPort>,
     recovery_gate: Mutex<()>,
     event_ingest: Arc<dyn WorkspaceBotEventIngestPort>,
+    terminal_verifier: Arc<dyn WorkspaceRuntimeTerminalVerifierPort>,
 }
 
 impl WorkspaceProviderBotEventService {
@@ -131,17 +197,19 @@ impl WorkspaceProviderBotEventService {
         if event_token.trim().is_empty() {
             return Err("Workspace Provider event token must not be blank");
         }
+        let run_context_recovery = Arc::new(DbWorkspaceRunContextRecovery::new(
+            Arc::clone(&db),
+            sql_flavor,
+            callback_timeout_ms,
+        )?);
         Ok(Self {
             fallback,
             event_token,
             bot_run_context,
-            run_context_recovery: Arc::new(DbWorkspaceRunContextRecovery::new(
-                db,
-                sql_flavor,
-                callback_timeout_ms,
-            )?),
+            run_context_recovery,
             recovery_gate: Mutex::new(()),
             event_ingest: Arc::new(MessageFlowEventIngest { message_flow }),
+            terminal_verifier: Arc::new(DbWorkspaceRuntimeTerminalVerifier { db, sql_flavor }),
         })
     }
 
@@ -187,6 +255,28 @@ impl WorkspaceProviderBotEventService {
         Ok(context)
     }
 
+    async fn persist_provider_event_ingested(
+        &self,
+        run_id: &str,
+        callback: &WorkspaceTerminalCallback,
+    ) -> Result<(), ProviderBotEventError> {
+        self.terminal_verifier
+            .mark_ingested(run_id, callback.provider_event_hash.as_str())
+            .await
+            .map_err(|marker_error| {
+                error!(
+                    provider_id = WORKSPACE_PROVIDER_ID,
+                    run_id,
+                    terminal_event_id = %callback.terminal_event_id,
+                    error = %marker_error,
+                    "Workspace Provider terminal ingest marker failed"
+                );
+                ProviderBotEventError::Internal(
+                    "Workspace Provider terminal ingest marker failed".to_string(),
+                )
+            })
+    }
+
     async fn submit_workspace_event(
         &self,
         command: ProviderBotEventCommand,
@@ -203,13 +293,6 @@ impl WorkspaceProviderBotEventService {
             ));
         }
 
-        let context = self.resolve_run_context(&command.run_id).await?;
-        if context.terminal || bcs_protocol::now_ms() > context.deadline_ms {
-            return Err(ProviderBotEventError::RunTerminated(
-                "run_terminated".to_string(),
-            ));
-        }
-
         let terminal = is_terminal(&command.state);
         if matches!(command.state, ChatEventState::Final) && command.message_text.trim().is_empty()
         {
@@ -217,18 +300,77 @@ impl WorkspaceProviderBotEventService {
                 "final Workspace Provider event must include text".to_string(),
             ));
         }
-        if terminal
-            && !self
-                .bot_run_context
-                .try_begin_terminal(&command.run_id)
-                .await
-        {
+        let callback = terminal
+            .then(|| workspace_terminal_callback(&command))
+            .transpose()?;
+        let context = self.resolve_run_context(&command.run_id).await?;
+        if !terminal && (context.terminal || bcs_protocol::now_ms() > context.deadline_ms) {
             return Err(ProviderBotEventError::RunTerminated(
                 "run_terminated".to_string(),
             ));
         }
 
-        let payload = workspace_event_payload(&command);
+        if let Some(callback) = callback.as_ref() {
+            let provider_event_ingested = match self
+                .terminal_verifier
+                .verify(&command.run_id, &command.state, callback)
+                .await
+            {
+                Ok(provider_event_ingested) => provider_event_ingested,
+                Err(verification_error) => {
+                    error!(
+                        provider_id = WORKSPACE_PROVIDER_ID,
+                        run_id = %command.run_id,
+                        error = %verification_error,
+                        "Workspace Provider terminal verification failed"
+                    );
+                    return Err(ProviderBotEventError::Internal(
+                        "Workspace Provider terminal verification failed".to_string(),
+                    ));
+                }
+            };
+            if provider_event_ingested {
+                let _ = self.bot_run_context.mark_terminal(&command.run_id).await;
+                info!(
+                    provider_id = WORKSPACE_PROVIDER_ID,
+                    run_id = %command.run_id,
+                    terminal_event_id = %callback.terminal_event_id,
+                    "Workspace Provider terminal replay already ingested"
+                );
+                return Ok(ProviderBotEventOutcome {
+                    delivered_count: 0,
+                    failed_count: 0,
+                });
+            }
+            if context.terminal {
+                self.persist_provider_event_ingested(&command.run_id, callback)
+                    .await?;
+                info!(
+                    provider_id = WORKSPACE_PROVIDER_ID,
+                    run_id = %command.run_id,
+                    terminal_event_id = %callback.terminal_event_id,
+                    "Workspace Provider terminal ingest marker recovered"
+                );
+                return Ok(ProviderBotEventOutcome {
+                    delivered_count: 0,
+                    failed_count: 0,
+                });
+            }
+            if !self
+                .bot_run_context
+                .try_begin_terminal(&command.run_id)
+                .await
+            {
+                return Err(ProviderBotEventError::RunTerminated(
+                    "run_terminated".to_string(),
+                ));
+            }
+        }
+
+        let payload = callback.as_ref().map_or_else(
+            || workspace_event_payload(&command),
+            |value| value.event_payload.clone(),
+        );
         let run_id = command.run_id.clone();
         let outcome = self
             .event_ingest
@@ -261,7 +403,17 @@ impl WorkspaceProviderBotEventService {
             }
         };
 
-        if terminal {
+        if let Some(callback) = callback.as_ref() {
+            if let Err(marker_error) = self
+                .persist_provider_event_ingested(&run_id, callback)
+                .await
+            {
+                // Message Flow has already accepted the terminal. Keep the
+                // in-memory context terminal so an exact same-process replay
+                // retries only the durable marker, never the side effect.
+                let _ = self.bot_run_context.mark_terminal(&run_id).await;
+                return Err(marker_error);
+            }
             let _ = self.bot_run_context.mark_terminal(&run_id).await;
         }
         info!(
@@ -298,7 +450,7 @@ fn build_run_context_recovery(
             .bind(callback_timeout_ms),
         DbSqlFlavor::Mysql => builder.push_static("0"),
     };
-    builder
+    let builder = builder
         .push_static(
             " AS deadline_ms FROM workspace_agent_runtime_correlations correlation \
              JOIN workspace_agent_bindings binding ON binding.tenant_id = correlation.tenant_id \
@@ -313,7 +465,24 @@ fn build_run_context_recovery(
         )
         .bind(run_id)
         .push_static(
-            " AND (correlation.status = 'running' OR \
+            " AND (correlation.status = 'running' OR (correlation.status = 'pending' AND EXISTS (\
+             SELECT 1 FROM workspace_task_dispatch_outbox dispatch WHERE dispatch.tenant_id = \
+             correlation.tenant_id AND dispatch.project_id = correlation.project_id AND \
+             dispatch.workspace_id = correlation.workspace_id AND dispatch.task_id = \
+             correlation.task_id AND dispatch.delivery_request_id = \
+             correlation.delivery_request_id AND dispatch.agent_id = \
+             correlation.provider_bot_ref AND dispatch.status = 'delivered' AND ",
+        );
+    let builder = match flavor {
+        DbSqlFlavor::Postgres => {
+            builder.push_static("dispatch.attempt_id IS NOT DISTINCT FROM correlation.attempt_id")
+        }
+        DbSqlFlavor::Sqlite => builder.push_static("dispatch.attempt_id IS correlation.attempt_id"),
+        DbSqlFlavor::Mysql => builder.push_static("1 = 0"),
+    };
+    builder
+        .push_static(
+            ")) OR \
              (correlation.status IN ('completed', 'failed', 'aborted') \
              AND correlation.callback_completed_at IS NULL)) \
              AND correlation.provider_id = 'memstack-workspace-agent-runtime' \
@@ -409,6 +578,106 @@ fn workspace_event_payload(command: &ProviderBotEventCommand) -> Value {
             }
         })
     })
+}
+
+fn workspace_terminal_callback(
+    command: &ProviderBotEventCommand,
+) -> Result<WorkspaceTerminalCallback, ProviderBotEventError> {
+    let mut event_payload = command.payload.clone().ok_or_else(|| {
+        ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal proof is required".to_string(),
+        )
+    })?;
+    let payload = event_payload.as_object_mut().ok_or_else(|| {
+        ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal payload must be an object".to_string(),
+        )
+    })?;
+    let terminal_message_id = proof_identifier(payload.remove("terminal_message_id"), "message")?;
+    let terminal_event_id = proof_identifier(payload.remove("terminal_event_id"), "event")?;
+    let report = payload.remove("terminal_report").ok_or_else(|| {
+        ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal report is required".to_string(),
+        )
+    })?;
+    let report_object = report.as_object().ok_or_else(|| {
+        ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal report must be an object".to_string(),
+        )
+    })?;
+    if report_object.len() != 4
+        || ![
+            "provider_state",
+            "sequence",
+            "message_text",
+            "provider_event",
+        ]
+        .iter()
+        .all(|key| report_object.contains_key(*key))
+    {
+        return Err(ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal report has an invalid shape".to_string(),
+        ));
+    }
+    let expected_state = state_name(&command.state);
+    let report_state = report_object.get("provider_state").and_then(Value::as_str);
+    let sequence = report_object.get("sequence").and_then(Value::as_u64);
+    let report_message = report_object.get("message_text").and_then(Value::as_str);
+    let report_event = report_object.get("provider_event");
+    if report_state != Some(expected_state)
+        || event_payload.get("state").and_then(Value::as_str) != Some(expected_state)
+        || event_payload.get("run_id").and_then(Value::as_str) != Some(command.run_id.as_str())
+        || sequence.is_none()
+        || event_payload.get("seq").and_then(Value::as_u64) != sequence
+        || report_message != Some(command.message_text.as_str())
+        || report_event != Some(&event_payload)
+    {
+        return Err(ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal report does not match the callback".to_string(),
+        ));
+    }
+    let provider_event_hash = canonical_json_hash(&event_payload)?;
+    Ok(WorkspaceTerminalCallback {
+        terminal_message_id,
+        terminal_event_id,
+        report,
+        event_payload,
+        provider_event_hash,
+    })
+}
+
+fn proof_identifier(value: Option<Value>, kind: &str) -> Result<String, ProviderBotEventError> {
+    let value = value.and_then(|value| value.as_str().map(str::to_string));
+    match value {
+        Some(value) if !value.trim().is_empty() && value.len() <= 191 => Ok(value),
+        _ => Err(ProviderBotEventError::InvalidRequest(format!(
+            "Workspace Provider terminal {kind} id is invalid"
+        ))),
+    }
+}
+
+fn canonical_json_hash(value: &Value) -> Result<String, ProviderBotEventError> {
+    let bytes = serde_json::to_vec(&canonical_json(value)).map_err(|_| {
+        ProviderBotEventError::InvalidRequest(
+            "Workspace Provider terminal payload cannot be encoded".to_string(),
+        )
+    })?;
+    Ok(hex::encode(Sha256::digest(bytes)))
+}
+
+fn canonical_json(value: &Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(items.iter().map(canonical_json).collect()),
+        Value::Object(items) => Value::Object(
+            items
+                .iter()
+                .map(|(key, value)| (key.clone(), canonical_json(value)))
+                .collect::<BTreeMap<_, _>>()
+                .into_iter()
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
 }
 
 fn state_name(state: &ChatEventState) -> &'static str {
@@ -557,6 +826,52 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingTerminalVerifier {
+        fail: Mutex<bool>,
+        ingested: Mutex<bool>,
+        mark_fail: Mutex<bool>,
+        calls: Mutex<Vec<(String, String)>>,
+        mark_calls: Mutex<Vec<(String, String)>>,
+    }
+
+    #[async_trait]
+    impl WorkspaceRuntimeTerminalVerifierPort for RecordingTerminalVerifier {
+        async fn verify(
+            &self,
+            run_id: &str,
+            state: &ChatEventState,
+            _callback: &WorkspaceTerminalCallback,
+        ) -> Result<bool, PublicWorkspaceRuntimeTerminalError> {
+            self.calls
+                .lock()
+                .await
+                .push((run_id.to_string(), state_name(state).to_string()));
+            if *self.fail.lock().await {
+                Err(PublicWorkspaceRuntimeTerminalError::InvalidRequest)
+            } else {
+                Ok(*self.ingested.lock().await)
+            }
+        }
+
+        async fn mark_ingested(
+            &self,
+            run_id: &str,
+            provider_event_hash: &str,
+        ) -> Result<(), PublicWorkspaceRuntimeTerminalError> {
+            self.mark_calls
+                .lock()
+                .await
+                .push((run_id.to_string(), provider_event_hash.to_string()));
+            if *self.mark_fail.lock().await {
+                Err(PublicWorkspaceRuntimeTerminalError::InvalidRequest)
+            } else {
+                *self.ingested.lock().await = true;
+                Ok(())
+            }
+        }
+    }
+
     fn service(
         run_context: Arc<RecordingRunContext>,
         fallback: Arc<RecordingFallback>,
@@ -576,6 +891,22 @@ mod tests {
         ingest: Arc<RecordingIngest>,
         recovery: Arc<RecordingRecovery>,
     ) -> WorkspaceProviderBotEventService {
+        service_with_recovery_and_verifier(
+            run_context,
+            fallback,
+            ingest,
+            recovery,
+            Arc::new(RecordingTerminalVerifier::default()),
+        )
+    }
+
+    fn service_with_recovery_and_verifier(
+        run_context: Arc<RecordingRunContext>,
+        fallback: Arc<RecordingFallback>,
+        ingest: Arc<RecordingIngest>,
+        recovery: Arc<RecordingRecovery>,
+        terminal_verifier: Arc<RecordingTerminalVerifier>,
+    ) -> WorkspaceProviderBotEventService {
         WorkspaceProviderBotEventService {
             fallback,
             event_token: "workspace-event-secret".to_string(),
@@ -583,10 +914,27 @@ mod tests {
             run_context_recovery: recovery,
             recovery_gate: Mutex::new(()),
             event_ingest: ingest,
+            terminal_verifier,
         }
     }
 
     fn command(provider_id: &str, token: &str, state: ChatEventState) -> ProviderBotEventCommand {
+        let provider_event = json!({
+            "run_id": "run-1",
+            "seq": 1,
+            "state": state_name(&state),
+            "message": {"content": [{"type": "text", "text": "done"}]}
+        });
+        let report = json!({
+            "provider_state": state_name(&state),
+            "sequence": 1,
+            "message_text": "done",
+            "provider_event": provider_event,
+        });
+        let mut payload = provider_event;
+        payload["terminal_message_id"] = json!("message-1");
+        payload["terminal_event_id"] = json!("event-1");
+        payload["terminal_report"] = report;
         ProviderBotEventCommand {
             provider_id: provider_id.to_string(),
             credential: ProviderBotEventCredential::StaticBearer(token.to_string()),
@@ -594,7 +942,7 @@ mod tests {
             state,
             message_text: "done".to_string(),
             event: Some("chat".to_string()),
-            payload: Some(json!({"state": "final", "message": {"content": "done"}})),
+            payload: Some(payload),
         }
     }
 
@@ -654,17 +1002,15 @@ mod tests {
         assert_eq!(accepted.delivered_count, 1);
         assert_eq!(ingest.commands.lock().await.len(), 1);
 
-        let duplicate = service
+        let replay = service
             .submit_event(command(
                 WORKSPACE_PROVIDER_ID,
                 "workspace-event-secret",
                 ChatEventState::Final,
             ))
-            .await;
-        assert!(matches!(
-            duplicate,
-            Err(ProviderBotEventError::RunTerminated(_))
-        ));
+            .await?;
+        assert_eq!(replay.delivered_count, 0);
+        assert_eq!(ingest.commands.lock().await.len(), 1);
         assert!(fallback.events.lock().await.is_empty());
         Ok(())
     }
@@ -735,6 +1081,65 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn workspace_terminal_verification_failure_is_not_ingested_and_can_retry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let contexts = Arc::new(RecordingRunContext::default());
+        let fallback = Arc::new(RecordingFallback::default());
+        let ingest = Arc::new(RecordingIngest::default());
+        let verifier = Arc::new(RecordingTerminalVerifier {
+            fail: Mutex::new(true),
+            ingested: Mutex::new(false),
+            mark_fail: Mutex::new(false),
+            calls: Mutex::new(Vec::new()),
+            mark_calls: Mutex::new(Vec::new()),
+        });
+        let service = service_with_recovery_and_verifier(
+            contexts.clone(),
+            fallback,
+            ingest.clone(),
+            Arc::new(RecordingRecovery::default()),
+            verifier.clone(),
+        );
+        put_open_context(contexts.as_ref()).await;
+
+        let rejected = service
+            .submit_event(command(
+                WORKSPACE_PROVIDER_ID,
+                "workspace-event-secret",
+                ChatEventState::Final,
+            ))
+            .await;
+        assert!(matches!(rejected, Err(ProviderBotEventError::Internal(_))));
+        assert!(ingest.commands.lock().await.is_empty());
+        assert_eq!(
+            contexts
+                .get_context("run-1")
+                .await
+                .map(|context| context.terminal),
+            Some(false)
+        );
+
+        *verifier.fail.lock().await = false;
+        let accepted = service
+            .submit_event(command(
+                WORKSPACE_PROVIDER_ID,
+                "workspace-event-secret",
+                ChatEventState::Final,
+            ))
+            .await?;
+        assert_eq!(accepted.delivered_count, 1);
+        assert_eq!(ingest.commands.lock().await.len(), 1);
+        assert_eq!(
+            verifier.calls.lock().await.as_slice(),
+            [
+                ("run-1".to_string(), "final".to_string()),
+                ("run-1".to_string(), "final".to_string()),
+            ]
+        );
+        Ok(())
+    }
+
     #[test]
     fn recovery_statement_uses_dialect_placeholders_and_fixed_provider_scope() {
         let postgres = build_run_context_recovery(DbSqlFlavor::Postgres, "run-1", 60_000);
@@ -768,7 +1173,8 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let db = Arc::new(LocalSqliteDbPlugin::new()?);
         for statement in [
-            "CREATE TABLE workspace_agent_runtime_correlations (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, provider_run_id TEXT NOT NULL, provider_id TEXT NOT NULL, provider_bot_ref TEXT NOT NULL, bcs_group_id TEXT, bcs_session_id TEXT, status TEXT NOT NULL, callback_completed_at TEXT, updated_at TEXT NOT NULL)",
+            "CREATE TABLE workspace_agent_runtime_correlations (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, task_id TEXT, attempt_id TEXT, delivery_request_id TEXT, provider_run_id TEXT NOT NULL, provider_id TEXT NOT NULL, provider_bot_ref TEXT NOT NULL, bcs_group_id TEXT, bcs_session_id TEXT, status TEXT NOT NULL, callback_completed_at TEXT, updated_at TEXT NOT NULL)",
+            "CREATE TABLE workspace_task_dispatch_outbox (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, task_id TEXT NOT NULL, attempt_id TEXT, delivery_request_id TEXT NOT NULL, agent_id TEXT NOT NULL, status TEXT NOT NULL)",
             "CREATE TABLE workspace_agent_bindings (tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, workspace_id TEXT NOT NULL, agent_id TEXT NOT NULL, bot_uuid TEXT NOT NULL, participant_actor_id TEXT NOT NULL, is_active INTEGER NOT NULL)",
             "CREATE TABLE bcs_bots (bot_uuid TEXT NOT NULL, env TEXT NOT NULL, status TEXT NOT NULL, is_deleted INTEGER NOT NULL)",
             "CREATE TABLE bcs_group_participants (group_id TEXT NOT NULL, bot_uuid TEXT NOT NULL, env TEXT NOT NULL, actor_kind TEXT NOT NULL)",
@@ -802,6 +1208,26 @@ mod tests {
         assert!(recovery.recover("run-1").await?.is_none());
         db.execute(DbStatement::new(
             "UPDATE workspace_agent_runtime_correlations SET status = 'running', callback_completed_at = NULL",
+        ))
+        .await?;
+        db.execute(DbStatement::new(
+            "UPDATE workspace_agent_runtime_correlations SET status = 'pending', task_id = 'task-1', attempt_id = 'attempt-1', delivery_request_id = 'delivery-1'",
+        ))
+        .await?;
+        assert!(
+            recovery.recover("run-1").await?.is_none(),
+            "an arbitrary pending correlation is not recoverable"
+        );
+        db.execute(DbStatement::new(
+            "INSERT INTO workspace_task_dispatch_outbox (tenant_id, project_id, workspace_id, task_id, attempt_id, delivery_request_id, agent_id, status) VALUES ('tenant-1', 'project-1', 'workspace-1', 'task-1', 'attempt-1', 'delivery-1', 'agent-1', 'delivered')",
+        ))
+        .await?;
+        assert!(
+            recovery.recover("run-1").await?.is_some(),
+            "a strictly matched delivered dispatch recovers its legacy pending correlation"
+        );
+        db.execute(DbStatement::new(
+            "UPDATE workspace_agent_runtime_correlations SET status = 'running'",
         ))
         .await?;
         db.execute(DbStatement::new(

@@ -1,6 +1,9 @@
 //! Durable, fenced delivery queue for Workspace execution Tasks.
 
-use bcs_db_api::{DbExecuteResult, DbRow, DbSqlFlavor, DbStatement, DbStatementBuilder};
+use bcs_db_api::{
+    DbCountExpectation, DbError, DbRow, DbSqlFlavor, DbStatement, DbStatementBuilder,
+    DbTransactionStep,
+};
 
 use crate::{WorkspaceTaskScope, WorkspaceTaskStoreError};
 
@@ -36,6 +39,7 @@ pub struct WorkspaceTaskDispatchClaim {
     pub plan_node_id: Option<String>,
     pub user_id: String,
     pub agent_id: String,
+    pub workspace_agent_binding_id: String,
     pub bot_uuid: String,
     pub group_id: String,
     pub conversation_id: String,
@@ -190,9 +194,47 @@ impl crate::WorkspaceTaskStore<'_> {
         }
         let result = self
             .db
+            .transaction(vec![
+                DbTransactionStep::execute_checked(
+                    complete_statement(self.flavor, claim, delivered_at_ms),
+                    DbCountExpectation::exactly(1),
+                ),
+                DbTransactionStep::execute_checked(
+                    correlation_running_statement(self.flavor, claim, delivered_at_ms),
+                    DbCountExpectation::exactly(1),
+                ),
+            ])
+            .await;
+        match result {
+            Ok(_) => Ok(()),
+            Err(DbError::TransactionExpectation { step_index: 0, .. }) => {
+                Err(WorkspaceTaskStoreError::DispatchLeaseLost)
+            }
+            Err(DbError::TransactionExpectation { step_index: 1, .. }) => {
+                Err(WorkspaceTaskStoreError::DispatchCorrelationConflict)
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// ACK a fenced claim whose Task was already terminal before Provider handoff.
+    pub async fn complete_terminal_task_dispatch(
+        &self,
+        claim: &WorkspaceTaskDispatchClaim,
+        delivered_at_ms: i64,
+    ) -> Result<(), WorkspaceTaskStoreError> {
+        if delivered_at_ms < 0 || !matches!(claim.task_status.as_str(), "done" | "blocked") {
+            return Err(WorkspaceTaskStoreError::InvalidDispatchClaim);
+        }
+        let result = self
+            .db
             .execute(complete_statement(self.flavor, claim, delivered_at_ms))
             .await?;
-        require_owned_lease(result)
+        if result.affected_rows == 1 {
+            Ok(())
+        } else {
+            Err(WorkspaceTaskStoreError::DispatchLeaseLost)
+        }
     }
 
     /// Release a failed lease for retry or durable dead-lettering.
@@ -289,7 +331,8 @@ fn claim_statement(
     builder
         .push_static(
             " RETURNING dispatch_id, tenant_id, project_id, workspace_id, task_id, \
-                      attempt_id, plan_id, plan_node_id, user_id, agent_id, bot_uuid, group_id, \
+                      attempt_id, plan_id, plan_node_id, user_id, agent_id, \
+                      workspace_agent_binding_id, bot_uuid, group_id, \
                       conversation_id, delivery_request_id, task_title, task_description, \
                       attempt_count, lease_generation, (SELECT status FROM workspace_tasks task \
                       WHERE task.task_id = workspace_task_dispatch_outbox.task_id) AS task_status",
@@ -334,6 +377,82 @@ fn complete_statement(
     .push_static(" AND lease_generation = ")
     .bind(claim.lease_generation)
     .build()
+}
+
+fn correlation_running_statement(
+    flavor: DbSqlFlavor,
+    claim: &WorkspaceTaskDispatchClaim,
+    delivered_at_ms: i64,
+) -> DbStatement {
+    let builder = DbStatementBuilder::new(flavor)
+        .push_static(
+            "UPDATE workspace_agent_runtime_correlations SET status = CASE WHEN status = \
+             'pending' THEN 'running' ELSE status END, updated_at = CASE WHEN status = 'pending' \
+             THEN CURRENT_TIMESTAMP ELSE updated_at END WHERE correlation_id = ",
+        )
+        .bind(claim.delivery_request_id.as_str())
+        .push_static(" AND tenant_id = ")
+        .bind(claim.tenant_id.as_str())
+        .push_static(" AND project_id = ")
+        .bind(claim.project_id.as_str())
+        .push_static(" AND workspace_id = ")
+        .bind(claim.workspace_id.as_str())
+        .push_static(" AND task_id = ")
+        .bind(claim.task_id.as_str());
+    let builder = nullable_match(builder, "attempt_id", claim.attempt_id.as_deref());
+    let builder = builder
+        .push_static(" AND delivery_request_id = ")
+        .bind(claim.delivery_request_id.as_str())
+        .push_static(" AND provider_run_id = ")
+        .bind(claim.delivery_request_id.as_str())
+        .push_static(
+            " AND provider_id = 'memstack-workspace-agent-runtime' AND provider_bot_ref = ",
+        )
+        .bind(claim.agent_id.as_str())
+        .push_static(
+            " AND status IN ('pending', 'running', 'completed', 'failed', 'aborted') AND EXISTS (\
+             SELECT 1 FROM workspace_task_dispatch_outbox dispatch WHERE dispatch.dispatch_id = ",
+        )
+        .bind(claim.dispatch_id.as_str())
+        .push_static(" AND dispatch.tenant_id = ")
+        .bind(claim.tenant_id.as_str())
+        .push_static(" AND dispatch.project_id = ")
+        .bind(claim.project_id.as_str())
+        .push_static(" AND dispatch.workspace_id = ")
+        .bind(claim.workspace_id.as_str())
+        .push_static(" AND dispatch.task_id = ")
+        .bind(claim.task_id.as_str());
+    nullable_match(builder, "dispatch.attempt_id", claim.attempt_id.as_deref())
+        .push_static(" AND dispatch.delivery_request_id = ")
+        .bind(claim.delivery_request_id.as_str())
+        .push_static(" AND dispatch.agent_id = ")
+        .bind(claim.agent_id.as_str())
+        .push_static(" AND dispatch.workspace_agent_binding_id = ")
+        .bind(claim.workspace_agent_binding_id.as_str())
+        .push_static(" AND dispatch.status = 'delivered' AND dispatch.delivered_at_ms = ")
+        .bind(delivered_at_ms)
+        .push_static(" AND dispatch.lease_generation = ")
+        .bind(claim.lease_generation)
+        .push_static(")")
+        .build()
+}
+
+fn nullable_match(
+    builder: DbStatementBuilder,
+    column: &'static str,
+    value: Option<&str>,
+) -> DbStatementBuilder {
+    match value {
+        Some(value) => builder
+            .push_static(" AND ")
+            .push_static(column)
+            .push_static(" = ")
+            .bind(value),
+        None => builder
+            .push_static(" AND ")
+            .push_static(column)
+            .push_static(" IS NULL"),
+    }
 }
 
 fn fail_statement(
@@ -425,6 +544,7 @@ fn dispatch_claim_from_row(
         plan_node_id: row.get_string("plan_node_id")?,
         user_id: required_string(row, "user_id")?,
         agent_id: required_string(row, "agent_id")?,
+        workspace_agent_binding_id: required_string(row, "workspace_agent_binding_id")?,
         bot_uuid: required_string(row, "bot_uuid")?,
         group_id: required_string(row, "group_id")?,
         conversation_id: required_string(row, "conversation_id")?,
@@ -437,14 +557,6 @@ fn dispatch_claim_from_row(
         lease_expires_at_ms,
         lease_generation: required_i64(row, "lease_generation")?,
     })
-}
-
-fn require_owned_lease(result: DbExecuteResult) -> Result<(), WorkspaceTaskStoreError> {
-    if result.affected_rows == 1 {
-        Ok(())
-    } else {
-        Err(WorkspaceTaskStoreError::DispatchLeaseLost)
-    }
 }
 
 fn required_string(row: &DbRow, column: &'static str) -> Result<String, WorkspaceTaskStoreError> {

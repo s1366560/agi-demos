@@ -10,6 +10,7 @@ import pytest
 from src.domain.llm_providers.models import ProviderConfig
 from src.infrastructure.workspace_core.autonomy_judge import (
     AgentWorkspaceAutonomyJudge,
+    WorkspaceAutonomyAgentCandidate,
     WorkspaceAutonomyCandidate,
     WorkspaceAutonomyJudgeRequest,
     WorkspaceAutonomyJudgeUnavailable,
@@ -61,6 +62,16 @@ def _request() -> WorkspaceAutonomyJudgeRequest:
                 metadata={"priority": 2},
             ),
         ],
+        agent_candidates=[
+            WorkspaceAutonomyAgentCandidate(
+                workspace_agent_binding_id="binding-1",
+                agent_id="agent-1",
+                display_name="Delivery Agent",
+                description="Executes verified work",
+                status="idle",
+                config={},
+            )
+        ],
     )
 
 
@@ -84,6 +95,11 @@ async def test_autonomy_judge_requires_one_tenant_scoped_structured_tool_call() 
                         "arguments": {
                             "verdict": "continue",
                             "selected_root_task_id": "task-2",
+                            "next_action": {
+                                "title": "Implement the next verified slice",
+                                "description": "Advance the selected root goal",
+                                "workspace_agent_binding_id": "binding-1",
+                            },
                             "rationale": "The supplied evidence supports task-2.",
                         },
                     }
@@ -101,6 +117,8 @@ async def test_autonomy_judge_requires_one_tenant_scoped_structured_tool_call() 
     assert pool.tenant_ids == ["tenant-1"]
     assert verdict.verdict == "continue"
     assert verdict.selected_root_task_id == "task-2"
+    assert verdict.next_action is not None
+    assert verdict.next_action.workspace_agent_binding_id == "binding-1"
     assert verdict.tool_name == "judge_workspace_autonomy"
     assert verdict.input_json["workspace_revision"] == 7
     assert len(client.calls) == 1
@@ -130,6 +148,109 @@ async def test_autonomy_judge_fails_closed_for_out_of_candidate_selection() -> N
                                 }
                             }
                         ]
+                    }
+                }
+            ]
+        }
+    )
+    judge = AgentWorkspaceAutonomyJudge(
+        pool_service=cast("Any", FakePool([_candidate()])),
+        client_factory=lambda _config: client,
+    )
+
+    with pytest.raises(WorkspaceAutonomyJudgeUnavailable):
+        await judge.judge(_request())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "next_action",
+    [
+        {
+            "title": "Next",
+            "description": "Continue",
+            "workspace_agent_binding_id": "binding-1",
+            "unexpected": True,
+        },
+        {
+            "title": "Next",
+            "description": "x" * 10_001,
+            "workspace_agent_binding_id": "binding-1",
+        },
+    ],
+)
+async def test_autonomy_judge_rejects_invalid_nested_next_action(
+    next_action: dict[str, Any],
+) -> None:
+    client = FakeClient(
+        {
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "judge_workspace_autonomy",
+                        "arguments": {
+                            "verdict": "continue",
+                            "selected_root_task_id": "task-1",
+                            "next_action": next_action,
+                            "rationale": "Continue",
+                        },
+                    }
+                }
+            ]
+        }
+    )
+    judge = AgentWorkspaceAutonomyJudge(
+        pool_service=cast("Any", FakePool([_candidate()])),
+        client_factory=lambda _config: client,
+    )
+
+    with pytest.raises(WorkspaceAutonomyJudgeUnavailable):
+        await judge.judge(_request())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("verdict", "next_action", "rationale"),
+    [
+        ("continue", None, "Continue"),
+        (
+            "block",
+            {
+                "title": "Unexpected",
+                "description": "Terminal verdicts cannot dispatch work",
+                "workspace_agent_binding_id": "binding-1",
+            },
+            "Block",
+        ),
+        (
+            "continue",
+            {
+                "title": "Outside",
+                "description": "Do not dispatch outside the supplied roster",
+                "workspace_agent_binding_id": "binding-outside",
+            },
+            "Continue",
+        ),
+        ("escalate", None, "   "),
+    ],
+)
+async def test_autonomy_judge_rejects_inconsistent_structured_verdict(
+    verdict: str,
+    next_action: dict[str, Any] | None,
+    rationale: str,
+) -> None:
+    client = FakeClient(
+        {
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "judge_workspace_autonomy",
+                        "arguments": {
+                            "verdict": verdict,
+                            "selected_root_task_id": "task-1",
+                            "next_action": next_action,
+                            "rationale": rationale,
+                        },
                     }
                 }
             ]

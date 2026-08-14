@@ -8,9 +8,10 @@ use memstack_workspace_service_api::{
     WorkspaceMutationAuthority, WorkspaceMutationCommand, WorkspaceName, WorkspaceScope,
 };
 use memstack_workspace_store::{
-    WorkspaceAgentStoreError, WorkspaceMemberStoreError, WorkspaceMutationPlanError,
-    WorkspaceMutationPlanner, WorkspaceMutationStore, WorkspaceMutationStoreError,
-    WorkspaceProfileSnapshot, WorkspaceProfileStore, WorkspaceProfileStoreError,
+    WorkspaceAgentStoreError, WorkspaceAutonomyBootstrapStore, WorkspaceMemberStoreError,
+    WorkspaceMutationPlanError, WorkspaceMutationPlanner, WorkspaceMutationStore,
+    WorkspaceMutationStoreError, WorkspaceProfileSnapshot, WorkspaceProfileStore,
+    WorkspaceProfileStoreError,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -223,9 +224,24 @@ impl<'a> PublicWorkspaceMutationService<'a> {
             "is_archived": profile.is_archived,
             "updated_by": &input.context.user_id,
         });
+        let mut domain_mutations = vec![profile_store.update_mutation(&profile, &persisted_at)];
+        if profile
+            .metadata
+            .get("collaboration_mode")
+            .and_then(Value::as_str)
+            == Some("autonomous")
+        {
+            domain_mutations.push(
+                WorkspaceAutonomyBootstrapStore::new(self.db, self.flavor).ensure_mutation(
+                    &profile,
+                    input.context.user_id.as_str(),
+                    now.timestamp_millis(),
+                ),
+            );
+        }
         let plan = WorkspaceMutationPlanner::new(self.flavor).plan_existing(
             &command,
-            vec![profile_store.update_mutation(&profile, &persisted_at)],
+            domain_mutations,
             response,
             event_payload,
         )?;

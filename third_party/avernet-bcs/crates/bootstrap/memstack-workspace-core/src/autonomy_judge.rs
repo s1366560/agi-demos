@@ -7,7 +7,7 @@ use bcs_route_security::OutboundUrlGuard;
 use memstack_workspace_service::{
     PublicWorkspaceAutonomyJudgePort, PublicWorkspaceAutonomyJudgePortError,
     PublicWorkspaceAutonomyJudgment, PublicWorkspaceAutonomyJudgmentRequest,
-    PublicWorkspaceAutonomyVerdictKind,
+    PublicWorkspaceAutonomyNextAction, PublicWorkspaceAutonomyVerdictKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -86,6 +86,7 @@ struct JudgeRequest<'a> {
     workspace_revision: u64,
     force: bool,
     candidates: Vec<CandidateRequest<'a>>,
+    agent_candidates: Vec<AgentCandidateRequest<'a>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,11 +98,22 @@ struct CandidateRequest<'a> {
     metadata: &'a Value,
 }
 
+#[derive(Debug, Serialize)]
+struct AgentCandidateRequest<'a> {
+    workspace_agent_binding_id: &'a str,
+    agent_id: &'a str,
+    display_name: Option<&'a str>,
+    description: Option<&'a str>,
+    status: &'a str,
+    config: &'a Value,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct JudgeResponse {
     verdict: PublicWorkspaceAutonomyVerdictKind,
     selected_root_task_id: Option<String>,
+    next_action: Option<PublicWorkspaceAutonomyNextAction>,
     rationale: String,
     agent_id: String,
     tool_name: String,
@@ -131,6 +143,18 @@ impl<'a> From<&'a PublicWorkspaceAutonomyJudgmentRequest> for JudgeRequest<'a> {
                     metadata: &candidate.metadata,
                 })
                 .collect(),
+            agent_candidates: request
+                .agent_candidates()
+                .iter()
+                .map(|candidate| AgentCandidateRequest {
+                    workspace_agent_binding_id: candidate.workspace_agent_binding_id.as_str(),
+                    agent_id: candidate.agent_id.as_str(),
+                    display_name: candidate.display_name.as_deref(),
+                    description: candidate.description.as_deref(),
+                    status: candidate.status.as_str(),
+                    config: &candidate.config,
+                })
+                .collect(),
         }
     }
 }
@@ -146,6 +170,7 @@ fn judgment_from_response(
         request,
         response.verdict,
         response.selected_root_task_id,
+        response.next_action,
         response.rationale,
         response.agent_id,
         response.tool_name,

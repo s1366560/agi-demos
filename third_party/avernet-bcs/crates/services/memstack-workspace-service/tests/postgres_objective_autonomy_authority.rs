@@ -10,9 +10,10 @@ use memstack_workspace_service::{
     PublicUpdateWorkspaceObjectiveFields, PublicWorkspaceAutonomyContext,
     PublicWorkspaceAutonomyErrorKind, PublicWorkspaceAutonomyJudgePort,
     PublicWorkspaceAutonomyJudgePortError, PublicWorkspaceAutonomyJudgment,
-    PublicWorkspaceAutonomyJudgmentRequest, PublicWorkspaceAutonomyService,
-    PublicWorkspaceAutonomyVerdictKind, PublicWorkspaceObjectiveContext,
-    PublicWorkspaceObjectiveErrorKind, PublicWorkspaceObjectiveService, WorkspaceCreationService,
+    PublicWorkspaceAutonomyJudgmentRequest, PublicWorkspaceAutonomyNextAction,
+    PublicWorkspaceAutonomyService, PublicWorkspaceAutonomyVerdictKind,
+    PublicWorkspaceObjectiveContext, PublicWorkspaceObjectiveErrorKind,
+    PublicWorkspaceObjectiveService, WorkspaceCreationService,
 };
 use serde_json::json;
 
@@ -138,6 +139,7 @@ async fn postgres_autonomy_uses_structured_judge_replay_and_atomic_outbox_rollba
     seed_project_membership(&db).await?;
     create_workspace(&db).await?;
     seed_root_task(&db).await?;
+    seed_agent_binding(&db).await?;
     let judge = FirstCandidateJudge::default();
     let service = PublicWorkspaceAutonomyService::new(&db, DbSqlFlavor::Postgres, &judge);
 
@@ -228,15 +230,33 @@ impl PublicWorkspaceAutonomyJudgePort for FirstCandidateJudge {
             .first()
             .map(|candidate| candidate.root_task_id.clone())
             .ok_or(PublicWorkspaceAutonomyJudgePortError::Unavailable)?;
+        let workspace_agent_binding_id = request
+            .agent_candidates()
+            .first()
+            .map(|candidate| candidate.workspace_agent_binding_id.clone())
+            .ok_or(PublicWorkspaceAutonomyJudgePortError::Unavailable)?;
         PublicWorkspaceAutonomyJudgment::new(
             request,
             PublicWorkspaceAutonomyVerdictKind::Continue,
             Some(root_task_id.clone()),
+            Some(PublicWorkspaceAutonomyNextAction {
+                title: "Advance the PostgreSQL objective".to_string(),
+                description: "Execute the next structured verification slice".to_string(),
+                workspace_agent_binding_id: workspace_agent_binding_id.clone(),
+            }),
             "the structured root candidate is ready".to_string(),
             "autonomy-pg-judge".to_string(),
             "judge_workspace_autonomy".to_string(),
             json!({"candidate_ids": [root_task_id.clone()]}),
-            json!({"verdict": "continue", "selected_root_task_id": root_task_id}),
+            json!({
+                "verdict": "continue",
+                "selected_root_task_id": root_task_id,
+                "next_action": {
+                    "title": "Advance the PostgreSQL objective",
+                    "description": "Execute the next structured verification slice",
+                    "workspace_agent_binding_id": workspace_agent_binding_id,
+                }
+            }),
             9,
         )
         .map_err(|_| PublicWorkspaceAutonomyJudgePortError::Unavailable)
@@ -314,6 +334,14 @@ async fn create_workspace(db: &dyn DbPlugin) -> Result<(), Box<dyn Error>> {
 async fn seed_root_task(db: &dyn DbPlugin) -> Result<(), Box<dyn Error>> {
     db.execute(DbStatement::new(
         "INSERT INTO workspace_tasks (task_id, tenant_id, project_id, workspace_id, title, description, created_by, status, priority, metadata_json) VALUES ('root-task-pg', 'tenant-objective-autonomy-pg', 'project-objective-autonomy-pg', 'workspace-objective-autonomy-pg', 'Root objective', 'Proceed through the structured judge', 'actor-objective-autonomy-pg', 'todo', 2, '{\"task_role\":\"goal_root\"}'::jsonb)",
+    ))
+    .await?;
+    Ok(())
+}
+
+async fn seed_agent_binding(db: &dyn DbPlugin) -> Result<(), Box<dyn Error>> {
+    db.execute(DbStatement::new(
+        "INSERT INTO workspace_agent_bindings (binding_id, tenant_id, project_id, workspace_id, agent_id, bot_uuid, participant_actor_id, display_name, description, config_json, is_active, status) VALUES ('binding-objective-autonomy-pg', 'tenant-objective-autonomy-pg', 'project-objective-autonomy-pg', 'workspace-objective-autonomy-pg', 'agent-objective-autonomy-pg', 'bot-objective-autonomy-pg', 'bot-objective-autonomy-pg', 'Autonomy Agent', 'Executes structured continuations', '{}'::jsonb, TRUE, 'idle')",
     ))
     .await?;
     Ok(())

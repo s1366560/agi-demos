@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::body::{Body, to_bytes};
@@ -11,7 +12,16 @@ use bcs_db_api::{
 use bcs_db_local::LocalSqliteDbPlugin;
 use memstack_workspace_core::{
     WorkspaceCoreAuthority, WorkspaceCoreState,
-    desktop_schema::run_desktop_workspace_schema_migrations, workspace_router,
+    autonomy_bootstrap_worker::{
+        WorkspaceAutonomyBootstrapWorker, WorkspaceAutonomyBootstrapWorkerConfig,
+    },
+    desktop_schema::run_desktop_workspace_schema_migrations,
+    workspace_router,
+};
+use memstack_workspace_service::{
+    PublicCreateWorkspaceObjectiveInput, PublicWorkspaceAutonomyAttentionService,
+    PublicWorkspaceAutonomyBootstrapService, PublicWorkspaceAutonomyContext,
+    PublicWorkspaceObjectiveContext, PublicWorkspaceObjectiveService,
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -549,6 +559,446 @@ async fn public_create_composes_programming_metadata_like_the_legacy_route()
         "sandbox_native"
     );
     assert!(payload["metadata"].get("source_control").is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn desktop_autonomous_create_bootstraps_one_root_objective_and_replays_idempotently()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(desktop_creation_db().await?);
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let payload = json!({
+        "name": "Autonomous Delivery",
+        "description": "Ship the desktop local-mode acceptance goals",
+        "collaboration_mode": "autonomous"
+    });
+
+    let first = workspace_router(state.clone())
+        .oneshot(public_local_create_request_with_payload(payload.clone())?)
+        .await?;
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first: Value = serde_json::from_slice(&to_bytes(first.into_body(), usize::MAX).await?)?;
+    let workspace_id = first["id"].as_str().ok_or("missing workspace id")?;
+
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox \
+             WHERE status = 'pending'"
+        )
+        .await?,
+        1,
+        "the creation transaction must durably enqueue before the API returns"
+    );
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_objectives"
+        )
+        .await?,
+        0,
+        "bootstrap execution must not be required for a successful create response"
+    );
+
+    // Simulate the API process disappearing without a UI retry. A fresh
+    // worker recovers solely from the durable database snapshot.
+    drop(state);
+    let worker_db: Arc<dyn DbPlugin> = db.clone();
+    let worker = WorkspaceAutonomyBootstrapWorker::new(
+        worker_db,
+        DbSqlFlavor::Sqlite,
+        WorkspaceAutonomyBootstrapWorkerConfig {
+            worker_id: "creation-contract-restarted-bootstrap".to_string(),
+            poll_interval: Duration::from_millis(10),
+            ..WorkspaceAutonomyBootstrapWorkerConfig::default()
+        },
+    )?;
+    let recovered = worker.advance_once().await?;
+    let exactly_once = worker.advance_once().await?;
+    assert_eq!(recovered.claimed, 1);
+    assert_eq!(recovered.completed, 1);
+    assert_eq!(exactly_once.claimed, 0);
+
+    let replay_state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let replay = workspace_router(replay_state)
+        .oneshot(public_local_create_request_with_payload(payload)?)
+        .await?;
+    assert_eq!(replay.status(), StatusCode::CREATED);
+    let replay: Value = serde_json::from_slice(&to_bytes(replay.into_body(), usize::MAX).await?)?;
+    assert_eq!(replay, first);
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        1
+    );
+
+    let objectives = db
+        .query(DbStatement::with_params(
+            "SELECT objective_id, title, description, objective_type, \
+                    CAST(progress AS INTEGER) AS progress \
+             FROM workspace_objectives WHERE workspace_id = ?",
+            vec![DbValue::from(workspace_id)],
+        ))
+        .await?;
+    assert_eq!(objectives.len(), 1);
+    let objective = objectives.first().ok_or("missing root Objective")?;
+    assert_eq!(
+        objective.get_string("title")?.as_deref(),
+        Some("Autonomous Delivery")
+    );
+    assert_eq!(
+        objective.get_string("description")?.as_deref(),
+        Some("Ship the desktop local-mode acceptance goals")
+    );
+    assert_eq!(
+        objective.get_string("objective_type")?.as_deref(),
+        Some("objective")
+    );
+    assert_eq!(objective.get_i64("progress")?, Some(0));
+
+    let tasks = db
+        .query(DbStatement::with_params(
+            "SELECT task_id, title, description, metadata_json FROM workspace_tasks \
+             WHERE workspace_id = ?",
+            vec![DbValue::from(workspace_id)],
+        ))
+        .await?;
+    assert_eq!(tasks.len(), 1);
+    let task = tasks.first().ok_or("missing root Task")?;
+    assert_eq!(
+        task.get_string("title")?.as_deref(),
+        Some("Autonomous Delivery")
+    );
+    assert_eq!(
+        task.get_string("description")?.as_deref(),
+        Some("Ship the desktop local-mode acceptance goals")
+    );
+    let task_metadata: Value = serde_json::from_str(
+        task.get_string("metadata_json")?
+            .as_deref()
+            .ok_or("missing Task metadata")?,
+    )?;
+    assert_eq!(task_metadata["task_role"], "goal_root");
+    assert_eq!(
+        task_metadata["objective_id"],
+        objective
+            .get_string("objective_id")?
+            .ok_or("missing Objective id")?
+    );
+
+    let projections = db
+        .query(DbStatement::with_params(
+            "SELECT objective_id, task_id FROM workspace_objective_task_projections \
+             WHERE workspace_id = ?",
+            vec![DbValue::from(workspace_id)],
+        ))
+        .await?;
+    assert_eq!(projections.len(), 1);
+    assert_eq!(
+        projections[0].get_string("objective_id")?,
+        objective.get_string("objective_id")?
+    );
+    assert_eq!(
+        projections[0].get_string("task_id")?,
+        task.get_string("task_id")?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn autonomous_creation_rolls_back_when_the_bootstrap_outbox_write_fails()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(desktop_creation_db().await?);
+    db.execute(DbStatement::new(
+        "CREATE TRIGGER reject_autonomy_bootstrap BEFORE INSERT ON \
+         workspace_autonomy_bootstrap_outbox BEGIN \
+         SELECT RAISE(FAIL, 'injected bootstrap outbox failure'); END",
+    ))
+    .await?;
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+
+    let response = workspace_router(state)
+        .oneshot(public_local_create_request_with_payload(json!({
+            "name": "Atomic Autonomous Delivery",
+            "collaboration_mode": "autonomous"
+        }))?)
+        .await?;
+
+    assert_ne!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_profiles"
+        )
+        .await?,
+        0
+    );
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox"
+        )
+        .await?,
+        0
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn expired_bootstrap_claim_recovers_after_objective_creation_and_revision_advance()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(desktop_creation_db().await?);
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let response = workspace_router(state)
+        .oneshot(public_local_create_request_with_payload(json!({
+            "name": "Revision Race Recovery",
+            "description": "Recover after the Objective commits",
+            "collaboration_mode": "autonomous"
+        }))?)
+        .await?;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+    let workspace_id = payload["id"].as_str().ok_or("missing workspace id")?;
+
+    let claim_now_ms = chrono::Utc::now().timestamp_millis();
+    let bootstrap = PublicWorkspaceAutonomyBootstrapService::new(db.as_ref(), DbSqlFlavor::Sqlite);
+    let claim = bootstrap
+        .claim_bootstraps(
+            "crashed-bootstrap-worker",
+            claim_now_ms,
+            claim_now_ms + 120_000,
+            1,
+        )
+        .await?
+        .pop()
+        .ok_or("missing bootstrap claim")?;
+
+    // The first worker committed the Objective and then disappeared before it
+    // could project or ACK its fenced claim.
+    let objective = PublicWorkspaceObjectiveService::new(db.as_ref(), DbSqlFlavor::Sqlite)
+        .create(&PublicCreateWorkspaceObjectiveInput {
+            context: PublicWorkspaceObjectiveContext {
+                tenant_id: "tenant-1".to_string(),
+                project_id: "project-1".to_string(),
+                workspace_id: workspace_id.to_string(),
+                user_id: "owner-1".to_string(),
+                is_superuser: false,
+                expected_revision: None,
+                idempotency_key: Some(format!(
+                    "workspace-autonomy-bootstrap-objective:{workspace_id}"
+                )),
+            },
+            title: claim.objective_title.clone(),
+            description: claim.objective_description.clone(),
+            objective_type: "objective".to_string(),
+            parent_objective_id: None,
+            progress: 0.0,
+        })
+        .await?;
+    assert!(!objective.replayed);
+
+    // Model an unrelated authority commit plus lease expiry before restart.
+    db.execute(DbStatement::with_params(
+        "UPDATE workspace_authorities SET revision = revision + 1 WHERE workspace_id = ?",
+        vec![DbValue::from(workspace_id)],
+    ))
+    .await?;
+    db.execute(DbStatement::with_params(
+        "UPDATE workspace_autonomy_bootstrap_outbox SET lease_expires_at_ms = 0 \
+         WHERE bootstrap_id = ?",
+        vec![DbValue::from(claim.bootstrap_id.as_str())],
+    ))
+    .await?;
+
+    let worker_db: Arc<dyn DbPlugin> = db.clone();
+    let restarted = WorkspaceAutonomyBootstrapWorker::new(
+        worker_db,
+        DbSqlFlavor::Sqlite,
+        WorkspaceAutonomyBootstrapWorkerConfig {
+            worker_id: "restarted-bootstrap-worker".to_string(),
+            ..WorkspaceAutonomyBootstrapWorkerConfig::default()
+        },
+    )?;
+    let outcome = restarted.advance_once().await?;
+
+    assert_eq!(outcome.claimed, 1);
+    assert_eq!(outcome.completed, 1);
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_objectives"
+        )
+        .await?,
+        1
+    );
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_tasks WHERE \
+             json_extract(metadata_json, '$.task_role') = 'goal_root'"
+        )
+        .await?,
+        1
+    );
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox WHERE \
+             status = 'completed' AND attempt_count = 2 AND objective_id IS NOT NULL \
+             AND root_task_id IS NOT NULL"
+        )
+        .await?,
+        1
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn bootstrap_dead_letter_creates_workspace_attention_and_editor_retry_recovers()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(desktop_creation_db().await?);
+    let state = Arc::new(
+        WorkspaceCoreState::new_with_sql_flavor(
+            db.clone(),
+            SERVICE_TOKEN.to_string(),
+            DbSqlFlavor::Sqlite,
+        )?
+        .with_authority(WorkspaceCoreAuthority::Local),
+    );
+    let response = workspace_router(state)
+        .oneshot(public_local_create_request_with_payload(json!({
+            "name": "Recoverable Bootstrap",
+            "collaboration_mode": "autonomous"
+        }))?)
+        .await?;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await?)?;
+    let workspace_id = payload["id"].as_str().ok_or("missing workspace id")?;
+
+    db.execute(DbStatement::new(
+        "UPDATE workspace_autonomy_bootstrap_outbox SET max_attempts = 1",
+    ))
+    .await?;
+    db.execute(DbStatement::new(
+        "CREATE TRIGGER reject_bootstrap_objective BEFORE INSERT ON workspace_objectives BEGIN \
+         SELECT RAISE(FAIL, 'injected objective failure'); END",
+    ))
+    .await?;
+    let worker_db: Arc<dyn DbPlugin> = db.clone();
+    let worker = WorkspaceAutonomyBootstrapWorker::new(
+        worker_db,
+        DbSqlFlavor::Sqlite,
+        WorkspaceAutonomyBootstrapWorkerConfig {
+            worker_id: "bootstrap-dead-letter-worker".to_string(),
+            retry_base: Duration::from_millis(1),
+            retry_max: Duration::from_millis(1),
+            ..WorkspaceAutonomyBootstrapWorkerConfig::default()
+        },
+    )?;
+
+    let failed = worker.advance_once().await?;
+
+    assert_eq!(failed.dead_lettered, 1);
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_attentions WHERE \
+             source_kind = 'bootstrap_dead_letter' AND root_task_id IS NULL AND status = 'open'"
+        )
+        .await?,
+        1
+    );
+    let attention_id = scalar_string(
+        db.as_ref(),
+        "SELECT attention_id AS value FROM workspace_autonomy_attentions WHERE \
+         source_kind = 'bootstrap_dead_letter'",
+    )
+    .await?;
+    let attentions = PublicWorkspaceAutonomyAttentionService::new(db.as_ref(), DbSqlFlavor::Sqlite);
+    let context = |user_id: &str| PublicWorkspaceAutonomyContext {
+        tenant_id: "tenant-1".to_string(),
+        project_id: "project-1".to_string(),
+        workspace_id: workspace_id.to_string(),
+        user_id: user_id.to_string(),
+        is_superuser: false,
+        expected_revision: None,
+        idempotency_key: None,
+    };
+
+    let unauthorized = attentions
+        .retry_bootstrap_dead_letter(&context("intruder"), attention_id.as_str(), 0)
+        .await;
+    assert!(unauthorized.is_err());
+
+    db.execute(DbStatement::new("DROP TRIGGER reject_bootstrap_objective"))
+        .await?;
+    attentions
+        .retry_bootstrap_dead_letter(&context("owner-1"), attention_id.as_str(), 0)
+        .await?;
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_bootstrap_outbox WHERE \
+             status = 'pending' AND attempt_count = 0"
+        )
+        .await?,
+        1
+    );
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_autonomy_attentions WHERE \
+             source_kind = 'bootstrap_dead_letter' AND status = 'resolved' AND \
+             resolved_by_actor_id = 'owner-1'"
+        )
+        .await?,
+        1
+    );
+
+    let recovered = worker.advance_once().await?;
+    assert_eq!(recovered.completed, 1);
+    assert_eq!(
+        scalar_i64(
+            db.as_ref(),
+            "SELECT COUNT(*) AS value FROM workspace_tasks WHERE \
+             json_extract(metadata_json, '$.task_role') = 'goal_root'"
+        )
+        .await?,
+        1
+    );
     Ok(())
 }
 
@@ -1091,6 +1541,16 @@ fn public_local_create_request() -> Result<Request<Body>, Box<dyn Error>> {
     Ok(request)
 }
 
+fn public_local_create_request_with_payload(
+    payload: Value,
+) -> Result<Request<Body>, Box<dyn Error>> {
+    let mut request = public_create_request(payload, Some("desktop-local-autonomous-create"))?;
+    request
+        .headers_mut()
+        .insert("x-memstack-project-membership-role", "owner".parse()?);
+    Ok(request)
+}
+
 fn public_workspace_request(
     method: &str,
     payload: Option<Value>,
@@ -1162,6 +1622,13 @@ async fn creation_db() -> Result<LocalSqliteDbPlugin, Box<dyn Error>> {
     Ok(db)
 }
 
+async fn desktop_creation_db() -> Result<LocalSqliteDbPlugin, Box<dyn Error>> {
+    let db = LocalSqliteDbPlugin::new()?;
+    bcs::migrations::run_sqlite_migrations(&db).await?;
+    run_desktop_workspace_schema_migrations(&db).await?;
+    Ok(db)
+}
+
 async fn creation_db_without_principal() -> Result<LocalSqliteDbPlugin, Box<dyn Error>> {
     let db = LocalSqliteDbPlugin::new()?;
     for ddl in [
@@ -1178,6 +1645,18 @@ async fn creation_db_without_principal() -> Result<LocalSqliteDbPlugin, Box<dyn 
         db.execute(DbStatement::new(ddl)).await?;
     }
     Ok(db)
+}
+
+async fn scalar_i64(db: &dyn DbPlugin, sql: &str) -> Result<i64, Box<dyn Error>> {
+    let rows = db.query(DbStatement::new(sql)).await?;
+    let row = rows.first().ok_or("missing scalar row")?;
+    Ok(row.get_i64("value")?.ok_or("missing scalar value")?)
+}
+
+async fn scalar_string(db: &dyn DbPlugin, sql: &str) -> Result<String, Box<dyn Error>> {
+    let rows = db.query(DbStatement::new(sql)).await?;
+    let row = rows.first().ok_or("missing scalar row")?;
+    Ok(row.get_string("value")?.ok_or("missing scalar value")?)
 }
 
 async fn table_count(db: &dyn DbPlugin, table: &str) -> Result<i64, Box<dyn Error>> {

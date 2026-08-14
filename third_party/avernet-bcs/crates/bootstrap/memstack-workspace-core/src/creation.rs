@@ -162,10 +162,13 @@ pub(super) async fn create_public_workspace(
         optional_header(&headers, PUBLIC_IDEMPOTENCY_HEADER)?,
         request,
     )?;
-    let outcome = PublicWorkspaceCreationService::new(state.db.as_ref(), state.sql_flavor)
-        .create(&input)
-        .await
-        .map_err(map_public_service_error)?;
+    let creation = PublicWorkspaceCreationService::new(state.db.as_ref(), state.sql_flavor);
+    let outcome = if state.authority == super::WorkspaceCoreAuthority::Local {
+        creation.create_with_autonomy_bootstrap(&input).await
+    } else {
+        creation.create(&input).await
+    }
+    .map_err(map_public_service_error)?;
     Ok((StatusCode::CREATED, Json(outcome.response)))
 }
 

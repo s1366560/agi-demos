@@ -23,7 +23,10 @@ pub mod agent_registry;
 mod agents;
 mod authority_query;
 mod autonomy;
+pub mod autonomy_bootstrap_worker;
 pub mod autonomy_judge;
+pub mod autonomy_progression_worker;
+pub mod autonomy_scheduler;
 mod blackboard;
 mod capabilities;
 mod collaboration_mutations;
@@ -35,6 +38,7 @@ pub mod desktop_schema;
 mod diagnostics;
 mod files;
 mod genes;
+pub mod graceful_shutdown;
 mod members;
 pub mod message_delivery;
 pub mod message_delivery_worker;
@@ -95,8 +99,14 @@ const SNAPSHOT_TABLES: &[&str] = &[
     "workspace_execution_terminals",
     "workspace_migration_ledger",
     "workspace_judge_audits",
-    "workspace_message_delivery_outbox",
+    "workspace_objective_task_projections",
+    "workspace_autonomy_ticks",
+    "workspace_autonomy_judgment_claims",
+    "workspace_autonomy_bootstrap_outbox",
+    "workspace_autonomy_progression_outbox",
     "workspace_task_dispatch_outbox",
+    "workspace_autonomy_attentions",
+    "workspace_message_delivery_outbox",
 ];
 
 /// Deployment authority reported by Workspace collaboration contracts.
@@ -889,28 +899,9 @@ mod tests {
                     DbTransactionStep::Query(_) | DbTransactionStep::QueryChecked { .. }
                         if index + 1 == steps.len() =>
                     {
-                        results.push(DbTransactionStepResult::Rows(vec![DbRow::new(
-                            BTreeMap::from([
-                                (
-                                    "status".to_string(),
-                                    DbValue::String("completed".to_string()),
-                                ),
-                                (
-                                    "outbox_id".to_string(),
-                                    DbValue::String("runtime-outbox-correlation-1".to_string()),
-                                ),
-                                (
-                                    "terminal_id".to_string(),
-                                    DbValue::String("runtime-terminal-correlation-1".to_string()),
-                                ),
-                                (
-                                    "report_hash".to_string(),
-                                    DbValue::String(hex::encode(Sha256::digest(
-                                        br#"{"content":"done"}"#,
-                                    ))),
-                                ),
-                            ]),
-                        )]));
+                        results.push(DbTransactionStepResult::Rows(vec![
+                            runtime_terminal_read_row(),
+                        ]));
                     }
                     DbTransactionStep::Query(_) | DbTransactionStep::QueryChecked { .. } => {
                         results.push(DbTransactionStepResult::Rows(Vec::new()));
@@ -995,15 +986,38 @@ mod tests {
 
     fn runtime_terminal_read_row() -> DbRow {
         let report = json!({"content": "done"});
+        let report_hash = hex::encode(Sha256::digest(br#"{"content":"done"}"#));
+        let payload = json!({
+            "correlation_id": "correlation-1",
+            "provider_run_id": "provider-run-1",
+            "delivery_request_id": "delivery-1",
+            "conversation_id": "conversation-1",
+            "execution_status": "completed",
+            "terminal_message_id": "message-1",
+            "terminal_event_id": "legacy-event-1",
+            "report_hash": &report_hash,
+            "report": &report,
+        });
         DbRow::new(BTreeMap::from([
             (
                 "correlation_id".to_string(),
                 DbValue::String("correlation-1".to_string()),
             ),
             (
+                "provider_run_id".to_string(),
+                DbValue::String("provider-run-1".to_string()),
+            ),
+            (
+                "delivery_request_id".to_string(),
+                DbValue::String("delivery-1".to_string()),
+            ),
+            (
                 "status".to_string(),
                 DbValue::String("completed".to_string()),
             ),
+            ("plan_id".to_string(), DbValue::String("plan-1".to_string())),
+            ("task_id".to_string(), DbValue::String("task-1".to_string())),
+            ("attempt_id".to_string(), DbValue::Null),
             (
                 "outbox_id".to_string(),
                 DbValue::String("runtime-outbox-correlation-1".to_string()),
@@ -1013,25 +1027,18 @@ mod tests {
                 DbValue::String("runtime-terminal-correlation-1".to_string()),
             ),
             (
-                "execution_status".to_string(),
-                DbValue::String("completed".to_string()),
+                "payload_json".to_string(),
+                DbValue::String(payload.to_string()),
             ),
             (
-                "terminal_message_id".to_string(),
-                DbValue::String("message-1".to_string()),
+                "metadata_json".to_string(),
+                DbValue::String(json!({"report_hash": report_hash}).to_string()),
             ),
             (
-                "terminal_event_id".to_string(),
-                DbValue::String("legacy-event-1".to_string()),
+                "task_status".to_string(),
+                DbValue::String("done".to_string()),
             ),
-            (
-                "report_json".to_string(),
-                DbValue::String(report.to_string()),
-            ),
-            (
-                "report_hash".to_string(),
-                DbValue::String(hex::encode(Sha256::digest(br#"{"content":"done"}"#))),
-            ),
+            ("attempt_status".to_string(), DbValue::Null),
         ]))
     }
 
@@ -1515,12 +1522,62 @@ mod tests {
         assert_eq!(payload["workspace_id"], "ws-1");
         assert_eq!(payload["revision"], 7);
         assert_eq!(payload["counts"]["workspace_profiles"], 1);
+        for table in [
+            "workspace_objective_task_projections",
+            "workspace_autonomy_ticks",
+            "workspace_autonomy_judgment_claims",
+            "workspace_autonomy_bootstrap_outbox",
+            "workspace_autonomy_progression_outbox",
+            "workspace_autonomy_attentions",
+        ] {
+            assert_eq!(
+                payload["counts"][table], 0,
+                "missing snapshot count for {table}"
+            );
+        }
         assert_eq!(
             payload["counts"].as_object().map(|counts| counts.len()),
             Some(SNAPSHOT_TABLES.len())
         );
         assert_eq!(payload["canonical_hash"].as_str().map(str::len), Some(64));
         Ok(())
+    }
+
+    #[test]
+    fn snapshot_tables_keep_autonomy_authority_after_its_dependencies() {
+        let position = |table: &str| {
+            SNAPSHOT_TABLES
+                .iter()
+                .position(|candidate| *candidate == table)
+                .unwrap_or_else(|| panic!("missing snapshot table {table}"))
+        };
+
+        let tasks = position("workspace_tasks");
+        let bindings = position("workspace_agent_bindings");
+        let objectives = position("workspace_objectives");
+        let outbox = position("workspace_outbox");
+        let audits = position("workspace_judge_audits");
+        let projections = position("workspace_objective_task_projections");
+        let ticks = position("workspace_autonomy_ticks");
+        let judgments = position("workspace_autonomy_judgment_claims");
+        let bootstrap = position("workspace_autonomy_bootstrap_outbox");
+        let progression = position("workspace_autonomy_progression_outbox");
+        let task_dispatch = position("workspace_task_dispatch_outbox");
+        let attentions = position("workspace_autonomy_attentions");
+
+        assert!(tasks < projections);
+        assert!(objectives < projections);
+        assert!(outbox < projections);
+        assert!(tasks < ticks);
+        assert!(audits < ticks);
+        assert!(audits < judgments);
+        assert!(tasks < progression);
+        assert!(bindings < progression);
+        assert!(ticks < progression);
+        assert!(judgments < attentions);
+        assert!(bootstrap < attentions);
+        assert!(progression < attentions);
+        assert!(task_dispatch < attentions);
     }
 
     #[tokio::test]

@@ -173,8 +173,16 @@ pub trait VectorIndexPort: Send + Sync {
 /// hot-pluggable registry.
 #[async_trait]
 pub trait ToolHost: Send + Sync {
-    /// The tool names currently dispatchable.
+    /// The tool names advertised to the model for new decisions.
     fn list_tools(&self) -> Vec<String>;
+    /// Whether this host can route an exact tool identity.
+    ///
+    /// Hosts may override this for non-advertised compatibility aliases. This
+    /// check is structural only and must not execute the tool or probe an
+    /// unknown target. The default keeps existing hosts list-driven.
+    fn can_dispatch(&self, tool: &str) -> bool {
+        self.list_tools().iter().any(|name| name == tool)
+    }
     /// Invoke a tool with a JSON input, returning a JSON output.
     async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String>;
 }

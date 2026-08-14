@@ -32,6 +32,29 @@ class WorkspaceAutonomyCandidate(BaseModel):
     metadata: dict[str, Any]
 
 
+class WorkspaceAutonomyAgentCandidate(BaseModel):
+    """One active Workspace Agent binding available for a Judge-selected action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_agent_binding_id: str = Field(min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=128)
+    display_name: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    status: str = Field(min_length=1, max_length=64)
+    config: dict[str, Any]
+
+
+class WorkspaceAutonomyNextAction(BaseModel):
+    """Concrete continuation selected by the structured Autonomy Judge."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1, max_length=10_000)
+    workspace_agent_binding_id: str = Field(min_length=1, max_length=128)
+
+
 class WorkspaceAutonomyJudgeRequest(BaseModel):
     """Bounded structured evidence for one subjective Autonomy decision."""
 
@@ -44,12 +67,16 @@ class WorkspaceAutonomyJudgeRequest(BaseModel):
     workspace_revision: int = Field(ge=0)
     force: bool
     candidates: list[WorkspaceAutonomyCandidate] = Field(min_length=1, max_length=500)
+    agent_candidates: list[WorkspaceAutonomyAgentCandidate] = Field(max_length=500)
 
     @model_validator(mode="after")
     def require_unique_candidates(self) -> WorkspaceAutonomyJudgeRequest:
         roots = {candidate.root_task_id for candidate in self.candidates}
         if len(roots) != len(self.candidates):
             raise ValueError("Workspace Autonomy root Task candidates must be unique")
+        bindings = {candidate.workspace_agent_binding_id for candidate in self.agent_candidates}
+        if len(bindings) != len(self.agent_candidates):
+            raise ValueError("Workspace Autonomy Agent binding candidates must be unique")
         return self
 
 
@@ -60,6 +87,7 @@ class WorkspaceAutonomyJudgeVerdict(BaseModel):
 
     verdict: WorkspaceAutonomyVerdict
     selected_root_task_id: str | None = None
+    next_action: WorkspaceAutonomyNextAction | None = None
     rationale: str = Field(min_length=1)
     agent_id: str = Field(min_length=1, max_length=512)
     tool_name: Literal["judge_workspace_autonomy"]
@@ -149,7 +177,7 @@ class AgentWorkspaceAutonomyJudge:
             client = self._client_factory(judge_candidate.provider_config)
             response = await client.generate(
                 messages=_judgment_messages(input_json),
-                tools=[_judgment_tool(request.candidates)],
+                tools=[_judgment_tool(request.candidates, request.agent_candidates)],
                 tool_choice={"type": "function", "function": {"name": _AUTONOMY_TOOL_NAME}},
                 temperature=0.0,
                 max_tokens=512,
@@ -160,29 +188,10 @@ class AgentWorkspaceAutonomyJudge:
                 raise WorkspaceAutonomyJudgeUnavailable(
                     "Workspace Autonomy judge omitted the required structured tool call"
                 )
-            verdict = output_json.get("verdict")
-            if verdict not in {"continue", "block", "escalate"}:
-                raise WorkspaceAutonomyJudgeUnavailable(
-                    "Workspace Autonomy judge returned an invalid verdict"
-                )
-            selected_root_task_id = output_json.get("selected_root_task_id")
-            candidate_ids = {candidate.root_task_id for candidate in request.candidates}
-            if selected_root_task_id is not None and (
-                not isinstance(selected_root_task_id, str)
-                or selected_root_task_id not in candidate_ids
-            ):
-                raise WorkspaceAutonomyJudgeUnavailable(
-                    "Workspace Autonomy judge selected a Task outside the candidates"
-                )
-            if verdict == "continue" and selected_root_task_id is None:
-                raise WorkspaceAutonomyJudgeUnavailable(
-                    "Workspace Autonomy judge omitted the required root Task"
-                )
-            rationale = output_json.get("rationale")
-            if not isinstance(rationale, str) or not rationale.strip():
-                raise WorkspaceAutonomyJudgeUnavailable(
-                    "Workspace Autonomy judge returned an empty rationale"
-                )
+            verdict = _required_verdict(output_json)
+            selected_root_task_id = _required_root_task_id(request, output_json)
+            next_action = _validated_next_action(request, verdict, output_json)
+            rationale = _required_rationale(output_json)
         except WorkspaceAutonomyJudgeUnavailable:
             raise
         except Exception as exc:
@@ -205,8 +214,9 @@ class AgentWorkspaceAutonomyJudge:
             },
         )
         return WorkspaceAutonomyJudgeVerdict(
-            verdict=cast("WorkspaceAutonomyVerdict", verdict),
+            verdict=verdict,
             selected_root_task_id=selected_root_task_id,
+            next_action=next_action,
             rationale=rationale.strip(),
             agent_id=judge_candidate.candidate_key,
             tool_name=_AUTONOMY_TOOL_NAME,
@@ -223,6 +233,72 @@ def _judgment_input(request: WorkspaceAutonomyJudgeRequest) -> dict[str, Any]:
     }
 
 
+def _required_verdict(output_json: Mapping[str, Any]) -> WorkspaceAutonomyVerdict:
+    verdict = output_json.get("verdict")
+    if verdict not in {"continue", "block", "escalate"}:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge returned an invalid verdict"
+        )
+    return cast("WorkspaceAutonomyVerdict", verdict)
+
+
+def _required_root_task_id(
+    request: WorkspaceAutonomyJudgeRequest,
+    output_json: Mapping[str, Any],
+) -> str:
+    selected_root_task_id = output_json.get("selected_root_task_id")
+    if selected_root_task_id is None:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge omitted the required root Task"
+        )
+    candidate_ids = {candidate.root_task_id for candidate in request.candidates}
+    if not isinstance(selected_root_task_id, str) or selected_root_task_id not in candidate_ids:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge selected a Task outside the candidates"
+        )
+    return selected_root_task_id
+
+
+def _validated_next_action(
+    request: WorkspaceAutonomyJudgeRequest,
+    verdict: WorkspaceAutonomyVerdict,
+    output_json: Mapping[str, Any],
+) -> WorkspaceAutonomyNextAction | None:
+    raw_next_action = output_json.get("next_action")
+    if raw_next_action is None:
+        next_action = None
+    else:
+        try:
+            next_action = WorkspaceAutonomyNextAction.model_validate(raw_next_action)
+        except Exception as exc:
+            raise WorkspaceAutonomyJudgeUnavailable(
+                "Workspace Autonomy judge returned an invalid next action"
+            ) from exc
+    if verdict == "continue" and next_action is None:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge omitted the required next action"
+        )
+    if verdict != "continue" and next_action is not None:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge returned an action for a terminal verdict"
+        )
+    binding_ids = {candidate.workspace_agent_binding_id for candidate in request.agent_candidates}
+    if next_action is not None and next_action.workspace_agent_binding_id not in binding_ids:
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge selected an Agent binding outside the candidates"
+        )
+    return next_action
+
+
+def _required_rationale(output_json: Mapping[str, Any]) -> str:
+    rationale = output_json.get("rationale")
+    if not isinstance(rationale, str) or not rationale.strip():
+        raise WorkspaceAutonomyJudgeUnavailable(
+            "Workspace Autonomy judge returned an empty rationale"
+        )
+    return rationale.strip()
+
+
 def _judgment_messages(input_json: dict[str, Any]) -> list[Message]:
     return [
         Message.system(
@@ -230,8 +306,9 @@ def _judgment_messages(input_json: dict[str, Any]) -> list[Message]:
                 (
                     "You are the Workspace Autonomy judgment agent.",
                     "Use only the supplied structured Workspace revision and root Task evidence.",
-                    "Call judge_workspace_autonomy exactly once with a verdict and rationale.",
-                    "Select a root Task only from the supplied candidates when continuing.",
+                    "Call judge_workspace_autonomy exactly once with a verdict, next action, and rationale.",
+                    "Select one root Task from the supplied candidates for every verdict.",
+                    "Select the next action Agent binding only from agent_candidates.",
                     "Do not use keyword rules, hidden priority, or unavailable data.",
                 )
             )
@@ -240,8 +317,12 @@ def _judgment_messages(input_json: dict[str, Any]) -> list[Message]:
     ]
 
 
-def _judgment_tool(candidates: list[WorkspaceAutonomyCandidate]) -> dict[str, Any]:
+def _judgment_tool(
+    candidates: list[WorkspaceAutonomyCandidate],
+    agent_candidates: list[WorkspaceAutonomyAgentCandidate],
+) -> dict[str, Any]:
     candidate_ids = [candidate.root_task_id for candidate in candidates]
+    binding_ids = [candidate.workspace_agent_binding_id for candidate in agent_candidates]
     return {
         "type": "function",
         "function": {
@@ -255,12 +336,34 @@ def _judgment_tool(candidates: list[WorkspaceAutonomyCandidate]) -> dict[str, An
                         "enum": ["continue", "block", "escalate"],
                     },
                     "selected_root_task_id": {
-                        "type": ["string", "null"],
-                        "enum": [*candidate_ids, None],
+                        "type": "string",
+                        "enum": candidate_ids,
+                    },
+                    "next_action": {
+                        "type": ["object", "null"],
+                        "properties": {
+                            "title": {"type": "string", "minLength": 1, "maxLength": 255},
+                            "description": {"type": "string", "minLength": 1},
+                            "workspace_agent_binding_id": {
+                                "type": "string",
+                                "enum": binding_ids,
+                            },
+                        },
+                        "required": [
+                            "title",
+                            "description",
+                            "workspace_agent_binding_id",
+                        ],
+                        "additionalProperties": False,
                     },
                     "rationale": {"type": "string", "minLength": 1},
                 },
-                "required": ["verdict", "selected_root_task_id", "rationale"],
+                "required": [
+                    "verdict",
+                    "selected_root_task_id",
+                    "next_action",
+                    "rationale",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -318,9 +421,11 @@ def _default_client_factory(provider_config: ProviderConfig) -> _LlmClient:
 
 __all__ = [
     "AgentWorkspaceAutonomyJudge",
+    "WorkspaceAutonomyAgentCandidate",
     "WorkspaceAutonomyCandidate",
     "WorkspaceAutonomyJudgePort",
     "WorkspaceAutonomyJudgeRequest",
     "WorkspaceAutonomyJudgeUnavailable",
     "WorkspaceAutonomyJudgeVerdict",
+    "WorkspaceAutonomyNextAction",
 ]

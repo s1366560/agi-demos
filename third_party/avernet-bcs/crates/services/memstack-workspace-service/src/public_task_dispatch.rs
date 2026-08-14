@@ -20,6 +20,7 @@ pub struct PublicWorkspaceTaskDispatchClaim {
     pub plan_node_id: Option<String>,
     pub user_id: String,
     pub agent_id: String,
+    pub workspace_agent_binding_id: String,
     pub bot_uuid: String,
     pub group_id: String,
     pub conversation_id: String,
@@ -91,6 +92,18 @@ impl<'a> PublicWorkspaceTaskDispatchService<'a> {
         Ok(())
     }
 
+    /// ACK an already-terminal Task without creating a Runtime correlation.
+    pub async fn complete_terminal_dispatch(
+        &self,
+        claim: &PublicWorkspaceTaskDispatchClaim,
+        delivered_at_ms: i64,
+    ) -> Result<(), PublicWorkspaceTaskError> {
+        self.store
+            .complete_terminal_task_dispatch(&claim.store_claim, delivered_at_ms)
+            .await?;
+        Ok(())
+    }
+
     /// Release a failed claim for retry or dead-lettering.
     pub async fn fail_dispatch(
         &self,
@@ -124,6 +137,7 @@ fn public_claim(claim: WorkspaceTaskDispatchClaim) -> PublicWorkspaceTaskDispatc
         plan_node_id: claim.plan_node_id.clone(),
         user_id: claim.user_id.clone(),
         agent_id: claim.agent_id.clone(),
+        workspace_agent_binding_id: claim.workspace_agent_binding_id.clone(),
         bot_uuid: claim.bot_uuid.clone(),
         group_id: claim.group_id.clone(),
         conversation_id: claim.conversation_id.clone(),

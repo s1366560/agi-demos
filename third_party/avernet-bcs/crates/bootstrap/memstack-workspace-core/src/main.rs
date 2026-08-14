@@ -9,8 +9,18 @@ use bcs::{
 };
 use clap::{Parser, ValueEnum};
 use memstack_workspace_core::agent_registry::HttpAgentRegistryPort;
+use memstack_workspace_core::autonomy_bootstrap_worker::{
+    WorkspaceAutonomyBootstrapWorker, WorkspaceAutonomyBootstrapWorkerConfig,
+};
 use memstack_workspace_core::autonomy_judge::HttpWorkspaceAutonomyJudgePort;
+use memstack_workspace_core::autonomy_progression_worker::{
+    WorkspaceAutonomyProgressionWorker, WorkspaceAutonomyProgressionWorkerConfig,
+};
+use memstack_workspace_core::autonomy_scheduler::{
+    WorkspaceAutonomyScheduler, WorkspaceAutonomySchedulerConfig,
+};
 use memstack_workspace_core::context_judge::HttpWorkspaceContextJudgePort;
+use memstack_workspace_core::graceful_shutdown::stop_producer_then_drain_consumers;
 use memstack_workspace_core::message_delivery::{
     WorkspaceMessageRuntime, WorkspaceMessageRuntimeConfig,
 };
@@ -293,6 +303,7 @@ async fn main() -> Result<()> {
         args.agent_registry_token,
         Duration::from_secs_f64(args.agent_registry_timeout_seconds),
     )?);
+    let autonomy_scheduler_judge = Arc::clone(&autonomy_judge);
     let sql_flavor = match args.mode {
         WorkspaceCoreMode::Cloud => bcs_db_api::DbSqlFlavor::Postgres,
         WorkspaceCoreMode::DesktopLocal => bcs_db_api::DbSqlFlavor::Sqlite,
@@ -448,7 +459,8 @@ async fn main() -> Result<()> {
         },
     )?;
     let delivery_task = tokio::spawn(async move { delivery_worker.run().await });
-    let task_dispatch_worker = WorkspaceTaskDispatchWorker::new(
+    let autonomy_consumer_stop = CancellationToken::new();
+    let task_dispatch_worker = Arc::new(WorkspaceTaskDispatchWorker::new(
         Arc::clone(&db),
         sql_flavor,
         task_runtime,
@@ -456,8 +468,50 @@ async fn main() -> Result<()> {
             worker_id: format!("workspace-task-dispatch:{instance_id}"),
             ..WorkspaceTaskDispatchWorkerConfig::default()
         },
-    )?;
-    let task_dispatch_task = tokio::spawn(async move { task_dispatch_worker.run().await });
+    )?);
+    let task_dispatch_task = tokio::spawn({
+        let worker = Arc::clone(&task_dispatch_worker);
+        let stop = autonomy_consumer_stop.clone();
+        async move { worker.run_until_cancelled(stop).await }
+    });
+    let autonomy_bootstrap_worker = Arc::new(WorkspaceAutonomyBootstrapWorker::new(
+        Arc::clone(&db),
+        sql_flavor,
+        WorkspaceAutonomyBootstrapWorkerConfig {
+            worker_id: format!("workspace-autonomy-bootstrap:{instance_id}"),
+            ..WorkspaceAutonomyBootstrapWorkerConfig::default()
+        },
+    )?);
+    let autonomy_bootstrap_task = tokio::spawn({
+        let worker = Arc::clone(&autonomy_bootstrap_worker);
+        let stop = autonomy_consumer_stop.clone();
+        async move { worker.run_until_cancelled(stop).await }
+    });
+    let autonomy_progression_worker = Arc::new(WorkspaceAutonomyProgressionWorker::new(
+        Arc::clone(&db),
+        sql_flavor,
+        WorkspaceAutonomyProgressionWorkerConfig {
+            worker_id: format!("workspace-autonomy-progression:{instance_id}"),
+            ..WorkspaceAutonomyProgressionWorkerConfig::default()
+        },
+    )?);
+    let autonomy_progression_task = tokio::spawn({
+        let worker = Arc::clone(&autonomy_progression_worker);
+        let stop = autonomy_consumer_stop.clone();
+        async move { worker.run_until_cancelled(stop).await }
+    });
+    let autonomy_scheduler = Arc::new(WorkspaceAutonomyScheduler::new(
+        Arc::clone(&db),
+        sql_flavor,
+        autonomy_scheduler_judge,
+        WorkspaceAutonomySchedulerConfig::default(),
+    )?);
+    let autonomy_producer_stop = CancellationToken::new();
+    let autonomy_scheduler_task = tokio::spawn({
+        let scheduler = Arc::clone(&autonomy_scheduler);
+        let stop = autonomy_producer_stop.clone();
+        async move { scheduler.run_until_cancelled(stop).await }
+    });
     let plan_delivery_worker =
         memstack_workspace_core::plan_delivery_worker::WorkspacePlanDeliveryWorker::new(
             Arc::clone(&db),
@@ -539,10 +593,34 @@ async fn main() -> Result<()> {
     } else {
         server.run().await.map_err(anyhow::Error::new)
     };
+    let autonomy_shutdown = stop_producer_then_drain_consumers(
+        autonomy_producer_stop,
+        autonomy_scheduler_task,
+        autonomy_consumer_stop,
+        vec![
+            autonomy_bootstrap_task,
+            autonomy_progression_task,
+            task_dispatch_task,
+        ],
+        DESKTOP_GRACEFUL_SHUTDOWN_TIMEOUT,
+        32,
+        move || {
+            let bootstrap = Arc::clone(&autonomy_bootstrap_worker);
+            let progression = Arc::clone(&autonomy_progression_worker);
+            let dispatch = Arc::clone(&task_dispatch_worker);
+            async move {
+                let bootstrap_claimed = bootstrap.advance_once().await?.claimed;
+                let progression_claimed = progression.advance_once().await?.claimed;
+                let dispatch_claimed = dispatch.dispatch_once().await?.claimed;
+                Ok(bootstrap_claimed
+                    .saturating_add(progression_claimed)
+                    .saturating_add(dispatch_claimed))
+            }
+        },
+    )
+    .await;
     delivery_task.abort();
     let _ = delivery_task.await;
-    task_dispatch_task.abort();
-    let _ = task_dispatch_task.await;
     plan_delivery_task.abort();
     let _ = plan_delivery_task.await;
     if let Some(task) = outbox_task {
@@ -550,6 +628,7 @@ async fn main() -> Result<()> {
         let _ = task.await;
     }
     server_result?;
+    autonomy_shutdown?;
     Ok(())
 }
 

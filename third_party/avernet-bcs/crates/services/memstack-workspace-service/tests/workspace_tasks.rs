@@ -4,8 +4,10 @@ use bcs_db_api::{DbPlugin, DbSqlFlavor, DbStatement};
 use bcs_db_local::LocalSqliteDbPlugin;
 use memstack_workspace_service::{
     PublicCreateWorkspaceTaskInput, PublicWorkspaceTaskContext, PublicWorkspaceTaskDispatchService,
-    PublicWorkspaceTaskErrorKind, PublicWorkspaceTaskRecoveryInput, PublicWorkspaceTaskService,
+    PublicWorkspaceTaskError, PublicWorkspaceTaskErrorKind, PublicWorkspaceTaskRecoveryInput,
+    PublicWorkspaceTaskService,
 };
+use memstack_workspace_store::WorkspaceTaskStoreError;
 use serde_json::{Value, json};
 
 #[tokio::test]
@@ -202,14 +204,17 @@ async fn recovery_action_commits_ordered_events_and_replays_without_duplicates()
         reason: Some("A different recovery intent".to_string()),
         ..recovery_input
     };
-    let conflict = service
+    let conflict = match service
         .recovery_action_with_authority(
             &recovery_context,
             created.task.id.as_str(),
             &conflicting_input,
         )
         .await
-        .expect_err("one idempotency key accepted a different recovery intent");
+    {
+        Ok(_) => return Err("one idempotency key accepted a different recovery intent".into()),
+        Err(error) => error,
+    };
     assert_eq!(conflict.kind(), PublicWorkspaceTaskErrorKind::Conflict);
     assert_eq!(
         task_outbox_events(&db, created.task.id.as_str()).await?,
@@ -256,7 +261,7 @@ async fn recovery_event_failure_rolls_back_task_attempt_receipt_revision_and_all
     ))
     .await?;
 
-    let error = service
+    let error = match service
         .recovery_action(
             &task_context("recovery-rollback", Some(1)),
             created.task.id.as_str(),
@@ -267,7 +272,12 @@ async fn recovery_event_failure_rolls_back_task_attempt_receipt_revision_and_all
             },
         )
         .await
-        .expect_err("one rejected recovery event did not abort the Task transaction");
+    {
+        Ok(_) => {
+            return Err("one rejected recovery event did not abort the Task transaction".into());
+        }
+        Err(error) => error,
+    };
 
     assert_eq!(error.kind(), PublicWorkspaceTaskErrorKind::Unavailable);
     assert_eq!(table_count(&db, "workspace_task_receipts").await?, 1);
@@ -420,6 +430,7 @@ async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
         Err(error) => error,
     };
     assert_eq!(stale.kind(), PublicWorkspaceTaskErrorKind::Unavailable);
+    dispatches.prepare_correlation(&recovered[0]).await?;
     dispatches.complete_dispatch(&recovered[0], 450).await?;
 
     let retry = dispatches
@@ -450,6 +461,70 @@ async fn execution_task_assignment_and_recovery_enqueue_fenced_dispatches()
         )
         .await?;
     assert_eq!(table_count(&db, "workspace_task_dispatch_outbox").await?, 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn dispatch_completion_without_prepared_correlation_fails_closed_and_rolls_back()
+-> Result<(), Box<dyn Error>> {
+    let db = seeded_task_db().await?;
+    let tasks = PublicWorkspaceTaskService::new(&db, DbSqlFlavor::Sqlite);
+    let created = tasks
+        .create(&PublicCreateWorkspaceTaskInput {
+            context: task_context("create-unprepared-dispatch", Some(0)),
+            title: "Require a runtime correlation".to_string(),
+            description: None,
+            assignee_user_id: None,
+            metadata: Some(json!({"task_role": "execution_task"})),
+            preferred_language: None,
+            priority: None,
+            estimated_effort: None,
+            blocker_reason: None,
+        })
+        .await?;
+    tasks
+        .assign_agent(
+            &task_context("assign-unprepared-dispatch", Some(1)),
+            created.task.id.as_str(),
+            "binding-1",
+            None,
+        )
+        .await?;
+
+    let dispatches = PublicWorkspaceTaskDispatchService::new(&db, DbSqlFlavor::Sqlite);
+    let claims = dispatches
+        .claim_dispatches("worker-unprepared", 100, 200, 1)
+        .await?;
+    let claim = claims.first().ok_or("missing claimed dispatch")?;
+    let error = match dispatches.complete_dispatch(claim, 150).await {
+        Ok(()) => return Err("dispatch completed without a runtime correlation".into()),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        PublicWorkspaceTaskError::Store(WorkspaceTaskStoreError::DispatchCorrelationConflict)
+    ));
+
+    let rows = db
+        .query(DbStatement::with_params(
+            "SELECT status, lease_owner, lease_expires_at_ms, delivered_at_ms FROM workspace_task_dispatch_outbox WHERE dispatch_id = ?",
+            vec![claim.dispatch_id.clone().into()],
+        ))
+        .await?;
+    let row = rows
+        .first()
+        .ok_or("missing dispatch after failed completion")?;
+    assert_eq!(row.get_string("status")?.as_deref(), Some("delivering"));
+    assert_eq!(
+        row.get_string("lease_owner")?.as_deref(),
+        Some("worker-unprepared")
+    );
+    assert_eq!(row.get_i64("lease_expires_at_ms")?, Some(200));
+    assert_eq!(row.get_i64("delivered_at_ms")?, None);
+    assert_eq!(
+        table_count(&db, "workspace_agent_runtime_correlations").await?,
+        0
+    );
     Ok(())
 }
 

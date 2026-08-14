@@ -6,6 +6,11 @@
 
 mod agent;
 mod autonomy;
+mod autonomy_attention;
+mod autonomy_bootstrap;
+mod autonomy_judgment;
+mod autonomy_progression;
+mod autonomy_schedule;
 mod blackboard;
 mod blackboard_mutation;
 mod context;
@@ -26,6 +31,7 @@ mod plan_snapshot_sql;
 mod policy;
 mod profile;
 mod repository;
+mod runtime_terminal;
 mod task;
 mod task_dispatch;
 mod task_mutation;
@@ -35,8 +41,32 @@ mod topology_mutation;
 
 pub use agent::{WorkspaceAgentSnapshot, WorkspaceAgentStore, WorkspaceAgentStoreError};
 pub use autonomy::{
-    WorkspaceAutonomyJudgmentAudit, WorkspaceAutonomyMutation, WorkspaceAutonomyMutationOutcome,
-    WorkspaceAutonomyScope, WorkspaceAutonomyStore, WorkspaceAutonomyStoreError,
+    WorkspaceAutonomyAgentBinding, WorkspaceAutonomyJudgmentAudit, WorkspaceAutonomyMutation,
+    WorkspaceAutonomyMutationOutcome, WorkspaceAutonomyProgressionWrite, WorkspaceAutonomyScope,
+    WorkspaceAutonomyStore, WorkspaceAutonomyStoreError,
+};
+pub use autonomy_attention::{
+    WorkspaceAutonomyAttentionRecord, WorkspaceAutonomyAttentionResolution,
+    WorkspaceAutonomyAttentionResolutionOutcome, WorkspaceAutonomyAttentionStore,
+    WorkspaceAutonomyAttentionStoreError, WorkspaceAutonomyAttentionWrite,
+};
+pub use autonomy_bootstrap::{
+    WorkspaceAutonomyBootstrapClaim, WorkspaceAutonomyBootstrapFailureOutcome,
+    WorkspaceAutonomyBootstrapStore, WorkspaceAutonomyBootstrapStoreError,
+};
+pub use autonomy_judgment::{
+    WorkspaceAutonomyJudgedSnapshot, WorkspaceAutonomyJudgmentApply,
+    WorkspaceAutonomyJudgmentClaimOutcome, WorkspaceAutonomyJudgmentClaimRequest,
+    WorkspaceAutonomyJudgmentLease, WorkspaceAutonomyJudgmentStore,
+    WorkspaceAutonomyJudgmentStoreError,
+};
+pub use autonomy_progression::{
+    WorkspaceAutonomyProgressionClaim, WorkspaceAutonomyProgressionFailureOutcome,
+    WorkspaceAutonomyProgressionStore, WorkspaceAutonomyProgressionStoreError,
+};
+pub use autonomy_schedule::{
+    WorkspaceAutonomyScheduleCandidate, WorkspaceAutonomyScheduleStore,
+    WorkspaceAutonomyScheduleStoreError,
 };
 pub use blackboard::{
     WorkspaceBlackboardDomainWrite, WorkspaceBlackboardMutation,
@@ -50,6 +80,7 @@ pub use context::{
     WorkspaceContextStoreError, WorkspaceContextTransition, WorkspaceContextTransitionKind,
 };
 pub use creation::{
+    WorkspaceAutonomousCreation, WorkspaceAutonomyBootstrapCreation,
     WorkspaceCreationOwnerIdentity, WorkspaceCreationPlan, WorkspaceCreationPlanError,
     WorkspaceCreationPlanner, WorkspaceCreationTimestamps,
 };
@@ -99,6 +130,10 @@ pub use policy::{
 pub use profile::{WorkspaceProfileSnapshot, WorkspaceProfileStore, WorkspaceProfileStoreError};
 pub use repository::{
     WorkspaceMutationOutcome, WorkspaceMutationStore, WorkspaceMutationStoreError,
+};
+pub use runtime_terminal::{
+    WorkspaceRuntimeTerminalOutcome, WorkspaceRuntimeTerminalScope, WorkspaceRuntimeTerminalStore,
+    WorkspaceRuntimeTerminalStoreError, WorkspaceRuntimeTerminalWrite,
 };
 pub use task::{
     WorkspaceObjectiveTaskProjection, WorkspaceObjectiveTaskProjectionWrite,

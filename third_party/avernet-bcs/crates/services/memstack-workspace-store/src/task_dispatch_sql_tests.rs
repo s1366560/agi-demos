@@ -40,6 +40,7 @@ fn dispatch_claim() -> WorkspaceTaskDispatchClaim {
         plan_node_id: Some("node-1".to_string()),
         user_id: "user-1".to_string(),
         agent_id: "agent-1".to_string(),
+        workspace_agent_binding_id: "binding-1".to_string(),
         bot_uuid: "bot-1".to_string(),
         group_id: "group-1".to_string(),
         conversation_id: "conversation-1".to_string(),
@@ -113,5 +114,39 @@ fn completion_and_failure_are_fenced_by_generation() {
         assert!(statement.sql().contains("lease_expires_at_ms"));
         assert!(statement.sql().contains("lease_generation"));
         assert_postgres_parameters(&statement);
+    }
+
+    for flavor in [DbSqlFlavor::Postgres, DbSqlFlavor::Sqlite] {
+        let correlation = correlation_running_statement(flavor, &claim, 300);
+        for required in [
+            "correlation_id",
+            "tenant_id",
+            "project_id",
+            "workspace_id",
+            "task_id",
+            "attempt_id",
+            "delivery_request_id",
+            "provider_run_id",
+            "provider_id",
+            "provider_bot_ref",
+            "dispatch.lease_generation",
+        ] {
+            assert!(correlation.sql().contains(required));
+        }
+        assert!(
+            correlation
+                .sql()
+                .contains("status = 'pending' THEN 'running'")
+        );
+        match flavor {
+            DbSqlFlavor::Postgres => assert_postgres_parameters(&correlation),
+            DbSqlFlavor::Sqlite => {
+                assert_eq!(
+                    correlation.sql().matches('?').count(),
+                    correlation.params().len()
+                );
+            }
+            DbSqlFlavor::Mysql => unreachable!(),
+        }
     }
 }

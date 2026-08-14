@@ -9,6 +9,7 @@ use memstack_workspace_service::{
     PublicWorkspaceTaskDispatchClaim, PublicWorkspaceTaskDispatchService,
 };
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 use crate::task_dispatch::{WorkspaceTaskDeliveryError, WorkspaceTaskRuntime};
 
@@ -112,8 +113,17 @@ impl WorkspaceTaskDispatchWorker {
 
     /// Run until the owning task is cancelled.
     pub async fn run(&self) {
+        self.run_until_cancelled(CancellationToken::new()).await;
+    }
+
+    /// Stop polling cooperatively without abandoning an in-flight fenced batch.
+    pub async fn run_until_cancelled(&self, shutdown: CancellationToken) {
         loop {
-            match self.dispatch_once().await {
+            let batch = tokio::select! {
+                () = shutdown.cancelled() => break,
+                result = self.dispatch_once() => result,
+            };
+            match batch {
                 Ok(outcome) if outcome.claimed > 0 => {
                     tracing::debug!(
                         claimed = outcome.claimed,
@@ -124,10 +134,18 @@ impl WorkspaceTaskDispatchWorker {
                         "Workspace Task dispatch batch completed"
                     );
                 }
-                Ok(_) => tokio::time::sleep(self.config.poll_interval).await,
+                Ok(_) => {
+                    tokio::select! {
+                        () = shutdown.cancelled() => break,
+                        () = tokio::time::sleep(self.config.poll_interval) => {}
+                    }
+                }
                 Err(error) => {
                     tracing::error!(error = %error, "Workspace Task dispatch polling failed");
-                    tokio::time::sleep(self.config.poll_interval).await;
+                    tokio::select! {
+                        () = shutdown.cancelled() => break,
+                        () = tokio::time::sleep(self.config.poll_interval) => {}
+                    }
                 }
             }
         }
@@ -222,7 +240,7 @@ async fn dispatch_claim(
     let service = PublicWorkspaceTaskDispatchService::new(db.as_ref(), sql_flavor);
     if task_is_terminal(&claim.task_status) {
         service
-            .complete_dispatch(&claim, now_ms)
+            .complete_terminal_dispatch(&claim, now_ms)
             .await
             .context("complete terminal Workspace Task dispatch")?;
         return Ok(ClaimDispatchOutcome::TerminalSkipped);
@@ -484,12 +502,13 @@ mod tests {
             Arc::clone(&db),
             DeliveryBehavior::Accepted,
         ));
+        let run_context = Arc::new(RecordingRunContext::default());
         let worker = WorkspaceTaskDispatchWorker::new(
             Arc::clone(&db),
             DbSqlFlavor::Sqlite,
             runtime(
                 Arc::clone(&delivery) as Arc<dyn BotDeliveryPort>,
-                Arc::new(RecordingRunContext::default()),
+                run_context.clone(),
             )?,
             worker_config("worker-accepted"),
         )?;
@@ -515,14 +534,30 @@ mod tests {
             .await?,
             1
         );
+        assert_eq!(
+            scalar_string(
+                db.as_ref(),
+                "SELECT status AS value FROM workspace_agent_runtime_correlations"
+            )
+            .await?,
+            "running"
+        );
+        assert_eq!(
+            run_context
+                .get_context("delivery-1")
+                .await
+                .map(|context| context.terminal),
+            Some(false),
+            "Provider acceptance must leave the callback run open"
+        );
         let commands = delivery.commands.lock().await;
         assert_eq!(commands.len(), 1);
-        assert_eq!(commands[0].delivery_kind, BotDeliveryKind::Inject);
+        assert_eq!(commands[0].delivery_kind, BotDeliveryKind::Send);
         assert_eq!(commands[0].run_id, "delivery-1");
         let BcsFrame::Request(frame) = &commands[0].frame else {
             bail!("Task dispatch must use a request frame");
         };
-        assert_eq!(frame.method, "chat.inject");
+        assert_eq!(frame.method, "chat.send");
         assert_eq!(frame.id, "delivery-1");
         let params = frame.params.as_ref().context("Task dispatch params")?;
         assert_eq!(params["bcs_group_id"], "group-1");
@@ -660,6 +695,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fenced_ack_rolls_back_delivery_when_correlation_scope_conflicts() -> Result<()> {
+        let db = seeded_db("todo").await?;
+        let service = PublicWorkspaceTaskDispatchService::new(&db, DbSqlFlavor::Sqlite);
+        let claim = service.claim_dispatches("worker-1", 100, 200, 1).await?;
+        service.prepare_correlation(&claim[0]).await?;
+        db.execute(DbStatement::new(
+            "UPDATE workspace_agent_runtime_correlations SET provider_bot_ref = 'other-agent'",
+        ))
+        .await?;
+
+        assert!(service.complete_dispatch(&claim[0], 150).await.is_err());
+        assert_eq!(
+            scalar_string(
+                &db,
+                "SELECT status AS value FROM workspace_task_dispatch_outbox"
+            )
+            .await?,
+            "delivering"
+        );
+        assert_eq!(
+            scalar_string(
+                &db,
+                "SELECT status AS value FROM workspace_agent_runtime_correlations"
+            )
+            .await?,
+            "pending"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn crash_after_correlation_reclaims_with_the_same_provider_run_id() -> Result<()> {
         let db = seeded_db("todo").await?;
         let db: Arc<dyn DbPlugin> = Arc::new(db);
@@ -712,12 +778,23 @@ mod tests {
             Arc::clone(&db),
             DeliveryBehavior::Accepted,
         ));
+        let run_context = Arc::new(RecordingRunContext::default());
         let runtime = runtime(
             Arc::clone(&delivery) as Arc<dyn BotDeliveryPort>,
-            Arc::new(RecordingRunContext::default()),
+            run_context.clone(),
         )?;
 
         runtime.dispatch(&claim[0]).await?;
+        let context = run_context
+            .get_context(&claim[0].delivery_request_id)
+            .await
+            .context("accepted dispatch context")?;
+        assert!(!context.terminal);
+        assert!(
+            run_context
+                .mark_terminal(&claim[0].delivery_request_id)
+                .await
+        );
         runtime.dispatch(&claim[0]).await?;
 
         assert_eq!(delivery.commands.lock().await.len(), 1);

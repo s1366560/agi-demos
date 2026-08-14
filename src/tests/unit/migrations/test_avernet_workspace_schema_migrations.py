@@ -32,6 +32,9 @@ _OBJECTIVE_AUTONOMY_REVISION = "c39e5a7b1d2f"
 _AUTHORITY_BACKFILL_REVISION = "727ce1982b0f"
 _CONVERSATION_LINK_RELAXATION_REVISION = "e9f0a1b2c3d5"
 _TASK_SESSION_SAGA_REVISION = "f0a1b2c3d4e6"
+_AUTONOMY_PROGRESSION_REVISION = "f184bcdba7ea"
+_AUTONOMY_INTEGRITY_REVISION = "a72d9c31e5bf"
+_AUTONOMY_BOOTSTRAP_BACKFILL_REVISION = "b84e2f6a9c31"
 
 _DOMAIN_TABLES = {
     "workspace_profiles",
@@ -204,6 +207,27 @@ def _task_session_saga_migration() -> ModuleType:
     )
 
 
+def _autonomy_progression_migration() -> ModuleType:
+    return _load_migration(
+        _AUTONOMY_PROGRESSION_REVISION,
+        "f184bcdba7ea_add_workspace_autonomy_progression_.py",
+    )
+
+
+def _autonomy_integrity_migration() -> ModuleType:
+    return _load_migration(
+        _AUTONOMY_INTEGRITY_REVISION,
+        "a72d9c31e5bf_add_workspace_autonomy_judgment_claims.py",
+    )
+
+
+def _autonomy_bootstrap_backfill_migration() -> ModuleType:
+    return _load_migration(
+        _AUTONOMY_BOOTSTRAP_BACKFILL_REVISION,
+        "b84e2f6a9c31_backfill_workspace_autonomy_bootstraps.py",
+    )
+
+
 def _tombstone_migration() -> ModuleType:
     return _load_migration(
         _TOMBSTONE_REVISION,
@@ -283,6 +307,21 @@ def test_workspace_migrations_form_one_linear_chain() -> None:
             _task_session_saga_migration,
             _TASK_SESSION_SAGA_REVISION,
             _CONVERSATION_LINK_RELAXATION_REVISION,
+        ),
+        (
+            _autonomy_progression_migration,
+            _AUTONOMY_PROGRESSION_REVISION,
+            _TASK_SESSION_SAGA_REVISION,
+        ),
+        (
+            _autonomy_integrity_migration,
+            _AUTONOMY_INTEGRITY_REVISION,
+            _AUTONOMY_PROGRESSION_REVISION,
+        ),
+        (
+            _autonomy_bootstrap_backfill_migration,
+            _AUTONOMY_BOOTSTRAP_BACKFILL_REVISION,
+            _AUTONOMY_INTEGRITY_REVISION,
         ),
     )
 

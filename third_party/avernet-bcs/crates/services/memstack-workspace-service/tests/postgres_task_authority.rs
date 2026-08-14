@@ -76,6 +76,14 @@ async fn postgres_task_authority_replays_dispatches_and_fences_provider_handoff(
     assert_eq!(claimed[0].plan_id.as_deref(), Some("plan-task-pg"));
     dispatches.prepare_correlation(&claimed[0]).await?;
     dispatches.complete_dispatch(&claimed[0], 150).await?;
+    assert_eq!(
+        query_string(
+            &db,
+            "SELECT status AS value FROM workspace_agent_runtime_correlations WHERE workspace_id = $1",
+        )
+        .await?,
+        "running"
+    );
     assert!(
         dispatches
             .complete_dispatch(&claimed[0], 151)
@@ -290,5 +298,16 @@ async fn query_i64(db: &dyn DbPlugin, sql: &str) -> Result<i64, Box<dyn Error>> 
         .first()
         .ok_or("missing row")?
         .get_i64("value")?
+        .ok_or("missing value")?)
+}
+
+async fn query_string(db: &dyn DbPlugin, sql: &str) -> Result<String, Box<dyn Error>> {
+    let rows = db
+        .query(DbStatement::with_params(sql, vec![WORKSPACE_ID.into()]))
+        .await?;
+    Ok(rows
+        .first()
+        .ok_or("missing row")?
+        .get_string("value")?
         .ok_or("missing value")?)
 }
