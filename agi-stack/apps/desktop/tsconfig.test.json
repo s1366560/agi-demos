@@ -196,6 +196,7 @@
     "src/features/settings/managedResourceModel.ts",
     "src/features/settings/managedResourcesClient.ts",
     "src/features/settings/mcpCommandModel.ts",
+    "src/features/settings/mcpMutationAttemptModel.ts",
     "src/features/settings/agentDefinitionEventModel.ts",
     "src/features/settings/notificationPreferences.ts",
     "src/features/settings/ShortcutSettingsPage.tsx",
@@ -411,6 +412,7 @@
     "src/features/workspace/WorkspaceDock.tsx",
     "src/features/workspace/WorkspaceCreateDialog.tsx",
     "src/features/workspace/WorkspaceOverview.tsx",
+    "src/features/workspace/autonomyAttentionResolveAttemptModel.ts",
     "src/features/workspace/capabilityWorkspaceCollaborationClient.ts",
     "src/features/workspace/httpWorkspaceCollaborationClient.ts",
     "src/features/workspace/workspaceCollaborationAuthorityEvent.ts",
@@ -424,6 +426,7 @@
     "src/features/workspace/workspaceTreeModel.ts",
     "src/features/workspace/workspaceOverviewModel.ts",
     "src/features/workspace/workspaceExecutionModel.ts",
+    "src/i18nContext.ts",
     "src/theme.tsx",
     "src/types.ts"
   ]

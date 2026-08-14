@@ -1,7 +1,7 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
-import { MCPServerCreateDialog } from './MCPServerDialog';
+import { MCPServerDialog } from './MCPServerDialog';
 import {
   PluginConfigDialog,
   PluginInstallDialog,
@@ -96,13 +96,21 @@ export function SettingsManagementDialogs({
       ) : null}
       <PluginRuntimeActivityDialog management={plugins} />
       <ChannelConnectionsDialog management={channels} />
-      {mcpServers.dialog?.kind === 'create' ? (
-        <MCPServerCreateDialog
+      {mcpServers.dialog ? (
+        <MCPServerDialog
           key={mcpServers.dialog.key}
+          server={mcpServers.dialog.kind === 'edit' ? mcpServers.dialog.server : null}
           busy={mcpServers.dialogBusy}
           error={mcpServers.dialogError}
           onClose={mcpServers.closeDialog}
-          onSubmit={(input) => void mcpServers.create(input)}
+          onSubmit={(input) =>
+            void (mcpServers.dialog?.kind === 'edit'
+              ? mcpServers.update(input)
+              : mcpServers.create(input))
+          }
+          onDelete={
+            mcpServers.dialog.kind === 'edit' ? () => void mcpServers.remove() : null
+          }
         />
       ) : null}
       {subagentDefinitions.dialog ? (

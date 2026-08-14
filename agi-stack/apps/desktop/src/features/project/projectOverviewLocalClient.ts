@@ -6,7 +6,7 @@ import {
 } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 
-const PROJECT_OVERVIEW_CONTRACT_VERSION = '3.0.0' as const;
+const PROJECT_OVERVIEW_CONTRACT_VERSION = '4.0.0' as const;
 const PROJECT_OVERVIEW_REASON = 'local_project_overview_timeline_projection_only' as const;
 const PROJECT_GRAPH_REASON = 'local_project_graph_projection_unavailable' as const;
 const PROJECT_STORAGE_REASON = 'local_project_storage_quota_not_applicable' as const;
@@ -65,6 +65,37 @@ export type LocalAvailableField<T> = Readonly<{
   value: T;
 }>;
 
+export type LocalConversationStatusSummary = Readonly<{
+  total: number;
+  idle: number;
+  queued: number;
+  running: number;
+  attention: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+}>;
+
+export type LocalConversationStatusRequest = Readonly<{
+  generation: number;
+  scope: string;
+}>;
+
+export function nextLocalConversationStatusRequest(
+  currentGeneration: number,
+  scope: string,
+): LocalConversationStatusRequest {
+  return Object.freeze({ generation: currentGeneration + 1, scope });
+}
+
+export function isCurrentLocalConversationStatusRequest(
+  request: LocalConversationStatusRequest,
+  currentGeneration: number,
+  currentScope: string,
+): boolean {
+  return request.generation === currentGeneration && request.scope === currentScope;
+}
+
 export type LocalRecentKnowledgeField = Readonly<{
   availability: 'degraded';
   reasonCode: typeof PROJECT_OVERVIEW_REASON;
@@ -93,6 +124,7 @@ export type LocalProjectOverviewSnapshot = Readonly<{
   backfillCursor: string | null;
   project: LocalAvailableField<LocalProjectOverviewProject>;
   conversationCount: LocalAvailableField<number>;
+  conversationStatusSummary: LocalAvailableField<LocalConversationStatusSummary>;
   recentKnowledgeItems: LocalRecentKnowledgeField;
   activeNodes: LocalUnavailableField;
   storageQuota: LocalNotApplicableField<typeof PROJECT_STORAGE_REASON>;
@@ -169,6 +201,9 @@ export function parseLocalProjectOverviewPayload(
   const capabilityScope = parseCapabilityScope(input.scope, expectedScope);
   const project = parseProjectField(input.project, expectedScope);
   const conversationCount = parseConversationCount(input.conversation_count);
+  const conversationStatusSummary = parseConversationStatusSummary(
+    input.conversation_status_summary,
+  );
   const recentKnowledgeItems = parseRecentKnowledge(input.recent_knowledge_items);
   const activeNodes = parseNullField(
     input.active_nodes,
@@ -189,6 +224,8 @@ export function parseLocalProjectOverviewPayload(
     !capabilityScope ||
     !project ||
     !conversationCount ||
+    !conversationStatusSummary ||
+    conversationStatusSummary.value.total !== conversationCount.value ||
     !recentKnowledgeItems ||
     !activeNodes ||
     !storageQuota ||
@@ -215,6 +252,7 @@ export function parseLocalProjectOverviewPayload(
     backfillCursor: input.backfill_cursor,
     project,
     conversationCount,
+    conversationStatusSummary,
     recentKnowledgeItems,
     activeNodes,
     storageQuota,
@@ -356,6 +394,42 @@ function parseConversationCount(input: unknown): LocalAvailableField<number> | n
     availability: 'available',
     reasonCode: null,
     value: input.value,
+  };
+}
+
+function parseConversationStatusSummary(
+  input: unknown,
+): LocalAvailableField<LocalConversationStatusSummary> | null {
+  if (
+    !isExactRecord(input, FIELD_KEYS) ||
+    input.availability !== 'available' ||
+    input.reason_code !== null ||
+    !isExactRecord(input.value, CONVERSATION_STATUS_KEYS)
+  ) {
+    return null;
+  }
+  const value = input.value;
+  if (!CONVERSATION_STATUS_KEYS.every((key) => isSafeNonnegativeInteger(value[key]))) {
+    return null;
+  }
+  const partitionTotal = CONVERSATION_STATUS_BUCKET_KEYS.reduce(
+    (total, key) => total + Number(value[key]),
+    0,
+  );
+  if (partitionTotal !== Number(value.total)) return null;
+  return {
+    availability: 'available',
+    reasonCode: null,
+    value: {
+      total: Number(value.total),
+      idle: Number(value.idle),
+      queued: Number(value.queued),
+      running: Number(value.running),
+      attention: Number(value.attention),
+      completed: Number(value.completed),
+      failed: Number(value.failed),
+      cancelled: Number(value.cancelled),
+    },
   };
 }
 
@@ -552,11 +626,22 @@ const TOP_LEVEL_KEYS = [
   'backfill_cursor',
   'project',
   'conversation_count',
+  'conversation_status_summary',
   'recent_knowledge_items',
   'active_nodes',
   'storage_quota',
   'collaborators',
 ] as const;
+const CONVERSATION_STATUS_BUCKET_KEYS = [
+  'idle',
+  'queued',
+  'running',
+  'attention',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
+const CONVERSATION_STATUS_KEYS = ['total', ...CONVERSATION_STATUS_BUCKET_KEYS] as const;
 const CAPABILITY_SCOPE_KEYS = [
   'tenant_id',
   'project_id',

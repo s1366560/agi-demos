@@ -257,6 +257,12 @@ export function ComposerPlusMenu({
     ];
   }, [catalog, conversations, excludedConversationId, t]);
 
+  function openMenu() {
+    setCatalog(null);
+    setCatalogError(null);
+    setOpen(true);
+  }
+
   function close(restoreFocus = false) {
     setOpen(false);
     setExpanded(null);
@@ -333,7 +339,7 @@ export function ComposerPlusMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t('composer.addContext')}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => (open ? close() : openMenu())}
       >
         <PlusIcon aria-hidden="true" />
         {!compact ? t('composer.add') : null}

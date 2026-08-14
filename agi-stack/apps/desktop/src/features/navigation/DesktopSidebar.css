@@ -139,6 +139,57 @@
   max-width: 120px;
 }
 
+.desktop-conversation-status-summary {
+  display: flex;
+  min-height: 18px;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.desktop-conversation-status-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px 5px;
+  border: 1px solid var(--desktop-border-soft);
+  border-radius: 999px;
+  color: var(--desktop-muted);
+  font-size: 7px;
+  line-height: 1;
+}
+
+.desktop-conversation-status-summary i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--desktop-faint);
+}
+
+.desktop-conversation-status-summary strong {
+  color: var(--desktop-text);
+  font-size: inherit;
+}
+
+.desktop-conversation-status-summary .running i {
+  background: var(--desktop-cyan);
+}
+
+.desktop-conversation-status-summary .queued i,
+.desktop-conversation-status-summary .attention i {
+  background: var(--desktop-amber);
+}
+
+.desktop-conversation-status-summary .failed i {
+  background: var(--desktop-red-muted);
+}
+
+.desktop-conversation-status-summary .completed i {
+  background: var(--desktop-green);
+}
+
 .desktop-workspace-heading-actions {
   display: flex;
   min-width: 0;

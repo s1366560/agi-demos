@@ -73,6 +73,7 @@ export function ManagedResourceWorkspace({
   busy,
   canManage,
   canCreate,
+  hasAvailableProjects,
   mode,
   onQueryChange,
   onFilterChange,
@@ -103,6 +104,7 @@ export function ManagedResourceWorkspace({
   busy: boolean;
   canManage: boolean;
   canCreate: boolean;
+  hasAvailableProjects: boolean;
   mode: RuntimeMode;
   onQueryChange: (query: string) => void;
   onFilterChange: (filter: ManagedResourceListFilter) => void;
@@ -269,8 +271,25 @@ export function ManagedResourceWorkspace({
           ) : null}
           {!loading && !error && items.length === 0 ? (
             <CatalogState
-              text={query.trim() ? t('settings.noMatches') : t('settings.empty')}
-              detail={query.trim() ? t('settings.noMatchesDescription') : undefined}
+              text={
+                section === 'subagents' && !hasAvailableProjects
+                  ? t('settings.noProjects')
+                  : query.trim()
+                    ? t('settings.noMatches')
+                    : section === 'subagents'
+                      ? t('settings.resourceCount', {
+                          count: 0,
+                          resource: t(meta.label),
+                        })
+                      : t('settings.empty')
+              }
+              detail={
+                section === 'subagents' && !hasAvailableProjects
+                  ? t('settings.noProjectsDescription')
+                  : query.trim()
+                    ? t('settings.noMatchesDescription')
+                    : undefined
+              }
             />
           ) : null}
           {!loading && !error

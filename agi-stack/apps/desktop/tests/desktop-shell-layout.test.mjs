@@ -198,6 +198,34 @@ test('sidebar is partitioned into brand, nav, header, list, and toolbar zones', 
   assert.match(sidebarStyles, /\.desktop-design-primary-nav\s*\{[\s\S]*?border-bottom:/);
 });
 
+test('sidebar renders the authoritative project conversation status summary', () => {
+  assert.match(sidebarSource, /conversationStatusSummary/);
+  assert.match(sidebarSource, /desktop-conversation-status-summary/);
+  assert.match(
+    sidebarSource,
+    /className="desktop-conversation-status-summary"[\s\S]{0,180}role="group"/,
+  );
+  assert.match(sidebarSource, /t\('overview\.conversations'\)/);
+  assert.doesNotMatch(sidebarSource, /workspaceTree\.conversations/);
+  assert.match(sidebarSource, /workspaceTree\.running/);
+  assert.match(sidebarSource, /workspaceTree\.queued/);
+  assert.match(sidebarSource, /settings\.attention/);
+  assert.match(sidebarSource, /workspaceTree\.completed/);
+  assert.match(sidebarSource, /workspaceTree\.failed/);
+  assert.match(sidebarStyles, /\.desktop-conversation-status-summary\s*\{/);
+  assert.match(appSource, /conversationStatusSummary=\{conversationStatusSummary\}/);
+  assert.doesNotMatch(appSource, /conversationStatusSummary=\{[^}]*conversationsByWorkspace/);
+  assert.match(appSource, /conversationStatusScopeRef/);
+  assert.match(
+    appSource,
+    /conversationStatusScopeRef\.current = '';[\s\S]*?setConversationStatusSummary\(null\)/,
+  );
+  assert.match(
+    appSource,
+    /\.catch\(\(\) => \{[\s\S]*?conversationStatusScopeRef\.current === requestScope[\s\S]*?setConversationStatusSummary\(null\)/,
+  );
+});
+
 test('workbench mounts the tab bar above a dedicated content layer', () => {
   assert.equal((appSource.match(/<WorkbenchTabBar\b/g) ?? []).length, 1);
   assert.match(appSource, /tabs=\{openTabs\}/);
@@ -298,6 +326,7 @@ test('titlebar and status bar copy exists in both locales', () => {
     'statusbar.live',
     'statusbar.connected',
     'statusbar.disconnected',
+    'overview.conversations',
     'tabs.bar',
     'tabs.close',
     'rightbar.context',

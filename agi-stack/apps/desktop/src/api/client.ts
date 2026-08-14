@@ -103,6 +103,9 @@ import type {
   WorkspaceAgentPolicyMutationInput,
   WorkspaceToolGrant,
   WorkspaceAgentBinding,
+  WorkspaceAutonomyAttention,
+  WorkspaceAutonomyAttentionResolveResponse,
+  WorkspaceAutonomyAttentionRetryResponse,
   WorkspaceAuthorityCollection,
   WorkspaceMemberSummary,
   WorkspaceSummary,
@@ -115,7 +118,7 @@ import {
   desktopSearchRequestContract,
   normalizeDesktopSearchResponse,
 } from './searchContract';
-import { desktopVaultBoundCloudRequestBroker } from './cloudRequestBroker';
+import { desktopApiFetch, desktopVaultBoundCloudRequestBroker } from './cloudRequestBroker';
 import { ManagedResourcesClient } from './managedResourcesClient';
 import type { DesktopSearchRequest, DesktopSearchResponse } from './searchContract';
 
@@ -123,6 +126,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   contentType?: string;
+  idempotencyKey?: string;
   signal?: AbortSignal;
   skipAuth?: boolean;
 };
@@ -208,6 +212,9 @@ export type DesktopMCPTransportConfig = {
   url?: string;
   credential_env_names?: string[];
   credential_header_names?: string[];
+  arguments_redacted?: boolean;
+  vault_env_names?: string[];
+  vault_header_names?: string[];
 };
 
 export type DesktopMCPCredentialProvisionInput = {
@@ -222,6 +229,7 @@ export type DesktopMCPCredentialProvisionInput = {
   credential_name: string;
   secret: string;
   idempotency_key: string;
+  mutation_idempotency_key?: string;
 };
 
 export type DesktopMCPCredentialProvisionResponse = {
@@ -233,11 +241,28 @@ export type DesktopMCPCredentialProvisionResponse = {
 
 export type DesktopMCPServerCreateInput = {
   name: string;
-  description?: string;
+  description?: string | null;
   server_type: DesktopMCPTransport;
   transport_config: DesktopMCPTransportConfig;
   enabled?: boolean;
   project_id: string;
+  idempotency_key: string;
+};
+
+export type DesktopMCPServerUpdateInput = DesktopMCPServerCreateInput & {
+  expected_revision: number;
+};
+
+export type DesktopMCPServerToggleInput = {
+  enabled: boolean;
+  project_id: string;
+  expected_revision: number;
+  idempotency_key: string;
+};
+
+export type DesktopMCPServerDeleteInput = {
+  project_id: string;
+  expected_revision: number;
   idempotency_key: string;
 };
 
@@ -246,7 +271,9 @@ export type DesktopMCPServerSummary = {
   tenant_id: string;
   project_id: string;
   name: string;
+  description?: string | null;
   server_type: DesktopMCPTransport;
+  transport_config?: DesktopMCPTransportConfig;
   enabled: boolean;
   runtime_status: string;
   runtime_metadata?: {
@@ -269,6 +296,37 @@ const IDENTITY_CATALOG_PAGE_SIZE = 100;
 const IDENTITY_CATALOG_MAX_PAGES = 1_000;
 const HIERARCHY_CATALOG_PAGE_SIZE = 500;
 const HIERARCHY_CATALOG_MAX_PAGES = 1_000;
+const WORKSPACE_AUTONOMY_ATTENTION_KEYS = new Set([
+  'attention_id',
+  'root_task_id',
+  'source_kind',
+  'source_id',
+  'reason',
+  'status',
+  'created_at_ms',
+]);
+const WORKSPACE_AUTONOMY_ATTENTION_SOURCE_KINDS = new Set([
+  'judge_block',
+  'judge_escalate',
+  'progression_dead_letter',
+  'bootstrap_dead_letter',
+  'task_dispatch_dead_letter',
+]);
+const WORKSPACE_AUTONOMY_ATTENTION_RETRY_KEYS = new Set(['attention_id', 'status']);
+const WORKSPACE_AUTONOMY_ATTENTION_RESOLVE_KEYS = new Set([
+  'attention_id',
+  'status',
+  'committed_revision',
+  'replayed',
+]);
+const WORKSPACE_AUTHORITY_KEYS = new Set([
+  'contract_version',
+  'tenant_id',
+  'project_id',
+  'workspace_id',
+  'revision',
+  'cursor',
+]);
 
 export class DesktopApiError extends Error {
   readonly status: number;
@@ -698,6 +756,53 @@ export class DesktopApiClient {
     }
   }
 
+  async listWorkspaceAutonomyAttentions(
+    signal?: AbortSignal,
+  ): Promise<WorkspaceAutonomyAttention[]> {
+    const payload = await this.request<unknown>(this.workspaceRoot('/autonomy/attentions'), {
+      signal,
+    });
+    return requireWorkspaceAutonomyAttentions(payload);
+  }
+
+  async getWorkspaceAuthorityRevision(signal?: AbortSignal): Promise<number> {
+    const payload = await this.request<unknown>(this.workspacePath('/collaboration/authority'), {
+      signal,
+    });
+    return requireWorkspaceAuthorityRevision(payload, this.config);
+  }
+
+  async resolveWorkspaceAutonomyAttention(
+    attentionId: string,
+    expectedRevision: number,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceAutonomyAttentionResolveResponse> {
+    const requiredAttentionId = requireValue(attentionId, 'attention id');
+    const payload = await requestWorkspaceRevisionMutation(
+      this.config,
+      this.workspaceRoot(
+        `/autonomy/attentions/${encodeURIComponent(requiredAttentionId)}/resolve`,
+      ),
+      expectedRevision,
+      idempotencyKey,
+      signal,
+    );
+    return requireWorkspaceAutonomyAttentionResolveResponse(payload, requiredAttentionId);
+  }
+
+  async retryWorkspaceAutonomyAttention(
+    attentionId: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceAutonomyAttentionRetryResponse> {
+    const requiredAttentionId = requireValue(attentionId, 'attention id');
+    const payload = await this.request<unknown>(
+      this.workspaceRoot(`/autonomy/attentions/${encodeURIComponent(requiredAttentionId)}/retry`),
+      { method: 'POST', signal },
+    );
+    return requireWorkspaceAutonomyAttentionRetryResponse(payload, requiredAttentionId);
+  }
+
   async createWorkspace(name: string, description?: string): Promise<WorkspaceSummary> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     const projectId = requireValue(this.config.projectId, 'project id');
@@ -1085,6 +1190,7 @@ export class DesktopApiClient {
       payload,
       requiredTenantId,
       requiredProjectId,
+      this.config.mode === 'local',
     );
   }
 
@@ -1168,7 +1274,10 @@ export class DesktopApiClient {
     projectId: string,
     expectedUserId: string,
     capabilityMode?: AgentCapabilityMode,
-    agentConfig?: { llm_model_override?: string | null },
+    agentConfig?: {
+      llm_model_override?: string | null;
+      llm_route_override?: { provider_id: string; model_id: string } | null;
+    },
   ): Promise<AgentConversation> {
     const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
@@ -1778,9 +1887,13 @@ export class DesktopApiClient {
     return normalizeLlmProviderRoutingPolicy(payload);
   }
 
-  async createLlmProvider(input: LlmProviderCreateInput): Promise<ManagedLlmProvider> {
+  async createLlmProvider(
+    input: LlmProviderCreateInput,
+    idempotencyKey: string,
+  ): Promise<ManagedLlmProvider> {
     const payload = await this.request<unknown>('/api/v1/llm-providers/', {
       method: 'POST',
+      idempotencyKey: requireValue(idempotencyKey, 'provider create idempotency key'),
       body: {
         name: input.name,
         provider_type: input.providerType,
@@ -1877,6 +1990,29 @@ export class DesktopApiClient {
       },
     );
     return normalizeManagedLlmProvider(payload);
+  }
+
+  async deleteLlmProvider(
+    providerId: string,
+    expectedRevision: number,
+    idempotencyKey: string,
+  ): Promise<void> {
+    const normalizedProviderId = requireValue(providerId, 'provider id');
+    const normalizedIdempotencyKey = requireValue(
+      idempotencyKey,
+      'provider delete idempotency key',
+    );
+    await this.request<unknown>(
+      `/api/v1/llm-providers/${encodeURIComponent(normalizedProviderId)}`,
+      {
+        method: 'DELETE',
+        idempotencyKey: normalizedIdempotencyKey,
+        body: {
+          expected_revision: expectedRevision,
+          idempotency_key: normalizedIdempotencyKey,
+        },
+      },
+    );
   }
 
   async checkLlmProvider(
@@ -2045,6 +2181,42 @@ export class DesktopApiClient {
       method: 'POST',
       body: input,
     });
+  }
+
+  async updateMCPServer(
+    serverId: string,
+    input: DesktopMCPServerUpdateInput,
+  ): Promise<DesktopMCPServerSummary> {
+    return this.request<DesktopMCPServerSummary>(
+      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
+      {
+        method: 'PUT',
+        body: input,
+      },
+    );
+  }
+
+  async setMCPServerEnabled(
+    serverId: string,
+    input: DesktopMCPServerToggleInput,
+  ): Promise<DesktopMCPServerSummary> {
+    return this.request<DesktopMCPServerSummary>(
+      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
+      {
+        method: 'PUT',
+        body: input,
+      },
+    );
+  }
+
+  async deleteMCPServer(serverId: string, input: DesktopMCPServerDeleteInput): Promise<void> {
+    await this.request<unknown>(
+      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
+      {
+        method: 'DELETE',
+        body: input,
+      },
+    );
   }
 
   async testMCPServer(serverId: string): Promise<DesktopMCPServerTestResult> {
@@ -2620,6 +2792,14 @@ export class DesktopApiClient {
         path,
         method: options.method ?? 'GET',
         ...(options.body === undefined ? {} : { body: options.body }),
+        ...(options.idempotencyKey === undefined
+          ? {}
+          : {
+              mutation: {
+                kind: 'idempotency-only' as const,
+                idempotency_key: options.idempotencyKey,
+              },
+            }),
         signal: options.signal,
       });
       if (response.status < 200 || response.status >= 300) {
@@ -2637,6 +2817,9 @@ export class DesktopApiClient {
     const launchCapability = desktopLaunchCapability(this.config);
     if (launchCapability) {
       headers.set('X-Agistack-Launch', launchCapability);
+    }
+    if (options.idempotencyKey !== undefined) {
+      headers.set('Idempotency-Key', options.idempotencyKey);
     }
 
     const body = formDataBody
@@ -2669,6 +2852,51 @@ export class DesktopApiClient {
 
     return payload as T;
   }
+}
+
+async function requestWorkspaceRevisionMutation(
+  config: DesktopRuntimeConfig,
+  path: string,
+  expectedRevision: number,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (!isUnsignedSafeInteger(expectedRevision)) {
+    throw new DesktopApiError('Invalid Workspace authority revision', 400, expectedRevision);
+  }
+  const requiredIdempotencyKey = requireValue(idempotencyKey, 'attention idempotency key');
+  if (requiredIdempotencyKey.length < 16 || requiredIdempotencyKey.length > 256) {
+    throw new DesktopApiError(
+      'Invalid Workspace autonomy attention idempotency key',
+      400,
+      idempotencyKey,
+    );
+  }
+  const headers = new Headers({
+    Accept: 'application/json',
+    'Idempotency-Key': requiredIdempotencyKey,
+    'If-Match': String(expectedRevision),
+    'X-Expected-Revision': String(expectedRevision),
+  });
+  const credential = desktopApiCredential(config);
+  if (credential) headers.set('Authorization', `Bearer ${credential}`);
+  const launchCapability = desktopLaunchCapability(config);
+  if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
+  const response = await desktopApiFetch(config, path, {
+    method: 'POST',
+    headers,
+    signal,
+  });
+  const contentType = response.headers.get('content-type') ?? '';
+  const payload = contentType.includes('application/json')
+    ? await response.json().catch(() => null)
+    : await response.text().catch(() => '');
+  if (!response.ok) {
+    const message =
+      isRecord(payload) && 'detail' in payload ? String(payload.detail) : `HTTP ${response.status}`;
+    throw new DesktopApiError(message, response.status, payload);
+  }
+  return payload;
 }
 
 export function desktopApiCredential(config: DesktopRuntimeConfig): string {
@@ -3354,17 +3582,30 @@ function requireWorkspaceBindingAgentDefinitions(
   payload: unknown,
   tenantId: string,
   projectId: string,
+  allowManagedResourceEnvelope: boolean,
 ): WorkspaceBindingAgentDefinition[] {
-  if (!Array.isArray(payload)) {
+  const managedItems =
+    allowManagedResourceEnvelope &&
+    isRecord(payload) &&
+    Array.isArray(payload.items)
+      ? payload.items
+      : null;
+  const managedResourceEnvelope = managedItems !== null;
+  const values: unknown[] | null = Array.isArray(payload) ? payload : managedItems;
+  if (!values) {
     throw new DesktopApiError(
       'Invalid workspace Agent definition response',
       502,
       payload,
     );
   }
-  const definitions = payload.map((value) =>
-    normalizeWorkspaceBindingAgentDefinition(value, tenantId, projectId),
-  );
+  const definitions = values.map((value) => {
+    const scopedValue =
+      managedResourceEnvelope && isRecord(value) && value.tenant_id === undefined
+        ? { ...value, tenant_id: tenantId }
+        : value;
+    return normalizeWorkspaceBindingAgentDefinition(scopedValue, tenantId, projectId);
+  });
   if (
     definitions.some((definition) => definition === null) ||
     new Set(definitions.map((definition) => definition?.id)).size !==
@@ -3478,6 +3719,100 @@ function isWorkspaceAgentBinding(
     isOptionalString(value.created_at) &&
     isOptionalNullableString(value.updated_at)
   );
+}
+
+function requireWorkspaceAutonomyAttentions(payload: unknown): WorkspaceAutonomyAttention[] {
+  if (!Array.isArray(payload)) {
+    throw new DesktopApiError('Invalid Workspace autonomy attentions response', 502, payload);
+  }
+  const seenIds = new Set<string>();
+  return payload.map((value) => {
+    if (
+      !isRecord(value) ||
+      !hasExactKeys(value, WORKSPACE_AUTONOMY_ATTENTION_KEYS) ||
+      !isNonEmptyString(value.attention_id) ||
+      (value.root_task_id !== null && !isNonEmptyString(value.root_task_id)) ||
+      !isNonEmptyString(value.source_kind) ||
+      !WORKSPACE_AUTONOMY_ATTENTION_SOURCE_KINDS.has(value.source_kind) ||
+      !isNonEmptyString(value.source_id) ||
+      !isNonEmptyString(value.reason) ||
+      value.status !== 'open' ||
+      !isUnsignedSafeInteger(value.created_at_ms) ||
+      seenIds.has(value.attention_id)
+    ) {
+      throw new DesktopApiError('Invalid Workspace autonomy attentions response', 502, payload);
+    }
+    seenIds.add(value.attention_id);
+    return {
+      attention_id: value.attention_id,
+      root_task_id: value.root_task_id,
+      source_kind: value.source_kind as WorkspaceAutonomyAttention['source_kind'],
+      source_id: value.source_id,
+      reason: value.reason,
+      status: 'open',
+      created_at_ms: value.created_at_ms,
+    };
+  });
+}
+
+function requireWorkspaceAutonomyAttentionRetryResponse(
+  payload: unknown,
+  attentionId: string,
+): WorkspaceAutonomyAttentionRetryResponse {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, WORKSPACE_AUTONOMY_ATTENTION_RETRY_KEYS) ||
+    payload.attention_id !== attentionId ||
+    payload.status !== 'retry_queued'
+  ) {
+    throw new DesktopApiError('Invalid Workspace autonomy attention retry response', 502, payload);
+  }
+  return { attention_id: attentionId, status: 'retry_queued' };
+}
+
+function requireWorkspaceAutonomyAttentionResolveResponse(
+  payload: unknown,
+  attentionId: string,
+): WorkspaceAutonomyAttentionResolveResponse {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, WORKSPACE_AUTONOMY_ATTENTION_RESOLVE_KEYS) ||
+    payload.attention_id !== attentionId ||
+    payload.status !== 'resolved' ||
+    !isUnsignedSafeInteger(payload.committed_revision) ||
+    typeof payload.replayed !== 'boolean'
+  ) {
+    throw new DesktopApiError(
+      'Invalid Workspace autonomy attention resolve response',
+      502,
+      payload,
+    );
+  }
+  return {
+    attention_id: attentionId,
+    status: 'resolved',
+    committed_revision: payload.committed_revision,
+    replayed: payload.replayed,
+  };
+}
+
+function requireWorkspaceAuthorityRevision(
+  payload: unknown,
+  config: DesktopRuntimeConfig,
+): number {
+  if (
+    !isRecord(payload) ||
+    !hasExactKeys(payload, WORKSPACE_AUTHORITY_KEYS) ||
+    payload.contract_version !== '2.0.0' ||
+    payload.tenant_id !== config.tenantId ||
+    payload.project_id !== config.projectId ||
+    payload.workspace_id !== config.workspaceId ||
+    !isUnsignedSafeInteger(payload.revision) ||
+    !isNonEmptyString(payload.cursor)
+  ) {
+    throw new DesktopApiError('Invalid Workspace authority response', 502, payload);
+  }
+  return payload.revision;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

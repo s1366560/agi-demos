@@ -421,6 +421,126 @@
   line-height: 1.4;
 }
 
+.workspace-design-attention-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.28);
+  border-radius: 8px;
+  background: rgba(var(--desktop-amber-rgb), 0.035);
+}
+
+.workspace-design-attention-card > header {
+  display: grid;
+  min-height: 56px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(var(--desktop-amber-rgb), 0.2);
+}
+
+.workspace-design-attention-card > header > span {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid rgba(var(--desktop-amber-rgb), 0.3);
+  border-radius: 8px;
+  background: rgba(var(--desktop-amber-rgb), 0.08);
+  color: var(--desktop-amber);
+}
+
+.workspace-design-attention-card > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-design-attention-card > header small {
+  color: var(--desktop-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.workspace-design-attention-card > header h2 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.workspace-design-attention-card > header em {
+  color: var(--desktop-amber);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.workspace-design-attention-body {
+  display: grid;
+}
+
+.workspace-design-attention-body > p,
+.workspace-design-attention-notice {
+  margin: 0;
+  padding: 13px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+}
+
+.workspace-design-attention-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-design-attention-notice p {
+  margin: 0;
+  color: var(--desktop-amber);
+}
+
+.workspace-design-attention-list {
+  display: grid;
+}
+
+.workspace-design-attention-list > section {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--desktop-border-soft);
+}
+
+.workspace-design-attention-list > section:last-child {
+  border-bottom: 0;
+}
+
+.workspace-design-attention-list > section > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.workspace-design-attention-list b {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-design-attention-list small {
+  color: var(--desktop-muted);
+  font-size: 10px;
+}
+
+.workspace-design-attention-list p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .workspace-design-lower-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(270px, 0.65fr);

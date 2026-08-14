@@ -8,6 +8,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   ReloadIcon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
 
 import { DesktopApiClient, DesktopApiError } from '../../api/client';
@@ -36,10 +37,25 @@ import { ProviderStatusBadge } from './ProviderStatusBadge';
 import {
   filterProviders,
   providerModelsFromProvider,
+  providerMutationForActiveState,
+  providerTogglePendingIdForScope,
+  providerToggleRequestMatches,
   providerTypeDisplayName,
+  routingPolicyReferencesProvider,
+  routingPolicyWithoutProvider,
+  settleProviderToggleRequest,
   type ProviderListFilter,
+  type ProviderToggleRequest,
 } from './providerManagementModel';
 import './ModelProviderWorkspace.css';
+
+type ProviderDeleteRequest = Readonly<{
+  scopeKey: string;
+  providerId: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  requestToken: number;
+}>;
 
 type ModelProviderWorkspaceProps = {
   config: DesktopRuntimeConfig;
@@ -109,14 +125,31 @@ export function ModelProviderWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [providerTogglePending, setProviderTogglePending] = useState<ProviderToggleRequest | null>(
+    null,
+  );
+  const [providerDeletePending, setProviderDeletePending] =
+    useState<ProviderDeleteRequest | null>(null);
+  const [deleteConfirmProviderId, setDeleteConfirmProviderId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const providerTogglePendingRef = useRef<ProviderToggleRequest | null>(null);
+  const providerToggleRequestTokenRef = useRef(0);
+  const providerDeletePendingRef = useRef<ProviderDeleteRequest | null>(null);
+  const providerDeleteRequestTokenRef = useRef(0);
+  const providerDeleteAttemptRef = useRef<Pick<
+    ProviderDeleteRequest,
+    'providerId' | 'expectedRevision' | 'idempotencyKey'
+  > | null>(null);
   const clientRef = useRef(client);
   clientRef.current = client;
   const scopeKey = `${config.mode}\u0000${config.apiBaseUrl}\u0000${config.tenantId}\u0000${config.projectId}\u0000${config.workspaceId}`;
   const scopeKeyRef = useRef(scopeKey);
   scopeKeyRef.current = scopeKey;
+  const providerTogglePendingId = providerTogglePendingIdForScope(providerTogglePending, scopeKey);
+  const providerDeletePendingId =
+    providerDeletePending?.scopeKey === scopeKey ? providerDeletePending.providerId : null;
 
   const showToast = useCallback((message: string) => {
     if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
@@ -131,6 +164,19 @@ export function ModelProviderWorkspace({
       if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (providerTogglePendingRef.current?.scopeKey !== scopeKey) {
+      providerTogglePendingRef.current = null;
+    }
+    setProviderTogglePending((current) => (current?.scopeKey === scopeKey ? current : null));
+    if (providerDeletePendingRef.current?.scopeKey !== scopeKey) {
+      providerDeletePendingRef.current = null;
+      providerDeleteAttemptRef.current = null;
+    }
+    setProviderDeletePending((current) => (current?.scopeKey === scopeKey ? current : null));
+    setDeleteConfirmProviderId(null);
+  }, [scopeKey]);
 
   const loadProviders = useCallback(
     async (signal?: AbortSignal) => {
@@ -307,6 +353,64 @@ export function ModelProviderWorkspace({
     [client, refreshRuntimeProjection, scopeKey, updateProvider],
   );
 
+  const setProviderActive = useCallback(
+    async (currentProvider: ManagedLlmProvider): Promise<void> => {
+      if (
+        !canManage ||
+        providerTogglePendingIdForScope(providerTogglePendingRef.current, scopeKey) !== null
+      ) {
+        return;
+      }
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const request: ProviderToggleRequest = {
+        scopeKey: requestScope,
+        providerId: currentProvider.id,
+        requestToken: ++providerToggleRequestTokenRef.current,
+      };
+      const nextActive = currentProvider.is_active === false;
+      providerTogglePendingRef.current = request;
+      setProviderTogglePending(request);
+      try {
+        const updated = await saveProvider(
+          currentProvider,
+          providerMutationForActiveState(currentProvider, nextActive),
+        );
+        if (
+          !mountedRef.current ||
+          clientRef.current !== requestClient ||
+          scopeKeyRef.current !== requestScope ||
+          !providerToggleRequestMatches(providerTogglePendingRef.current, request)
+        ) {
+          return;
+        }
+        showToast(
+          t(nextActive ? 'providers.providerEnabled' : 'providers.providerDisabled', {
+            provider: updated.name,
+          }),
+        );
+      } catch {
+        if (
+          mountedRef.current &&
+          clientRef.current === requestClient &&
+          scopeKeyRef.current === requestScope &&
+          providerToggleRequestMatches(providerTogglePendingRef.current, request)
+        ) {
+          showToast(t('providers.providerStatusUpdateFailed'));
+        }
+      } finally {
+        if (mountedRef.current) {
+          providerTogglePendingRef.current = settleProviderToggleRequest(
+            providerTogglePendingRef.current,
+            request,
+          );
+          setProviderTogglePending((current) => settleProviderToggleRequest(current, request));
+        }
+      }
+    },
+    [canManage, client, saveProvider, scopeKey, showToast, t],
+  );
+
   const saveRoutingPolicy = useCallback(
     async (mutation: RoutingPolicyDraftMutation): Promise<LlmProviderRoutingPolicy> => {
       if (!routingScope) throw new Error(t('providers.routingScopeRequired'));
@@ -373,6 +477,105 @@ export function ModelProviderWorkspace({
     [client, onCountChange, refreshRuntimeProjection, routingScope, scopeKey, showToast, t],
   );
 
+  const deleteProvider = useCallback(
+    async (currentProvider: ManagedLlmProvider): Promise<void> => {
+      if (!canManage || providerDeletePendingRef.current !== null) return;
+      const requestScope = scopeKey;
+      const requestClient = client;
+      const currentAttempt = providerDeleteAttemptRef.current;
+      const attempt: Pick<
+        ProviderDeleteRequest,
+        'providerId' | 'expectedRevision' | 'idempotencyKey'
+      > =
+        currentAttempt?.providerId === currentProvider.id
+          ? currentAttempt
+          : {
+              providerId: currentProvider.id,
+              expectedRevision: currentProvider.revision ?? 0,
+              idempotencyKey: `provider-delete-${crypto.randomUUID()}`,
+            };
+      providerDeleteAttemptRef.current = attempt;
+      const request: ProviderDeleteRequest = {
+        ...attempt,
+        scopeKey: requestScope,
+        requestToken: ++providerDeleteRequestTokenRef.current,
+      };
+      providerDeletePendingRef.current = request;
+      setProviderDeletePending(request);
+      try {
+        if (
+          config.mode === 'local' &&
+          routingScope &&
+          routingPolicy &&
+          routingPolicyReferencesProvider(routingPolicy, currentProvider.id)
+        ) {
+          const cleaned = routingPolicyWithoutProvider(routingPolicy, currentProvider.id);
+          await saveRoutingPolicy({
+            roles: cleaned.roles,
+            fallbacks: cleaned.fallbacks,
+            expectedRevision: routingPolicy.revision,
+          });
+        }
+        await requestClient.deleteLlmProvider(
+          currentProvider.id,
+          attempt.expectedRevision,
+          attempt.idempotencyKey,
+        );
+        if (
+          !mountedRef.current ||
+          clientRef.current !== requestClient ||
+          scopeKeyRef.current !== requestScope ||
+          providerDeletePendingRef.current?.requestToken !== request.requestToken
+        ) {
+          return;
+        }
+        const remainingProviders = providers.filter((item) => item.id !== currentProvider.id);
+        setProviders(remainingProviders);
+        setSelectedId((current) =>
+          current === currentProvider.id ? (remainingProviders[0]?.id ?? null) : current,
+        );
+        onCountChange?.(remainingProviders.length);
+        setDeleteConfirmProviderId(null);
+        providerDeleteAttemptRef.current = null;
+        showToast(t('providers.providerDeleted', { provider: currentProvider.name }));
+        await refreshRuntimeProjection(requestScope, requestClient);
+      } catch {
+        if (
+          mountedRef.current &&
+          clientRef.current === requestClient &&
+          scopeKeyRef.current === requestScope &&
+          providerDeletePendingRef.current?.requestToken === request.requestToken
+        ) {
+          showToast(t('providers.providerDeleteFailed'));
+        }
+      } finally {
+        if (
+          mountedRef.current &&
+          providerDeletePendingRef.current?.requestToken === request.requestToken
+        ) {
+          providerDeletePendingRef.current = null;
+          setProviderDeletePending((current) =>
+            current?.requestToken === request.requestToken ? null : current,
+          );
+        }
+      }
+    },
+    [
+      canManage,
+      client,
+      config.mode,
+      onCountChange,
+      providers,
+      refreshRuntimeProjection,
+      routingPolicy,
+      routingScope,
+      saveRoutingPolicy,
+      scopeKey,
+      showToast,
+      t,
+    ],
+  );
+
   const validateProvider = useCallback(
     async (providerId: string, expectedRevision: number): Promise<LlmProviderValidationOutcome> => {
       const requestScope = scopeKey;
@@ -416,10 +619,14 @@ export function ModelProviderWorkspace({
   );
 
   const createProvider = useCallback(
-    async (input: LlmProviderCreateInput, draftValidation: LlmProviderValidationOutcome) => {
+    async (
+      input: LlmProviderCreateInput,
+      draftValidation: LlmProviderValidationOutcome,
+      idempotencyKey: string,
+    ) => {
       const requestScope = scopeKey;
       const requestClient = client;
-      const created = await requestClient.createLlmProvider(input);
+      const created = await requestClient.createLlmProvider(input, idempotencyKey);
       if (
         !mountedRef.current ||
         clientRef.current !== requestClient ||
@@ -601,8 +808,89 @@ export function ModelProviderWorkspace({
                 ? t('providers.workspaceScope')
                 : config.mode === 'local'
                   ? t('providers.localScope')
-                  : t('providers.globalProviderScope')}
+                : t('providers.globalProviderScope')}
             </span>
+            {provider ? (
+              <button
+                className={`provider-status-action ${
+                  provider.is_active === false ? 'enable' : 'disable'
+                }`}
+                type="button"
+                disabled={!canManage || providerTogglePendingId !== null}
+                aria-label={t(
+                  provider.is_active === false
+                    ? 'providers.enableProvider'
+                    : 'providers.disableProvider',
+                )}
+                title={t(
+                  provider.is_active === false
+                    ? 'providers.enableProvider'
+                    : 'providers.disableProvider',
+                )}
+                onClick={() => void setProviderActive(provider)}
+              >
+                {providerTogglePendingId === provider.id ? (
+                  <ReloadIcon className="spin" />
+                ) : null}
+                {t(
+                  providerTogglePendingId === provider.id
+                    ? provider.is_active === false
+                      ? 'providers.enablingProvider'
+                      : 'providers.disablingProvider'
+                    : provider.is_active === false
+                      ? 'providers.enableProvider'
+                      : 'providers.disableProvider',
+                )}
+              </button>
+            ) : null}
+            {provider && config.mode === 'local' && canManage ? (
+              deleteConfirmProviderId === provider.id ? (
+                <span
+                  className="provider-delete-confirmation"
+                  role="group"
+                  aria-label={t('providers.deleteProviderNamed', { provider: provider.name })}
+                >
+                  <span>{t('providers.deleteProviderConfirm')}</span>
+                  <button
+                    className="provider-delete-action"
+                    type="button"
+                    disabled={providerDeletePendingId === provider.id}
+                    onClick={() => void deleteProvider(provider)}
+                  >
+                    {providerDeletePendingId === provider.id ? (
+                      <ReloadIcon className="spin" />
+                    ) : (
+                      <TrashIcon />
+                    )}
+                    {t(
+                      providerDeletePendingId === provider.id
+                        ? 'providers.deletingProvider'
+                        : 'common.delete',
+                    )}
+                  </button>
+                  <button
+                    className="provider-icon-button"
+                    type="button"
+                    aria-label={t('common.cancel')}
+                    title={t('common.cancel')}
+                    disabled={providerDeletePendingId === provider.id}
+                    onClick={() => setDeleteConfirmProviderId(null)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ) : (
+                <button
+                  className="provider-icon-button danger"
+                  type="button"
+                  aria-label={t('providers.deleteProviderNamed', { provider: provider.name })}
+                  title={t('providers.deleteProviderNamed', { provider: provider.name })}
+                  onClick={() => setDeleteConfirmProviderId(provider.id)}
+                >
+                  <TrashIcon />
+                </button>
+              )
+            ) : null}
             {provider ? (
               <button
                 className="provider-icon-button"

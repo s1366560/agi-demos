@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -23,11 +24,39 @@ import {
   orderedPlanTasks,
   planPriorityTranslationKey,
   planTaskSignature,
+  planningTerminalFailure,
   planningTurnAttempt,
   readLegacyPlanApprovalRecovery,
   shouldOfferPlanRetry,
   writeLegacyPlanApprovalRecovery,
 } from '/tmp/agistack-desktop-test-dist/src/features/task/newTaskPlanModel.js';
+
+const conversationThreadsSource = readFileSync(
+  new URL('../src/hooks/useConversationThreads.ts', import.meta.url),
+  'utf8',
+);
+const newTaskFlowSource = readFileSync(
+  new URL('../src/features/task/NewTaskFlow.tsx', import.meta.url),
+  'utf8',
+);
+const createComposerThreadSource =
+  conversationThreadsSource.match(
+    /const createComposerThread = async \(input: NewThreadComposerInput\) => \{[\s\S]*?\n  \};\n  return \{/u,
+  )?.[0] ?? '';
+const generatePlanSource =
+  newTaskFlowSource.match(
+    /const generatePlan = async \(workspaceSelectionOverride\?: string\) => \{[\s\S]*?\n  \};\n\n  const createAsNewTask/u,
+  )?.[0] ?? '';
+
+function assertAbstractContextSourceContract(prompt) {
+  assert.match(prompt, /abstract source categories/u);
+  assert.match(prompt, /not file or directory paths/u);
+  assert.match(prompt, /Never pass category labels[^\n]*to file-reading tools/u);
+  assert.match(
+    prompt,
+    /Only call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root\./u,
+  );
+}
 
 test('planning prompt establishes a real structured plan and approval boundary', () => {
   const prompt = buildPlanningPrompt({
@@ -42,6 +71,145 @@ test('planning prompt establishes a real structured plan and approval boundary',
   assert.match(prompt, /without changing files/);
   assert.match(prompt, /human explicitly approves/);
   assert.match(prompt, /\/workspace\/app/);
+});
+
+test('planning terminal failure requires the exact request message and structured failure payload', () => {
+  const timeline = [
+    {
+      id: 'old-failure',
+      type: 'complete',
+      message_id: 'other-message',
+      payload: { success: false, summary: 'unrelated failure' },
+    },
+    {
+      id: 'current-failure',
+      type: 'complete',
+      message_id: 'planning-message',
+      payload: { success: false, summary: 'tool error: denied by policy' },
+    },
+  ];
+
+  assert.deepEqual(planningTerminalFailure(timeline, 'planning-message'), {
+    summary: 'tool error: denied by policy',
+  });
+  assert.equal(planningTerminalFailure(timeline, 'other-message')?.summary, 'unrelated failure');
+  assert.equal(planningTerminalFailure(timeline, 'missing-message'), null);
+  assert.equal(
+    planningTerminalFailure(
+      [
+        {
+          id: 'success',
+          type: 'complete',
+          message_id: 'planning-message',
+          payload: { success: true, summary: 'done' },
+        },
+      ],
+      'planning-message',
+    ),
+    null,
+  );
+
+  assert.deepEqual(
+    planningTerminalFailure(
+      [
+        {
+          id: 'earlier-failure',
+          type: 'complete',
+          message_id: 'planning-message',
+          payload: { success: false, summary: 'earlier failure' },
+        },
+        {
+          id: 'latest-success',
+          type: 'complete',
+          message_id: 'planning-message',
+          payload: { success: true, summary: 'recovered' },
+        },
+      ],
+      'planning-message',
+    ),
+    null,
+  );
+});
+
+test('planning terminal failure remains observable when the runtime omits a summary', () => {
+  assert.deepEqual(
+    planningTerminalFailure(
+      [
+        {
+          id: 'failure',
+          type: 'complete',
+          message_id: 'planning-message',
+          payload: { success: false },
+        },
+      ],
+      'planning-message',
+    ),
+    { summary: null },
+  );
+});
+
+test('local planning poll surfaces terminal failure and rotates the failed retry identity', () => {
+  assert.match(newTaskFlowSource, /session\.config\.mode === 'local'/u);
+  assert.match(newTaskFlowSource, /\.getConversationMessages\(/u);
+  assert.match(
+    newTaskFlowSource,
+    /planningTerminalFailure\([\s\S]*planningAttemptRef\.current\?\.messageId/u,
+  );
+  assert.match(
+    newTaskFlowSource,
+    /if \(terminalFailure\) \{[\s\S]*planningAttemptRef\.current = null;[\s\S]*setPlanRetryAvailable\(true\);[\s\S]*setPlanningFailed\(true\);[\s\S]*setFlowError\(message\);/u,
+  );
+  const terminalFailureBranch =
+    newTaskFlowSource.match(/if \(terminalFailure\) \{[\s\S]*?\n\s*return;\n\s*\}/u)?.[0] ?? '';
+  assert.notEqual(terminalFailureBranch, '');
+  assert.doesNotMatch(terminalFailureBranch, /scheduleNextPoll\(\)/u);
+  assert.match(newTaskFlowSource, /!session \|\|[\s\S]*planningFailed/u);
+  assert.match(newTaskFlowSource, /terminalFailure=\{planningFailed\}/u);
+  const terminalFailureAssignment =
+    newTaskFlowSource.match(/const terminalFailure =[\s\S]*?\n\s*: null;/u)?.[0] ?? '';
+  assert.notEqual(terminalFailureAssignment, '');
+  assert.match(terminalFailureAssignment, /phase === 'planning'/u);
+  assert.doesNotMatch(terminalFailureAssignment, /tasks\.length/u);
+});
+
+test('createComposerThread keeps default context categories out of file-tool paths', () => {
+  assert.notEqual(createComposerThreadSource, '');
+  assert.match(
+    createComposerThreadSource,
+    /contextSources: \['project_memory', 'project_files'\]/u,
+  );
+  assert.match(createComposerThreadSource, /buildPlanningPrompt\(definition\)/u);
+
+  const prompt = buildPlanningPrompt({
+    title: 'Repair session UX',
+    objective: 'Create a reviewable plan',
+    kind: 'programming',
+    workspaceRoot: '/workspace/app',
+    contextSources: ['project_memory', 'project_files'],
+  });
+
+  assert.match(prompt, /project_memory/u);
+  assert.match(prompt, /project_files/u);
+  assertAbstractContextSourceContract(prompt);
+});
+
+test('generatePlan keeps selected context categories out of file-tool paths', () => {
+  assert.notEqual(generatePlanSource, '');
+  assert.match(
+    generatePlanSource,
+    /const definition: NewTaskDefinition = \{[\s\S]*contextSources,[\s\S]*\};[\s\S]*const planningPrompt = buildPlanningPrompt\(definition\)/u,
+  );
+
+  const prompt = buildPlanningPrompt({
+    title: 'Research recovery behavior',
+    objective: 'Create a reviewable plan',
+    kind: 'general',
+    contextSources: ['project_memory', 'web_research'],
+  });
+
+  assert.match(prompt, /project_memory/u);
+  assert.match(prompt, /web_research/u);
+  assertAbstractContextSourceContract(prompt);
 });
 
 test('revision and execution prompts preserve the human authority boundary', () => {

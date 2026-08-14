@@ -71,6 +71,25 @@ export function MCPServerSettingsPage({
                   type="button"
                   className="secondary"
                   disabled={!canManage || management.actionBusyId !== null}
+                  onClick={() => management.openEdit(server)}
+                >
+                  {t('common.edit')}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!canManage || management.actionBusyId !== null}
+                  onClick={() => void management.toggleServer(server)}
+                >
+                  {management.actionBusyId === server.id ? (
+                    <ReloadIcon className="managed-resource-spin" />
+                  ) : null}
+                  {t(server.enabled ? 'settings.disable' : 'settings.enable')}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!canManage || !server.enabled || management.actionBusyId !== null}
                   onClick={() => void management.testServer(server.id)}
                 >
                   {management.actionBusyId === server.id ? (

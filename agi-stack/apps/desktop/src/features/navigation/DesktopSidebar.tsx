@@ -14,6 +14,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
+import type { LocalConversationStatusSummary } from '../project/projectOverviewLocalClient';
 import type {
   AgentConversation,
   CurrentUser,
@@ -31,6 +32,7 @@ type DesktopSidebarProps = {
   mode?: 'work' | 'code';
   taskCount: number;
   activityUnreadCount: number;
+  conversationStatusSummary?: LocalConversationStatusSummary | null;
   tenantName: string;
   projectName: string;
   user: CurrentUser | null;
@@ -86,6 +88,7 @@ export function DesktopSidebar({
   activeSection,
   taskCount,
   activityUnreadCount,
+  conversationStatusSummary = null,
   tenantName,
   projectName,
   user,
@@ -209,6 +212,49 @@ export function DesktopSidebar({
             ) : null}
           </div>
         </header>
+        {conversationStatusSummary ? (
+          <div
+            className="desktop-conversation-status-summary"
+            role="group"
+            aria-label={`${t('overview.conversations')} ${conversationStatusSummary.total}`}
+          >
+            <ConversationStatusChip
+              label={t('workspaceTree.running')}
+              count={conversationStatusSummary.running}
+              tone="running"
+            />
+            <ConversationStatusChip
+              label={t('workspaceTree.queued')}
+              count={conversationStatusSummary.queued}
+              tone="queued"
+            />
+            <ConversationStatusChip
+              label={t('settings.attention')}
+              count={conversationStatusSummary.attention}
+              tone="attention"
+            />
+            <ConversationStatusChip
+              label={t('workspaceTree.failed')}
+              count={conversationStatusSummary.failed}
+              tone="failed"
+            />
+            <ConversationStatusChip
+              label={t('workspaceTree.completed')}
+              count={conversationStatusSummary.completed}
+              tone="completed"
+            />
+            <ConversationStatusChip
+              label={t('overview.idle')}
+              count={conversationStatusSummary.idle}
+              tone="idle"
+            />
+            <ConversationStatusChip
+              label={t('workspaceTree.cancelled')}
+              count={conversationStatusSummary.cancelled}
+              tone="cancelled"
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Core list: the workspace tree owns the remaining scrollable space. */}
@@ -318,5 +364,24 @@ export function DesktopSidebar({
       </div>
       {resizeHandle}
     </aside>
+  );
+}
+
+function ConversationStatusChip({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone: string;
+}) {
+  if (count === 0) return null;
+  return (
+    <span className={tone} title={`${label}: ${count}`}>
+      <i aria-hidden="true" />
+      {label}
+      <strong>{count}</strong>
+    </span>
   );
 }

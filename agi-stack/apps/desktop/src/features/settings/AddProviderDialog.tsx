@@ -24,8 +24,9 @@ import type {
 import {
   providerAuthMethodSupported,
   providerProbeInputIsValid,
-  providerTypeDisplayName,
+  providerSetupOptions,
   providerValidationAccepted,
+  type ProviderSetupOption,
 } from './providerManagementModel';
 import { useModalDialog } from './useModalDialog';
 
@@ -38,26 +39,8 @@ type AddProviderDialogProps = {
   onCreate: (
     input: LlmProviderCreateInput,
     validation: LlmProviderValidationOutcome,
+    idempotencyKey: string,
   ) => Promise<ManagedLlmProvider>;
-};
-
-const providerDefaults: Record<string, { baseUrl: string }> = {
-  openai: {
-    baseUrl: 'https://api.openai.com/v1',
-  },
-  anthropic: {
-    baseUrl: 'https://api.anthropic.com',
-  },
-  openai_compatible: {
-    baseUrl: 'http://127.0.0.1:11434/v1',
-  },
-  azure_openai: { baseUrl: '' },
-  ollama: {
-    baseUrl: 'http://127.0.0.1:11434',
-  },
-  lmstudio: {
-    baseUrl: 'http://127.0.0.1:1234/v1',
-  },
 };
 
 export function AddProviderDialog({
@@ -68,7 +51,8 @@ export function AddProviderDialog({
 }: AddProviderDialogProps) {
   const { t } = useI18n();
   const [step, setStep] = useState(1);
-  const [types, setTypes] = useState<LlmProviderTypeDescriptor[]>([]);
+  const [options, setOptions] = useState<readonly ProviderSetupOption[]>([]);
+  const [selectedOptionId, setSelectedOptionId] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [name, setName] = useState('');
   const [authMethod, setAuthMethod] = useState<LlmProviderAuthMethod>('api_key');
@@ -81,10 +65,16 @@ export function AddProviderDialog({
   const [validation, setValidation] = useState<LlmProviderValidationOutcome | null>(null);
   const [busy, setBusy] = useState<'types' | 'test' | 'create' | null>('types');
   const [error, setError] = useState<string | null>(null);
+  const [providerCreateIdempotencyKey, setProviderCreateIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  );
   const validationRequestId = useRef(0);
   const onLoadTypesRef = useRef(onLoadTypes);
   onLoadTypesRef.current = onLoadTypes;
-  const dialogRef = useModalDialog({ nested: true, onClose });
+  const closeDialog = () => {
+    if (busy !== 'create') onClose();
+  };
+  const dialogRef = useModalDialog({ nested: true, onClose: closeDialog });
 
   const invalidateValidation = () => {
     validationRequestId.current += 1;
@@ -102,11 +92,11 @@ export function AddProviderDialog({
       .current()
       .then((nextTypes) => {
         if (cancelled) return;
-        const chatProviderTypes = nextTypes.filter(
-          (descriptor) => descriptor.operationType === 'llm',
+        const chatProviderOptions = providerSetupOptions(
+          nextTypes.filter((descriptor) => descriptor.operationType === 'llm'),
         );
-        setTypes(chatProviderTypes);
-        if (chatProviderTypes[0]) chooseType(chatProviderTypes[0]);
+        setOptions(chatProviderOptions);
+        if (chatProviderOptions[0]) chooseOption(chatProviderOptions[0]);
       })
       .catch((caught) => {
         if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
@@ -122,18 +112,15 @@ export function AddProviderDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const chooseType = (descriptor: LlmProviderTypeDescriptor) => {
+  const chooseOption = (option: ProviderSetupOption) => {
     invalidateValidation();
-    const defaults = providerDefaults[descriptor.providerType] ?? {
-      baseUrl: '',
-    };
-    const nextAuth = descriptor.authMethods[0] ?? descriptor.unavailableAuthMethods[0] ?? 'api_key';
-    setSelectedType(descriptor.providerType);
-    setName(providerTypeDisplayName(descriptor.providerType));
-    setAuthMethod(nextAuth);
-    setBaseUrl(defaults.baseUrl);
+    setSelectedOptionId(option.id);
+    setSelectedType(option.descriptor.providerType);
+    setName(option.name);
+    setAuthMethod(option.authMethod);
+    setBaseUrl(option.baseUrl);
     setApiKey('');
-    setEnvironmentVariable('');
+    setEnvironmentVariable(option.environmentVariable);
     setError(null);
   };
 
@@ -186,7 +173,11 @@ export function AddProviderDialog({
     ],
   );
 
-  const selectedDescriptor = types.find((descriptor) => descriptor.providerType === selectedType);
+  useEffect(() => {
+    setProviderCreateIdempotencyKey(() => crypto.randomUUID());
+  }, [input]);
+
+  const selectedDescriptor = options.find((option) => option.id === selectedOptionId)?.descriptor;
   const unavailableAuthMethods = selectedDescriptor?.unavailableAuthMethods ?? [];
   const wizardAuthOptions = AUTH_METHOD_ORDER.filter(
     (method) =>
@@ -252,7 +243,7 @@ export function AddProviderDialog({
     setBusy('create');
     setError(null);
     try {
-      await onCreate(input, validation);
+      await onCreate(input, validation, providerCreateIdempotencyKey);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setBusy(null);
@@ -275,7 +266,7 @@ export function AddProviderDialog({
       className="provider-dialog-backdrop"
       onMouseDown={(event) => {
         event.stopPropagation();
-        if (event.target === event.currentTarget && busy !== 'create') onClose();
+        if (event.target === event.currentTarget) closeDialog();
       }}
     >
       <section
@@ -296,7 +287,7 @@ export function AddProviderDialog({
             type="button"
             disabled={busy === 'create'}
             aria-label={t('providers.closeWizard')}
-            onClick={onClose}
+            onClick={closeDialog}
           >
             <Cross2Icon />
           </button>
@@ -324,27 +315,27 @@ export function AddProviderDialog({
                 </div>
               ) : (
                 <div className="provider-option-grid">
-                  {types.map((descriptor) => (
+                  {options.map((option) => (
                     <button
-                      className={selectedType === descriptor.providerType ? 'selected' : ''}
+                      className={selectedOptionId === option.id ? 'selected' : ''}
                       type="button"
-                      key={descriptor.providerType}
-                      onClick={() => chooseType(descriptor)}
+                      key={option.id}
+                      onClick={() => chooseOption(option)}
                     >
                       <span>
                         <CubeIcon />
                       </span>
                       <div>
-                        <b>{providerTypeDisplayName(descriptor.providerType)}</b>
+                        <b>{option.name}</b>
                         <small>
                           {t(
-                            descriptor.authMethods.includes('none')
+                            option.descriptor.authMethods.includes('none')
                               ? 'providers.localRuntime'
                               : 'providers.cloudApi',
                           )}
                         </small>
                       </div>
-                      {selectedType === descriptor.providerType ? <CheckCircledIcon /> : null}
+                      {selectedOptionId === option.id ? <CheckCircledIcon /> : null}
                     </button>
                   ))}
                 </div>
@@ -609,7 +600,7 @@ export function AddProviderDialog({
               disabled={busy === 'create'}
               onClick={
                 step === 1
-                  ? onClose
+                  ? closeDialog
                   : () => {
                       invalidateValidation();
                       setStep((current) => current - 1);
@@ -623,7 +614,7 @@ export function AddProviderDialog({
               type="button"
               disabled={
                 busy !== null ||
-                (step === 1 && !selectedType) ||
+                (step === 1 && !selectedOptionId) ||
                 (step === 2 && !validationAccepted) ||
                 (step === 3 && selectedModels.size === 0)
               }

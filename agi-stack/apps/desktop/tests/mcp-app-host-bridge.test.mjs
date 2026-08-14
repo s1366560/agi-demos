@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -488,4 +489,120 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('Desktop MCP server mutations preserve revision and idempotency contracts', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    calls.push({
+      url: String(input),
+      method: init.method ?? 'GET',
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    return Response.json({
+      id: 'server-1',
+      tenant_id: 'tenant-selected',
+      project_id: 'project-selected',
+      name: 'release-tools',
+      server_type: 'http',
+      enabled: true,
+      runtime_status: 'stopped',
+      runtime_metadata: { revision: 5 },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: '',
+      localApiToken: 'sidecar-launch-capability',
+      projectId: 'project-selected',
+    });
+    await client.updateMCPServer('server/1', {
+      name: 'release-tools',
+      description: 'Release automation tools',
+      server_type: 'http',
+      transport_config: { url: 'https://mcp.memstack.test' },
+      enabled: true,
+      project_id: 'project-selected',
+      expected_revision: 4,
+      idempotency_key: 'mcp-update-action-1',
+    });
+    await client.setMCPServerEnabled('server/1', {
+      enabled: false,
+      project_id: 'project-selected',
+      expected_revision: 5,
+      idempotency_key: 'mcp-disable-action-1',
+    });
+    await client.deleteMCPServer('server/1', {
+      project_id: 'project-selected',
+      expected_revision: 6,
+      idempotency_key: 'mcp-delete-action-1',
+    });
+
+    assert.deepEqual(calls, [
+      {
+        url: 'http://127.0.0.1:8088/api/v1/mcp/server%2F1',
+        method: 'PUT',
+        body: {
+          name: 'release-tools',
+          description: 'Release automation tools',
+          server_type: 'http',
+          transport_config: { url: 'https://mcp.memstack.test' },
+          enabled: true,
+          project_id: 'project-selected',
+          expected_revision: 4,
+          idempotency_key: 'mcp-update-action-1',
+        },
+      },
+      {
+        url: 'http://127.0.0.1:8088/api/v1/mcp/server%2F1',
+        method: 'PUT',
+        body: {
+          enabled: false,
+          project_id: 'project-selected',
+          expected_revision: 5,
+          idempotency_key: 'mcp-disable-action-1',
+        },
+      },
+      {
+        url: 'http://127.0.0.1:8088/api/v1/mcp/server%2F1',
+        method: 'DELETE',
+        body: {
+          project_id: 'project-selected',
+          expected_revision: 6,
+          idempotency_key: 'mcp-delete-action-1',
+        },
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('MCP settings expose edit, enable-disable, and delete lifecycle actions', () => {
+  const hookSource = readFileSync(
+    new URL('../src/features/settings/useMCPServerManagement.ts', import.meta.url),
+    'utf8',
+  );
+  const pageSource = readFileSync(
+    new URL('../src/features/settings/MCPServerSettingsPage.tsx', import.meta.url),
+    'utf8',
+  );
+  const dialogSource = readFileSync(
+    new URL('../src/features/settings/MCPServerDialog.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(hookSource, /openEdit/u);
+  assert.match(hookSource, /updateMCPServer/u);
+  assert.match(hookSource, /setMCPServerEnabled/u);
+  assert.match(hookSource, /deleteMCPServer/u);
+  assert.match(pageSource, /management\.openEdit\(server\)/u);
+  assert.match(pageSource, /management\.toggleServer\(server\)/u);
+  assert.match(dialogSource, /onDelete/u);
+  assert.match(dialogSource, /arguments_redacted/u);
 });

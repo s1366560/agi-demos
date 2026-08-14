@@ -19,7 +19,12 @@ import {
   RocketIcon,
 } from '@radix-ui/react-icons';
 
-import { desktopApiCredential, desktopLaunchCapability, DesktopApiClient } from './api/client';
+import {
+  desktopApiCredential,
+  desktopLaunchCapability,
+  DesktopApiClient,
+  DesktopApiError,
+} from './api/client';
 import {
   desktopApiAuthenticationAvailable,
   desktopVaultBoundCloudRequestBroker,
@@ -272,6 +277,13 @@ import { createProjectAgentLogsController } from './features/project-agent/proje
 import { createProjectAgentLogsRouteModuleLoader } from './features/project-agent/projectAgentLogsRouteModule';
 import { createProjectAgentPatternsController } from './features/project-agent/projectAgentPatternsController';
 import { createProjectAgentPatternsRouteModuleLoader } from './features/project-agent/projectAgentPatternsRouteModule';
+import {
+  createLocalProjectOverviewClient,
+  isCurrentLocalConversationStatusRequest,
+  nextLocalConversationStatusRequest,
+  type LocalConversationStatusSummary,
+  type LocalConversationStatusRequest,
+} from './features/project/projectOverviewLocalClient';
 import { createProjectMaintenanceController } from './features/project-administration/projectMaintenanceController';
 import { createProjectMaintenanceRouteModuleLoader } from './features/project-administration/projectMaintenanceRouteModule';
 import { createProjectSchemaController } from './features/project-administration/projectSchemaController';
@@ -367,6 +379,13 @@ import { WorkspaceCollaborationCanvas } from './features/workspace/WorkspaceColl
 import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
+import {
+  currentWorkspaceAutonomyAttentionResolveAttempt,
+  discardWorkspaceAutonomyAttentionResolveAttempt,
+  resolveWorkspaceAutonomyAttentionAttempt,
+  retainOpenWorkspaceAutonomyAttentionResolveAttempts,
+  type WorkspaceAutonomyAttentionResolveAttempt,
+} from './features/workspace/autonomyAttentionResolveAttemptModel';
 import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
 import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
@@ -447,6 +466,8 @@ import type {
   TerminalServiceResponse,
   WorkbenchSection,
   WorkspaceAgentBinding,
+  WorkspaceAutonomyAttention,
+  WorkspaceAuthorityCollection,
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
@@ -534,6 +555,19 @@ const emptyConversationTimeline: ConversationTimelineState = {
   lastCursor: null,
 };
 
+type ScopedWorkspaceAutonomyAttentionAuthority = {
+  scopeKey: string;
+  authority: WorkspaceAuthorityCollection<WorkspaceAutonomyAttention>;
+};
+
+const WORKSPACE_AUTONOMY_RETRY_ROLES = new Set(['owner', 'editor', 'admin']);
+
+function workspaceAutonomyAttentionScopeKey(
+  config: Pick<DesktopRuntimeConfig, 'tenantId' | 'projectId' | 'workspaceId'>,
+): string {
+  return `${config.tenantId}\u0000${config.projectId}\u0000${config.workspaceId}`;
+}
+
 export function App() {
   const runsInNativeDesktop = detectNativeDesktopShell();
   const { locale, t } = useI18n();
@@ -601,7 +635,23 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [workspaceSso, setWorkspaceSso] = useState<WorkspaceSsoPresentation | null>(null);
   const [dataset, setDataset] = useState<RuntimeDataset>(emptyDataset);
+  const [conversationStatusSummary, setConversationStatusSummary] =
+    useState<LocalConversationStatusSummary | null>(null);
+  const [conversationStatusRefreshRevision, setConversationStatusRefreshRevision] = useState(0);
   const [workspaceLiveActivity, setWorkspaceLiveActivity] = useState<WorkspaceLiveActivity[]>([]);
+  const [workspaceAutonomyAttentionState, setWorkspaceAutonomyAttentionState] =
+    useState<ScopedWorkspaceAutonomyAttentionAuthority>(() => ({
+      scopeKey: '',
+      authority: unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>(),
+    }));
+  const [retryingWorkspaceAutonomyAttentionId, setRetryingWorkspaceAutonomyAttentionId] = useState<
+    string | null
+  >(null);
+  const [resolvingWorkspaceAutonomyAttentionId, setResolvingWorkspaceAutonomyAttentionId] =
+    useState<string | null>(null);
+  const workspaceAutonomyAttentionResolveAttemptsRef = useRef<
+    Map<string, WorkspaceAutonomyAttentionResolveAttempt>
+  >(new Map());
   const [connection, setConnection] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>('never');
@@ -727,6 +777,8 @@ export function App() {
   const datasetRef = useRef(dataset);
   const expandedWorkspaceIdsRef = useRef(expandedWorkspaceIds);
   const runtimeRefreshRequestRef = useRef(0);
+  const conversationStatusRequestRef = useRef(0);
+  const conversationStatusScopeRef = useRef('');
   const sidecarRecoveryRefreshGenerationRef = useRef<number | null>(null);
   const conversationModelMutationRequestRef = useRef(0);
   const conversationSummaryMutationRequestRef = useRef(0);
@@ -2337,6 +2389,7 @@ export function App() {
     const events = socketEventsSince(socket.events, authoritativeRunEventsHeadRef.current);
     authoritativeRunEventsHeadRef.current = socket.events[0] ?? null;
     if (!authoritativeRunsFromSocketEvents(events).length) return;
+    setConversationStatusRefreshRevision((revision) => revision + 1);
     const runs = authoritativeRunsFromSocketEvents(socket.events);
     if (!runs.length) return;
     setAgentConversationSession((current) => {
@@ -2453,6 +2506,15 @@ export function App() {
     setMyWorkRefreshing(false);
     datasetRef.current = emptyDataset;
     setDataset(emptyDataset);
+    setWorkspaceAutonomyAttentionState({
+      scopeKey: '',
+      authority: unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>(),
+    });
+    setRetryingWorkspaceAutonomyAttentionId(null);
+    setResolvingWorkspaceAutonomyAttentionId(null);
+    conversationStatusRequestRef.current += 1;
+    conversationStatusScopeRef.current = '';
+    setConversationStatusSummary(null);
     setConnection('idle');
     setError(null);
     setLastSync('never');
@@ -2500,6 +2562,7 @@ export function App() {
       setConnection('loading');
       setError(null);
       let refreshProjectId = nextConfig.projectId.trim();
+      let localConversationStatusRequest: LocalConversationStatusRequest | null = null;
       let conversationRequestGenerations = supersedeWorkspaceConversationRequests(
         workspaceConversationRequestGenerationsRef.current,
         activeRuntimeConversationRequestsRef.current,
@@ -2529,6 +2592,18 @@ export function App() {
         const resolvedProjectId = resolvedProject.id;
         refreshProjectId = resolvedProjectId;
         const expansionScope = `${resolvedProject.tenant_id}\u0000${resolvedProjectId}`;
+        if (conversationStatusScopeRef.current !== expansionScope) {
+          conversationStatusRequestRef.current += 1;
+          conversationStatusScopeRef.current = expansionScope;
+          setConversationStatusSummary(null);
+        }
+        if (runtimeConfig.mode === 'local') {
+          localConversationStatusRequest = nextLocalConversationStatusRequest(
+            conversationStatusRequestRef.current,
+            expansionScope,
+          );
+          conversationStatusRequestRef.current = localConversationStatusRequest.generation;
+        }
         const expandSelectedWorkspace = workspaceExpansionScopeRef.current !== expansionScope;
         const projects = [resolvedProject];
         const loadingNodeState: RuntimeNodeLoadState = {
@@ -2628,6 +2703,15 @@ export function App() {
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
         if (!contextIsCurrent()) return false;
+        const autonomyAttentionScopeKey = workspaceAutonomyAttentionScopeKey(resolvedConfig);
+        setWorkspaceAutonomyAttentionState({
+          scopeKey: autonomyAttentionScopeKey,
+          authority: workspaceId
+            ? loadingWorkspaceAuthority<WorkspaceAutonomyAttention>()
+            : unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>(),
+        });
+        setRetryingWorkspaceAutonomyAttentionId(null);
+        setResolvingWorkspaceAutonomyAttentionId(null);
         updateDataset((current) => {
           const workspaceNodeState = { ...current.nodeState.workspaces };
           for (const targetWorkspaceId of supersededRefreshWorkspaceIds) {
@@ -2698,8 +2782,10 @@ export function App() {
           plan,
           workspaceMembers,
           workspaceAgents,
+          workspaceAutonomyAttentions,
           myWorkResult,
           conversationResults,
+          localConversationStatusSummary,
         ] = await Promise.all([
           workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
           workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
@@ -2710,6 +2796,9 @@ export function App() {
           workspaceId
             ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
+          workspaceId
+            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAutonomyAttentions())
+            : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>()),
           resolvedProjectId
             ? scopedClient
                 .listMyWork(resolvedProjectId)
@@ -2720,6 +2809,16 @@ export function App() {
                 }))
             : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
           conversationResultsPromise,
+          localConversationStatusRequest
+            ? createLocalProjectOverviewClient(resolvedConfig)
+                .load({
+                  authority: 'local',
+                  tenantId: resolvedConfig.tenantId,
+                  projectId: resolvedConfig.projectId,
+                })
+                .then((snapshot) => snapshot.conversationStatusSummary.value)
+                .catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (!contextIsCurrent()) return false;
         const validConversationGroupIds = new Set([
@@ -2737,7 +2836,30 @@ export function App() {
         );
 
         if (!contextIsCurrent()) return false;
+        const autonomyAttentionActorId = authRef.current.user?.user_id.trim() ?? '';
+        if (workspaceAutonomyAttentions.status === 'ready' && autonomyAttentionActorId) {
+          retainOpenWorkspaceAutonomyAttentionResolveAttempts(
+            workspaceAutonomyAttentionResolveAttemptsRef.current,
+            autonomyAttentionScopeKey,
+            autonomyAttentionActorId,
+            workspaceAutonomyAttentions.items,
+          );
+        }
+        setWorkspaceAutonomyAttentionState({
+          scopeKey: autonomyAttentionScopeKey,
+          authority: workspaceAutonomyAttentions,
+        });
         commitRuntimeConfig(resolvedConfig);
+        if (
+          localConversationStatusRequest &&
+          isCurrentLocalConversationStatusRequest(
+            localConversationStatusRequest,
+            conversationStatusRequestRef.current,
+            conversationStatusScopeRef.current,
+          )
+        ) {
+          setConversationStatusSummary(localConversationStatusSummary);
+        }
         updateDataset((current) => {
           const conversationsByWorkspace = {
             ...Object.fromEntries(
@@ -2824,7 +2946,29 @@ export function App() {
         return true;
       } catch (caught) {
         if (!contextIsCurrent()) return false;
+        if (
+          !localConversationStatusRequest ||
+          isCurrentLocalConversationStatusRequest(
+            localConversationStatusRequest,
+            conversationStatusRequestRef.current,
+            conversationStatusScopeRef.current,
+          )
+        ) {
+          conversationStatusRequestRef.current += 1;
+          setConversationStatusSummary(null);
+        }
         const connectionError = formatConnectionError(caught, nextConfig.apiBaseUrl);
+        setWorkspaceAutonomyAttentionState((current) =>
+          current.authority.status === 'loading'
+            ? {
+                ...current,
+                authority: failLoadingWorkspaceAuthority(
+                  current.authority,
+                  connectionError,
+                ),
+              }
+            : current,
+        );
         updateDataset((current) => {
           const failedWorkspaceNodeState = { ...current.nodeState.workspaces };
           for (const [workspaceId, generation] of conversationRequestGenerations) {
@@ -2875,6 +3019,106 @@ export function App() {
       updateDataset,
     ],
   );
+  useEffect(() => {
+    if (
+      auth.status !== 'signed_in' ||
+      config.mode !== 'local' ||
+      connection !== 'ready' ||
+      !config.tenantId.trim() ||
+      !config.projectId.trim()
+    ) {
+      conversationStatusRequestRef.current += 1;
+      conversationStatusScopeRef.current = '';
+      setConversationStatusSummary(null);
+      return undefined;
+    }
+    const effectScope = `${config.tenantId}\u0000${config.projectId}`;
+    if (conversationStatusScopeRef.current !== effectScope) {
+      conversationStatusRequestRef.current += 1;
+      conversationStatusScopeRef.current = effectScope;
+      setConversationStatusSummary(null);
+    }
+    let active = true;
+    let timer: number | null = null;
+    const refreshSummary = () => {
+      const runtimeConfig = configRef.current;
+      const requestScope = `${runtimeConfig.tenantId}\u0000${runtimeConfig.projectId}`;
+      const statusRequest = nextLocalConversationStatusRequest(
+        conversationStatusRequestRef.current,
+        requestScope,
+      );
+      conversationStatusRequestRef.current = statusRequest.generation;
+      let request: ReturnType<ReturnType<typeof createLocalProjectOverviewClient>['load']>;
+      try {
+        request = createLocalProjectOverviewClient(runtimeConfig).load({
+          authority: 'local',
+          tenantId: runtimeConfig.tenantId,
+          projectId: runtimeConfig.projectId,
+        });
+      } catch {
+        if (
+          active &&
+          isCurrentLocalConversationStatusRequest(
+            statusRequest,
+            conversationStatusRequestRef.current,
+            conversationStatusScopeRef.current,
+          )
+        ) {
+          setConversationStatusSummary(null);
+        }
+        return;
+      }
+      void request
+        .then((snapshot) => {
+          if (
+            active &&
+            isCurrentLocalConversationStatusRequest(
+              statusRequest,
+              conversationStatusRequestRef.current,
+              conversationStatusScopeRef.current,
+            ) &&
+            configRef.current.tenantId === snapshot.scope.tenantId &&
+            configRef.current.projectId === snapshot.scope.projectId &&
+            conversationStatusScopeRef.current === requestScope
+          ) {
+            setConversationStatusSummary(snapshot.conversationStatusSummary.value);
+          }
+        })
+        .catch(() => {
+          if (
+            active &&
+            conversationStatusScopeRef.current === requestScope &&
+            isCurrentLocalConversationStatusRequest(
+              statusRequest,
+              conversationStatusRequestRef.current,
+              conversationStatusScopeRef.current,
+            )
+          ) {
+            setConversationStatusSummary(null);
+          }
+        });
+    };
+    const refreshVisibleSummary = () => {
+      if (document.visibilityState === 'visible') refreshSummary();
+    };
+    refreshSummary();
+    timer = window.setInterval(refreshSummary, 15_000);
+    window.addEventListener('focus', refreshSummary);
+    document.addEventListener('visibilitychange', refreshVisibleSummary);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener('focus', refreshSummary);
+      document.removeEventListener('visibilitychange', refreshVisibleSummary);
+    };
+  }, [
+    auth.status,
+    config.mode,
+    config.projectId,
+    config.tenantId,
+    connection,
+    conversationStatusRefreshRevision,
+  ]);
   productionRouteRefreshRef.current = (nextConfig, projects) =>
     refreshRuntime(nextConfig, projects);
   const productionRouteScopeTransaction = useMemo(
@@ -3872,6 +4116,26 @@ export function App() {
   const selectedWorkspace = useMemo(
     () => dataset.workspaces.find((workspace) => workspace.id === config.workspaceId) ?? null,
     [config.workspaceId, dataset.workspaces],
+  );
+  const workspaceAutonomyAttentionScope = workspaceAutonomyAttentionScopeKey(config);
+  const workspaceAutonomyAttentions =
+    config.workspaceId.trim() &&
+    workspaceAutonomyAttentionState.scopeKey === workspaceAutonomyAttentionScope
+      ? workspaceAutonomyAttentionState.authority
+      : unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>();
+  const selectedWorkspaceMembershipRole = useMemo(
+    () =>
+      dataset.workspaceMembers.items.find(
+        (member) =>
+          member.workspace_id === config.workspaceId &&
+          member.user_id === auth.user?.user_id,
+      )?.role ?? null,
+    [auth.user?.user_id, config.workspaceId, dataset.workspaceMembers.items],
+  );
+  const canRetryWorkspaceAutonomyAttention = Boolean(
+    auth.user?.is_superuser ||
+      (selectedWorkspaceMembershipRole !== null &&
+        WORKSPACE_AUTONOMY_RETRY_ROLES.has(selectedWorkspaceMembershipRole)),
   );
   const selectedProject = useMemo(
     () =>
@@ -5359,6 +5623,157 @@ export function App() {
     }
     openSettingsEntry('workspace_overview');
   };
+  const retryWorkspaceAutonomyAttention = useCallback(async (attentionId: string) => {
+    const requestConfig = configRef.current;
+    const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
+    if (!requestConfig.workspaceId.trim()) return;
+    const requestIsCurrent = () =>
+      isSameDesktopRequestScope(requestConfig, configRef.current) &&
+      requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current);
+    setRetryingWorkspaceAutonomyAttentionId(attentionId);
+    setWorkspaceAutonomyAttentionState((current) =>
+      current.scopeKey === requestScopeKey
+        ? { ...current, authority: { ...current.authority, error: null } }
+        : current,
+    );
+    try {
+      const client = new DesktopApiClient(requestConfig);
+      await client.retryWorkspaceAutonomyAttention(attentionId);
+      const attentions = await client.listWorkspaceAutonomyAttentions();
+      if (!requestIsCurrent()) return;
+      setWorkspaceAutonomyAttentionState({
+        scopeKey: requestScopeKey,
+        authority: { status: 'ready', items: attentions, error: null },
+      });
+    } catch (caught) {
+      if (!requestIsCurrent()) return;
+      const retryError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+      setWorkspaceAutonomyAttentionState((current) =>
+        current.scopeKey === requestScopeKey
+          ? {
+              ...current,
+              authority: { ...current.authority, status: 'error', error: retryError },
+            }
+          : current,
+      );
+    } finally {
+      if (requestIsCurrent()) {
+        setRetryingWorkspaceAutonomyAttentionId((current) =>
+          current === attentionId ? null : current,
+        );
+      }
+    }
+  }, []);
+  const resolveWorkspaceAutonomyAttention = useCallback(async (attentionId: string) => {
+    const requestConfig = configRef.current;
+    const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
+    const requestActorId = authRef.current.user?.user_id.trim() ?? '';
+    if (!requestConfig.workspaceId.trim() || !requestActorId) return;
+    const requestIsCurrent = () =>
+      isSameDesktopRequestScope(requestConfig, configRef.current) &&
+      requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current) &&
+      (authRef.current.user?.user_id.trim() ?? '') === requestActorId;
+    const applyCanonicalAttentions = (
+      attentions: readonly WorkspaceAutonomyAttention[],
+      authorityError: string | null,
+    ): boolean => {
+      retainOpenWorkspaceAutonomyAttentionResolveAttempts(
+        workspaceAutonomyAttentionResolveAttemptsRef.current,
+        requestScopeKey,
+        requestActorId,
+        attentions,
+      );
+      const attentionRemainsOpen = attentions.some(
+        (attention) => attention.attention_id === attentionId,
+      );
+      setWorkspaceAutonomyAttentionState({
+        scopeKey: requestScopeKey,
+        authority: {
+          status: authorityError ? 'error' : 'ready',
+          items: [...attentions],
+          error: authorityError,
+        },
+      });
+      return attentionRemainsOpen;
+    };
+    setResolvingWorkspaceAutonomyAttentionId(attentionId);
+    setWorkspaceAutonomyAttentionState((current) =>
+      current.scopeKey === requestScopeKey
+        ? { ...current, authority: { ...current.authority, error: null } }
+        : current,
+    );
+    try {
+      const client = new DesktopApiClient(requestConfig);
+      let attempt = currentWorkspaceAutonomyAttentionResolveAttempt(
+        workspaceAutonomyAttentionResolveAttemptsRef.current,
+        requestScopeKey,
+        requestActorId,
+        attentionId,
+      );
+      if (!attempt) {
+        const expectedRevision = await client.getWorkspaceAuthorityRevision();
+        if (!requestIsCurrent()) return;
+        attempt = resolveWorkspaceAutonomyAttentionAttempt(
+          workspaceAutonomyAttentionResolveAttemptsRef.current,
+          {
+            scopeKey: requestScopeKey,
+            actorId: requestActorId,
+            attentionId,
+            expectedRevision,
+            idempotencyKey: `desktop-autonomy-attention-resolve:${globalThis.crypto.randomUUID()}`,
+          },
+        );
+      }
+      await client.resolveWorkspaceAutonomyAttention(
+        attentionId,
+        attempt.expectedRevision,
+        attempt.idempotencyKey,
+      );
+      const attentions = await client.listWorkspaceAutonomyAttentions();
+      if (!requestIsCurrent()) return;
+      applyCanonicalAttentions(attentions, null);
+    } catch (caught) {
+      if (!requestIsCurrent()) return;
+      const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+      try {
+        const client = new DesktopApiClient(requestConfig);
+        const attentions = await client.listWorkspaceAutonomyAttentions();
+        if (!requestIsCurrent()) return;
+        const attentionRemainsOpen = attentions.some(
+          (attention) => attention.attention_id === attentionId,
+        );
+        if (!attentionRemainsOpen) {
+          applyCanonicalAttentions(attentions, null);
+          return;
+        }
+        if (caught instanceof DesktopApiError && caught.status === 409) {
+          discardWorkspaceAutonomyAttentionResolveAttempt(
+            workspaceAutonomyAttentionResolveAttemptsRef.current,
+            requestScopeKey,
+            requestActorId,
+            attentionId,
+          );
+        }
+        applyCanonicalAttentions(attentions, resolveError);
+      } catch {
+        if (!requestIsCurrent()) return;
+        setWorkspaceAutonomyAttentionState((current) =>
+          current.scopeKey === requestScopeKey
+            ? {
+                ...current,
+                authority: { ...current.authority, status: 'error', error: resolveError },
+              }
+            : current,
+        );
+      }
+    } finally {
+      if (requestIsCurrent()) {
+        setResolvingWorkspaceAutonomyAttentionId((current) =>
+          current === attentionId ? null : current,
+        );
+      }
+    }
+  }, []);
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {
@@ -5913,9 +6328,20 @@ export function App() {
           plan={activeDataset.plan}
           sandboxStatus={dataset.sandbox?.status ?? null}
           liveActivity={workspaceLiveActivity}
+          autonomyAttentions={workspaceAutonomyAttentions}
+          canRetryAutonomyAttention={canRetryWorkspaceAutonomyAttention}
+          canResolveAutonomyAttention={canRetryWorkspaceAutonomyAttention}
+          retryingAutonomyAttentionId={retryingWorkspaceAutonomyAttentionId}
+          resolvingAutonomyAttentionId={resolvingWorkspaceAutonomyAttentionId}
           newTaskDisabledReason={newTaskDisabledReason}
           onNewTask={() => openNewTask(config.workspaceId)}
           onRetryWorkspaces={() => void refreshRuntime()}
+          onRetryAutonomyAttention={(attentionId) =>
+            void retryWorkspaceAutonomyAttention(attentionId)
+          }
+          onResolveAutonomyAttention={(attentionId) =>
+            void resolveWorkspaceAutonomyAttention(attentionId)
+          }
           onOpenConversation={(conversationId) => {
             const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
               (item) => item.id === conversationId,
@@ -6413,6 +6839,7 @@ export function App() {
             }
             taskCount={dataset.myWork.length}
             activityUnreadCount={activityInbox.unreadCount}
+            conversationStatusSummary={conversationStatusSummary}
             tenantName={activeTenantName}
             projectName={activeProjectName}
             user={auth.user}

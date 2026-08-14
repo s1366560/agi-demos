@@ -81,7 +81,7 @@ export function resolveRuntimeWorkspaceId(
 const CONVERSATION_STATUS_PRESENTATIONS: Readonly<
   Record<string, WorkspaceTreeStatusPresentation>
 > = {
-  active: { tone: 'idle', labelKey: 'workspaceTree.active' },
+  active: { tone: 'idle', labelKey: 'overview.idle' },
   running: { tone: 'active', labelKey: 'workspaceTree.running' },
   queued: { tone: 'queued', labelKey: 'workspaceTree.queued' },
   paused: { tone: 'paused', labelKey: 'workspaceTree.paused' },

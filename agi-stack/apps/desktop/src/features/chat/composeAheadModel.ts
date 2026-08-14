@@ -235,6 +235,11 @@ export function conversationResponseIsStreaming(input: {
 }): boolean {
   if (input.sending) return true;
   if (!input.activeConversationId) return false;
+
+  const latestUserIndex = findLatestUserIndex(input.timelineItems);
+  const currentTurn =
+    latestUserIndex >= 0 ? input.timelineItems.slice(latestUserIndex + 1) : input.timelineItems;
+  if (currentTurn.some(isTerminalConversationItem)) return false;
   if (
     input.signals.some(
       (signal) =>
@@ -245,12 +250,7 @@ export function conversationResponseIsStreaming(input: {
   ) {
     return true;
   }
-
-  const latestUserIndex = findLatestUserIndex(input.timelineItems);
-  const currentTurn =
-    latestUserIndex >= 0 ? input.timelineItems.slice(latestUserIndex + 1) : input.timelineItems;
   if (currentTurn.some((item) => item.metadata?.streaming === true)) return true;
-  if (currentTurn.some(isTerminalConversationItem)) return false;
   return latestUserIndex >= 0 && input.activityPresence === 'live';
 }
 

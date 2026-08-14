@@ -143,6 +143,9 @@ export function SettingsWindow({
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
+  const hasAvailableProjects = auth.projects.some(
+    (project) => project.tenant_id === config.tenantId,
+  );
   const isResourceSection = isResource(section);
   const canManageProviders = providerManagementAllowed(config.mode, auth.user?.roles ?? []);
   const normalizedRoles = new Set(
@@ -686,6 +689,7 @@ export function SettingsWindow({
                     subAgentDefinitions.busy ||
                     (skillPackageManagement.versionsDialog?.rollbackVersion ?? null) !== null
                   }
+                  hasAvailableProjects={hasAvailableProjects}
                   mode={config.mode}
                   canCreate={
                     section === 'skills'

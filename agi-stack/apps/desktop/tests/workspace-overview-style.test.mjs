@@ -60,6 +60,9 @@ const workspace = {
 function renderWorkspaceOverview({
   workspaceValue = null,
   workspaceAuthority = { status: 'unavailable', items: [], error: null },
+  autonomyAttentions = { status: 'unavailable', items: [], error: null },
+  canRetryAutonomyAttention = false,
+  canResolveAutonomyAttention = false,
 } = {}) {
   const authority = { status: 'ready', items: [], error: null };
   return renderToStaticMarkup(
@@ -76,9 +79,14 @@ function renderWorkspaceOverview({
         agents: authority,
         plan: null,
         sandboxStatus: null,
+        autonomyAttentions,
+        canRetryAutonomyAttention,
+        canResolveAutonomyAttention,
         newTaskDisabledReason: null,
         onNewTask: () => {},
         onRetryWorkspaces: () => {},
+        onRetryAutonomyAttention: () => {},
+        onResolveAutonomyAttention: () => {},
         onOpenConversation: () => {},
         onOpenSettings: () => {},
       }),
@@ -143,6 +151,62 @@ test('workspace overview keeps the approved canvas when an authoritative workspa
   assertSingleWorkbenchMain(markup);
   assert.match(markup, /Mission Control/);
   assert.match(markup, /workspace-design-summary-grid/);
+});
+
+test('workspace overview renders durable autonomy attentions with role-gated retry controls', () => {
+  const autonomyAttentions = {
+    status: 'ready',
+    error: null,
+    items: [
+      {
+        attention_id: 'attention-dispatch-1',
+        root_task_id: 'root-task-1',
+        source_kind: 'task_dispatch_dead_letter',
+        source_id: 'dispatch-1',
+        reason: 'Delivery retries exhausted',
+        status: 'open',
+        created_at_ms: 10,
+      },
+      {
+        attention_id: 'attention-judge-1',
+        root_task_id: 'root-task-1',
+        source_kind: 'judge_block',
+        source_id: 'audit-1',
+        reason: 'Editor decision required',
+        status: 'open',
+        created_at_ms: 11,
+      },
+    ],
+  };
+  const editorMarkup = renderWorkspaceOverview({
+    workspaceValue: workspace,
+    workspaceAuthority: { status: 'ready', items: [workspace], error: null },
+    autonomyAttentions,
+    canRetryAutonomyAttention: true,
+    canResolveAutonomyAttention: true,
+  });
+
+  assert.match(editorMarkup, /Open workspace interventions/);
+  assert.match(editorMarkup, /2 open/);
+  assert.match(editorMarkup, /Task delivery failed/);
+  assert.match(editorMarkup, /Delivery retries exhausted/);
+  assert.match(editorMarkup, /Judge blocked/);
+  assert.equal((editorMarkup.match(/Retry source/g) ?? []).length, 1);
+  assert.equal((editorMarkup.match(/Mark handled and resume/g) ?? []).length, 1);
+  const attentionStart = editorMarkup.indexOf('workspace-design-attention-card');
+  const attentionMarkup = editorMarkup.slice(
+    attentionStart,
+    editorMarkup.indexOf('</article>', attentionStart),
+  );
+  assert.match(attentionMarkup, /<svg[^>]*aria-hidden="true"/);
+
+  const viewerMarkup = renderWorkspaceOverview({
+    workspaceValue: workspace,
+    workspaceAuthority: { status: 'ready', items: [workspace], error: null },
+    autonomyAttentions,
+  });
+  assert.doesNotMatch(viewerMarkup, /Retry source/);
+  assert.doesNotMatch(viewerMarkup, /Mark handled and resume/);
 });
 
 test('workspace overview keeps the prototype flat canvas without an invented gradient', () => {

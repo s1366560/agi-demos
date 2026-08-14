@@ -294,6 +294,35 @@ export type WorkspaceAgentBinding = {
   updated_at?: string | null;
 };
 
+export type WorkspaceAutonomyAttentionSourceKind =
+  | 'judge_block'
+  | 'judge_escalate'
+  | 'progression_dead_letter'
+  | 'bootstrap_dead_letter'
+  | 'task_dispatch_dead_letter';
+
+export type WorkspaceAutonomyAttention = {
+  attention_id: string;
+  root_task_id: string | null;
+  source_kind: WorkspaceAutonomyAttentionSourceKind;
+  source_id: string;
+  reason: string;
+  status: 'open';
+  created_at_ms: number;
+};
+
+export type WorkspaceAutonomyAttentionRetryResponse = {
+  attention_id: string;
+  status: 'retry_queued';
+};
+
+export type WorkspaceAutonomyAttentionResolveResponse = {
+  attention_id: string;
+  status: 'resolved';
+  committed_revision: number;
+  replayed: boolean;
+};
+
 export type WorkspaceAuthorityStatus =
   | 'unavailable'
   | 'loading'

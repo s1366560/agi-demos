@@ -746,7 +746,11 @@ test('tree status presentation translates every governed conversation state', ()
   for (const [status, tone] of Object.entries(expected)) {
     const presentation = conversationTreeStatusPresentation(status);
     assert.equal(presentation.tone, tone, status);
-    assert.match(presentation.labelKey, /^workspaceTree\./, status);
+    assert.match(
+      presentation.labelKey,
+      status === 'active' ? /^overview\.idle$/ : /^workspaceTree\./,
+      status,
+    );
   }
   assert.deepEqual(conversationTreeStatusPresentation('future_state'), {
     tone: 'unknown',
@@ -768,7 +772,7 @@ test('conversation lifecycle activity remains distinct from an executing run', (
   assert.equal(conversationTreeStatusValue(lifecycleOnly), 'active');
   assert.deepEqual(conversationTreeStatusPresentation('active'), {
     tone: 'idle',
-    labelKey: 'workspaceTree.active',
+    labelKey: 'overview.idle',
   });
   assert.deepEqual(workspaceTreeRootStatusPresentation('inactive', [lifecycleOnly]), {
     tone: 'offline',

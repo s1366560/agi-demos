@@ -268,6 +268,47 @@ test('conversation response state is scoped and stops only on structured termina
   );
 });
 
+test('current-turn terminal evidence overrides a stale acknowledged task signal', () => {
+  assert.equal(
+    conversationResponseIsStreaming({
+      activeConversationId: 'conversation-a',
+      sending: false,
+      activityPresence: 'live',
+      signals: [
+        {
+          id: 'stale-signal',
+          content: 'tool call',
+          status: 'acknowledged',
+          detail: 'started before the terminal event',
+          createdAt: '2026-08-14T00:00:00Z',
+          conversationId: 'conversation-a',
+          messageId: 'message-a',
+          eventType: 'tool_start',
+        },
+      ],
+      timelineItems: [
+        {
+          id: 'user-a',
+          type: 'user_message',
+          eventTimeUs: 1,
+          eventCounter: 1,
+          role: 'user',
+          content: 'delegate the task',
+        },
+        {
+          id: 'complete-a',
+          type: 'complete',
+          eventTimeUs: 2,
+          eventCounter: 2,
+          message_id: 'message-a',
+          payload: { success: false, summary: 'tool policy rejected the call' },
+        },
+      ],
+    }),
+    false,
+  );
+});
+
 test('compose-ahead scope binds tenant, project, workspace, and conversation identity', () => {
   assert.equal(
     composeAheadConversationScope({

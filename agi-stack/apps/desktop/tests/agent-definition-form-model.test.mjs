@@ -135,6 +135,23 @@ test('new Agent definition drafts inherit the selected project and safe runtime 
   });
 });
 
+test('new spawn-enabled Agents encode an empty SubAgent allow-list as unrestricted null', () => {
+  const draft = {
+    ...agentDefinitionDraftFrom(null, 'project-a'),
+    name: 'local_coordinator',
+    displayName: 'Local coordinator',
+    systemPrompt: 'Delegate structured tasks.',
+    canSpawn: true,
+  };
+
+  assert.deepEqual(agentDefinitionMutationFromDraft(draft).spawn_policy, {
+    max_depth: 3,
+    max_active_runs: 16,
+    max_children_per_requester: 8,
+    allowed_subagents: null,
+  });
+});
+
 test('editing an Agent definition preserves authoritative identity, runtime, and policy fields', () => {
   assert.deepEqual(agentDefinitionDraftFrom(definition, 'project-other'), {
     name: 'release_reviewer',

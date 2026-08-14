@@ -4,6 +4,8 @@ import test from 'node:test';
 import { DesktopApiError } from '/tmp/agistack-desktop-test-dist/src/api/client.js';
 import {
   createLocalProjectOverviewClient,
+  isCurrentLocalConversationStatusRequest,
+  nextLocalConversationStatusRequest,
   parseLocalProjectOverviewPayload,
 } from '/tmp/agistack-desktop-test-dist/src/features/project/projectOverviewLocalClient.js';
 
@@ -30,7 +32,7 @@ const rawPayload = {
   availability: 'degraded',
   reason_code: 'local_project_overview_timeline_projection_only',
   service_version: '0.1.0',
-  contract_version: '3.0.0',
+  contract_version: '4.0.0',
   allowed_actions: ['view'],
   scope: {
     tenant_id: 'tenant-1',
@@ -56,6 +58,20 @@ const rawPayload = {
     availability: 'available',
     reason_code: null,
     value: 3,
+  },
+  conversation_status_summary: {
+    availability: 'available',
+    reason_code: null,
+    value: {
+      total: 3,
+      idle: 0,
+      queued: 1,
+      running: 1,
+      attention: 1,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+    },
   },
   recent_knowledge_items: {
     availability: 'degraded',
@@ -125,7 +141,7 @@ test('Local Project Overview adapter uses the scoped sidecar route, credentials,
       availability: 'degraded',
       reasonCode: 'local_project_overview_timeline_projection_only',
       serviceVersion: '0.1.0',
-      contractVersion: '3.0.0',
+      contractVersion: '4.0.0',
       allowedActions: ['view'],
       scope: {
         tenantId: 'tenant-1',
@@ -152,6 +168,20 @@ test('Local Project Overview adapter uses the scoped sidecar route, credentials,
       availability: 'available',
       reasonCode: null,
       value: 3,
+    },
+    conversationStatusSummary: {
+      availability: 'available',
+      reasonCode: null,
+      value: {
+        total: 3,
+        idle: 0,
+        queued: 1,
+        running: 1,
+        attention: 1,
+        completed: 0,
+        failed: 0,
+        cancelled: 0,
+      },
     },
     recentKnowledgeItems: {
       availability: 'degraded',
@@ -257,6 +287,81 @@ test('Local Project Overview parser requires available project and conversation 
   ]) {
     assert.equal(parseLocalProjectOverviewPayload(payload, scope), null);
   }
+});
+
+test('Local Project Overview parser requires an exact authoritative conversation status partition', () => {
+  for (const payload of [
+    {
+      ...rawPayload,
+      conversation_status_summary: {
+        ...rawPayload.conversation_status_summary,
+        availability: 'degraded',
+      },
+    },
+    {
+      ...rawPayload,
+      conversation_status_summary: {
+        ...rawPayload.conversation_status_summary,
+        value: {
+          ...rawPayload.conversation_status_summary.value,
+          attention: -1,
+        },
+      },
+    },
+    {
+      ...rawPayload,
+      conversation_status_summary: {
+        ...rawPayload.conversation_status_summary,
+        value: {
+          ...rawPayload.conversation_status_summary.value,
+          total: 4,
+        },
+      },
+    },
+    {
+      ...rawPayload,
+      conversation_status_summary: {
+        ...rawPayload.conversation_status_summary,
+        value: {
+          ...rawPayload.conversation_status_summary.value,
+          unexpected: 0,
+        },
+      },
+    },
+  ]) {
+    assert.equal(parseLocalProjectOverviewPayload(payload, scope), null);
+  }
+});
+
+test('newer event refresh prevents an older full refresh from replacing conversation status', () => {
+  const requestScope = `${scope.tenantId}\u0000${scope.projectId}`;
+  const fullRefresh = nextLocalConversationStatusRequest(0, requestScope);
+  const eventRefresh = nextLocalConversationStatusRequest(fullRefresh.generation, requestScope);
+  const currentGeneration = eventRefresh.generation;
+  const committed = [];
+
+  if (
+    isCurrentLocalConversationStatusRequest(
+      fullRefresh,
+      currentGeneration,
+      requestScope,
+    )
+  ) {
+    committed.push('full');
+  }
+  if (
+    isCurrentLocalConversationStatusRequest(
+      eventRefresh,
+      currentGeneration,
+      requestScope,
+    )
+  ) {
+    committed.push('event');
+  }
+
+  assert.equal(fullRefresh.generation, 1);
+  assert.equal(eventRefresh.generation, 2);
+  assert.deepEqual(committed, ['event']);
 });
 
 test('Local Project Overview parser keeps timeline knowledge degraded and never accepts Memory shape', () => {

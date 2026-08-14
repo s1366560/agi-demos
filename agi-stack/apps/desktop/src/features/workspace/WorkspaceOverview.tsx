@@ -23,6 +23,7 @@ import type {
   PlanSnapshot,
   ProjectSummary,
   WorkspaceAgentBinding,
+  WorkspaceAutonomyAttention,
   WorkspaceAuthorityCollection,
   WorkspaceAuthorityStatus,
   WorkspaceMemberSummary,
@@ -38,8 +39,17 @@ import {
   type WorkspaceTreeStatusTone,
 } from './workspaceTreeModel';
 import type { WorkspaceLiveActivity } from './workspaceActivityEventModel';
+import { WorkspaceAutonomyAttentionCard } from './WorkspaceAutonomyAttentionCard';
 import { WorkspaceContextState } from './WorkspaceContextState';
 import './WorkspaceOverview.css';
+
+const UNAVAILABLE_AUTONOMY_ATTENTIONS: WorkspaceAuthorityCollection<WorkspaceAutonomyAttention> = {
+  status: 'unavailable',
+  items: [],
+  error: null,
+};
+const ignoreAutonomyAttentionRetry = () => undefined;
+const ignoreAutonomyAttentionResolve = () => undefined;
 
 type WorkspaceOverviewProps = {
   workspace: WorkspaceSummary | null;
@@ -52,9 +62,16 @@ type WorkspaceOverviewProps = {
   plan: PlanSnapshot | null;
   sandboxStatus: string | null;
   liveActivity?: WorkspaceLiveActivity[];
+  autonomyAttentions?: WorkspaceAuthorityCollection<WorkspaceAutonomyAttention>;
+  canRetryAutonomyAttention?: boolean;
+  canResolveAutonomyAttention?: boolean;
+  retryingAutonomyAttentionId?: string | null;
+  resolvingAutonomyAttentionId?: string | null;
   newTaskDisabledReason: string | null;
   onNewTask: () => void;
   onRetryWorkspaces: () => void;
+  onRetryAutonomyAttention?: (attentionId: string) => void;
+  onResolveAutonomyAttention?: (attentionId: string) => void;
   onOpenConversation: (conversationId: string) => void;
   onOpenSettings: () => void;
 };
@@ -70,9 +87,16 @@ export function WorkspaceOverview({
   plan,
   sandboxStatus,
   liveActivity = [],
+  autonomyAttentions = UNAVAILABLE_AUTONOMY_ATTENTIONS,
+  canRetryAutonomyAttention = false,
+  canResolveAutonomyAttention = false,
+  retryingAutonomyAttentionId = null,
+  resolvingAutonomyAttentionId = null,
   newTaskDisabledReason,
   onNewTask,
   onRetryWorkspaces,
+  onRetryAutonomyAttention = ignoreAutonomyAttentionRetry,
+  onResolveAutonomyAttention = ignoreAutonomyAttentionResolve,
   onOpenConversation,
   onOpenSettings,
 }: WorkspaceOverviewProps) {
@@ -404,6 +428,17 @@ export function WorkspaceOverview({
             </div>
           </SystemCard>
         </section>
+
+        <WorkspaceAutonomyAttentionCard
+          authority={autonomyAttentions}
+          canRetry={canRetryAutonomyAttention}
+          canResolve={canResolveAutonomyAttention}
+          retryingAttentionId={retryingAutonomyAttentionId}
+          resolvingAttentionId={resolvingAutonomyAttentionId}
+          onRetry={onRetryAutonomyAttention}
+          onResolve={onResolveAutonomyAttention}
+          onRefresh={onRetryWorkspaces}
+        />
 
         <section className="workspace-design-lower-grid">
           <article className="workspace-design-sessions-card">

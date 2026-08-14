@@ -520,3 +520,23 @@ test('composer catalog exposes execution metadata for Agents, SubAgents, skills,
   assert.match(chatPanelSource, /!uploadingAttachments/);
   assert.match(composerPlusMenuSource, /onUploadFiles/);
 });
+
+test('composer catalog reloads managed resources whenever the same-scope menu reopens', () => {
+  const openMenu = composerPlusMenuSource.match(
+    /function openMenu\(\) \{[\s\S]*?\n  \}/u,
+  );
+  assert.ok(openMenu, 'ComposerPlusMenu should own an explicit open boundary');
+  assert.match(
+    openMenu[0],
+    /setCatalog\(null\);[\s\S]*setCatalogError\(null\);[\s\S]*setOpen\(true\);/u,
+  );
+  assert.doesNotMatch(openMenu[0], /window\.(?:addEventListener|dispatchEvent)/u);
+  assert.match(
+    composerPlusMenuSource,
+    /onClick=\{\(\) => \(open \? close\(\) : openMenu\(\)\)\}/u,
+  );
+  assert.match(
+    composerPlusMenuSource,
+    /if \(!open \|\| catalog\) return;[\s\S]*loadComposerCatalog\(api, controller\.signal\)/u,
+  );
+});

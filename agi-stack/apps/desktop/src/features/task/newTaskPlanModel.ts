@@ -1,4 +1,4 @@
-import type { AgentPlanTask, DesktopRuntimeConfig } from '../../types';
+import type { AgentPlanTask, AgentTimelineItem, DesktopRuntimeConfig } from '../../types';
 import { canonicalJsonSha256 } from '../session/canonicalJsonDigest';
 
 export type NewTaskKind = 'general' | 'programming';
@@ -8,6 +8,10 @@ export type NewTaskAgentTurnOutcome = 'acknowledged' | 'unknown_outcome';
 export type PlanningTurnAttempt = {
   fingerprint: string;
   messageId: string;
+};
+
+export type PlanningTerminalFailure = {
+  summary: string | null;
 };
 
 export type LegacyPlanApprovalRecovery = {
@@ -66,6 +70,26 @@ export function planningTurnAttempt(
 ): PlanningTurnAttempt {
   if (current?.fingerprint === fingerprint) return current;
   return { fingerprint, messageId: createMessageId() };
+}
+
+export function planningTerminalFailure(
+  timeline: readonly AgentTimelineItem[],
+  messageId: string,
+): PlanningTerminalFailure | null {
+  const expectedMessageId = messageId.trim();
+  if (!expectedMessageId) return null;
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const item = timeline[index];
+    if (item.type !== 'complete' || item.message_id !== expectedMessageId) continue;
+    const payload =
+      item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+        ? (item.payload as Record<string, unknown>)
+        : null;
+    if (payload?.success !== false) return null;
+    const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+    return { summary: summary || null };
+  }
+  return null;
 }
 
 // Keep the original key namespace so schema-v1 records are rejected and removed in place.
@@ -286,7 +310,9 @@ export function buildPlanningPrompt(definition: NewTaskDefinition): string {
     'Do not start implementation until the human explicitly approves the plan.',
     `Task title: ${definition.title.trim()}`,
     `Objective: ${definition.objective.trim()}${codeContext}`,
-    `Requested planning context (guidance, not an access-control boundary): ${context}`,
+    `Requested planning context (abstract source categories, not file or directory paths): ${context}`,
+    'Never pass category labels such as project_memory, project_files, or web_research to file-reading tools.',
+    'Only call file-reading tools with a concrete path explicitly supplied by the user or discovered within the configured workspace root.',
   ].join('\n\n');
 }
 

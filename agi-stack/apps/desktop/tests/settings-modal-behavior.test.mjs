@@ -38,11 +38,31 @@ test('settings dialogs trap focus, restore focus, and give nested Escape priorit
     addProviderSource,
     new RegExp(
       'className="provider-dialog-backdrop"[\\s\\S]{0,180}' +
-        'event\\.stopPropagation\\(\\)[\\s\\S]{0,80}onClose\\(\\)'
+        'event\\.stopPropagation\\(\\)[\\s\\S]{0,120}closeDialog\\(\\)'
     )
   );
   assert.doesNotMatch(settingsWindowSource, /window\.addEventListener\('keydown'/);
   assert.doesNotMatch(addProviderSource, /window\.addEventListener\('keydown'/);
+});
+
+test('provider creation keeps one retry identity and cannot close through Escape while busy', () => {
+  assert.match(addProviderSource, /providerCreateIdempotencyKey/);
+  assert.match(
+    addProviderSource,
+    /setProviderCreateIdempotencyKey\([\s\S]*crypto\.randomUUID\(\)/,
+  );
+  assert.match(
+    addProviderSource,
+    /onCreate\(input, validation, providerCreateIdempotencyKey\)/,
+  );
+  assert.match(
+    addProviderSource,
+    /const closeDialog = \(\) => \{[\s\S]*busy !== 'create'[\s\S]*onClose\(\)/,
+  );
+  assert.match(
+    addProviderSource,
+    /useModalDialog\(\{[\s\S]*nested: true[\s\S]*onClose: closeDialog/,
+  );
 });
 
 test('provider catalog requests stay bound to their validation or provider request', () => {

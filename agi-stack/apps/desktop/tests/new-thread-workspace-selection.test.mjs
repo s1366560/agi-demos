@@ -252,6 +252,10 @@ test('unbound creation sends the selected model atomically with conversation cre
     unboundCreateSource,
     /createAgentConversation\([\s\S]*llm_model_override: input\.model\.modelId/,
   );
+  assert.match(
+    unboundCreateSource,
+    /threadConfig\.mode === 'local'[\s\S]*llm_route_override:[\s\S]*provider_id: input\.model\.providerId[\s\S]*model_id: input\.model\.modelId/,
+  );
   assert.doesNotMatch(unboundCreateSource, /updateAgentConversationConfig\(/);
 });
 

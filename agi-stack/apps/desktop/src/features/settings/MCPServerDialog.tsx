@@ -3,45 +3,82 @@ import {
   ComponentInstanceIcon,
   Cross2Icon,
   ReloadIcon,
+  TrashIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import type { DesktopMCPTransport } from '../../api/client';
-import { parseMCPStdioCommand } from './mcpCommandModel';
-import type { MCPServerCreateSubmission } from './useMCPServerManagement';
+import type { DesktopMCPServerSummary, DesktopMCPTransport } from '../../api/client';
+import {
+  formatMCPStdioCommand,
+  mcpStdioCommandArgv,
+  parseMCPStdioCommand,
+} from './mcpCommandModel';
+import type { MCPServerSubmission } from './useMCPServerManagement';
 import { useModalDialog } from './useModalDialog';
 
 import './PluginManagementDialogs.css';
 
 const TRANSPORTS: readonly DesktopMCPTransport[] = ['stdio', 'http', 'sse', 'websocket'];
 
-export function MCPServerCreateDialog({
+function initialCommand(server: DesktopMCPServerSummary | null): string {
+  const config = server?.transport_config;
+  return formatMCPStdioCommand(mcpStdioCommandArgv(config?.command, config?.args));
+}
+
+function initialCredential(server: DesktopMCPServerSummary | null): {
+  kind: 'none' | 'env' | 'header';
+  name: string;
+} {
+  const envName = server?.transport_config?.vault_env_names?.[0];
+  if (envName) return { kind: 'env', name: envName };
+  const headerName = server?.transport_config?.vault_header_names?.[0];
+  if (headerName) return { kind: 'header', name: headerName };
+  return { kind: 'none', name: '' };
+}
+
+export function MCPServerDialog({
+  server,
   busy,
   error,
   onClose,
   onSubmit,
+  onDelete,
 }: {
+  server: DesktopMCPServerSummary | null;
   busy: boolean;
   error: string | null;
   onClose: () => void;
-  onSubmit: (input: MCPServerCreateSubmission) => void;
+  onSubmit: (input: MCPServerSubmission) => void;
+  onDelete: (() => void) | null;
 }) {
   const { t } = useI18n();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [serverType, setServerType] = useState<DesktopMCPTransport>('stdio');
-  const [command, setCommand] = useState('');
-  const [url, setUrl] = useState('');
-  const [credentialKind, setCredentialKind] = useState<'none' | 'env' | 'header'>('none');
-  const [credentialName, setCredentialName] = useState('');
+  const existingCredential = initialCredential(server);
+  const existingCommand = initialCommand(server);
+  const existingUrl = server?.transport_config?.url ?? '';
+  const [name, setName] = useState(server?.name ?? '');
+  const [description, setDescription] = useState(server?.description ?? '');
+  const [serverType, setServerType] = useState<DesktopMCPTransport>(
+    server?.server_type ?? 'stdio',
+  );
+  const [command, setCommand] = useState(
+    server?.transport_config?.arguments_redacted ? '' : existingCommand,
+  );
+  const [url, setUrl] = useState(existingUrl);
+  const [credentialKind, setCredentialKind] = useState<'none' | 'env' | 'header'>(
+    existingCredential.kind,
+  );
+  const [credentialName, setCredentialName] = useState(existingCredential.name);
   const [secret, setSecret] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  const requestClose = () => {
+    if (!busy) onClose();
+  };
   const dialogRef = useModalDialog({
     active: true,
     initialFocusRef: nameRef,
     nested: true,
-    onClose,
+    onClose: requestClose,
   });
   const requiresCommand = serverType === 'stdio';
   const requiresUrl = !requiresCommand;
@@ -50,13 +87,57 @@ export function MCPServerCreateDialog({
     () => (requiresCommand ? parseMCPStdioCommand(command) : null),
     [command, requiresCommand],
   );
+  const credentialRequiresSecret = useMemo(() => {
+    if (!secretKind) return false;
+    if (!server) return true;
+    if (
+      secretKind !== existingCredential.kind ||
+      credentialName.trim() !== existingCredential.name ||
+      name.trim() !== server.name ||
+      serverType !== server.server_type
+    ) {
+      return true;
+    }
+    if (requiresCommand) {
+      return (
+        Boolean(server.transport_config?.arguments_redacted) ||
+        command.trim() !== existingCommand
+      );
+    }
+    return url.trim() !== existingUrl;
+  }, [
+    command,
+    credentialName,
+    existingCommand,
+    existingCredential.kind,
+    existingCredential.name,
+    existingUrl,
+    name,
+    requiresCommand,
+    secretKind,
+    server,
+    serverType,
+    url,
+  ]);
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
     if (requiresCommand && parsedCommand?.ok !== true) return false;
     if (requiresUrl && !url.trim()) return false;
-    if (secretKind && (!credentialName.trim() || !secret)) return false;
+    if (secretKind && (!credentialName.trim() || (credentialRequiresSecret && !secret))) {
+      return false;
+    }
     return true;
-  }, [credentialName, name, parsedCommand, requiresCommand, requiresUrl, secret, secretKind, url]);
+  }, [
+    credentialName,
+    credentialRequiresSecret,
+    name,
+    parsedCommand,
+    requiresCommand,
+    requiresUrl,
+    secret,
+    secretKind,
+    url,
+  ]);
 
   const submit = () => {
     if (!canSubmit) {
@@ -78,17 +159,17 @@ export function MCPServerCreateDialog({
           }
         : null,
     });
-    setSecret('');
   };
 
   return (
-    <div className="plugin-management-backdrop" onMouseDown={onClose}>
+    <div className="plugin-management-backdrop" onMouseDown={requestClose}>
       <section
         ref={dialogRef}
         className="plugin-management-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={t('settings.mcpServers.createTitle')}
+        aria-busy={busy}
+        aria-label={t(server ? 'common.edit' : 'settings.mcpServers.createTitle')}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -96,10 +177,15 @@ export function MCPServerCreateDialog({
           <ComponentInstanceIcon />
           <div>
             <span>{t('settings.mcp')}</span>
-            <h2>{t('settings.mcpServers.createTitle')}</h2>
+            <h2>{t(server ? 'common.edit' : 'settings.mcpServers.createTitle')}</h2>
             <p>{t('settings.mcpServers.createDescription')}</p>
           </div>
-          <button type="button" aria-label={t('common.close')} onClick={onClose}>
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            disabled={busy}
+            onClick={requestClose}
+          >
             <Cross2Icon />
           </button>
         </header>
@@ -123,7 +209,12 @@ export function MCPServerCreateDialog({
             <span>{t('settings.mcpServers.transport')}</span>
             <select
               value={serverType}
-              onChange={(event) => setServerType(event.target.value as DesktopMCPTransport)}
+              onChange={(event) => {
+                setServerType(event.target.value as DesktopMCPTransport);
+                setCredentialKind('none');
+                setCredentialName('');
+                setSecret('');
+              }}
             >
               {TRANSPORTS.map((transport) => (
                 <option key={transport} value={transport}>
@@ -167,8 +258,13 @@ export function MCPServerCreateDialog({
                 }
               >
                 <option value="none">{t('settings.mcpServers.credentialKinds.none')}</option>
-                <option value="env">{t('settings.mcpServers.credentialKinds.env')}</option>
-                <option value="header">{t('settings.mcpServers.credentialKinds.header')}</option>
+                {requiresCommand ? (
+                  <option value="env">{t('settings.mcpServers.credentialKinds.env')}</option>
+                ) : (
+                  <option value="header">
+                    {t('settings.mcpServers.credentialKinds.header')}
+                  </option>
+                )}
               </select>
             </label>
             {secretKind ? (
@@ -198,14 +294,38 @@ export function MCPServerCreateDialog({
             </div>
           ) : null}
         </div>
-        <footer className="plugin-management-footer">
-          <button type="button" className="secondary" disabled={busy} onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" className="primary" disabled={busy || !canSubmit} onClick={submit}>
-            {busy ? <ReloadIcon className="managed-resource-spin" /> : <ComponentInstanceIcon />}
-            {t('settings.mcpServers.create')}
-          </button>
+        <footer className={`plugin-management-footer${server ? ' split' : ''}`}>
+          {server ? (
+            <div>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy}
+                onClick={onDelete ?? undefined}
+              >
+                <TrashIcon />
+                {t('common.delete')}
+              </button>
+            </div>
+          ) : null}
+          <div>
+            <button type="button" className="secondary" disabled={busy} onClick={onClose}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || !canSubmit}
+              onClick={submit}
+            >
+              {busy ? (
+                <ReloadIcon className="managed-resource-spin" />
+              ) : (
+                <ComponentInstanceIcon />
+              )}
+              {t(server ? 'common.save' : 'settings.mcpServers.create')}
+            </button>
+          </div>
         </footer>
       </section>
     </div>

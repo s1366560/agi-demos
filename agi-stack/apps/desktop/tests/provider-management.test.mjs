@@ -17,16 +17,23 @@ const {
   localRuntimeRoutingModelIds,
   providerModelCanBeDisabled,
   providerModelsFromProvider,
+  providerMutationForActiveState,
   providerMutationForEnabledModels,
   providerMutationFromDraft,
   providerProbeInputFromDraft,
   providerProbeInputIsValid,
   providerRoutingOverview,
+  providerSetupOptions,
+  providerTogglePendingIdForScope,
+  providerToggleRequestMatches,
   providerTypeDisplayName,
   routingFallbackCanAdd,
+  settleProviderToggleRequest,
   providerValidationAccepted,
   providerValidationSignal,
   providerValidationSucceeded,
+  routingPolicyReferencesProvider,
+  routingPolicyWithoutProvider,
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings/providerManagementModel.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const addProviderDialogSource = readFileSync(
@@ -81,6 +88,72 @@ test('provider type labels preserve public brand spelling', () => {
   assert.equal(providerTypeDisplayName('openai_compatible'), 'OpenAI-compatible');
   assert.equal(providerTypeDisplayName('lmstudio'), 'LM Studio');
   assert.equal(providerTypeDisplayName('custom_gateway'), 'Custom Gateway');
+});
+
+test('local OpenAI-compatible capability expands into a distinct Kimi environment preset', () => {
+  const descriptor = {
+    providerType: 'openai_compatible',
+    authMethods: ['api_key', 'environment', 'none'],
+    unavailableAuthMethods: [],
+    operationType: 'llm',
+    probeSupported: true,
+    source: 'local_runtime',
+  };
+
+  const options = providerSetupOptions([descriptor]);
+
+  assert.deepEqual(
+    options.map((option) => ({
+      id: option.id,
+      name: option.name,
+      providerType: option.descriptor.providerType,
+      authMethod: option.authMethod,
+      environmentVariable: option.environmentVariable,
+      baseUrl: option.baseUrl,
+    })),
+    [
+      {
+        id: 'preset:kimi',
+        name: 'Kimi',
+        providerType: 'openai_compatible',
+        authMethod: 'environment',
+        environmentVariable: 'KIMI_API_KEY',
+        baseUrl: 'https://api.kimi.com/coding/v1',
+      },
+      {
+        id: 'type:openai_compatible',
+        name: 'OpenAI-compatible',
+        providerType: 'openai_compatible',
+        authMethod: 'api_key',
+        environmentVariable: '',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+      },
+    ],
+  );
+  assert.equal(new Set(options.map((option) => option.id)).size, options.length);
+});
+
+test('Kimi preset is not advertised without local environment authority', () => {
+  const descriptor = {
+    providerType: 'openai_compatible',
+    authMethods: ['api_key'],
+    unavailableAuthMethods: [],
+    operationType: 'llm',
+    probeSupported: true,
+    source: 'local_runtime',
+  };
+  const cloudDescriptor = {
+    ...descriptor,
+    authMethods: ['api_key', 'environment'],
+    source: 'cloud_api',
+  };
+
+  assert.deepEqual(providerSetupOptions([descriptor]).map((option) => option.id), [
+    'type:openai_compatible',
+  ]);
+  assert.deepEqual(providerSetupOptions([cloudDescriptor]).map((option) => option.id), [
+    'type:openai_compatible',
+  ]);
 });
 
 test('Settings model navigation copy matches the approved provider-first source', () => {
@@ -259,6 +332,71 @@ test('provider model selection promotes the first enabled model when no default 
   const mutation = providerMutationForEnabledModels(provider, ['qwen3-coder', 'qwen3-coder']);
   assert.equal(mutation.primaryModel, 'qwen3-coder');
   assert.deepEqual(mutation.allowedModels, ['qwen3-coder']);
+});
+
+test('provider activation mutation preserves configuration and credential references', () => {
+  const provider = {
+    id: 'environment-kimi',
+    name: 'Kimi coding',
+    provider_type: 'openai_compatible',
+    auth_method: 'environment',
+    environment_variable: 'KIMI_API_KEY',
+    base_url: 'https://api.kimi.com/coding/v1/',
+    llm_model: 'kimi-for-coding-highspeed',
+    allowed_models: ['kimi-for-coding-highspeed'],
+    is_active: true,
+    revision: 9,
+  };
+
+  assert.deepEqual(providerMutationForActiveState(provider, false), {
+    name: 'Kimi coding',
+    providerType: 'openai_compatible',
+    authMethod: 'environment',
+    baseUrl: 'https://api.kimi.com/coding/v1',
+    primaryModel: 'kimi-for-coding-highspeed',
+    allowedModels: ['kimi-for-coding-highspeed'],
+    active: false,
+    expectedRevision: 9,
+    environmentVariable: 'KIMI_API_KEY',
+  });
+});
+
+test('provider activation pending state is isolated by scope and unique request token', () => {
+  const workspaceARequest = {
+    scopeKey: 'workspace-a',
+    providerId: 'environment-kimi',
+    requestToken: 17,
+  };
+  const workspaceBRequest = {
+    scopeKey: 'workspace-b',
+    providerId: 'environment-kimi',
+    requestToken: 18,
+  };
+
+  assert.equal(
+    providerTogglePendingIdForScope(workspaceARequest, workspaceARequest.scopeKey),
+    workspaceARequest.providerId,
+  );
+  assert.equal(
+    providerTogglePendingIdForScope(workspaceARequest, workspaceBRequest.scopeKey),
+    null,
+  );
+  assert.equal(providerToggleRequestMatches(workspaceBRequest, workspaceARequest), false);
+  assert.deepEqual(
+    settleProviderToggleRequest(workspaceBRequest, workspaceARequest),
+    workspaceBRequest,
+  );
+  const staleWorkspaceBRequest = {
+    ...workspaceBRequest,
+    requestToken: workspaceBRequest.requestToken + 1,
+  };
+  assert.equal(providerToggleRequestMatches(workspaceBRequest, staleWorkspaceBRequest), false);
+  assert.deepEqual(
+    settleProviderToggleRequest(workspaceBRequest, staleWorkspaceBRequest),
+    workspaceBRequest,
+  );
+  assert.equal(providerToggleRequestMatches(workspaceBRequest, workspaceBRequest), true);
+  assert.equal(settleProviderToggleRequest(workspaceBRequest, workspaceBRequest), null);
 });
 
 test('provider workspace helpers search structured fields and map attention states', () => {
@@ -579,18 +717,9 @@ test('provider wizard creates only active providers with an enabled model', () =
   assert.match(addProviderDialogSource, /if \(modelId === primaryModel\) return/);
   assert.match(addProviderDialogSource, /disabled=\{model\.id === primaryModel\}/);
   assert.match(addProviderDialogSource, /descriptor\.authMethods\.includes\('none'\)/);
-  assert.match(
-    addProviderDialogSource,
-    /ollama:[\s\S]{0,100}baseUrl: 'http:\/\/127\.0\.0\.1:11434'/,
-  );
-  assert.match(
-    addProviderDialogSource,
-    /anthropic:[\s\S]{0,100}baseUrl: 'https:\/\/api\.anthropic\.com'/,
-  );
-  assert.doesNotMatch(
-    addProviderDialogSource,
-    /anthropic:[\s\S]{0,100}baseUrl: 'https:\/\/api\.anthropic\.com\/v1'/,
-  );
+  assert.match(addProviderDialogSource, /providerSetupOptions/);
+  assert.match(addProviderDialogSource, /key=\{option\.id\}/);
+  assert.match(addProviderDialogSource, /selectedOptionId === option\.id/);
 });
 
 test('provider authentication UI exposes truthful OAuth and environment-secret states', () => {
@@ -735,6 +864,52 @@ test('provider editing preserves stored credentials only for the unchanged endpo
   assert.match(i18nSource, /密钥保存在本机系统凭据库中，API 永不回传密钥/);
   assert.match(i18nSource, /密钥由服务端加密保存，API 永不回传明文凭据/);
   assert.match(modelProviderWorkspaceSource, /mode=\{config\.mode\}/);
+});
+
+test('provider workspace exposes an authorized activation lifecycle', () => {
+  const activationLifecycle =
+    modelProviderWorkspaceSource.match(
+      /const setProviderActive = useCallback\([\s\S]*?\n  \);\n\n  const saveRoutingPolicy/,
+    )?.[0] ?? '';
+  const successWriteback =
+    activationLifecycle.match(/const updated = await saveProvider\([\s\S]*?showToast\(/)?.[0] ?? '';
+  const failureWriteback =
+    activationLifecycle.match(
+      /\} catch \{[\s\S]*?showToast\(t\('providers\.providerStatusUpdateFailed'\)\)/,
+    )?.[0] ?? '';
+
+  assert.match(modelProviderWorkspaceSource, /providerMutationForActiveState/);
+  assert.match(
+    modelProviderWorkspaceSource,
+    /const setProviderActive = useCallback\([\s\S]{0,900}saveProvider\([\s\S]{0,180}providerMutationForActiveState/,
+  );
+  assert.match(
+    modelProviderWorkspaceSource,
+    /disabled=\{!canManage \|\| providerTogglePendingId !== null\}/,
+  );
+  assert.match(activationLifecycle, /requestToken: \+\+providerToggleRequestTokenRef\.current/);
+  assert.match(successWriteback, /clientRef\.current !== requestClient/);
+  assert.match(successWriteback, /scopeKeyRef\.current !== requestScope/);
+  assert.match(
+    successWriteback,
+    /providerToggleRequestMatches\(providerTogglePendingRef\.current, request\)/,
+  );
+  assert.match(failureWriteback, /clientRef\.current === requestClient/);
+  assert.match(failureWriteback, /scopeKeyRef\.current === requestScope/);
+  assert.match(
+    failureWriteback,
+    /providerToggleRequestMatches\(providerTogglePendingRef\.current, request\)/,
+  );
+  assert.match(
+    activationLifecycle,
+    /finally \{[\s\S]{0,260}settleProviderToggleRequest\([\s\S]{0,180}request/,
+  );
+  assert.match(modelProviderWorkspaceSource, /providers\.disableProvider/);
+  assert.match(modelProviderWorkspaceSource, /providers\.enableProvider/);
+  assert.match(i18nSource, /'providers\.providerDisabled': '\{provider\} disabled'/);
+  assert.match(i18nSource, /'providers\.providerEnabled': '\{provider\} enabled'/);
+  assert.match(i18nSource, /'providers\.providerDisabled': '已停用 \{provider\}'/);
+  assert.match(i18nSource, /'providers\.providerEnabled': '已启用 \{provider\}'/);
 });
 
 test('provider routing is policy-backed, cross-provider, and context safe', () => {
@@ -1193,11 +1368,15 @@ test('provider create adapters send auth method and omit mismatched credentials'
       oauthToken: 'oauth-token-must-not-be-sent',
     };
 
-    await local.createLlmProvider(input);
-    await cloud.createLlmProvider(input);
+    await local.createLlmProvider(input, 'provider-create-local-retry-1');
+    await cloud.createLlmProvider(input, 'provider-create-cloud-retry-1');
 
     assert.equal(String(calls[0]?.input), 'http://127.0.0.1:8088/api/v1/llm-providers/');
     assert.equal(calls[0]?.init?.method, 'POST');
+    assert.equal(
+      new Headers(calls[0]?.init?.headers).get('Idempotency-Key'),
+      'provider-create-local-retry-1',
+    );
     assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
       name: 'New provider',
       provider_type: 'openai_compatible',
@@ -1209,6 +1388,10 @@ test('provider create adapters send auth method and omit mismatched credentials'
     });
     assert.equal(String(calls[1]?.input), 'https://api.example.test/api/v1/llm-providers/');
     assert.equal(calls[1]?.init?.method, 'POST');
+    assert.equal(
+      new Headers(calls[1]?.init?.headers).get('Idempotency-Key'),
+      'provider-create-cloud-retry-1',
+    );
     assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), {
       name: 'New provider',
       provider_type: 'openai_compatible',
@@ -1271,15 +1454,18 @@ test('environment provider requests send only variable references in local and c
     };
 
     for (const client of clients) {
-      await client.createLlmProvider({
-        ...credentialInput,
-        name: 'Environment provider',
-        providerType: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        primaryModel: 'gpt-test',
-        allowedModels: ['gpt-test'],
-        active: true,
-      });
+      await client.createLlmProvider(
+        {
+          ...credentialInput,
+          name: 'Environment provider',
+          providerType: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          primaryModel: 'gpt-test',
+          allowedModels: ['gpt-test'],
+          active: true,
+        },
+        'provider-create-environment-retry-1',
+      );
       await client.updateLlmProvider('environment-provider', {
         ...credentialInput,
         name: 'Environment provider',
@@ -1350,15 +1536,18 @@ test('OAuth provider mutations fail closed before making a request', async () =>
 
     for (const client of clients) {
       await assert.rejects(
-        client.createLlmProvider({
-          ...oauthCredential,
-          name: 'OAuth provider',
-          providerType: 'anthropic',
-          baseUrl: 'https://api.anthropic.com',
-          primaryModel: 'claude-test',
-          allowedModels: ['claude-test'],
-          active: true,
-        }),
+        client.createLlmProvider(
+          {
+            ...oauthCredential,
+            name: 'OAuth provider',
+            providerType: 'anthropic',
+            baseUrl: 'https://api.anthropic.com',
+            primaryModel: 'claude-test',
+            allowedModels: ['claude-test'],
+            active: true,
+          },
+          'provider-create-oauth-retry-1',
+        ),
         /OAuth provider authentication is not available/,
       );
       await assert.rejects(
@@ -2147,4 +2336,82 @@ test('provider validation rejects responses without explicit probe evidence', as
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('provider deletion uses an expected revision and a replay-safe idempotency key', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    return new Response(JSON.stringify({ deleted: true, id: 'provider-local', replayed: false }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-user-session',
+      localApiToken: 'launch-capability',
+    });
+
+    await client.deleteLlmProvider('provider / local', 7, 'provider-delete-retry-1');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].input, 'http://127.0.0.1:8088/api/v1/llm-providers/provider%20%2F%20local');
+    assert.equal(calls[0].init.method, 'DELETE');
+    assert.deepEqual(JSON.parse(String(calls[0].init.body)), {
+      expected_revision: 7,
+      idempotency_key: 'provider-delete-retry-1',
+    });
+    assert.equal(calls[0].init.headers.get('Idempotency-Key'), 'provider-delete-retry-1');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('routing policy cleanup removes only the deleted provider routes', () => {
+  const policy = {
+    tenant_id: 'tenant-a',
+    project_id: 'project-a',
+    workspace_id: 'workspace-a',
+    revision: 3,
+    roles: {
+      default: { provider_id: 'provider-a', model_id: 'model-a' },
+      fast: { provider_id: 'provider-b', model_id: 'model-b' },
+      coding: null,
+      vision: { provider_id: 'provider-a', model_id: 'model-vision' },
+    },
+    fallbacks: [
+      { provider_id: 'provider-a', model_id: 'model-a' },
+      { provider_id: 'provider-b', model_id: 'model-b' },
+    ],
+    updated_at: '2026-08-14T00:00:00Z',
+  };
+
+  assert.equal(routingPolicyReferencesProvider(policy, 'provider-a'), true);
+  assert.equal(routingPolicyReferencesProvider(policy, 'provider-c'), false);
+  assert.deepEqual(routingPolicyWithoutProvider(policy, 'provider-a'), {
+    roles: {
+      default: null,
+      fast: { provider_id: 'provider-b', model_id: 'model-b' },
+      coding: null,
+      vision: null,
+    },
+    fallbacks: [{ provider_id: 'provider-b', model_id: 'model-b' }],
+  });
+});
+
+test('provider workspace exposes a guarded local delete lifecycle', () => {
+  assert.match(apiClientSource, /async deleteLlmProvider\(/);
+  assert.match(modelProviderWorkspaceSource, /deleteConfirmProviderId/);
+  assert.match(modelProviderWorkspaceSource, /routingPolicyWithoutProvider\(routingPolicy, currentProvider\.id\)/);
+  assert.match(modelProviderWorkspaceSource, /deleteLlmProvider\(\s*currentProvider\.id,\s*attempt\.expectedRevision,\s*attempt\.idempotencyKey/s);
+  assert.match(modelProviderWorkspaceSource, /provider-delete-\$\{crypto\.randomUUID\(\)\}/);
+  assert.match(modelProviderWorkspaceSource, /providerDeleteAttemptRef/);
+  assert.match(i18nSource, /'providers\.deleteProviderConfirm': 'Delete this provider and its saved credential\?'/);
+  assert.match(i18nSource, /'providers\.deleteProviderConfirm': '删除此供应商及其已保存凭据？'/);
 });

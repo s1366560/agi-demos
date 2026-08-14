@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+
+import { I18nContext } from '/tmp/agistack-desktop-test-dist/src/i18nContext.js';
+import { NewTaskPlanningStage } from '/tmp/agistack-desktop-test-dist/src/features/task/NewTaskFlowStages.js';
 
 const flowStyles = readFileSync(
   new URL('../src/features/task/NewTaskFlow.css', import.meta.url),
@@ -51,6 +56,37 @@ test('planning stage preserves prototype geometry and a distinct code identity',
       /export function NewTaskDefinitionStage\([\s\S]*?\n}\n\ntype PlanningStageProps/,
     )?.[0] ?? '';
   assert.doesNotMatch(definitionStage, /new-task-code-boundary|task\.codeRoot|EnvironmentButton/);
+});
+
+test('terminal planning failure removes waiting animation while retaining a retry action', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      I18nContext.Provider,
+      {
+        value: {
+          locale: 'en',
+          setLocale: () => {},
+          t: (key) => key,
+        },
+      },
+      createElement(NewTaskPlanningStage, {
+        title: 'Repair local planning',
+        objective: 'Surface a terminal failure',
+        kind: 'programming',
+        workspaceLabel: 'QA workspace',
+        contextCount: 2,
+        retryAvailable: true,
+        terminalFailure: true,
+        deliveryOutcomeUnknown: false,
+        onRetry: () => {},
+      }),
+    ),
+  );
+
+  assert.doesNotMatch(markup, /role="progressbar"/u);
+  assert.doesNotMatch(markup, /new-task-planning-checks/u);
+  assert.match(markup, /task\.planRunFailed/u);
+  assert.match(markup, /task\.retryPlan/u);
 });
 
 test('human plan review retains the prototype split and step rhythm', () => {

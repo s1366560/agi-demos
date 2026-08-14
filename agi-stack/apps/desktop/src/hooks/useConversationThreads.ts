@@ -375,7 +375,19 @@ export function useConversationThreads(params: AgentConversationParams) {
           threadConfig.projectId,
           actorId,
           input.mode,
-          input.model ? { llm_model_override: input.model.modelId } : undefined,
+          input.model
+            ? {
+                llm_model_override: input.model.modelId,
+                ...(threadConfig.mode === 'local'
+                  ? {
+                      llm_route_override: {
+                        provider_id: input.model.providerId,
+                        model_id: input.model.modelId,
+                      },
+                    }
+                  : {}),
+              }
+            : undefined,
         );
         if (!requestScopeIsCurrent()) return;
         if (conversation.workspace_id !== null) {

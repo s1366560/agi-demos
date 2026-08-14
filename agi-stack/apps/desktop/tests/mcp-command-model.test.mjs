@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { parseMCPStdioCommand } = require(
+const { formatMCPStdioCommand, mcpStdioCommandArgv, parseMCPStdioCommand } = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/mcpCommandModel.js',
 );
 
@@ -36,4 +36,26 @@ test('MCP stdio command parsing rejects incomplete structural input', () => {
     ok: false,
     reason: 'executable_not_absolute',
   });
+});
+
+test('MCP stdio command formatting preserves complete command and args argv', () => {
+  const argv = mcpStdioCommandArgv(
+    ['/usr/bin/python3', '-m'],
+    ['example server', '', 'quote"value', "single'value", 'back\\slash'],
+  );
+  assert.deepEqual(argv, [
+    '/usr/bin/python3',
+    '-m',
+    'example server',
+    '',
+    'quote"value',
+    "single'value",
+    'back\\slash',
+  ]);
+  assert.deepEqual(parseMCPStdioCommand(formatMCPStdioCommand(argv)), { ok: true, argv });
+  assert.deepEqual(mcpStdioCommandArgv('/usr/bin/node', ['server.js', '--stdio']), [
+    '/usr/bin/node',
+    'server.js',
+    '--stdio',
+  ]);
 });

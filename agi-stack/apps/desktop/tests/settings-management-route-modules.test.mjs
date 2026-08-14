@@ -225,6 +225,53 @@ test('each route owns a typed authority adapter and validates its runtime scope'
   ]);
 });
 
+test('local provider management observes the sidecar without invoking cloud_request', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const requests = [];
+  const cloudInvocations = [];
+  globalThis.window = {
+    __MEMSTACK_DESKTOP__: {
+      core: {
+        async invoke(command) {
+          cloudInvocations.push(command);
+          throw new Error('cloud authority must not be used');
+        },
+      },
+    },
+  };
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return new Response('[]', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const localConfig = { ...config('local'), apiKey: '' };
+    const scope = {
+      authority: 'local',
+      tenantId: localConfig.tenantId,
+      projectId: localConfig.projectId,
+    };
+
+    assert.deepEqual(await createProviderRouteClient(localConfig).observe(scope), {
+      scope,
+      itemCount: 0,
+    });
+    assert.deepEqual(requests.sort(), [
+      'http://127.0.0.1:8088/api/v1/llm-providers/?include_inactive=true',
+      'http://127.0.0.1:8088/api/v1/llm-providers/types',
+    ]);
+    assert.deepEqual(cloudInvocations, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
 test('controller exposes stable loading, empty, forbidden, unavailable, and retry states', async () => {
   const scope = {
     authority: 'local',

@@ -5,6 +5,21 @@ export type MCPCommandParseResult =
       reason: 'empty' | 'unterminated_quote' | 'trailing_escape' | 'executable_not_absolute';
     };
 
+export function mcpStdioCommandArgv(
+  command: string | string[] | null | undefined,
+  args: string[] | undefined,
+): string[] {
+  if (typeof command === 'string') return [command, ...(args ?? [])];
+  if (Array.isArray(command)) return [...command, ...(args ?? [])];
+  return [];
+}
+
+export function formatMCPStdioCommand(argv: string[]): string {
+  return argv
+    .map((argument) => `"${argument.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`)
+    .join(' ');
+}
+
 export function parseMCPStdioCommand(value: string): MCPCommandParseResult {
   const argv: string[] = [];
   let current = '';

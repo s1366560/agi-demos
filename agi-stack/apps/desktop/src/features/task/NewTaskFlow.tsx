@@ -50,6 +50,7 @@ import {
   newTaskDefinitionSignature,
   orderedPlanTasks,
   planTaskSignature,
+  planningTerminalFailure,
   planningTurnAttempt,
   readLegacyPlanApprovalRecovery,
   shouldOfferPlanRetry,
@@ -185,6 +186,7 @@ export function NewTaskFlow({
   const [revisionAwaitingPlan, setRevisionAwaitingPlan] = useState(false);
   const [manualPlanReviewRequired, setManualPlanReviewRequired] = useState(false);
   const [planRetryAvailable, setPlanRetryAvailable] = useState(false);
+  const [planningFailed, setPlanningFailed] = useState(false);
   const [revisionFeedback, setRevisionFeedback] = useState('');
   const [revisionComposerOpen, setRevisionComposerOpen] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
@@ -349,6 +351,7 @@ export function NewTaskFlow({
     setRevisionAwaitingPlan(false);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
+    setPlanningFailed(false);
     setRevisionFeedback('');
     setRevisionComposerOpen(false);
     setFlowError(null);
@@ -426,6 +429,7 @@ export function NewTaskFlow({
     setPlanApproval(null);
     setTaskSessionConflictRecovery(null);
     setFlowError(null);
+    setPlanningFailed(false);
     setPhase('define');
     if (open) onCloseRef.current();
   }, [normalizedActorId, open]);
@@ -487,7 +491,14 @@ export function NewTaskFlow({
   }, [open, phase]);
 
   useEffect(() => {
-    if (!open || (phase !== 'planning' && phase !== 'review') || !session) return;
+    if (
+      !open ||
+      (phase !== 'planning' && phase !== 'review') ||
+      !session ||
+      planningFailed
+    ) {
+      return;
+    }
     const abortController = new AbortController();
     let stopped = false;
     let pollTimeout: number | undefined;
@@ -507,16 +518,43 @@ export function NewTaskFlow({
       }
       try {
         const client = new DesktopApiClient(session.config);
-        const response = await client.listAgentPlanTasks(
-          session.conversation.id,
-          abortController.signal,
-        );
+        const timelineRequest =
+          session.config.mode === 'local'
+            ? client
+                .getConversationMessages(
+                  session.conversation.id,
+                  session.config.projectId,
+                  { limit: 50, signal: abortController.signal },
+                )
+                .catch(() => null)
+            : Promise.resolve(null);
+        const [response, timeline] = await Promise.all([
+          client.listAgentPlanTasks(session.conversation.id, abortController.signal),
+          timelineRequest,
+        ]);
         if (stopped) return;
         const nextApproval = approvalCapability(response);
         const nextPlanVersion = approvalPlanVersion(response);
         const tasks = orderedPlanTasks(
           nextPlanVersion?.tasks?.length ? nextPlanVersion.tasks : (response.tasks ?? []),
         );
+        const terminalFailure =
+          phase === 'planning'
+            ? planningTerminalFailure(
+                timeline?.timeline ?? [],
+                planningAttemptRef.current?.messageId ?? '',
+              )
+            : null;
+        if (terminalFailure) {
+          const message = terminalFailure.summary ?? t('task.planRunFailed');
+          planningAttemptRef.current = null;
+          emptyPlanPollCountRef.current = 0;
+          setDeliveryOutcomeUnknown(false);
+          setPlanRetryAvailable(true);
+          setPlanningFailed(true);
+          setFlowError(message);
+          return;
+        }
         const signature = planTaskSignature(tasks);
         const previousSignature = displayedPlanSignatureRef.current;
         const versionChanged = hasPlanVersionChanged(
@@ -557,6 +595,7 @@ export function NewTaskFlow({
           setRevisionFeedback('');
           setRevisionComposerOpen(false);
           setFlowError(null);
+          setPlanningFailed(false);
           setDeliveryOutcomeUnknown(false);
           setPhase('review');
         }
@@ -580,7 +619,7 @@ export function NewTaskFlow({
       if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
       abortController.abort();
     };
-  }, [open, phase, session]);
+  }, [open, phase, planningFailed, session, t]);
 
   if (!open) return null;
 
@@ -647,6 +686,7 @@ export function NewTaskFlow({
     setRevisionAwaitingPlan(false);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
+    setPlanningFailed(false);
     emptyPlanPollCountRef.current = 0;
     const definition: NewTaskDefinition = {
       title,
@@ -917,6 +957,7 @@ export function NewTaskFlow({
     setRevisionAwaitingPlan(true);
     setManualPlanReviewRequired(false);
     setPlanRetryAvailable(false);
+    setPlanningFailed(false);
     setDeliveryOutcomeUnknown(false);
     emptyPlanPollCountRef.current = 0;
     setRevisionComposerOpen(false);
@@ -948,6 +989,7 @@ export function NewTaskFlow({
     const operationEpoch = flowEpochRef.current;
     planningConversationIdRef.current = session.conversation.id;
     setPlanRetryAvailable(false);
+    setPlanningFailed(false);
     setDeliveryOutcomeUnknown(false);
     emptyPlanPollCountRef.current = 0;
     setFlowError(null);
@@ -1233,6 +1275,7 @@ export function NewTaskFlow({
                 workspaceLabel={workspaceLabel}
                 contextCount={contextSources.length}
                 retryAvailable={planRetryAvailable}
+                terminalFailure={planningFailed}
                 deliveryOutcomeUnknown={deliveryOutcomeUnknown}
                 onRetry={() => void retryPlanning()}
               />
@@ -1312,7 +1355,9 @@ export function NewTaskFlow({
               </>
             ) : phase === 'planning' ? (
               <>
-                <span>{t('task.waitingForPlan')}</span>
+                <span>
+                  {planningFailed ? t('task.planRunFailed') : t('task.waitingForPlan')}
+                </span>
                 <button type="button" onClick={closeFlow}>
                   {t('task.continueBackground')}
                 </button>

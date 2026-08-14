@@ -240,6 +240,7 @@ type PlanningStageProps = {
   workspaceLabel: string;
   contextCount: number;
   retryAvailable: boolean;
+  terminalFailure: boolean;
   deliveryOutcomeUnknown: boolean;
   onRetry: () => void;
 };
@@ -251,6 +252,7 @@ export function NewTaskPlanningStage({
   workspaceLabel,
   contextCount,
   retryAvailable,
+  terminalFailure,
   deliveryOutcomeUnknown,
   onRetry,
 }: PlanningStageProps) {
@@ -267,36 +269,40 @@ export function NewTaskPlanningStage({
         <span className="new-task-eyebrow">{t('task.agentPlanning')}</span>
         <h2>{t('task.planningFor', { title })}</h2>
         <p>{t('task.planningSafety')}</p>
-        <div
-          className="new-task-planning-progress"
-          role="progressbar"
-          aria-label={t('task.waitingForPlan')}
-          aria-valuetext={t('task.waitingForPlan')}
-        >
-          <i />
-        </div>
-        <div className="new-task-planning-checks">
-          <PlanningCheck
-            state="complete"
-            title={t('task.planningOutcomeTitle')}
-            description={t('task.planningOutcomeDescription')}
-          />
-          <PlanningCheck
-            state="complete"
-            title={t('task.planningContextTitle')}
-            description={t('task.planningContextDescription', { count: contextCount })}
-          />
-          <PlanningCheck
-            state="active"
-            title={t('task.planningPathTitle')}
-            description={t('task.planningPathDescription')}
-          />
-          <PlanningCheck
-            state="pending"
-            title={t('task.planningPacketTitle')}
-            description={t('task.planningPacketDescription')}
-          />
-        </div>
+        {!terminalFailure ? (
+          <>
+            <div
+              className="new-task-planning-progress"
+              role="progressbar"
+              aria-label={t('task.waitingForPlan')}
+              aria-valuetext={t('task.waitingForPlan')}
+            >
+              <i />
+            </div>
+            <div className="new-task-planning-checks">
+              <PlanningCheck
+                state="complete"
+                title={t('task.planningOutcomeTitle')}
+                description={t('task.planningOutcomeDescription')}
+              />
+              <PlanningCheck
+                state="complete"
+                title={t('task.planningContextTitle')}
+                description={t('task.planningContextDescription', { count: contextCount })}
+              />
+              <PlanningCheck
+                state="active"
+                title={t('task.planningPathTitle')}
+                description={t('task.planningPathDescription')}
+              />
+              <PlanningCheck
+                state="pending"
+                title={t('task.planningPacketTitle')}
+                description={t('task.planningPacketDescription')}
+              />
+            </div>
+          </>
+        ) : null}
         {deliveryOutcomeUnknown ? (
           <div className="new-task-planning-delay" role="status">
             <span>
@@ -307,8 +313,10 @@ export function NewTaskPlanningStage({
         {retryAvailable ? (
           <div className="new-task-planning-delay" role="status">
             <span>
-              <strong>{t('task.planDelayedTitle')}</strong>
-              <small>{t('task.planDelayedDescription')}</small>
+              <strong>
+                {terminalFailure ? t('task.planRunFailed') : t('task.planDelayedTitle')}
+              </strong>
+              {!terminalFailure ? <small>{t('task.planDelayedDescription')}</small> : null}
             </span>
             <button type="button" onClick={onRetry}>
               <ReloadIcon /> {t('task.retryPlan')}

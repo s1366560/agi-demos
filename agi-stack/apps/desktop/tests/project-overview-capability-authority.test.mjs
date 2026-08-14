@@ -42,7 +42,7 @@ const localProjectOverview = {
   availability: 'degraded',
   reason_code: 'local_project_overview_timeline_projection_only',
   service_version: '0.1.0',
-  contract_version: '3.0.0',
+  contract_version: '4.0.0',
   allowed_actions: ['view'],
   scope: {
     tenant_id: 'tenant-1',
@@ -68,6 +68,20 @@ const localProjectOverview = {
     availability: 'available',
     reason_code: null,
     value: 0,
+  },
+  conversation_status_summary: {
+    availability: 'available',
+    reason_code: null,
+    value: {
+      total: 0,
+      idle: 0,
+      queued: 0,
+      running: 0,
+      attention: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+    },
   },
   recent_knowledge_items: {
     availability: 'degraded',
@@ -355,7 +369,7 @@ test('Local workbench preserves degraded Project Overview authority metadata', a
         availability: 'degraded',
         reason_code: 'local_project_overview_timeline_projection_only',
         service_version: '0.1.0',
-        contract_version: '3.0.0',
+        contract_version: '4.0.0',
         allowed_actions: ['view'],
         scope: projectScope,
         authority_revision: 11,

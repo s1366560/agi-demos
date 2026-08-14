@@ -37,6 +37,21 @@ export type ProviderConnectionStatus = Exclude<ProviderListFilter, 'all'>;
 
 export type ProviderRoutingOverview = Pick<LlmProviderRoutingPolicy, 'roles' | 'fallbacks'>;
 
+export type ProviderSetupOption = Readonly<{
+  id: string;
+  descriptor: LlmProviderTypeDescriptor;
+  name: string;
+  authMethod: LlmProviderAuthMethod;
+  environmentVariable: string;
+  baseUrl: string;
+}>;
+
+export type ProviderToggleRequest = Readonly<{
+  scopeKey: string;
+  providerId: string;
+  requestToken: number;
+}>;
+
 const LOCAL_RUNTIME_ROUTING_PROVIDER_TYPES = new Set(['anthropic', 'openai', 'openai_compatible']);
 
 const LOCAL_RUNTIME_ROUTABLE_HEALTH_STATUSES = new Set([
@@ -60,6 +75,24 @@ const providerTypeLabels: Readonly<Record<string, string>> = {
   xai: 'xAI',
 };
 
+const providerDefaultBaseUrls: Readonly<Record<string, string>> = {
+  anthropic: 'https://api.anthropic.com',
+  azure_openai: '',
+  lmstudio: 'http://127.0.0.1:1234/v1',
+  ollama: 'http://127.0.0.1:11434',
+  openai: 'https://api.openai.com/v1',
+  openai_compatible: 'http://127.0.0.1:11434/v1',
+};
+
+const KIMI_PROVIDER_PRESET = Object.freeze({
+  id: 'preset:kimi',
+  name: 'Kimi',
+  providerType: 'openai_compatible',
+  authMethod: 'environment' as const,
+  environmentVariable: 'KIMI_API_KEY',
+  baseUrl: 'https://api.kimi.com/coding/v1',
+});
+
 export function providerTypeDisplayName(providerType: string): string {
   const normalized = providerType.trim().toLowerCase();
   return (
@@ -72,6 +105,32 @@ export function providerTypeDisplayName(providerType: string): string {
   );
 }
 
+export function providerSetupOptions(
+  descriptors: readonly LlmProviderTypeDescriptor[],
+): readonly ProviderSetupOption[] {
+  return Object.freeze(
+    descriptors.flatMap((descriptor) => {
+      const genericOption = providerSetupOption({
+        id: `type:${descriptor.providerType}`,
+        descriptor,
+        name: providerTypeDisplayName(descriptor.providerType),
+        authMethod:
+          descriptor.authMethods[0] ?? descriptor.unavailableAuthMethods[0] ?? 'api_key',
+        environmentVariable: '',
+        baseUrl: providerDefaultBaseUrls[descriptor.providerType] ?? '',
+      });
+      if (!supportsKimiProviderPreset(descriptor)) return [genericOption];
+      return [
+        providerSetupOption({
+          ...KIMI_PROVIDER_PRESET,
+          descriptor,
+        }),
+        genericOption,
+      ];
+    }),
+  );
+}
+
 export function providerAuthMethodSupported(
   descriptor: LlmProviderTypeDescriptor,
   method: LlmProviderAuthMethod,
@@ -79,6 +138,44 @@ export function providerAuthMethodSupported(
   return (
     descriptor.authMethods.includes(method) && !descriptor.unavailableAuthMethods.includes(method)
   );
+}
+
+function supportsKimiProviderPreset(descriptor: LlmProviderTypeDescriptor): boolean {
+  return (
+    descriptor.source === 'local_runtime' &&
+    descriptor.operationType === 'llm' &&
+    descriptor.providerType === KIMI_PROVIDER_PRESET.providerType &&
+    providerAuthMethodSupported(descriptor, KIMI_PROVIDER_PRESET.authMethod)
+  );
+}
+
+function providerSetupOption(option: ProviderSetupOption): ProviderSetupOption {
+  return Object.freeze(option);
+}
+
+export function providerTogglePendingIdForScope(
+  pending: ProviderToggleRequest | null,
+  scopeKey: string,
+): string | null {
+  return pending?.scopeKey === scopeKey ? pending.providerId : null;
+}
+
+export function providerToggleRequestMatches(
+  pending: ProviderToggleRequest | null,
+  request: ProviderToggleRequest,
+): boolean {
+  return (
+    pending?.scopeKey === request.scopeKey &&
+    pending.providerId === request.providerId &&
+    pending.requestToken === request.requestToken
+  );
+}
+
+export function settleProviderToggleRequest(
+  pending: ProviderToggleRequest | null,
+  completed: ProviderToggleRequest,
+): ProviderToggleRequest | null {
+  return providerToggleRequestMatches(pending, completed) ? null : pending;
 }
 
 export function providerManagementAllowed(mode: RuntimeMode, roles: readonly string[]): boolean {
@@ -280,9 +377,43 @@ export function providerRoutingOverview(
   };
 }
 
+export function routingPolicyReferencesProvider(
+  policy: LlmProviderRoutingPolicy,
+  providerId: string,
+): boolean {
+  return (
+    Object.values(policy.roles).some((target) => target?.provider_id === providerId) ||
+    policy.fallbacks.some((target) => target.provider_id === providerId)
+  );
+}
+
+export function routingPolicyWithoutProvider(
+  policy: LlmProviderRoutingPolicy,
+  providerId: string,
+): ProviderRoutingOverview {
+  return {
+    roles: Object.fromEntries(
+      Object.entries(policy.roles).map(([role, target]) => [
+        role,
+        target?.provider_id === providerId ? null : target,
+      ]),
+    ) as LlmProviderRoutingPolicy['roles'],
+    fallbacks: policy.fallbacks.filter((target) => target.provider_id !== providerId),
+  };
+}
+
 export function providerModelCanBeDisabled(provider: ManagedLlmProvider, modelId: string): boolean {
   const primaryModel = provider.llm_model?.trim();
   return !primaryModel || modelId.trim() !== primaryModel;
+}
+
+export function providerMutationForActiveState(
+  provider: ManagedLlmProvider,
+  active: boolean,
+): LlmProviderMutationInput {
+  const draft = providerDraftFromProvider(provider);
+  draft.active = active;
+  return providerMutationFromDraft(draft);
 }
 
 export function providerMutationForEnabledModels(

@@ -1,4 +1,11 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+
+import {
+  I18nContext,
+  type DesktopLocale,
+  type I18nContextValue,
+  type TranslationValues,
+} from './i18nContext';
 
 import {
   projectOverviewEnUS,
@@ -86,15 +93,7 @@ import {
   tenantWorkspacesZhCN,
 } from './features/tenant/locales/tenantWorkspacesMessages';
 
-export type DesktopLocale = 'en' | 'zh-CN';
-
-type TranslationValues = Record<string, string | number>;
-
-type I18nContextValue = {
-  locale: DesktopLocale;
-  setLocale: (locale: DesktopLocale) => void;
-  t: (key: string, values?: TranslationValues) => string;
-};
+export type { DesktopLocale } from './i18nContext';
 
 const STORAGE_KEY = 'agistack.desktop.locale';
 
@@ -1582,6 +1581,18 @@ const enUS: Record<string, string> = {
   'providers.neverChecked': 'Not checked',
   'providers.providerSettings': '{provider} provider settings',
   'providers.providerSaved': '{provider} saved',
+  'providers.enableProvider': 'Enable provider',
+  'providers.disableProvider': 'Disable provider',
+  'providers.enablingProvider': 'Enabling…',
+  'providers.disablingProvider': 'Disabling…',
+  'providers.providerEnabled': '{provider} enabled',
+  'providers.providerDisabled': '{provider} disabled',
+  'providers.deleteProviderNamed': 'Delete {provider}',
+  'providers.deleteProviderConfirm': 'Delete this provider and its saved credential?',
+  'providers.deletingProvider': 'Deleting…',
+  'providers.providerDeleted': '{provider} deleted',
+  'providers.providerDeleteFailed': 'Unable to delete the provider.',
+  'providers.providerStatusUpdateFailed': 'Unable to update provider status.',
   'providers.runtimeRefreshFailed':
     'Provider updated, but the runtime status could not be refreshed.',
   'providers.contextChanged': 'Runtime context changed before this Provider action completed.',
@@ -1945,6 +1956,24 @@ const enUS: Record<string, string> = {
   'overview.sandboxUnknownDescription': 'The runtime reported an unsupported sandbox state',
   'overview.sandboxReportedByRuntime': 'Status reported by the runtime',
   'overview.runtimePolicySource': 'Credentials and tools follow the reported project policy',
+  'overview.autonomyAttention.eyebrow': 'AUTONOMY ATTENTION',
+  'overview.autonomyAttention.title': 'Open workspace interventions',
+  'overview.autonomyAttention.openCount': '{count} open',
+  'overview.autonomyAttention.loading': 'Reading the durable attention queue…',
+  'overview.autonomyAttention.unavailable':
+    'The durable attention queue has not been loaded for this workspace.',
+  'overview.autonomyAttention.loadFailed': 'The durable attention queue could not be loaded.',
+  'overview.autonomyAttention.empty': 'No autonomous work currently needs human intervention.',
+  'overview.autonomyAttention.createdAt': 'Created {date}',
+  'overview.autonomyAttention.retry': 'Retry source',
+  'overview.autonomyAttention.retrying': 'Retrying…',
+  'overview.autonomyAttention.resolve': 'Mark handled and resume',
+  'overview.autonomyAttention.resolving': 'Resuming…',
+  'overview.autonomyAttention.source.judgeBlock': 'Judge blocked',
+  'overview.autonomyAttention.source.judgeEscalate': 'Judge escalated',
+  'overview.autonomyAttention.source.progressionDeadLetter': 'Progression delivery failed',
+  'overview.autonomyAttention.source.bootstrapDeadLetter': 'Workspace bootstrap failed',
+  'overview.autonomyAttention.source.taskDispatchDeadLetter': 'Task delivery failed',
   'overview.conversations': 'CONVERSATIONS',
   'overview.recentSessions': 'Recent sessions',
   'overview.totalCount': '{count} total',
@@ -4063,6 +4092,7 @@ const enUS: Record<string, string> = {
   'task.planDelayedTitle': 'No structured plan has arrived yet',
   'task.planDelayedDescription':
     'The Agent may still be working. You can ask it to publish the plan again.',
+  'task.planRunFailed': 'The planning run ended before publishing a structured plan.',
   'task.retryPlan': 'Retry plan generation',
   'task.taskBrief': 'TASK BRIEF',
   'task.mode': 'Mode',
@@ -5500,6 +5530,18 @@ const zhCN: Record<string, string> = {
   'providers.neverChecked': '尚未检查',
   'providers.providerSettings': '{provider} 供应商设置',
   'providers.providerSaved': '已保存 {provider}',
+  'providers.enableProvider': '启用供应商',
+  'providers.disableProvider': '停用供应商',
+  'providers.enablingProvider': '正在启用…',
+  'providers.disablingProvider': '正在停用…',
+  'providers.providerEnabled': '已启用 {provider}',
+  'providers.providerDisabled': '已停用 {provider}',
+  'providers.deleteProviderNamed': '删除 {provider}',
+  'providers.deleteProviderConfirm': '删除此供应商及其已保存凭据？',
+  'providers.deletingProvider': '正在删除…',
+  'providers.providerDeleted': '已删除 {provider}',
+  'providers.providerDeleteFailed': '无法删除供应商。',
+  'providers.providerStatusUpdateFailed': '无法更新供应商状态。',
   'providers.runtimeRefreshFailed': 'Provider 已更新，但无法刷新运行时状态。',
   'providers.contextChanged': 'Provider 操作完成前运行时上下文已切换。',
   'providers.providerConnected': '已连接 {provider}',
@@ -5821,6 +5863,23 @@ const zhCN: Record<string, string> = {
   'overview.sandboxUnknownDescription': '运行时报告了不支持的沙箱状态',
   'overview.sandboxReportedByRuntime': '状态由运行时报告',
   'overview.runtimePolicySource': '凭据与工具遵循运行时报告的项目策略',
+  'overview.autonomyAttention.eyebrow': '自主推进关注项',
+  'overview.autonomyAttention.title': '待处理工作空间干预',
+  'overview.autonomyAttention.openCount': '{count} 个未处理',
+  'overview.autonomyAttention.loading': '正在读取持久化关注队列…',
+  'overview.autonomyAttention.unavailable': '尚未加载此工作空间的持久化关注队列。',
+  'overview.autonomyAttention.loadFailed': '无法加载持久化关注队列。',
+  'overview.autonomyAttention.empty': '当前没有需要人工干预的自主推进任务。',
+  'overview.autonomyAttention.createdAt': '创建于 {date}',
+  'overview.autonomyAttention.retry': '重试来源任务',
+  'overview.autonomyAttention.retrying': '正在重试…',
+  'overview.autonomyAttention.resolve': '标记已处理并继续推进',
+  'overview.autonomyAttention.resolving': '正在继续推进…',
+  'overview.autonomyAttention.source.judgeBlock': '判断被阻塞',
+  'overview.autonomyAttention.source.judgeEscalate': '判断已升级',
+  'overview.autonomyAttention.source.progressionDeadLetter': '推进交付失败',
+  'overview.autonomyAttention.source.bootstrapDeadLetter': '工作空间初始化失败',
+  'overview.autonomyAttention.source.taskDispatchDeadLetter': '任务交付失败',
   'overview.conversations': '会话',
   'overview.recentSessions': '最近会话',
   'overview.totalCount': '共 {count} 个',
@@ -7792,6 +7851,7 @@ const zhCN: Record<string, string> = {
   'task.planningPacketDescription': '计划权限与任务标识仍在等待中。',
   'task.planDelayedTitle': '尚未收到结构化计划',
   'task.planDelayedDescription': '智能体可能仍在工作；你可以要求它重新发布计划。',
+  'task.planRunFailed': '规划运行已结束，但没有发布结构化计划。',
   'task.retryPlan': '重试生成计划',
   'task.taskBrief': '任务说明',
   'task.mode': '模式',
@@ -7866,8 +7926,6 @@ const zhCN: Record<string, string> = {
     '待确认批准已不再匹配当前完整任务列表。请返回会话并刷新权威状态后再重试。',
   'task.planEditsSubmitted': '已提交 {count} 项经审查的计划修改。',
 };
-
-const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<DesktopLocale>(() => {

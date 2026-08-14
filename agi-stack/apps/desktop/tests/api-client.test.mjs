@@ -536,26 +536,26 @@ test('workspace Agent binding catalog and mutations preserve scoped authority id
     calls.push({ request: String(request), init });
     if (responseMode === 'definitions') {
       return new Response(
-        JSON.stringify([
-          {
-            id: 'tenant-agent',
-            tenant_id: tenantId,
-            project_id: null,
-            name: 'tenant-agent',
-            display_name: 'Tenant Agent',
-            enabled: true,
-            model: 'tenant-model',
-          },
-          {
-            id: agentId,
-            tenant_id: tenantId,
-            project_id: projectId,
-            name: 'project-agent',
-            display_name: 'Project Agent',
-            enabled: true,
-            model: 'project-model',
-          },
-        ]),
+        JSON.stringify({
+          items: [
+            {
+              id: 'tenant-agent',
+              project_id: null,
+              name: 'tenant-agent',
+              display_name: 'Tenant Agent',
+              enabled: true,
+              model: 'tenant-model',
+            },
+            {
+              id: agentId,
+              project_id: projectId,
+              name: 'project-agent',
+              display_name: 'Project Agent',
+              enabled: true,
+              model: 'project-model',
+            },
+          ],
+        }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
@@ -673,6 +673,94 @@ test('workspace Agent binding catalog and mutations preserve scoped authority id
         return true;
       },
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace Agent binding catalog keeps cloud and local authority contracts distinct', async () => {
+  const originalFetch = globalThis.fetch;
+  const tenantId = 'tenant-authority';
+  const projectId = 'project-authority';
+  const definition = {
+    id: 'agent-authority',
+    project_id: projectId,
+    name: 'authority-agent',
+    display_name: 'Authority Agent',
+    enabled: true,
+    model: 'authority-model',
+  };
+  let payload = [];
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  try {
+    const cloudClient = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session',
+      tenantId,
+      projectId,
+    });
+    const localClient = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      mode: 'local',
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'local-session',
+      localApiToken: 'launch-capability',
+      tenantId,
+      projectId,
+    });
+
+    payload = [{ ...definition, tenant_id: tenantId }];
+    assert.equal(
+      (await cloudClient.listWorkspaceBindingAgentDefinitionsForProject(projectId, tenantId))[0]
+        .tenant_id,
+      tenantId,
+    );
+
+    for (const invalidCloudPayload of [
+      [definition],
+      [{ ...definition, tenant_id: 'different-tenant' }],
+      [{ ...definition, tenant_id: tenantId, project_id: 'different-project' }],
+      { items: [definition] },
+    ]) {
+      payload = invalidCloudPayload;
+      await assert.rejects(
+        cloudClient.listWorkspaceBindingAgentDefinitionsForProject(projectId, tenantId),
+        (error) => {
+          assert.equal(error instanceof DesktopApiError, true);
+          assert.equal(error.status, 502);
+          return true;
+        },
+      );
+    }
+
+    payload = { items: [definition] };
+    assert.equal(
+      (await localClient.listWorkspaceBindingAgentDefinitionsForProject(projectId, tenantId))[0]
+        .tenant_id,
+      tenantId,
+    );
+
+    for (const invalidLocalPayload of [
+      { items: [{ ...definition, tenant_id: 'different-tenant' }] },
+      { items: [{ ...definition, project_id: 'different-project' }] },
+    ]) {
+      payload = invalidLocalPayload;
+      await assert.rejects(
+        localClient.listWorkspaceBindingAgentDefinitionsForProject(projectId, tenantId),
+        (error) => {
+          assert.equal(error instanceof DesktopApiError, true);
+          assert.equal(error.status, 502);
+          return true;
+        },
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1971,6 +2059,260 @@ test('workspace roster requests stay inside the selected scope', async () => {
   }
 });
 
+test('workspace autonomy attention requests use strict list retry authority and resolve contracts', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const requestUrl = String(input);
+    calls.push({ input: requestUrl, init });
+    let payload;
+    if (requestUrl.endsWith('/collaboration/authority')) {
+      payload = {
+        contract_version: '2.0.0',
+        tenant_id: 'tenant/1',
+        project_id: 'project/1',
+        workspace_id: 'workspace/1',
+        revision: 17,
+        cursor: 'authority-cursor-17',
+      };
+    } else if (requestUrl.endsWith('/resolve')) {
+      payload = {
+        attention_id: 'attention/1',
+        status: 'resolved',
+        committed_revision: 18,
+        replayed: false,
+      };
+    } else if (init?.method === 'POST') {
+      payload = { attention_id: 'attention/1', status: 'retry_queued' };
+    } else {
+      payload = [
+        {
+          attention_id: 'attention/1',
+          root_task_id: 'root-task-1',
+          source_kind: 'task_dispatch_dead_letter',
+          source_id: 'dispatch-1',
+          reason: 'delivery retries exhausted',
+          status: 'open',
+          created_at_ms: 10,
+        },
+      ];
+    }
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const controller = new AbortController();
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'authenticated-session',
+      tenantId: 'tenant/1',
+      projectId: 'project/1',
+      workspaceId: 'workspace/1',
+    });
+
+    const attentions = await client.listWorkspaceAutonomyAttentions(controller.signal);
+    const retry = await client.retryWorkspaceAutonomyAttention('attention/1', controller.signal);
+    const authorityRevision = await client.getWorkspaceAuthorityRevision(controller.signal);
+    const resolved = await client.resolveWorkspaceAutonomyAttention(
+      'attention/1',
+      authorityRevision,
+      'desktop-attention-resolve-attempt-1',
+      controller.signal,
+    );
+
+    assert.equal(attentions[0].source_kind, 'task_dispatch_dead_letter');
+    assert.deepEqual(retry, { attention_id: 'attention/1', status: 'retry_queued' });
+    assert.equal(authorityRevision, 17);
+    assert.deepEqual(resolved, {
+      attention_id: 'attention/1',
+      status: 'resolved',
+      committed_revision: 18,
+      replayed: false,
+    });
+    assert.deepEqual(
+      calls.map(({ input, init }) => [input, init?.method ?? 'GET', init?.signal]),
+      [
+        [
+          'http://127.0.0.1:8088/api/v1/workspaces/workspace%2F1/autonomy/attentions',
+          'GET',
+          controller.signal,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/workspaces/workspace%2F1/autonomy/attentions/attention%2F1/retry',
+          'POST',
+          controller.signal,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/tenants/tenant%2F1/projects/project%2F1/workspaces/workspace%2F1/collaboration/authority',
+          'GET',
+          controller.signal,
+        ],
+        [
+          'http://127.0.0.1:8088/api/v1/workspaces/workspace%2F1/autonomy/attentions/attention%2F1/resolve',
+          'POST',
+          controller.signal,
+        ],
+      ],
+    );
+    const resolveHeaders = new Headers(calls[3].init?.headers);
+    assert.equal(resolveHeaders.get('If-Match'), '17');
+    assert.equal(resolveHeaders.get('X-Expected-Revision'), '17');
+    assert.equal(
+      resolveHeaders.get('Idempotency-Key'),
+      'desktop-attention-resolve-attempt-1',
+    );
+    assert.equal(calls[3].init?.body, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('workspace autonomy attention requests reject malformed and mismatched authority', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({
+    ...DEFAULT_CONFIG,
+    apiBaseUrl: 'http://127.0.0.1:8088',
+    apiKey: 'authenticated-session',
+    tenantId: 'tenant-1',
+    projectId: 'project-1',
+    workspaceId: 'workspace-1',
+  });
+
+  try {
+    for (const payload of [
+      { items: [] },
+      [
+        {
+          attention_id: 'attention-1',
+          root_task_id: null,
+          source_kind: 'guessed_dead_letter',
+          source_id: 'dispatch-1',
+          reason: 'invalid source',
+          status: 'open',
+          created_at_ms: 10,
+        },
+      ],
+      [
+        {
+          attention_id: 'attention-1',
+          root_task_id: null,
+          source_kind: 'judge_block',
+          source_id: 'audit-1',
+          reason: 'needs review',
+          status: 'resolved',
+          created_at_ms: 10,
+        },
+      ],
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.listWorkspaceAutonomyAttentions(), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ attention_id: 'attention-2', status: 'retry_queued' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    await assert.rejects(client.retryWorkspaceAutonomyAttention('attention-1'), (error) => {
+      assert.equal(error instanceof DesktopApiError, true);
+      assert.equal(error.status, 502);
+      return true;
+    });
+
+    const validAuthority = {
+      contract_version: '2.0.0',
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      workspace_id: 'workspace-1',
+      revision: 7,
+      cursor: 'authority-cursor-7',
+    };
+    for (const payload of [
+      { ...validAuthority, workspace_id: 'workspace-2' },
+      { ...validAuthority, revision: -1 },
+      { ...validAuthority, unexpected: true },
+      { ...validAuthority, cursor: '' },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(client.getWorkspaceAuthorityRevision(), (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.status, 502);
+        return true;
+      });
+    }
+
+    for (const payload of [
+      {
+        attention_id: 'attention-2',
+        status: 'resolved',
+        committed_revision: 8,
+        replayed: false,
+      },
+      {
+        attention_id: 'attention-1',
+        status: 'open',
+        committed_revision: 8,
+        replayed: false,
+      },
+      {
+        attention_id: 'attention-1',
+        status: 'resolved',
+        committed_revision: -1,
+        replayed: false,
+      },
+      {
+        attention_id: 'attention-1',
+        status: 'resolved',
+        committed_revision: 8,
+        replayed: 'false',
+      },
+      {
+        attention_id: 'attention-1',
+        status: 'resolved',
+        committed_revision: 8,
+        replayed: false,
+        unexpected: true,
+      },
+    ]) {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      await assert.rejects(
+        client.resolveWorkspaceAutonomyAttention(
+          'attention-1',
+          7,
+          'desktop-attention-resolve-attempt-1',
+        ),
+        (error) => {
+          assert.equal(error instanceof DesktopApiError, true);
+          assert.equal(error.status, 502);
+          return true;
+        },
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('workspace roster requests reject wrapped collections', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
@@ -3031,7 +3373,7 @@ test('createAgentConversation preserves the explicit Work or Code capability', a
   }
 });
 
-test('createAgentConversation atomically includes an optional model override', async () => {
+test('createAgentConversation atomically includes an optional provider-specific model route', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -3041,7 +3383,11 @@ test('createAgentConversation atomically includes an optional model override', a
         workspace_id: null,
         workspace_name: null,
         title: 'Research release risk',
-        agent_config: { capability_mode: 'work', llm_model_override: 'gpt-primary' },
+        agent_config: {
+          capability_mode: 'work',
+          llm_model_override: 'gpt-primary',
+          llm_route_override: { provider_id: 'provider-primary', model_id: 'gpt-primary' },
+        },
       })),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
@@ -3063,6 +3409,7 @@ test('createAgentConversation atomically includes an optional model override', a
       'work',
       {
         llm_model_override: 'gpt-primary',
+        llm_route_override: { provider_id: 'provider-primary', model_id: 'gpt-primary' },
       },
     );
 
@@ -3073,6 +3420,7 @@ test('createAgentConversation atomically includes an optional model override', a
         selected_agent_id: 'builtin:all-access',
         capability_mode: 'work',
         llm_model_override: 'gpt-primary',
+        llm_route_override: { provider_id: 'provider-primary', model_id: 'gpt-primary' },
       },
     });
   } finally {
