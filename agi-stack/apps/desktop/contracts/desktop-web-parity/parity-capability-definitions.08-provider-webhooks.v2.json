@@ -184,6 +184,12 @@
         },
         {
           "surface": "desktop_local",
+          "method": "DELETE",
+          "path": "/api/v1/llm-providers/{provider_id}",
+          "authority": "sidecar"
+        },
+        {
+          "surface": "desktop_local",
           "method": "POST",
           "path": "/api/v1/llm-providers/{provider_id}/health-check",
           "authority": "sidecar"
