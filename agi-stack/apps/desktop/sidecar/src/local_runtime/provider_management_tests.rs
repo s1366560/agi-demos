@@ -569,3 +569,39 @@ async fn provider_delete_replays_one_tombstone_and_cleans_runtime_selection_and_
     assert!(!runtime.probes.contains_key(&key));
     assert!(!runtime.selections.contains_key("local"));
 }
+
+#[tokio::test]
+async fn provider_delete_preflight_allows_browser_delete_request() {
+    let response = local_router(test_state("provider-delete-preflight-secret"))
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/v1/llm-providers/local-runtime")
+                .header("origin", "agistack://app")
+                .header("access-control-request-method", "DELETE")
+                .header(
+                    "access-control-request-headers",
+                    "authorization,content-type,idempotency-key,x-agistack-launch",
+                )
+                .body(Body::empty())
+                .expect("provider DELETE preflight request"),
+        )
+        .await
+        .expect("provider DELETE preflight response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|value| value.to_str().ok()),
+        Some("agistack://app")
+    );
+    assert!(response
+        .headers()
+        .get("access-control-allow-methods")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|methods| methods
+            .split(',')
+            .any(|method| method.trim() == "DELETE")));
+}

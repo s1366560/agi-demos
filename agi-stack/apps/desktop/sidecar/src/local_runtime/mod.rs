@@ -3080,7 +3080,13 @@ fn local_cors_layer() -> CorsLayer {
         .allow_origin(AllowOrigin::list(local_cors_origins(
             renderer_origin.as_deref(),
         )))
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT])
+        .allow_methods([
+            Method::DELETE,
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+        ])
         .allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
