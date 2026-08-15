@@ -298,6 +298,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       deferUntilNextConnection: delivery.deferUntilNextConnection,
       agentId: input.agentId,
       forcedSkillName: input.forcedSkillName,
+      subAgentId: input.subAgentId,
       mentions: input.mentions,
       fileMetadata: input.fileMetadata,
       appModelContext: input.appModelContext,

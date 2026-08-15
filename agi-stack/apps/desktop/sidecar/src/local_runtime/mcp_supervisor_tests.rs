@@ -65,11 +65,12 @@ async fn discovered_mcp_tools_are_dispatchable_through_the_agent_tool_host() {
     )
     .expect("agent MCP tool host");
     let tools = host.list_tools();
-    assert_eq!(tools.len(), 1);
-    assert!(tools[0].starts_with("mcp__"));
+    assert_eq!(tools.len(), 2);
+    assert!(tools.iter().any(|tool| tool.starts_with("mcp__")));
+    assert!(tools.contains(&"mock".to_string()));
 
     let output = host
-        .call(&tools[0], &json!({"message": "from agent"}).to_string())
+        .call("mock", &json!({"message": "from agent"}).to_string())
         .await
         .expect("call MCP through agent host");
     let output: serde_json::Value = serde_json::from_str(&output).expect("MCP output JSON");
@@ -278,6 +279,115 @@ async fn react_engine_dispatches_legacy_mcp_alias_without_advertising_it() {
         .output_json
         .contains("legacy engine route"));
     assert_eq!(state.answer.as_deref(), Some("legacy alias completed"));
+
+    fs::remove_dir_all(root).expect("remove MCP test root");
+}
+
+#[tokio::test]
+async fn authorized_run_dispatches_model_friendly_mcp_alias() {
+    let root = test_root("agent-tool-host-model-alias");
+    let script = write_mock_server(&root);
+    let python = python_executable();
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let supervisor = Arc::new(
+        McpSupervisor::new(store.clone(), root.clone(), None, test_limits())
+            .expect("MCP supervisor"),
+    );
+    let active_scope = scope("local-project");
+    let server = supervisor
+        .create_server(
+            &active_scope,
+            definition("local-echo", &python, &script, "normal"),
+            "create-agent-tool-host-model-alias",
+        )
+        .expect("create MCP server");
+    supervisor
+        .list_tools(&active_scope, &server.id)
+        .await
+        .expect("discover MCP tools");
+
+    let mcp_host = Arc::new(
+        McpAgentToolHost::new(
+            Arc::clone(&supervisor),
+            active_scope,
+            "run-agent-tool-host-model-alias".to_string(),
+            None,
+        )
+        .expect("agent MCP tool host"),
+    );
+    let canonical = mcp_host
+        .list_tools()
+        .into_iter()
+        .find(|tool| tool.starts_with("mcp__"))
+        .expect("canonical MCP tool");
+    assert!(canonical.starts_with("mcp__"));
+    let metadata = mcp_host.authority_metadata_by_name();
+    assert!(metadata.contains_key("local-echo"));
+    assert_eq!(metadata["local-echo"].name, "local-echo");
+    assert_eq!(metadata["local-echo"].effect, ToolEffect::Mutate);
+
+    let run = running_run(
+        &store,
+        &root,
+        "model-alias",
+        DesktopPermissionProfile::FullAccess,
+    )
+    .expect("full-access run");
+    let agent = json!({
+        "id": "builtin:all-access",
+        "name": "Local Agent",
+        "system_prompt": "Coordinate the selected resources.",
+        "enabled": true,
+        "status": "active",
+        "allowed_tools": ["*"],
+        "allowed_skills": ["*"],
+        "allowed_mcp_servers": ["*"],
+        "can_spawn": true,
+        "spawn_policy": {"allowed_subagents": ["*"]}
+    });
+    let profile = ExecutionProfile::resolve("builtin:all-access", &agent, None, None)
+        .expect("all-access profile");
+    let fan_out = Arc::new(FanOutToolHost::new(vec![mcp_host]));
+    let profiled: Arc<dyn ToolHost> = Arc::new(ProfiledToolHost::new(fan_out, &profile));
+    let advertised_tools = profiled.list_tools();
+    assert!(advertised_tools.contains(&canonical));
+    assert!(advertised_tools.contains(&"local-echo".to_string()));
+    let authorized: Arc<dyn ToolHost> = Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
+        profiled,
+        store.clone(),
+        run,
+        metadata,
+    ));
+    let engine = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(vec![
+            AgentAction::CallTool {
+                tool: "local-echo".to_string(),
+                input_json: json!({"message": "model alias"}).to_string(),
+            },
+            AgentAction::Finish {
+                answer: "model alias completed".to_string(),
+            },
+        ])),
+        authorized,
+        Arc::new(InMemoryCheckpointStore::new()),
+        Arc::new(FixedClock(1_000)),
+    );
+
+    let state = engine
+        .run(
+            "session-agent-tool-host-model-alias",
+            "Call local-echo",
+            Some("local-project"),
+        )
+        .await
+        .expect("authorized model alias reaches MCP host");
+
+    assert_eq!(state.completed_tool_calls.len(), 1);
+    assert_eq!(state.completed_tool_calls[0].tool, "local-echo");
+    assert!(state.completed_tool_calls[0]
+        .output_json
+        .contains("model alias"));
+    assert_eq!(state.answer.as_deref(), Some("model alias completed"));
 
     fs::remove_dir_all(root).expect("remove MCP test root");
 }

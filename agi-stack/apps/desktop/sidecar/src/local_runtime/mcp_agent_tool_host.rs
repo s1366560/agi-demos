@@ -5,7 +5,10 @@
 //! already-discovered tools in the active tenant/project scope and dispatches
 //! exact structured calls through [`McpSupervisor`].
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
 use async_trait::async_trait;
@@ -43,6 +46,7 @@ pub(super) struct McpAgentToolHost {
     run_id: String,
     tools: BTreeMap<String, McpAgentTool>,
     legacy_aliases: BTreeMap<String, String>,
+    advertised_aliases: BTreeSet<String>,
 }
 
 impl McpAgentToolHost {
@@ -53,7 +57,8 @@ impl McpAgentToolHost {
         allowed_servers: Option<&[String]>,
     ) -> Result<Self, String> {
         let mut tools: BTreeMap<String, McpAgentTool> = BTreeMap::new();
-        let mut legacy_aliases: BTreeMap<String, Option<String>> = BTreeMap::new();
+        let mut dispatch_aliases: BTreeMap<String, Option<String>> = BTreeMap::new();
+        let mut advertised_alias_candidates = BTreeSet::new();
         for server in supervisor
             .list_servers(&scope)
             .map_err(|error| error.to_string())?
@@ -78,14 +83,15 @@ impl McpAgentToolHost {
                     continue;
                 }
                 let legacy_name = legacy_exposed_tool_name(&server.id, tool_name);
-                legacy_aliases
-                    .entry(legacy_name)
-                    .and_modify(|target| {
-                        if target.as_deref() != Some(exposed_name.as_str()) {
-                            *target = None;
-                        }
-                    })
-                    .or_insert_with(|| Some(exposed_name.clone()));
+                insert_dispatch_alias(&mut dispatch_aliases, legacy_name, &exposed_name);
+                if let Some(model_alias) = model_alias_name(&server.name) {
+                    insert_dispatch_alias(
+                        &mut dispatch_aliases,
+                        model_alias.clone(),
+                        &exposed_name,
+                    );
+                    advertised_alias_candidates.insert(model_alias);
+                }
                 tools.insert(
                     exposed_name.clone(),
                     McpAgentTool {
@@ -101,7 +107,7 @@ impl McpAgentToolHost {
                 );
             }
         }
-        let legacy_aliases = legacy_aliases
+        let legacy_aliases: BTreeMap<String, String> = dispatch_aliases
             .into_iter()
             .filter_map(|(alias, target)| {
                 target
@@ -109,12 +115,17 @@ impl McpAgentToolHost {
                     .map(|canonical| (alias, canonical))
             })
             .collect();
+        let advertised_aliases = advertised_alias_candidates
+            .into_iter()
+            .filter(|alias| legacy_aliases.contains_key(alias))
+            .collect();
         Ok(Self {
             supervisor,
             scope,
             run_id,
             tools,
             legacy_aliases,
+            advertised_aliases,
         })
     }
 
@@ -143,7 +154,11 @@ impl McpAgentToolHost {
 #[async_trait]
 impl ToolHost for McpAgentToolHost {
     fn list_tools(&self) -> Vec<String> {
-        self.tools.keys().cloned().collect()
+        self.tools
+            .keys()
+            .cloned()
+            .chain(self.advertised_aliases.iter().cloned())
+            .collect()
     }
 
     fn can_dispatch(&self, tool: &str) -> bool {
@@ -220,6 +235,34 @@ pub(super) fn legacy_exposed_tool_name(server_id: &str, tool_name: &str) -> Stri
         URL_SAFE_NO_PAD.encode(server_id.as_bytes()),
         URL_SAFE_NO_PAD.encode(tool_name.as_bytes())
     )
+}
+
+fn model_alias_name(server_name: &str) -> Option<String> {
+    let value = server_name.trim();
+    if value.is_empty()
+        || value.len() > MAX_EXPOSED_TOOL_NAME_BYTES
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return None;
+    }
+    Some(value.to_string())
+}
+
+fn insert_dispatch_alias(
+    aliases: &mut BTreeMap<String, Option<String>>,
+    alias: String,
+    canonical: &str,
+) {
+    aliases
+        .entry(alias)
+        .and_modify(|target| {
+            if target.as_deref() != Some(canonical) {
+                *target = None;
+            }
+        })
+        .or_insert_with(|| Some(canonical.to_string()));
 }
 
 fn readable_slug(value: &str, max_bytes: usize, fallback: &str) -> String {
@@ -387,6 +430,27 @@ mod tests {
             legacy_exposed_tool_name("server-a", "repo/query"),
             "mcp__c2VydmVyLWE__cmVwby9xdWVyeQ"
         );
+    }
+
+    #[test]
+    fn model_aliases_accept_only_unambiguous_safe_names() {
+        assert_eq!(model_alias_name(" local-echo "), Some("local-echo".into()));
+        assert_eq!(
+            model_alias_name("server_name-1"),
+            Some("server_name-1".into())
+        );
+        assert_eq!(model_alias_name("server name"), None);
+        assert_eq!(model_alias_name(""), None);
+        assert_eq!(model_alias_name(&"x".repeat(65)), None);
+    }
+
+    #[test]
+    fn conflicting_model_aliases_fail_closed() {
+        let mut aliases = BTreeMap::new();
+        insert_dispatch_alias(&mut aliases, "shared".into(), "canonical-a");
+        insert_dispatch_alias(&mut aliases, "shared".into(), "canonical-b");
+
+        assert_eq!(aliases.get("shared"), Some(&None));
     }
 
     #[test]

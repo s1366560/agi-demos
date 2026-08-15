@@ -298,6 +298,22 @@ async fn structured_subagent_tool_runs_the_exact_authorized_target() {
     let compatible_name_output: Value =
         serde_json::from_str(&compatible_name_output).expect("structured name output");
     assert_eq!(compatible_name_output["subagent_id"], "qa-path-reader");
+
+    let model_alias_output = authorized_call(
+        &host,
+        "invocation-model-alias",
+        1,
+        &json!({
+            "agent": "QA Path Reader",
+            "task": "Inspect the model-facing alias",
+        })
+        .to_string(),
+    )
+    .await
+    .expect("model-facing agent alias delegation");
+    let model_alias_output: Value =
+        serde_json::from_str(&model_alias_output).expect("structured alias output");
+    assert_eq!(model_alias_output["subagent_id"], "qa-path-reader");
 }
 
 #[tokio::test]

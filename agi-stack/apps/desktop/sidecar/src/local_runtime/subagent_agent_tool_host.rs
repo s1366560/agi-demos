@@ -33,7 +33,7 @@ const MAX_TASK_BYTES: usize = 64 * 1024;
 struct SubagentToolInput {
     #[serde(default)]
     subagent_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "agent")]
     subagent_name: Option<String>,
     task: String,
 }

@@ -241,7 +241,8 @@ test('composer execution context routes selected Web resources into the cloud Ag
   });
 });
 
-test('new composer threads forward the selected Sub Agent through both task launch paths', () => {
+test('new composer threads forward the selected Sub Agent through every launch transport', () => {
+  assert.match(conversationThreadsSource, /subAgentId: input\.subAgentId/);
   assert.equal(
     conversationThreadsSource.split('subAgentId: execution.subAgentId').length - 1,
     2,
