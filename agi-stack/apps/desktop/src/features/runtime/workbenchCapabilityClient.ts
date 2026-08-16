@@ -1056,7 +1056,9 @@ async function loadManagementRouteCapability(
         workspace_id: null,
         instance_id: null,
       },
-      authority_revision: null,
+      // The local sidecar exposes no per-collection revision; the observed item
+      // count is the authoritative signal available for the revision closure.
+      authority_revision: observation.itemCount,
     };
   } catch (error) {
     if (signal?.aborted) throw error;

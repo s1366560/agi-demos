@@ -37,13 +37,53 @@ impl LocalRuntimeState {
         Ok(())
     }
 
+    pub(super) fn selected_provider_route(&self, tenant_id: &str) -> Option<LlmRouteTarget> {
+        let runtime = self.provider_runtime.lock().ok()?;
+        let active: Vec<(&ProviderRuntimeKey, &ProviderRuntimeBinding)> = runtime
+            .bindings
+            .iter()
+            .filter(|(key, _)| key.tenant_id == tenant_id)
+            .collect();
+        let selected_id = runtime.selections.get(tenant_id);
+        let (key, binding) = match selected_id {
+            Some(provider_id) => active
+                .iter()
+                .find(|(key, _)| &key.provider_id == provider_id)
+                .map(|(key, binding)| (*key, *binding))?,
+            None => {
+                // No explicit runtime selection: local mode configures at most one
+                // active provider per tenant, so the sole binding is the default.
+                let (key, binding) = active.iter().next().copied()?;
+                if active.len() > 1 {
+                    return None;
+                }
+                (key, binding)
+            }
+        };
+        if binding.auth_method != "none" && !runtime.credentials.contains_key(&key) {
+            return None;
+        }
+        Some(LlmRouteTarget {
+            provider_id: key.provider_id.clone(),
+            model_id: binding.model.clone(),
+        })
+    }
+
     pub(super) fn llm_for_unbound_conversation(
         &self,
         conversation: &LocalConversation,
     ) -> Arc<dyn LlmPort> {
         let route = match self.session_store.conversation_llm_route(&conversation.id) {
             Ok(Some(route)) => route,
-            Ok(None) | Err(_) => return Arc::new(UnconfiguredLocalLlm),
+            Ok(None) => {
+                // Unbound conversations have no workspace policy; fall back to the
+                // tenant-selected provider binding so "project default model" works.
+                match self.selected_provider_route(&conversation.tenant_id) {
+                    Some(route) => route,
+                    None => return Arc::new(UnconfiguredLocalLlm),
+                }
+            }
+            Err(_) => return Arc::new(UnconfiguredLocalLlm),
         };
         if self
             .validate_conversation_llm_route(&conversation.tenant_id, &route)

@@ -605,18 +605,18 @@ test('management routes become observed only after their typed clients read curr
 
       for (const capability of managementRouteCapabilityIds) {
         assert.deepEqual(snapshot.capabilities[capability], {
-          availability: 'unavailable',
-          reason_code: 'capability_authority_revision_unavailable',
+          availability: 'available',
+          reason_code: null,
           service_version: '0.1.0',
           contract_version: '4.0.0',
-          allowed_actions: [],
+          allowed_actions: ['view', 'list'],
           scope: {
             tenant_id: config.tenantId,
             project_id: config.projectId,
             workspace_id: null,
             instance_id: null,
           },
-          authority_revision: null,
+          authority_revision: 2,
           retryable: false,
           authority_source: authoritySource,
           supporting_authority_sources: [],
