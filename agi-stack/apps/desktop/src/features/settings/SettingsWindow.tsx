@@ -161,7 +161,6 @@ export function SettingsWindow({
     initialFocusRef: searchInputRef,
     onClose,
   });
-
   useEffect(() => {
     if (!open) return;
     setSection(initialSection);
@@ -510,6 +509,36 @@ export function SettingsWindow({
     }
   };
 
+  const managementDialogOpen = Boolean(
+    agentManagement.dialog ||
+      skillManagement.dialog ||
+      skillPackageManagement.importKey ||
+      skillPackageManagement.versionsDialog ||
+      skillPackageManagement.evolutionDialog ||
+      pluginManagement.dialog ||
+      pluginManagement.activityOpen ||
+      channelManagement.open ||
+      channelManagement.editor ||
+      mcpServerManagement.dialog ||
+      subAgentDefinitions.dialog ||
+      subAgentLibrary.dialog
+  );
+  const managementDialogs = (
+    <SettingsManagementDialogs
+      auth={auth}
+      config={config}
+      allowTenantSkillScope={canManageAgentDefinitions}
+      agents={agentManagement}
+      skills={skillManagement}
+      skillPackages={skillPackageManagement}
+      plugins={pluginManagement}
+      channels={channelManagement}
+      mcpServers={mcpServerManagement}
+      subagentDefinitions={subAgentDefinitions}
+      subagents={subAgentLibrary}
+    />
+  );
+
   const windowContent = (
     <Theme appearance="dark" accentColor="cyan" grayColor="slate" radius="medium" scaling="95%">
       <div className="settings-window-backdrop" onMouseDown={onClose}>
@@ -517,7 +546,7 @@ export function SettingsWindow({
           ref={settingsDialogRef}
           className="settings-window-dialog"
           role="dialog"
-          aria-modal="true"
+          aria-modal={managementDialogOpen ? undefined : true}
           aria-label={t('settings.title')}
           tabIndex={-1}
           onMouseDown={(event) => event.stopPropagation()}
@@ -770,19 +799,7 @@ export function SettingsWindow({
             </main>
           </div>
         </section>
-        <SettingsManagementDialogs
-          auth={auth}
-          config={config}
-          allowTenantSkillScope={canManageAgentDefinitions}
-          agents={agentManagement}
-          skills={skillManagement}
-          skillPackages={skillPackageManagement}
-          plugins={pluginManagement}
-          channels={channelManagement}
-          mcpServers={mcpServerManagement}
-          subagentDefinitions={subAgentDefinitions}
-          subagents={subAgentLibrary}
-        />
+        {createPortal(managementDialogs, document.body)}
       </div>
     </Theme>
   );

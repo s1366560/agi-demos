@@ -1670,7 +1670,7 @@ const enUS: Record<string, string> = {
   'providers.environmentVariable': 'Environment variable',
   'providers.environmentVariablePlaceholder': 'OPENAI_API_KEY',
   'providers.environmentSecretDescription':
-    "Only the variable name is saved. Standard variables are resolved only for the provider's official HTTPS endpoint; the secret is never returned by the API.",
+    "Only the variable name is saved. Standard variables are resolved for the provider's official HTTPS endpoint or a trusted loopback endpoint; the secret is never returned by the API.",
   'providers.environmentSecretAvailable': 'Available',
   'providers.environmentSecretUnavailable': 'Not available',
   'providers.environmentSecretUnknown': 'Check required',
@@ -5615,7 +5615,7 @@ const zhCN: Record<string, string> = {
   'providers.environmentVariable': '环境变量',
   'providers.environmentVariablePlaceholder': 'OPENAI_API_KEY',
   'providers.environmentSecretDescription':
-    '仅保存变量名；标准变量只会解析并发送到供应商官方 HTTPS 端点，API 永不回传密钥值。',
+    '仅保存变量名；标准变量只会解析并发送到供应商官方 HTTPS 端点或可信本机回环端点，API 永不回传密钥值。',
   'providers.environmentSecretAvailable': '可用',
   'providers.environmentSecretUnavailable': '不可用',
   'providers.environmentSecretUnknown': '需要检查',

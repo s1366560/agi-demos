@@ -45,6 +45,14 @@ test('settings dialogs trap focus, restore focus, and give nested Escape priorit
   assert.doesNotMatch(addProviderSource, /window\.addEventListener\('keydown'/);
 });
 
+test('management dialogs are portalled beside the settings window', () => {
+  assert.match(settingsWindowSource, /const managementDialogs = \(\s*<SettingsManagementDialogs/);
+  assert.match(
+    settingsWindowSource,
+    /\{createPortal\(managementDialogs, document\.body\)\}/,
+  );
+});
+
 test('provider creation keeps one retry identity and cannot close through Escape while busy', () => {
   assert.match(addProviderSource, /providerCreateIdempotencyKey/);
   assert.match(
