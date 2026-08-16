@@ -11,6 +11,7 @@
   },
   "include": [
     "css.d.ts",
+    "../src/vite-env.d.ts",
     "../src/features/project-agent/**/*.ts",
     "../src/features/project-agent/**/*.tsx"
   ]

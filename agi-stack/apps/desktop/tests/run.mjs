@@ -31,6 +31,20 @@ const compile = spawnSync(
 );
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
+for (const project of ['project-agent', 'project-administration', 'project-knowledge']) {
+  const projectDistRoot = `/tmp/agistack-${project}-test-dist`;
+  rmSync(projectDistRoot, { recursive: true, force: true });
+  const projectCompile = spawnSync(
+    process.execPath,
+    [tscEntrypoint, '-p', `tests/tsconfig.${project}.json`],
+    {
+      cwd: desktopRoot,
+      stdio: 'inherit',
+    },
+  );
+  if (projectCompile.status !== 0) process.exit(projectCompile.status ?? 1);
+}
+
 const compiledTaskDirectory = join(compiledRoot, 'src', 'features', 'task');
 mkdirSync(compiledTaskDirectory, { recursive: true });
 copyFileSync(
