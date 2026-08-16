@@ -4937,7 +4937,10 @@ export function App() {
       : conversationModelEvent?.overrideModel,
   );
   const persistChatRuntimeModelOverride = useCallback(
-    async (overrideModel: string | null): Promise<void> => {
+    async (
+      overrideModel: string | null,
+      routeOverride?: { provider_id: string; model_id: string } | null,
+    ): Promise<void> => {
       const conversation = scopedConversation;
       if (!conversation || !chatModelScopeKey) {
         throw new Error(t('chat.selectedModelUnavailable'));
@@ -4962,7 +4965,10 @@ export function App() {
       try {
         const updated = await api.updateAgentConversationConfig(
           conversation.id,
-          { llm_model_override: overrideModel },
+          {
+            llm_model_override: overrideModel,
+            ...(config.mode === 'local' ? { llm_route_override: routeOverride ?? null } : {}),
+          },
           conversation.project_id || config.projectId,
         );
         const activeSession = agentConversationSessionRef.current;
@@ -5038,7 +5044,12 @@ export function App() {
       if (!scopedConversation) return selectRuntimeModel(value);
       const option = runtimeModelOptions.find((candidate) => candidate.value === value);
       if (!option) throw new Error(t('chat.selectedModelUnavailable'));
-      return persistChatRuntimeModelOverride(option.modelId);
+      return persistChatRuntimeModelOverride(
+        option.modelId,
+        config.mode === 'local'
+          ? { provider_id: option.providerId, model_id: option.modelId }
+          : null,
+      );
     },
     [
       persistChatRuntimeModelOverride,
@@ -5048,10 +5059,9 @@ export function App() {
       t,
     ],
   );
-  const resetChatRuntimeModel = useCallback(
-    async (): Promise<void> => persistChatRuntimeModelOverride(null),
-    [persistChatRuntimeModelOverride],
-  );
+  const resetChatRuntimeModel = useCallback((): Promise<void> => {
+    return persistChatRuntimeModelOverride(null, null);
+  }, [persistChatRuntimeModelOverride]);
   const chatRuntimeModelMutationIsCurrent =
     conversationModelMutation.scopeKey === chatModelScopeKey;
   const chatRuntimeModelSwitching = scopedConversation

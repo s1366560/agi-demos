@@ -204,6 +204,7 @@ pub(super) struct ProjectTaskSessionInput {
     pub(super) conversation: LocalConversation,
     pub(super) initial_message: Value,
     pub(super) policy: Value,
+    pub(super) llm_route: Option<LlmRouteTarget>,
     pub(super) capability_version: String,
     pub(super) now: String,
 }
@@ -1217,6 +1218,41 @@ impl DesktopSessionStore {
             .map_err(|error| error.to_string())
     }
 
+    pub(super) fn update_conversation_llm_route(
+        &self,
+        conversation_id: &str,
+        route: Option<&LlmRouteTarget>,
+        now: &str,
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let updated_rows = match route {
+            Some(route) => transaction
+                .execute(
+                    "INSERT INTO desktop_conversation_llm_routes(
+                       conversation_id, provider_id, model_id, created_at
+                     ) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(conversation_id) DO UPDATE SET
+                       provider_id = excluded.provider_id,
+                       model_id = excluded.model_id",
+                    params![conversation_id, route.provider_id, route.model_id, now,],
+                )
+                .map_err(|error| error.to_string())?,
+            None => transaction
+                .execute(
+                    "DELETE FROM desktop_conversation_llm_routes WHERE conversation_id = ?1",
+                    [conversation_id],
+                )
+                .map_err(|error| error.to_string())?,
+        };
+        if route.is_some() && updated_rows == 0 {
+            return Err("conversation LLM route could not be stored".to_string());
+        }
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
     pub(super) fn project_task_session(
         &self,
         input: ProjectTaskSessionInput,
@@ -1232,6 +1268,7 @@ impl DesktopSessionStore {
             conversation,
             initial_message,
             policy,
+            llm_route,
             capability_version,
             now,
         } = input;
@@ -1304,8 +1341,27 @@ impl DesktopSessionStore {
         }
         insert_conversation_record(&transaction, &conversation)
             .map_err(DesktopTaskSessionError::Storage)?;
-        let conversation_response =
-            task_session_conversation_value(&conversation, &workspace, &user_id);
+        if let Some(route) = llm_route.as_ref() {
+            transaction
+                .execute(
+                    "INSERT INTO desktop_conversation_llm_routes(
+                       conversation_id, provider_id, model_id, created_at
+                     ) VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        conversation.id,
+                        route.provider_id,
+                        route.model_id,
+                        conversation.created_at,
+                    ],
+                )
+                .map_err(|error| DesktopTaskSessionError::Storage(error.to_string()))?;
+        }
+        let conversation_response = task_session_conversation_value(
+            &conversation,
+            &workspace,
+            &user_id,
+            llm_route.as_ref(),
+        );
         let response = TaskSessionResponseSnapshot {
             workspace: workspace.clone(),
             conversation: conversation_response.clone(),
@@ -5289,6 +5345,7 @@ fn task_session_conversation_value(
     conversation: &LocalConversation,
     workspace: &Value,
     user_id: &str,
+    llm_route: Option<&LlmRouteTarget>,
 ) -> Value {
     json!({
         "id": conversation.id,
@@ -5304,6 +5361,8 @@ fn task_session_conversation_value(
         "agent_config": {
             "selected_agent_id": "builtin:all-access",
             "capability_mode": conversation.capability_mode,
+            "llm_route_override": llm_route,
+            "llm_model_override": llm_route.map(|route| route.model_id.clone()),
         },
         "metadata": {
             "runtime": "local",

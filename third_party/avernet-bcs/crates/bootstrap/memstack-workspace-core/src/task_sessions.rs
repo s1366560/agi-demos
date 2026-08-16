@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::public_api::caller_from_headers;
-use super::{ApiError, WorkspaceCoreState, required_header};
+use super::{
+    ApiError, WorkspaceCoreAuthority, WorkspaceCoreState, creation::mirror_local_project_principal,
+    required_header,
+};
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 const USER_EMAIL_HEADER: &str = "x-memstack-user-email";
@@ -91,6 +94,18 @@ pub(super) async fn create_task_session(
     let caller = caller_from_headers(&headers)?;
     let actor_email = required_header(&headers, USER_EMAIL_HEADER)?;
     let idempotency_key = required_header(&headers, IDEMPOTENCY_HEADER)?;
+    if state.authority == WorkspaceCoreAuthority::Local
+        && matches!(request.workspace, WorkspaceRequest::Create { .. })
+    {
+        mirror_local_project_principal(
+            state.as_ref(),
+            tenant_id.as_str(),
+            project_id.as_str(),
+            caller.user_id.as_str(),
+            &headers,
+        )
+        .await?;
+    }
     let workspace = workspace_input(request.workspace);
     let input = CreateTaskSessionInput {
         context: TaskSessionContext {

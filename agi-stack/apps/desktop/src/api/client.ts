@@ -1338,6 +1338,7 @@ export class DesktopApiClient {
     payload: {
       selected_agent_id?: string | null;
       llm_model_override?: string | null;
+      llm_route_override?: { provider_id: string; model_id: string } | null;
       llm_overrides?: Record<string, unknown> | null;
     },
     projectId = this.config.projectId,

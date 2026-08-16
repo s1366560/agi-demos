@@ -220,6 +220,44 @@ async fn create_task_session_proxy_server_with(
             "policy": null,
             "capability_version": "avernet-task-session-v1"
         });
+        if let Some(selection) = command["workspace_policy"].as_object() {
+            let route = selection
+                .get("route")
+                .cloned()
+                .expect("task-session policy route");
+            let capability_role = if command["capability_mode"] == "code" {
+                "coding"
+            } else {
+                "default"
+            };
+            response["policy"] = json!({
+                "tenant_id": "local",
+                "project_id": "local-project",
+                "workspace_id": "local-workspace",
+                "revision": selection
+                    .get("expected_revision")
+                    .and_then(Value::as_u64)
+                    .map(|revision| revision + 1)
+                    .unwrap_or(1),
+                "roles": {
+                    "default": if capability_role == "default" { route.clone() } else { Value::Null },
+                    "fast": null,
+                    "coding": if capability_role == "coding" { route.clone() } else { Value::Null },
+                    "vision": null
+                },
+                "fallbacks": [],
+                "reasoning_effort": selection
+                    .get("reasoning_effort")
+                    .cloned()
+                    .unwrap_or_else(|| json!("medium")),
+                "permission_mode": selection
+                    .get("permission_mode")
+                    .cloned()
+                    .unwrap_or_else(|| json!("ask")),
+                "capability_version": "workspace-agent-policy-v1",
+                "updated_at": "2026-08-13T00:00:00Z"
+            });
+        }
         if matches!(behavior, TaskSessionProxyBehavior::MalformedSuccess) {
             response["initial_message"]["content"] = json!("Unexpected objective");
         }
@@ -531,7 +569,7 @@ async fn conversation_binding_uses_core_workspace_authority_without_legacy_rows(
     let (core_url, mut observations) = create_workspace_proxy_server().await;
     install(&state, &core_url);
 
-    let response = local_router(state)
+    let response = local_router(Arc::clone(&state))
         .oneshot(
             Request::builder()
                 .method("PATCH")
@@ -1721,7 +1759,7 @@ async fn cleared_authority_never_restores_legacy_workspace_routes_after_cutover(
     let generation = install(&state, "http://127.0.0.1:21000");
     clear_authority(&state, generation);
 
-    let response = local_router(state)
+    let response = local_router(Arc::clone(&state))
         .oneshot(
             Request::builder()
                 .uri("/api/v1/tenants/local/projects/local-project/workspaces/legacy-workspace")
@@ -1956,6 +1994,206 @@ async fn task_session_core_failure_does_not_create_a_local_conversation_projecti
         .list_conversations("local-project", Some("local-workspace"))
         .expect("conversation projections")
         .is_empty());
+}
+
+#[tokio::test]
+async fn task_session_persists_and_replays_explicit_llm_route() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    state
+        .session_store
+        .put_managed_resource(
+            ManagedResourceKind::Provider,
+            "tenant",
+            "local",
+            "local-runtime",
+            "active",
+            None,
+            json!({
+                "id": "local-runtime",
+                "tenant_id": "local",
+                "provider_type": "openai_compatible",
+                "base_url": "http://127.0.0.1:19001/v1",
+                "auth_method": "none",
+                "is_active": true,
+                "llm_model": "default-model",
+                "allowed_models": ["default-model", "task-session-model"]
+            }),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .expect("seed active provider");
+    {
+        let mut runtime = state.provider_runtime.lock().expect("provider runtime");
+        runtime.bindings.insert(
+            crate::local_runtime::ProviderRuntimeKey {
+                tenant_id: "local".to_string(),
+                provider_id: "local-runtime".to_string(),
+            },
+            crate::local_runtime::ProviderRuntimeBinding {
+                provider_type: "openai_compatible".to_string(),
+                base_url: "http://127.0.0.1:19001/v1".to_string(),
+                model: "default-model".to_string(),
+                auth_method: "none".to_string(),
+            },
+        );
+    }
+    let (core_url, mut observations) = create_task_session_proxy_server().await;
+    let generation = install(&state, &core_url);
+    let app = local_router(Arc::clone(&state));
+    let body = json!({
+        "idempotency_key": "desktop-task-session-route",
+        "workspace": {"kind": "existing", "workspace_id": "local-workspace"},
+        "conversation": {
+            "title": "Routed task session",
+            "capability_mode": "code"
+        },
+        "initial_message": {"content": "Create a routed task session"},
+        "workspace_policy": {
+            "expected_revision": 0,
+            "route": {
+                "provider_id": "local-runtime",
+                "model_id": "task-session-model"
+            },
+            "reasoning_effort": "medium",
+            "permission_mode": "ask"
+        }
+    })
+    .to_string();
+    let request = || {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+            .header("x-agistack-launch", "launch-token")
+            .header(AUTHORIZATION, "Bearer desktop-session")
+            .header("content-type", "application/json")
+            .body(Body::from(body.clone()))
+            .expect("task-session route request")
+    };
+
+    let first = app
+        .clone()
+        .oneshot(request())
+        .await
+        .expect("first response");
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first_body = to_bytes(first.into_body(), 1024 * 1024)
+        .await
+        .expect("first response body");
+    let first_value: Value = serde_json::from_slice(&first_body).expect("first response JSON");
+    let conversation_id = first_value["conversation"]["id"]
+        .as_str()
+        .expect("conversation id")
+        .to_string();
+    assert_eq!(
+        first_value["conversation"]["agent_config"]["llm_route_override"],
+        json!({"provider_id": "local-runtime", "model_id": "task-session-model"})
+    );
+    assert_eq!(
+        first_value["conversation"]["agent_config"]["llm_model_override"],
+        "task-session-model"
+    );
+    assert_eq!(
+        first_value["policy"]["roles"]["coding"]["model_id"],
+        "task-session-model"
+    );
+    assert_eq!(
+        state
+            .session_store
+            .conversation_llm_route(&conversation_id)
+            .expect("persisted task-session route"),
+        Some(LlmRouteTarget {
+            provider_id: "local-runtime".to_string(),
+            model_id: "task-session-model".to_string(),
+        })
+    );
+    let (_, _, core_body) = observations.recv().await.expect("first Core request");
+    let core_request: Value = serde_json::from_slice(&core_body).expect("Core request JSON");
+    assert_eq!(
+        core_request["workspace_policy"]["route"]["model_id"],
+        "task-session-model"
+    );
+
+    clear_authority(&state, generation);
+    let second = app.oneshot(request()).await.expect("replay response");
+    assert_eq!(second.status(), StatusCode::OK);
+    let second_body = to_bytes(second.into_body(), 1024 * 1024)
+        .await
+        .expect("replay response body");
+    let second_value: Value = serde_json::from_slice(&second_body).expect("replay response JSON");
+    assert_eq!(second_value["replayed"], true);
+    assert_eq!(
+        second_value["conversation"]["agent_config"]["llm_model_override"],
+        "task-session-model"
+    );
+    assert_eq!(
+        state
+            .session_store
+            .conversation_llm_route(&conversation_id)
+            .expect("persisted task-session route after replay"),
+        Some(LlmRouteTarget {
+            provider_id: "local-runtime".to_string(),
+            model_id: "task-session-model".to_string(),
+        })
+    );
+    assert!(observations.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn task_session_without_explicit_policy_does_not_infer_an_active_provider_route() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let (core_url, _observations) = create_task_session_proxy_server().await;
+    install(&state, &core_url);
+
+    let response = local_router(Arc::clone(&state))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+                .header("x-agistack-launch", "launch-token")
+                .header(AUTHORIZATION, "Bearer desktop-session")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "idempotency_key": "desktop-task-session-without-policy",
+                        "workspace": {"kind": "existing", "workspace_id": "local-workspace"},
+                        "conversation": {
+                            "title": "Unrouted task session",
+                            "capability_mode": "work"
+                        },
+                        "initial_message": {"content": "Do not infer a route"}
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let response_body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("response body");
+    let response_value: Value = serde_json::from_slice(&response_body).expect("response JSON");
+    let conversation_id = response_value["conversation"]["id"]
+        .as_str()
+        .expect("conversation id");
+    assert_eq!(
+        response_value["conversation"]["agent_config"]["llm_route_override"],
+        Value::Null
+    );
+    assert_eq!(
+        state
+            .session_store
+            .conversation_llm_route(conversation_id)
+            .expect("task-session route"),
+        None
+    );
 }
 
 #[tokio::test]

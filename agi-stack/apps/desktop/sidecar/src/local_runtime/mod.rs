@@ -2109,19 +2109,7 @@ impl LocalRuntimeState {
         };
         let role = workload_role
             .unwrap_or_else(|| workload_role_for_capability(conversation.capability_mode));
-        let base_llm: Arc<dyn LlmPort> = match policy.as_ref() {
-            Some(policy) => self.llm_for_policy(&conversation.tenant_id, policy, role),
-            None => {
-                #[cfg(test)]
-                if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
-                    Arc::new(MockLocalLlm)
-                } else {
-                    self.llm_for_unbound_conversation(conversation)
-                }
-                #[cfg(not(test))]
-                self.llm_for_unbound_conversation(conversation)
-            }
-        };
+        let base_llm = self.llm_for_role(conversation, role).await?;
         let max_rounds = policy
             .as_ref()
             .and_then(|policy| {
@@ -2484,13 +2472,19 @@ impl LocalRuntimeState {
         conversation: &LocalConversation,
         role: LlmWorkloadRole,
     ) -> Result<Arc<dyn LlmPort>, String> {
+        #[cfg(test)]
+        if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
+            return Ok(Arc::new(MockLocalLlm));
+        }
         let Some(workspace_id) = conversation.workspace_id.as_deref() else {
-            #[cfg(test)]
-            if self.mock_llm_enabled.load(Ordering::Acquire) != 0 {
-                return Ok(Arc::new(MockLocalLlm));
-            }
             return Ok(self.llm_for_unbound_conversation(conversation));
         };
+        if matches!(
+            self.session_store.conversation_llm_route(&conversation.id),
+            Ok(Some(_))
+        ) {
+            return Ok(self.llm_for_unbound_conversation(conversation));
+        }
         self.llm_for_scope(
             &conversation.tenant_id,
             &conversation.project_id,
@@ -2628,15 +2622,10 @@ impl LocalRuntimeState {
             .and_then(|environment| serde_json::to_value(environment).ok())
             .unwrap_or_else(|| json!({ "kind": "local", "label": "Local runtime" }));
         let workspace_name: Option<String> = None;
-        let llm_route_override = conversation
-            .workspace_id
-            .is_none()
-            .then(|| {
-                self.session_store
-                    .conversation_llm_route(&conversation.id)
-                    .ok()
-                    .flatten()
-            })
+        let llm_route_override = self
+            .session_store
+            .conversation_llm_route(&conversation.id)
+            .ok()
             .flatten();
         let llm_model_override = llm_route_override
             .as_ref()
@@ -2913,6 +2902,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         .route(
             "/api/v1/agent/conversations/:conversation_id/mode",
             patch(update_conversation_mode),
+        )
+        .route(
+            "/api/v1/agent/conversations/:conversation_id/config",
+            patch(update_conversation_config),
         )
         .route(
             "/api/v1/agent/conversations/:conversation_id/session",
@@ -5788,6 +5781,16 @@ struct ConversationModeBody {
     capability_mode: Option<ConversationCapabilityMode>,
 }
 
+#[derive(Default, Deserialize)]
+struct ConversationConfigBody {
+    #[serde(default)]
+    selected_agent_id: Option<String>,
+    #[serde(default)]
+    llm_model_override: Option<String>,
+    #[serde(default)]
+    llm_route_override: Option<LlmRouteTarget>,
+}
+
 async fn update_conversation_mode(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -5832,6 +5835,50 @@ async fn update_conversation_mode(
             conversation.capability_mode = capability_mode;
         }
         conversation.updated_at = now_iso();
+        state
+            .session_store
+            .update_conversation(&conversation)
+            .map_err(local_store_error)?;
+        state.conversation_value(&conversation)
+    };
+    Ok(Json(value))
+}
+
+async fn update_conversation_config(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Path(conversation_id): Path<String>,
+    Json(body): Json<ConversationConfigBody>,
+) -> LocalJsonResult {
+    let llm_route =
+        normalized_conversation_llm_route(body.llm_model_override, body.llm_route_override)
+            .map_err(local_bad_request)?;
+    if let Some(route) = llm_route.as_ref() {
+        state
+            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
+            .map_err(local_bad_request)?;
+    }
+    let value = {
+        let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
+        let now = now_iso();
+        let mut selection = state
+            .session_store
+            .execution_selection(&conversation.id)
+            .map_err(local_store_error)?
+            .unwrap_or_default();
+        if body.selected_agent_id.is_some() {
+            selection.agent_id = body.selected_agent_id;
+        }
+        let selection = selection.normalized().map_err(local_bad_request)?;
+        state
+            .session_store
+            .update_conversation_llm_route(&conversation.id, llm_route.as_ref(), &now)
+            .map_err(local_store_error)?;
+        state
+            .session_store
+            .save_execution_selection(&conversation.id, "conversation-config", &selection, &now)
+            .map_err(local_store_error)?;
+        conversation.updated_at = now;
         state
             .session_store
             .update_conversation(&conversation)

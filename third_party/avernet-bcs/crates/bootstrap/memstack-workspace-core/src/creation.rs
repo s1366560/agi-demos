@@ -172,7 +172,7 @@ pub(super) async fn create_public_workspace(
     Ok((StatusCode::CREATED, Json(outcome.response)))
 }
 
-async fn mirror_local_project_principal(
+pub(super) async fn mirror_local_project_principal(
     state: &WorkspaceCoreState,
     tenant_id: &str,
     project_id: &str,

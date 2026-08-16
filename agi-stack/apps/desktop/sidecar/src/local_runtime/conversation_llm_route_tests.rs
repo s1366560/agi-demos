@@ -39,6 +39,37 @@ async fn spawn_provider_chat_server() -> (
     (format!("http://{address}/v1"), requests, shutdown_tx)
 }
 
+async fn spawn_empty_workspace_policy_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+    let app = Router::new().route(
+        "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/agent-policy",
+        get(
+            |Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>| async move {
+                Json(json!({
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "workspace_id": workspace_id,
+                    "roles": {},
+                    "fallbacks": [],
+                }))
+            },
+        ),
+    );
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("workspace policy listener");
+    let address = listener.local_addr().expect("workspace policy address");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                shutdown_rx.await.ok();
+            })
+            .await
+            .ok();
+    });
+    (format!("http://{address}/"), shutdown_tx)
+}
+
 #[tokio::test]
 async fn unbound_conversation_creation_persists_and_projects_provider_specific_model_route() {
     let state = test_state("conversation-route-secret");
@@ -179,6 +210,169 @@ async fn unbound_conversation_creation_rejects_ambiguous_or_unavailable_model_ro
             .len(),
         count_before
     );
+}
+
+#[tokio::test]
+async fn conversation_config_updates_provider_specific_model_routes() {
+    let state = test_state("conversation-config-secret");
+    let app = local_router(Arc::clone(&state));
+    let configured = app
+        .clone()
+        .oneshot(authenticated_json_request(
+            "PUT",
+            "/api/v1/llm-providers/local-runtime",
+            "conversation-config-secret",
+            json!({
+                "provider_type": "openai_compatible",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "auth_method": "none",
+                "llm_model": "default-model",
+                "allowed_models": ["default-model", "switched-model"],
+                "is_active": true,
+                "expected_revision": 0
+            }),
+        ))
+        .await
+        .expect("configure provider for switch");
+    assert_eq!(configured.status(), StatusCode::OK);
+
+    let created = app
+        .clone()
+        .oneshot(authenticated_json_request(
+            "POST",
+            "/api/v1/agent/conversations",
+            "conversation-config-secret",
+            json!({
+                "project_id": "local-project",
+                "title": "Switch model session"
+            }),
+        ))
+        .await
+        .expect("create switchable conversation");
+    assert_eq!(created.status(), StatusCode::OK);
+    let conversation_id = response_json(created).await["id"]
+        .as_str()
+        .expect("conversation id")
+        .to_string();
+
+    let updated = app
+        .oneshot(authenticated_json_request(
+            "PATCH",
+            &format!(
+                "/api/v1/agent/conversations/{conversation_id}/config?project_id=local-project"
+            ),
+            "conversation-config-secret",
+            json!({
+                "llm_model_override": "switched-model",
+                "llm_route_override": {
+                    "provider_id": "local-runtime",
+                    "model_id": "switched-model"
+                }
+            }),
+        ))
+        .await
+        .expect("update conversation model config");
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated = response_json(updated).await;
+    assert_eq!(
+        updated["agent_config"]["llm_model_override"],
+        "switched-model"
+    );
+    assert_eq!(
+        state
+            .session_store
+            .conversation_llm_route(&conversation_id)
+            .expect("switched conversation route"),
+        Some(LlmRouteTarget {
+            provider_id: "local-runtime".to_string(),
+            model_id: "switched-model".to_string(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn workspace_bound_agent_engine_uses_persisted_conversation_route_over_empty_policy() {
+    let state = test_state("workspace-conversation-route-secret");
+    state
+        .mock_llm_enabled
+        .store(0, std::sync::atomic::Ordering::Release);
+    let app = local_router(Arc::clone(&state));
+    let (provider_base_url, requests, provider_shutdown) = spawn_provider_chat_server().await;
+    let configured = app
+        .oneshot(authenticated_json_request(
+            "PUT",
+            "/api/v1/llm-providers/local-runtime",
+            "workspace-conversation-route-secret",
+            json!({
+                "provider_type": "openai_compatible",
+                "base_url": provider_base_url,
+                "auth_method": "none",
+                "llm_model": "default-model",
+                "allowed_models": ["default-model", "workspace-model"],
+                "is_active": true,
+                "expected_revision": 0
+            }),
+        ))
+        .await
+        .expect("configure workspace conversation provider");
+    assert_eq!(configured.status(), StatusCode::OK);
+
+    let conversation = LocalConversation {
+        id: format!("workspace-routed-{}", Uuid::new_v4()),
+        project_id: "local-project".to_string(),
+        tenant_id: "local".to_string(),
+        title: "Workspace-routed session".to_string(),
+        workspace_id: Some("local-workspace".to_string()),
+        capability_mode: ConversationCapabilityMode::Work,
+        current_mode: ConversationRunMode::Plan,
+        created_at: now_iso(),
+        updated_at: now_iso(),
+    };
+    state
+        .session_store
+        .insert_conversation(&conversation)
+        .expect("insert workspace conversation");
+    let route = LlmRouteTarget {
+        provider_id: "local-runtime".to_string(),
+        model_id: "workspace-model".to_string(),
+    };
+    state
+        .session_store
+        .update_conversation_llm_route(&conversation.id, Some(&route), &now_iso())
+        .expect("persist workspace conversation route");
+
+    let (workspace_base_url, workspace_shutdown) = spawn_empty_workspace_policy_server().await;
+    workspace_core_bridge::install_authority(
+        &state,
+        workspace_base_url,
+        "workspace-policy-service-token".to_string(),
+        "workspace-agent-registry-token".to_string(),
+        "workspace-provider-webhook-token".to_string(),
+        "workspace-provider-event-token".to_string(),
+    )
+    .expect("install workspace policy authority");
+
+    let engine = state
+        .agent_engine_for_role(&conversation, None, None)
+        .await
+        .expect("build workspace-bound agent engine");
+    let result = engine
+        .run(
+            &format!("checkpoint-{}", conversation.id),
+            "route this workspace request",
+            Some("local-project"),
+        )
+        .await
+        .expect("run workspace-bound routed agent");
+    assert_eq!(result.status, SessionStatus::Finished);
+    assert_eq!(result.answer.as_deref(), Some("routed answer"));
+
+    let captured = requests.lock().await;
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0]["model"], "workspace-model");
+    drop(captured);
+    provider_shutdown.send(()).ok();
+    workspace_shutdown.send(()).ok();
 }
 
 #[tokio::test]

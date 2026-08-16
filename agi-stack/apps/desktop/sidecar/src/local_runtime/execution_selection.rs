@@ -46,7 +46,33 @@ impl DesktopSessionStore {
         selection: &ExecutionSelection,
         now: &str,
     ) -> Result<(), String> {
-        self.connection()?
+        let connection = self.connection()?;
+        let existing = connection
+            .query_row(
+                "SELECT agent_id, forced_skill_id, subagent_id
+                 FROM desktop_conversation_execution_selections
+                 WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| {
+                    Ok(ExecutionSelection {
+                        agent_id: row.get(0)?,
+                        forced_skill_id: row.get(1)?,
+                        subagent_id: row.get(2)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        let effective_selection = if existing.is_some()
+            && selection.agent_id.is_none()
+            && selection.forced_skill_id.is_none()
+            && selection.subagent_id.is_none()
+        {
+            existing
+        } else {
+            Some(selection.clone())
+        };
+        connection
             .execute(
                 "INSERT INTO desktop_conversation_execution_selections(
                conversation_id, agent_id, forced_skill_id, subagent_id, message_id, updated_at
@@ -59,9 +85,15 @@ impl DesktopSessionStore {
                updated_at = excluded.updated_at",
                 params![
                     conversation_id,
-                    selection.agent_id,
-                    selection.forced_skill_id,
-                    selection.subagent_id,
+                    effective_selection
+                        .as_ref()
+                        .and_then(|value| value.agent_id.as_deref()),
+                    effective_selection
+                        .as_ref()
+                        .and_then(|value| value.forced_skill_id.as_deref()),
+                    effective_selection
+                        .as_ref()
+                        .and_then(|value| value.subagent_id.as_deref()),
                     message_id,
                     now,
                 ],
@@ -143,6 +175,47 @@ mod tests {
             store
                 .execution_selection(&conversation.id)
                 .expect("read selection"),
+            Some(selection)
+        );
+    }
+
+    #[test]
+    fn empty_turn_selection_preserves_an_existing_conversation_selection() {
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        let conversation = LocalConversation {
+            id: "sticky-selection-conversation".to_string(),
+            project_id: "project".to_string(),
+            tenant_id: "tenant".to_string(),
+            title: "Sticky selection".to_string(),
+            workspace_id: None,
+            capability_mode: ConversationCapabilityMode::Code,
+            current_mode: ConversationRunMode::Plan,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        store
+            .insert_conversation(&conversation)
+            .expect("insert conversation");
+        let selection = ExecutionSelection {
+            agent_id: Some("builtin:all-access".to_string()),
+            forced_skill_id: None,
+            subagent_id: None,
+        };
+        store
+            .save_execution_selection(&conversation.id, "first", &selection, &now_iso())
+            .expect("save first selection");
+        store
+            .save_execution_selection(
+                &conversation.id,
+                "second",
+                &ExecutionSelection::default(),
+                &now_iso(),
+            )
+            .expect("save empty selection");
+        assert_eq!(
+            store
+                .execution_selection(&conversation.id)
+                .expect("read sticky selection"),
             Some(selection)
         );
     }

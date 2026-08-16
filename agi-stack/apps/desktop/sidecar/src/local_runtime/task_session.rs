@@ -13,7 +13,8 @@ use super::{
     session_store::{DesktopTaskSessionError, ProjectTaskSessionInput, ReplayTaskSessionInput},
     tool_authority::canonical_json_digest,
     workspace_core_bridge::{self, WorkspaceCoreTaskSessionRequest},
-    ConversationCapabilityMode, ConversationRunMode, LocalConversation, LocalRuntimeState,
+    ConversationCapabilityMode, ConversationRunMode, LlmRouteTarget, LocalConversation,
+    LocalRuntimeState,
 };
 
 const TASK_SESSION_ID_NAMESPACE: Uuid = Uuid::from_u128(0xf583_658d_976f_4589_a385_750a_3b0b_8e74);
@@ -120,6 +121,16 @@ pub(super) async fn create_task_session(
         &serde_json::to_value(&body).map_err(|error| local_store_error(error.to_string()))?,
     )
     .map_err(|error| local_store_error(error.to_string()))?;
+    let submitted_llm_route = body
+        .workspace_policy
+        .as_ref()
+        .and_then(|policy| policy.get("route"))
+        .map(|route| {
+            serde_json::from_value::<LlmRouteTarget>(route.clone()).map_err(|_| {
+                super::local_bad_request("workspace_policy.route is invalid".to_string())
+            })
+        })
+        .transpose()?;
     if let Some(outcome) = state
         .session_store
         .replay_task_session(ReplayTaskSessionInput {
@@ -133,6 +144,11 @@ pub(super) async fn create_task_session(
         .map_err(task_session_error)?
     {
         return task_session_response(outcome);
+    }
+    if let Some(route) = submitted_llm_route.as_ref() {
+        state
+            .validate_conversation_llm_route(&tenant_id, route)
+            .map_err(super::local_bad_request)?;
     }
     let now = now_iso();
     let conversation_id = stable_task_session_id(
@@ -198,6 +214,13 @@ pub(super) async fn create_task_session(
             initial_content: &initial_content,
         },
     )?;
+    let committed_llm_route = committed_task_session_route(
+        core_response
+            .get("policy")
+            .ok_or_else(invalid_core_response)?,
+        body.conversation.capability_mode,
+        submitted_llm_route.as_ref(),
+    )?;
     let conversation = LocalConversation {
         id: conversation_id,
         project_id: project_id.clone(),
@@ -222,6 +245,7 @@ pub(super) async fn create_task_session(
             conversation,
             initial_message: core_response["initial_message"].clone(),
             policy: core_response.get("policy").cloned().unwrap_or(Value::Null),
+            llm_route: committed_llm_route,
             capability_version: core_response["capability_version"]
                 .as_str()
                 .ok_or_else(invalid_core_response)?
@@ -234,6 +258,32 @@ pub(super) async fn create_task_session(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     task_session_response(outcome)
+}
+
+fn committed_task_session_route(
+    policy: &Value,
+    capability_mode: TaskSessionCapabilityMode,
+    submitted_route: Option<&LlmRouteTarget>,
+) -> Result<Option<LlmRouteTarget>, (StatusCode, Json<Value>)> {
+    let Some(submitted_route) = submitted_route else {
+        return Ok(None);
+    };
+    if policy.is_null() {
+        return Err(invalid_core_response());
+    }
+    let role = match capability_mode {
+        TaskSessionCapabilityMode::Work => super::LlmWorkloadRole::Default,
+        TaskSessionCapabilityMode::Code => super::LlmWorkloadRole::Coding,
+    };
+    let route = super::routing_targets_for_role(policy, role)
+        .map_err(|_| invalid_core_response())?
+        .into_iter()
+        .next()
+        .ok_or_else(invalid_core_response)?;
+    if route != *submitted_route {
+        return Err(invalid_core_response());
+    }
+    Ok(Some(route))
 }
 
 fn task_session_response(
