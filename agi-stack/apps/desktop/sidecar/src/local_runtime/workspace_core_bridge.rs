@@ -37,6 +37,7 @@ mod registry;
 
 const CALLBACK_TIMEOUT_SECONDS: u64 = 10;
 const MAX_PROXY_REQUEST_BYTES: usize = 64 * 1024 * 1024;
+const MAX_PLATFORM_PLUGIN_MCP_INPUT_BYTES: usize = 256 * 1024;
 const LOCAL_DESKTOP_USER_ID: &str = "local-user";
 pub(super) const CUTOVER_GENERATION_BIT: u64 = 1 << 63;
 const AUTHORITY_GENERATION_MASK: u64 = CUTOVER_GENERATION_BIT - 1;
@@ -868,6 +869,13 @@ async fn invoke_mcp_plugin_tool(
     tool_id: &str,
     input: Value,
 ) -> Result<Json<Value>, BridgeError> {
+    let encoded_input = serde_json::to_string(&input)
+        .map_err(|_| bad_request("platform plugin MCP input is invalid"))?;
+    if encoded_input.len() > MAX_PLATFORM_PLUGIN_MCP_INPUT_BYTES {
+        return Err(conflict(
+            "platform plugin MCP request exceeds its input quota",
+        ));
+    }
     let scope = McpScope {
         tenant_id: "local".to_string(),
         project_id: "local-project".to_string(),

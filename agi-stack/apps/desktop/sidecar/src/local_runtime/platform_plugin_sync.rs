@@ -1272,9 +1272,11 @@ mod tests {
             "activation": {"default_scope": "tenant", "restart_policy": "process-boundary"},
             "config": {}
         });
+        let script = write_platform_plugin_mcp_server(&runtime);
+        let python = python_executable();
         let runtime_definition = json!({
             "transport": "stdio",
-            "command": ["/bin/echo", "mcp"],
+            "command": [python.to_string_lossy(), script.to_string_lossy()],
             "cwd": ".",
             "enabled": true
         });
@@ -1307,6 +1309,10 @@ mod tests {
         reconcile_once(&runtime, &broker)
             .await
             .expect("MCP activate");
+        runtime
+            .session_store
+            .seed_test_session("desktop-session")
+            .expect("desktop session");
 
         let scope = McpScope {
             tenant_id: "local".to_string(),
@@ -1317,9 +1323,69 @@ mod tests {
             .server_by_name(&scope, "platform-plugin-third-party-mcp")
             .expect("MCP lookup")
             .expect("MCP server registered");
+        assert!(server
+            .command
+            .starts_with(&[python.to_string_lossy().to_string()]));
+
+        let invocation =
+            crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
+                .with_state(runtime.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/platform-plugins/tools/invoke")
+                        .header(AUTHORIZATION, "Bearer desktop-session")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            json!({
+                                "plugin_id": "third-party-mcp",
+                                "tool_id": "echo",
+                                "input": {"message": "hello"}
+                            })
+                            .to_string(),
+                        ))
+                        .expect("MCP invocation request"),
+                )
+                .await
+                .expect("MCP invocation response");
+        assert_eq!(invocation.status(), StatusCode::OK);
+        let invocation_body = axum::body::to_bytes(invocation.into_body(), usize::MAX)
+            .await
+            .expect("MCP invocation body");
+        let invocation: Value = serde_json::from_slice(&invocation_body).expect("MCP result");
+        assert_eq!(invocation["content"][0]["type"], "text");
+        assert_eq!(invocation["content"][0]["text"], r#"{"message": "hello"}"#);
+
+        let oversized_invocation =
+            crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
+                .with_state(runtime.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/platform-plugins/tools/invoke")
+                        .header(AUTHORIZATION, "Bearer desktop-session")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            json!({
+                                "plugin_id": "third-party-mcp",
+                                "tool_id": "echo",
+                                "input": {"message": "x".repeat(300 * 1024)}
+                            })
+                            .to_string(),
+                        ))
+                        .expect("oversized MCP invocation request"),
+                )
+                .await
+                .expect("oversized MCP invocation response");
+        assert_eq!(oversized_invocation.status(), StatusCode::CONFLICT);
+        let oversized_body = axum::body::to_bytes(oversized_invocation.into_body(), usize::MAX)
+            .await
+            .expect("oversized MCP invocation body");
+        let oversized: Value =
+            serde_json::from_slice(&oversized_body).expect("oversized MCP result");
         assert_eq!(
-            server.command,
-            vec!["/bin/echo".to_string(), "mcp".to_string()]
+            oversized["detail"],
+            "platform plugin MCP request exceeds its input quota"
         );
 
         let mut removal_payload = json!({
@@ -1344,6 +1410,199 @@ mod tests {
             .server_by_name(&scope, "platform-plugin-third-party-mcp")
             .expect("MCP removed lookup")
             .is_none());
+        {
+            let connection = runtime.session_store.connection().expect("connection");
+            assert!(plugin_snapshots::read_runtime_artifact(
+                &connection,
+                "third-party-mcp",
+                &layer_digest
+            )
+            .expect("removed MCP artifact")
+            .is_none());
+        }
+    }
+
+    fn python_executable() -> std::path::PathBuf {
+        std::env::split_paths(&std::env::var_os("PATH").expect("test PATH"))
+            .map(|entry| entry.join("python3"))
+            .find(|candidate| candidate.is_file())
+            .and_then(|candidate| candidate.canonicalize().ok())
+            .expect("python3 executable")
+    }
+
+    fn write_platform_plugin_mcp_server(runtime: &StdArc<LocalRuntimeState>) -> std::path::PathBuf {
+        let root = runtime
+            .workspace_root
+            .lock()
+            .expect("workspace root")
+            .clone();
+        std::fs::create_dir_all(&root).expect("MCP workspace root");
+        let script = root.join("platform_plugin_mcp.py");
+        std::fs::write(
+            &script,
+            r#"import json
+import sys
+
+for raw_line in sys.stdin:
+    request = json.loads(raw_line)
+    method = request.get("method")
+    request_id = request.get("id")
+    if method == "notifications/initialized":
+        continue
+    if method == "initialize":
+        result = {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "platform-plugin-mcp", "version": "1.0.0"},
+        }
+    elif method == "tools/call":
+        arguments = request.get("params", {}).get("arguments", {})
+        result = {
+            "content": [{"type": "text", "text": json.dumps(arguments, sort_keys=True)}],
+            "isError": False,
+        }
+    else:
+        result = None
+    if result is None:
+        response = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": -32601, "message": "method not found"},
+        }
+    else:
+        response = {"jsonrpc": "2.0", "id": request_id, "result": result}
+    sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+"#,
+        )
+        .expect("MCP server script");
+        script
+    }
+
+    #[tokio::test]
+    async fn untrusted_frontend_package_is_served_and_uninstalled_atomically() {
+        let runtime = state();
+        let (url, broker, control) = control_plane(json!({})).await;
+        let registry = url.as_str().trim_end_matches("/api/v1").to_string();
+        let mut plugin = json!({
+            "schema_version": 1,
+            "id": "third-party-ui",
+            "version": "1.0.0",
+            "runtime": "frontend",
+            "trust": "signed",
+            "provides": [{
+                "kind": "ui_renderer",
+                "id": "tool_result_renderer",
+                "contract": "ui_renderer:tool-result",
+                "permissions": ["ui.render"]
+            }],
+            "activation": {"default_scope": "tenant", "restart_policy": "process-boundary"},
+            "config": {}
+        });
+        let runtime_definition = json!({
+            "html": "<main id=\"plugin-module\">signed module</main>",
+            "slots": ["tool_result_renderer"]
+        });
+        let runtime_bytes = serde_json::to_vec(&runtime_definition).expect("frontend runtime");
+        let archive = plugin_package_archive(&plugin, "runtime/plugin.json", &runtime_bytes);
+        let layer_digest = sha256_hex(&archive);
+        let oci_manifest = serde_json::to_vec(&json!({
+            "schemaVersion": 2,
+            "mediaType": OCI_MANIFEST_MEDIA_TYPE,
+            "artifactType": MEMSTACK_ARTIFACT_TYPE,
+            "layers": [{
+                "mediaType": MEMSTACK_LAYER_TYPE,
+                "digest": format!("sha256:{layer_digest}"),
+                "size": archive.len()
+            }]
+        }))
+        .expect("OCI manifest");
+        let manifest_digest = sha256_hex(&oci_manifest);
+        plugin["config"]["artifact"] = json!({
+            "registry": registry,
+            "repository": "plugins",
+            "manifest_sha256": manifest_digest,
+            "layer_sha256": layer_digest
+        });
+        *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
+        *control.oci_layer.lock().expect("OCI layer") = archive;
+        let (snapshot, _) = control_snapshot_with_plugin(11, plugin);
+        *control.snapshot.lock().expect("snapshot") = snapshot;
+
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("frontend activate");
+        runtime
+            .session_store
+            .seed_test_session("desktop-session")
+            .expect("desktop session");
+        let module_response =
+            crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
+                .with_state(runtime.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("GET")
+                        .uri("/api/v1/platform-plugins/frontend/third-party-ui/module")
+                        .header(AUTHORIZATION, "Bearer desktop-session")
+                        .body(Body::empty())
+                        .expect("frontend module request"),
+                )
+                .await
+                .expect("frontend module response");
+        assert_eq!(module_response.status(), StatusCode::OK);
+        let module_body = axum::body::to_bytes(module_response.into_body(), usize::MAX)
+            .await
+            .expect("frontend module body");
+        let module: Value = serde_json::from_slice(&module_body).expect("frontend module");
+        assert_eq!(module["plugin_id"], "third-party-ui");
+        assert_eq!(module["digest"], layer_digest);
+        assert_eq!(module["trust"], "signed");
+        assert_eq!(
+            module["html"],
+            "<main id=\"plugin-module\">signed module</main>"
+        );
+
+        let mut removal_payload = json!({
+            "schema_version": 1,
+            "profile_id": "desktop-default",
+            "plugins": [],
+            "digest": Value::Null
+        });
+        let removal_digest =
+            platform_plugin_payload_digest(&removal_payload).expect("removal digest");
+        removal_payload["digest"] = json!(removal_digest);
+        *control.snapshot.lock().expect("snapshot") = json!({
+            "version": 12,
+            "nonce": "nonce-12",
+            "profile_id": "desktop-default",
+            "digest": removal_digest,
+            "payload": removal_payload
+        });
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("frontend remove");
+        let removed_response =
+            crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
+                .with_state(runtime.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("GET")
+                        .uri("/api/v1/platform-plugins/frontend/third-party-ui/module")
+                        .header(AUTHORIZATION, "Bearer desktop-session")
+                        .body(Body::empty())
+                        .expect("removed frontend module request"),
+                )
+                .await
+                .expect("removed frontend module response");
+        assert_eq!(removed_response.status(), StatusCode::NOT_FOUND);
+        let connection = runtime.session_store.connection().expect("connection");
+        assert!(plugin_snapshots::read_runtime_artifact(
+            &connection,
+            "third-party-ui",
+            &layer_digest
+        )
+        .expect("removed frontend artifact")
+        .is_none());
     }
 
     fn snapshot(version: u64, digest: &str, runtime: &str, credential: &str) -> Value {
