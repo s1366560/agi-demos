@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fs, path::PathBuf, sync::Arc};
 
 use agistack_adapters_device::SqliteCheckpointStore;
 use agistack_adapters_local_tools::LocalToolHost;
@@ -117,6 +117,28 @@ fn active_frontend_snapshot(digest: &str, artifact_digest: &str) -> Value {
     })
 }
 
+fn active_mcp_snapshot(digest: &str, artifact_digest: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "profile_id": "desktop-default",
+        "plugins": [{
+            "schema_version": 1,
+            "id": "third-party-mcp",
+            "version": "1.0.0",
+            "runtime": "mcp",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "echo",
+                "contract": "tool:echo",
+                "permissions": ["tools.execute"]
+            }],
+            "config": {"artifact": {"layer_sha256": artifact_digest}}
+        }],
+        "digest": digest
+    })
+}
+
 #[tokio::test]
 async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good() {
     let state = state();
@@ -124,7 +146,7 @@ async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let app = router(state);
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
     let mut payload = snapshot("placeholder");
     payload.as_object_mut().expect("payload").remove("digest");
     let digest = platform_plugin_payload_digest(&payload).expect("canonical digest");
@@ -197,7 +219,7 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let app = router(state);
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
     let mut payload = snapshot("placeholder");
     payload.as_object_mut().expect("payload").remove("digest");
     let digest = platform_plugin_payload_digest(&payload).expect("canonical digest");
@@ -277,13 +299,145 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
 }
 
 #[tokio::test]
+async fn active_mcp_plugin_tool_is_invoked_through_the_supervisor() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let workspace_root = state.workspace_root.lock().expect("workspace root").clone();
+    fs::create_dir_all(&workspace_root).expect("workspace root");
+    let script = workspace_root.join("platform_plugin_mcp.py");
+    fs::write(
+        &script,
+        r#"import json
+import sys
+
+for raw_line in sys.stdin:
+    request = json.loads(raw_line)
+    method = request.get("method")
+    request_id = request.get("id")
+    if method == "notifications/initialized":
+        continue
+    if method == "initialize":
+        result = {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "platform-plugin-mcp", "version": "1.0.0"},
+        }
+    elif method == "tools/list":
+        result = {"tools": [{"name": "echo", "inputSchema": {"type": "object"}}]}
+    elif method == "tools/call":
+        arguments = request.get("params", {}).get("arguments", {})
+        result = {
+            "content": [{"type": "text", "text": json.dumps(arguments, sort_keys=True)}],
+            "isError": False,
+        }
+    else:
+        result = None
+    if result is None:
+        response = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": -32601, "message": "method not found"},
+        }
+    else:
+        response = {"jsonrpc": "2.0", "id": request_id, "result": result}
+    sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+"#,
+    )
+    .expect("MCP script");
+    let python = std::env::split_paths(&std::env::var_os("PATH").expect("test PATH"))
+        .map(|entry| entry.join("python3"))
+        .find(|candidate| candidate.is_file())
+        .and_then(|candidate| candidate.canonicalize().ok())
+        .unwrap_or_else(|| PathBuf::from("/usr/bin/python3"));
+    let runtime_definition = json!({
+        "transport": "stdio",
+        "command": [python.to_string_lossy(), script.to_string_lossy()],
+        "cwd": ".",
+        "enabled": true
+    });
+    let runtime_bytes = serde_json::to_vec(&runtime_definition).expect("MCP runtime");
+    let artifact_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&runtime_bytes);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let mut payload = active_mcp_snapshot("placeholder", &artifact_digest);
+    payload.as_object_mut().expect("payload").remove("digest");
+    let digest = platform_plugin_payload_digest(&payload).expect("digest");
+    payload["digest"] = json!(digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-mcp".to_string(),
+                digest: artifact_digest.clone(),
+                runtime: "mcp".to_string(),
+                path: "runtime/plugin.json".to_string(),
+                bytes: runtime_bytes,
+            },
+        )
+        .expect("artifact");
+    }
+    let scope = McpScope {
+        tenant_id: "local".to_string(),
+        project_id: "local-project".to_string(),
+    };
+    state
+        .mcp_supervisor
+        .ensure_platform_plugin_server(
+            &scope,
+            "third-party-mcp",
+            &runtime_definition,
+            &artifact_digest,
+        )
+        .expect("MCP server");
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
+    let submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 13,
+            "nonce": "nonce-13",
+            "digest": digest,
+            "payload": payload
+        }),
+    )
+    .await;
+    let invoked = request_json(
+        app,
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-mcp", "tool_id": "echo", "input": {"message": "hello"}}),
+    )
+    .await;
+
+    assert_eq!(submitted.0, StatusCode::OK);
+    assert_eq!(submitted.1["status"], "ack");
+    assert_eq!(invoked.0, StatusCode::OK);
+    assert_eq!(invoked.1["content"][0]["type"], "text");
+    assert_eq!(invoked.1["content"][0]["text"], r#"{"message": "hello"}"#);
+}
+
+#[tokio::test]
 async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
     let state = state();
     state
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let app = router(state.clone());
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
     let runtime = SCORE_V1_WAT.as_bytes().to_vec();
     let artifact_digest = {
         use sha2::{Digest, Sha256};
@@ -371,7 +525,7 @@ async fn signed_frontend_module_is_served_only_after_activation() {
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let app = router(state.clone());
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
     let runtime = json!({
         "html": "<main id=\"plugin-root\">signed module</main>",
         "slots": ["tool_result_renderer"]
@@ -455,7 +609,7 @@ async fn subprocess_plugin_enforces_process_group_wall_time_and_output_quotas() 
         .session_store
         .seed_test_session("desktop-session")
         .expect("desktop session");
-    let app = router(state.clone());
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
     let runtime = json!({
         "command": ["/bin/sh", "-c", "printf subprocess-ok"],
         "timeout_ms": 1000

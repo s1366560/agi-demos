@@ -908,7 +908,9 @@ mod tests {
 
     use agistack_adapters_device::SqliteCheckpointStore;
     use agistack_adapters_local_tools::LocalToolHost;
+    use agistack_adapters_wasmtime::SCORE_V1_WAT;
     use axum::{
+        body::Body,
         extract::State,
         http::{header::AUTHORIZATION, StatusCode},
         routing::{get, post},
@@ -917,6 +919,7 @@ mod tests {
     use serde_json::json;
     use std::io::Write;
     use tokio::net::TcpListener;
+    use tower::ServiceExt;
     use uuid::Uuid;
     use zip::ZipWriter;
 
@@ -1118,7 +1121,8 @@ mod tests {
             "activation": {"default_scope": "tenant", "restart_policy": "process-boundary"},
             "config": {}
         });
-        let archive = wasm_package_archive(&plugin, b"verified-wasm-runtime");
+        let runtime_bytes = SCORE_V1_WAT.as_bytes().to_vec();
+        let archive = wasm_package_archive(&plugin, &runtime_bytes);
         let layer_digest = sha256_hex(&archive);
         let oci_manifest = serde_json::to_vec(&json!({
             "schemaVersion": 2,
@@ -1160,6 +1164,10 @@ mod tests {
         reconcile_once(&runtime, &broker)
             .await
             .expect("untrusted wasm reconcile");
+        runtime
+            .session_store
+            .seed_test_session("desktop-session")
+            .expect("desktop session");
 
         let connection = runtime.session_store.connection().expect("connection");
         let record = plugin_snapshots::read_apply_record(&connection)
@@ -1173,13 +1181,42 @@ mod tests {
             plugin_snapshots::read_runtime_artifact(&connection, "third-party-tool", &layer_digest)
                 .expect("artifact")
                 .expect("stored artifact");
-        assert_eq!(artifact.bytes, b"verified-wasm-runtime".to_vec());
+        assert_eq!(artifact.bytes, runtime_bytes);
         {
             let observations = control.observations.lock().expect("observations");
             assert_eq!(observations.len(), 1);
             assert_eq!(observations[0].1["status"], "ack");
         }
         drop(connection);
+
+        let invocation =
+            crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
+                .with_state(runtime.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/platform-plugins/tools/invoke")
+                        .header(AUTHORIZATION, "Bearer desktop-session")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            json!({
+                                "plugin_id": "third-party-tool",
+                                "tool_id": "demo",
+                                "input": {"text": "hello"}
+                            })
+                            .to_string(),
+                        ))
+                        .expect("tool invocation request"),
+                )
+                .await
+                .expect("tool invocation response");
+        assert_eq!(invocation.status(), StatusCode::OK);
+        let invocation_body = axum::body::to_bytes(invocation.into_body(), usize::MAX)
+            .await
+            .expect("tool invocation body");
+        let invocation: Value = serde_json::from_slice(&invocation_body).expect("tool result");
+        assert_eq!(invocation["tool"], "demo");
+        assert_eq!(invocation["score"], 22);
 
         let mut removal_payload = json!({
             "schema_version": 1,

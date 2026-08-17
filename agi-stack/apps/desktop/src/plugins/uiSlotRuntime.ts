@@ -94,10 +94,16 @@ export class UiSlotRuntime {
         continue;
       }
       if (this.disposers.has(key)) continue;
+      const trust = definition.moduleRef.startsWith('builtin:')
+        ? 'builtin'
+        : definition.moduleRef.startsWith('signed:')
+          ? 'signed'
+          : null;
+      if (trust === null) continue;
       this.disposers.set(
         key,
         this.registry.register(definition, {
-          trust: 'builtin',
+          trust,
           runtime: 'frontend',
         }),
       );

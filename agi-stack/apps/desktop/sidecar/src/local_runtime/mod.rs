@@ -3025,6 +3025,9 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
+        .merge(workspace_core_bridge::platform_plugin_router(Arc::clone(
+            &state,
+        )))
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
         .layer(middleware::from_fn_with_state(
@@ -14663,6 +14666,32 @@ mod tests {
                 .split(',')
                 .any(|header| header.trim().eq_ignore_ascii_case(expected)));
         }
+
+        let platform_plugin_preflight = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/platform-plugins/apply-state")
+                    .header("origin", "http://localhost:5173")
+                    .header("access-control-request-method", "GET")
+                    .header("access-control-request-headers", "authorization")
+                    .body(Body::empty())
+                    .expect("platform plugin GET preflight request"),
+            )
+            .await
+            .expect("platform plugin GET preflight response");
+        assert_eq!(
+            platform_plugin_preflight.status(),
+            axum::http::StatusCode::OK
+        );
+        assert_eq!(
+            platform_plugin_preflight
+                .headers()
+                .get("access-control-allow-origin")
+                .and_then(|value| value.to_str().ok()),
+            Some("http://localhost:5173")
+        );
 
         let tenant_project_post_preflight = app
             .clone()

@@ -28,6 +28,22 @@ const BUILTIN_UI_SLOT_DEFINITIONS: readonly UiSlotDefinition[] = Object.freeze([
   },
 ]);
 
+export function builtinUiFallbackSnapshot() {
+  return Object.freeze({
+    plugins: Object.freeze([
+      Object.freeze({
+        schema_version: 1,
+        id: 'builtin-ui',
+        version: '1.0.0',
+        runtime: 'frontend',
+        trust: 'builtin',
+        provides: Object.freeze([]),
+        config: Object.freeze({}),
+      }),
+    ]),
+  });
+}
+
 export function usePlatformPluginUiSlots({
   active,
   config,
@@ -66,7 +82,11 @@ export function usePlatformPluginUiSlots({
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        setSlots(runtimeRef.current.reconcile({ plugins: [] }, BUILTIN_UI_SLOT_DEFINITIONS).slots);
+        setSlots(
+          runtimeRef.current
+            .reconcile(builtinUiFallbackSnapshot(), BUILTIN_UI_SLOT_DEFINITIONS)
+            .slots,
+        );
         setError(caught instanceof Error ? caught.message : String(caught));
       })
       .finally(() => {

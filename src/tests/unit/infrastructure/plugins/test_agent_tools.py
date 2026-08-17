@@ -33,6 +33,8 @@ def test_service_publishes_pins_and_builds_generations() -> None:
 
     assert asyncio.run(implementation({"value": 42}, scope)) == 42
     assert service.current(scope) is not None
+    assert service.current(scope) is service.current(scope)
+    assert service.pin(first.generation, scope) is pinned
     assert second.generation.sequence > first.generation.sequence
 
 

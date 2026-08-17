@@ -6,6 +6,7 @@ import copy
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from src.domain.model.plugins import PluginGeneration
@@ -111,8 +112,8 @@ class AgentToolSetService:
             snapshot = ToolSetSnapshot(
                 generation=generation,
                 scope=scope,
-                tools=copy.deepcopy(normalized_tools),
-                shadow_inventory=inventory,
+                tools=MappingProxyType(copy.deepcopy(normalized_tools)),
+                shadow_inventory=MappingProxyType(inventory),
             )
             scope_key = scope.cache_key()
             self._snapshots[(generation, scope_key)] = snapshot
@@ -130,12 +131,7 @@ class AgentToolSetService:
             snapshot = self._current.get(scope.cache_key())
             if snapshot is None:
                 return None
-            return ToolSetSnapshot(
-                generation=snapshot.generation,
-                scope=snapshot.scope,
-                tools=copy.deepcopy(snapshot.tools),
-                shadow_inventory=snapshot.shadow_inventory,
-            )
+            return snapshot
 
     def pin(
         self,
@@ -147,12 +143,7 @@ class AgentToolSetService:
             snapshot = self._snapshots.get((generation, scope.cache_key()))
             if snapshot is None:
                 return None
-            return ToolSetSnapshot(
-                generation=snapshot.generation,
-                scope=snapshot.scope,
-                tools=copy.deepcopy(snapshot.tools),
-                shadow_inventory=snapshot.shadow_inventory,
-            )
+            return snapshot
 
     def shadow_diff(
         self,

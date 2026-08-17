@@ -22,6 +22,7 @@ use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, DEFAULT_MEMORY_BYTE
 use agistack_plugin_host::tool::Tool;
 
 use super::{
+    mcp_supervisor::McpScope,
     session_store::{DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError},
     LocalRuntimeState,
 };
@@ -612,7 +613,6 @@ pub(super) fn router(state: Arc<LocalRuntimeState>) -> Router {
             "/internal/v1/workspace-core/plan-dispatch",
             post(provider::dispatch_plan),
         )
-        .merge(platform_plugin_router(Arc::clone(&state)))
         .with_state(state)
 }
 
@@ -646,7 +646,9 @@ struct PlatformPluginToolInvocationRequest {
     input: Value,
 }
 
-fn platform_plugin_router(state: Arc<LocalRuntimeState>) -> Router<Arc<LocalRuntimeState>> {
+pub(super) fn platform_plugin_router(
+    state: Arc<LocalRuntimeState>,
+) -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route(
             "/api/v1/platform-plugins/snapshot",
@@ -816,7 +818,7 @@ async fn invoke_platform_plugin_tool(
             .into_iter()
             .find(|plugin| plugin.plugin_id == plugin_id)
             .ok_or_else(|| not_found("platform plugin is not active"))?;
-        if !matches!(plugin.runtime.as_str(), "wasm" | "subprocess") {
+        if !matches!(plugin.runtime.as_str(), "wasm" | "subprocess" | "mcp") {
             return Err(unavailable(
                 "platform plugin runtime cannot execute locally",
             ));
@@ -847,6 +849,8 @@ async fn invoke_platform_plugin_tool(
     let input = request.input.to_string();
     let output = if plugin.runtime == "wasm" {
         invoke_wasm_plugin_tool(&tool_id, &plugin, &artifact, &input).await?
+    } else if plugin.runtime == "mcp" {
+        return invoke_mcp_plugin_tool(&state, &plugin_id, &tool_id, request.input).await;
     } else {
         invoke_subprocess_plugin_tool(&tool_id, &plugin, &artifact).await?
     };
@@ -855,6 +859,52 @@ async fn invoke_platform_plugin_tool(
     }
     let result = serde_json::from_str::<Value>(&output)
         .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
+    Ok(Json(result))
+}
+
+async fn invoke_mcp_plugin_tool(
+    state: &Arc<LocalRuntimeState>,
+    plugin_id: &str,
+    tool_id: &str,
+    input: Value,
+) -> Result<Json<Value>, BridgeError> {
+    let scope = McpScope {
+        tenant_id: "local".to_string(),
+        project_id: "local-project".to_string(),
+    };
+    let server_name = format!("platform-plugin-{plugin_id}");
+    let server = state
+        .mcp_supervisor
+        .server_by_name(&scope, &server_name)
+        .map_err(|error| unavailable(&format!("{}: {}", error.reason_code(), error.detail())))?
+        .ok_or_else(|| unavailable("platform plugin MCP server is unavailable"))?;
+    let request_hash = Sha256::digest(
+        format!(
+            "{}\n{}\n{}",
+            plugin_id,
+            tool_id,
+            serde_json::to_string(&input)
+                .map_err(|_| bad_request("platform plugin tool input is invalid"))?
+        )
+        .as_bytes(),
+    );
+    let idempotency_key = format!(
+        "platform-plugin-call-{}",
+        request_hash
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let outcome = state
+        .mcp_supervisor
+        .call_tool(&scope, &server.id, tool_id, input, &idempotency_key)
+        .await
+        .map_err(|error| conflict(&format!("{}: {}", error.reason_code(), error.detail())))?;
+    if outcome.is_error {
+        return Err(conflict("platform plugin MCP tool failed"));
+    }
+    let result = serde_json::to_value(&outcome.result)
+        .map_err(|_| conflict("platform plugin MCP tool returned invalid JSON"))?;
     Ok(Json(result))
 }
 
