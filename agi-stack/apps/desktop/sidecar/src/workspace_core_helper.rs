@@ -479,16 +479,19 @@ async fn launch_helper(config: &WorkspaceCoreLaunchConfig) -> Result<SupervisedC
     );
     let mut child = Command::new(&config.binary_path)
         .arg("--desktop-control")
-        .current_dir(&config.runtime_directory)
-        .env_clear()
         // The core's agent-registry HTTP client doubles as the Workspace
         // judge transport, and desktop judge calls run an LLM round-trip
         // synchronously. The 5s default guaranteed judge transport failures
         // (and endless scheduler retries) for any real model; 60s is the
         // core's documented upper bound and exceeds the sidecar's own 45s
         // per-candidate LLM timeout, so the judge verdict always settles
-        // first.
-        .env("WORKSPACE_CORE_AGENT_REGISTRY_TIMEOUT_SECONDS", "60")
+        // first. Passed as a CLI flag because the helper contract forbids
+        // configuring the child through `WORKSPACE_CORE_` environment
+        // variables on top of `env_clear()`.
+        .arg("--agent-registry-timeout-seconds")
+        .arg("60")
+        .current_dir(&config.runtime_directory)
+        .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         // Inherit the sidecar's stderr so Workspace Core diagnostics remain

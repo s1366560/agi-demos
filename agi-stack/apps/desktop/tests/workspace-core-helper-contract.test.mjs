@@ -36,6 +36,7 @@ test('Electron passes the helper path to the authenticated Sidecar bootstrap wit
 test('Sidecar owns private helper credentials, capped recovery, and redacted status', () => {
   assert.match(sidecarHelperSource, /const DEFAULT_MAX_RESTART_ATTEMPTS:\s*usize\s*=\s*4/u);
   assert.match(sidecarHelperSource, /\.arg\("--desktop-control"\)/u);
+  assert.match(sidecarHelperSource, /\.arg\("--agent-registry-timeout-seconds"\)/u);
   assert.match(sidecarHelperSource, /\.env_clear\(\)/u);
   assert.doesNotMatch(sidecarHelperSource, /\.arg\("--config-dir"\)/u);
   assert.doesNotMatch(sidecarHelperSource, /\.env\("WORKSPACE_CORE_/u);
