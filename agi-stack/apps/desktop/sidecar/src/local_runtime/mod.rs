@@ -2518,14 +2518,25 @@ impl LocalRuntimeState {
         policy: &Value,
         role: LlmWorkloadRole,
     ) -> Arc<dyn LlmPort> {
+        let mut targets = match routing_targets_for_role(policy, role) {
+            Ok(targets) => targets,
+            Err(_) => return Arc::new(UnconfiguredLocalLlm),
+        };
+        if targets.is_empty() {
+            // A workspace policy without explicit routing targets means routing
+            // was never configured for this workspace. Fall back to the
+            // tenant-level runtime default (explicit selection, or the sole
+            // active binding in local mode) so a freshly created workspace can
+            // run with the configured provider instead of failing closed with
+            // model_unconfigured.
+            if let Some(route) = self.selected_provider_route(tenant_id) {
+                targets.push(route);
+            }
+        }
         let runtime = self
             .provider_runtime
             .lock()
             .expect("provider runtime state");
-        let targets = match routing_targets_for_role(policy, role) {
-            Ok(targets) => targets,
-            Err(_) => return Arc::new(UnconfiguredLocalLlm),
-        };
         let candidates = targets
             .into_iter()
             .filter_map(|target| {
@@ -20660,6 +20671,58 @@ mod tests {
             )
             .await
             .expect_err("an unconfigured model must not invent a plan");
+        assert!(error.to_string().contains("model_unconfigured"));
+    }
+
+    #[tokio::test]
+    async fn workspace_policy_without_targets_falls_back_to_sole_tenant_binding() {
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        {
+            let mut runtime = state.provider_runtime.lock().expect("runtime");
+            let key = ProviderRuntimeKey {
+                tenant_id: "local".to_string(),
+                provider_id: "provider-a".to_string(),
+            };
+            runtime.bindings.insert(
+                key.clone(),
+                ProviderRuntimeBinding {
+                    provider_type: "openai".to_string(),
+                    base_url: "http://127.0.0.1:1/v1".to_string(),
+                    model: "model-a".to_string(),
+                    auth_method: "api_key".to_string(),
+                },
+            );
+            runtime.credentials.insert(key, "llm-secret".to_string());
+        }
+        let empty_policy = json!({
+            "roles": {"default": null, "fast": null, "coding": null, "vision": null},
+            "fallbacks": [],
+        });
+        let llm = state.llm_for_policy("local", &empty_policy, LlmWorkloadRole::Default);
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("the unreachable test endpoint must fail");
+        assert!(
+            !error.to_string().contains("model_unconfigured"),
+            "sole tenant binding must serve a workspace policy without targets: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_policy_without_targets_stays_unconfigured_without_binding() {
+        let state = test_state("launch-secret");
+        state.mock_llm_enabled.store(0, Ordering::Release);
+        let empty_policy = json!({
+            "roles": {"default": null, "fast": null, "coding": null, "vision": null},
+            "fallbacks": [],
+        });
+        let llm = state.llm_for_policy("local", &empty_policy, LlmWorkloadRole::Default);
+        let error = llm
+            .decide("goal", 0, &[], &[])
+            .await
+            .expect_err("no binding anywhere must stay unconfigured");
         assert!(error.to_string().contains("model_unconfigured"));
     }
 
