@@ -8,6 +8,8 @@ import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
+from threading import RLock
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -197,37 +199,135 @@ class ResourceQuotaEnforcer:
 
     def __init__(self, quotas: Mapping[str, ResourceQuota]) -> None:
         self._quotas = {plugin_id: quota for plugin_id, quota in quotas.items()}
-        self._concurrent: dict[str, int] = {}
-        self._window_started: dict[str, float] = {}
-        self._window_requests: dict[str, int] = {}
+        self._usage: dict[str, _PluginQuotaUsage] = {}
+        self._lock = RLock()
 
-    def acquire(self, plugin_id: str, *, output_bytes: int = 0) -> None:
-        """Reserve one invocation and output budget atomically."""
+    def acquire(
+        self,
+        plugin_id: str,
+        *,
+        output_bytes: int = 0,
+        wasm_fuel: int = 0,
+        wasm_memory_bytes: int = 0,
+        wall_time_ms: int = 0,
+        network_requests: int = 1,
+        storage_bytes: int = 0,
+        usd_micros: int = 0,
+    ) -> None:
+        """Reserve one invocation and every declared resource atomically."""
+        values = {
+            "output_bytes": output_bytes,
+            "wasm_fuel": wasm_fuel,
+            "wasm_memory_bytes": wasm_memory_bytes,
+            "wall_time_ms": wall_time_ms,
+            "network_requests": network_requests,
+            "storage_bytes": storage_bytes,
+            "usd_micros": usd_micros,
+        }
+        negative = sorted(name for name, value in values.items() if value < 0)
+        if negative:
+            raise ValueError(f"quota reservations cannot be negative: {negative}")
         quota = self._quotas.get(plugin_id)
         if quota is None:
             return
-        current = self._concurrent.get(plugin_id, 0)
-        if quota.max_concurrent_calls is not None and current >= quota.max_concurrent_calls:
-            raise PluginQuotaExceededError(plugin_id, "max_concurrent_calls")
-        if quota.max_output_bytes is not None and output_bytes > quota.max_output_bytes:
-            raise PluginQuotaExceededError(plugin_id, "max_output_bytes")
         now = time.monotonic()
-        if now - self._window_started.get(plugin_id, now) >= 60:
-            self._window_started[plugin_id] = now
-            self._window_requests[plugin_id] = 0
-        requests = self._window_requests.get(plugin_id, 0)
-        if (
-            quota.max_network_requests_per_minute is not None
-            and requests >= quota.max_network_requests_per_minute
-        ):
-            raise PluginQuotaExceededError(plugin_id, "max_network_requests_per_minute")
-        self._concurrent[plugin_id] = current + 1
-        self._window_requests[plugin_id] = requests + 1
+        with self._lock:
+            usage = self._usage.get(plugin_id)
+            if usage is None:
+                usage = _PluginQuotaUsage(window_started=time.monotonic())
+                self._usage[plugin_id] = usage
+            if now - usage.window_started >= 60:
+                usage.window_started = now
+                usage.window_requests = 0
 
-    def release(self, plugin_id: str) -> None:
-        """Release one invocation reservation."""
-        current = self._concurrent.get(plugin_id, 0)
-        self._concurrent[plugin_id] = max(0, current - 1)
+            checks = (
+                (
+                    quota.max_concurrent_calls is not None
+                    and usage.concurrent >= quota.max_concurrent_calls,
+                    "max_concurrent_calls",
+                ),
+                (
+                    quota.max_output_bytes is not None
+                    and (
+                        output_bytes > quota.max_output_bytes
+                        or usage.output_bytes + output_bytes > quota.max_output_bytes
+                    ),
+                    "max_output_bytes",
+                ),
+                (
+                    quota.max_wasm_fuel is not None and wasm_fuel > quota.max_wasm_fuel,
+                    "max_wasm_fuel",
+                ),
+                (
+                    quota.max_wasm_memory_bytes is not None
+                    and wasm_memory_bytes > quota.max_wasm_memory_bytes,
+                    "max_wasm_memory_bytes",
+                ),
+                (
+                    quota.max_wall_time_ms is not None and wall_time_ms > quota.max_wall_time_ms,
+                    "max_wall_time_ms",
+                ),
+                (
+                    quota.max_network_requests_per_minute is not None
+                    and (
+                        network_requests > quota.max_network_requests_per_minute
+                        or usage.window_requests + network_requests
+                        > quota.max_network_requests_per_minute
+                    ),
+                    "max_network_requests_per_minute",
+                ),
+                (
+                    quota.max_storage_bytes is not None
+                    and usage.storage_bytes + storage_bytes > quota.max_storage_bytes,
+                    "max_storage_bytes",
+                ),
+                (
+                    quota.max_monthly_usd is not None
+                    and usage.usd_micros + usd_micros > self._monthly_micros(quota),
+                    "max_monthly_usd",
+                ),
+            )
+            for exceeded, limit in checks:
+                if exceeded:
+                    raise PluginQuotaExceededError(plugin_id, limit)
+
+            usage.concurrent += 1
+            usage.window_requests += network_requests
+            usage.output_bytes += output_bytes
+            usage.storage_bytes += storage_bytes
+            usage.usd_micros += usd_micros
+
+    def release(self, plugin_id: str, *, wall_time_ms: int = 0) -> None:
+        """Release one reservation and enforce the observed wall-clock bound."""
+        with self._lock:
+            usage = self._usage.get(plugin_id)
+            if usage is None:
+                return
+            usage.concurrent = max(0, usage.concurrent - 1)
+            quota = self._quotas.get(plugin_id)
+            if (
+                wall_time_ms >= 0
+                and quota is not None
+                and quota.max_wall_time_ms is not None
+                and wall_time_ms > quota.max_wall_time_ms
+            ):
+                raise PluginQuotaExceededError(plugin_id, "max_wall_time_ms")
+
+    @staticmethod
+    def _monthly_micros(quota: ResourceQuota) -> int:
+        if quota.max_monthly_usd is None:
+            return 0
+        return int(Decimal(str(quota.max_monthly_usd)) * Decimal(1_000_000))
+
+
+@dataclass
+class _PluginQuotaUsage:
+    window_started: float
+    concurrent: int = 0
+    window_requests: int = 0
+    output_bytes: int = 0
+    storage_bytes: int = 0
+    usd_micros: int = 0
 
 
 class PluginQuotaExceededError(RuntimeError):

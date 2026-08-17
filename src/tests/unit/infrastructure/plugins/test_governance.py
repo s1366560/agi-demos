@@ -79,6 +79,59 @@ def test_quota_enforcer_returns_structured_errors() -> None:
     enforcer.acquire("plugin")
 
 
+@pytest.mark.unit
+def test_quota_enforcer_covers_runtime_resource_dimensions() -> None:
+    enforcer = ResourceQuotaEnforcer(
+        {
+            "plugin": ResourceQuota(
+                max_wasm_fuel=1_000,
+                max_wasm_memory_bytes=64 * 1024,
+                max_wall_time_ms=100,
+                max_output_bytes=128,
+                max_network_requests_per_minute=2,
+                max_storage_bytes=256,
+                max_monthly_usd=0.01,
+            )
+        }
+    )
+
+    enforcer.acquire(
+        "plugin",
+        wasm_fuel=100,
+        wasm_memory_bytes=64 * 1024,
+        wall_time_ms=50,
+        output_bytes=64,
+        network_requests=1,
+        storage_bytes=128,
+        usd_micros=5_000,
+    )
+    enforcer.release("plugin", wall_time_ms=50)
+    enforcer.acquire("plugin", network_requests=1, storage_bytes=128, usd_micros=5_000)
+    enforcer.release("plugin", wall_time_ms=100)
+
+    limits = {
+        "max_output_bytes": lambda: enforcer.acquire("plugin", output_bytes=65, network_requests=0),
+        "max_network_requests_per_minute": lambda: enforcer.acquire("plugin"),
+        "max_storage_bytes": lambda: enforcer.acquire(
+            "plugin", storage_bytes=1, network_requests=0
+        ),
+        "max_monthly_usd": lambda: enforcer.acquire("plugin", usd_micros=1, network_requests=0),
+    }
+    for limit, acquire in limits.items():
+        with pytest.raises(PluginQuotaExceededError) as exc_info:
+            acquire()
+        assert exc_info.value.limit == limit
+
+    with pytest.raises(PluginQuotaExceededError) as fuel:
+        enforcer.acquire("plugin", wasm_fuel=1_001, network_requests=0)
+    assert fuel.value.limit == "max_wasm_fuel"
+    with pytest.raises(PluginQuotaExceededError) as memory:
+        enforcer.acquire("plugin", wasm_memory_bytes=65 * 1024, network_requests=0)
+    assert memory.value.limit == "max_wasm_memory_bytes"
+    with pytest.raises(ValueError, match="cannot be negative"):
+        enforcer.acquire("plugin", wall_time_ms=-1, network_requests=0)
+
+
 def _bundle(manifest, private_key, public_pem, artifact):
     canonical = manifest.to_json()
     payload = canonical_plugin_json(

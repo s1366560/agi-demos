@@ -28,7 +28,15 @@
 //! server/desktop adapter, exactly like `adapters-device`'s SQLite.
 
 use async_trait::async_trait;
-use wasmtime::{Config, Engine, Module, Store, Trap};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
+    time::Duration,
+};
+use wasmtime::{Config, Engine, Module, Store, StoreLimits, StoreLimitsBuilder, Trap};
 
 use agistack_core::ports::{CoreError, CoreResult};
 use agistack_plugin_host::manifest::ToolDecl;
@@ -39,6 +47,13 @@ use agistack_plugin_host::ToolFactory;
 /// instructions, so this is effectively unbounded for honest tools while still
 /// trapping a runaway (e.g. an infinite loop) in well under a millisecond.
 pub const DEFAULT_FUEL: u64 = 1_000_000;
+
+/// Conservative per-call linear-memory ceiling for untrusted tools.
+pub const DEFAULT_MEMORY_BYTES: usize = 16 * 1024 * 1024;
+
+struct QuotaState {
+    limits: StoreLimits,
+}
 
 /// A sandboxed tool backed by a Wasmtime-compiled module.
 ///
@@ -52,6 +67,8 @@ pub struct WasmtimeTool {
     engine: Engine,
     module: Module,
     fuel: u64,
+    memory_bytes: usize,
+    wall_time: Option<Duration>,
 }
 
 impl WasmtimeTool {
@@ -75,6 +92,28 @@ impl WasmtimeTool {
         wasm: &[u8],
         fuel: u64,
     ) -> CoreResult<Self> {
+        Self::from_bytes_with_limits(name, version, wasm, fuel, DEFAULT_MEMORY_BYTES, None)
+    }
+
+    /// Compile a tool with explicit fuel, linear-memory, and wall-clock limits.
+    pub fn from_bytes_with_limits(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        wasm: &[u8],
+        fuel: u64,
+        memory_bytes: usize,
+        wall_time: Option<Duration>,
+    ) -> CoreResult<Self> {
+        if fuel == 0 || memory_bytes < 64 * 1024 {
+            return Err(CoreError::Tool(
+                "wasm quota requires positive fuel and at least one memory page".to_string(),
+            ));
+        }
+        if wall_time.is_some_and(|limit| limit.is_zero()) {
+            return Err(CoreError::Tool(
+                "wasm wall-time quota must be positive".to_string(),
+            ));
+        }
         let engine = Engine::new(&Self::quota_config())
             .map_err(|e| CoreError::Tool(format!("wasmtime engine: {e:#}")))?;
         let module = Module::new(&engine, wasm)
@@ -85,6 +124,8 @@ impl WasmtimeTool {
             engine,
             module,
             fuel,
+            memory_bytes,
+            wall_time,
         })
     }
 
@@ -108,7 +149,19 @@ impl WasmtimeTool {
     /// as [`CoreError::Tool`] — the host stays in control, the guest cannot
     /// escape its budget.
     fn run_score(&self, len: i32) -> CoreResult<i32> {
-        let mut store = Store::new(&self.engine, ());
+        let mut store = Store::new(
+            &self.engine,
+            QuotaState {
+                limits: StoreLimitsBuilder::new()
+                    .memory_size(self.memory_bytes)
+                    .instances(1)
+                    .tables(1)
+                    .memories(1)
+                    .trap_on_grow_failure(true)
+                    .build(),
+            },
+        );
+        store.limiter(|state| &mut state.limits);
         // Deterministic per-instruction budget.
         store
             .set_fuel(self.fuel)
@@ -117,18 +170,42 @@ impl WasmtimeTool {
         // traps immediately (wasmtime default deadline is 0). Push it far out:
         // the honest path never trips epoch; the server runner lowers/drives it
         // for a real wall-clock budget.
+        let wall_time = self.wall_time;
         store.set_epoch_deadline(u64::MAX);
 
         let instance = instantiate_module(&self.module, &mut store)?;
         let score = instance
             .get_typed_func::<i32, i32>(&mut store, "score")
             .map_err(|e| CoreError::Tool(format!("missing export score: {e:#}")))?;
-        score.call(&mut store, len).map_err(map_trap)
+        let Some(wall_time) = wall_time else {
+            return score.call(&mut store, len).map_err(map_trap);
+        };
+
+        store.set_epoch_deadline(1);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let interrupter_cancelled = Arc::clone(&cancelled);
+        let interrupter_engine = self.engine.clone();
+        let interrupter = thread::spawn(move || {
+            let start = std::time::Instant::now();
+            while !interrupter_cancelled.load(Ordering::Acquire) && start.elapsed() < wall_time {
+                thread::sleep(Duration::from_millis(1));
+            }
+            if !interrupter_cancelled.load(Ordering::Acquire) {
+                interrupter_engine.increment_epoch();
+            }
+        });
+        let result = score.call(&mut store, len).map_err(map_trap);
+        cancelled.store(true, Ordering::Release);
+        let _ = interrupter.join();
+        result
     }
 }
 
 /// Instantiate a no-import module, mapping failures to [`CoreError`].
-fn instantiate_module(module: &Module, store: &mut Store<()>) -> CoreResult<wasmtime::Instance> {
+fn instantiate_module(
+    module: &Module,
+    store: &mut Store<QuotaState>,
+) -> CoreResult<wasmtime::Instance> {
     wasmtime::Instance::new(store, module, &[])
         .map_err(|e| CoreError::Tool(format!("instantiate: {e:#}")))
 }
@@ -187,15 +264,34 @@ impl Tool for WasmtimeTool {
 /// means enable/disable and CP/DP reconcile drive real Wasmtime tools.
 pub struct WasmtimeToolFactory {
     fuel: u64,
+    memory_bytes: usize,
+    wall_time: Option<Duration>,
 }
 
 impl WasmtimeToolFactory {
     pub fn new() -> Self {
-        Self { fuel: DEFAULT_FUEL }
+        Self {
+            fuel: DEFAULT_FUEL,
+            memory_bytes: DEFAULT_MEMORY_BYTES,
+            wall_time: None,
+        }
     }
     /// Override the per-call fuel budget given to every tool this factory builds.
     pub fn with_fuel(fuel: u64) -> Self {
-        Self { fuel }
+        Self {
+            fuel,
+            memory_bytes: DEFAULT_MEMORY_BYTES,
+            wall_time: None,
+        }
+    }
+
+    /// Override all hard limits applied to every tool built by this factory.
+    pub fn with_limits(fuel: u64, memory_bytes: usize, wall_time: Option<Duration>) -> Self {
+        Self {
+            fuel,
+            memory_bytes,
+            wall_time,
+        }
     }
 }
 
@@ -213,7 +309,14 @@ impl ToolFactory for WasmtimeToolFactory {
                 decl.name
             ))
         })?;
-        let tool = WasmtimeTool::from_wat(decl.name.clone(), decl.version.clone(), wat, self.fuel)?;
+        let tool = WasmtimeTool::from_bytes_with_limits(
+            decl.name.clone(),
+            decl.version.clone(),
+            wat.as_bytes(),
+            self.fuel,
+            self.memory_bytes,
+            self.wall_time,
+        )?;
         Ok(std::sync::Arc::new(tool))
     }
 }
@@ -247,6 +350,18 @@ pub const INFINITE_WAT: &str = r#"
   (func (export "score") (param i32) (result i32)
     (loop $l (br $l))
     unreachable))
+"#;
+
+/// Allocates an unbounded amount of linear memory. The host Store limiter and
+/// grow-failure trap turn this into a structured quota error.
+pub const MEMORY_HOG_WAT: &str = r#"
+(module
+  (memory 1)
+  (func (export "score") (param i32) (result i32)
+    i32.const 65536
+    memory.grow
+    drop
+    local.get 0))
 "#;
 
 #[cfg(test)]
@@ -326,6 +441,46 @@ mod tests {
         assert!(
             msg.contains("interrupt"),
             "expected epoch interrupt trap, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn memory_quota_traps_unbounded_growth() {
+        let tool = WasmtimeTool::from_bytes_with_limits(
+            "memory-hog",
+            "1.0.0",
+            MEMORY_HOG_WAT.as_bytes(),
+            DEFAULT_FUEL,
+            64 * 1024,
+            None,
+        )
+        .unwrap();
+        let error = tool.run_score(1).unwrap_err();
+        let message = format!("{error}");
+        assert!(
+            message.contains("memory") || message.contains("resource"),
+            "expected memory quota trap, got: {message}"
+        );
+    }
+
+    #[test]
+    fn wall_time_quota_interrupts_a_running_guest() {
+        let tool = WasmtimeTool::from_bytes_with_limits(
+            "runaway",
+            "1.0.0",
+            INFINITE_WAT.as_bytes(),
+            u64::MAX,
+            DEFAULT_MEMORY_BYTES,
+            Some(Duration::from_millis(5)),
+        )
+        .unwrap();
+        let start = std::time::Instant::now();
+        let error = tool.run_score(1).unwrap_err();
+        assert!(start.elapsed() < Duration::from_secs(1));
+        let message = format!("{error}");
+        assert!(
+            message.contains("interrupt"),
+            "expected wall-time interrupt, got: {message}"
         );
     }
 
