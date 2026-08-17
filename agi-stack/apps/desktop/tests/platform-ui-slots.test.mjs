@@ -54,6 +54,6 @@ test('ui slot registry rejects external code and unsandboxed renderers', () => {
         { ...definition, moduleRef: 'https://example.test/module.js' },
         { trust: 'builtin', runtime: 'frontend' },
       ),
-    /builtin frontend modules/,
+    /builtin or signed frontend modules/,
   );
 });
