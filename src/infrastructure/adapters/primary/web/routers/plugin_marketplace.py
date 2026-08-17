@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,18 +37,25 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.package_registry import OciPluginArtifactClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/plugin-marketplace", tags=["Plugin Marketplace"])
 
 
-def _service(
+async def _service(
     db: AsyncSession = Depends(get_db),
-) -> PluginMarketplaceInstallService:
-    return PluginMarketplaceInstallService(
-        PlatformPluginGovernanceRepository(db),
-    )
+) -> AsyncIterator[PluginMarketplaceInstallService]:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        yield PluginMarketplaceInstallService(
+            PlatformPluginGovernanceRepository(db),
+            PlatformPluginRepository(db),
+            OciPluginArtifactClient(client),
+        )
 
 
 def _catalog_service(
@@ -87,6 +96,10 @@ def _catalog_entry(package: PlatformPluginPackageModel) -> MarketplacePackageCat
         version=package.version,
         publisher=package.publisher,
         artifact_digest=package.artifact_digest,
+        artifact_registry=package.artifact_registry,
+        artifact_repository=package.artifact_repository,
+        oci_manifest_digest=package.oci_manifest_digest,
+        install_status=package.install_status,
         manifest=package.manifest,
         signature=package.signature,
         provenance=package.provenance,

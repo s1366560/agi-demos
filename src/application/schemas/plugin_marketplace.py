@@ -19,11 +19,18 @@ class MarketplacePackageProvenance(BaseModel):
     subject_name: str
 
 
+class MarketplaceArtifactSource(BaseModel):
+    registry: str = Field(min_length=1, max_length=512)
+    repository: str = Field(min_length=1, max_length=255)
+    manifest_sha256: str = Field(min_length=64, max_length=64)
+
+
 class MarketplacePackageRequest(BaseModel):
     plugin_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
     publisher: str = Field(min_length=1)
     tenant_id: str = Field(min_length=1)
+    artifact: MarketplaceArtifactSource
     artifact_sha256: str = Field(min_length=64, max_length=64)
     manifest: dict[str, object]
     signature: MarketplacePackageSignature
@@ -45,6 +52,10 @@ class MarketplacePackageCatalogEntry(BaseModel):
     version: str
     publisher: str
     artifact_digest: str
+    artifact_registry: str
+    artifact_repository: str
+    oci_manifest_digest: str
+    install_status: str
     manifest: dict[str, object]
     signature: dict[str, object]
     provenance: dict[str, object]

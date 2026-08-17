@@ -1,10 +1,15 @@
 import base64
+import hashlib
+import io
+import json
+import zipfile
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from src.application.schemas.plugin_marketplace import (
+    MarketplaceArtifactSource,
     MarketplacePackageProvenance,
     MarketplacePackageRequest,
     MarketplacePackageSignature,
@@ -19,17 +24,15 @@ from src.domain.model.plugins import parse_plugin_manifest
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
 from src.infrastructure.plugins.governance import canonical_plugin_json, sha256_hex
+from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
 
 
-def _request(
-    private_key: Ed25519PrivateKey,
-    public_pem: str,
-    *,
-    artifact: str | None = None,
-    signed_artifact: str | None = None,
-) -> MarketplacePackageRequest:
-    manifest = {
+def base_manifest() -> dict[str, object]:
+    return {
         "schemaVersion": 1,
         "id": "third-party-tool",
         "version": "1.0.0",
@@ -43,7 +46,49 @@ def _request(
             }
         ],
     }
-    artifact = artifact or sha256_hex(b"artifact")
+
+
+def package_archive(manifest: dict[str, object]) -> bytes:
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+    runtime = b"wasm-runtime"
+    checksums = {
+        "plugin.manifest.json": hashlib.sha256(manifest_bytes).hexdigest(),
+        "runtime/plugin.wasm": hashlib.sha256(runtime).hexdigest(),
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle:
+        bundle.writestr("plugin.manifest.json", manifest_bytes)
+        bundle.writestr("runtime/plugin.wasm", runtime)
+        bundle.writestr("checksums.json", json.dumps(checksums, separators=(",", ":")))
+    return output.getvalue()
+
+
+class FakeArtifactClient:
+    def __init__(self, archive: bytes, layer_digest: str | None = None) -> None:
+        self.archive = archive
+        self.layer_digest = layer_digest or hashlib.sha256(archive).hexdigest()
+
+    async def fetch(
+        self, *, registry: str, repository: str, manifest_digest: str
+    ) -> RegistryPluginArtifact:
+        return RegistryPluginArtifact(
+            registry=registry,
+            repository=repository,
+            manifest_digest=manifest_digest,
+            layer_digest=self.layer_digest,
+            archive=self.archive,
+        )
+
+
+def _request(
+    private_key: Ed25519PrivateKey,
+    public_pem: str,
+    *,
+    artifact: str | None = None,
+    signed_artifact: str | None = None,
+) -> MarketplacePackageRequest:
+    manifest = base_manifest()
+    artifact = artifact or hashlib.sha256(package_archive(manifest)).hexdigest()
     canonical = parse_plugin_manifest(manifest).to_json()
     payload = canonical_plugin_json(
         {
@@ -57,6 +102,11 @@ def _request(
         version="1.0.0",
         publisher="memstack",
         tenant_id="tenant-1",
+        artifact=MarketplaceArtifactSource(
+            registry="https://registry.memstack.test",
+            repository="memstack/plugins/third-party-tool",
+            manifest_sha256="1" * 64,
+        ),
         artifact_sha256=artifact,
         manifest=manifest,
         signature=MarketplacePackageSignature(
@@ -87,6 +137,8 @@ async def test_marketplace_install_validates_and_persists(db_session):
     )
     service = PluginMarketplaceInstallService(
         PlatformPluginGovernanceRepository(db_session),
+        PlatformPluginRepository(db_session),
+        FakeArtifactClient(package_archive(base_manifest())),
         trusted_public_keys=(public_pem,),
     )
 
@@ -94,6 +146,12 @@ async def test_marketplace_install_validates_and_persists(db_session):
 
     assert decision.status == "approved"
     assert await PlatformPluginGovernanceRepository(db_session).list_packages()
+    catalog = await PlatformPluginRepository(db_session).list_catalog()
+    assert [(row.plugin_id, row.version) for row in catalog] == [("third-party-tool", "1.0.0")]
+    desired = await PlatformPluginRepository(db_session).get_desired_state("third-party-tool")
+    assert desired is not None
+    assert desired.enabled is True
+    assert desired.revision == 1
 
 
 @pytest.mark.unit
@@ -115,6 +173,11 @@ async def test_marketplace_install_quarantines_tampered_artifact(db_session):
     )
     service = PluginMarketplaceInstallService(
         PlatformPluginGovernanceRepository(db_session),
+        PlatformPluginRepository(db_session),
+        FakeArtifactClient(
+            package_archive(base_manifest()),
+            layer_digest=sha256_hex(b"tampered"),
+        ),
         trusted_public_keys=(public_pem,),
     )
 

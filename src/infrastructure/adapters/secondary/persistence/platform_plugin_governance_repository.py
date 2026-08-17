@@ -240,6 +240,9 @@ class PlatformPluginGovernanceRepository:
         version: str,
         publisher: str,
         artifact_digest: str,
+        artifact_registry: str = "inline://marketplace",
+        artifact_repository: str | None = None,
+        oci_manifest_digest: str | None = None,
         manifest: dict[str, object],
         signature: dict[str, object],
         provenance: dict[str, object],
@@ -256,6 +259,10 @@ class PlatformPluginGovernanceRepository:
                 version=version,
                 publisher=publisher,
                 artifact_digest=artifact_digest,
+                artifact_registry=artifact_registry,
+                artifact_repository=artifact_repository or plugin_id,
+                oci_manifest_digest=oci_manifest_digest or artifact_digest,
+                install_status="installed",
                 manifest=dict(manifest),
                 security_scan_status=security_scan_status,
             )
@@ -263,6 +270,10 @@ class PlatformPluginGovernanceRepository:
         else:
             model.publisher = publisher
             model.artifact_digest = artifact_digest
+            model.artifact_registry = artifact_registry
+            model.artifact_repository = artifact_repository or plugin_id
+            model.oci_manifest_digest = oci_manifest_digest or artifact_digest
+            model.install_status = "installed"
             model.manifest = dict(manifest)
             model.security_scan_status = security_scan_status
         model.signature = dict(signature)

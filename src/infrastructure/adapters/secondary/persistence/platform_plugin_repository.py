@@ -53,6 +53,25 @@ class PlatformPluginRepository:
         )
         return list(result.scalars().all())
 
+    async def get_desired_state(
+        self,
+        plugin_id: str,
+        *,
+        scope: PluginScope = PluginScope.GLOBAL,
+        scope_id: str | None = None,
+    ) -> PlatformPluginDesiredStateModel | None:
+        normalized_scope_id = scope_id if scope and scope != PluginScope.GLOBAL else "global"
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginDesiredStateModel).where(
+                    PlatformPluginDesiredStateModel.scope_type == scope.value,
+                    PlatformPluginDesiredStateModel.scope_id == normalized_scope_id,
+                    PlatformPluginDesiredStateModel.plugin_id == plugin_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def set_desired_state(
         self,
         *,
