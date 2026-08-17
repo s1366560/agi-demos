@@ -39,6 +39,7 @@
     "electron/main/rendererProtocol.ts",
     "electron/main/sidecarSupervisor.ts",
     "electron/main/updatePolicy.ts",
+    "src/plugins/uiSlotRegistry.ts",
     "src/vite-env.d.ts",
     "src/api/client.ts",
     "src/api/cloudRequestBroker.ts",

@@ -3207,6 +3207,178 @@ class PlatformPluginApplyStateModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginPermissionModel(IdGeneratorMixin, Base):
+    """Tenant-approved plugin permission grant."""
+
+    __tablename__ = "platform_plugin_permissions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False, default="global")
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    permission: Mapped[str] = mapped_column(String(64), nullable=False)
+    granted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_type",
+            "scope_id",
+            "plugin_id",
+            "permission",
+            name="uq_platform_plugin_permission_scope",
+        ),
+        Index("ix_platform_plugin_permission_scope", "scope_type", "scope_id", "plugin_id"),
+    )
+
+
+class PlatformPluginCredentialGrantModel(IdGeneratorMixin, Base):
+    """Short-lived host-owned credential reference grant."""
+
+    __tablename__ = "platform_plugin_credential_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    credential_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    permission: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    granted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_platform_plugin_credential_grant_lookup",
+            "plugin_id",
+            "credential_ref",
+            "expires_at",
+        ),
+    )
+
+
+class PlatformPluginBackendSelectionModel(IdGeneratorMixin, Base):
+    """Scoped backend selection for one replaceable capability."""
+
+    __tablename__ = "platform_plugin_backend_selections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False, default="global")
+    capability_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    capability_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_type",
+            "scope_id",
+            "capability_kind",
+            name="uq_platform_plugin_backend_selection_scope",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_platform_plugin_backend_selection_revision",
+        ),
+    )
+
+
+class PlatformPluginHttpRouteModel(IdGeneratorMixin, Base):
+    """Declarative plugin HTTP route desired state."""
+
+    __tablename__ = "platform_plugin_http_routes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String(8), nullable=False)
+    path: Mapped[str] = mapped_column(String(512), nullable=False)
+    permission: Mapped[str] = mapped_column(String(191), nullable=False)
+    authorization_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("method", "path", name="uq_platform_plugin_http_route"),
+        CheckConstraint(
+            "method IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')",
+            name="ck_platform_plugin_http_route_method",
+        ),
+        CheckConstraint(
+            "authorization_mode IN ('tenant_member', 'project_member', 'tenant_admin')",
+            name="ck_platform_plugin_http_route_authorization",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_platform_plugin_http_route_revision",
+        ),
+    )
+
+
+class PlatformPluginQuotaUsageModel(Base):
+    """Current per-plugin quota counters."""
+
+    __tablename__ = "platform_plugin_quota_usage"
+
+    plugin_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    concurrent_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    requests_in_window: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    storage_bytes: Mapped[str] = mapped_column(BigInteger, nullable=False, default=0)
+    usd_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "concurrent_calls >= 0 AND requests_in_window >= 0",
+            name="ck_platform_plugin_quota_counts",
+        ),
+        CheckConstraint(
+            "output_bytes >= 0 AND storage_bytes >= 0 AND usd_micros >= 0",
+            name="ck_platform_plugin_quota_bytes",
+        ),
+    )
+
+
+class PlatformPluginPackageModel(Base):
+    """Marketplace package trust and provenance catalog."""
+
+    __tablename__ = "platform_plugin_packages"
+
+    plugin_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    publisher: Mapped[str] = mapped_column(String(255), nullable=False)
+    artifact_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    security_scan_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ClusterModel(Base):
     """Compute cluster registered to a tenant."""
 

@@ -92,10 +92,10 @@ after desired state and audit records are consistent.
 | 0 capability inventory and architecture decision | Implemented as an architecture contract and inventory. |
 | 1 reversible kernel and legacy facade | Implemented for capability ownership and trusted builtins. |
 | 2 profile/control-plane foundation | Implemented for composition, persistence, snapshot envelope, and Rust contract. |
-| 3 agent runtime migration | Not started; current tool cache and event pipeline remain legacy. |
-| 4 provider/channel/storage migration | Not started. |
-| 5 Rust, desktop, and Web UI surfaces | Snapshot contract only; native reconcile and UI slots remain future work. |
-| 6 external ecosystem and hardening | Not started; pip install remains a trusted local/dev path only. |
+| 3 agent runtime migration | Ports, typed event bus, tool generation cache, prompt/subagent/loop contracts implemented. Legacy processor and tool cache cutover remains incremental behind feature flags. |
+| 4 provider/channel/storage migration | Provider route/credential lease, channel/backend/HTTP route contracts, desired-state tables, and route mount service implemented. Existing manager/router cutover remains incremental. |
+| 5 Rust, desktop, and Web UI surfaces | Rust full-profile reconciler with ACK/NACK and last-good, desktop builtin UI slot registry, and generated platform capability inventory implemented. Native sidecar wiring and external renderer loading remain future work. |
+| 6 external ecosystem and hardening | Ed25519 package verification, SLSA provenance checks, permission gate, quota accounting, package/revocation persistence, and pure marketplace decisions implemented. OCI distribution and public catalog remain future work. |
 
 Full migration remains deliberately incremental. Every phase must preserve the current
 default behavior when the new profile has no active external plugins.

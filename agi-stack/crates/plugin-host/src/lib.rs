@@ -46,6 +46,7 @@ pub mod control_plane;
 pub mod host;
 pub mod manifest;
 pub mod native;
+pub mod profile_reconcile;
 pub mod reconcile;
 pub mod registry;
 pub mod skill;
@@ -57,6 +58,10 @@ pub use control_plane::{ConfigAck, ConfigSnapshot, ControlPlane, TOOL_REGISTRY_T
 pub use host::{PluginHost, ToolFactory};
 pub use manifest::{CapabilityKind, PluginManifest, ToolDecl};
 pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
+pub use profile_reconcile::{
+    PlatformPluginActivator, PlatformPluginEnvelope, PlatformPluginSnapshotReconciler,
+    PluginActivation, PluginApplyReceipt, PluginApplyStatus,
+};
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
 pub use skill::{Skill, SkillContext, SkillEngine};

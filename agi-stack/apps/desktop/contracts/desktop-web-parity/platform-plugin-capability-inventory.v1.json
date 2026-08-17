@@ -1,0 +1,261 @@
+{
+  "capabilities": [
+    {
+      "capability_id": "after_turn_complete",
+      "capability_kind": "hook",
+      "contract": "hook:after_turn_complete",
+      "id": "platform-plugin-memory-runtime-hook-after_turn_complete",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "before_prompt_build",
+      "capability_kind": "hook",
+      "contract": "hook:before_prompt_build",
+      "id": "platform-plugin-memory-runtime-hook-before_prompt_build",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "on_context_overflow",
+      "capability_kind": "hook",
+      "contract": "hook:on_context_overflow",
+      "id": "platform-plugin-memory-runtime-hook-on_context_overflow",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "memory_create",
+      "capability_kind": "tool",
+      "contract": "tool:memory_create",
+      "id": "platform-plugin-memory-runtime-tool-memory_create",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "memory_delete",
+      "capability_kind": "tool",
+      "contract": "tool:memory_delete",
+      "id": "platform-plugin-memory-runtime-tool-memory_delete",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "memory_get",
+      "capability_kind": "tool",
+      "contract": "tool:memory_get",
+      "id": "platform-plugin-memory-runtime-tool-memory_get",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "memory_search",
+      "capability_kind": "tool",
+      "contract": "tool:memory_search",
+      "id": "platform-plugin-memory-runtime-tool-memory_search",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "memory_update",
+      "capability_kind": "tool",
+      "contract": "tool:memory_update",
+      "id": "platform-plugin-memory-runtime-tool-memory_update",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "after_tool_execution",
+      "capability_kind": "hook",
+      "contract": "hook:after_tool_execution",
+      "id": "platform-plugin-sisyphus-runtime-hook-after_tool_execution",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "sisyphus-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "before_response",
+      "capability_kind": "hook",
+      "contract": "hook:before_response",
+      "id": "platform-plugin-sisyphus-runtime-hook-before_response",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "sisyphus-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "on_session_start",
+      "capability_kind": "hook",
+      "contract": "hook:on_session_start",
+      "id": "platform-plugin-sisyphus-runtime-hook-on_session_start",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "sisyphus-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "after_tool_execution",
+      "capability_kind": "hook",
+      "contract": "hook:after_tool_execution",
+      "id": "platform-plugin-skill-evolution-hook-after_tool_execution",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "skill-evolution",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "after_turn_complete",
+      "capability_kind": "hook",
+      "contract": "hook:after_turn_complete",
+      "id": "platform-plugin-skill-evolution-hook-after_turn_complete",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "skill-evolution",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "after_tool_execution",
+      "capability_kind": "hook",
+      "contract": "hook:after_tool_execution",
+      "id": "platform-plugin-workspace-runtime-hook-after_tool_execution",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "workspace-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "before_response",
+      "capability_kind": "hook",
+      "contract": "hook:before_response",
+      "id": "platform-plugin-workspace-runtime-hook-before_response",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "workspace-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "on_session_start",
+      "capability_kind": "hook",
+      "contract": "hook:on_session_start",
+      "id": "platform-plugin-workspace-runtime-hook-on_session_start",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "workspace-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "workspace-task-harness",
+      "capability_kind": "skill_provider",
+      "contract": "agent-skill:workspace-task-harness",
+      "id": "platform-plugin-workspace-runtime-skill_provider-workspace-task-harness",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "workspace-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    }
+  ],
+  "schema_version": "1.0.0",
+  "source": "src/infrastructure/plugins/builtin_manifests.py"
+}

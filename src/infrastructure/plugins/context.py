@@ -9,29 +9,23 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from src.domain.model.plugins import CapabilityKind, PluginManifest, PluginScope
+from src.domain.model.plugins import (
+    CapabilityKind,
+    PluginManifest,
+    PluginScope,
+    PluginScopeContext,
+)
 
 Disposable = Callable[[], None]
 
-
-@dataclass(frozen=True)
-class PluginScopeContext:
-    """Immutable identity passed to a plugin activation."""
-
-    tenant_id: str | None = None
-    project_id: str | None = None
-    session_id: str | None = None
-
-    @property
-    def default_scope(self) -> PluginScope:
-        """Return the narrowest scope represented by this context."""
-        if self.session_id is not None:
-            return PluginScope.SESSION
-        if self.project_id is not None:
-            return PluginScope.PROJECT
-        if self.tenant_id is not None:
-            return PluginScope.TENANT
-        return PluginScope.GLOBAL
+__all__ = [
+    "CapabilityConflictError",
+    "CapabilityRecord",
+    "CapabilityRegistry",
+    "Disposable",
+    "PluginContext",
+    "PluginScopeContext",
+]
 
 
 @dataclass(frozen=True)
