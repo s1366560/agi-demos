@@ -8,10 +8,10 @@ use axum::{
     http::{header::AUTHORIZATION, HeaderMap, HeaderName, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -24,6 +24,8 @@ use super::{
 
 mod contracts;
 mod judge;
+#[cfg(test)]
+mod plugin_snapshot_routes_tests;
 mod provider;
 mod registry;
 
@@ -605,7 +607,242 @@ pub(super) fn router(state: Arc<LocalRuntimeState>) -> Router {
             "/internal/v1/workspace-core/plan-dispatch",
             post(provider::dispatch_plan),
         )
+        .merge(platform_plugin_router(Arc::clone(&state)))
         .with_state(state)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+struct PlatformPluginSnapshotRequest {
+    version: u64,
+    nonce: String,
+    digest: String,
+    payload: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+struct PlatformPluginAckRequest {
+    version: u64,
+    digest: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+struct PlatformPluginNackRequest {
+    reason: String,
+}
+
+fn platform_plugin_router(state: Arc<LocalRuntimeState>) -> Router<Arc<LocalRuntimeState>> {
+    Router::new()
+        .route(
+            "/api/v1/platform-plugins/snapshot",
+            get(platform_plugin_snapshot).post(submit_platform_plugin_snapshot),
+        )
+        .route(
+            "/api/v1/platform-plugins/apply-state",
+            get(platform_plugin_apply_state),
+        )
+        .route("/api/v1/platform-plugins/ack", post(platform_plugin_ack))
+        .route("/api/v1/platform-plugins/nack", post(platform_plugin_nack))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_platform_plugin_session,
+        ))
+        .with_state(state)
+}
+
+async fn require_platform_plugin_session(
+    State(state): State<Arc<LocalRuntimeState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let credential = request
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let authenticated = credential.and_then(|credential| {
+        state
+            .session_store
+            .validate_session_credential(credential, chrono::Utc::now().timestamp_millis())
+            .ok()
+            .flatten()
+    });
+    let Some(_authenticated) = authenticated else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "authenticated desktop session required"})),
+        )
+            .into_response();
+    };
+    next.run(request).await
+}
+
+async fn platform_plugin_snapshot(
+    State(state): State<Arc<LocalRuntimeState>>,
+) -> Result<Json<Value>, BridgeError> {
+    let connection = state.session_store.connection().map_err(store_error)?;
+    crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+    if let Some(payload) =
+        crate::plugin_snapshots::read_last_good(&connection).map_err(store_error)?
+    {
+        return Ok(Json(json!({"source": "last_good", "snapshot": payload})));
+    }
+    let requested = crate::plugin_snapshots::read_requested(&connection)
+        .map_err(store_error)?
+        .ok_or_else(|| not_found("platform plugin snapshot is unavailable"))?;
+    Ok(Json(json!({
+        "source": "requested",
+        "version": requested.version,
+        "nonce": requested.nonce,
+        "digest": requested.digest,
+        "payload": requested.payload,
+    })))
+}
+
+async fn submit_platform_plugin_snapshot(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Json(request): Json<PlatformPluginSnapshotRequest>,
+) -> Result<Json<Value>, BridgeError> {
+    validate_platform_plugin_snapshot(&request).map_err(|detail| bad_request(&detail))?;
+    let connection = state.session_store.connection().map_err(store_error)?;
+    crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+    if let Some(record) =
+        crate::plugin_snapshots::read_apply_record(&connection).map_err(store_error)?
+    {
+        let same_version = record.requested_version == request.version;
+        let stale =
+            request.version <= record.applied_version || request.version < record.requested_version;
+        let same_snapshot = same_version && record.requested_digest == request.digest;
+        if same_snapshot {
+            return Ok(Json(json!({
+                "status": record.status.as_str(),
+                "idempotent": true,
+            })));
+        }
+        if same_version || stale {
+            let reason = if same_version {
+                "snapshot version already belongs to another digest"
+            } else {
+                "snapshot version is stale"
+            };
+            crate::plugin_snapshots::record_nack(&connection, reason).map_err(store_error)?;
+            return Err(conflict(reason));
+        }
+    }
+    crate::plugin_snapshots::record_requested(
+        &connection,
+        request.version,
+        &request.nonce,
+        &request.digest,
+        &request.payload.to_string(),
+    )
+    .map_err(store_error)?;
+    Ok(Json(json!({"status": "pending"})))
+}
+
+async fn platform_plugin_apply_state(
+    State(state): State<Arc<LocalRuntimeState>>,
+) -> Result<Json<Value>, BridgeError> {
+    let connection = state.session_store.connection().map_err(store_error)?;
+    crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+    let record = crate::plugin_snapshots::read_apply_record(&connection)
+        .map_err(store_error)?
+        .ok_or_else(|| not_found("platform plugin apply state is unavailable"))?;
+    serde_json::to_value(record)
+        .map(Json)
+        .map_err(|error| store_error(error.to_string()))
+}
+
+async fn platform_plugin_ack(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Json(request): Json<PlatformPluginAckRequest>,
+) -> Result<Json<Value>, BridgeError> {
+    let connection = state.session_store.connection().map_err(store_error)?;
+    crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+    let requested = crate::plugin_snapshots::read_requested(&connection)
+        .map_err(store_error)?
+        .ok_or_else(|| conflict("platform plugin snapshot has not been requested"))?;
+    if requested.version != request.version || requested.digest != request.digest {
+        let reason = "ACK does not match the requested platform plugin snapshot";
+        crate::plugin_snapshots::record_nack(&connection, reason).map_err(store_error)?;
+        return Err(conflict(reason));
+    }
+    crate::plugin_snapshots::record_ack(
+        &connection,
+        requested.version,
+        &requested.digest,
+        &requested.payload.to_string(),
+    )
+    .map_err(store_error)?;
+    Ok(Json(json!({"status": "ack"})))
+}
+
+async fn platform_plugin_nack(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Json(request): Json<PlatformPluginNackRequest>,
+) -> Result<Json<Value>, BridgeError> {
+    if request.reason.trim().is_empty() || request.reason.len() > 2048 {
+        return Err(bad_request("NACK reason must contain 1..2048 characters"));
+    }
+    let connection = state.session_store.connection().map_err(store_error)?;
+    crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+    if crate::plugin_snapshots::read_requested(&connection)
+        .map_err(store_error)?
+        .is_none()
+    {
+        return Err(conflict("platform plugin snapshot has not been requested"));
+    }
+    crate::plugin_snapshots::record_nack(&connection, request.reason.trim())
+        .map_err(store_error)?;
+    Ok(Json(json!({"status": "nack"})))
+}
+
+fn validate_platform_plugin_snapshot(
+    request: &PlatformPluginSnapshotRequest,
+) -> Result<(), String> {
+    if request.version == 0 {
+        return Err("snapshot version must be positive".to_string());
+    }
+    if request.nonce.trim().is_empty() || request.nonce.len() > 128 {
+        return Err("snapshot nonce must contain 1..128 characters".to_string());
+    }
+    if request.digest.len() != 64 || !request.digest.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err("snapshot digest must be 64 hexadecimal characters".to_string());
+    }
+    let Some(payload) = request.payload.as_object() else {
+        return Err("snapshot payload must be an object".to_string());
+    };
+    if payload.get("schema_version").and_then(Value::as_u64) != Some(1) {
+        return Err("snapshot schema_version must be 1".to_string());
+    }
+    if !payload
+        .get("profile_id")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return Err("snapshot profile_id is required".to_string());
+    }
+    if !payload.get("plugins").is_some_and(Value::is_array) {
+        return Err("snapshot plugins must be an array".to_string());
+    }
+    if payload.get("digest").and_then(Value::as_str) != Some(request.digest.as_str()) {
+        return Err("snapshot payload digest does not match the envelope".to_string());
+    }
+    let actual_digest = platform_plugin_payload_digest(&request.payload)?;
+    if actual_digest != request.digest {
+        return Err("snapshot digest does not match its canonical payload".to_string());
+    }
+    Ok(())
+}
+
+fn platform_plugin_payload_digest(payload: &Value) -> Result<String, String> {
+    let mut canonical = payload.clone();
+    if let Some(object) = canonical.as_object_mut() {
+        object.remove("digest");
+    }
+    super::tool_authority::canonical_json_digest(&canonical).map_err(|error| error.to_string())
 }
 
 #[derive(Clone, Copy)]

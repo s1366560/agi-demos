@@ -5,7 +5,7 @@
 //! active generation. Credential values are never stored here.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const TABLE_SQL: &str = r#"
@@ -34,6 +34,14 @@ pub(crate) struct PluginApplyRecord {
     pub status: String,
     pub error_message: Option<String>,
     pub has_last_good: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct RequestedPluginSnapshot {
+    pub(crate) version: u64,
+    pub(crate) nonce: String,
+    pub(crate) digest: String,
+    pub(crate) payload: Value,
 }
 
 pub(crate) fn initialize_schema(connection: &Connection) -> Result<(), String> {
@@ -87,6 +95,33 @@ pub(crate) fn read_last_good(connection: &Connection) -> Result<Option<Value>, S
                 .map_err(|error| error.to_string()),
             None => Ok(None),
         })
+}
+
+pub(crate) fn read_requested(
+    connection: &Connection,
+) -> Result<Option<RequestedPluginSnapshot>, String> {
+    let raw = connection
+        .query_row(
+            r#"
+            SELECT requested_version, requested_nonce, requested_digest, requested_json
+              FROM desktop_platform_plugin_snapshots WHERE id = 1
+            "#,
+            [],
+            |row| {
+                let raw_payload = row.get::<_, String>(3)?;
+                let payload = serde_json::from_str::<Value>(&raw_payload)
+                    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+                Ok(RequestedPluginSnapshot {
+                    version: row.get::<_, i64>(0)? as u64,
+                    nonce: row.get(1)?,
+                    digest: row.get(2)?,
+                    payload,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    Ok(raw)
 }
 
 pub(crate) fn record_requested(
@@ -188,6 +223,26 @@ mod tests {
             "plugins": [],
             "digest": digest
         })
+    }
+
+    #[test]
+    fn requested_snapshot_roundtrips_without_exposing_last_good_payload() {
+        let connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+        let digest = "c".repeat(64);
+        let payload = snapshot(&digest);
+
+        record_requested(&connection, 5, "nonce-5", &digest, &payload.to_string())
+            .expect("record requested");
+        let requested = read_requested(&connection)
+            .expect("requested snapshot")
+            .expect("requested row");
+
+        assert_eq!(requested.version, 5);
+        assert_eq!(requested.nonce, "nonce-5");
+        assert_eq!(requested.digest, digest);
+        assert_eq!(requested.payload, payload);
+        assert_eq!(read_last_good(&connection).expect("last good"), None);
     }
 
     #[test]
