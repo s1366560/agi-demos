@@ -92,6 +92,8 @@ async def test_http_route_quota_and_package_governance_roundtrip(db_session):
         "1.0.0",
         "publisher compromised",
     )
+    active_packages = await repository.list_packages()
+    package_versions = await repository.get_package("example-plugin")
 
     assert isinstance(route, PlatformPluginHttpRouteModel)
     assert route.revision == 2
@@ -99,3 +101,6 @@ async def test_http_route_quota_and_package_governance_roundtrip(db_session):
     assert isinstance(package, PlatformPluginPackageModel)
     assert package.revoked
     assert package.revocation_reason == "publisher compromised"
+    assert active_packages == []
+    assert package_versions == [package]
+    assert await repository.list_packages(include_revoked=True) == [package]

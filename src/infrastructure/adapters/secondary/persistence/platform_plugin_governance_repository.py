@@ -268,6 +268,35 @@ class PlatformPluginGovernanceRepository:
         await self._session.flush()
         return model
 
+    async def list_packages(
+        self,
+        *,
+        include_revoked: bool = False,
+    ) -> list[PlatformPluginPackageModel]:
+        """Return deterministic marketplace package rows."""
+        statement = select(PlatformPluginPackageModel).order_by(
+            PlatformPluginPackageModel.plugin_id,
+            PlatformPluginPackageModel.version.desc(),
+        )
+        if not include_revoked:
+            statement = statement.where(PlatformPluginPackageModel.revoked.is_(False))
+        result = await self._session.execute(refresh_select_statement(statement))
+        return list(result.scalars().all())
+
+    async def get_package(
+        self,
+        plugin_id: str,
+    ) -> list[PlatformPluginPackageModel]:
+        """Return all versions for one package."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginPackageModel)
+                .where(PlatformPluginPackageModel.plugin_id == plugin_id)
+                .order_by(PlatformPluginPackageModel.version.desc())
+            )
+        )
+        return list(result.scalars().all())
+
 
 def utc_now() -> datetime:
     """Return current UTC time for callers composing grants."""

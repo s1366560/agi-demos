@@ -66,6 +66,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     memories,
     notifications,
     observability,
+    platform_plugins,
     plugin_marketplace,
     project_my_work,
     project_sandbox,
@@ -739,6 +740,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(tenant_webhooks.router, prefix="/api/v1")
     app.include_router(system.router, prefix="/api/v1")
     app.include_router(plugin_marketplace.router)
+    app.include_router(platform_plugins.router)
     app.include_router(events.router)
 
     # Tunnel (WebSocket reverse tunnel for local sandbox connectivity)

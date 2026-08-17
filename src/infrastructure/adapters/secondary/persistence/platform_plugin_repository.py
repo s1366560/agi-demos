@@ -127,6 +127,17 @@ class PlatformPluginRepository:
         )
         return result.scalar_one_or_none()
 
+    async def latest_snapshot(self) -> PlatformPluginSnapshotModel | None:
+        """Return the newest published snapshot."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginSnapshotModel).order_by(
+                    PlatformPluginSnapshotModel.version.desc()
+                )
+            )
+        )
+        return result.scalars().first()
+
     async def record_capability_transition(
         self,
         *,

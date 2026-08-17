@@ -1,0 +1,182 @@
+"""Unit tests for the platform plugin control-plane transport."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import FastAPI, status
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers import platform_plugins
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginApplyStateModel,
+    User,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
+from src.infrastructure.plugins import compose_profile, parse_profile_document
+from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
+from src.infrastructure.plugins.profile import ProfileSnapshot
+
+
+def compose_snapshot(profile_id: str) -> ProfileSnapshot:
+    document = parse_profile_document(
+        {
+            "profile": {
+                "id": profile_id,
+                "layers": [{"id": "base", "plugins": [{"id": "workspace-runtime"}]}],
+            }
+        }
+    )
+    return compose_profile(document, default_builtin_manifests())
+
+
+def make_client(db: AsyncSession) -> TestClient:
+    app = FastAPI()
+    app.include_router(platform_plugins.router)
+
+    async def override_db() -> AsyncSession:
+        return db
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="platform-plugin-user",
+        email="platform-plugin@example.com",
+        hashed_password="hashed",
+        full_name="Platform Plugin User",
+        is_active=True,
+    )
+    return TestClient(app)
+
+
+@pytest.mark.unit
+async def test_snapshot_endpoint_returns_latest_snapshot(db_session: AsyncSession) -> None:
+    repository = PlatformPluginRepository(db_session)
+    latest_snapshot = compose_snapshot("router-test-latest")
+    for version in (3, 7):
+        snapshot = latest_snapshot if version == 7 else compose_snapshot("router-test-previous")
+        await repository.record_snapshot(snapshot, version=version)
+    await db_session.commit()
+
+    response = make_client(db_session).get("/api/v1/platform-plugins/snapshot")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "version": 7,
+        "profile_id": latest_snapshot.profile_id,
+        "digest": latest_snapshot.digest,
+        "payload": latest_snapshot.to_payload(),
+    }
+
+
+@pytest.mark.unit
+async def test_snapshot_endpoint_returns_404_without_published_snapshot(
+    db_session: AsyncSession,
+) -> None:
+    response = make_client(db_session).get("/api/v1/platform-plugins/snapshot")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.unit
+async def test_data_plane_ack_is_persisted(db_session: AsyncSession) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-ack")
+    await repository.record_snapshot(snapshot, version=9)
+    await db_session.commit()
+
+    response = make_client(db_session).post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": snapshot.digest,
+            "requested_version": 9,
+            "applied_version": 9,
+            "status": "ack",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "ack"
+    apply_state_result = await db_session.execute(
+        select(PlatformPluginApplyStateModel).where(
+            PlatformPluginApplyStateModel.data_plane_id == "desktop-local"
+        )
+    )
+    apply_state = apply_state_result.scalar_one()
+    assert apply_state is not None
+    assert apply_state.snapshot_digest == snapshot.digest
+    assert apply_state.requested_version == 9
+    assert apply_state.applied_version == 9
+
+
+@pytest.mark.unit
+async def test_data_plane_nack_requires_reason(db_session: AsyncSession) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-nack")
+    await repository.record_snapshot(snapshot, version=11)
+    await db_session.commit()
+
+    response = make_client(db_session).post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": snapshot.digest,
+            "requested_version": 11,
+            "applied_version": 10,
+            "status": "nack",
+            "error_message": " ",
+        },
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.unit
+async def test_data_plane_receipt_rejects_stale_version_or_digest(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-conflict")
+    await repository.record_snapshot(snapshot, version=12)
+    await db_session.commit()
+    client = make_client(db_session)
+
+    stale_version = client.post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": snapshot.digest,
+            "requested_version": 11,
+            "applied_version": 11,
+            "status": "ack",
+        },
+    )
+    stale_digest = client.post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": "a" * 64,
+            "requested_version": 12,
+            "applied_version": 12,
+            "status": "ack",
+        },
+    )
+    incomplete_ack = client.post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": snapshot.digest,
+            "requested_version": 12,
+            "applied_version": 11,
+            "status": "ack",
+        },
+    )
+
+    assert stale_version.status_code == status.HTTP_409_CONFLICT
+    assert stale_digest.status_code == status.HTTP_409_CONFLICT
+    assert incomplete_ack.status_code == status.HTTP_409_CONFLICT
