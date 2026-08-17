@@ -26,6 +26,7 @@ Last checked against code: 2026-06-23.
 | Area | Current docs |
 |---|---|
 | Architecture | [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md), [architecture/README.md](architecture/README.md) |
+| Platform plugin kernel | [architecture/platform-plugin-kernel.md](architecture/platform-plugin-kernel.md), [architecture/plugin-capability-inventory.md](architecture/plugin-capability-inventory.md) |
 | Multi-agent and pool notes | [architecture/AGENT_POOL.md](architecture/AGENT_POOL.md) (see [archive/architecture/MULTI_AGENT.md](archive/architecture/MULTI_AGENT.md) for history) |
 | Plan mode and workspace planning | [architecture/plan-mode.md](architecture/plan-mode.md) (history in [archive/plan-mode/](archive/plan-mode/)) |
 | Sandbox | [sandbox-unified-architecture.md](sandbox-unified-architecture.md), [sandbox-mcp-server/README.md](../sandbox-mcp-server/README.md) |

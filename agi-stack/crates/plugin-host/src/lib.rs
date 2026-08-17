@@ -49,6 +49,7 @@ pub mod native;
 pub mod reconcile;
 pub mod registry;
 pub mod skill;
+pub mod snapshot;
 pub mod tool;
 pub mod toolhost;
 
@@ -59,4 +60,8 @@ pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
 pub use skill::{Skill, SkillContext, SkillEngine};
+pub use snapshot::{
+    PlatformPluginSnapshot, SnapshotActivation, SnapshotCapability, SnapshotPlugin,
+    SnapshotRequirement, PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL,
+};
 pub use tool::{PluginShape, Tool, ToolAccessClass, Trust};

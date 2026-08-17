@@ -3076,6 +3076,137 @@ class TenantEventLogModel(Base):
     __table_args__ = (Index("ix_tenant_event_logs_tenant_created", "tenant_id", "created_at"),)
 
 
+class PlatformPluginCatalogModel(Base):
+    """Authoritative manifest catalog for platform plugin packages."""
+
+    __tablename__ = "platform_plugin_catalog"
+
+    plugin_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    runtime: Mapped[str] = mapped_column(String(32), nullable=False)
+    trust: Mapped[str] = mapped_column(String(32), nullable=False)
+    manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+
+class PlatformPluginDesiredStateModel(IdGeneratorMixin, Base):
+    """Declarative desired activation/config for one plugin scope."""
+
+    __tablename__ = "platform_plugin_desired_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False, default="global")
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_type",
+            "scope_id",
+            "plugin_id",
+            name="uq_platform_plugin_desired_scope_plugin",
+        ),
+        Index(
+            "ix_platform_plugin_desired_scope",
+            "scope_type",
+            "scope_id",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_platform_plugin_desired_revision",
+        ),
+    )
+
+
+class PlatformPluginSnapshotModel(Base):
+    """Immutable effective composition produced by the profile engine."""
+
+    __tablename__ = "platform_plugin_snapshots"
+
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PlatformPluginCapabilityAuditModel(IdGeneratorMixin, Base):
+    """Append-only ownership transition for a plugin capability."""
+
+    __tablename__ = "platform_plugin_capability_audits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    plugin_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    capability_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    capability_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    before_state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    after_state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_platform_plugin_capability_audit_snapshot_created",
+            "snapshot_digest",
+            "created_at",
+        ),
+    )
+
+
+class PlatformPluginApplyStateModel(IdGeneratorMixin, Base):
+    """Latest acknowledged generation for one data plane."""
+
+    __tablename__ = "platform_plugin_apply_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    applied_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_ack_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "requested_version > 0 AND applied_version > 0",
+            name="ck_platform_plugin_apply_versions",
+        ),
+        CheckConstraint(
+            "status IN ('ack', 'nack')",
+            name="ck_platform_plugin_apply_status",
+        ),
+    )
+
+
 class ClusterModel(Base):
     """Compute cluster registered to a tenant."""
 

@@ -60,6 +60,8 @@ dependencies = [
     "email-validator>=2.3.0",
     # i18n: Babel for .po/.mo extraction & compilation
     "babel>=2.14.0",
+    # Plugin profile documents are authored as YAML.
+    "pyyaml>=6.0.1",
 ]
 
 [project.scripts]

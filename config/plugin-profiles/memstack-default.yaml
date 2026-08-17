@@ -1,0 +1,16 @@
+# Default trusted composition for the Python service and desktop sidecar.
+# Environment-dependent memory and skill-evolution rows stay disabled here;
+# higher layers enable them only after their runtime dependencies are available.
+schemaVersion: 1
+profile:
+  id: memstack-default
+  layers:
+    - id: memstack.kernel-base
+      plugins:
+        - id: workspace-runtime
+        - id: sisyphus-runtime
+        - id: memory-runtime
+          enabled: false
+        - id: skill-evolution
+          enabled: false
+patches: []

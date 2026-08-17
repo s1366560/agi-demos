@@ -1,0 +1,66 @@
+import pytest
+
+from src.application.services.platform_plugin_profile_service import (
+    PlatformPluginProfileService,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
+from src.infrastructure.plugins import CapabilityRegistry, compose_profile, parse_profile_document
+from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
+from src.infrastructure.plugins.compatibility import activate_profile_snapshot
+
+
+@pytest.mark.unit
+async def test_publish_records_snapshot_audit_and_ack(db_session):
+    repository = PlatformPluginRepository(db_session)
+    service = PlatformPluginProfileService(repository)
+
+    publication = await service.publish(version=4, nonce="nonce-4", actor_id="admin-1")
+    await service.record_ack(publication, data_plane_id="desktop-local", applied_version=4)
+
+    assert publication.snapshot.profile_id == "memstack-default"
+    assert publication.envelope.version == 4
+    assert await repository.get_snapshot(4) is not None
+
+
+@pytest.mark.unit
+async def test_nack_requires_reason_and_retains_applied_version(db_session):
+    repository = PlatformPluginRepository(db_session)
+    service = PlatformPluginProfileService(repository)
+    publication = await service.publish(version=5)
+
+    with pytest.raises(ValueError, match="error_message is required"):
+        await service.record_nack(
+            publication,
+            data_plane_id="desktop-local",
+            applied_version=4,
+            error_message=" ",
+        )
+    await service.record_nack(
+        publication,
+        data_plane_id="desktop-local",
+        applied_version=4,
+        error_message="validation failed",
+    )
+
+
+@pytest.mark.unit
+def test_snapshot_activation_is_reversible():
+    snapshot = compose_profile(
+        parse_profile_document(
+            {
+                "profile": {
+                    "id": "activation-test",
+                    "layers": [{"id": "base", "plugins": [{"id": "workspace-runtime"}]}],
+                }
+            }
+        ),
+        default_builtin_manifests(),
+    )
+    registry = CapabilityRegistry()
+    dispose = activate_profile_snapshot(snapshot, registry)
+
+    assert registry.list_capabilities("workspace-runtime")
+    dispose()
+    assert registry.list_capabilities("workspace-runtime") == ()

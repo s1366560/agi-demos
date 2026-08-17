@@ -302,7 +302,6 @@ class AgentPluginRegistry:
         self._cli_commands: dict[str, list[PluginCliCommand]] = {}
         self._lifecycle_hooks: dict[str, dict[str, PluginLifecycleHandler]] = {}
         self._lock = RLock()
-        self._lock = RLock()
         self._config_schemas: dict[str, PluginConfigSchema] = {}
         self._sandbox_tool_factories: dict[str, list[PluginToolFactory]] = {}
         self._subagent_resolver_factories: dict[str, SubAgentResolverFactory] = {}
@@ -327,6 +326,101 @@ class AgentPluginRegistry:
         """Return manifest-declared plugin capability contracts."""
         with self._lock:
             return dict(self._plugin_contracts)
+
+    def unregister_plugin(self, plugin_name: str) -> list[str]:
+        """Remove every registration currently owned by one plugin.
+
+        This is the narrow teardown primitive used by the platform plugin kernel.
+        It never clears another plugin's contribution and never resets global
+        state that is not keyed by plugin ownership.
+        """
+        with self._lock:
+            removed = [
+                *self._unregister_plugin_factories(plugin_name),
+                *self._unregister_plugin_channels(plugin_name),
+                *self._unregister_plugin_hooks(plugin_name),
+                *self._unregister_plugin_named_capabilities(plugin_name),
+                *self._unregister_plugin_metadata(plugin_name),
+            ]
+        return sorted(set(removed))
+
+    def _unregister_plugin_factories(self, plugin_name: str) -> list[str]:
+        removed: list[str] = []
+        with self._lock:
+            if self._tool_factories.pop(plugin_name, None) is not None:
+                removed.append("tool_factory")
+            if self._skill_factories.pop(plugin_name, None) is not None:
+                removed.append("skill_factory")
+            if self._channel_reload_hooks.pop(plugin_name, None) is not None:
+                removed.append("channel_reload_hook")
+            if self._sandbox_tool_factories.pop(plugin_name, None) is not None:
+                removed.append("sandbox_tool_factories")
+            if self._subagent_resolver_factories.pop(plugin_name, None) is not None:
+                removed.append("subagent_resolver_factory")
+            if self._http_routes.pop(plugin_name, None) is not None:
+                removed.append("http_routes")
+            if self._cli_commands.pop(plugin_name, None) is not None:
+                removed.append("cli_commands")
+        return removed
+
+    def _unregister_plugin_channels(self, plugin_name: str) -> list[str]:
+        removed: list[str] = []
+        with self._lock:
+            for channel_type in [
+                channel_type
+                for channel_type, (owner, _factory) in self._channel_adapter_factories.items()
+                if owner == plugin_name
+            ]:
+                del self._channel_adapter_factories[channel_type]
+                _ = self._channel_type_metadata.pop(channel_type, None)
+                removed.append("channel_adapter")
+        return removed
+
+    def _unregister_plugin_hooks(self, plugin_name: str) -> list[str]:
+        removed: list[str] = []
+        with self._lock:
+            for hook_name, handlers in list(self._hook_handlers.items()):
+                if handlers.pop(plugin_name, None) is not None:
+                    removed.append("hook")
+                if not handlers:
+                    del self._hook_handlers[hook_name]
+            for metadata_key in [key for key in self._hook_metadata if key[0] == plugin_name]:
+                del self._hook_metadata[metadata_key]
+            for event_name, lifecycle_handlers in list(self._lifecycle_hooks.items()):
+                if lifecycle_handlers.pop(plugin_name, None) is not None:
+                    removed.append("lifecycle_hook")
+                if not lifecycle_handlers:
+                    del self._lifecycle_hooks[event_name]
+        return removed
+
+    def _unregister_plugin_named_capabilities(self, plugin_name: str) -> list[str]:
+        removed: list[str] = []
+        with self._lock:
+            for name in [
+                name for name, (owner, _handler) in self._commands.items() if owner == plugin_name
+            ]:
+                del self._commands[name]
+                removed.append("command")
+            for name in [
+                name for name, (owner, _service) in self._services.items() if owner == plugin_name
+            ]:
+                del self._services[name]
+                removed.append("service")
+            for name in [
+                name for name, (owner, _provider) in self._providers.items() if owner == plugin_name
+            ]:
+                del self._providers[name]
+                removed.append("provider")
+        return removed
+
+    def _unregister_plugin_metadata(self, plugin_name: str) -> list[str]:
+        removed: list[str] = []
+        with self._lock:
+            if self._config_schemas.pop(plugin_name, None) is not None:
+                removed.append("config_schema")
+            if self._plugin_contracts.pop(plugin_name, None) is not None:
+                removed.append("plugin_contracts")
+            return removed
 
     def register_tool_factory(
         self,
