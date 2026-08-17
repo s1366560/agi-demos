@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS desktop_platform_plugin_activations (
 );
 "#;
 
+const ARTIFACT_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS desktop_platform_plugin_artifacts (
+    artifact_digest TEXT NOT NULL,
+    plugin_id TEXT NOT NULL,
+    runtime_kind TEXT NOT NULL,
+    runtime_path TEXT NOT NULL,
+    runtime_bytes BLOB NOT NULL,
+    verified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (artifact_digest, plugin_id)
+);
+"#;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PluginApplyRecord {
     pub requested_version: u64,
@@ -68,6 +80,15 @@ pub(crate) struct PluginActivationRecord {
     pub(crate) config: Value,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RuntimeArtifact {
+    pub(crate) plugin_id: String,
+    pub(crate) digest: String,
+    pub(crate) runtime: String,
+    pub(crate) path: String,
+    pub(crate) bytes: Vec<u8>,
+}
+
 struct PreparedPlugin {
     plugin_id: String,
     plugin_version: String,
@@ -79,7 +100,9 @@ struct PreparedPlugin {
 
 pub(crate) fn initialize_schema(connection: &Connection) -> Result<(), String> {
     connection
-        .execute_batch(&format!("{TABLE_SQL}{ACTIVATION_TABLE_SQL}"))
+        .execute_batch(&format!(
+            "{TABLE_SQL}{ACTIVATION_TABLE_SQL}{ARTIFACT_TABLE_SQL}"
+        ))
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
@@ -195,6 +218,61 @@ pub(crate) fn read_active_plugins(
     Ok(records)
 }
 
+pub(crate) fn store_runtime_artifact(
+    connection: &Connection,
+    artifact: &RuntimeArtifact,
+) -> Result<(), String> {
+    connection
+        .execute(
+            r#"
+            INSERT INTO desktop_platform_plugin_artifacts (
+                artifact_digest, plugin_id, runtime_kind, runtime_path, runtime_bytes
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(artifact_digest, plugin_id) DO UPDATE SET
+                runtime_path = excluded.runtime_path,
+                runtime_bytes = excluded.runtime_bytes,
+                verified_at = CURRENT_TIMESTAMP
+            "#,
+            params![
+                artifact.digest,
+                artifact.plugin_id,
+                artifact.runtime,
+                artifact.path,
+                artifact.bytes
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn read_runtime_artifact(
+    connection: &Connection,
+    plugin_id: &str,
+    digest: &str,
+) -> Result<Option<RuntimeArtifact>, String> {
+    let row = connection
+        .query_row(
+            r#"
+            SELECT runtime_kind, runtime_path, runtime_bytes
+              FROM desktop_platform_plugin_artifacts
+             WHERE plugin_id = ?1 AND artifact_digest = ?2
+            "#,
+            params![plugin_id, digest],
+            |row| {
+                Ok(RuntimeArtifact {
+                    plugin_id: plugin_id.to_string(),
+                    digest: digest.to_string(),
+                    runtime: row.get(0)?,
+                    path: row.get(1)?,
+                    bytes: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    Ok(row)
+}
+
 pub(crate) fn record_requested(
     connection: &Connection,
     version: u64,
@@ -252,7 +330,7 @@ pub(crate) fn record_ack(
     connection: &mut Connection,
     requested: &RequestedPluginSnapshot,
 ) -> Result<Vec<PluginActivationRecord>, String> {
-    let prepared = prepare_plugins(&requested.payload)?;
+    let prepared = prepare_plugins(connection, &requested.payload)?;
     let transaction = connection
         .transaction()
         .map_err(|error| error.to_string())?;
@@ -342,7 +420,36 @@ pub(crate) fn record_nack(connection: &Connection, error: &str) -> Result<(), St
         .map_err(|error| error.to_string())
 }
 
-fn prepare_plugins(payload: &Value) -> Result<Vec<PreparedPlugin>, String> {
+fn required_runtime_artifact(
+    connection: &Connection,
+    plugin_id: &str,
+    config: &Value,
+) -> Result<RuntimeArtifact, String> {
+    let artifact_config = config
+        .get("artifact")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("plugin {plugin_id} has no runtime artifact reference"))?;
+    let digest = bounded_text(
+        artifact_config.get("layer_sha256"),
+        64,
+        "runtime artifact digest",
+    )?;
+    if digest
+        .chars()
+        .any(|character| !character.is_ascii_hexdigit())
+    {
+        return Err(format!(
+            "plugin {plugin_id} runtime artifact digest is invalid"
+        ));
+    }
+    read_runtime_artifact(connection, plugin_id, &digest)?
+        .ok_or_else(|| format!("plugin {plugin_id} runtime {digest} is not installed or verified"))
+}
+
+fn prepare_plugins(
+    connection: &Connection,
+    payload: &Value,
+) -> Result<Vec<PreparedPlugin>, String> {
     let Some(plugins) = payload.get("plugins").and_then(Value::as_array) else {
         return Err("snapshot plugins must be an array".to_string());
     };
@@ -382,12 +489,6 @@ fn prepare_plugins(payload: &Value) -> Result<Vec<PreparedPlugin>, String> {
                 "plugin {plugin_id} uses an unsupported runtime/trust pair"
             ));
         }
-        if runtime != "python-trusted" {
-            return Err(format!(
-                "plugin {plugin_id} runtime {runtime} requires an installed runtime artifact"
-            ));
-        }
-
         let Some(capability_values) = object.get("provides").and_then(Value::as_array) else {
             return Err(format!("plugin {plugin_id} provides must be an array"));
         };
@@ -436,6 +537,15 @@ fn prepare_plugins(payload: &Value) -> Result<Vec<PreparedPlugin>, String> {
             return Err(format!("plugin {plugin_id} config must be an object"));
         }
         validate_config(&config).map_err(|error| format!("plugin {plugin_id}: {error}"))?;
+        if runtime != "python-trusted" {
+            let artifact = required_runtime_artifact(connection, &plugin_id, &config)?;
+            if artifact.runtime != runtime {
+                return Err(format!(
+                    "plugin {plugin_id} artifact does not provide runtime {}",
+                    runtime
+                ));
+            }
+        }
 
         if let Some(requirements) = object.get("requires").and_then(Value::as_array) {
             for requirement in requirements {
@@ -664,7 +774,7 @@ mod tests {
                 "runtime": "wasm",
                 "trust": "signed",
                 "provides": [{"kind": "tool", "id": "demo", "contract": "tool:demo"}],
-                "config": {"api_key": "plaintext"}
+                "config": {"credential_ref": "vault://plugins/external/token"}
             }],
             "digest": digest
         });
@@ -679,7 +789,7 @@ mod tests {
 
         let error = record_ack(&mut connection, &requested).expect_err("activation must fail");
 
-        assert!(error.contains("requires an installed runtime artifact"));
+        assert!(error.contains("runtime artifact"));
         let record = read_apply_record(&connection)
             .expect("apply record")
             .expect("row");

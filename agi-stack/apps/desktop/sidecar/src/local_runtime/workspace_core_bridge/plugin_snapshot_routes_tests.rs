@@ -11,6 +11,8 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+use agistack_adapters_wasmtime::SCORE_V1_WAT;
+
 use super::*;
 use crate::local_runtime::session_store::DesktopSessionStore;
 
@@ -67,6 +69,28 @@ fn snapshot(digest: &str) -> Value {
         "schema_version": 1,
         "profile_id": "desktop-default",
         "plugins": [],
+        "digest": digest
+    })
+}
+
+fn active_wasm_snapshot(digest: &str, artifact_digest: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "profile_id": "desktop-default",
+        "plugins": [{
+            "schema_version": 1,
+            "id": "third-party-tool",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "demo",
+                "contract": "tool:demo",
+                "permissions": ["tools.execute"]
+            }],
+            "config": {"artifact": {"layer_sha256": artifact_digest}}
+        }],
         "digest": digest
     })
 }
@@ -228,4 +252,70 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
     assert_eq!(mismatched.0, StatusCode::CONFLICT);
     assert_eq!(missing_reason.0, StatusCode::BAD_REQUEST);
     assert_eq!(nacked.0, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let app = router(state.clone());
+    let runtime = SCORE_V1_WAT.as_bytes().to_vec();
+    let artifact_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&runtime);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let mut payload = active_wasm_snapshot("placeholder", &artifact_digest);
+    payload.as_object_mut().expect("payload").remove("digest");
+    let digest = platform_plugin_payload_digest(&payload).expect("digest");
+    payload["digest"] = json!(digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-tool".to_string(),
+                digest: artifact_digest.clone(),
+                runtime: "wasm".to_string(),
+                path: "runtime/plugin.wasm".to_string(),
+                bytes: runtime,
+            },
+        )
+        .expect("artifact");
+    }
+
+    let submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 9,
+            "nonce": "nonce-9",
+            "digest": digest,
+            "payload": payload
+        }),
+    )
+    .await;
+    let invoked = request_json(
+        app,
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-tool", "tool_id": "demo", "input": {"text": "hello"}}),
+    )
+    .await;
+
+    assert_eq!(submitted.0, StatusCode::OK);
+    assert_eq!(submitted.1["status"], "ack");
+    assert_eq!(invoked.0, StatusCode::OK);
+    assert_eq!(invoked.1["score"], 22);
+    assert_eq!(invoked.1["tool"], "demo");
 }

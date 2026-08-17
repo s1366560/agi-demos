@@ -14,6 +14,9 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageRequest,
     MarketplacePackageSignature,
 )
+from src.application.services.platform_plugin_profile_service import (
+    PlatformPluginProfileService,
+)
 from src.application.services.plugin_marketplace_catalog_service import (
     PluginMarketplaceCatalogService,
 )
@@ -152,6 +155,21 @@ async def test_marketplace_install_validates_and_persists(db_session):
     assert desired is not None
     assert desired.enabled is True
     assert desired.revision == 1
+
+    publication = await PlatformPluginProfileService(PlatformPluginRepository(db_session)).publish(
+        version=6, nonce="nonce-6"
+    )
+    installed = next(
+        row for row in publication.snapshot.rows if row.manifest.id == "third-party-tool"
+    )
+    layer_digest = hashlib.sha256(package_archive(base_manifest())).hexdigest()
+    assert installed.manifest.runtime.value == "wasm"
+    assert installed.config["artifact"] == {
+        "registry": "https://registry.memstack.test",
+        "repository": "memstack/plugins/third-party-tool",
+        "manifest_sha256": "1" * 64,
+        "layer_sha256": layer_digest,
+    }
 
 
 @pytest.mark.unit

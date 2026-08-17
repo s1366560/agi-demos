@@ -131,6 +131,9 @@ class PluginMarketplaceInstallService:
                 version=request.version,
                 publisher=request.publisher,
                 artifact_digest=request.artifact_sha256,
+                artifact_registry=request.artifact.registry,
+                artifact_repository=request.artifact.repository,
+                oci_manifest_digest=request.artifact.manifest_sha256,
                 manifest=parsed_manifest.to_payload(),
                 signature={
                     "algorithm": "Ed25519",

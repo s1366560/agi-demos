@@ -17,6 +17,9 @@ use sha2::{Digest, Sha256};
 use url::Url;
 use zeroize::Zeroizing;
 
+use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, DEFAULT_MEMORY_BYTES};
+use agistack_plugin_host::tool::Tool;
+
 use super::{
     session_store::{DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError},
     LocalRuntimeState,
@@ -634,6 +637,14 @@ struct PlatformPluginNackRequest {
     reason: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+struct PlatformPluginToolInvocationRequest {
+    plugin_id: String,
+    tool_id: String,
+    input: Value,
+}
+
 fn platform_plugin_router(state: Arc<LocalRuntimeState>) -> Router<Arc<LocalRuntimeState>> {
     Router::new()
         .route(
@@ -643,6 +654,10 @@ fn platform_plugin_router(state: Arc<LocalRuntimeState>) -> Router<Arc<LocalRunt
         .route(
             "/api/v1/platform-plugins/apply-state",
             get(platform_plugin_apply_state),
+        )
+        .route(
+            "/api/v1/platform-plugins/tools/invoke",
+            post(invoke_platform_plugin_tool),
         )
         .route("/api/v1/platform-plugins/ack", post(platform_plugin_ack))
         .route("/api/v1/platform-plugins/nack", post(platform_plugin_nack))
@@ -770,6 +785,80 @@ async fn platform_plugin_apply_state(
         object.insert("active_plugins".to_string(), plugins);
     }
     Ok(value)
+}
+
+async fn invoke_platform_plugin_tool(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Json(request): Json<PlatformPluginToolInvocationRequest>,
+) -> Result<Json<Value>, BridgeError> {
+    let plugin_id = request.plugin_id;
+    let tool_id = request.tool_id;
+    if !request.input.is_object() {
+        return Err(bad_request("platform plugin tool input must be an object"));
+    }
+    let (plugin, artifact) = {
+        let connection = state.session_store.connection().map_err(store_error)?;
+        crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+        let record = crate::plugin_snapshots::read_apply_record(&connection)
+            .map_err(store_error)?
+            .ok_or_else(|| unavailable("no platform plugin snapshot is active"))?;
+        let applied_digest = record
+            .applied_digest
+            .as_deref()
+            .ok_or_else(|| unavailable("no platform plugin snapshot is active"))?;
+        let plugin = crate::plugin_snapshots::read_active_plugins(&connection, applied_digest)
+            .map_err(store_error)?
+            .into_iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .ok_or_else(|| not_found("platform plugin is not active"))?;
+        if plugin.runtime != "wasm" {
+            return Err(unavailable(
+                "platform plugin runtime cannot execute locally",
+            ));
+        }
+        if !plugin.capabilities.iter().any(|capability| {
+            capability.get("kind").and_then(Value::as_str) == Some("tool")
+                && capability.get("id").and_then(Value::as_str) == Some(tool_id.as_str())
+        }) {
+            return Err(not_found("platform plugin tool is not active"));
+        }
+        let artifact_digest = plugin
+            .config
+            .get("artifact")
+            .and_then(Value::as_object)
+            .and_then(|artifact| artifact.get("layer_sha256"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| unavailable("platform plugin has no runtime artifact"))?;
+        let artifact = crate::plugin_snapshots::read_runtime_artifact(
+            &connection,
+            &plugin_id,
+            artifact_digest,
+        )
+        .map_err(store_error)?
+        .ok_or_else(|| unavailable("platform plugin runtime artifact is unavailable"))?;
+        (plugin, artifact)
+    };
+
+    let tool = WasmtimeTool::from_bytes_with_limits(
+        tool_id.clone(),
+        plugin.plugin_version.clone(),
+        &artifact.bytes,
+        DEFAULT_FUEL,
+        DEFAULT_MEMORY_BYTES,
+        Some(std::time::Duration::from_secs(5)),
+    )
+    .map_err(|error| unavailable(&format!("platform plugin tool cannot start: {error}")))?;
+    let input = request.input.to_string();
+    let output = tool
+        .invoke(&input)
+        .await
+        .map_err(|error| conflict(&format!("platform plugin tool failed: {error}")))?;
+    if output.len() > 1024 * 1024 {
+        return Err(conflict("platform plugin tool exceeded its output quota"));
+    }
+    let result = serde_json::from_str::<Value>(&output)
+        .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
+    Ok(Json(result))
 }
 
 async fn platform_plugin_ack(

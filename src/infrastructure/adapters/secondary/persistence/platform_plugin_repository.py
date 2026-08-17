@@ -12,6 +12,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCapabilityAuditModel,
     PlatformPluginCatalogModel,
     PlatformPluginDesiredStateModel,
+    PlatformPluginPackageModel,
     PlatformPluginSnapshotModel,
 )
 from src.infrastructure.plugins.profile import ProfileSnapshot
@@ -49,6 +50,33 @@ class PlatformPluginRepository:
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginCatalogModel).order_by(PlatformPluginCatalogModel.plugin_id)
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_desired_states(self) -> list[PlatformPluginDesiredStateModel]:
+        """Return every declarative desired-state row deterministically."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginDesiredStateModel).order_by(
+                    PlatformPluginDesiredStateModel.scope_type,
+                    PlatformPluginDesiredStateModel.scope_id,
+                    PlatformPluginDesiredStateModel.plugin_id,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_installed_packages(self) -> list[PlatformPluginPackageModel]:
+        """Return installed marketplace package sources."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginPackageModel)
+                .where(
+                    PlatformPluginPackageModel.revoked.is_(False),
+                    PlatformPluginPackageModel.install_status == "installed",
+                )
+                .order_by(PlatformPluginPackageModel.plugin_id)
             )
         )
         return list(result.scalars().all())

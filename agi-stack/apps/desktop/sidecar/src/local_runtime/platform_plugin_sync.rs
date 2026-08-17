@@ -1,15 +1,19 @@
 //! Background reconciliation from the Python plugin control plane.
 
 use std::{
-    sync::{Arc, Mutex},
+    collections::BTreeMap,
+    io::{Cursor, Read},
+    sync::Arc,
     time::Duration,
 };
 
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use url::Url;
+use zip::ZipArchive;
 
 use crate::{
     plugin_snapshots::{self, RequestedPluginSnapshot},
@@ -26,6 +30,13 @@ const INITIAL_ERROR_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_ERROR_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_OCI_MANIFEST_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PLUGIN_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
+const MAX_ARCHIVE_FILES: usize = 512;
+const MAX_ARCHIVE_UNCOMPRESSED_BYTES: usize = 128 * 1024 * 1024;
+const OCI_MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
+const MEMSTACK_ARTIFACT_TYPE: &str = "application/vnd.memstack.plugin.v1";
+const MEMSTACK_LAYER_TYPE: &str = "application/vnd.memstack.plugin.bundle.v1+zip";
 
 #[derive(Debug)]
 pub(crate) struct PlatformPluginControlPlaneReconciler {
@@ -122,8 +133,10 @@ async fn reconcile_once(
     let snapshot =
         fetch_control_plane_snapshot(&client, &base_url, record.credential.as_str()).await?;
     validate_snapshot(&snapshot)?;
-
-    let receipt = prepare_local_snapshot(state, &snapshot)?;
+    let receipt = match prepare_runtime_artifacts(&state, &client, &snapshot).await {
+        Ok(()) => prepare_local_snapshot(state, &snapshot)?,
+        Err(reason) => Some(reject_local_snapshot(state, &snapshot, reason)),
+    };
     let Some((requested_version, applied_version, digest, status, error_message)) = receipt else {
         return Ok(());
     };
@@ -149,7 +162,169 @@ async fn reconcile_once(
     })
 }
 
+fn reject_local_snapshot(
+    state: &LocalRuntimeState,
+    snapshot: &ControlPlaneSnapshot,
+    reason: String,
+) -> (u64, u64, String, String, Option<String>) {
+    let connection = state
+        .session_store
+        .connection()
+        .map_err(|error| error.to_string())
+        .and_then(|connection| {
+            plugin_snapshots::initialize_schema(&connection)?;
+            Ok(connection)
+        });
+    let connection = match connection {
+        Ok(connection) => connection,
+        Err(storage_error) => {
+            return (
+                snapshot.version,
+                0,
+                snapshot.digest.clone(),
+                "nack".to_string(),
+                Some(format!("{reason}; storage error: {storage_error}")),
+            );
+        }
+    };
+    let previous = plugin_snapshots::read_apply_record(&connection)
+        .ok()
+        .flatten()
+        .map_or(0, |record| record.applied_version);
+    let requested = RequestedPluginSnapshot {
+        version: snapshot.version,
+        nonce: snapshot.nonce.clone(),
+        digest: snapshot.digest.clone(),
+        payload: snapshot.payload.clone(),
+    };
+    if let Err(storage_error) = plugin_snapshots::record_requested(
+        &connection,
+        requested.version,
+        &requested.nonce,
+        &requested.digest,
+        &requested.payload.to_string(),
+    ) {
+        return (
+            snapshot.version,
+            previous,
+            snapshot.digest.clone(),
+            "nack".to_string(),
+            Some(format!("{reason}; storage error: {storage_error}")),
+        );
+    }
+    if let Err(storage_error) = plugin_snapshots::record_nack(&connection, &reason) {
+        return (
+            snapshot.version,
+            previous,
+            snapshot.digest.clone(),
+            "nack".to_string(),
+            Some(format!("{reason}; storage error: {storage_error}")),
+        );
+    }
+    (
+        snapshot.version,
+        previous,
+        snapshot.digest.clone(),
+        "nack".to_string(),
+        Some(reason),
+    )
+}
+
 type ControlPlaneReceipt = Option<(u64, u64, String, String, Option<String>)>;
+
+async fn prepare_runtime_artifacts(
+    state: &LocalRuntimeState,
+    client: &reqwest::Client,
+    snapshot: &ControlPlaneSnapshot,
+) -> Result<(), String> {
+    let plugins = snapshot
+        .payload
+        .get("plugins")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "control-plane snapshot plugins are invalid".to_string())?;
+    struct ArtifactReference {
+        plugin: Value,
+        plugin_id: String,
+        runtime: String,
+        registry: String,
+        repository: String,
+        manifest_digest: String,
+        layer_digest: String,
+    }
+
+    let mut references = Vec::new();
+    {
+        let connection = state.session_store.connection()?;
+        plugin_snapshots::initialize_schema(&connection)?;
+
+        for plugin in plugins {
+            let object = plugin
+                .as_object()
+                .ok_or_else(|| "control-plane plugin must be an object".to_string())?;
+            let runtime = bounded_field(object.get("runtime"), 32, "plugin runtime")?;
+            if runtime == "python-trusted" {
+                continue;
+            }
+            let plugin_id = bounded_field(object.get("id"), 255, "plugin id")?;
+            let artifact = object
+                .get("config")
+                .and_then(Value::as_object)
+                .and_then(|config| config.get("artifact"))
+                .and_then(Value::as_object)
+                .ok_or_else(|| format!("plugin {plugin_id} has no runtime artifact reference"))?;
+            let registry = bounded_field(artifact.get("registry"), 512, "artifact registry")?;
+            let repository = bounded_field(artifact.get("repository"), 255, "artifact repository")?;
+            let manifest_digest =
+                hex_digest(artifact.get("manifest_sha256"), "OCI manifest digest")?;
+            let layer_digest = hex_digest(artifact.get("layer_sha256"), "OCI layer digest")?;
+
+            if plugin_snapshots::read_runtime_artifact(&connection, &plugin_id, &layer_digest)?
+                .is_some()
+            {
+                continue;
+            }
+            references.push(ArtifactReference {
+                plugin: plugin.clone(),
+                plugin_id,
+                runtime,
+                registry,
+                repository,
+                manifest_digest,
+                layer_digest,
+            });
+        }
+    }
+
+    for reference in references {
+        let archive = fetch_verified_plugin_layer(
+            client,
+            &reference.registry,
+            &reference.repository,
+            &reference.manifest_digest,
+            &reference.layer_digest,
+        )
+        .await?;
+        let (runtime_path, runtime_bytes) = verify_plugin_archive(&archive, &reference.plugin)
+            .map_err(|error| {
+                format!(
+                    "plugin {} artifact {}: {}",
+                    reference.plugin_id, reference.layer_digest, error
+                )
+            })?;
+        let connection = state.session_store.connection()?;
+        plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &plugin_snapshots::RuntimeArtifact {
+                plugin_id: reference.plugin_id,
+                digest: reference.layer_digest,
+                runtime: reference.runtime,
+                path: runtime_path,
+                bytes: runtime_bytes,
+            },
+        )?;
+    }
+    Ok(())
+}
 
 fn prepare_local_snapshot(
     state: &LocalRuntimeState,
@@ -260,6 +435,136 @@ async fn fetch_control_plane_snapshot(
         .map_err(|error| format!("control-plane snapshot contract is invalid: {error}"))
 }
 
+async fn fetch_verified_plugin_layer(
+    client: &reqwest::Client,
+    registry: &str,
+    repository: &str,
+    manifest_digest: &str,
+    layer_digest: &str,
+) -> Result<Vec<u8>, String> {
+    let registry_url =
+        Url::parse(registry).map_err(|_| "plugin artifact registry URL is invalid".to_string())?;
+    validate_registry_url(&registry_url)?;
+    validate_repository(repository)?;
+    let registry_origin = registry_url.as_str().trim_end_matches('/');
+    let manifest_url =
+        format!("{registry_origin}/v2/{repository}/manifests/sha256:{manifest_digest}");
+    let manifest_response = client
+        .get(&manifest_url)
+        .header(
+            "Accept",
+            format!("{OCI_MANIFEST_MEDIA_TYPE}, {MEMSTACK_ARTIFACT_TYPE}"),
+        )
+        .send()
+        .await
+        .map_err(|error| format!("OCI manifest fetch failed: {error}"))?;
+    check_registry_response(
+        manifest_response.status(),
+        &format!("OCI manifest {manifest_url}"),
+    )?;
+    let manifest_bytes =
+        bounded_response_bytes(manifest_response, MAX_OCI_MANIFEST_BYTES, "OCI manifest").await?;
+    ensure_digest(&manifest_bytes, manifest_digest, "OCI manifest")?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .map_err(|_| "OCI manifest JSON is invalid".to_string())?;
+    let actual_layer_digest = validate_oci_manifest(&manifest)?;
+    if actual_layer_digest != layer_digest {
+        return Err("requested layer digest does not match OCI manifest".to_string());
+    }
+
+    let blob_url = format!("{registry_origin}/v2/{repository}/blobs/sha256:{layer_digest}");
+    let layer_response = client
+        .get(blob_url)
+        .send()
+        .await
+        .map_err(|error| format!("OCI plugin layer fetch failed: {error}"))?;
+    check_registry_response(layer_response.status(), "OCI plugin layer")?;
+    let archive =
+        bounded_response_bytes(layer_response, MAX_PLUGIN_ARCHIVE_BYTES, "OCI plugin layer")
+            .await?;
+    ensure_digest(&archive, layer_digest, "OCI plugin layer")?;
+    Ok(archive)
+}
+
+fn verify_plugin_archive(archive: &[u8], plugin: &Value) -> Result<(String, Vec<u8>), String> {
+    let mut zip = ZipArchive::new(Cursor::new(archive))
+        .map_err(|_| "plugin artifact is not a valid zip archive".to_string())?;
+    if zip.len() as usize > MAX_ARCHIVE_FILES {
+        return Err("plugin archive contains too many files".to_string());
+    }
+    let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut total_uncompressed = 0_usize;
+    for index in 0..zip.len() {
+        let mut entry = zip
+            .by_index(index)
+            .map_err(|error| format!("plugin archive entry is invalid: {error}"))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = safe_archive_name(entry.name())?;
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err(format!("plugin archive entry {name} is a symbolic link"));
+        }
+        total_uncompressed = total_uncompressed.saturating_add(entry.size() as usize);
+        if total_uncompressed > MAX_ARCHIVE_UNCOMPRESSED_BYTES {
+            return Err("plugin archive expands beyond its size limit".to_string());
+        }
+        let mut bytes = Vec::with_capacity(entry.size() as usize);
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("plugin archive entry {name} could not be read: {error}"))?;
+        if files.insert(name.clone(), bytes).is_some() {
+            return Err(format!("plugin archive contains duplicate entry {name}"));
+        }
+    }
+
+    let manifest = read_archive_object(&files, "plugin.manifest.json")?;
+    let checksums = read_archive_object(&files, "checksums.json")?;
+    let mut comparable_plugin = plugin.clone();
+    if let Some(config) = comparable_plugin
+        .get_mut("config")
+        .and_then(Value::as_object_mut)
+    {
+        config.remove("artifact");
+    }
+    if manifest != comparable_plugin {
+        return Err("plugin archive manifest differs from control plane".to_string());
+    }
+    for (name, bytes) in &files {
+        if name == "checksums.json" {
+            continue;
+        }
+        let expected = checksums
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("plugin archive file {name} has no checksum"))?;
+        ensure_digest(bytes, expected, "plugin archive file")?;
+    }
+
+    let runtime = plugin
+        .get("runtime")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let expected_name = match runtime {
+        "wasm" => "runtime/plugin.wasm",
+        "mcp" => "runtime/plugin.json",
+        "subprocess" => "runtime/plugin.json",
+        "frontend" => "runtime/plugin.json",
+        _ => {
+            return Err(format!(
+                "plugin runtime {runtime} has no runtime artifact mapping"
+            ))
+        }
+    };
+    let bytes = files
+        .remove(expected_name)
+        .ok_or_else(|| format!("plugin archive is missing {expected_name}"))?;
+    Ok((expected_name.to_string(), bytes))
+}
+
 async fn post_receipt(
     client: &reqwest::Client,
     base_url: &Url,
@@ -308,6 +613,146 @@ fn record_control_plane_nack(
         &snapshot.payload.to_string(),
     )?;
     plugin_snapshots::record_nack(connection, reason)
+}
+
+fn bounded_field(value: Option<&Value>, limit: usize, label: &str) -> Result<String, String> {
+    let text = value
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} must be a string"))?;
+    if text.trim().is_empty() || text.len() > limit || text != text.trim() {
+        return Err(format!("{label} is invalid"));
+    }
+    Ok(text.to_string())
+}
+
+fn hex_digest(value: Option<&Value>, label: &str) -> Result<String, String> {
+    let digest = bounded_field(value, 64, label)?;
+    if digest
+        .chars()
+        .any(|character| !character.is_ascii_hexdigit())
+    {
+        return Err(format!("{label} must be lowercase hexadecimal"));
+    }
+    Ok(digest)
+}
+
+fn validate_registry_url(url: &Url) -> Result<(), String> {
+    let loopback = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.path() != "/"
+        || !((url.scheme() == "https" && !loopback) || (url.scheme() == "http" && loopback))
+    {
+        return Err("plugin artifact registry URL is unsafe".to_string());
+    }
+    Ok(())
+}
+
+fn validate_repository(repository: &str) -> Result<(), String> {
+    let invalid = repository.is_empty()
+        || repository.len() > 255
+        || repository.starts_with('/')
+        || repository.ends_with('/')
+        || repository.split('/').any(|segment| {
+            segment.is_empty()
+                || segment == "."
+                || segment == ".."
+                || !segment.chars().all(|character| {
+                    character.is_ascii_lowercase()
+                        || character.is_ascii_digit()
+                        || matches!(character, '.' | '_' | '-')
+                })
+        });
+    if invalid {
+        return Err("plugin artifact repository is invalid".to_string());
+    }
+    Ok(())
+}
+
+fn check_registry_response(status: reqwest::StatusCode, label: &str) -> Result<(), String> {
+    if !status.is_success() {
+        return Err(format!("{label} fetch returned {status}"));
+    }
+    Ok(())
+}
+
+async fn bounded_response_bytes(
+    response: reqwest::Response,
+    limit: usize,
+    label: &str,
+) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    let mut response = response;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("{label} body failed: {error}"))?
+    {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() > limit {
+            return Err(format!("{label} exceeds its size limit"));
+        }
+    }
+    Ok(bytes)
+}
+
+fn ensure_digest(bytes: &[u8], expected: &str, label: &str) -> Result<(), String> {
+    let actual = Sha256::digest(bytes);
+    let actual = actual
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    if !actual.eq_ignore_ascii_case(expected) {
+        return Err(format!("{label} digest mismatch"));
+    }
+    Ok(())
+}
+
+fn validate_oci_manifest(manifest: &Value) -> Result<String, String> {
+    let layer = manifest
+        .get("layers")
+        .and_then(Value::as_array)
+        .and_then(|layers| layers.first())
+        .ok_or_else(|| "OCI manifest has no plugin layer".to_string())?;
+    let digest = layer
+        .get("digest")
+        .and_then(Value::as_str)
+        .and_then(|value| value.strip_prefix("sha256:"))
+        .ok_or_else(|| "OCI plugin layer digest is invalid".to_string())?;
+    if manifest.get("schemaVersion").and_then(Value::as_u64) != Some(2)
+        || manifest.get("mediaType").and_then(Value::as_str) != Some(OCI_MANIFEST_MEDIA_TYPE)
+        || manifest.get("artifactType").and_then(Value::as_str) != Some(MEMSTACK_ARTIFACT_TYPE)
+        || layer.get("mediaType").and_then(Value::as_str) != Some(MEMSTACK_LAYER_TYPE)
+    {
+        return Err("OCI artifact is not a MemStack plugin package".to_string());
+    }
+    let digest = hex_digest(Some(&Value::String(digest.to_string())), "OCI layer digest")?;
+    Ok(digest)
+}
+
+fn safe_archive_name(name: &str) -> Result<String, String> {
+    if name.trim() != name
+        || name.starts_with('/')
+        || name.contains('\\')
+        || name
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err("plugin archive entry name is invalid".to_string());
+    }
+    Ok(name.to_string())
+}
+
+fn read_archive_object<'a>(
+    files: &'a BTreeMap<String, Vec<u8>>,
+    name: &str,
+) -> Result<Value, String> {
+    let bytes = files
+        .get(name)
+        .ok_or_else(|| format!("plugin archive is missing {name}"))?;
+    serde_json::from_slice(bytes).map_err(|_| format!("plugin archive file {name} is invalid JSON"))
 }
 
 fn validate_cloud_base_url(record: &TrustedSessionRecord) -> Result<Url, String> {
@@ -374,7 +819,7 @@ fn validate_snapshot(snapshot: &ControlPlaneSnapshot) -> Result<(), String> {
 mod tests {
     use std::sync::{
         atomic::{AtomicU64, Ordering},
-        Arc as StdArc,
+        Arc as StdArc, Mutex,
     };
 
     use agistack_adapters_device::SqliteCheckpointStore;
@@ -386,8 +831,10 @@ mod tests {
         Json, Router,
     };
     use serde_json::json;
+    use std::io::Write;
     use tokio::net::TcpListener;
     use uuid::Uuid;
+    use zip::ZipWriter;
 
     use super::*;
     use crate::local_runtime::LocalRuntimeState;
@@ -422,6 +869,8 @@ mod tests {
         calls: StdArc<AtomicU64>,
         disconnected: StdArc<std::sync::atomic::AtomicBool>,
         failures: StdArc<AtomicU64>,
+        oci_manifest: StdArc<Mutex<Vec<u8>>>,
+        oci_layer: StdArc<Mutex<Vec<u8>>>,
     }
 
     fn state() -> StdArc<LocalRuntimeState> {
@@ -451,6 +900,8 @@ mod tests {
             calls: StdArc::new(AtomicU64::new(0)),
             disconnected: StdArc::new(std::sync::atomic::AtomicBool::new(false)),
             failures: StdArc::new(AtomicU64::new(0)),
+            oci_manifest: StdArc::new(Mutex::new(Vec::new())),
+            oci_layer: StdArc::new(Mutex::new(Vec::new())),
         };
         let router_state = control.clone();
         async fn snapshot_endpoint(State(control): State<ControlPlaneState>) -> Json<Value> {
@@ -476,12 +927,20 @@ mod tests {
             control.calls.fetch_add(1, Ordering::Release);
             StatusCode::OK
         }
+        async fn oci_manifest_endpoint(State(control): State<ControlPlaneState>) -> Vec<u8> {
+            control.oci_manifest.lock().expect("OCI manifest").clone()
+        }
+        async fn oci_blob_endpoint(State(control): State<ControlPlaneState>) -> Vec<u8> {
+            control.oci_layer.lock().expect("OCI layer").clone()
+        }
         let app = Router::new()
             .route("/api/v1/platform-plugins/snapshot", get(snapshot_endpoint))
             .route(
                 "/api/v1/platform-plugins/data-plane-state",
                 post(receipt_endpoint),
             )
+            .route("/v2/plugins/manifests/:digest", get(oci_manifest_endpoint))
+            .route("/v2/plugins/blobs/:digest", get(oci_blob_endpoint))
             .with_state(router_state);
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -555,6 +1014,84 @@ mod tests {
         assert!(control.calls.load(Ordering::Acquire) <= calls_after_shutdown + 1);
     }
 
+    #[tokio::test]
+    async fn untrusted_wasm_artifact_is_downloaded_verified_and_activated() {
+        let runtime = state();
+        let (url, broker, control) = control_plane(json!({})).await;
+        let registry = url.as_str().trim_end_matches("/api/v1").to_string();
+        let mut plugin = json!({
+            "schema_version": 1,
+            "id": "third-party-tool",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "demo",
+                "contract": "tool:demo",
+                "permissions": ["tools.execute"]
+            }],
+            "activation": {"default_scope": "tenant", "restart_policy": "process-boundary"},
+            "config": {}
+        });
+        let archive = wasm_package_archive(&plugin, b"verified-wasm-runtime");
+        let layer_digest = sha256_hex(&archive);
+        let oci_manifest = serde_json::to_vec(&json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "artifactType": "application/vnd.memstack.plugin.v1",
+            "layers": [{
+                "mediaType": "application/vnd.memstack.plugin.bundle.v1+zip",
+                "digest": format!("sha256:{layer_digest}"),
+                "size": archive.len()
+            }]
+        }))
+        .expect("OCI manifest");
+        let manifest_digest = sha256_hex(&oci_manifest);
+        plugin["config"]["artifact"] = json!({
+            "registry": registry,
+            "repository": "plugins",
+            "manifest_sha256": manifest_digest,
+            "layer_sha256": layer_digest
+        });
+        *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
+        *control.oci_layer.lock().expect("OCI layer") = archive.clone();
+        let snapshot_digest = "2".repeat(64);
+        *control.snapshot.lock().expect("snapshot") = json!({
+            "version": 7,
+            "nonce": "nonce-7",
+            "profile_id": "desktop-default",
+            "digest": snapshot_digest,
+            "payload": {
+                "schema_version": 1,
+                "profile_id": "desktop-default",
+                "plugins": [plugin],
+                "digest": snapshot_digest
+            }
+        });
+
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("untrusted wasm reconcile");
+
+        let connection = runtime.session_store.connection().expect("connection");
+        let record = plugin_snapshots::read_apply_record(&connection)
+            .expect("record")
+            .expect("row");
+        assert_eq!(record.status, "ack");
+        let active = plugin_snapshots::read_active_plugins(&connection, &snapshot_digest)
+            .expect("active plugins");
+        assert_eq!(active[0].plugin_id, "third-party-tool");
+        let artifact =
+            plugin_snapshots::read_runtime_artifact(&connection, "third-party-tool", &layer_digest)
+                .expect("artifact")
+                .expect("stored artifact");
+        assert_eq!(artifact.bytes, b"verified-wasm-runtime".to_vec());
+        let observations = control.observations.lock().expect("observations");
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].1["status"], "ack");
+    }
+
     fn snapshot(version: u64, digest: &str, runtime: &str, credential: &str) -> Value {
         json!({
             "version": version,
@@ -581,6 +1118,40 @@ mod tests {
                 "digest": digest
             }
         })
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        let digest = Sha256::digest(bytes);
+        digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    fn wasm_package_archive(plugin: &Value, wasm: &[u8]) -> Vec<u8> {
+        let manifest = serde_json::to_vec(plugin).expect("plugin manifest JSON");
+        let checksums = json!({
+            "plugin.manifest.json": sha256_hex(&manifest),
+            "runtime/plugin.wasm": sha256_hex(wasm),
+        });
+        let checksums = serde_json::to_vec(&checksums).expect("checksum JSON");
+        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
+        archive
+            .start_file(
+                "plugin.manifest.json",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .expect("manifest entry");
+        archive.write_all(&manifest).expect("manifest bytes");
+        archive
+            .start_file(
+                "runtime/plugin.wasm",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .expect("runtime entry");
+        archive.write_all(wasm).expect("runtime bytes");
+        archive
+            .start_file("checksums.json", zip::write::SimpleFileOptions::default())
+            .expect("checksum entry");
+        archive.write_all(&checksums).expect("checksum bytes");
+        archive.finish().expect("plugin archive").into_inner()
     }
 
     #[tokio::test]
@@ -652,7 +1223,7 @@ mod tests {
         let error = reconcile_once(&runtime, &broker)
             .await
             .expect_err("wasm artifact is unavailable");
-        assert!(error.contains("requires an installed runtime artifact"));
+        assert!(error.contains("runtime artifact"));
         let connection = runtime.session_store.connection().expect("connection");
         let record = plugin_snapshots::read_apply_record(&connection)
             .expect("record")

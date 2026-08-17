@@ -2196,6 +2196,11 @@
       "method": "POST",
       "path": "/api/v1/platform-plugins/nack",
       "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/platform-plugins/tools/invoke",
+      "reason_code": "executable_fixture_platform_plugin_tool_pending_ui_parity"
     }
   ],
   "catalog_fixture_not_applicable": [

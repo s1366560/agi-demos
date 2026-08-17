@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from src.domain.model.plugins import PluginManifest
+from src.domain.model.plugins import PluginManifest, parse_plugin_manifest
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
 )
 from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
 from src.infrastructure.plugins.profile import (
     ControlPlaneEnvelope,
+    ProfileDocument,
+    ProfileLayer,
+    ProfileRow,
     ProfileSnapshot,
     compose_profile,
     control_envelope,
@@ -55,11 +58,14 @@ class PlatformPluginProfileService:
         actor_id: str | None = None,
     ) -> PlatformPluginPublication:
         """Persist manifests, effective snapshot, audit rows, and envelope."""
-        manifests = self._manifest_provider()
+        manifests = dict(self._manifest_provider())
+        for catalog_row in await self._repository.list_catalog():
+            manifests[catalog_row.plugin_id] = parse_plugin_manifest(catalog_row.manifest)
         for manifest in sorted(manifests.values(), key=lambda item: item.id):
             await self._repository.upsert_catalog_manifest(manifest)
 
-        snapshot = compose_profile(load_profile_document(self._profile_path), manifests)
+        document = await self._effective_document()
+        snapshot = compose_profile(document, manifests)
         envelope = control_envelope(snapshot, version=version, nonce=nonce)
         await self._repository.record_snapshot(
             snapshot,
@@ -98,6 +104,41 @@ class PlatformPluginProfileService:
             requested_version=publication.envelope.version,
             applied_version=applied_version,
             status="ack",
+        )
+
+    async def _effective_document(self) -> ProfileDocument:
+        """Merge the static base profile with installed marketplace desired rows."""
+        document = load_profile_document(self._profile_path)
+        packages = {
+            package.plugin_id: package
+            for package in await self._repository.list_installed_packages()
+        }
+        existing_ids = {row.id for layer in document.layers for row in layer.rows}
+        rows = []
+        for desired in await self._repository.list_desired_states():
+            package = packages.get(desired.plugin_id)
+            if not desired.enabled or package is None or desired.plugin_id in existing_ids:
+                continue
+            rows.append(
+                ProfileRow(
+                    id=desired.plugin_id,
+                    enabled=True,
+                    config={
+                        **dict(desired.config),
+                        "artifact": {
+                            "registry": package.artifact_registry,
+                            "repository": package.artifact_repository,
+                            "manifest_sha256": package.oci_manifest_digest,
+                            "layer_sha256": package.artifact_digest,
+                        },
+                    },
+                )
+            )
+        if not rows:
+            return document
+        return replace(
+            document,
+            layers=(*document.layers, ProfileLayer(id="marketplace-installed", rows=tuple(rows))),
         )
 
     async def record_nack(
