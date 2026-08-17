@@ -99,6 +99,7 @@ class PluginMarketplaceInstallService:
                 version=request.version,
                 publisher=request.publisher,
                 artifact_digest=request.artifact_sha256,
+                manifest=parsed_manifest.to_payload(),
                 signature={
                     "algorithm": "Ed25519",
                     "public_key_sha256": sha256_hex(
@@ -115,6 +116,13 @@ class PluginMarketplaceInstallService:
                 },
                 security_scan_status="passed",
             )
+            for permission in sorted(permissions, key=lambda item: item.value):
+                await self._repository.grant_permission(
+                    plugin_id=request.plugin_id,
+                    permission=permission.value,
+                    scope_type="tenant",
+                    scope_id=request.tenant_id,
+                )
             return MarketplaceInstallDecision(
                 status="approved",
                 plugin_id=request.plugin_id,

@@ -3369,6 +3369,7 @@ class PlatformPluginPackageModel(Base):
     version: Mapped[str] = mapped_column(String(64), primary_key=True)
     publisher: Mapped[str] = mapped_column(String(255), nullable=False)
     artifact_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     signature: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     provenance: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     security_scan_status: Mapped[str] = mapped_column(String(32), nullable=False)

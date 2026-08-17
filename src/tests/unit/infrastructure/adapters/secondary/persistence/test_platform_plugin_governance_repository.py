@@ -83,6 +83,7 @@ async def test_http_route_quota_and_package_governance_roundtrip(db_session):
         version="1.0.0",
         publisher="memstack",
         artifact_digest="a" * 64,
+        manifest={"id": "example-plugin", "version": "1.0.0"},
         signature={"algorithm": "Ed25519"},
         provenance={"predicateType": "https://slsa.dev/provenance/v1"},
         security_scan_status="passed",

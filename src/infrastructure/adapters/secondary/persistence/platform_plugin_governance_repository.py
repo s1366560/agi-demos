@@ -85,6 +85,23 @@ class PlatformPluginGovernanceRepository:
         )
         return list(result.scalars().all())
 
+    async def revoke_permissions(self, plugin_id: str) -> int:
+        """Revoke every active grant for a plugin and return the count."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginPermissionModel).where(
+                    PlatformPluginPermissionModel.plugin_id == plugin_id,
+                    PlatformPluginPermissionModel.revoked_at.is_(None),
+                )
+            )
+        )
+        revoked_at = utc_now()
+        rows = list(result.scalars().all())
+        for row in rows:
+            row.revoked_at = revoked_at
+        await self._session.flush()
+        return len(rows)
+
     async def grant_credential(
         self,
         *,
@@ -223,6 +240,7 @@ class PlatformPluginGovernanceRepository:
         version: str,
         publisher: str,
         artifact_digest: str,
+        manifest: dict[str, object],
         signature: dict[str, object],
         provenance: dict[str, object],
         security_scan_status: str,
@@ -238,17 +256,30 @@ class PlatformPluginGovernanceRepository:
                 version=version,
                 publisher=publisher,
                 artifact_digest=artifact_digest,
+                manifest=dict(manifest),
                 security_scan_status=security_scan_status,
             )
             self._session.add(model)
         else:
             model.publisher = publisher
             model.artifact_digest = artifact_digest
+            model.manifest = dict(manifest)
             model.security_scan_status = security_scan_status
         model.signature = dict(signature)
         model.provenance = dict(provenance)
         await self._session.flush()
         return model
+
+    async def get_package_version(
+        self,
+        plugin_id: str,
+        version: str,
+    ) -> PlatformPluginPackageModel | None:
+        """Return one immutable catalog package version."""
+        return await self._session.get(
+            PlatformPluginPackageModel,
+            {"plugin_id": plugin_id, "version": version},
+        )
 
     async def revoke_package(
         self,
@@ -296,6 +327,27 @@ class PlatformPluginGovernanceRepository:
             )
         )
         return list(result.scalars().all())
+
+    async def revoke_packages(
+        self,
+        plugin_id: str,
+        reason: str,
+        *,
+        version: str | None = None,
+    ) -> list[PlatformPluginPackageModel]:
+        """Revoke one or all package versions and return the affected rows."""
+        statement = select(PlatformPluginPackageModel).where(
+            PlatformPluginPackageModel.plugin_id == plugin_id
+        )
+        if version is not None:
+            statement = statement.where(PlatformPluginPackageModel.version == version)
+        result = await self._session.execute(refresh_select_statement(statement))
+        rows = list(result.scalars().all())
+        for row in rows:
+            row.revoked = True
+            row.revocation_reason = reason
+        await self._session.flush()
+        return rows
 
 
 def utc_now() -> datetime:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +23,7 @@ class MarketplacePackageRequest(BaseModel):
     plugin_id: str = Field(min_length=1)
     version: str = Field(min_length=1)
     publisher: str = Field(min_length=1)
+    tenant_id: str = Field(min_length=1)
     artifact_sha256: str = Field(min_length=64, max_length=64)
     manifest: dict[str, object]
     signature: MarketplacePackageSignature
@@ -35,3 +38,45 @@ class MarketplacePackageResponse(BaseModel):
     version: str
     status: str
     reason: str
+
+
+class MarketplacePackageCatalogEntry(BaseModel):
+    plugin_id: str
+    version: str
+    publisher: str
+    artifact_digest: str
+    manifest: dict[str, object]
+    signature: dict[str, object]
+    provenance: dict[str, object]
+    security_scan_status: str
+    revoked: bool
+    revocation_reason: str | None = None
+
+
+class MarketplacePackageDetailResponse(BaseModel):
+    plugin_id: str
+    versions: list[MarketplacePackageCatalogEntry]
+
+
+class MarketplacePackageApprovalRequest(BaseModel):
+    version: str = Field(min_length=1)
+    tenant_id: str = Field(min_length=1)
+    approved_permissions: frozenset[str] = Field(default_factory=frozenset)
+
+
+class MarketplacePackageApprovalResponse(BaseModel):
+    plugin_id: str
+    version: str
+    status: Literal["approved", "revoked"]
+    granted_permissions: list[str] = Field(default_factory=list)
+
+
+class MarketplacePackageRevocationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=2048)
+    version: str | None = Field(default=None, min_length=1)
+
+
+class MarketplacePackageRevocationResponse(BaseModel):
+    plugin_id: str
+    revoked_versions: list[str]
+    revoked_permissions: int
