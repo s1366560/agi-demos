@@ -602,14 +602,16 @@ fn verify_plugin_archive(archive: &[u8], plugin: &Value) -> Result<(String, Vec<
         }
     }
 
-    let manifest = read_archive_object(&files, "plugin.manifest.json")?;
+    let mut manifest = read_archive_object(&files, "plugin.manifest.json")?;
     let checksums = read_archive_object(&files, "checksums.json")?;
+    if let Some(object) = manifest.as_object_mut() {
+        object.remove("config");
+        object.remove("layer_id");
+    }
     let mut comparable_plugin = plugin.clone();
-    if let Some(config) = comparable_plugin
-        .get_mut("config")
-        .and_then(Value::as_object_mut)
-    {
-        config.remove("artifact");
+    if let Some(object) = comparable_plugin.as_object_mut() {
+        object.remove("config");
+        object.remove("layer_id");
     }
     if manifest != comparable_plugin {
         return Err("plugin archive manifest differs from control plane".to_string());

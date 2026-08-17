@@ -138,6 +138,38 @@ async def test_data_plane_nack_requires_reason(db_session: AsyncSession) -> None
 
 
 @pytest.mark.unit
+async def test_first_data_plane_nack_can_report_no_previously_applied_version(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-first-nack")
+    await repository.record_snapshot(snapshot, version=13, nonce="nonce-13")
+    await db_session.commit()
+
+    response = make_client(db_session).post(
+        "/api/v1/platform-plugins/data-plane-state",
+        json={
+            "data_plane_id": "desktop-local",
+            "snapshot_digest": snapshot.digest,
+            "requested_version": 13,
+            "applied_version": 0,
+            "status": "nack",
+            "error_message": "runtime artifact is unavailable",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    result = await db_session.execute(
+        select(PlatformPluginApplyStateModel).where(
+            PlatformPluginApplyStateModel.data_plane_id == "desktop-local"
+        )
+    )
+    apply_state = result.scalar_one()
+    assert apply_state.applied_version == 0
+    assert apply_state.error_message == "runtime artifact is unavailable"
+
+
+@pytest.mark.unit
 async def test_data_plane_receipt_rejects_stale_version_or_digest(
     db_session: AsyncSession,
 ) -> None:

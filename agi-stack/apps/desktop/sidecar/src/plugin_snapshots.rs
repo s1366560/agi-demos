@@ -556,9 +556,10 @@ fn prepare_plugins(
                     bounded_text(Some(permission), 191, "capability permission")?;
                 }
             }
-            if contracts
-                .iter()
-                .any(|(existing, owner)| existing == &contract && owner != &plugin_id)
+            if kind != "hook"
+                && contracts
+                    .iter()
+                    .any(|(existing, owner)| existing == &contract && owner != &plugin_id)
             {
                 return Err(format!(
                     "capability contract {contract} has multiple owners"
@@ -796,6 +797,62 @@ mod tests {
             read_active_plugins(&connection, &digest).expect("active plugins"),
             activated
         );
+    }
+
+    #[test]
+    fn activation_allows_multiple_hook_providers_for_one_event_contract() {
+        let mut connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+        let digest = "f".repeat(64);
+        let hook = json!({
+            "kind": "hook",
+            "id": "before_response",
+            "contract": "hook:before_response",
+            "permissions": []
+        });
+        let payload = json!({
+            "schema_version": 1,
+            "profile_id": "test-profile",
+            "plugins": [
+                {
+                    "schema_version": 1,
+                    "id": "workspace-runtime",
+                    "version": "1.2.3",
+                    "runtime": "python-trusted",
+                    "trust": "builtin",
+                    "provides": [hook.clone()],
+                    "config": {}
+                },
+                {
+                    "schema_version": 1,
+                    "id": "sisyphus-runtime",
+                    "version": "1.2.3",
+                    "runtime": "python-trusted",
+                    "trust": "builtin",
+                    "provides": [hook],
+                    "config": {}
+                }
+            ],
+            "digest": digest
+        });
+        let requested = RequestedPluginSnapshot {
+            version: 8,
+            nonce: "nonce-8".to_string(),
+            digest: digest.clone(),
+            payload,
+        };
+
+        record_requested(
+            &connection,
+            8,
+            "nonce-8",
+            &digest,
+            &requested.payload.to_string(),
+        )
+        .expect("record requested");
+        let activated = record_ack(&mut connection, &requested).expect("hook listeners activate");
+
+        assert_eq!(activated.len(), 2);
     }
 
     #[test]

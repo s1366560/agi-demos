@@ -3198,7 +3198,7 @@ class PlatformPluginApplyStateModel(IdGeneratorMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "requested_version > 0 AND applied_version > 0",
+            "requested_version > 0 AND applied_version >= 0",
             name="ck_platform_plugin_apply_versions",
         ),
         CheckConstraint(

@@ -19,7 +19,7 @@ class PlatformPluginApplyStateRequest(BaseModel):
     data_plane_id: str = Field(min_length=1)
     snapshot_digest: str = Field(min_length=64, max_length=64)
     requested_version: int = Field(ge=1)
-    applied_version: int = Field(ge=1)
+    applied_version: int = Field(ge=0)
     status: Literal["ack", "nack"]
     error_message: str | None = Field(default=None, max_length=8192)
 
