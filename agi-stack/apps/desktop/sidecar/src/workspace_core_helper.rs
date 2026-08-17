@@ -481,9 +481,20 @@ async fn launch_helper(config: &WorkspaceCoreLaunchConfig) -> Result<SupervisedC
         .arg("--desktop-control")
         .current_dir(&config.runtime_directory)
         .env_clear()
+        // The core's agent-registry HTTP client doubles as the Workspace
+        // judge transport, and desktop judge calls run an LLM round-trip
+        // synchronously. The 5s default guaranteed judge transport failures
+        // (and endless scheduler retries) for any real model; 60s is the
+        // core's documented upper bound and exceeds the sidecar's own 45s
+        // per-candidate LLM timeout, so the judge verdict always settles
+        // first.
+        .env("WORKSPACE_CORE_AGENT_REGISTRY_TIMEOUT_SECONDS", "60")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        // Inherit the sidecar's stderr so Workspace Core diagnostics remain
+        // visible to whoever captures sidecar logs; the Electron supervisor
+        // still drains that pipe without forwarding it to app logs.
+        .stderr(Stdio::inherit())
         .kill_on_drop(true)
         .spawn()
         .map_err(|error| format!("failed to launch Workspace Core helper: {error}"))?;

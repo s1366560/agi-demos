@@ -1410,7 +1410,7 @@ async fn workspace_task_send_conflict_and_incomplete_receipt_fail_closed() {
 }
 
 #[tokio::test]
-async fn workspace_task_send_requires_attempt_before_projecting_authority() {
+async fn workspace_task_send_derives_missing_attempt_but_rejects_a_blank_one() {
     let state = state();
     install(&state, "http://127.0.0.1:21000");
     let mut missing = task_provider_request(
@@ -1442,7 +1442,11 @@ async fn workspace_task_send_requires_attempt_before_projecting_authority() {
     )
     .await;
 
-    assert_eq!(missing_status, StatusCode::BAD_REQUEST);
+    // A missing attempt id is the legitimate first-dispatch shape: the
+    // runtime derives a deterministic attempt from the delivery request id.
+    // The request therefore passes authority validation and only stops at the
+    // (here unreachable) Workspace Core policy authority.
+    assert_eq!(missing_status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(blank_status, StatusCode::BAD_REQUEST);
     assert!(state
         .session_store
@@ -1512,6 +1516,7 @@ async fn workspace_task_prelaunch_recovery_reuses_the_same_run_once() {
                 provider_id: "provider-1".to_string(),
                 model_id: "model-1".to_string(),
             },
+            environment: None,
             now: now_iso(),
         })
         .expect("atomic task projection");
@@ -3142,7 +3147,7 @@ async fn task_terminal_stage_server(
     ) -> StatusCode {
         assert_eq!(headers["authorization"], "Bearer event-token");
         assert_eq!(
-            headers["bcn-provider-id"],
+            headers["X-BCN-Provider-Id"],
             "memstack-workspace-agent-runtime"
         );
         state
@@ -3299,7 +3304,7 @@ async fn callback_server_with_status(status: StatusCode) -> (String, mpsc::Recei
     ) -> StatusCode {
         assert_eq!(headers["authorization"], "Bearer event-token");
         assert_eq!(
-            headers["bcn-provider-id"],
+            headers["X-BCN-Provider-Id"],
             "memstack-workspace-agent-runtime"
         );
         let (sender, status) = &*state.lock().await;

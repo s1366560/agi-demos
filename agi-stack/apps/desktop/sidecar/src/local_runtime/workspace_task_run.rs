@@ -7,8 +7,9 @@ use uuid::Uuid;
 use super::{
     authority_store::{
         insert_plan_version, insert_run, insert_run_event, is_recovered_unstarted_run,
-        query_conversation, query_plan_version, DesktopPermissionProfile, DesktopPlanStatus,
-        DesktopPlanVersion, DesktopRun, DesktopRunStatus,
+        query_conversation, query_plan_version, DesktopExecutionEnvironment,
+        DesktopPermissionProfile, DesktopPlanStatus, DesktopPlanVersion, DesktopRun,
+        DesktopRunStatus,
     },
     session_store::DesktopSessionStore,
     ConversationCapabilityMode, ConversationRunMode, LlmRouteTarget, LocalConversation,
@@ -35,6 +36,7 @@ pub(super) struct ProjectWorkspaceTaskRunInput {
     pub(super) conversation_id: String,
     pub(super) message: String,
     pub(super) llm_route: LlmRouteTarget,
+    pub(super) environment: Option<DesktopExecutionEnvironment>,
     pub(super) now: String,
 }
 
@@ -212,6 +214,7 @@ impl DesktopSessionStore {
             "approved_at": input.now,
             "mode": "build",
             "permission_profile": DesktopPermissionProfile::WorkspaceWrite,
+            "environment": input.environment.clone(),
         });
         let run = DesktopRun {
             id: run_id,
@@ -229,7 +232,7 @@ impl DesktopSessionStore {
             completed_at: None,
             last_heartbeat_at: None,
             error: None,
-            environment: None,
+            environment: input.environment.clone(),
             permission_profile: DesktopPermissionProfile::WorkspaceWrite,
             authorization_snapshot,
         };

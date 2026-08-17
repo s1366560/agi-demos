@@ -168,15 +168,22 @@ async fn send_workspace_task(
 ) -> BridgeResult {
     let message = message_text(request.message.as_ref())?;
     let task_id = required_task_extension(request.extensions.task_id.as_deref(), "task_id")?;
-    let attempt_id =
-        required_task_extension(request.extensions.attempt_id.as_deref(), "attempt_id")?;
-    let workspace_agent_binding_id = required_task_extension(
-        request.extensions.workspace_agent_binding_id.as_deref(),
-        "workspace_agent_binding_id",
-    )?;
     let delivery_request_id = required_task_extension(
         request.extensions.delivery_request_id.as_deref(),
         "delivery_request_id",
+    )?;
+    // First dispatch arrives without an attempt id (see validation above):
+    // derive a deterministic one from the delivery request id so idempotent
+    // redelivery replays the same attempt instead of minting a new one.
+    let attempt_id = request
+        .extensions
+        .attempt_id
+        .as_deref()
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("attempt-{delivery_request_id}"));
+    let workspace_agent_binding_id = required_task_extension(
+        request.extensions.workspace_agent_binding_id.as_deref(),
+        "workspace_agent_binding_id",
     )?;
     if delivery_request_id != request.id {
         return Err(bad_request(
@@ -194,6 +201,10 @@ async fn send_workspace_task(
         .map_err(|_| unavailable("Workspace Task LLM routing policy is invalid"))?
         .into_iter()
         .next()
+        // A workspace without explicit routing falls back to the tenant-level
+        // runtime default (explicit selection, or the sole active binding in
+        // local mode), mirroring llm_for_policy's fallback for agent runs.
+        .or_else(|| state.selected_provider_route(&request.extensions.tenant_id))
         .ok_or_else(|| unavailable("Workspace Task LLM routing policy is unconfigured"))?;
     #[cfg(test)]
     if state
@@ -212,6 +223,23 @@ async fn send_workspace_task(
     let request_payload = serde_json::to_value(&request)
         .map_err(|_| bad_request("Workspace Task Provider request cannot be encoded"))?;
     let request_hash = provider_request_hash(&request)?;
+    // Workspace task runs execute tools under WorkspaceWrite; they need a
+    // prepared execution environment just like conversation runs, otherwise
+    // every tool call fails with "authorized run has no execution
+    // environment" and the agent can only escalate a spurious env_var HITL.
+    let environment = state
+        .worktree_manager()
+        .prepare(
+            crate::local_runtime::DesktopExecutionEnvironmentKind::Local,
+            &format!("workspace-task-environment-{}", request.id),
+            &now_iso(),
+        )
+        .map_err(|error| {
+            unavailable(&format!(
+                "Workspace Task execution environment is unavailable: {error}"
+            ))
+        })?
+        .environment;
     let outcome = state
         .session_store
         .project_workspace_task_run(ProjectWorkspaceTaskRunInput {
@@ -231,6 +259,7 @@ async fn send_workspace_task(
             conversation_id: request.extensions.conversation_id.clone(),
             message: message.clone(),
             llm_route,
+            environment: Some(environment),
             now: now_iso(),
         })
         .map_err(workspace_task_projection_error)?;
@@ -995,10 +1024,14 @@ async fn send_callback_once(
         .client
         .post(format!("{}/bot/events", authority.core_api_base_url))
         .bearer_auth(authority.provider_event_token.as_str())
-        .header("bcn-provider-id", WORKSPACE_PROVIDER_ID)
+        // Canonical protocol casing: the Workspace Core /bot/events handler
+        // resolves these via &str HeaderMap lookups whose hashing is
+        // case-sensitive for non-standard names, so a lowercase
+        // `bcn-provider-id` is rejected as missing.
+        .header("X-BCN-Provider-Id", WORKSPACE_PROVIDER_ID)
         .json(payload);
     if !provider_bot_ref.is_empty() {
-        request_builder = request_builder.header("bcn-provider-bot-ref", provider_bot_ref);
+        request_builder = request_builder.header("X-BCN-Provider-Bot-Ref", provider_bot_ref);
     }
     request_builder
         .send()
@@ -1033,13 +1066,25 @@ fn validate_provider_request(request: &ProviderWebhookRequest) -> Result<(), sup
     if request.extensions.task_id.is_some() {
         for value in [
             request.extensions.task_id.as_deref(),
-            request.extensions.attempt_id.as_deref(),
             request.extensions.workspace_agent_binding_id.as_deref(),
             request.extensions.delivery_request_id.as_deref(),
         ] {
             if value.map_or(true, |value| !identifier(value, 512)) {
                 return Err(bad_request("Workspace Task Provider authority is invalid"));
             }
+        }
+        // The first dispatch of a Workspace task legitimately carries
+        // `attempt_id: null` — the attempt is materialized by this runtime
+        // when the run starts, and the core matches the runtime correlation
+        // with a null-safe comparison. Only a present-but-malformed attempt
+        // id is rejected here.
+        if request
+            .extensions
+            .attempt_id
+            .as_deref()
+            .is_some_and(|value| !identifier(value, 512))
+        {
+            return Err(bad_request("Workspace Task Provider authority is invalid"));
         }
         for value in [
             request.extensions.plan_id.as_deref(),
