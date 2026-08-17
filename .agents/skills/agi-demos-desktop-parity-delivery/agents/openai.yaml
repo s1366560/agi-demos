@@ -1,4 +1,0 @@
-interface:
-  display_name: "MemStack Desktop Parity Delivery"
-  short_description: "Deliver and verify native desktop parity safely"
-  default_prompt: "Use $agi-demos-desktop-parity-delivery to deliver and verify a MemStack Electron desktop change against its prototype or Web reference."

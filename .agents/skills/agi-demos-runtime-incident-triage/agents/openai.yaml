@@ -1,4 +1,0 @@
-interface:
-  display_name: "MemStack Runtime Incident Triage"
-  short_description: "Triage and recover scoped local runtime incidents"
-  default_prompt: "Use $agi-demos-runtime-incident-triage to diagnose and safely recover this local MemStack runtime incident."
