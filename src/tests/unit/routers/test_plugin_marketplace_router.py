@@ -14,6 +14,9 @@ from src.infrastructure.adapters.secondary.persistence.models import Tenant, Use
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
 
 MANIFEST = {
     "schemaVersion": 1,
@@ -175,3 +178,64 @@ async def test_marketplace_revocation_requires_superuser_and_fails_closed(
     assert revoked.status_code == status.HTTP_200_OK
     assert revoked.json()["revoked_versions"] == ["1.0.0"]
     assert listing.json()[0]["revoked"] is True
+
+
+@pytest.mark.unit
+async def test_marketplace_uninstall_removes_desired_state(
+    db_session: AsyncSession,
+) -> None:
+    await seed_package(db_session)
+    tenant = Tenant(
+        id="marketplace-uninstall-tenant",
+        name="Uninstall Tenant",
+        slug="marketplace-uninstall-tenant",
+        owner_id="marketplace-uninstaller",
+    )
+    user = User(
+        id="marketplace-uninstaller",
+        email="uninstaller@example.com",
+        hashed_password="hashed",
+        full_name="Uninstaller",
+        is_active=True,
+    )
+    db_session.add_all(
+        [
+            tenant,
+            user,
+            UserTenant(
+                id="marketplace-uninstall-membership",
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role="admin",
+            ),
+        ]
+    )
+    await PlatformPluginRepository(db_session).set_desired_state(
+        plugin_id="third-party-tool",
+        enabled=True,
+        config={},
+    )
+    await db_session.commit()
+    await db_session.commit()
+
+    response = make_client(db_session, user).post(
+        "/api/v1/plugin-marketplace/packages/third-party-tool/uninstall",
+        json={"version": "1.0.0", "tenant_id": tenant.id},
+    )
+    desired = await PlatformPluginRepository(db_session).get_desired_state("third-party-tool")
+    package = await PlatformPluginGovernanceRepository(db_session).get_package_version(
+        "third-party-tool",
+        "1.0.0",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "plugin_id": "third-party-tool",
+        "version": "1.0.0",
+        "status": "uninstalled",
+        "desired_removed": True,
+        "revoked_permissions": 0,
+    }
+    assert desired is None
+    assert package is not None
+    assert package.install_status == "uninstalled"

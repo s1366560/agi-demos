@@ -12,6 +12,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
+    PlatformPluginRepository,
+)
 from src.infrastructure.plugins.governance import PluginTrustGate
 
 
@@ -29,16 +32,26 @@ class MarketplaceRevocationResult:
     revoked_permissions: int
 
 
+@dataclass(frozen=True)
+class MarketplaceUninstallResult:
+    plugin_id: str
+    version: str
+    desired_removed: bool
+    revoked_permissions: int
+
+
 class PluginMarketplaceCatalogService:
     """Read and govern packages without exposing signed secrets."""
 
     def __init__(
         self,
         repository: PlatformPluginGovernanceRepository,
+        plugin_repository: PlatformPluginRepository,
         *,
         trust_gate: PluginTrustGate | None = None,
     ) -> None:
         self._repository = repository
+        self._plugin_repository = plugin_repository
         self._trust_gate = trust_gate or PluginTrustGate()
 
     async def list_packages(
@@ -113,5 +126,24 @@ class PluginMarketplaceCatalogService:
         return MarketplaceRevocationResult(
             plugin_id=plugin_id,
             revoked_versions=tuple(row.version for row in rows),
+            revoked_permissions=revoked_permissions,
+        )
+
+    async def uninstall(
+        self,
+        *,
+        plugin_id: str,
+        version: str,
+    ) -> MarketplaceUninstallResult:
+        """Uninstall one package and remove it from the next desired snapshot."""
+        package = await self._repository.uninstall_package(plugin_id, version)
+        if package is None:
+            raise LookupError("marketplace package version was not found")
+        desired_removed = await self._plugin_repository.remove_desired_state(plugin_id)
+        revoked_permissions = await self._repository.revoke_permissions(plugin_id)
+        return MarketplaceUninstallResult(
+            plugin_id=plugin_id,
+            version=version,
+            desired_removed=desired_removed,
             revoked_permissions=revoked_permissions,
         )

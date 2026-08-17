@@ -292,6 +292,17 @@ class PlatformPluginGovernanceRepository:
             {"plugin_id": plugin_id, "version": version},
         )
 
+    async def uninstall_package(
+        self, plugin_id: str, version: str
+    ) -> PlatformPluginPackageModel | None:
+        """Mark one installed package version uninstalled without revoking trust."""
+        model = await self.get_package_version(plugin_id, version)
+        if model is None:
+            return None
+        model.install_status = "uninstalled"
+        await self._session.flush()
+        return model
+
     async def revoke_package(
         self,
         plugin_id: str,

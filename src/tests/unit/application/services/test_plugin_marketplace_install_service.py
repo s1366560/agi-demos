@@ -170,6 +170,18 @@ async def test_marketplace_install_validates_and_persists(db_session):
         "manifest_sha256": "1" * 64,
         "layer_sha256": layer_digest,
     }
+    uninstall = await PluginMarketplaceCatalogService(
+        PlatformPluginGovernanceRepository(db_session),
+        PlatformPluginRepository(db_session),
+    ).uninstall(plugin_id="third-party-tool", version="1.0.0")
+    uninstalled_publication = await PlatformPluginProfileService(
+        PlatformPluginRepository(db_session)
+    ).publish(version=7, nonce="nonce-7")
+
+    assert uninstall.desired_removed is True
+    assert all(
+        row.manifest.id != "third-party-tool" for row in uninstalled_publication.snapshot.rows
+    )
 
 
 @pytest.mark.unit
@@ -228,7 +240,10 @@ async def test_marketplace_catalog_approval_and_revocation_fail_closed(db_sessio
         provenance={"predicateType": "https://slsa.dev/provenance/v1"},
         security_scan_status="passed",
     )
-    service = PluginMarketplaceCatalogService(repository)
+    service = PluginMarketplaceCatalogService(
+        repository,
+        PlatformPluginRepository(db_session),
+    )
 
     approval = await service.approve(
         plugin_id="third-party-tool",
@@ -249,6 +264,10 @@ async def test_marketplace_catalog_approval_and_revocation_fail_closed(db_sessio
         plugin_id="third-party-tool",
         reason="publisher compromised",
     )
+    uninstall = await service.uninstall(
+        plugin_id="third-party-tool",
+        version="1.0.0",
+    )
 
     assert approval.granted_permissions == ("tools.execute",)
     assert revocation.revoked_versions == ("1.0.0",)
@@ -260,3 +279,4 @@ async def test_marketplace_catalog_approval_and_revocation_fail_closed(db_sessio
         )
         == []
     )
+    assert uninstall.desired_removed is False

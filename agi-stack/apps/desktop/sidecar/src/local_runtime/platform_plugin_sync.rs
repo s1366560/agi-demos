@@ -1087,9 +1087,42 @@ mod tests {
                 .expect("artifact")
                 .expect("stored artifact");
         assert_eq!(artifact.bytes, b"verified-wasm-runtime".to_vec());
-        let observations = control.observations.lock().expect("observations");
-        assert_eq!(observations.len(), 1);
-        assert_eq!(observations[0].1["status"], "ack");
+        {
+            let observations = control.observations.lock().expect("observations");
+            assert_eq!(observations.len(), 1);
+            assert_eq!(observations[0].1["status"], "ack");
+        }
+        drop(connection);
+
+        let removal_digest = "3".repeat(64);
+        *control.snapshot.lock().expect("snapshot") = json!({
+            "version": 8,
+            "nonce": "nonce-8",
+            "profile_id": "desktop-default",
+            "digest": removal_digest,
+            "payload": {
+                "schema_version": 1,
+                "profile_id": "desktop-default",
+                "plugins": [],
+                "digest": removal_digest
+            }
+        });
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("untrusted wasm removal");
+        let connection = runtime.session_store.connection().expect("connection");
+        assert!(
+            plugin_snapshots::read_active_plugins(&connection, &removal_digest)
+                .expect("removed active plugins")
+                .is_empty()
+        );
+        assert!(plugin_snapshots::read_runtime_artifact(
+            &connection,
+            "third-party-tool",
+            &layer_digest
+        )
+        .expect("removed artifact")
+        .is_none());
     }
 
     fn snapshot(version: u64, digest: &str, runtime: &str, credential: &str) -> Value {

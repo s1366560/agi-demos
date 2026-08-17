@@ -4,7 +4,7 @@
 //! activation inventory. A rejected snapshot never changes the active generation
 //! and credential values are never stored here.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -273,6 +273,33 @@ pub(crate) fn read_runtime_artifact(
     Ok(row)
 }
 
+pub(crate) fn prune_runtime_artifacts(
+    connection: &mut Transaction<'_>,
+    active_plugin_ids: &std::collections::BTreeSet<String>,
+) -> Result<usize, String> {
+    let mut statement = connection
+        .prepare("SELECT DISTINCT plugin_id FROM desktop_platform_plugin_artifacts")
+        .map_err(|error| error.to_string())?;
+    let stored_ids = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    let mut removed = 0;
+    for plugin_id in stored_ids {
+        if active_plugin_ids.contains(&plugin_id) {
+            continue;
+        }
+        removed += connection
+            .execute(
+                "DELETE FROM desktop_platform_plugin_artifacts WHERE plugin_id = ?1",
+                params![plugin_id],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(removed)
+}
+
 pub(crate) fn record_requested(
     connection: &Connection,
     version: u64,
@@ -331,7 +358,7 @@ pub(crate) fn record_ack(
     requested: &RequestedPluginSnapshot,
 ) -> Result<Vec<PluginActivationRecord>, String> {
     let prepared = prepare_plugins(connection, &requested.payload)?;
-    let transaction = connection
+    let mut transaction = connection
         .transaction()
         .map_err(|error| error.to_string())?;
     for plugin in &prepared {
@@ -371,6 +398,18 @@ pub(crate) fn record_ack(
         &requested.digest,
         &requested.payload.to_string(),
     )?;
+    let active_plugin_ids = requested
+        .payload
+        .get("plugins")
+        .and_then(Value::as_array)
+        .map(|plugins| {
+            plugins
+                .iter()
+                .filter_map(|plugin| plugin.get("id").and_then(Value::as_str).map(String::from))
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    prune_runtime_artifacts(&mut transaction, &active_plugin_ids)?;
     transaction.commit().map_err(|error| error.to_string())?;
 
     Ok(prepared

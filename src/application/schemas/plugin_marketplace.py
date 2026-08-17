@@ -91,3 +91,16 @@ class MarketplacePackageRevocationResponse(BaseModel):
     plugin_id: str
     revoked_versions: list[str]
     revoked_permissions: int
+
+
+class MarketplacePackageUninstallRequest(BaseModel):
+    version: str = Field(min_length=1)
+    tenant_id: str = Field(min_length=1)
+
+
+class MarketplacePackageUninstallResponse(BaseModel):
+    plugin_id: str
+    version: str
+    status: Literal["uninstalled"]
+    desired_removed: bool
+    revoked_permissions: int

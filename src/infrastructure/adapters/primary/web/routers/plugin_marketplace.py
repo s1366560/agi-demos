@@ -19,6 +19,8 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageResponse,
     MarketplacePackageRevocationRequest,
     MarketplacePackageRevocationResponse,
+    MarketplacePackageUninstallRequest,
+    MarketplacePackageUninstallResponse,
 )
 from src.application.services.plugin_marketplace_catalog_service import (
     PluginMarketplaceCatalogService,
@@ -63,6 +65,7 @@ def _catalog_service(
 ) -> PluginMarketplaceCatalogService:
     return PluginMarketplaceCatalogService(
         PlatformPluginGovernanceRepository(db),
+        PlatformPluginRepository(db),
     )
 
 
@@ -238,5 +241,36 @@ async def revoke_package(
     return MarketplacePackageRevocationResponse(
         plugin_id=result.plugin_id,
         revoked_versions=list(result.revoked_versions),
+        revoked_permissions=result.revoked_permissions,
+    )
+
+
+@router.post(
+    "/packages/{plugin_id}/uninstall",
+    response_model=MarketplacePackageUninstallResponse,
+)
+async def uninstall_package(
+    plugin_id: str,
+    request: MarketplacePackageUninstallRequest,
+    current_user: User = Depends(get_current_user),
+    service: PluginMarketplaceCatalogService = Depends(_catalog_service),
+    db: AsyncSession = Depends(get_db),
+) -> MarketplacePackageUninstallResponse:
+    """Uninstall a package and remove it from the next desired snapshot."""
+    await _require_tenant_admin(db, current_user, request.tenant_id)
+    try:
+        result = await service.uninstall(
+            plugin_id=plugin_id,
+            version=request.version,
+        )
+    except LookupError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await db.commit()
+    return MarketplacePackageUninstallResponse(
+        plugin_id=result.plugin_id,
+        version=result.version,
+        status="uninstalled",
+        desired_removed=result.desired_removed,
         revoked_permissions=result.revoked_permissions,
     )
