@@ -363,6 +363,37 @@ impl McpSupervisor {
             .create_server(scope, &input, idempotency_key, &request_hash)
     }
 
+    pub(super) fn ensure_platform_plugin_server(
+        &self,
+        scope: &McpScope,
+        plugin_id: &str,
+        runtime_definition: &Value,
+        snapshot_digest: &str,
+    ) -> McpResult<McpServerDefinition> {
+        validate_identifier(plugin_id, "local_mcp_plugin_id_invalid")?;
+        let server_name = format!("platform-plugin-{plugin_id}");
+        if let Some(existing) = self.server_by_name(scope, &server_name)? {
+            return Ok(existing);
+        }
+        let input = platform_plugin_definition(plugin_id, runtime_definition)?;
+        let idempotency_key = format!("platform-plugin-{plugin_id}-{snapshot_digest}");
+        self.create_server(scope, input, &idempotency_key)
+    }
+
+    pub(super) fn remove_platform_plugin_server(
+        &self,
+        scope: &McpScope,
+        plugin_id: &str,
+    ) -> McpResult<bool> {
+        let server_name = format!("platform-plugin-{plugin_id}");
+        let Some(existing) = self.server_by_name(scope, &server_name)? else {
+            return Ok(false);
+        };
+        let idempotency_key = format!("platform-plugin-remove-{plugin_id}");
+        self.delete_server(scope, &existing.id, existing.revision, &idempotency_key)?;
+        Ok(true)
+    }
+
     pub(super) fn update_server(
         &self,
         scope: &McpScope,
@@ -928,6 +959,76 @@ fn validate_definition(input: &McpServerDefinitionInput) -> McpResult<()> {
         }
     }
     Ok(())
+}
+
+fn platform_plugin_definition(
+    plugin_id: &str,
+    value: &Value,
+) -> McpResult<McpServerDefinitionInput> {
+    let Some(object) = value.as_object() else {
+        return Err(McpSupervisorError::new(
+            "local_mcp_runtime_invalid",
+            "MCP plugin runtime definition must be an object",
+        ));
+    };
+    let transport = match object.get("transport").and_then(Value::as_str) {
+        Some("stdio") => McpTransport::Stdio,
+        Some("http") => McpTransport::Http,
+        Some("sse") => McpTransport::Sse,
+        Some("websocket") => McpTransport::Websocket,
+        _ => {
+            return Err(McpSupervisorError::new(
+                "local_mcp_transport_invalid",
+                "MCP plugin transport is invalid",
+            ));
+        }
+    };
+    let command = object
+        .get("command")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| item.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()
+        })
+        .flatten()
+        .ok_or_else(|| {
+            McpSupervisorError::new(
+                "local_mcp_command_invalid",
+                "MCP plugin command must be a string array",
+            )
+        })?;
+    let mut vault_env_refs = BTreeMap::new();
+    if let Some(credentials) = object.get("vault_env_refs").and_then(Value::as_object) {
+        for (name, reference) in credentials {
+            let Some(reference) = reference.as_str() else {
+                return Err(McpSupervisorError::new(
+                    "local_mcp_environment_invalid",
+                    "MCP plugin credential reference must be a string",
+                ));
+            };
+            vault_env_refs.insert(name.clone(), reference.to_string());
+        }
+    }
+    Ok(McpServerDefinitionInput {
+        name: format!("platform-plugin-{plugin_id}"),
+        description: object
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        transport,
+        command,
+        cwd: object
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        vault_env_refs,
+        enabled: object
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    })
 }
 
 fn validate_credential_provision_input(input: &McpCredentialProvisionInput) -> McpResult<()> {

@@ -1,7 +1,7 @@
 //! Background reconciliation from the Python plugin control plane.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io::{Cursor, Read},
     sync::Arc,
     time::Duration,
@@ -23,6 +23,7 @@ use crate::{
     },
 };
 
+use super::mcp_supervisor::McpScope;
 use super::workspace_core_bridge::platform_plugin_payload_digest;
 use super::LocalRuntimeState;
 
@@ -134,10 +135,20 @@ async fn reconcile_once(
     let snapshot =
         fetch_control_plane_snapshot(&client, &base_url, record.credential.as_str()).await?;
     validate_snapshot(&snapshot)?;
+    let previous_last_good = {
+        let connection = state.session_store.connection()?;
+        plugin_snapshots::initialize_schema(&connection)?;
+        plugin_snapshots::read_last_good(&connection)?
+    };
     let receipt = match prepare_runtime_artifacts(&state, &client, &snapshot).await {
         Ok(()) => prepare_local_snapshot(state, &snapshot)?,
         Err(reason) => Some(reject_local_snapshot(state, &snapshot, reason)),
     };
+    if receipt.as_ref().is_some_and(|item| item.3 == "nack") {
+        reconcile_mcp_servers(&state, previous_last_good.as_ref())?;
+    } else {
+        reconcile_mcp_servers(&state, Some(&snapshot.payload))?;
+    }
     let Some((requested_version, applied_version, digest, status, error_message)) = receipt else {
         return Ok(());
     };
@@ -232,6 +243,75 @@ fn reject_local_snapshot(
 }
 
 type ControlPlaneReceipt = Option<(u64, u64, String, String, Option<String>)>;
+
+fn reconcile_mcp_servers(
+    state: &LocalRuntimeState,
+    desired_payload: Option<&Value>,
+) -> Result<(), String> {
+    let scope = McpScope {
+        tenant_id: "local".to_string(),
+        project_id: "local-project".to_string(),
+    };
+    let mut desired_ids = BTreeSet::new();
+    if let Some(payload) = desired_payload {
+        let plugins = payload
+            .get("plugins")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "control-plane snapshot plugins are invalid".to_string())?;
+        for plugin in plugins {
+            let runtime = plugin
+                .get("runtime")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if runtime != "mcp" {
+                continue;
+            }
+            let plugin_id = plugin
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "MCP plugin id is missing".to_string())?;
+            let artifact_digest = plugin
+                .get("config")
+                .and_then(Value::as_object)
+                .and_then(|config| config.get("artifact"))
+                .and_then(Value::as_object)
+                .and_then(|artifact| artifact.get("layer_sha256"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("MCP plugin {plugin_id} has no artifact digest"))?;
+            let artifact = {
+                let connection = state.session_store.connection()?;
+                plugin_snapshots::read_runtime_artifact(&connection, plugin_id, artifact_digest)?
+                    .ok_or_else(|| {
+                        format!("MCP plugin {plugin_id} runtime artifact is unavailable")
+                    })?
+            };
+            let definition = serde_json::from_slice::<Value>(&artifact.bytes)
+                .map_err(|_| format!("MCP plugin {plugin_id} runtime JSON is invalid"))?;
+            state
+                .mcp_supervisor
+                .ensure_platform_plugin_server(&scope, plugin_id, &definition, &artifact.digest)
+                .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+            desired_ids.insert(plugin_id.to_string());
+        }
+    }
+
+    let servers = state
+        .mcp_supervisor
+        .list_servers(&scope)
+        .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+    for server in servers {
+        let Some(plugin_id) = server.name.strip_prefix("platform-plugin-") else {
+            continue;
+        };
+        if !desired_ids.contains(plugin_id) {
+            state
+                .mcp_supervisor
+                .remove_platform_plugin_server(&scope, plugin_id)
+                .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+        }
+    }
+    Ok(())
+}
 
 async fn prepare_runtime_artifacts(
     state: &LocalRuntimeState,
@@ -1135,6 +1215,100 @@ mod tests {
         .is_none());
     }
 
+    #[tokio::test]
+    async fn untrusted_mcp_package_is_registered_and_uninstalled_atomically() {
+        let runtime = state();
+        let (url, broker, control) = control_plane(json!({})).await;
+        let registry = url.as_str().trim_end_matches("/api/v1").to_string();
+        let mut plugin = json!({
+            "schema_version": 1,
+            "id": "third-party-mcp",
+            "version": "1.0.0",
+            "runtime": "mcp",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "echo",
+                "contract": "tool:echo",
+                "permissions": ["tools.execute"]
+            }],
+            "activation": {"default_scope": "tenant", "restart_policy": "process-boundary"},
+            "config": {}
+        });
+        let runtime_definition = json!({
+            "transport": "stdio",
+            "command": ["/bin/echo", "mcp"],
+            "cwd": ".",
+            "enabled": true
+        });
+        let runtime_bytes = serde_json::to_vec(&runtime_definition).expect("MCP runtime");
+        let archive = plugin_package_archive(&plugin, "runtime/plugin.json", &runtime_bytes);
+        let layer_digest = sha256_hex(&archive);
+        let oci_manifest = serde_json::to_vec(&json!({
+            "schemaVersion": 2,
+            "mediaType": OCI_MANIFEST_MEDIA_TYPE,
+            "artifactType": MEMSTACK_ARTIFACT_TYPE,
+            "layers": [{
+                "mediaType": MEMSTACK_LAYER_TYPE,
+                "digest": format!("sha256:{layer_digest}"),
+                "size": archive.len()
+            }]
+        }))
+        .expect("OCI manifest");
+        let manifest_digest = sha256_hex(&oci_manifest);
+        plugin["config"]["artifact"] = json!({
+            "registry": registry,
+            "repository": "plugins",
+            "manifest_sha256": manifest_digest,
+            "layer_sha256": layer_digest
+        });
+        *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
+        *control.oci_layer.lock().expect("OCI layer") = archive;
+        let (snapshot, _) = control_snapshot_with_plugin(9, plugin);
+        *control.snapshot.lock().expect("snapshot") = snapshot;
+
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("MCP activate");
+
+        let scope = McpScope {
+            tenant_id: "local".to_string(),
+            project_id: "local-project".to_string(),
+        };
+        let server = runtime
+            .mcp_supervisor
+            .server_by_name(&scope, "platform-plugin-third-party-mcp")
+            .expect("MCP lookup")
+            .expect("MCP server registered");
+        assert_eq!(
+            server.command,
+            vec!["/bin/echo".to_string(), "mcp".to_string()]
+        );
+
+        let mut removal_payload = json!({
+            "schema_version": 1,
+            "profile_id": "desktop-default",
+            "plugins": [],
+            "digest": Value::Null
+        });
+        let removal_digest =
+            platform_plugin_payload_digest(&removal_payload).expect("removal digest");
+        removal_payload["digest"] = json!(removal_digest);
+        *control.snapshot.lock().expect("snapshot") = json!({
+            "version": 10,
+            "nonce": "nonce-10",
+            "profile_id": "desktop-default",
+            "digest": removal_digest,
+            "payload": removal_payload
+        });
+        reconcile_once(&runtime, &broker).await.expect("MCP remove");
+        assert!(runtime
+            .mcp_supervisor
+            .server_by_name(&scope, "platform-plugin-third-party-mcp")
+            .expect("MCP removed lookup")
+            .is_none());
+    }
+
     fn snapshot(version: u64, digest: &str, runtime: &str, credential: &str) -> Value {
         let mut payload = json!({
             "version": version,
@@ -1189,11 +1363,11 @@ mod tests {
         );
     }
 
-    fn wasm_package_archive(plugin: &Value, wasm: &[u8]) -> Vec<u8> {
+    fn plugin_package_archive(plugin: &Value, runtime_name: &str, runtime: &[u8]) -> Vec<u8> {
         let manifest = serde_json::to_vec(plugin).expect("plugin manifest JSON");
         let checksums = json!({
             "plugin.manifest.json": sha256_hex(&manifest),
-            "runtime/plugin.wasm": sha256_hex(wasm),
+            runtime_name: sha256_hex(runtime),
         });
         let checksums = serde_json::to_vec(&checksums).expect("checksum JSON");
         let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
@@ -1205,17 +1379,37 @@ mod tests {
             .expect("manifest entry");
         archive.write_all(&manifest).expect("manifest bytes");
         archive
-            .start_file(
-                "runtime/plugin.wasm",
-                zip::write::SimpleFileOptions::default(),
-            )
+            .start_file(runtime_name, zip::write::SimpleFileOptions::default())
             .expect("runtime entry");
-        archive.write_all(wasm).expect("runtime bytes");
+        archive.write_all(runtime).expect("runtime bytes");
         archive
             .start_file("checksums.json", zip::write::SimpleFileOptions::default())
             .expect("checksum entry");
         archive.write_all(&checksums).expect("checksum bytes");
         archive.finish().expect("plugin archive").into_inner()
+    }
+
+    fn wasm_package_archive(plugin: &Value, wasm: &[u8]) -> Vec<u8> {
+        plugin_package_archive(plugin, "runtime/plugin.wasm", wasm)
+    }
+
+    fn control_snapshot_with_plugin(version: u64, plugin: Value) -> (Value, String) {
+        let mut payload = json!({
+            "schema_version": 1,
+            "profile_id": "desktop-default",
+            "plugins": [plugin],
+            "digest": Value::Null
+        });
+        let digest = platform_plugin_payload_digest(&payload).expect("snapshot digest");
+        payload["digest"] = json!(digest);
+        let snapshot = json!({
+            "version": version,
+            "nonce": format!("nonce-{version}"),
+            "profile_id": "desktop-default",
+            "digest": digest,
+            "payload": payload
+        });
+        (snapshot, digest)
     }
 
     #[tokio::test]
