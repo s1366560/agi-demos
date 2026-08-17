@@ -277,6 +277,40 @@ export function PluginRuntimeActivityDialog({
             <CapabilityCounts details={management.lastActionDetails} />
           </ActivitySection>
         ) : null}
+        <ActivitySection title={t('settings.pluginActivity.snapshotState')}>
+          {management.snapshotState ? (
+            <div className="plugin-activity-snapshot">
+              <div className="plugin-activity-trace">
+                <strong data-status={management.snapshotState.status}>
+                  {t(`settings.pluginActivity.snapshotStatus.${management.snapshotState.status}`)}
+                </strong>
+                <span>
+                  {t('settings.pluginActivity.snapshotVersion', {
+                    requested: management.snapshotState.requested_version,
+                    applied: management.snapshotState.applied_version,
+                  })}
+                </span>
+                <span>
+                  {t('settings.pluginActivity.lastGood', {
+                    state: management.snapshotState.has_last_good
+                      ? t('settings.pluginActivity.lastGoodAvailable')
+                      : t('settings.pluginActivity.lastGoodUnavailable'),
+                  })}
+                </span>
+              </div>
+              <code>{management.snapshotState.requested_digest}</code>
+              {management.snapshotState.error_message ? (
+                <p>{management.snapshotState.error_message}</p>
+              ) : null}
+            </div>
+          ) : management.snapshotError ? (
+            <p className="plugin-activity-empty">{management.snapshotError}</p>
+          ) : (
+            <p className="plugin-activity-empty">
+              {t('settings.pluginActivity.noSnapshotState')}
+            </p>
+          )}
+        </ActivitySection>
         <ActivitySection title={t('settings.pluginActivity.diagnostics')}>
           {management.activityLoading && management.diagnostics.length === 0 ? (
             <div className="plugin-management-state compact">

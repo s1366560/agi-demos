@@ -3,6 +3,9 @@ import {
   UiSlotRegistry,
 } from './uiSlotRegistry';
 
+export { UiSlotRegistry };
+export type { UiSlotDefinition } from './uiSlotRegistry';
+
 export interface PlatformPluginSnapshotCapability {
   readonly kind: string;
   readonly id: string;

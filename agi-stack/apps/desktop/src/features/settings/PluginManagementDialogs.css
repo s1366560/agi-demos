@@ -151,6 +151,25 @@
   font-size: 11.5px;
 }
 
+.plugin-activity-snapshot {
+  display: grid;
+  gap: 7px;
+}
+
+.plugin-activity-snapshot strong[data-status='ack'] {
+  color: var(--desktop-cyan-ice);
+}
+
+.plugin-activity-snapshot strong[data-status='nack'] {
+  color: var(--desktop-red);
+}
+
+.plugin-activity-snapshot p {
+  margin: 0;
+  color: var(--desktop-gray-28);
+  font-size: 11.5px;
+}
+
 .plugin-activity-metrics {
   display: flex;
   flex-wrap: wrap;

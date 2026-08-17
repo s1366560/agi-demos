@@ -9,6 +9,7 @@ import type {
   PluginConfigRecord,
   PluginConfigSchema,
   PluginDiagnostic,
+  PlatformPluginApplyState,
   UpdatePluginConfigRequest,
 } from '../../types';
 import {
@@ -51,6 +52,8 @@ export function usePluginManagement({
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [snapshotState, setSnapshotState] = useState<PlatformPluginApplyState | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<PluginDiagnostic[]>([]);
   const [lastActionDetails, setLastActionDetails] = useState<PluginActionDetails | null>(null);
   const [actionTimeline, setActionTimeline] = useState<PluginActionTimelineEntry[]>([]);
@@ -66,6 +69,8 @@ export function usePluginManagement({
     setActivityOpen(false);
     setActivityLoading(false);
     setActivityError(null);
+    setSnapshotState(null);
+    setSnapshotError(null);
     setDiagnostics([]);
     setLastActionDetails(null);
     setActionTimeline([]);
@@ -90,6 +95,18 @@ export function usePluginManagement({
     try {
       const runtime = await new DesktopApiClient(config).getManagedPluginRuntime();
       if (contextKeyRef.current === requestContextKey) setDiagnostics(runtime.diagnostics);
+      try {
+        const state = await new DesktopApiClient(config).getPlatformPluginApplyState();
+        if (contextKeyRef.current === requestContextKey) {
+          setSnapshotState(state);
+          setSnapshotError(null);
+        }
+      } catch (caught) {
+        if (contextKeyRef.current === requestContextKey) {
+          setSnapshotState(null);
+          setSnapshotError(errorMessage(caught));
+        }
+      }
     } catch (caught) {
       if (contextKeyRef.current === requestContextKey) setActivityError(errorMessage(caught));
     } finally {
@@ -247,6 +264,8 @@ export function usePluginManagement({
     activityOpen,
     activityLoading,
     activityError,
+    snapshotState,
+    snapshotError,
     diagnostics,
     lastActionDetails,
     actionTimeline,

@@ -81,6 +81,9 @@ import type {
   PluginConfigRecord,
   PluginConfigSchema,
   PaginatedConversationsResponse,
+  PlatformPluginSnapshot,
+  PlatformPluginSnapshotRow,
+  PlatformPluginApplyState,
   PlanSnapshot,
   PromptTemplateCreateInput,
   PromptTemplateRecord,
@@ -2329,6 +2332,23 @@ export class DesktopApiClient {
     };
   }
 
+  async getPlatformPluginApplyState(signal?: AbortSignal): Promise<PlatformPluginApplyState> {
+    return this.request<PlatformPluginApplyState>('/api/v1/platform-plugins/apply-state', {
+      signal,
+    });
+  }
+
+  async getPlatformPluginSnapshot(signal?: AbortSignal): Promise<PlatformPluginSnapshot> {
+    const payload = await this.request<unknown>('/api/v1/platform-plugins/snapshot', {
+      signal,
+    });
+    const snapshot = this.readPlatformPluginSnapshot(payload);
+    return {
+      ...snapshot,
+      plugins: readArray<PlatformPluginSnapshotRow>(snapshot, ['plugins']),
+    };
+  }
+
   async setManagedPluginEnabled(
     pluginId: string,
     enabled: boolean,
@@ -2406,6 +2426,18 @@ export class DesktopApiClient {
       { signal },
     );
     return readArray<ManagedChannelPluginCatalogItem>(payload, ['items', 'data']);
+  }
+
+  private readPlatformPluginSnapshot(payload: unknown): Record<string, unknown> {
+    if (!payload || typeof payload !== 'object') return {};
+    const record = payload as Record<string, unknown>;
+    if (record.snapshot && typeof record.snapshot === 'object') {
+      return record.snapshot as Record<string, unknown>;
+    }
+    if (record.payload && typeof record.payload === 'object') {
+      return record.payload as Record<string, unknown>;
+    }
+    return record;
   }
 
   async getManagedChannelSchema(channelType: string): Promise<ManagedChannelPluginConfigSchema> {

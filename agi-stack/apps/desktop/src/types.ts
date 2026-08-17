@@ -1374,6 +1374,41 @@ export type ManagedPluginRuntime = {
   diagnostics: PluginDiagnostic[];
 };
 
+export type PlatformPluginApplyState = {
+  requested_version: number;
+  requested_nonce: string;
+  requested_digest: string;
+  applied_version: number;
+  applied_digest: string | null;
+  status: 'pending' | 'ack' | 'nack';
+  error_message: string | null;
+  has_last_good: boolean;
+};
+
+export type PlatformPluginSnapshotCapability = {
+  kind: string;
+  id: string;
+  contract: string;
+  permissions: string[];
+};
+
+export type PlatformPluginSnapshotRow = {
+  schema_version: number;
+  id: string;
+  version: string;
+  runtime: string;
+  trust: string;
+  provides: PlatformPluginSnapshotCapability[];
+  config: Record<string, unknown>;
+};
+
+export type PlatformPluginSnapshot = {
+  version?: number;
+  profile_id?: string;
+  digest?: string;
+  plugins: PlatformPluginSnapshotRow[];
+};
+
 export type PluginCapabilityCounts = {
   channel_types: number;
   tool_factories: number;

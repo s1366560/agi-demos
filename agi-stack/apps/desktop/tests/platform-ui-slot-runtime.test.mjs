@@ -7,6 +7,9 @@ const { UiSlotRuntime } =
   require('/tmp/agistack-desktop-test-dist/src/plugins/uiSlotRuntime.js');
 const { UiSlotRegistry } =
   require('/tmp/agistack-desktop-test-dist/src/plugins/uiSlotRegistry.js');
+const { usePlatformPluginUiSlots } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/settings/usePlatformPluginUiSlots.js'
+);
 
 const definition = {
   pluginId: 'builtin-ui',
@@ -40,4 +43,8 @@ test('ui slot runtime reconciles slots from a canonical plugin snapshot', () => 
 
   const disabled = runtime.reconcile({ plugins: [] }, [definition]);
   assert.equal(disabled.slots.length, 0);
+});
+
+test('desktop settings hook exports a canonical-snapshot ui slot boundary', () => {
+  assert.equal(typeof usePlatformPluginUiSlots, 'function');
 });

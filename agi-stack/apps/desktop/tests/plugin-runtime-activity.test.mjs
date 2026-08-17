@@ -158,3 +158,62 @@ test('desktop plugin runtime API preserves diagnostics and typed action response
     globalThis.fetch = originalFetch;
   }
 });
+
+test('desktop platform plugin APIs normalize canonical snapshots and apply receipts', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push([String(input), init?.method]);
+    if (String(input).endsWith('/apply-state')) {
+      return Response.json({
+        requested_version: 7,
+        requested_nonce: 'nonce-7',
+        requested_digest: 'a'.repeat(64),
+        applied_version: 6,
+        applied_digest: 'b'.repeat(64),
+        status: 'nack',
+        error_message: 'plugin preparation failed',
+        has_last_good: true,
+      });
+    }
+    return Response.json({
+      source: 'last_good',
+      snapshot: {
+        schema_version: 1,
+        profile_id: 'desktop-default',
+        digest: 'a'.repeat(64),
+        plugins: [
+          {
+            schema_version: 1,
+            id: 'builtin-ui',
+            version: '1.0.0',
+            runtime: 'frontend',
+            trust: 'builtin',
+            provides: [],
+            config: {},
+          },
+        ],
+      },
+    });
+  };
+
+  try {
+    const client = new DesktopApiClient({
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'http://127.0.0.1:8088',
+    });
+    const snapshot = await client.getPlatformPluginSnapshot();
+    const state = await client.getPlatformPluginApplyState();
+
+    assert.equal(snapshot.plugins.length, 1);
+    assert.equal(snapshot.plugins[0].runtime, 'frontend');
+    assert.equal(state.status, 'nack');
+    assert.equal(state.has_last_good, true);
+    assert.deepEqual(calls, [
+      ['http://127.0.0.1:8088/api/v1/platform-plugins/snapshot', 'GET'],
+      ['http://127.0.0.1:8088/api/v1/platform-plugins/apply-state', 'GET'],
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

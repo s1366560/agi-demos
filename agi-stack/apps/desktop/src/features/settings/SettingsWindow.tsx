@@ -44,6 +44,7 @@ import { MCPServerSettingsPage } from './MCPServerSettingsPage';
 import { SettingsManagementDialogs } from './SettingsManagementDialogs';
 import { ShortcutSettingsPage } from './ShortcutSettingsPage';
 import { UpdateSettingsPage } from './UpdateSettingsPage';
+import { PlatformPluginUiSlots } from './PlatformPluginUiSlots';
 import { providerManagementAllowed } from './providerManagementModel';
 import {
   AccountSettingsPage,
@@ -64,6 +65,7 @@ import { useModalDialog } from './useModalDialog';
 import { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
 import { useChannelConnectionManagement } from './useChannelConnectionManagement';
 import { usePluginManagement } from './usePluginManagement';
+import { usePlatformPluginUiSlots } from './usePlatformPluginUiSlots';
 import { useSkillManagement } from './useSkillManagement';
 import { useSkillPackageManagement } from './useSkillPackageManagement';
 import { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
@@ -257,6 +259,10 @@ export function SettingsWindow({
     canManage: canManagePluginControlPlane,
     onReload: reloadPluginResources,
     onUninstalled: clearPluginSelection,
+  });
+  const platformPluginUiSlots = usePlatformPluginUiSlots({
+    active: open && section === 'plugins',
+    config,
   });
   const channelManagement = useChannelConnectionManagement({
     active: open,
@@ -696,7 +702,15 @@ export function SettingsWindow({
                 />
               ) : null}
               {isResourceSection ? (
-                <ManagedResourceWorkspace
+                <>
+                  {section === 'plugins' ? (
+                    <PlatformPluginUiSlots
+                      slots={platformPluginUiSlots.slots}
+                      error={platformPluginUiSlots.error}
+                      loading={platformPluginUiSlots.loading}
+                    />
+                  ) : null}
+                  <ManagedResourceWorkspace
                   section={section}
                   items={filteredItems}
                   selected={selectedResource}
@@ -794,7 +808,8 @@ export function SettingsWindow({
                       void pluginManagement.openConfig(item as ManagedPlugin, true);
                     }
                   }}
-                />
+                  />
+                </>
               ) : null}
             </main>
           </div>
