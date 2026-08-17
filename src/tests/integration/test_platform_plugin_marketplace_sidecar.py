@@ -331,6 +331,56 @@ async def wait_for_receipt(
     )
 
 
+async def publish_snapshot(
+    session_factory: async_sessionmaker[Any],
+    *,
+    version: int,
+    nonce: str,
+) -> None:
+    async with session_factory() as session:
+        await PlatformPluginProfileService(PlatformPluginRepository(session)).publish(
+            version=version,
+            nonce=nonce,
+        )
+        await session.commit()
+
+
+async def set_package_artifact_digest(
+    session_factory: async_sessionmaker[Any],
+    digest: str,
+) -> None:
+    async with session_factory() as session:
+        package = await session.get(
+            PlatformPluginPackageModel,
+            ("cross-language-subprocess", "1.0.0"),
+        )
+        assert package is not None
+        package.artifact_digest = digest
+        await session.commit()
+
+
+async def set_desired_config(
+    session_factory: async_sessionmaker[Any],
+    config: dict[str, Any],
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        PlatformPluginDesiredStateModel,
+    )
+
+    async with session_factory() as session:
+        result = await session.execute(
+            select(PlatformPluginDesiredStateModel).where(
+                PlatformPluginDesiredStateModel.scope_type == "global",
+                PlatformPluginDesiredStateModel.scope_id == "global",
+                PlatformPluginDesiredStateModel.plugin_id == "cross-language-subprocess",
+            )
+        )
+        desired = result.scalar_one()
+        assert desired is not None
+        desired.config = config
+        await session.commit()
+
+
 @pytest.mark.integration
 async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(  # noqa: PLR0915
     tmp_path: Path,
@@ -512,6 +562,87 @@ async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(
                 invocation.raise_for_status()
                 assert invocation.json()["stdout"] == "cross-language-subprocess-ok"
 
+            # Rollback drill: distribute an invalid artifact reference while the
+            # installed v101 generation remains active, then prove convergence to
+            # a corrected forward version rather than falsifying ACK history.
+            await set_package_artifact_digest(session_factory, "0" * 64)
+            await publish_snapshot(
+                session_factory,
+                version=102,
+                nonce="cross-language-invalid-102",
+            )
+            bad_receipt = await wait_for_receipt(
+                session_factory,
+                diagnostics=sidecar.diagnostics,
+                version=102,
+                status="nack",
+            )
+            assert bad_receipt.applied_version == 101
+            assert bad_receipt.error_message is not None
+            assert bad_receipt.error_message in {
+                "requested layer digest does not match OCI manifest",
+                "OCI manifest fetch returned 404 Not Found",
+            }
+
+            async with httpx.AsyncClient() as client:
+                bad_apply_state = await client.get(
+                    f"{sidecar.api_base_url}/api/v1/platform-plugins/apply-state",
+                    headers=headers,
+                )
+                bad_apply_state.raise_for_status()
+                assert bad_apply_state.json()["status"] == "nack"
+                assert bad_apply_state.json()["applied_version"] == 101
+                still_active = await client.post(
+                    f"{sidecar.api_base_url}/api/v1/platform-plugins/tools/invoke",
+                    headers=headers,
+                    json={
+                        "plugin_id": "cross-language-subprocess",
+                        "tool_id": "demo",
+                        "input": {},
+                    },
+                )
+                still_active.raise_for_status()
+                assert still_active.json()["stdout"] == "cross-language-subprocess-ok"
+
+            await set_package_artifact_digest(session_factory, fixture.layer_digest)
+            await set_desired_config(
+                session_factory,
+                {"rollback_drill": "restored-103"},
+            )
+            await publish_snapshot(
+                session_factory,
+                version=103,
+                nonce="cross-language-restore-103",
+            )
+            restored_receipt = await wait_for_receipt(
+                session_factory,
+                diagnostics=sidecar.diagnostics,
+                version=103,
+                status="ack",
+            )
+            assert restored_receipt.applied_version == 103
+            assert restored_receipt.error_message is None
+
+            async with httpx.AsyncClient() as client:
+                restored_apply_state = await client.get(
+                    f"{sidecar.api_base_url}/api/v1/platform-plugins/apply-state",
+                    headers=headers,
+                )
+                restored_apply_state.raise_for_status()
+                assert restored_apply_state.json()["status"] == "ack"
+                assert restored_apply_state.json()["applied_version"] == 103
+                restored = await client.post(
+                    f"{sidecar.api_base_url}/api/v1/platform-plugins/tools/invoke",
+                    headers=headers,
+                    json={
+                        "plugin_id": "cross-language-subprocess",
+                        "tool_id": "demo",
+                        "input": {},
+                    },
+                )
+                restored.raise_for_status()
+                assert restored.json()["stdout"] == "cross-language-subprocess-ok"
+
             async with session_factory() as session:
                 catalog = PluginMarketplaceCatalogService(
                     PlatformPluginGovernanceRepository(session),
@@ -522,14 +653,16 @@ async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(
                     version="1.0.0",
                 )
                 assert uninstall.desired_removed is True
-                await PlatformPluginProfileService(PlatformPluginRepository(session)).publish(
-                    version=102, nonce="cross-language-uninstall-102"
-                )
                 await session.commit()
+            await publish_snapshot(
+                session_factory,
+                version=104,
+                nonce="cross-language-uninstall-104",
+            )
             await wait_for_receipt(
                 session_factory,
                 diagnostics=sidecar.diagnostics,
-                version=102,
+                version=104,
                 status="ack",
             )
 
