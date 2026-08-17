@@ -776,7 +776,7 @@ test('conversation lifecycle activity remains distinct from an executing run', (
   });
   assert.deepEqual(workspaceTreeRootStatusPresentation('inactive', [lifecycleOnly]), {
     tone: 'offline',
-    labelKey: 'workspaceTree.offline',
+    labelKey: 'workspaceTree.inactive',
   });
 });
 

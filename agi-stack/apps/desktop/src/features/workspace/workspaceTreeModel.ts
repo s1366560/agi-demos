@@ -94,7 +94,9 @@ const CONVERSATION_STATUS_PRESENTATIONS: Readonly<
   interrupted: { tone: 'danger', labelKey: 'workspaceTree.interrupted' },
   cancelled: { tone: 'offline', labelKey: 'workspaceTree.cancelled' },
   archived: { tone: 'offline', labelKey: 'workspaceTree.archived' },
-  inactive: { tone: 'offline', labelKey: 'workspaceTree.offline' },
+  // An inactive workspace simply has no live runtime session right now; it is
+  // not a connectivity failure, so it gets its own label instead of "离线".
+  inactive: { tone: 'offline', labelKey: 'workspaceTree.inactive' },
   offline: { tone: 'offline', labelKey: 'workspaceTree.offline' },
 };
 
