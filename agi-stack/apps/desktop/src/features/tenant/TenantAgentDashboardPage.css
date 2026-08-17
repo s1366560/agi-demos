@@ -104,7 +104,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 20px;
   background: var(--gray-2);
-  box-shadow: var(--shadow-4);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .tenant-agent-dashboard-card {
@@ -373,7 +373,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 20px;
   background: var(--gray-2);
-  box-shadow: var(--shadow-6);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .tenant-agent-dashboard-editor label,

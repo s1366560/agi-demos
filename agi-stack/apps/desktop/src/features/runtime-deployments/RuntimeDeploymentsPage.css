@@ -113,7 +113,6 @@
   background: var(--surface-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  box-shadow: var(--shadow-sm);
 }
 
 .runtime-deployments__deviation {

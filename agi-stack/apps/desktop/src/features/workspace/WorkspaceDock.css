@@ -108,17 +108,14 @@
 
 .workspace-tree-workspace-action > i[data-status='active'] {
   background: var(--desktop-green-vivid-2);
-  box-shadow: 0 0 8px rgba(var(--desktop-green-glow-rgb), 0.55);
 }
 
 .workspace-tree-workspace-action > i[data-status='attention'] {
   background: var(--desktop-amber);
-  box-shadow: 0 0 8px rgba(var(--desktop-amber-soft-rgb), 0.42);
 }
 
 .workspace-tree-workspace-action > i[data-status='danger'] {
   background: var(--desktop-red);
-  box-shadow: 0 0 8px rgba(var(--desktop-red-rgb), 0.42);
 }
 
 .workspace-tree-workspace-action > i[data-status='ready'],
@@ -218,12 +215,10 @@
 .workspace-tree-session-status[data-status='active'],
 .workspace-tree-session-status[data-status='queued'] {
   background: var(--desktop-cyan);
-  box-shadow: 0 0 8px rgba(var(--desktop-cyan-rgb), 0.45);
 }
 
 .workspace-tree-session-status[data-status='attention'] {
   background: var(--desktop-amber);
-  box-shadow: 0 0 8px rgba(var(--desktop-amber-soft-rgb), 0.42);
 }
 
 .workspace-tree-session-status[data-status='ready'],
@@ -233,7 +228,6 @@
 
 .workspace-tree-session-status[data-status='danger'] {
   background: var(--desktop-red);
-  box-shadow: 0 0 8px rgba(var(--desktop-red-rgb), 0.42);
 }
 
 .workspace-tree-session-actions {
@@ -289,7 +283,7 @@
   border: 1px solid var(--desktop-border-soft);
   border-radius: 7px;
   background: var(--desktop-panel);
-  box-shadow: 0 14px 34px rgba(var(--desktop-black-rgb), 0.38);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .workspace-tree-session-actions button {

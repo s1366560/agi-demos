@@ -225,7 +225,7 @@
 .session-insights-stage.selected {
   transform: translateY(-1px);
   color: var(--gray-12);
-  box-shadow: 0 9px 24px color-mix(in srgb, black 18%, transparent);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .session-insights-stage.stage-routing:hover,

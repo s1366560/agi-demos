@@ -219,7 +219,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   background: var(--surface-primary);
-  box-shadow: 0 18px 50px rgba(var(--desktop-black-rgb), 35%);
+  box-shadow: var(--desktop-shadow-dialog);
   padding: 18px;
 }
 

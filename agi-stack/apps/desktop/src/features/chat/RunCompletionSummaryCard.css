@@ -15,7 +15,7 @@
     ),
     var(--desktop-surface-21);
   color: var(--desktop-muted);
-  box-shadow: 0 12px 30px rgba(var(--desktop-black-rgb), 0.14);
+  box-shadow: var(--desktop-shadow-raised);
   box-sizing: border-box;
 }
 

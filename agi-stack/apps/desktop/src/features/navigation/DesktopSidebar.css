@@ -362,7 +362,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
   background: var(--desktop-surface-15);
-  box-shadow: 0 12px 28px rgba(var(--desktop-black-rgb), 0.42);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .desktop-design-profile-menu-identity {

@@ -16,7 +16,7 @@
   margin: auto;
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  box-shadow: 0 24px 72px rgba(var(--desktop-black-rgb), 0.28);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .qa-evidence-head {

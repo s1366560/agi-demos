@@ -386,6 +386,13 @@
   --desktop-panel-glass-2-rgb: 27, 27, 27;
   --desktop-track-glass-rgb: 7, 7, 7;
   --desktop-on-accent: #0f0f0f;
+  /* Elevation shadow scale. Depth comes from surface and border contrast, so
+     shadows stay subtle: raised = hover lift on cards, popover = menus,
+     toasts and floating panels, dialog = modal surfaces. Decorative glow
+     shadows are not part of the scale. */
+  --desktop-shadow-raised: 0 4px 14px rgba(var(--desktop-black-rgb), 0.35);
+  --desktop-shadow-popover: 0 12px 32px rgba(var(--desktop-black-rgb), 0.5);
+  --desktop-shadow-dialog: 0 24px 64px rgba(var(--desktop-black-rgb), 0.6);
 }
 
 /* Light theme overrides. Every --desktop-* token from :root must be redefined
@@ -774,4 +781,8 @@
   --desktop-panel-glass-2-rgb: 255, 255, 255;
   --desktop-track-glass-rgb: 238, 238, 238;
   --desktop-on-accent: #ffffff;
+  /* Elevation shadow scale (softer on light surfaces) */
+  --desktop-shadow-raised: 0 2px 10px rgba(var(--desktop-black-rgb), 0.08);
+  --desktop-shadow-popover: 0 10px 28px rgba(var(--desktop-black-rgb), 0.12);
+  --desktop-shadow-dialog: 0 20px 48px rgba(var(--desktop-black-rgb), 0.16);
 }

@@ -119,7 +119,7 @@
   border: 1px solid var(--gray-7);
   border-radius: 14px;
   background: var(--color-panel-solid);
-  box-shadow: var(--shadow-6);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .tenant-projects-editor form,

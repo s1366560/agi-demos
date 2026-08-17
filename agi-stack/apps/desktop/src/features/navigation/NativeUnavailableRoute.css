@@ -16,7 +16,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 12px;
   background: var(--desktop-panel);
-  box-shadow: 0 8px 24px rgba(var(--desktop-black-rgb), 0.18);
+  box-shadow: var(--desktop-shadow-raised);
   gap: 10px;
 }
 

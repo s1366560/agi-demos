@@ -70,13 +70,13 @@
 
 .skill-package-archive-picker small {
   color: var(--desktop-gray-26);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .skill-package-archive-picker em {
   padding: 7px 10px;
   color: var(--desktop-purple-pale);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   background: var(--desktop-surface-purple-2);
   border: 1px solid var(--desktop-purple);
@@ -88,7 +88,7 @@
   align-items: center;
   gap: 10px;
   color: var(--desktop-gray-7);
-  font-size: 8px;
+  font-size: 11px;
   text-transform: uppercase;
 }
 
@@ -139,12 +139,12 @@
 }
 
 .skill-package-checkbox strong {
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .skill-package-checkbox small {
   color: var(--desktop-gray-26);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .skill-versions-dialog {
@@ -167,7 +167,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--desktop-gray-26);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .skill-version-row {
@@ -198,13 +198,13 @@
 .skill-version-number span,
 .skill-version-copy span {
   color: var(--desktop-gray-7);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .skill-version-copy strong {
   overflow: hidden;
   color: var(--desktop-text-pale);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -220,7 +220,7 @@
 .skill-version-current {
   padding: 5px 8px;
   color: var(--desktop-green-vivid);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-green-2);
   border: 1px solid var(--desktop-border-green-2);
   border-radius: 10px;
@@ -231,7 +231,7 @@
   min-height: 28px;
   padding: 0 9px;
   color: var(--desktop-text-pale);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-31);
   border: 1px solid var(--desktop-border-21);
   border-radius: 5px;
@@ -246,7 +246,7 @@
 .skill-version-confirmation span {
   max-width: 150px;
   color: var(--desktop-red-light);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .skill-version-confirmation button.danger {
@@ -281,19 +281,19 @@
 
 .skill-version-preview header strong {
   color: var(--desktop-purple-pale);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .skill-version-preview header span {
   color: var(--desktop-gray-7);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .skill-version-preview header button {
   min-height: 26px;
   padding: 0 8px;
   color: var(--desktop-gray-31);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-31);
   border: 1px solid var(--desktop-border-21);
   border-radius: 5px;
@@ -306,7 +306,7 @@
   overflow: auto;
   color: var(--desktop-text-pale);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
 }

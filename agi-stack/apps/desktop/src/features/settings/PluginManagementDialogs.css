@@ -19,7 +19,7 @@
   border-radius: 18px;
   background: var(--desktop-surface-11);
   color: var(--desktop-text-bright);
-  box-shadow: 0 28px 90px rgba(var(--desktop-black-rgb), 0.55);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .plugin-management-heading {
@@ -47,7 +47,7 @@
 }
 
 .plugin-management-heading span {
-  font-size: 10px;
+  font-size: 11.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -148,7 +148,7 @@
 .plugin-activity-diagnostics code,
 .plugin-activity-timeline code {
   color: var(--desktop-gray-35);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .plugin-activity-metrics {
@@ -162,7 +162,7 @@
   border-radius: 7px;
   color: var(--desktop-gray-29);
   background: rgba(var(--desktop-cyan-soft-rgb), 0.08);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .plugin-activity-metrics b {
@@ -191,7 +191,7 @@
   border-radius: 999px;
   color: var(--desktop-cyan-ice);
   background: rgba(var(--desktop-cyan-vivid-rgb), 0.13);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 

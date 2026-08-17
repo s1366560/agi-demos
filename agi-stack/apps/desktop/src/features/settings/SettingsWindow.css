@@ -19,7 +19,7 @@
   background: var(--desktop-surface-3);
   border: 1px solid var(--desktop-border-6);
   border-radius: 11px;
-  box-shadow: 0 30px 80px rgba(var(--desktop-black-rgb), 55%);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .settings-window-titlebar {

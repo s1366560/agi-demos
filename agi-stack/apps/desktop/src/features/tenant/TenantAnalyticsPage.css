@@ -69,7 +69,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 16px;
   background: color-mix(in srgb, var(--color-panel-solid) 92%, transparent);
-  box-shadow: 0 12px 36px color-mix(in srgb, var(--gray-12) 6%, transparent);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .tenant-analytics-summary article {

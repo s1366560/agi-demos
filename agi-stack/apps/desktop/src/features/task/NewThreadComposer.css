@@ -58,12 +58,12 @@
   border: 1px solid var(--desktop-border-17);
   border-radius: 12px;
   background: var(--desktop-surface-12);
-  box-shadow: 0 18px 48px rgba(var(--desktop-black-rgb), 35%);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .new-thread-composer:focus-within {
   border-color: var(--desktop-border-cyan-4);
-  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-rgb), 8%), 0 18px 48px rgba(var(--desktop-black-rgb), 35%);
+  box-shadow: 0 0 0 2px rgba(var(--desktop-cyan-rgb), 8%), var(--desktop-shadow-raised);
 }
 
 .new-thread-composer textarea {

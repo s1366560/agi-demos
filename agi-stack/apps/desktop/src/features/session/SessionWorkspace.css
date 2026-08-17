@@ -163,7 +163,7 @@
   background: var(--desktop-surface-21);
   border: 1px solid var(--desktop-border);
   border-radius: 7px;
-  box-shadow: 0 16px 36px rgba(var(--desktop-black-rgb), 0.42);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .session-workspace-more button {
@@ -286,7 +286,7 @@
   color: var(--desktop-text);
   background: var(--desktop-surface-9);
   border: 1px solid var(--desktop-border);
-  box-shadow: 0 24px 80px rgba(var(--desktop-black-rgb), 0.52);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .session-recovery-dialog-icon {

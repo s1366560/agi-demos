@@ -230,7 +230,7 @@
   overflow: auto;
   border-left: 1px solid var(--gray-6);
   background: var(--gray-1);
-  box-shadow: -18px 0 50px rgba(var(--desktop-black-rgb), 24%);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .dead-letter-queue-detail dl,
@@ -281,7 +281,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 12px;
   background: var(--gray-2);
-  box-shadow: 0 20px 60px rgba(var(--desktop-black-rgb), 35%);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .dead-letter-queue-dialog-backdrop h2 {

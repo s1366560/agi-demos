@@ -107,7 +107,7 @@
   border-radius: 8px;
   background: var(--desktop-panel-2);
   color: var(--desktop-text);
-  box-shadow: 0 24px 90px rgba(var(--desktop-black-rgb), 0.52);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .auth-modal .rt-Text {

@@ -36,7 +36,7 @@
 .settings-general-page .settings-page-heading p,
 .settings-preference-page .settings-page-heading p {
   color: var(--desktop-gray-11);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .settings-panel > header {
@@ -63,12 +63,12 @@
 }
 
 .settings-panel > header strong {
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .settings-panel > header small {
   color: var(--desktop-gray-22);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -76,7 +76,7 @@
   padding: 4px 6px;
   margin-left: auto;
   color: var(--desktop-cyan);
-  font-size: 7px;
+  font-size: 10.5px;
   font-style: normal;
   background: var(--desktop-surface-cyan);
   border: 1px solid var(--desktop-border-cyan-6);
@@ -109,19 +109,19 @@
 
 .settings-row > span strong {
   color: var(--desktop-gray-33);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .settings-row > span small {
   color: var(--desktop-gray-8);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .settings-row > b {
   max-width: 55%;
   overflow: hidden;
   color: var(--desktop-gray-27);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 500;
   text-align: right;
   text-overflow: ellipsis;
@@ -158,7 +158,7 @@
 
 .settings-account-hero > div > small {
   color: var(--desktop-gray-25);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .settings-security-panel > header > span,
@@ -170,7 +170,7 @@
   align-self: flex-start;
   padding: 0;
   color: var(--desktop-red-muted);
-  font-size: 8px;
+  font-size: 11px;
   background: transparent;
   border: 0;
 }
@@ -201,14 +201,14 @@
 
 .settings-current-context small {
   color: var(--desktop-gray-24);
-  font-size: 7px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 
 .settings-current-context strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -225,7 +225,7 @@
   align-items: center;
   gap: 6px;
   color: var(--desktop-cyan);
-  font-size: 7px;
+  font-size: 10.5px;
   font-style: normal;
 }
 
@@ -251,7 +251,7 @@
   height: 24px;
   place-items: center;
   color: var(--desktop-cyan);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-cyan-2);
   border: 1px solid var(--desktop-border-cyan);
   border-radius: 50%;
@@ -259,13 +259,13 @@
 
 .settings-context-step h2 {
   margin: 0 0 3px;
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .settings-context-step p {
   margin: 0;
   color: var(--desktop-gray-8);
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
@@ -307,12 +307,12 @@
 
 .settings-project-empty strong {
   color: var(--desktop-gray-33);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .settings-project-empty small {
   color: var(--desktop-gray-20);
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.45;
 }
 
@@ -383,7 +383,7 @@ button.active > .settings-choice-icon {
 .settings-project-grid button strong {
   overflow: hidden;
   color: var(--desktop-gray-33);
-  font-size: 8px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -392,7 +392,7 @@ button.active > .settings-choice-icon {
 .settings-project-grid button small {
   overflow: hidden;
   color: var(--desktop-gray-20);
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
 }
@@ -400,7 +400,7 @@ button.active > .settings-choice-icon {
 .settings-tenant-list button > em,
 .settings-project-grid button span > em {
   color: var(--desktop-gray-16);
-  font-size: 7px;
+  font-size: 10.5px;
   font-style: normal;
 }
 
@@ -420,7 +420,7 @@ button.active > .settings-choice-icon {
   background: var(--desktop-surface-23);
   border: 1px solid var(--desktop-border-6);
   border-radius: 7px;
-  box-shadow: 0 -12px 26px rgba(var(--desktop-overlay-11-rgb), 55%);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .settings-context-apply > div {
@@ -440,12 +440,12 @@ button.active > .settings-choice-icon {
 
 .settings-context-apply strong {
   color: var(--desktop-gray-31);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .settings-context-apply small {
   color: var(--desktop-gray-20);
-  font-size: 7px;
+  font-size: 10.5px;
 }
 
 .settings-context-preview {
@@ -494,7 +494,7 @@ button.active > .settings-choice-icon {
   height: 34px;
   place-items: center;
   color: var(--desktop-gray-12);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 800;
   background: var(--desktop-surface-30);
   border-radius: 7px;
@@ -514,12 +514,12 @@ button.active > .settings-choice-icon {
 
 .settings-language-options strong {
   color: var(--desktop-gray-33);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .settings-language-options small {
   color: var(--desktop-gray-6);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .settings-language-options > button > svg {
@@ -567,12 +567,12 @@ button.active > .settings-choice-icon {
 
 .settings-resource-entry-grid strong {
   color: var(--desktop-gray-33);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .settings-resource-entry-grid small {
   color: var(--desktop-gray-7);
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
@@ -582,7 +582,7 @@ button.active > .settings-choice-icon {
   height: 20px;
   place-items: center;
   color: var(--desktop-cyan);
-  font-size: 7px;
+  font-size: 10.5px;
   font-style: normal;
   background: var(--desktop-surface-cyan-4);
   border-radius: 10px;
@@ -591,7 +591,7 @@ button.active > .settings-choice-icon {
 .settings-resource-entry-grid b {
   grid-column: 2 / -1;
   color: var(--desktop-cyan-link-bright);
-  font-size: 7px;
+  font-size: 10.5px;
   font-weight: 650;
 }
 
@@ -616,12 +616,12 @@ button.active > .settings-choice-icon {
 }
 
 .settings-preference-summary > header strong {
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .settings-preference-summary > header small {
   color: var(--desktop-gray-22);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -650,13 +650,13 @@ button.active > .settings-choice-icon {
 .settings-delivery-options legend,
 .settings-quiet-hours label > span {
   color: var(--desktop-text-pale);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .settings-preference-switch-row small,
 .settings-delivery-options > p {
   color: var(--desktop-gray-8);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -669,7 +669,7 @@ button.active > .settings-choice-icon {
   gap: 7px;
   padding: 0 9px 0 5px;
   color: var(--desktop-gray-10);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-5);
   border: 1px solid var(--desktop-border-4);
   border-radius: 999px;
@@ -718,7 +718,7 @@ button.active > .settings-choice-icon {
   gap: 6px;
   padding: 8px 10px;
   color: var(--desktop-gray-11);
-  font-size: 8px;
+  font-size: 11px;
   text-align: left;
   background: var(--desktop-surface-5);
   border: 1px solid var(--desktop-border-4);

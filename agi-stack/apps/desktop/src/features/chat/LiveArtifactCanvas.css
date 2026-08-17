@@ -253,7 +253,7 @@
   border: 1px solid var(--gray-a6);
   border-radius: 10px;
   background: var(--color-panel-solid);
-  box-shadow: var(--shadow-5);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .artifact-canvas-confirmation p {

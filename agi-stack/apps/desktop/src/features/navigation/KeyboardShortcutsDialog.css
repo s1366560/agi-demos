@@ -19,7 +19,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 10px;
   background: var(--desktop-panel);
-  box-shadow: 0 26px 90px rgba(var(--desktop-black-rgb), 0.55);
+  box-shadow: var(--desktop-shadow-dialog);
   outline: none;
 }
 

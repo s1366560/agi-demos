@@ -19,7 +19,7 @@
   background: var(--desktop-surface-21);
   border: 1px solid var(--desktop-border-18);
   border-radius: 13px;
-  box-shadow: 0 28px 80px rgba(var(--desktop-black-rgb), 55%);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .agent-definition-dialog-heading {

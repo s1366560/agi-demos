@@ -19,7 +19,7 @@
   background: var(--desktop-panel-2);
   border: 1px solid var(--desktop-border);
   border-radius: 6px;
-  box-shadow: 0 12px 40px rgba(var(--desktop-black-rgb), 45%);
+  box-shadow: var(--desktop-shadow-popover);
   overflow: hidden;
   transition:
     opacity 160ms var(--ease-out),

@@ -1115,9 +1115,7 @@
   height: 14px;
   flex: 0 0 14px;
   border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 1px rgba(var(--desktop-slate-rgb), 0.24),
-    0 0 0 4px rgba(var(--desktop-slate-rgb), 0.05);
+  box-shadow: inset 0 0 0 1px rgba(var(--desktop-slate-rgb), 0.24);
 }
 
 .composer-status-button {
@@ -1139,9 +1137,7 @@
 
 .composer-status-dot.is-blocked {
   background: rgba(var(--desktop-amber-alt-rgb), 0.58);
-  box-shadow:
-    inset 0 0 0 1px rgba(var(--desktop-amber-hot-rgb), 0.46),
-    0 0 0 4px rgba(var(--desktop-amber-alt-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--desktop-amber-hot-rgb), 0.46);
 }
 
 .chat-empty-state {
@@ -1240,7 +1236,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 8px;
   background: var(--desktop-surface-22);
-  box-shadow: 0 16px 50px rgba(var(--desktop-black-rgb), 0.42);
+  box-shadow: var(--desktop-shadow-popover);
 }
 
 .composer-control:last-child .composer-popover {

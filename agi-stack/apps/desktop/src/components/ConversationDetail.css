@@ -224,7 +224,7 @@
 .session-terminal-canvas pre em { color: var(--cyan); font-style: normal; }
 .session-terminal-canvas > footer { display: flex; align-items: center; gap: 6px; padding: 9px 2px; color: var(--desktop-gray-4); font-size: 5.8px; }
 
-.session-artifact-canvas > article { max-width: 650px; margin: 10px auto 0; padding: 38px 42px 56px; border: 1px solid var(--desktop-border-14); border-radius: 6px; background: var(--desktop-surface-22); box-shadow: 0 15px 45px rgba(var(--desktop-black-rgb), .22); }
+.session-artifact-canvas > article { max-width: 650px; margin: 10px auto 0; padding: 38px 42px 56px; border: 1px solid var(--desktop-border-14); border-radius: 6px; background: var(--desktop-surface-22); box-shadow: var(--desktop-shadow-popover); }
 .session-artifact-canvas > article > span { color: var(--cyan); font-size: 5.5px; font-weight: 800; letter-spacing: .15em; }
 .session-artifact-canvas h2 { margin: 12px 0 14px; font-size: 18px; line-height: 1.25; }
 .session-artifact-canvas h3 { margin: 24px 0 8px; color: var(--desktop-text-pale); font-size: 9px; }

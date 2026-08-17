@@ -111,7 +111,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 16px;
   background: color-mix(in srgb, var(--color-panel-solid) 94%, transparent);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--gray-12) 5%, transparent);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .project-support-list article > header {
@@ -219,7 +219,7 @@
   border: 1px solid var(--gray-7);
   border-radius: 18px;
   background: var(--color-panel-solid);
-  box-shadow: 0 22px 70px color-mix(in srgb, var(--gray-12) 22%, transparent);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .project-support-editor h2 {

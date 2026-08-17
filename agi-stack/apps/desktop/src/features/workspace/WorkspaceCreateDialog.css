@@ -3,7 +3,7 @@
   background:
     radial-gradient(circle at top right, rgba(var(--desktop-cyan-alt-rgb), 0.08), transparent 28rem),
     var(--desktop-surface-10);
-  box-shadow: 0 28px 80px rgba(var(--desktop-black-rgb), 0.56);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .workspace-create-dialog .rt-DialogTitle {
@@ -163,7 +163,7 @@
 
 .workspace-create-option-grid small {
   color: var(--desktop-faint, var(--desktop-gray-9));
-  font-size: 9px;
+  font-size: 10.5px;
   line-height: 1.35;
 }
 

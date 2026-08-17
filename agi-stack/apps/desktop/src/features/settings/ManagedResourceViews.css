@@ -37,7 +37,7 @@
 .managed-resource-identity > div:nth-child(2) > span,
 .managed-resource-card header span {
   color: var(--desktop-gray-3);
-  font-size: 7px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -68,7 +68,7 @@
   min-width: 0;
   flex: 1;
   color: var(--desktop-text-frost);
-  font-size: 9px;
+  font-size: 12px;
   background: transparent;
   border: 0;
   outline: 0;
@@ -91,7 +91,7 @@
   height: 24px;
   padding: 0 8px;
   color: var(--desktop-gray-21);
-  font-size: 8px;
+  font-size: 11px;
   background: transparent;
   border: 0;
   border-radius: 4px;
@@ -121,7 +121,7 @@
   justify-content: space-between;
   padding: 0 13px;
   color: var(--desktop-gray-3);
-  font-size: 7px;
+  font-size: 10.5px;
 }
 
 .managed-resource-list {
@@ -208,7 +208,7 @@
 .managed-resource-detail-topbar .managed-resource-secondary-action {
   min-height: 29px;
   padding: 0 9px;
-  font-size: 8px;
+  font-size: 11px;
   border-radius: 5px;
 }
 
@@ -245,7 +245,7 @@
 .managed-resource-catalog .managed-resource-create {
   min-height: 30px;
   padding: 0 10px;
-  font-size: 10px;
+  font-size: 11.5px;
   border-radius: 7px;
 }
 
@@ -268,7 +268,7 @@
 .managed-resource-detail-topbar .managed-resource-danger-action {
   min-height: 29px;
   padding: 0 9px;
-  font-size: 8px;
+  font-size: 11px;
   border-radius: 5px;
 }
 
@@ -289,7 +289,7 @@
 .managed-resource-item-copy b {
   overflow: hidden;
   color: var(--desktop-text-soft);
-  font-size: 10px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -299,7 +299,7 @@
   margin-top: 4px;
   overflow: hidden;
   color: var(--desktop-gray-25);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -309,7 +309,7 @@
   margin-top: 6px;
   overflow: hidden;
   color: var(--desktop-gray-2);
-  font-size: 7px;
+  font-size: 10.5px;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -328,7 +328,7 @@
   gap: 4px;
   padding: 0 6px;
   color: var(--desktop-gray-27);
-  font-size: 7px;
+  font-size: 10.5px;
   white-space: nowrap;
   background: var(--desktop-surface-30);
   border: 1px solid var(--desktop-border-6);
@@ -391,7 +391,7 @@
 .managed-resource-breadcrumb {
   overflow: hidden;
   color: var(--desktop-gray-7);
-  font-size: 7px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -408,7 +408,7 @@
   gap: 5px;
   overflow: hidden;
   color: var(--desktop-gray-22);
-  font-size: 7px;
+  font-size: 10.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -422,7 +422,7 @@
   gap: 6px;
   padding: 0 10px;
   color: var(--desktop-text-ice);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
   background: var(--desktop-cyan-dark);
@@ -515,7 +515,7 @@
   max-width: 620px;
   margin: 0;
   color: var(--desktop-gray-12);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -531,7 +531,7 @@
 .managed-resource-chips span {
   padding: 4px 7px;
   color: var(--desktop-gray-13);
-  font-size: 7px;
+  font-size: 10.5px;
   background: var(--desktop-surface-29);
   border: 1px solid var(--desktop-border-18);
   border-radius: 5px;
@@ -543,7 +543,7 @@
   gap: 4px;
   padding: 4px 7px;
   color: var(--desktop-gray-13);
-  font-size: 7px;
+  font-size: 10.5px;
   background: var(--desktop-surface-29);
   border: 1px solid var(--desktop-border-18);
   border-radius: 5px;
@@ -561,7 +561,7 @@
   max-width: 150px;
   overflow: hidden;
   color: var(--desktop-gray-19);
-  font-size: 7px;
+  font-size: 10.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -569,7 +569,7 @@
 .managed-resource-identity > section b {
   margin: 6px 0 4px;
   color: var(--desktop-gray-34);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .managed-resource-overview-label {
@@ -578,7 +578,7 @@
   align-items: center;
   padding: 0 28px;
   color: var(--desktop-text);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-12);
   border-top: 1px solid var(--desktop-border-5);
   border-bottom: 1px solid var(--desktop-border-5);
@@ -599,7 +599,7 @@
   gap: 8px;
   padding: 9px 11px;
   color: var(--desktop-red-soft);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-red);
   border: 1px solid var(--desktop-border-red);
   border-radius: 6px;
@@ -623,7 +623,7 @@
 .managed-resource-fact-grid span {
   display: block;
   color: var(--desktop-gray-8);
-  font-size: 7px;
+  font-size: 10.5px;
 }
 
 .managed-resource-fact-grid b {
@@ -631,7 +631,7 @@
   margin-top: 5px;
   overflow: hidden;
   color: var(--desktop-text-pale);
-  font-size: 10px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -657,7 +657,7 @@
 .managed-resource-card h2 {
   margin: 4px 0 0;
   color: var(--desktop-text-mist);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .managed-resource-chips {
@@ -682,11 +682,11 @@
 
 .managed-resource-card-empty strong {
   color: var(--desktop-gray-30);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .managed-resource-card-empty span {
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .managed-resource-catalog-state,
@@ -704,12 +704,12 @@
 .managed-resource-catalog-state strong,
 .managed-resource-detail-empty strong {
   color: var(--desktop-gray-28);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .managed-resource-catalog-state span,
 .managed-resource-detail-empty span {
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -721,7 +721,7 @@
   height: 26px;
   padding: 0 9px;
   color: var(--desktop-gray-32);
-  font-size: 8px;
+  font-size: 11px;
   background: var(--desktop-surface-29);
   border: 1px solid var(--desktop-border-20);
   border-radius: 5px;

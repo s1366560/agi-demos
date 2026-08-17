@@ -7,7 +7,7 @@
   border: 1px solid var(--gray-a5);
   border-radius: 18px;
   background: var(--color-panel-solid);
-  box-shadow: var(--shadow-4);
+  box-shadow: var(--desktop-shadow-raised);
 }
 
 .invitation-acceptance-page header,

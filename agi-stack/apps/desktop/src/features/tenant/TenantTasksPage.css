@@ -279,7 +279,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 14px;
   background: var(--desktop-surface-3);
-  box-shadow: var(--shadow-6);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .tenant-tasks-dialog-card > button:first-child {

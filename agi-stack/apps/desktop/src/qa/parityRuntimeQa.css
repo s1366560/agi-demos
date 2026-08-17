@@ -40,7 +40,7 @@
   border: 1px solid var(--desktop-border);
   border-radius: 16px;
   background: var(--desktop-surface-1);
-  box-shadow: 0 18px 50px rgba(var(--desktop-black-rgb), 0.28);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .parity-runtime-qa__preview-nav {

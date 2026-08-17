@@ -112,7 +112,7 @@
   border: 1px solid var(--gray-6);
   border-radius: 14px;
   background: color-mix(in srgb, var(--gray-2) 82%, transparent);
-  box-shadow: var(--shadow-6);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .tenant-agent-bindings-grid article {
@@ -204,7 +204,7 @@
   border: 1px solid var(--gray-7);
   border-radius: 16px;
   background: var(--gray-2);
-  box-shadow: var(--shadow-6);
+  box-shadow: var(--desktop-shadow-dialog);
 }
 
 .tenant-agent-bindings-dialog-card > header {
