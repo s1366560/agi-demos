@@ -95,6 +95,28 @@ fn active_wasm_snapshot(digest: &str, artifact_digest: &str) -> Value {
     })
 }
 
+fn active_frontend_snapshot(digest: &str, artifact_digest: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "profile_id": "desktop-default",
+        "plugins": [{
+            "schema_version": 1,
+            "id": "third-party-ui",
+            "version": "1.0.0",
+            "runtime": "frontend",
+            "trust": "signed",
+            "provides": [{
+                "kind": "ui_renderer",
+                "id": "tool_result_renderer",
+                "contract": "ui_renderer:tool-result",
+                "permissions": ["ui.render"]
+            }],
+            "config": {"artifact": {"layer_sha256": artifact_digest}}
+        }],
+        "digest": digest
+    })
+}
+
 #[tokio::test]
 async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good() {
     let state = state();
@@ -318,4 +340,88 @@ async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
     assert_eq!(invoked.0, StatusCode::OK);
     assert_eq!(invoked.1["score"], 22);
     assert_eq!(invoked.1["tool"], "demo");
+}
+
+#[tokio::test]
+async fn signed_frontend_module_is_served_only_after_activation() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let app = router(state.clone());
+    let runtime = json!({
+        "html": "<main id=\"plugin-root\">signed module</main>",
+        "slots": ["tool_result_renderer"]
+    })
+    .to_string();
+    let runtime = runtime.into_bytes();
+    let artifact_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&runtime);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let mut payload = active_frontend_snapshot("placeholder", &artifact_digest);
+    payload.as_object_mut().expect("payload").remove("digest");
+    let digest = platform_plugin_payload_digest(&payload).expect("digest");
+    payload["digest"] = json!(digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-ui".to_string(),
+                digest: artifact_digest.clone(),
+                runtime: "frontend".to_string(),
+                path: "runtime/plugin.json".to_string(),
+                bytes: runtime,
+            },
+        )
+        .expect("artifact");
+    }
+
+    let before_activation = request_json(
+        app.clone(),
+        "GET",
+        "/api/v1/platform-plugins/frontend/third-party-ui/module",
+        Some("desktop-session"),
+        json!({}),
+    )
+    .await;
+    let submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 10,
+            "nonce": "nonce-10",
+            "digest": digest,
+            "payload": payload
+        }),
+    )
+    .await;
+    let module = request_json(
+        app,
+        "GET",
+        "/api/v1/platform-plugins/frontend/third-party-ui/module",
+        Some("desktop-session"),
+        json!({}),
+    )
+    .await;
+
+    assert_eq!(before_activation.0, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(submitted.0, StatusCode::OK);
+    assert_eq!(module.0, StatusCode::OK);
+    assert_eq!(module.1["plugin_id"], "third-party-ui");
+    assert_eq!(module.1["digest"], artifact_digest);
+    assert_eq!(module.1["trust"], "signed");
+    assert_eq!(
+        module.1["html"],
+        "<main id=\"plugin-root\">signed module</main>"
+    );
 }

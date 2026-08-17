@@ -4,7 +4,7 @@ use std::sync::{atomic::Ordering, Arc};
 
 use axum::{
     body::{to_bytes, Body},
-    extract::State,
+    extract::{Path, State},
     http::{header::AUTHORIZATION, HeaderMap, HeaderName, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -659,6 +659,10 @@ fn platform_plugin_router(state: Arc<LocalRuntimeState>) -> Router<Arc<LocalRunt
             "/api/v1/platform-plugins/tools/invoke",
             post(invoke_platform_plugin_tool),
         )
+        .route(
+            "/api/v1/platform-plugins/frontend/:plugin_id/module",
+            get(platform_plugin_frontend_module),
+        )
         .route("/api/v1/platform-plugins/ack", post(platform_plugin_ack))
         .route("/api/v1/platform-plugins/nack", post(platform_plugin_nack))
         .layer(axum::middleware::from_fn_with_state(
@@ -859,6 +863,66 @@ async fn invoke_platform_plugin_tool(
     let result = serde_json::from_str::<Value>(&output)
         .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
     Ok(Json(result))
+}
+
+async fn platform_plugin_frontend_module(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<Value>, BridgeError> {
+    let (plugin, artifact) = {
+        let connection = state.session_store.connection().map_err(store_error)?;
+        crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
+        let record = crate::plugin_snapshots::read_apply_record(&connection)
+            .map_err(store_error)?
+            .ok_or_else(|| unavailable("no platform plugin snapshot is active"))?;
+        let applied_digest = record
+            .applied_digest
+            .as_deref()
+            .ok_or_else(|| unavailable("no platform plugin snapshot is active"))?;
+        let plugin = crate::plugin_snapshots::read_active_plugins(&connection, applied_digest)
+            .map_err(store_error)?
+            .into_iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .ok_or_else(|| not_found("platform plugin is not active"))?;
+        if plugin.runtime != "frontend" || !matches!(plugin.trust.as_str(), "builtin" | "signed") {
+            return Err(unavailable(
+                "platform plugin frontend runtime is unavailable",
+            ));
+        }
+        let artifact_digest = plugin
+            .config
+            .get("artifact")
+            .and_then(Value::as_object)
+            .and_then(|artifact| artifact.get("layer_sha256"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| unavailable("platform plugin has no runtime artifact"))?;
+        let artifact = crate::plugin_snapshots::read_runtime_artifact(
+            &connection,
+            &plugin_id,
+            artifact_digest,
+        )
+        .map_err(store_error)?
+        .ok_or_else(|| unavailable("platform plugin runtime artifact is unavailable"))?;
+        (plugin, artifact)
+    };
+    let module = serde_json::from_slice::<Value>(&artifact.bytes)
+        .map_err(|_| unavailable("platform plugin frontend module is invalid"))?;
+    let html = module
+        .get("html")
+        .and_then(Value::as_str)
+        .ok_or_else(|| unavailable("platform plugin frontend module has no html payload"))?;
+    if html.len() > 1024 * 1024 {
+        return Err(conflict(
+            "platform plugin frontend module exceeds its quota",
+        ));
+    }
+    Ok(Json(json!({
+        "plugin_id": plugin_id,
+        "digest": artifact.digest,
+        "trust": plugin.trust,
+        "html": html,
+        "slots": module.get("slots").cloned().unwrap_or_else(|| json!([])),
+    })))
 }
 
 async fn platform_plugin_ack(

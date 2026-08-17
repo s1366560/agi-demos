@@ -708,6 +708,7 @@ export function SettingsWindow({
                       slots={platformPluginUiSlots.slots}
                       error={platformPluginUiSlots.error}
                       loading={platformPluginUiSlots.loading}
+                      config={config}
                     />
                   ) : null}
                   <ManagedResourceWorkspace

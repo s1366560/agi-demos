@@ -521,7 +521,7 @@ fn prepare_plugins(
                     "subprocess",
                     "builtin" | "signed" | "tenant-approved" | "untrusted"
                 )
-                | ("frontend", "builtin")
+                | ("frontend", "builtin" | "signed")
         );
         if !supported {
             return Err(format!(

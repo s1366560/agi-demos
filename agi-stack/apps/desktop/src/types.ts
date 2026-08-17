@@ -1395,6 +1395,14 @@ export type PlatformPluginActivationRecord = {
   config: Record<string, unknown>;
 };
 
+export type PlatformPluginFrontendModule = {
+  plugin_id: string;
+  digest: string;
+  trust: 'builtin' | 'signed';
+  html: string;
+  slots: unknown[];
+};
+
 export type PlatformPluginSnapshotCapability = {
   kind: string;
   id: string;

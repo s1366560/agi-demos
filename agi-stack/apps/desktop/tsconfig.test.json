@@ -42,6 +42,7 @@
     "src/plugins/uiSlotRegistry.ts",
     "src/plugins/uiSlotRuntime.ts",
     "src/features/settings/usePlatformPluginUiSlots.ts",
+    "src/features/settings/SignedUiModuleBoundary.tsx",
     "src/vite-env.d.ts",
     "src/api/client.ts",
     "src/api/cloudRequestBroker.ts",

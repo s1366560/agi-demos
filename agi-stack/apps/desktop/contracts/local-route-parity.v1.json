@@ -2201,6 +2201,11 @@
       "method": "POST",
       "path": "/api/v1/platform-plugins/tools/invoke",
       "reason_code": "executable_fixture_platform_plugin_tool_pending_ui_parity"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/platform-plugins/frontend/{plugin_id}/module",
+      "reason_code": "executable_fixture_platform_plugin_frontend_pending_ui_parity"
     }
   ],
   "catalog_fixture_not_applicable": [

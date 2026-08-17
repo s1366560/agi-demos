@@ -84,6 +84,7 @@ import type {
   PlatformPluginSnapshot,
   PlatformPluginSnapshotRow,
   PlatformPluginApplyState,
+  PlatformPluginFrontendModule,
   PlanSnapshot,
   PromptTemplateCreateInput,
   PromptTemplateRecord,
@@ -2347,6 +2348,16 @@ export class DesktopApiClient {
       ...snapshot,
       plugins: readArray<PlatformPluginSnapshotRow>(snapshot, ['plugins']),
     };
+  }
+
+  async getPlatformPluginFrontendModule(
+    pluginId: string,
+    signal?: AbortSignal,
+  ): Promise<PlatformPluginFrontendModule> {
+    return this.request<PlatformPluginFrontendModule>(
+      `/api/v1/platform-plugins/frontend/${encodeURIComponent(pluginId)}/module`,
+      { signal },
+    );
   }
 
   async setManagedPluginEnabled(

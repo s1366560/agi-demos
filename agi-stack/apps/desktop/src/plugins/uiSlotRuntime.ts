@@ -27,6 +27,45 @@ export interface UiSlotRuntimeState {
   readonly slots: readonly ReturnType<UiSlotRegistry['list']>[number][];
 }
 
+const UI_SLOT_KINDS = new Set([
+  'nav_item',
+  'settings_page',
+  'conversation_renderer',
+  'tool_result_renderer',
+  'composer_action',
+  'mcp_canvas',
+]);
+
+export function frontendSlotDefinitions(
+  snapshot: {
+    readonly plugins: readonly PlatformPluginSnapshotRow[];
+  },
+): UiSlotDefinition[] {
+  const definitions: UiSlotDefinition[] = [];
+  for (const plugin of snapshot.plugins) {
+    if (plugin.runtime !== 'frontend' || plugin.trust !== 'signed') continue;
+    const artifactDigest = (plugin.config.artifact as
+      | { layer_sha256?: unknown }
+      | undefined)?.layer_sha256;
+    if (typeof artifactDigest !== 'string' || artifactDigest.length !== 64) continue;
+    for (const capability of plugin.provides) {
+      if (capability.kind !== 'ui_slot' && capability.kind !== 'ui_renderer') continue;
+      const slot = UI_SLOT_KINDS.has(capability.id)
+        ? (capability.id as UiSlotDefinition['slot'])
+        : 'tool_result_renderer';
+      definitions.push({
+        pluginId: plugin.id,
+        slot,
+        id: capability.id,
+        moduleRef: `signed:${artifactDigest}`,
+        permission: capability.permissions[0] ?? 'ui.render',
+        sandbox: true,
+      });
+    }
+  }
+  return definitions;
+}
+
 export class UiSlotRuntime {
   private readonly disposers = new Map<string, () => void>();
 

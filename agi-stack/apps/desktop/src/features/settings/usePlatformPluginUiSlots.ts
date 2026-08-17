@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DesktopApiClient } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
+  frontendSlotDefinitions,
   UiSlotDefinition,
   UiSlotRegistry,
   UiSlotRuntime,
@@ -57,7 +58,11 @@ export function usePlatformPluginUiSlots({
       .getPlatformPluginSnapshot(controller.signal)
       .then((snapshot) => {
         if (controller.signal.aborted) return;
-        setSlots(runtimeRef.current.reconcile(snapshot, BUILTIN_UI_SLOT_DEFINITIONS).slots);
+        const definitions = [
+          ...frontendSlotDefinitions(snapshot),
+          ...BUILTIN_UI_SLOT_DEFINITIONS,
+        ];
+        setSlots(runtimeRef.current.reconcile(snapshot, definitions).slots);
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;

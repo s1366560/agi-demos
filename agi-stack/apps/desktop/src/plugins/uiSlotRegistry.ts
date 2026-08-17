@@ -52,8 +52,12 @@ export class UiSlotRegistry {
     if (!definition.permission.startsWith('ui.')) {
       throw new UiSlotRegistrationError('UI slot permissions must start with ui.');
     }
-    if (!definition.moduleRef.startsWith('builtin:')) {
-      throw new UiSlotRegistrationError('Only builtin frontend modules are allowed');
+    const builtinModule = definition.moduleRef.startsWith('builtin:');
+    const signedModule = definition.moduleRef.startsWith('signed:');
+    if (!builtinModule && !(signedModule && context.trust === 'signed')) {
+      throw new UiSlotRegistrationError(
+        'Only builtin or signed frontend modules are allowed',
+      );
     }
 
     const key = slotKey(definition);
