@@ -41,7 +41,7 @@ async def test_catalog_snapshot_desired_and_apply_state_roundtrip(db_session):
 async def test_snapshot_apply_and_audit_rows_are_persisted(db_session):
     repository = PlatformPluginRepository(db_session)
     snapshot = compose_default_snapshot()
-    snapshot_row = await repository.record_snapshot(snapshot, version=3)
+    snapshot_row = await repository.record_snapshot(snapshot, version=3, nonce="nonce-3")
     audit_row = await repository.record_capability_transition(
         snapshot_digest=snapshot.digest,
         plugin_id="workspace-runtime",
@@ -62,6 +62,7 @@ async def test_snapshot_apply_and_audit_rows_are_persisted(db_session):
     )
 
     assert isinstance(snapshot_row, PlatformPluginSnapshotModel)
+    assert snapshot_row.nonce == "nonce-3"
     assert isinstance(audit_row, object)
     assert isinstance(apply_row, PlatformPluginApplyStateModel)
     assert apply_row.status == "nack"

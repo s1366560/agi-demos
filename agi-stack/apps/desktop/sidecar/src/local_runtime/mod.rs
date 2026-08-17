@@ -96,6 +96,8 @@ mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
 mod parity_routes;
+pub(crate) mod platform_plugin_sync;
+pub(crate) use platform_plugin_sync::PlatformPluginControlPlaneReconciler;
 mod provider_credentials;
 mod provider_management;
 mod provider_probe;
@@ -394,6 +396,16 @@ impl LocalRuntimeService {
             browser_bridge: self.state.browser_bridge_status(&config.browser_bridge),
             config,
         }
+    }
+
+    pub(crate) fn start_platform_plugin_control_plane(
+        &self,
+        trusted_sessions: crate::trusted_session::TrustedSessionBroker,
+    ) -> platform_plugin_sync::PlatformPluginControlPlaneReconciler {
+        platform_plugin_sync::PlatformPluginControlPlaneReconciler::start(
+            Arc::clone(&self.state),
+            trusted_sessions,
+        )
     }
 
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {

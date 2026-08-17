@@ -22,7 +22,10 @@ use zeroize::Zeroize;
 use crate::{
     application_vault::ApplicationCredentialVault,
     data_migration::migrate_legacy_data,
-    local_runtime::{browser_bridge, LocalRuntimeConfig, LocalRuntimeService},
+    local_runtime::{
+        browser_bridge, LocalRuntimeConfig, LocalRuntimeService,
+        PlatformPluginControlPlaneReconciler,
+    },
     native_host,
     oauth_pending_attempt::{OAuthPendingAttemptBroker, OAuthPendingAttemptRecord},
     trusted_session::{
@@ -96,6 +99,7 @@ struct ControlState {
     oauth_pending_attempts: OAuthPendingAttemptBroker,
     trusted_sessions: TrustedSessionBroker,
     workspace_core: WorkspaceCoreSupervisor,
+    plugin_control_plane: PlatformPluginControlPlaneReconciler,
 }
 
 pub(crate) async fn run() -> Result<(), String> {
@@ -125,6 +129,8 @@ pub(crate) async fn run() -> Result<(), String> {
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
+    let plugin_control_plane =
+        runtime.start_platform_plugin_control_plane(trusted_sessions.clone());
     let status = runtime.status();
     let workspace_core = match WorkspaceCoreSupervisor::start(
         initialize.workspace_core_binary_path,
@@ -154,6 +160,7 @@ pub(crate) async fn run() -> Result<(), String> {
         oauth_pending_attempts,
         trusted_sessions,
         workspace_core,
+        plugin_control_plane,
     };
     while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
         let response = match serde_json::from_str::<ControlRequest>(&line) {
@@ -169,6 +176,7 @@ pub(crate) async fn run() -> Result<(), String> {
         write_json_line(&mut output, &response).await?;
     }
     state.workspace_core.shutdown().await;
+    state.plugin_control_plane.shutdown().await;
     state.runtime.shutdown().await;
     Ok(())
 }

@@ -59,7 +59,7 @@ async def test_snapshot_endpoint_returns_latest_snapshot(db_session: AsyncSessio
     latest_snapshot = compose_snapshot("router-test-latest")
     for version in (3, 7):
         snapshot = latest_snapshot if version == 7 else compose_snapshot("router-test-previous")
-        await repository.record_snapshot(snapshot, version=version)
+        await repository.record_snapshot(snapshot, version=version, nonce=f"nonce-{version}")
     await db_session.commit()
 
     response = make_client(db_session).get("/api/v1/platform-plugins/snapshot")
@@ -67,6 +67,7 @@ async def test_snapshot_endpoint_returns_latest_snapshot(db_session: AsyncSessio
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
         "version": 7,
+        "nonce": "nonce-7",
         "profile_id": latest_snapshot.profile_id,
         "digest": latest_snapshot.digest,
         "payload": latest_snapshot.to_payload(),
@@ -86,7 +87,7 @@ async def test_snapshot_endpoint_returns_404_without_published_snapshot(
 async def test_data_plane_ack_is_persisted(db_session: AsyncSession) -> None:
     repository = PlatformPluginRepository(db_session)
     snapshot = compose_snapshot("router-test-ack")
-    await repository.record_snapshot(snapshot, version=9)
+    await repository.record_snapshot(snapshot, version=9, nonce="nonce-9")
     await db_session.commit()
 
     response = make_client(db_session).post(
@@ -118,7 +119,7 @@ async def test_data_plane_ack_is_persisted(db_session: AsyncSession) -> None:
 async def test_data_plane_nack_requires_reason(db_session: AsyncSession) -> None:
     repository = PlatformPluginRepository(db_session)
     snapshot = compose_snapshot("router-test-nack")
-    await repository.record_snapshot(snapshot, version=11)
+    await repository.record_snapshot(snapshot, version=11, nonce="nonce-11")
     await db_session.commit()
 
     response = make_client(db_session).post(
@@ -142,7 +143,7 @@ async def test_data_plane_receipt_rejects_stale_version_or_digest(
 ) -> None:
     repository = PlatformPluginRepository(db_session)
     snapshot = compose_snapshot("router-test-conflict")
-    await repository.record_snapshot(snapshot, version=12)
+    await repository.record_snapshot(snapshot, version=12, nonce="nonce-12")
     await db_session.commit()
     client = make_client(db_session)
 

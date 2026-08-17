@@ -21,6 +21,7 @@ use super::{
     session_store::{DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError},
     LocalRuntimeState,
 };
+use crate::plugin_snapshots::RequestedPluginSnapshot;
 
 mod contracts;
 mod judge;
@@ -706,7 +707,7 @@ async fn submit_platform_plugin_snapshot(
     Json(request): Json<PlatformPluginSnapshotRequest>,
 ) -> Result<Json<Value>, BridgeError> {
     validate_platform_plugin_snapshot(&request).map_err(|detail| bad_request(&detail))?;
-    let connection = state.session_store.connection().map_err(store_error)?;
+    let mut connection = state.session_store.connection().map_err(store_error)?;
     crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
     if let Some(record) =
         crate::plugin_snapshots::read_apply_record(&connection).map_err(store_error)?
@@ -739,7 +740,13 @@ async fn submit_platform_plugin_snapshot(
         &request.payload.to_string(),
     )
     .map_err(store_error)?;
-    Ok(Json(json!({"status": "pending"})))
+    let requested = RequestedPluginSnapshot {
+        version: request.version,
+        nonce: request.nonce.clone(),
+        digest: request.digest.clone(),
+        payload: request.payload.clone(),
+    };
+    activate_platform_plugin_snapshot(&mut connection, requested)
 }
 
 async fn platform_plugin_apply_state(
@@ -750,16 +757,26 @@ async fn platform_plugin_apply_state(
     let record = crate::plugin_snapshots::read_apply_record(&connection)
         .map_err(store_error)?
         .ok_or_else(|| not_found("platform plugin apply state is unavailable"))?;
-    serde_json::to_value(record)
+    let mut value = serde_json::to_value(&record)
         .map(Json)
-        .map_err(|error| store_error(error.to_string()))
+        .map_err(|error| store_error(error.to_string()))?;
+    if let (Some(object), Some(applied_digest)) =
+        (value.as_object_mut(), record.applied_digest.as_deref())
+    {
+        let plugins = crate::plugin_snapshots::read_active_plugins(&connection, applied_digest)
+            .map_err(store_error)?;
+        let plugins =
+            serde_json::to_value(plugins).map_err(|error| store_error(error.to_string()))?;
+        object.insert("active_plugins".to_string(), plugins);
+    }
+    Ok(value)
 }
 
 async fn platform_plugin_ack(
     State(state): State<Arc<LocalRuntimeState>>,
     Json(request): Json<PlatformPluginAckRequest>,
 ) -> Result<Json<Value>, BridgeError> {
-    let connection = state.session_store.connection().map_err(store_error)?;
+    let mut connection = state.session_store.connection().map_err(store_error)?;
     crate::plugin_snapshots::initialize_schema(&connection).map_err(store_error)?;
     let requested = crate::plugin_snapshots::read_requested(&connection)
         .map_err(store_error)?
@@ -769,14 +786,27 @@ async fn platform_plugin_ack(
         crate::plugin_snapshots::record_nack(&connection, reason).map_err(store_error)?;
         return Err(conflict(reason));
     }
-    crate::plugin_snapshots::record_ack(
-        &connection,
-        requested.version,
-        &requested.digest,
-        &requested.payload.to_string(),
-    )
-    .map_err(store_error)?;
-    Ok(Json(json!({"status": "ack"})))
+    activate_platform_plugin_snapshot(&mut connection, requested)
+}
+
+fn activate_platform_plugin_snapshot(
+    connection: &mut std::sync::MutexGuard<'_, rusqlite::Connection>,
+    requested: RequestedPluginSnapshot,
+) -> Result<Json<Value>, BridgeError> {
+    match crate::plugin_snapshots::record_ack(connection, &requested) {
+        Ok(activated) => {
+            let activated =
+                serde_json::to_value(activated).map_err(|error| store_error(error.to_string()))?;
+            Ok(Json(json!({
+                "status": "ack",
+                "activated_plugins": activated,
+            })))
+        }
+        Err(error) => {
+            crate::plugin_snapshots::record_nack(connection, &error).map_err(store_error)?;
+            Err(conflict(&error))
+        }
+    }
 }
 
 async fn platform_plugin_nack(

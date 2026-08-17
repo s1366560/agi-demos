@@ -97,19 +97,21 @@ class PlatformPluginRepository:
         snapshot: ProfileSnapshot,
         *,
         version: int,
+        nonce: str,
     ) -> PlatformPluginSnapshotModel:
         """Persist an immutable effective plugin snapshot."""
         existing = await self._session.get(PlatformPluginSnapshotModel, snapshot.digest)
         if existing is not None:
-            if existing.version != version:
+            if existing.version != version or existing.nonce != nonce:
                 raise ValueError(
-                    f"snapshot digest {snapshot.digest} already belongs to version {existing.version}"
+                    f"snapshot digest {snapshot.digest} already belongs to another envelope"
                 )
             return existing
         model = PlatformPluginSnapshotModel(
             digest=snapshot.digest,
             profile_id=snapshot.profile_id,
             version=version,
+            nonce=nonce,
             payload=snapshot.to_payload(),
         )
         self._session.add(model)

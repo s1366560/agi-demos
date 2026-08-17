@@ -38,6 +38,7 @@ async def get_snapshot(
         )
     return PlatformPluginSnapshotResponse(
         version=snapshot.version,
+        nonce=snapshot.nonce,
         profile_id=snapshot.profile_id,
         digest=snapshot.digest,
         payload=snapshot.payload,

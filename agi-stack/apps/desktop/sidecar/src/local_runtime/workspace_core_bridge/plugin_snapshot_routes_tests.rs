@@ -132,7 +132,7 @@ async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good
 
     assert_eq!(unauthorized.0, StatusCode::UNAUTHORIZED);
     assert_eq!(submitted.0, StatusCode::OK);
-    assert_eq!(submitted.1["status"], "pending");
+    assert_eq!(submitted.1["status"], "ack");
     assert_eq!(acknowledged.0, StatusCode::OK);
     assert_eq!(acknowledged.1["status"], "ack");
     assert_eq!(active.0, StatusCode::OK);

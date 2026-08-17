@@ -1383,6 +1383,16 @@ export type PlatformPluginApplyState = {
   status: 'pending' | 'ack' | 'nack';
   error_message: string | null;
   has_last_good: boolean;
+  active_plugins?: PlatformPluginActivationRecord[];
+};
+
+export type PlatformPluginActivationRecord = {
+  plugin_id: string;
+  plugin_version: string;
+  runtime: string;
+  trust: string;
+  capabilities: Record<string, unknown>[];
+  config: Record<string, unknown>;
 };
 
 export type PlatformPluginSnapshotCapability = {

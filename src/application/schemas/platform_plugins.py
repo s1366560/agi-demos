@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class PlatformPluginSnapshotResponse(BaseModel):
     version: int
+    nonce: str
     profile_id: str
     digest: str
     payload: dict[str, Any]

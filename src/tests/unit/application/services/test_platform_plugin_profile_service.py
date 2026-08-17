@@ -21,7 +21,9 @@ async def test_publish_records_snapshot_audit_and_ack(db_session):
 
     assert publication.snapshot.profile_id == "memstack-default"
     assert publication.envelope.version == 4
-    assert await repository.get_snapshot(4) is not None
+    snapshot = await repository.get_snapshot(4)
+    assert snapshot is not None
+    assert snapshot.nonce == "nonce-4"
 
 
 @pytest.mark.unit

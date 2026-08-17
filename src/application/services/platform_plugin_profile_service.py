@@ -60,7 +60,12 @@ class PlatformPluginProfileService:
             await self._repository.upsert_catalog_manifest(manifest)
 
         snapshot = compose_profile(load_profile_document(self._profile_path), manifests)
-        await self._repository.record_snapshot(snapshot, version=version)
+        envelope = control_envelope(snapshot, version=version, nonce=nonce)
+        await self._repository.record_snapshot(
+            snapshot,
+            version=version,
+            nonce=envelope.nonce,
+        )
         for row in snapshot.rows:
             for capability in row.manifest.provides:
                 await self._repository.record_capability_transition(
@@ -76,7 +81,7 @@ class PlatformPluginProfileService:
 
         return PlatformPluginPublication(
             snapshot=snapshot,
-            envelope=control_envelope(snapshot, version=version, nonce=nonce),
+            envelope=envelope,
         )
 
     async def record_ack(
