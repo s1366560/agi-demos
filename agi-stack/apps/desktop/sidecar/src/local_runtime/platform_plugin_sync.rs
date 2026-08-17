@@ -23,6 +23,7 @@ use crate::{
     },
 };
 
+use super::workspace_core_bridge::platform_plugin_payload_digest;
 use super::LocalRuntimeState;
 
 const SUCCESS_INTERVAL: Duration = Duration::from_secs(30);
@@ -812,6 +813,9 @@ fn validate_snapshot(snapshot: &ControlPlaneSnapshot) -> Result<(), String> {
     {
         return Err("control-plane snapshot payload contract is invalid".to_string());
     }
+    if platform_plugin_payload_digest(&snapshot.payload)? != snapshot.digest {
+        return Err("control-plane snapshot digest does not match canonical bytes".to_string());
+    }
     Ok(())
 }
 
@@ -1056,18 +1060,21 @@ mod tests {
         });
         *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
         *control.oci_layer.lock().expect("OCI layer") = archive.clone();
-        let snapshot_digest = "2".repeat(64);
+        let mut snapshot_payload = json!({
+            "schema_version": 1,
+            "profile_id": "desktop-default",
+            "plugins": [plugin],
+            "digest": Value::Null
+        });
+        let snapshot_digest =
+            platform_plugin_payload_digest(&snapshot_payload).expect("snapshot digest");
+        snapshot_payload["digest"] = json!(snapshot_digest);
         *control.snapshot.lock().expect("snapshot") = json!({
             "version": 7,
             "nonce": "nonce-7",
             "profile_id": "desktop-default",
             "digest": snapshot_digest,
-            "payload": {
-                "schema_version": 1,
-                "profile_id": "desktop-default",
-                "plugins": [plugin],
-                "digest": snapshot_digest
-            }
+            "payload": snapshot_payload
         });
 
         reconcile_once(&runtime, &broker)
@@ -1094,18 +1101,21 @@ mod tests {
         }
         drop(connection);
 
-        let removal_digest = "3".repeat(64);
+        let mut removal_payload = json!({
+            "schema_version": 1,
+            "profile_id": "desktop-default",
+            "plugins": [],
+            "digest": Value::Null
+        });
+        let removal_digest =
+            platform_plugin_payload_digest(&removal_payload).expect("removal digest");
+        removal_payload["digest"] = json!(removal_digest);
         *control.snapshot.lock().expect("snapshot") = json!({
             "version": 8,
             "nonce": "nonce-8",
             "profile_id": "desktop-default",
             "digest": removal_digest,
-            "payload": {
-                "schema_version": 1,
-                "profile_id": "desktop-default",
-                "plugins": [],
-                "digest": removal_digest
-            }
+            "payload": removal_payload
         });
         reconcile_once(&runtime, &broker)
             .await
@@ -1126,7 +1136,7 @@ mod tests {
     }
 
     fn snapshot(version: u64, digest: &str, runtime: &str, credential: &str) -> Value {
-        json!({
+        let mut payload = json!({
             "version": version,
             "nonce": format!("nonce-{version}"),
             "profile_id": "desktop-default",
@@ -1150,12 +1160,33 @@ mod tests {
                 }],
                 "digest": digest
             }
-        })
+        });
+        let canonical_digest = platform_plugin_payload_digest(&payload["payload"])
+            .expect("canonical test snapshot digest");
+        payload["digest"] = json!(canonical_digest);
+        payload["payload"]["digest"] = json!(canonical_digest);
+        payload
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {
         let digest = Sha256::digest(bytes);
         digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    #[test]
+    fn control_plane_snapshot_digest_must_match_canonical_bytes() {
+        let mut snapshot = snapshot(4, "ignored", "python-trusted", "vault://plugins/test");
+        snapshot["digest"] = json!("0".repeat(64));
+        snapshot["payload"]["digest"] = json!("0".repeat(64));
+        let snapshot =
+            serde_json::from_value::<ControlPlaneSnapshot>(snapshot).expect("test snapshot");
+
+        let error = validate_snapshot(&snapshot).expect_err("digest must be canonical");
+
+        assert_eq!(
+            error,
+            "control-plane snapshot digest does not match canonical bytes"
+        );
     }
 
     fn wasm_package_archive(plugin: &Value, wasm: &[u8]) -> Vec<u8> {
@@ -1190,8 +1221,8 @@ mod tests {
     #[tokio::test]
     async fn full_resync_survives_disconnect_and_converges_to_new_snapshot() {
         let runtime = state();
-        let first_digest = "a".repeat(64);
-        let first = snapshot(4, &first_digest, "python-trusted", "vault://plugins/one");
+        let first = snapshot(4, "ignored", "python-trusted", "vault://plugins/one");
+        let first_digest = first["digest"].as_str().expect("first digest").to_string();
         let (url, broker, control) = control_plane(first.clone()).await;
         reconcile_once(&runtime, &broker).await.expect("first sync");
 
@@ -1214,9 +1245,12 @@ mod tests {
             .save(cloud_record(url))
             .expect("save reconnected record");
         control.disconnected.store(false, Ordering::Release);
-        let second_digest = "b".repeat(64);
         *control.snapshot.lock().expect("snapshot") =
-            snapshot(5, &second_digest, "python-trusted", "vault://plugins/two");
+            snapshot(5, "ignored", "python-trusted", "vault://plugins/two");
+        let second_digest = control.snapshot.lock().expect("snapshot")["digest"]
+            .as_str()
+            .expect("second digest")
+            .to_string();
         reconcile_once(&runtime, &broker)
             .await
             .expect("second sync");
@@ -1245,14 +1279,13 @@ mod tests {
     #[tokio::test]
     async fn preparation_failure_posts_nack_and_keeps_last_good() {
         let runtime = state();
-        let good_digest = "c".repeat(64);
-        let good = snapshot(4, &good_digest, "python-trusted", "vault://plugins/good");
+        let good = snapshot(4, "ignored", "python-trusted", "vault://plugins/good");
+        let good_digest = good["digest"].as_str().expect("good digest").to_string();
         let (_url, broker, control) = control_plane(good).await;
         reconcile_once(&runtime, &broker).await.expect("good sync");
 
-        let bad_digest = "d".repeat(64);
         *control.snapshot.lock().expect("snapshot") =
-            snapshot(5, &bad_digest, "wasm", "vault://plugins/bad");
+            snapshot(5, "ignored", "wasm", "vault://plugins/bad");
         let error = reconcile_once(&runtime, &broker)
             .await
             .expect_err("wasm artifact is unavailable");

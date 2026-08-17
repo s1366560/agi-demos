@@ -956,7 +956,7 @@ fn validate_platform_plugin_snapshot(
     Ok(())
 }
 
-fn platform_plugin_payload_digest(payload: &Value) -> Result<String, String> {
+pub(super) fn platform_plugin_payload_digest(payload: &Value) -> Result<String, String> {
     let mut canonical = payload.clone();
     if let Some(object) = canonical.as_object_mut() {
         object.remove("digest");
