@@ -780,6 +780,37 @@ test('conversation lifecycle activity remains distinct from an executing run', (
   });
 });
 
+test('every workspace tree status labelKey resolves in both i18n dictionaries', () => {
+  const statuses = [
+    'active',
+    'running',
+    'ready_review',
+    'completed',
+    'failed',
+    'issue',
+    'disconnected',
+    'interrupted',
+    'cancelled',
+    'archived',
+    'inactive',
+    'offline',
+    'unknown',
+    'needs_approval',
+  ];
+  const labelKeys = new Set();
+  for (const status of statuses) {
+    labelKeys.add(conversationTreeStatusPresentation(status).labelKey);
+    labelKeys.add(workspaceTreeRootStatusPresentation(status, []).labelKey);
+  }
+  for (const key of labelKeys) {
+    assert.equal(
+      (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}'`, 'g')) ?? []).length,
+      2,
+      `${key} must exist in both the English and Chinese dictionaries`,
+    );
+  }
+});
+
 test('workspace root remains unknown when neither runtime nor loaded run metadata reports status', () => {
   const lifecycleOnly = conversation(
     'conversation-active',
