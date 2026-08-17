@@ -14,6 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use tokio::io::AsyncReadExt;
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -815,7 +816,7 @@ async fn invoke_platform_plugin_tool(
             .into_iter()
             .find(|plugin| plugin.plugin_id == plugin_id)
             .ok_or_else(|| not_found("platform plugin is not active"))?;
-        if plugin.runtime != "wasm" {
+        if !matches!(plugin.runtime.as_str(), "wasm" | "subprocess") {
             return Err(unavailable(
                 "platform plugin runtime cannot execute locally",
             ));
@@ -843,8 +844,28 @@ async fn invoke_platform_plugin_tool(
         (plugin, artifact)
     };
 
+    let input = request.input.to_string();
+    let output = if plugin.runtime == "wasm" {
+        invoke_wasm_plugin_tool(&tool_id, &plugin, &artifact, &input).await?
+    } else {
+        invoke_subprocess_plugin_tool(&tool_id, &plugin, &artifact).await?
+    };
+    if output.len() > 1024 * 1024 {
+        return Err(conflict("platform plugin tool exceeded its output quota"));
+    }
+    let result = serde_json::from_str::<Value>(&output)
+        .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
+    Ok(Json(result))
+}
+
+async fn invoke_wasm_plugin_tool(
+    tool_id: &str,
+    plugin: &crate::plugin_snapshots::PluginActivationRecord,
+    artifact: &crate::plugin_snapshots::RuntimeArtifact,
+    input: &str,
+) -> Result<String, BridgeError> {
     let tool = WasmtimeTool::from_bytes_with_limits(
-        tool_id.clone(),
+        tool_id.to_string(),
         plugin.plugin_version.clone(),
         &artifact.bytes,
         DEFAULT_FUEL,
@@ -852,17 +873,94 @@ async fn invoke_platform_plugin_tool(
         Some(std::time::Duration::from_secs(5)),
     )
     .map_err(|error| unavailable(&format!("platform plugin tool cannot start: {error}")))?;
-    let input = request.input.to_string();
-    let output = tool
-        .invoke(&input)
+    tool.invoke(input)
         .await
-        .map_err(|error| conflict(&format!("platform plugin tool failed: {error}")))?;
-    if output.len() > 1024 * 1024 {
-        return Err(conflict("platform plugin tool exceeded its output quota"));
+        .map_err(|error| conflict(&format!("platform plugin tool failed: {error}")))
+}
+
+async fn invoke_subprocess_plugin_tool(
+    tool_id: &str,
+    plugin: &crate::plugin_snapshots::PluginActivationRecord,
+    artifact: &crate::plugin_snapshots::RuntimeArtifact,
+) -> Result<String, BridgeError> {
+    let definition = serde_json::from_slice::<Value>(&artifact.bytes)
+        .map_err(|_| bad_request("subprocess plugin runtime JSON is invalid"))?;
+    let command = definition
+        .get("command")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .map(|item| item.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()
+        })
+        .filter(|command| !command.is_empty() && command.len() <= 64)
+        .ok_or_else(|| bad_request("subprocess plugin command is invalid"))?;
+    if command.iter().any(|argument| {
+        argument.is_empty()
+            || argument.len() > 4096
+            || argument.chars().any(|character| character.is_control())
+    }) {
+        return Err(bad_request("subprocess plugin command is invalid"));
     }
-    let result = serde_json::from_str::<Value>(&output)
-        .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
-    Ok(Json(result))
+    let timeout_ms = definition
+        .get("timeout_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(1_000)
+        .min(5_000);
+    if timeout_ms == 0 {
+        return Err(bad_request("subprocess plugin timeout must be positive"));
+    }
+
+    let mut command_builder = tokio::process::Command::new(&command[0]);
+    command_builder
+        .args(&command[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(unix)]
+    {
+        command_builder.process_group(0);
+    }
+    let mut child = command_builder
+        .spawn()
+        .map_err(|error| conflict(&format!("subprocess plugin failed to start: {error}")))?;
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+    let read_stdout = async {
+        let mut bytes = Vec::new();
+        if let Some(stdout) = stdout.as_mut() {
+            let _ = stdout.read_to_end(&mut bytes).await;
+        }
+        bytes
+    };
+    let read_stderr = async {
+        let mut bytes = Vec::new();
+        if let Some(stderr) = stderr.as_mut() {
+            let _ = stderr.read_to_end(&mut bytes).await;
+        }
+        bytes
+    };
+    let wait = child.wait();
+    let (status, stdout, stderr) =
+        tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), async {
+            tokio::join!(wait, read_stdout, read_stderr)
+        })
+        .await
+        .map_err(|_| conflict("subprocess plugin exceeded its wall-time quota"))?;
+    let status = status.map_err(|error| conflict(&format!("subprocess plugin failed: {error}")))?;
+    if stdout.len() > 1024 * 1024 || stderr.len() > 1024 * 1024 {
+        return Err(conflict("subprocess plugin exceeded its output quota"));
+    }
+    Ok(json!({
+        "tool": tool_id,
+        "plugin_id": plugin.plugin_id,
+        "exit_code": status.code(),
+        "stdout": String::from_utf8_lossy(&stdout),
+        "stderr": String::from_utf8_lossy(&stderr),
+    })
+    .to_string())
 }
 
 async fn platform_plugin_frontend_module(

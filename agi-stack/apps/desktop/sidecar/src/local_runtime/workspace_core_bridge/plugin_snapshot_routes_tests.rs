@@ -342,6 +342,28 @@ async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
     assert_eq!(invoked.1["tool"], "demo");
 }
 
+fn active_subprocess_snapshot(digest: &str, artifact_digest: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "profile_id": "desktop-default",
+        "plugins": [{
+            "schema_version": 1,
+            "id": "third-party-subprocess",
+            "version": "1.0.0",
+            "runtime": "subprocess",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "demo",
+                "contract": "tool:demo",
+                "permissions": ["tools.execute"]
+        }],
+            "config": {"artifact": {"layer_sha256": artifact_digest}}
+        }],
+        "digest": digest
+    })
+}
+
 #[tokio::test]
 async fn signed_frontend_module_is_served_only_after_activation() {
     let state = state();
@@ -423,5 +445,149 @@ async fn signed_frontend_module_is_served_only_after_activation() {
     assert_eq!(
         module.1["html"],
         "<main id=\"plugin-root\">signed module</main>"
+    );
+}
+
+#[tokio::test]
+async fn subprocess_plugin_enforces_process_group_wall_time_and_output_quotas() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let app = router(state.clone());
+    let runtime = json!({
+        "command": ["/bin/sh", "-c", "printf subprocess-ok"],
+        "timeout_ms": 1000
+    })
+    .to_string();
+    let runtime = runtime.into_bytes();
+    let artifact_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&runtime);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let mut payload = active_subprocess_snapshot("placeholder", &artifact_digest);
+    payload.as_object_mut().expect("payload").remove("digest");
+    let digest = platform_plugin_payload_digest(&payload).expect("digest");
+    payload["digest"] = json!(digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-subprocess".to_string(),
+                digest: artifact_digest.clone(),
+                runtime: "subprocess".to_string(),
+                path: "runtime/plugin.json".to_string(),
+                bytes: runtime,
+            },
+        )
+        .expect("artifact");
+    }
+
+    let submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 11,
+            "nonce": "nonce-11",
+            "digest": digest,
+            "payload": payload
+        }),
+    )
+    .await;
+    let invoked = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({
+            "plugin_id": "third-party-subprocess",
+            "tool_id": "demo",
+            "input": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(submitted.0, StatusCode::OK);
+    assert_eq!(invoked.0, StatusCode::OK);
+    assert_eq!(invoked.1["exit_code"], 0);
+    assert_eq!(invoked.1["stdout"], "subprocess-ok");
+
+    let slow_runtime = json!({
+        "command": ["/bin/sleep", "2"],
+        "timeout_ms": 20
+    })
+    .to_string();
+    let slow_runtime = slow_runtime.into_bytes();
+    let slow_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&slow_runtime);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let mut slow_payload = active_subprocess_snapshot("placeholder", &slow_digest);
+    slow_payload
+        .as_object_mut()
+        .expect("payload")
+        .remove("digest");
+    let slow_snapshot_digest =
+        platform_plugin_payload_digest(&slow_payload).expect("slow snapshot digest");
+    slow_payload["digest"] = json!(slow_snapshot_digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-subprocess".to_string(),
+                digest: slow_digest,
+                runtime: "subprocess".to_string(),
+                path: "runtime/plugin.json".to_string(),
+                bytes: slow_runtime,
+            },
+        )
+        .expect("slow artifact");
+    }
+
+    let slow_submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 12,
+            "nonce": "nonce-12",
+            "digest": slow_snapshot_digest,
+            "payload": slow_payload
+        }),
+    )
+    .await;
+    let slow_invoked = request_json(
+        app,
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({
+            "plugin_id": "third-party-subprocess",
+            "tool_id": "demo",
+            "input": {}
+        }),
+    )
+    .await;
+
+    assert_eq!(slow_submitted.0, StatusCode::OK);
+    assert_eq!(slow_invoked.0, StatusCode::CONFLICT);
+    assert_eq!(
+        slow_invoked.1["detail"],
+        "subprocess plugin exceeded its wall-time quota"
     );
 }
