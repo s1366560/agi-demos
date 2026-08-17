@@ -660,6 +660,38 @@ fn mutate_llm_provider(
         runtime.credentials.remove(&key);
         runtime.configured_credentials.remove(&key);
     }
+    // A freshly created provider becomes the tenant runtime default when no
+    // selection exists yet: the first configured provider must be usable
+    // immediately. An explicit selection always wins, so this only fills the
+    // empty slot and never overrides an operator's choice.
+    if creating
+        && next_binding.is_some()
+        && runtime.selections.get(tenant_id).is_none()
+    {
+        let credential_ready = next_binding
+            .as_ref()
+            .is_some_and(|binding| binding.auth_method == "none")
+            || runtime.credentials.contains_key(&key);
+        let stored_revision = stored
+            .get("revision")
+            .and_then(Value::as_u64)
+            .unwrap_or(next_revision);
+        if credential_ready {
+            match state.session_store.select_llm_provider(
+                tenant_id,
+                &provider_id,
+                stored_revision,
+                Utc::now().timestamp_millis(),
+            ) {
+                Ok(_) => {
+                    runtime.selections.insert(tenant_id.clone(), provider_id.clone());
+                }
+                Err(error) => {
+                    eprintln!("failed to auto-select provider runtime default: {error:?}");
+                }
+            }
+        }
+    }
     let selected = runtime
         .selections
         .get(tenant_id)

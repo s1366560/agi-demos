@@ -381,6 +381,58 @@ async fn provider_create_idempotency_replays_one_resource_and_rejects_payload_re
 }
 
 #[tokio::test]
+async fn first_created_provider_becomes_runtime_default_without_overriding_later_choice() {
+    let state = test_state("provider-auto-select-secret");
+    let app = local_router(Arc::clone(&state));
+    let create = |name: &str, model: &str| {
+        authenticated_json_request(
+            "POST",
+            "/api/v1/llm-providers/",
+            "provider-auto-select-secret",
+            json!({
+                "name": name,
+                "provider_type": "openai_compatible",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "auth_method": "none",
+                "llm_model": model,
+                "allowed_models": [model],
+                "is_active": true
+            }),
+        )
+    };
+
+    let first = app
+        .clone()
+        .oneshot(create("First provider", "model-one"))
+        .await
+        .expect("first create response");
+    assert_eq!(first.status(), StatusCode::OK);
+    let first = response_json(first).await;
+    assert_eq!(
+        first["runtime_selected"], json!(true),
+        "the first configured provider must become the runtime default"
+    );
+
+    let second = app
+        .clone()
+        .oneshot(create("Second provider", "model-two"))
+        .await
+        .expect("second create response");
+    assert_eq!(second.status(), StatusCode::OK);
+    let second = response_json(second).await;
+    assert_eq!(
+        second["runtime_selected"], json!(false),
+        "an existing selection must never be overridden by a later create"
+    );
+
+    let runtime = state.provider_runtime.lock().expect("runtime");
+    let selections: Vec<_> = runtime.selections.values().collect();
+    assert_eq!(selections.len(), 1);
+    assert_eq!(selections[0], &first["id"].as_str().expect("first id").to_string());
+    drop(runtime);
+}
+
+#[tokio::test]
 async fn concurrent_provider_updates_keep_the_winning_revision_and_credential_together() {
     let state = test_state("concurrent-provider-session");
     let app = local_router(Arc::clone(&state));
