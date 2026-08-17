@@ -95,6 +95,8 @@ class AgentConfig:
     # -- Tenant ------------------------------------------------------------
     tenant_id: str | None = None
     environment: str = "production"
+    # Typed plugin event dispatcher (optional rollout bridge)
+    plugin_event_dispatcher: Any | None = None
 
     # -- Backward-compatibility property shims -----------------------------
     # ``config.execution.max_steps`` -> ``self.max_steps`` (self is returned)

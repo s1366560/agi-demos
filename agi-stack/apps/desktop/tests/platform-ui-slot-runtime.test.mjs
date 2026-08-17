@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { test } from 'node:test';
+
+const require = createRequire(import.meta.url);
+const { UiSlotRuntime } =
+  require('/tmp/agistack-desktop-test-dist/src/plugins/uiSlotRuntime.js');
+const { UiSlotRegistry } =
+  require('/tmp/agistack-desktop-test-dist/src/plugins/uiSlotRegistry.js');
+
+const definition = {
+  pluginId: 'builtin-ui',
+  slot: 'settings_page',
+  id: 'plugin-settings',
+  moduleRef: 'builtin:plugin-settings',
+  permission: 'ui.settings.plugins',
+  sandbox: true,
+};
+
+test('ui slot runtime reconciles slots from a canonical plugin snapshot', () => {
+  const runtime = new UiSlotRuntime(new UiSlotRegistry());
+  const state = runtime.reconcile(
+    {
+      plugins: [
+        {
+          schema_version: 1,
+          id: 'builtin-ui',
+          version: '1.0.0',
+          runtime: 'frontend',
+          trust: 'builtin',
+          provides: [],
+          config: {},
+        },
+      ],
+    },
+    [definition],
+  );
+
+  assert.equal(state.slots.length, 1);
+
+  const disabled = runtime.reconcile({ plugins: [] }, [definition]);
+  assert.equal(disabled.slots.length, 0);
+});

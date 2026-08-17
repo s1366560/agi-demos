@@ -61,6 +61,7 @@ class ProcessorFactory:
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
     plugin_registry: object | None = None
+    plugin_event_dispatcher: object | None = None
     message_bus: object | None = None
     control_channel: ControlChannelPort | None = None
 
@@ -120,6 +121,7 @@ class ProcessorFactory:
             max_steps=subagent.max_iterations,
             llm_client=self.llm_client,
             plugin_registry=self.plugin_registry,
+            plugin_event_dispatcher=self.plugin_event_dispatcher,
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
             message_bus=self.message_bus,

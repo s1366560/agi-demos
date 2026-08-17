@@ -834,6 +834,7 @@ class StreamMixin:
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
             plugin_registry=config.plugin_registry,
+            plugin_event_dispatcher=config.plugin_event_dispatcher,
             runtime_hook_overrides=[dict(item) for item in config.runtime_hook_overrides],
             runtime_context=dict(config.runtime_context),
             tool_provider=tool_provider,

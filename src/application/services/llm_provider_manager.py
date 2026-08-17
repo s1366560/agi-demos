@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 from src.domain.llm_providers.llm_types import LLMClient, LLMConfig
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.domain.model.plugins import CredentialReference
+from src.domain.ports.plugins import ResolvedLlmRoute
 from src.infrastructure.llm.registry import get_provider_adapter_registry
 from src.infrastructure.llm.resilience import (
     CircuitBreakerRegistry,
@@ -42,6 +44,14 @@ from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_health_checker,
     get_provider_rate_limiter,
+)
+from src.infrastructure.plugins.context import PluginScopeContext
+from src.infrastructure.plugins.llm_runtime import (
+    CredentialLease,
+    CredentialLeaseScope,
+    LlmRouteResolver,
+    ProviderMetadataRegistry,
+    ProviderRouteConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,6 +109,12 @@ class LLMProviderManager:
         )
         self._rate_limiter = rate_limiter or self._build_rate_limiter(redis_client)
         self._health_checker = health_checker or get_health_checker()
+        self.provider_metadata = ProviderMetadataRegistry()
+        self._route_configs: dict[str, ProviderRouteConfig] = {}
+        self._route_resolver = LlmRouteResolver(
+            providers=self._route_configs,
+            lease_resolver=_NoopCredentialLeaseResolver(),
+        )
 
         # Provider configurations (loaded from database or settings)
         self._provider_configs: dict[ProviderType, ProviderConfig] = {}
@@ -223,6 +239,7 @@ class LLMProviderManager:
 
         # Register with health checker
         self._health_checker.register_provider(provider_type, provider_config)
+        self._register_route_config(provider_config)
 
         logger.info(f"Registered provider: {provider_type.value}")
 
@@ -230,6 +247,59 @@ class LLMProviderManager:
         """Unregister a provider configuration."""
         self._provider_configs.pop(provider_type, None)
         self._health_checker.unregister_provider(provider_type)
+        self._route_configs.pop(provider_type.value, None)
+
+    def resolve_route(
+        self,
+        provider_type: ProviderType,
+        model_id: str | None = None,
+    ) -> ResolvedLlmRoute:
+        """Resolve request-scoped provider facts without exposing credentials."""
+        return self._route_resolver.resolve(provider_type.value, model_id=model_id)
+
+    async def lease_route_credential(
+        self,
+        scope: PluginScopeContext,
+        route: ResolvedLlmRoute,
+    ) -> CredentialLeaseScope:
+        """Lease a credential at an execution boundary; fail closed without vault."""
+        return await self._route_resolver.lease(scope, route)
+
+    def _register_route_config(self, provider_config: ProviderConfig) -> None:
+        """Project a provider row into request-time route and metadata registries."""
+        model_id = (
+            provider_config.llm_model
+            or provider_config.embedding_model
+            or provider_config.reranker_model
+            or ""
+        )
+        raw_config = provider_config.config
+        route = ProviderRouteConfig(
+            provider_id=provider_config.provider_type.value,
+            provider_type=provider_config.provider_type.value,
+            model_id=model_id,
+            base_url=provider_config.base_url
+            or f"memstack://provider/{provider_config.provider_type.value}",
+            credential_ref=f"vault://llm-provider/{provider_config.id}",
+            credential_revision=max(1, int(provider_config.updated_at.timestamp() * 1000)),
+            timeout_ms=_positive_int(raw_config.get("timeout_seconds"), 120) * 1000,
+            context_window=_positive_int(raw_config.get("context_window"), 128_000),
+            max_output_tokens=_positive_int(raw_config.get("max_output_tokens"), 8_192),
+        )
+        provider_id = provider_config.provider_type.value
+        self._route_configs[provider_id] = route
+        self.provider_metadata.register(
+            provider_id,
+            {
+                "provider_id": provider_id,
+                "operation_type": provider_config.operation_type.value,
+                "model_id": model_id,
+                "pool_enabled": provider_config.pool_enabled,
+                "pool_weight": provider_config.pool_weight,
+                "context_window": route.context_window,
+                "max_output_tokens": route.max_output_tokens,
+            },
+        )
 
     def get_provider_config(
         self,
@@ -278,6 +348,17 @@ class LLMProviderManager:
             if not provider_config:
                 logger.debug(f"Skipping {provider_type.value}: no configuration registered")
                 continue
+            if self._route_rollout_enabled:
+                route = self.resolve_route(
+                    provider_type,
+                    model_id=llm_config.model if llm_config is not None else None,
+                )
+                logger.debug(
+                    "Resolved platform LLM route provider=%s model=%s credential_ref=%s",
+                    provider_type.value,
+                    route.model_id,
+                    route.credential.ref,
+                )
 
             # Check circuit breaker
             circuit_breaker = self._circuit_breakers.get(provider_type)
@@ -316,6 +397,14 @@ class LLMProviderManager:
             f"No healthy LLM provider available for operation {operation.value}. "
             f"Last error: {last_error}"
         )
+
+    @property
+    def _route_rollout_enabled(self) -> bool:
+        """Return whether V2 route resolution or shadow comparison is enabled."""
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        return settings.platform_plugin_llm_v2 or settings.platform_plugin_llm_shadow
 
     def _get_provider_order(
         self,
@@ -483,6 +572,29 @@ class LLMProviderManager:
     async def stop_health_monitoring(self) -> None:
         """Stop background health monitoring."""
         await self._health_checker.stop()
+
+
+def _positive_int(value: Any, default: int) -> int:
+    """Coerce a public numeric provider setting to a positive integer."""
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+class _NoopCredentialLeaseResolver:
+    """Fail-closed lease resolver for managers without a vault implementation."""
+
+    async def resolve(
+        self,
+        scope: PluginScopeContext,
+        credential: CredentialReference,
+    ) -> CredentialLease:
+        _ = scope
+        raise RuntimeError(f"credential vault is not configured for {credential.ref}")
 
 
 # Global manager instance

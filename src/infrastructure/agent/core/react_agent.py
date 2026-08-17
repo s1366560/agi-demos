@@ -34,6 +34,7 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+from src.infrastructure.plugins.agent_events import create_agent_plugin_event_dispatcher
 
 from ..commands.builtins import register_builtin_commands
 from ..commands.interceptor import CommandInterceptor
@@ -458,6 +459,7 @@ class ReActAgent(
             base_api_key=self.api_key,
             base_url=self.base_url,
             plugin_registry=get_plugin_registry(),
+            plugin_event_dispatcher=create_agent_plugin_event_dispatcher(get_plugin_registry()),
             message_bus=message_bus,
             control_channel=control_channel,
         )
@@ -638,9 +640,7 @@ class ReActAgent(
 
         agent_policy_deny: set[str] = set()
         if selected_agent and selected_agent.tool_policy is not None:
-            agent_policy_allow = set(
-                canonical_tool_policy_names(selected_agent.tool_policy.allow)
-            )
+            agent_policy_allow = set(canonical_tool_policy_names(selected_agent.tool_policy.allow))
             if agent_policy_allow:
                 allowlists.append(agent_policy_allow)
 

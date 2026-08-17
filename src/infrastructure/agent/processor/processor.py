@@ -179,6 +179,7 @@ class ProcessorConfig:
 
     # Plugin registry (optional, for hook notifications)
     plugin_registry: Any | None = None
+    plugin_event_dispatcher: Any | None = None
     runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
     runtime_context: dict[str, Any] = field(default_factory=dict)
 
@@ -315,6 +316,18 @@ def _consume_tool_pending_events(tool_def: "ToolDefinition") -> list[Any]:
 ProcessorEvent = AgentDomainEvent | dict[str, Any]
 
 
+def _create_event_dispatcher(
+    plugin_registry: Any | None,
+    runtime_hook_overrides: list[dict[str, Any]],
+) -> Any | None:
+    """Create the rollout dispatcher only when a flag explicitly enables it."""
+    from src.infrastructure.plugins.agent_events import (
+        create_agent_plugin_event_dispatcher,
+    )
+
+    return create_agent_plugin_event_dispatcher(plugin_registry, runtime_hook_overrides)
+
+
 class SessionProcessor:
     """
     Core ReAct agent processing loop.
@@ -429,6 +442,10 @@ class SessionProcessor:
         self._llm_client = config.llm_client
         # Plugin registry for hook notifications (optional)
         self._plugin_registry = config.plugin_registry
+        self._plugin_event_dispatcher = config.plugin_event_dispatcher or _create_event_dispatcher(
+            config.plugin_registry,
+            config.runtime_hook_overrides,
+        )
 
         # Session state
         self._state = ProcessorState.IDLE
@@ -512,6 +529,39 @@ class SessionProcessor:
         effective_payload = dict(payload or {})
         if self._plugin_registry is None:
             return effective_payload
+        if self._plugin_event_dispatcher is not None:
+            try:
+                result = await self._plugin_event_dispatcher.dispatch(
+                    hook_name,
+                    payload=effective_payload,
+                    runtime_hook_overrides=self.config.runtime_hook_overrides,
+                )
+            except Exception:
+                logger.warning("Typed plugin event %r failed", hook_name, exc_info=True)
+                return effective_payload
+            for diagnostic in result.diagnostics:
+                diagnostic_message = getattr(diagnostic, "message", str(diagnostic))
+                diagnostic_plugin = getattr(diagnostic, "plugin_name", "unknown")
+                log_level = (
+                    logging.ERROR
+                    if getattr(diagnostic, "level", "error") == "error"
+                    else logging.WARNING
+                )
+                logger.log(
+                    log_level,
+                    "Plugin event %s diagnostic [%s]: %s",
+                    hook_name,
+                    diagnostic_plugin,
+                    diagnostic_message,
+                )
+            if result.shadow_diff is not None and not result.shadow_diff.equal:
+                logger.warning(
+                    "Plugin event shadow diff for %s -> %s",
+                    hook_name,
+                    result.shadow_diff.event_name,
+                )
+            self._merge_hook_instructions(result.payload)
+            return cast(dict[str, Any], result.payload)
         try:
             result = await self._plugin_registry.apply_hook(
                 hook_name,

@@ -88,10 +88,11 @@ class LlmRouteResolver:
 
     def __init__(
         self,
+        *,
         providers: Mapping[str, ProviderRouteConfig],
         lease_resolver: CredentialLeaseResolver,
     ) -> None:
-        self._providers = dict(providers)
+        self._providers = providers
         self._lease_resolver = lease_resolver
 
     def resolve(

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 import redis.asyncio as redis
 
+from src.domain.model.plugins import PluginScopeContext
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.agent.plugins.registry import (
     PluginDiagnostic,
@@ -2842,7 +2843,16 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
     Returns:
         Dictionary of tool name -> tool instance, or None if not cached
     """
-    return _tools_cache.get(project_id)
+    cached = _tools_cache.get(project_id)
+    if cached is None:
+        return None
+    _publish_scoped_tool_generation(project_id, cached)
+    service = _agent_tool_service_if_v2()
+    if service is not None:
+        current = service.current(PluginScopeContext(project_id=project_id))
+        if current is not None:
+            return dict(current.tools)
+    return cached
 
 
 def get_custom_tool_diagnostics(
@@ -3019,6 +3029,7 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
                 len(custom_tools),
                 project_id,
             )
+        _publish_scoped_tool_generation(project_id, cached)
         return len(custom_tools)
 
     except Exception as e:
@@ -3028,6 +3039,33 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
             e,
         )
         return 0
+
+
+def _agent_tool_service_if_v2() -> Any | None:
+    """Return the scoped tool service only when V2 rollout is enabled."""
+    from src.configuration.config import get_settings
+    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
+
+    if not get_settings().platform_plugin_agent_tools_v2:
+        return None
+    return get_agent_tool_set_service()
+
+
+def _publish_scoped_tool_generation(
+    project_id: str,
+    tools: dict[str, Any],
+) -> None:
+    """Publish or shadow-compare one scoped legacy tool generation."""
+    from src.configuration.config import get_settings
+    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
+
+    settings = get_settings()
+    if not (settings.platform_plugin_agent_tools_v2 or settings.platform_plugin_agent_tools_shadow):
+        return
+    service = get_agent_tool_set_service()
+    scope = PluginScopeContext(project_id=project_id)
+    if service.current(scope) is None or service.shadow_diff(scope, tools):
+        service.publish(scope, tools)
 
 
 def invalidate_all_caches_for_project(

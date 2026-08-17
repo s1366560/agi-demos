@@ -364,6 +364,34 @@ class Settings(BaseSettings):
         default=True,
         alias="AGENT_MEMORY_FAILURE_PERSISTENCE_ENABLED",
     )  # Persist memory runtime failures into audit logs
+    platform_plugin_agent_events_v2: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_EVENTS_V2",
+    )
+    platform_plugin_agent_events_shadow: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_EVENTS_SHADOW",
+    )
+    platform_plugin_agent_tools_v2: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_TOOLS_V2",
+    )
+    platform_plugin_agent_tools_shadow: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_TOOLS_SHADOW",
+    )
+    platform_plugin_llm_v2: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_LLM_V2",
+    )
+    platform_plugin_llm_shadow: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_LLM_SHADOW",
+    )
+    platform_plugin_http_route_v2: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_HTTP_ROUTE_V2",
+    )
     agent_max_steps: int = Field(
         default=5000, alias="AGENT_MAX_STEPS"
     )  # Maximum steps for ReActAgent execution

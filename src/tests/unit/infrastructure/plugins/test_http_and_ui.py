@@ -9,7 +9,12 @@ from src.domain.ports.plugins import (
     UiSlotDefinition,
     UiSlotKind,
 )
-from src.infrastructure.plugins.http_routes import HttpRouteMountError, HttpRouteMountService
+from src.infrastructure.plugins.http_routes import (
+    HttpRouteCapabilityAppAssembler,
+    HttpRouteCapabilityRow,
+    HttpRouteMountError,
+    HttpRouteMountService,
+)
 from src.infrastructure.plugins.ui_slots import UiSlotRegistrationError, UiSlotRegistry
 
 
@@ -54,7 +59,7 @@ def test_plugin_route_requires_scoped_auth_dependency() -> None:
         authorization=HttpAuthorizationMode.AUTHENTICATED,
     )
 
-    with pytest.raises(HttpRouteMountError, match="scoped authorization"):
+    with pytest.raises(HttpRouteMountError, match="unsafe route definition"):
         service.mount(
             definition,
             lambda: None,
@@ -62,10 +67,47 @@ def test_plugin_route_requires_scoped_auth_dependency() -> None:
         )
     with pytest.raises(HttpRouteMountError, match="requires auth dependency"):
         service.mount(
-            definition,
+            HttpRouteDefinition(
+                plugin_id="example",
+                method="GET",
+                path="/api/v1/plugins/example/hello",
+                permission="plugin.example.read",
+                authorization=HttpAuthorizationMode.TENANT_MEMBER,
+            ),
             lambda: None,
             auth_dependency=None,
         )
+
+
+@pytest.mark.unit
+def test_http_route_assembler_mounts_and_removes_desired_rows() -> None:
+    app = FastAPI()
+    service = HttpRouteMountService(app)
+    assembler = HttpRouteCapabilityAppAssembler(
+        service,
+        {HttpAuthorizationMode.TENANT_MEMBER: _dependency},
+    )
+
+    async def handler():
+        return {"ok": True}
+
+    added, removed = assembler.reconcile(
+        [
+            HttpRouteCapabilityRow(
+                plugin_id="example",
+                method="GET",
+                path="/api/v1/plugins/example/hello",
+                permission="plugin.example.read",
+                authorization_mode="tenant_member",
+            )
+        ],
+        {("GET", "/api/v1/plugins/example/hello"): handler},
+    )
+    assert (added, removed) == (1, 0)
+
+    added, removed = assembler.reconcile([], {})
+    assert (added, removed) == (0, 1)
+    assert service.list_routes() == ()
 
 
 @pytest.mark.unit

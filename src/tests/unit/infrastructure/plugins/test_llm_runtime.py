@@ -17,7 +17,7 @@ class Resolver:
 
 def _resolver() -> LlmRouteResolver:
     return LlmRouteResolver(
-        {
+        providers={
             "openai-compatible": ProviderRouteConfig(
                 provider_id="openai-compatible",
                 provider_type="openai_compatible",
@@ -27,7 +27,7 @@ def _resolver() -> LlmRouteResolver:
                 credential_revision=4,
             )
         },
-        Resolver(),
+        lease_resolver=Resolver(),
     )
 
 

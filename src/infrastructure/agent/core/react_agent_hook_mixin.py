@@ -43,6 +43,26 @@ class HookMixin:
     ) -> dict[str, Any]:
         """Dispatch one runtime hook via the shared plugin registry."""
         effective_payload = dict(payload or {})
+        event_dispatcher = getattr(self.config, "plugin_event_dispatcher", None)
+        if event_dispatcher is not None:
+            try:
+                result = await event_dispatcher.dispatch(
+                    hook_name,
+                    payload=effective_payload,
+                    runtime_hook_overrides=getattr(
+                        self.config,
+                        "runtime_hook_overrides",
+                        [],
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "[ReActAgent] Typed plugin event %r failed",
+                    hook_name,
+                    exc_info=True,
+                )
+                return effective_payload
+            return dict(result.payload)
         plugin_registry = getattr(self.config, "plugin_registry", None)
         if plugin_registry is None:
             return effective_payload

@@ -41,5 +41,10 @@ def route_definition_is_safe(definition: HttpRouteDefinition) -> bool:
         normalized_method in {"GET", "POST", "PUT", "PATCH", "DELETE"}
         and definition.path.startswith("/")
         and bool(definition.permission.strip())
-        and isinstance(definition.authorization, HttpAuthorizationMode)
+        and definition.authorization
+        in {
+            HttpAuthorizationMode.TENANT_MEMBER,
+            HttpAuthorizationMode.PROJECT_MEMBER,
+            HttpAuthorizationMode.TENANT_ADMIN,
+        }
     )
