@@ -126,31 +126,46 @@ fn happy_path_runs_tool_once_then_finishes() {
 }
 
 #[test]
-fn observed_tool_failure_emits_one_terminal_failure_and_preserves_original_error() {
+fn observed_tool_failure_becomes_observation_and_run_recovers() {
     let observer = Arc::new(RecordingObserver::default());
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
     let engine = ReActEngine::new(
         Arc::new(ScriptedLlm::new(vec![AgentAction::CallTool {
             tool: "read".to_string(),
             input_json: r#"{"file":"README.md"}"#.to_string(),
         }])),
         Arc::new(FailingToolHost),
-        Arc::new(InMemoryCheckpointStore::new()),
+        checkpoints.clone(),
         Arc::new(FixedClock(0)),
     );
 
-    let error = block_on(engine.run_observed(
+    let state = block_on(engine.run_observed(
         "s-observed-tool-failure",
         "read README",
         Some("p1"),
         observer.clone(),
     ))
-    .expect_err("tool failure must propagate");
+    .expect("tool failure must become an observation, not abort the run");
 
-    assert_eq!(error.to_string(), "tool error: missing path alias");
+    // The script is exhausted after the failed round, so the planner finishes;
+    // the run ends normally instead of propagating the tool error.
+    assert_eq!(state.status, SessionStatus::Finished);
     assert_eq!(
         observer.events.lock().expect("observer events").as_slice(),
         &["start:read", "failed:read:tool error: missing path alias"]
     );
+    // The failure is fed back to the planner as this round's observation.
+    assert!(
+        state.transcript.iter().any(|entry| entry.role == Role::Observation
+            && entry.content.contains("tool error: missing path alias")),
+        "transcript should contain the failure observation: {:?}",
+        state.transcript
+    );
+    // Recorded as a failed call so crash replay cannot treat it as a success.
+    let call = state
+        .completed_call(0, "read", r#"{"file":"README.md"}"#)
+        .expect("failed call recorded");
+    assert!(call.failed);
 }
 
 #[test]
@@ -215,6 +230,7 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
         tool: "len".into(),
         input_json: LEN_INPUT.into(),
         output_json: r#"{"reused":true,"len":5}"#.into(),
+        failed: false,
     });
     checkpoints.seed(seeded).unwrap();
 

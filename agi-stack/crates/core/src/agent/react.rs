@@ -409,14 +409,14 @@ impl ReActEngine {
 
                     // Crash recovery: if this exact call already completed in
                     // this round, reuse its output — do NOT re-invoke the tool.
-                    let output = match state
-                        .completed_output(state.round, &tool, &input_json)
-                        .map(|s| s.to_string())
+                    let (output, tool_failed) = match state
+                        .completed_call(state.round, &tool, &input_json)
+                        .map(|call| (call.output_json.clone(), call.failed))
                     {
                         Some(prior) => prior,
                         None => {
                             let out = match self.tools.call(&tool, &input_json).await {
-                                Ok(output) => output,
+                                Ok(output) => (output, false),
                                 Err(error) => {
                                     if let Some(observer) = observer.as_deref() {
                                         let _ = observer
@@ -429,14 +429,27 @@ impl ReActEngine {
                                             )
                                             .await;
                                     }
-                                    return Err(error);
+                                    // Agent-First recovery (ADR-0005): a tool
+                                    // failure is structural evidence, not a
+                                    // verdict. Feed it back as this round's
+                                    // observation so the planner judges the
+                                    // recovery path; the run still stops only
+                                    // through the structural circuit breakers
+                                    // (doom loop, cost ceiling, round budget)
+                                    // or the planner itself. The failure text
+                                    // doubles as the recorded output so a
+                                    // crash + resume replays the same
+                                    // observation instead of re-invoking a
+                                    // tool whose side-effect state is unknown.
+                                    (error.to_string(), true)
                                 }
                             };
                             state.completed_tool_calls.push(CompletedCall {
                                 round: state.round,
                                 tool: tool.clone(),
                                 input_json: input_json.clone(),
-                                output_json: out.clone(),
+                                output_json: out.0.clone(),
+                                failed: out.1,
                             });
                             // Incremental persist (ADR-0005): from here on, a
                             // crash + resume must not run this tool again.
@@ -445,14 +458,16 @@ impl ReActEngine {
                         }
                     };
 
-                    if let Some(observer) = observer.as_deref() {
-                        observer
-                            .on_tool_result(session_id, state.round, &tool, &input_json, &output)
-                            .await?;
+                    if !tool_failed {
+                        if let Some(observer) = observer.as_deref() {
+                            observer
+                                .on_tool_result(session_id, state.round, &tool, &input_json, &output)
+                                .await?;
+                        }
                     }
 
                     state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output));
-                    if self.terminal_tools.contains(&tool) {
+                    if !tool_failed && self.terminal_tools.contains(&tool) {
                         state.status = SessionStatus::Finished;
                     }
                 }

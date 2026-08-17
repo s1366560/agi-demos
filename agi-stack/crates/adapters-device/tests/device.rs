@@ -159,6 +159,7 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
         tool: "len".into(),
         input_json: LEN_INPUT.into(),
         output_json: r#"{"reused":true}"#.into(),
+        failed: false,
     });
     block_on(store.save(&seeded)).unwrap();
 

@@ -405,6 +405,12 @@ pub struct CompletedCall {
     pub tool: String,
     pub input_json: String,
     pub output_json: String,
+    /// True when `output_json` records a tool **failure** observation instead
+    /// of a successful result. The engine feeds failures back to the planner
+    /// (Agent-First recovery) instead of aborting the run, and replay must not
+    /// treat the call as a successful — possibly terminal — result.
+    #[serde(default)]
+    pub failed: bool,
 }
 
 /// Lifecycle of an agent session.
@@ -501,10 +507,20 @@ impl SessionState {
 
     /// The already-recorded output for a tool call at `round`, if any.
     pub fn completed_output(&self, round: u64, tool: &str, input_json: &str) -> Option<&str> {
+        self.completed_call(round, tool, input_json)
+            .map(|c| c.output_json.as_str())
+    }
+
+    /// The full recorded call at `round`, including its success/failure flag.
+    pub fn completed_call(
+        &self,
+        round: u64,
+        tool: &str,
+        input_json: &str,
+    ) -> Option<&CompletedCall> {
         self.completed_tool_calls
             .iter()
             .find(|c| c.round == round && c.tool == tool && c.input_json == input_json)
-            .map(|c| c.output_json.as_str())
     }
 
     /// The recorded human answer for a HITL request id, if it has been answered.
