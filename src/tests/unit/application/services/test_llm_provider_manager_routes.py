@@ -8,13 +8,21 @@ import pytest
 from src.application.services.llm_provider_manager import LLMProviderManager
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.domain.model.plugins import parse_plugin_manifest
 from src.infrastructure.llm.resilience.health_checker import HealthCheckResult, HealthStatus
+from src.infrastructure.plugins import CapabilityRegistry
 from src.infrastructure.plugins.context import PluginScopeContext
 from src.infrastructure.plugins.llm_adapters import (
     LlmAdapterProviderRegistry,
     LlmAdapterRequest,
     RoutedLlmAdapterProvider,
 )
+from src.infrastructure.plugins.profile import (
+    compose_profile,
+    control_envelope,
+    parse_profile_document,
+)
+from src.infrastructure.plugins.runtime_host import PlatformPluginRuntimeHost
 from src.infrastructure.plugins.shadow_rollout import (
     queued_event_count,
     reset_shadow_rollout_queue_for_test,
@@ -431,3 +439,108 @@ def test_routed_adapter_provider_builds_client_without_legacy_registry() -> None
     assert captured[0][0].model == "test-model"
     assert captured[0][0].base_url == "https://example.test/v1"
     assert captured[0][1] is config
+
+
+@pytest.mark.unit
+async def test_profile_activated_adapter_serves_strict_removal_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compose -> reconcile -> registry -> manager with the legacy path removed."""
+    expected_client = cast(LLMClient, SimpleNamespace(name="profile-activated-client"))
+    built_configs: list[Any] = []
+
+    def routed_factory(**kwargs: Any) -> LLMClient:
+        built_configs.append(kwargs["config"])
+        return expected_client
+
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "llm-openai",
+            "version": "1.0.0",
+            "runtime": "python-trusted",
+            "trust": "builtin",
+            "provides": [
+                {
+                    "kind": "llm_provider",
+                    "id": "openai",
+                    "contract": "llm_adapter:openai",
+                    "permissions": ["llm.invoke"],
+                }
+            ],
+        }
+    )
+    snapshot = compose_profile(
+        parse_profile_document(
+            {
+                "profile": {
+                    "id": "strict-removal-e2e",
+                    "layers": [{"id": "providers", "plugins": [{"id": "llm-openai"}]}],
+                }
+            }
+        ),
+        {"llm-openai": manifest},
+    )
+    registry = LlmAdapterProviderRegistry()
+    host = PlatformPluginRuntimeHost(
+        capability_registry=CapabilityRegistry(),
+        adapter_registry=registry,
+        llm_adapter_factory=routed_factory,
+    )
+    receipt = host.apply(snapshot, control_envelope(snapshot, version=1))
+    assert receipt.accepted
+    assert registry.owner_of("openai") == "llm-openai"
+
+    class LegacyProvider:
+        def create_adapter(self, request: LlmAdapterRequest) -> LLMClient:
+            raise AssertionError(f"legacy fallback must not run for {request.provider_config.id}")
+
+    class HealthyProviders:
+        def register_provider(
+            self,
+            provider_type: ProviderType,
+            provider_config: ProviderConfig,
+        ) -> None:
+            _ = provider_type, provider_config
+
+        def unregister_provider(self, provider_type: ProviderType) -> None:
+            _ = provider_type
+
+        async def get_health(self, provider_type: ProviderType) -> HealthCheckResult:
+            return HealthCheckResult(
+                provider_type=provider_type,
+                status=HealthStatus.HEALTHY,
+            )
+
+    class OpenCircuitBreakers:
+        def get(self, provider_type: ProviderType) -> Any:
+            _ = provider_type
+            return SimpleNamespace(can_execute=lambda: True, record_failure=lambda: None)
+
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=True,
+            platform_plugin_llm_remove_legacy=True,
+            platform_plugin_llm_shadow=False,
+            llm_cache_enabled=True,
+        ),
+    )
+    manager = LLMProviderManager(
+        circuit_breaker_registry=cast(Any, OpenCircuitBreakers()),
+        health_checker=cast(Any, HealthyProviders()),
+        adapter_provider=LegacyProvider(),
+        adapter_registry=registry,
+    )
+    manager.register_provider(_provider_config())
+
+    client = await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
+
+    assert client is expected_client
+    assert built_configs[0].model == "test-model"
+    assert built_configs[0].base_url == "https://example.test/v1"
+
+    host.dispose()
+    assert registry.get("openai") is None
+    with pytest.raises(RuntimeError, match="no provider is registered"):
+        await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
