@@ -25,6 +25,9 @@ class ProfileCompositionError(ValueError):
     """Raised when a profile cannot compose into a valid runtime snapshot."""
 
 
+PROFILE_SNAPSHOT_TYPE_URL = "types.memstack.ai/plugin.profile.v1"
+
+
 @dataclass(frozen=True)
 class ProfileRow:
     """One plugin activation row contributed by a profile layer."""
@@ -218,7 +221,7 @@ def control_envelope(
     *,
     version: int,
     nonce: str | None = None,
-    type_url: str = "types.memstack.ai/plugin.profile.v1",
+    type_url: str = PROFILE_SNAPSHOT_TYPE_URL,
 ) -> ControlPlaneEnvelope:
     """Build a versioned envelope for snapshot distribution."""
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:

@@ -148,51 +148,9 @@ def activate_profile_snapshot(
     """
     contexts: list[PluginContext] = []
     adapter_disposers: list[Disposable] = []
-    for row in snapshot.rows:
-        context = PluginContext(
-            capability_registry,
-            row.manifest,
-            config=row.config,
-        )
-        llm_providers: dict[str, RoutedLlmAdapterProvider] = {}
-        if adapter_registry is not None:
-            for capability in row.manifest.provides:
-                if capability.kind.value != "llm_provider":
-                    continue
-                if (
-                    row.manifest.runtime.value != "python-trusted"
-                    or row.manifest.trust.value
-                    not in {
-                        "builtin",
-                        "signed",
-                    }
-                ):
-                    raise ValueError("LLM adapter providers require a trusted python runtime")
-                provider = RoutedLlmAdapterProvider(factory=llm_adapter_factory)
-                adapter_disposers.append(
-                    adapter_registry.register(
-                        capability.id,
-                        provider,
-                        owner=row.manifest.id,
-                    )
-                )
-                llm_providers[capability.id] = provider
-        for capability in row.manifest.provides:
-            implementation = llm_providers.get(
-                capability.id,
-                LegacyCapability(
-                    plugin_id=row.manifest.id,
-                    capability=capability.contract,
-                ),
-            )
-            _ = context.register_capability(
-                capability.kind,
-                capability.id,
-                implementation,
-            )
-        contexts.append(context)
+    pending_context: PluginContext | None = None
 
-    def dispose() -> None:
+    def dispose_all() -> None:
         for adapter_dispose in reversed(adapter_disposers):
             adapter_dispose()
         adapter_disposers.clear()
@@ -200,7 +158,63 @@ def activate_profile_snapshot(
             context.close()
         contexts.clear()
 
-    return dispose
+    try:
+        for row in snapshot.rows:
+            pending_context = PluginContext(
+                capability_registry,
+                row.manifest,
+                config=row.config,
+            )
+            context = pending_context
+            llm_providers: dict[str, RoutedLlmAdapterProvider] = {}
+            if adapter_registry is not None:
+                for capability in row.manifest.provides:
+                    if capability.kind.value != "llm_provider":
+                        continue
+                    if (
+                        row.manifest.runtime.value != "python-trusted"
+                        or row.manifest.trust.value
+                        not in {
+                            "builtin",
+                            "signed",
+                        }
+                    ):
+                        raise ValueError("LLM adapter providers require a trusted python runtime")
+                    provider = RoutedLlmAdapterProvider(factory=llm_adapter_factory)
+                    adapter_disposers.append(
+                        adapter_registry.register(
+                            capability.id,
+                            provider,
+                            owner=row.manifest.id,
+                        )
+                    )
+                    llm_providers[capability.id] = provider
+            for capability in row.manifest.provides:
+                implementation = llm_providers.get(
+                    capability.id,
+                    LegacyCapability(
+                        plugin_id=row.manifest.id,
+                        capability=capability.contract,
+                    ),
+                )
+                _ = context.register_capability(
+                    capability.kind,
+                    capability.id,
+                    implementation,
+                )
+            contexts.append(context)
+            pending_context = None
+    except Exception:
+        # A failed activation must not leak partially registered capabilities:
+        # close every context created so far (including a row in progress that
+        # was not yet appended) and release adapter registrations in reverse.
+        if pending_context is not None:
+            pending_context.close()
+            pending_context = None
+        dispose_all()
+        raise
+
+    return dispose_all
 
 
 def register_plugin_activation(
