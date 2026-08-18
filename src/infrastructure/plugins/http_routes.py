@@ -109,9 +109,11 @@ class HttpRouteCapabilityAppAssembler:
         self,
         mount_service: HttpRouteMountService,
         auth_dependencies: Mapping[HttpAuthorizationMode, Callable[..., Any]],
+        route_auth_dependencies: Mapping[tuple[str, str], Callable[..., Any]] | None = None,
     ) -> None:
         self._mount_service = mount_service
         self._auth_dependencies = dict(auth_dependencies)
+        self._route_auth_dependencies = dict(route_auth_dependencies or {})
         self._mounted: dict[tuple[str, str], Disposable] = {}
 
     def reconcile(
@@ -148,7 +150,10 @@ class HttpRouteCapabilityAppAssembler:
             if key in self._mounted:
                 continue
             definition = _definition_from_row(row)
-            auth_dependency = self._auth_dependencies.get(definition.authorization)
+            auth_dependency = self._route_auth_dependencies.get(
+                key,
+                self._auth_dependencies.get(definition.authorization),
+            )
             self._mounted[key] = self._mount_service.mount(
                 definition,
                 handler,

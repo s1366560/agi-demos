@@ -85,6 +85,28 @@ class PlatformPluginGovernanceRepository:
         )
         return list(result.scalars().all())
 
+    async def permission_is_granted(
+        self,
+        *,
+        plugin_id: str,
+        permission: str,
+        scope_type: str,
+        scope_id: str,
+    ) -> bool:
+        """Return whether one exact permission grant is active."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginPermissionModel.id).where(
+                    PlatformPluginPermissionModel.plugin_id == plugin_id,
+                    PlatformPluginPermissionModel.permission == permission,
+                    PlatformPluginPermissionModel.scope_type == scope_type,
+                    PlatformPluginPermissionModel.scope_id == scope_id,
+                    PlatformPluginPermissionModel.revoked_at.is_(None),
+                )
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def revoke_permissions(self, plugin_id: str) -> int:
         """Revoke every active grant for a plugin and return the count."""
         result = await self._session.execute(

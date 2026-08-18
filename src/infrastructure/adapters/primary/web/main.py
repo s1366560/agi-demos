@@ -109,6 +109,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
+    install_http_route_capabilities,
     record_initial_http_route_inventory_shadow,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
@@ -177,6 +178,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     _ = await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
     shadow_rollout_worker = initialize_shadow_rollout_worker(async_session_factory)
     _ = await record_initial_http_route_inventory_shadow(async_session_factory)
+    http_route_assembler = await install_http_route_capabilities(
+        app,
+        session_factory=async_session_factory,
+    )
+    app.state.platform_plugin_http_routes = http_route_assembler
 
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
@@ -377,6 +383,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Failed to wire reflection runtime -- loop disabled")
 
     yield
+
+    # Remove plugin-owned routes before application state services unwind.
+    http_routes = getattr(app.state, "platform_plugin_http_routes", None)
+    if http_routes is not None:
+        http_routes.dispose()
+        app.state.platform_plugin_http_routes = None
 
     # Stop new recovery claims and drain all persisted Provider callbacks
     # before their DB, Redis, and Agent Runtime dependencies are torn down.

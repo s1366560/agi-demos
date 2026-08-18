@@ -26,6 +26,7 @@ from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
 from .graph import initialize_graph_service
+from .http_route_capabilities import install_http_route_capabilities
 from .llm import initialize_llm_providers, sync_health_checker_providers
 from .redis import initialize_redis_client
 from .sandbox_reaper import initialize_sandbox_idle_reaper, shutdown_sandbox_idle_reaper
@@ -55,6 +56,7 @@ __all__ = [
     "initialize_telemetry",
     "initialize_websocket_manager",
     "initialize_workflow_engine",
+    "install_http_route_capabilities",
     "record_initial_http_route_inventory_shadow",
     "reload_channel_manager_connections",
     "set_message_router",
