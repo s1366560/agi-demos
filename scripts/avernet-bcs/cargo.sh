@@ -95,6 +95,12 @@ install_protoc() {
   exit 1
 }
 
+# rustup may be installed at ~/.cargo/bin without being on PATH (e.g. fresh
+# login shells, IDE tasks); probe the standard location before giving up.
+if ! command -v rustup >/dev/null && [[ -x "${HOME}/.cargo/bin/rustup" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
 command -v rustup >/dev/null || {
   echo "rustup is required to install the isolated BCS toolchain" >&2
   exit 1
