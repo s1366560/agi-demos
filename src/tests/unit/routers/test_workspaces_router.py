@@ -350,18 +350,26 @@ class TestWorkspacesRouter:
         workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
 
     def test_list_members_batch_resolves_user_email(
-        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+        self,
+        workspaces_client: TestClient,
+        mock_workspace_service: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         mock_workspace_service.list_members.return_value = [
             _make_member("user-2"),
             _make_member("user-3", role=WorkspaceRole.VIEWER),
         ]
-        user_email_result = Mock()
-        user_email_result.all.return_value = [
-            ("user-2", "editor@example.com"),
-            ("user-3", "viewer@example.com"),
-        ]
-        workspaces_client.mock_db.execute.return_value = user_email_result  # type: ignore[attr-defined]
+        user_repo = Mock()
+        user_repo.find_by_ids = AsyncMock(
+            return_value=[
+                Mock(id="user-2", email="editor@example.com"),
+                Mock(id="user-3", email="viewer@example.com"),
+            ]
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.workspaces.SqlUserRepository",
+            lambda _db: user_repo,
+        )
 
         response = workspaces_client.get(
             "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members"
@@ -390,7 +398,7 @@ class TestWorkspacesRouter:
                 "updated_at": response.json()[1]["updated_at"],
             },
         ]
-        assert workspaces_client.mock_db.execute.await_count == 1  # type: ignore[attr-defined]
+        user_repo.find_by_ids.assert_awaited_once_with(["user-2", "user-3"])
 
     def test_list_agents_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
