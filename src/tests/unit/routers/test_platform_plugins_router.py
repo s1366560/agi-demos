@@ -247,11 +247,13 @@ async def test_shadow_rollout_readiness_requires_complete_zero_diff_scope_covera
         ],
         "agent_tools": ["agent.tool_generation"],
         "llm_routes": ["llm.route"],
+        "http_routes": ["http.route_inventory"],
     }
     scope_types = {
         "agent_events": "tenant",
         "agent_tools": "project",
         "llm_routes": "tenant",
+        "http_routes": "tenant",
     }
     for capability, events in event_names.items():
         for scope_index in range(2):
@@ -303,7 +305,7 @@ async def test_shadow_rollout_readiness_requires_complete_zero_diff_scope_covera
     )
     diff_payload = diff_response.json()
     assert diff_payload["ready"] is False
-    assert "llm_routes:diffs_present" in diff_payload["reasons"]
+    assert "http_routes:diffs_present" in diff_payload["reasons"]
 
 
 @pytest.mark.unit
@@ -477,6 +479,22 @@ async def test_cutover_approval_requires_readiness_and_is_durable(
     await repository.record_shadow_rollout_events(
         [
             {
+                "capability": "http_routes",
+                "event_name": "http.route_inventory",
+                "hook_name": "route_inventory",
+                "scope_type": "tenant",
+                "scope_id": f"approval-http-{scope_index}",
+                "equal": True,
+                "legacy_payload": {"value": "same"},
+                "typed_payload": {"value": "same"},
+                "occurred_at": now,
+            }
+            for scope_index in range(100)
+        ]
+    )
+    await repository.record_shadow_rollout_events(
+        [
+            {
                 "capability": "llm_routes",
                 "event_name": "llm.route",
                 "hook_name": "provider_route",
@@ -637,7 +655,7 @@ def _ready_shadow(checked_at: datetime) -> ShadowRolloutReadiness:
             last_occurred_at=checked_at,
             reasons=(),
         )
-        for capability in ("agent_events", "agent_tools", "llm_routes")
+        for capability in ("agent_events", "agent_tools", "llm_routes", "http_routes")
     ]
     return ShadowRolloutReadiness(
         ready=True,

@@ -16,6 +16,7 @@ REQUIRED_SHADOW_EVENTS: frozenset[tuple[str, str]] = frozenset(
         ("agent_events", "agent.after_turn"),
         ("agent_tools", "agent.tool_generation"),
         ("llm_routes", "llm.route"),
+        ("http_routes", "http.route_inventory"),
     }
 )
 

@@ -57,10 +57,11 @@ class FakeRepository:
         return self.approval if expires_at > checked_at else None
 
 
-def settings(*, v2: bool) -> SimpleNamespace:
+def settings(*, v2: bool, http_route_v2: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         platform_plugin_agent_events_v2=v2,
         platform_plugin_agent_tools_v2=v2,
+        platform_plugin_http_route_v2=http_route_v2,
     )
 
 
@@ -88,12 +89,14 @@ def complete_evidence(now: datetime) -> FakeRepository:
             ],
             ("agent_tools", "agent.tool_generation"),
             ("llm_routes", "llm.route"),
+            ("http_routes", "http.route_inventory"),
         )
     ]
     repository.scope_counts = [
         {"capability": "agent_events", "distinct_scope_count": 10},
         {"capability": "agent_tools", "distinct_scope_count": 10},
         {"capability": "llm_routes", "distinct_scope_count": 10},
+        {"capability": "http_routes", "distinct_scope_count": 10},
     ]
     repository.apply_events = [
         SimpleNamespace(
@@ -163,6 +166,23 @@ async def test_cutover_gate_rejects_v2_without_durable_evidence(
     assert any(reason.startswith("shadow:agent_events:missing_event:") for reason in reasons)
     assert "rollback_drill:insufficient_rollback_drills:0:1" in reasons
     assert "operator_approval:missing" in reasons
+
+
+@pytest.mark.unit
+async def test_cutover_gate_rejects_http_route_v2_without_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = FakeRepository(FakeSession())
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: settings(v2=False, http_route_v2=True),
+    )
+    monkeypatch.setattr(cutover_gate_module, "PlatformPluginRepository", lambda _s: repository)
+
+    with pytest.raises(CutoverGateError) as error:
+        await ensure_platform_plugin_v2_cutover_ready(FakeSession)
+
+    assert "operator_approval:missing" in error.value.reasons
 
 
 @pytest.mark.unit

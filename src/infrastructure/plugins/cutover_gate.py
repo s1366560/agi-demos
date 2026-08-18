@@ -39,7 +39,8 @@ async def ensure_platform_plugin_v2_cutover_ready(
     events_v2 = bool(getattr(settings, "platform_plugin_agent_events_v2", False))
     tools_v2 = bool(getattr(settings, "platform_plugin_agent_tools_v2", False))
     llm_v2 = bool(getattr(settings, "platform_plugin_llm_v2", False))
-    if not (events_v2 or tools_v2 or llm_v2):
+    http_route_v2 = bool(getattr(settings, "platform_plugin_http_route_v2", False))
+    if not (events_v2 or tools_v2 or llm_v2 or http_route_v2):
         return False
 
     checked_at = datetime.now(UTC)
