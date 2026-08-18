@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     io::{Read, Write},
     path::{Path as FsPath, PathBuf},
     sync::{
@@ -141,7 +141,7 @@ use authority_store::{
     BROWSER_CREDENTIAL_FILL_TARGET_KIND, BROWSER_FULL_CDP_TARGET_KIND, BROWSER_ORIGIN_TARGET_KIND,
     FULL_CDP_CAPABILITY, HITL_PENDING_AUTHORITY_REVISION,
 };
-use authorized_tool_host::AuthorizedRunToolHost;
+use authorized_tool_host::{AuthorizedRunToolHost, RunOnceToolPermissions};
 use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesInspector};
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
 use conversation_llm_route::{normalized_conversation_llm_route, workload_role_for_capability};
@@ -543,6 +543,10 @@ impl LocalRuntimeState {
             .lock()
             .expect("browser once consents")
             .retain(|(consent_run_id, _)| consent_run_id != run_id);
+        self.run_once_tool_permissions
+            .lock()
+            .expect("run once tool permissions")
+            .retain(|(permission_run_id, _)| permission_run_id != run_id);
     }
 }
 
@@ -811,6 +815,7 @@ struct LocalRuntimeState {
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
+    run_once_tool_permissions: RunOnceToolPermissions,
     site_credentials: provider_credentials::SiteCredentialBroker,
     /// Application data directory (set by `LocalRuntimeService::start`;
     /// `None` in tests). Backs browser screenshot artifact files.
@@ -1100,6 +1105,7 @@ impl LocalRuntimeState {
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
+            run_once_tool_permissions: Arc::new(Mutex::new(BTreeSet::new())),
             site_credentials,
             app_data_dir: None,
             #[cfg(test)]
@@ -2160,14 +2166,17 @@ impl LocalRuntimeState {
                 self.session_store.clone(),
                 conversation.id.clone(),
             )),
-            ConversationRunMode::Build => Arc::new(AuthorizedRunToolHost::with_dynamic_metadata(
-                combined_tool_host,
-                self.session_store.clone(),
-                run.cloned().ok_or_else(|| {
-                    "build mode requires an authoritative run for tool execution".to_string()
-                })?,
-                dynamic_metadata,
-            )),
+            ConversationRunMode::Build => Arc::new(
+                AuthorizedRunToolHost::with_dynamic_metadata(
+                    combined_tool_host,
+                    self.session_store.clone(),
+                    run.cloned().ok_or_else(|| {
+                        "build mode requires an authoritative run for tool execution".to_string()
+                    })?,
+                    dynamic_metadata,
+                )
+                .with_once_permissions(Arc::clone(&self.run_once_tool_permissions)),
+            ),
         };
         let llm: Arc<dyn LlmPort> =
             Arc::new(execution_profile::ProfiledLlm::new(base_llm, &profile));
@@ -7706,6 +7715,15 @@ async fn respond_to_hitl(
             return Err(hitl_response_commit_error(error));
         }
     };
+    if let Some((run_id, canonical_tool_name)) =
+        run_once_tool_permission_from_hitl(&request, &body.response_data)
+    {
+        state
+            .run_once_tool_permissions
+            .lock()
+            .expect("run once tool permissions")
+            .insert((run_id, canonical_tool_name));
+    }
     // The HITL response is committed; apply the browser-origin consent.
     // Persisted scopes go to the grant table; `once` joins the run-scoped
     // in-memory cache only (never persisted). A duplicate response replays
@@ -8266,6 +8284,27 @@ fn workspace_tool_grant_from_hitl(
         revoked_by: None,
         revoked_at: None,
     }))
+}
+
+fn run_once_tool_permission_from_hitl(
+    request: &DesktopHitlRequest,
+    response_data: &Value,
+) -> Option<(String, String)> {
+    if request.kind != HitlKind::Permission {
+        return None;
+    }
+    let run_id = request.run_id.clone()?;
+    if response_data.get("action").and_then(Value::as_str) != Some("allow")
+        || response_data.get("granted").and_then(Value::as_bool) != Some(true)
+        || response_data.get("scope").and_then(Value::as_str) != Some("once")
+    {
+        return None;
+    }
+    let canonical_tool_name = request.decision.as_ref()?.action.name.trim().to_string();
+    if canonical_tool_name.is_empty() {
+        return None;
+    }
+    Some((run_id, canonical_tool_name))
 }
 
 /// The browser-origin consent derived from a permission HITL response, if
@@ -10403,6 +10442,16 @@ mod tests {
         }
     }
 
+    fn workspace_permission_hitl_request(
+        run_id: Option<&str>,
+        canonical_tool_name: &str,
+    ) -> DesktopHitlRequest {
+        let mut request = browser_origin_hitl_request(run_id);
+        request.decision.as_mut().expect("decision").target.kind = "file".to_string();
+        request.decision.as_mut().expect("decision").action.name = canonical_tool_name.to_string();
+        request
+    }
+
     #[test]
     fn browser_origin_permission_response_accepts_once_site_all_and_deny() {
         let request = browser_origin_hitl_request(Some("run-1"));
@@ -10447,6 +10496,36 @@ mod tests {
             &other,
             &json!({"action": "allow", "granted": true, "scope": "all"})
         ));
+    }
+
+    #[test]
+    fn run_once_tool_permission_extracts_only_an_allowed_canonical_tool() {
+        let request = workspace_permission_hitl_request(Some("run-once"), "write");
+        assert_eq!(
+            run_once_tool_permission_from_hitl(
+                &request,
+                &json!({"action": "allow", "granted": true, "scope": "once"}),
+            ),
+            Some(("run-once".to_string(), "write".to_string()))
+        );
+        for response in [
+            json!({"action": "allow_always", "granted": true, "scope": "workspace_tool"}),
+            json!({"action": "deny", "granted": false, "scope": "once"}),
+            json!({"action": "allow", "granted": false, "scope": "once"}),
+            json!({"action": "allow", "granted": true, "scope": "site"}),
+        ] {
+            assert_eq!(
+                run_once_tool_permission_from_hitl(&request, &response),
+                None
+            );
+        }
+        assert_eq!(
+            run_once_tool_permission_from_hitl(
+                &workspace_permission_hitl_request(None, "write"),
+                &json!({"action": "allow", "granted": true, "scope": "once"}),
+            ),
+            None
+        );
     }
 
     #[test]
@@ -10654,6 +10733,16 @@ mod tests {
             consents.insert(("run-x".to_string(), "b.test".to_string()));
             consents.insert(("run-y".to_string(), "a.test".to_string()));
         }
+        state
+            .run_once_tool_permissions
+            .lock()
+            .unwrap()
+            .insert(("run-x".to_string(), "write".to_string()));
+        state
+            .run_once_tool_permissions
+            .lock()
+            .unwrap()
+            .insert(("run-y".to_string(), "edit".to_string()));
         // Non-terminal: nothing happens.
         state
             .browser_run_cleanup("run-x", DesktopRunStatus::ReadyReview)
@@ -10666,6 +10755,9 @@ mod tests {
         let consents = state.browser_once_consents.lock().unwrap();
         assert_eq!(consents.len(), 1);
         assert!(consents.contains(&("run-y".to_string(), "a.test".to_string())));
+        let tool_permissions = state.run_once_tool_permissions.lock().unwrap();
+        assert_eq!(tool_permissions.len(), 1);
+        assert!(tool_permissions.contains(&("run-y".to_string(), "edit".to_string())));
     }
 
     #[tokio::test]

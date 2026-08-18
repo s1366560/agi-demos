@@ -131,6 +131,7 @@ const DECIDE_SYSTEM: &str = "You are a ReAct agent. Choose the next action and r
 {\"kind\":\"finish\",\"answer\":string} | \
 {\"kind\":\"request_human\",\"request\":{\"id\":string,\"kind\":\"clarification\"|\"decision\"|\"env_var\"|\"permission\",\"prompt\":string,\"decision\":{\"action\":{\"name\":string,\"label\":string},\"target\":{\"kind\":string,\"id\":string,\"version_id\":string|null,\"path\":string|null},\"data\":{\"summary\":string,\"redacted_fields\":string[]},\"reason\":string,\"risk\":{\"level\":\"low\"|\"medium\"|\"high\",\"rationale\":string},\"reversibility\":{\"mode\":\"reversible\"|\"partial\"|\"irreversible\",\"recovery\":string|null},\"scope\":{\"kind\":string,\"ids\":string[]},\"evidence\":[{\"kind\":string,\"id\":string,\"label\":string,\"uri\":string|null,\"digest\":string|null}]}}}. \
 decision is required and must be complete for decision or permission; omit it for clarification or env_var. \
+For permission, decision.action.name must be the exact canonical tool name from the advertised tool list, not a semantic alias such as create_file. \
 Risk, rationale, reversibility, scope, and evidence are your structured judgment and must not be delegated to prompt parsing. \
 Redact secrets from data.summary and name them in redacted_fields. input_json must be the tool's JSON input object, not a string containing encoded JSON. No prose, no code fences.";
 
@@ -387,5 +388,18 @@ impl LlmPort for HttpLlm {
             first_wire.expect("wire was validated above")
         };
         wire.into_action()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn permission_prompt_requires_a_canonical_tool_name() {
+        assert!(DECIDE_SYSTEM.contains(
+            "decision.action.name must be the exact canonical tool name from the advertised tool list"
+        ));
+        assert!(DECIDE_SYSTEM.contains("not a semantic alias such as create_file"));
     }
 }

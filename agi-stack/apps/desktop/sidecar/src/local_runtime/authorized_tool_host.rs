@@ -3,7 +3,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     future::Future,
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use agistack_core::ports::{CoreError, CoreResult, ToolHost};
@@ -21,6 +21,8 @@ use super::{
 };
 
 const PROFILE_GRANT_TTL_MS: i64 = 5 * 60 * 1_000;
+
+pub(super) type RunOnceToolPermissions = Arc<Mutex<BTreeSet<(String, String)>>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct AuthorizedInvocationContext {
@@ -53,6 +55,7 @@ pub(super) struct AuthorizedRunToolHost {
     session_store: DesktopSessionStore,
     run: DesktopRun,
     dynamic_metadata: BTreeMap<String, ToolMetadata>,
+    once_permissions: RunOnceToolPermissions,
 }
 
 impl AuthorizedRunToolHost {
@@ -75,7 +78,30 @@ impl AuthorizedRunToolHost {
             session_store,
             run,
             dynamic_metadata,
+            once_permissions: Arc::new(Mutex::new(BTreeSet::new())),
         }
+    }
+
+    pub(super) fn with_once_permissions(
+        mut self,
+        once_permissions: RunOnceToolPermissions,
+    ) -> Self {
+        self.once_permissions = once_permissions;
+        self
+    }
+
+    fn once_permission_active(&self, tool: &str) -> bool {
+        self.once_permissions
+            .lock()
+            .expect("run once tool permissions")
+            .contains(&(self.run.id.clone(), tool.to_string()))
+    }
+
+    fn consume_once_permission(&self, tool: &str) {
+        self.once_permissions
+            .lock()
+            .expect("run once tool permissions")
+            .remove(&(self.run.id.clone(), tool.to_string()));
     }
 
     fn metadata(&self, tool: &str) -> Option<ToolMetadata> {
@@ -92,7 +118,9 @@ impl AuthorizedRunToolHost {
                 .workspace_tool_grant_active(&self.run.conversation_id, tool)
                 .unwrap_or(false);
         match self.run.permission_profile {
-            DesktopPermissionProfile::ReadOnly => effect == ToolEffect::Read || workspace_granted,
+            DesktopPermissionProfile::ReadOnly => {
+                effect == ToolEffect::Read || workspace_granted || self.once_permission_active(tool)
+            }
             DesktopPermissionProfile::WorkspaceWrite => {
                 effect == ToolEffect::Read || is_workspace_write_tool(tool) || workspace_granted
             }
@@ -127,8 +155,11 @@ impl ToolHost for AuthorizedRunToolHost {
             .list_tools()
             .into_iter()
             .filter(|tool| {
-                self.metadata(tool)
-                    .is_some_and(|metadata| self.allows(tool, metadata.effect))
+                self.metadata(tool).is_some_and(|metadata| {
+                    self.allows(tool, metadata.effect)
+                        || (self.run.permission_profile == DesktopPermissionProfile::ReadOnly
+                            && is_workspace_write_tool(tool))
+                })
             })
             .collect()
     }
@@ -139,7 +170,7 @@ impl ToolHost for AuthorizedRunToolHost {
             .ok_or_else(|| CoreError::Tool(format!("tool '{tool}' has no authority metadata")))?;
         if !self.allows(tool, metadata.effect) {
             return Err(CoreError::Tool(format!(
-                "tool '{tool}' is outside the approved permission profile"
+                "tool '{tool}' is outside the approved permission profile; request human permission with the exact canonical tool name"
             )));
         }
         // Browser tools are remote side effects authorized by the
@@ -209,6 +240,10 @@ impl ToolHost for AuthorizedRunToolHost {
                 now_ms,
             )
             .map_err(CoreError::Tool)?;
+
+        if self.once_permission_active(tool) {
+            self.consume_once_permission(tool);
+        }
 
         if prepared.existing {
             match prepared.invocation.status {
@@ -544,13 +579,64 @@ mod tests {
         Ok((root, store, run, host))
     }
 
-    #[test]
-    fn read_only_profile_hides_mutating_tools() -> Result<(), String> {
+    #[tokio::test]
+    async fn read_only_profile_advertises_but_blocks_workspace_writes() -> Result<(), String> {
         let (root, _store, _run, host) = running_host(DesktopPermissionProfile::ReadOnly)?;
         let tools = host.list_tools();
         assert!(tools.contains(&"read".to_string()));
-        assert!(!tools.contains(&"write".to_string()));
+        assert!(tools.contains(&"write".to_string()));
         assert!(!tools.contains(&"bash".to_string()));
+        let error = host
+            .call(
+                "write",
+                r#"{"path":"blocked.txt","content":"must not write"}"#,
+            )
+            .await
+            .expect_err("write remains blocked until human permission");
+        assert!(error
+            .to_string()
+            .contains("request human permission with the exact canonical tool name"));
+        assert!(!root.join("blocked.txt").exists());
+        std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn one_time_hitl_permission_exposes_and_consumes_exactly_one_call() -> Result<(), String>
+    {
+        let (root, _store, run, host) = running_host(DesktopPermissionProfile::ReadOnly)?;
+        let once_permissions: RunOnceToolPermissions = Arc::new(Mutex::new(BTreeSet::new()));
+        once_permissions
+            .lock()
+            .expect("run once permissions")
+            .insert((run.id.clone(), "write".to_string()));
+        let host = host.with_once_permissions(Arc::clone(&once_permissions));
+
+        assert!(host.list_tools().iter().any(|tool| tool == "write"));
+        std::fs::create_dir(root.join("src")).map_err(|error| error.to_string())?;
+        host.call(
+            "write",
+            r#"{"path":"src/one-time.txt","content":"PLUGIN_TOOL_OK"}"#,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        assert!(root.join("src/one-time.txt").exists());
+        let second_error = host
+            .call(
+                "write",
+                r#"{"path":"src/second.txt","content":"must not write"}"#,
+            )
+            .await
+            .expect_err("one-time permission was consumed");
+        assert!(second_error
+            .to_string()
+            .contains("request human permission with the exact canonical tool name"));
+        assert!(!root.join("src/second.txt").exists());
+        assert!(once_permissions
+            .lock()
+            .expect("run once permissions")
+            .is_empty());
+
         std::fs::remove_dir_all(root).map_err(|error| error.to_string())?;
         Ok(())
     }
