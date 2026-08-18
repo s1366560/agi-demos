@@ -16,6 +16,16 @@ class PlatformPluginSnapshotResponse(BaseModel):
     payload: dict[str, Any]
 
 
+class PlatformPluginPublishResponse(BaseModel):
+    version: int
+    nonce: str
+    profile_id: str
+    digest: str
+    plugin_count: int
+    local_status: Literal["ack", "nack"]
+    local_error_message: str | None = None
+
+
 class PlatformPluginHttpRouteRequest(BaseModel):
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
     path: str = Field(min_length=1, max_length=512)

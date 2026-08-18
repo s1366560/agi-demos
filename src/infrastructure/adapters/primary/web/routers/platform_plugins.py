@@ -19,6 +19,7 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginHttpRouteReconcileResponse,
     PlatformPluginHttpRouteRequest,
     PlatformPluginHttpRouteResponse,
+    PlatformPluginPublishResponse,
     PlatformPluginRollbackDrillDataPlaneResponse,
     PlatformPluginRollbackDrillReadinessResponse,
     PlatformPluginShadowRolloutCapabilityReadinessResponse,
@@ -27,6 +28,9 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginShadowRolloutResponse,
     PlatformPluginShadowRolloutSummaryResponse,
     PlatformPluginSnapshotResponse,
+)
+from src.application.services.platform_plugin_profile_service import (
+    PlatformPluginProfileService,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
@@ -51,10 +55,12 @@ from src.infrastructure.plugins.cutover_readiness import (
     evaluate_rollback_drill_readiness,
 )
 from src.infrastructure.plugins.http_routes import HttpRouteMountError
+from src.infrastructure.plugins.profile import ProfileCompositionError
 from src.infrastructure.plugins.rollout_readiness import (
     ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
 )
+from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
@@ -440,6 +446,42 @@ async def reconcile_platform_plugin_http_routes(
     return PlatformPluginHttpRouteReconcileResponse(
         mounted=mounted,
         unmounted=unmounted,
+    )
+
+
+@router.post("/publish", response_model=PlatformPluginPublishResponse)
+async def publish_snapshot(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginPublishResponse:
+    """Publish the next canonical snapshot and reconcile the local data plane."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may publish plugin snapshots"),
+        )
+    service = PlatformPluginProfileService(PlatformPluginRepository(db))
+    try:
+        result = await service.publish_and_reconcile_local(
+            runtime_host=get_platform_plugin_runtime_host(),
+            actor_id=current_user.id,
+        )
+    except ProfileCompositionError as exc:
+        logger.warning("Platform plugin profile composition failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("Plugin profile composition failed"),
+        ) from exc
+    await db.commit()
+    publication = result.publication
+    return PlatformPluginPublishResponse(
+        version=publication.envelope.version,
+        nonce=publication.envelope.nonce,
+        profile_id=publication.snapshot.profile_id,
+        digest=publication.snapshot.digest,
+        plugin_count=len(publication.snapshot.rows),
+        local_status="ack" if result.receipt.accepted else "nack",
+        local_error_message=result.receipt.error_message,
     )
 
 

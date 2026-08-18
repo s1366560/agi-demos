@@ -1,8 +1,13 @@
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.platform_plugin_profile_service import (
     PlatformPluginProfileService,
+)
+from src.domain.model.plugins import parse_plugin_manifest
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginApplyStateModel,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
@@ -10,6 +15,11 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 from src.infrastructure.plugins import CapabilityRegistry, compose_profile, parse_profile_document
 from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
 from src.infrastructure.plugins.compatibility import activate_profile_snapshot
+from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
+from src.infrastructure.plugins.runtime_host import (
+    LOCAL_DATA_PLANE_ID,
+    PlatformPluginRuntimeHost,
+)
 
 
 @pytest.mark.unit
@@ -67,6 +77,108 @@ def test_snapshot_activation_is_reversible() -> None:
     assert registry.list_capabilities("workspace-runtime")
     dispose()
     assert registry.list_capabilities("workspace-runtime") == ()
+
+
+@pytest.mark.unit
+async def test_publish_and_reconcile_local_publishes_and_acks(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    service = PlatformPluginProfileService(repository)
+    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
+
+    result = await service.publish_and_reconcile_local(runtime_host=host, actor_id="admin-1")
+
+    assert result.publication.envelope.version == 1
+    assert result.receipt.accepted
+    assert host.reconciler.applied_version == 1
+    assert host.capabilities.list_capabilities("workspace-runtime")
+
+    apply_state = await db_session.execute(
+        select(PlatformPluginApplyStateModel).where(
+            PlatformPluginApplyStateModel.data_plane_id == LOCAL_DATA_PLANE_ID
+        )
+    )
+    state = apply_state.scalar_one()
+    assert state.status == "ack"
+    assert state.applied_version == 1
+
+
+@pytest.mark.unit
+async def test_publish_and_reconcile_local_dedupes_unchanged_composition(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    service = PlatformPluginProfileService(repository)
+    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
+
+    first = await service.publish_and_reconcile_local(runtime_host=host)
+    second = await service.publish_and_reconcile_local(runtime_host=host)
+
+    assert first.publication.envelope.version == 1
+    assert second.publication.envelope.version == 1
+    assert second.publication.envelope.nonce == first.publication.envelope.nonce
+    assert second.receipt.accepted
+    assert host.reconciler.applied_version == 1
+
+
+@pytest.mark.unit
+async def test_publish_and_reconcile_local_persists_nack_receipt(
+    db_session: AsyncSession,
+    tmp_path,
+) -> None:
+    untrusted_llm = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "untrusted-llm",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "untrusted",
+            "provides": [
+                {
+                    "kind": "llm_provider",
+                    "id": "openai",
+                    "contract": "llm_adapter:openai",
+                    "permissions": ["llm.invoke"],
+                }
+            ],
+        }
+    )
+    profile_path = tmp_path / "profile.yaml"
+    _ = profile_path.write_text(
+        "schemaVersion: 1\n"
+        "profile:\n"
+        "  id: nack-test\n"
+        "  layers:\n"
+        "    - id: base\n"
+        "      plugins:\n"
+        "        - id: untrusted-llm\n",
+        encoding="utf-8",
+    )
+
+    manifests = {**default_builtin_manifests(), "untrusted-llm": untrusted_llm}
+    repository = PlatformPluginRepository(db_session)
+    service = PlatformPluginProfileService(
+        repository,
+        profile_path=profile_path,
+        manifest_provider=lambda: manifests,
+    )
+    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
+
+    result = await service.publish_and_reconcile_local(runtime_host=host)
+
+    assert not result.receipt.accepted
+    assert "trusted python runtime" in (result.receipt.error_message or "")
+    assert host.reconciler.applied_version is None
+    apply_state = await db_session.execute(
+        select(PlatformPluginApplyStateModel).where(
+            PlatformPluginApplyStateModel.data_plane_id == LOCAL_DATA_PLANE_ID
+        )
+    )
+    state = apply_state.scalar_one()
+    assert state.status == "nack"
+    assert state.applied_version == 0
+    assert state.error_message
 
 
 @pytest.mark.unit

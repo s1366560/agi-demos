@@ -21,6 +21,11 @@ from src.infrastructure.plugins.profile import (
     control_envelope,
     load_profile_document,
 )
+from src.infrastructure.plugins.runtime_host import (
+    LOCAL_DATA_PLANE_ID,
+    PlatformPluginRuntimeHost,
+)
+from src.infrastructure.plugins.snapshot_reconciler import SnapshotApplyReceipt
 
 ManifestProvider = Callable[[], Mapping[str, PluginManifest]]
 DEFAULT_PROFILE_PATH = (
@@ -34,6 +39,14 @@ class PlatformPluginPublication:
 
     snapshot: ProfileSnapshot
     envelope: ControlPlaneEnvelope
+
+
+@dataclass(frozen=True)
+class LocalPublicationResult:
+    """A control-plane publication plus the local data-plane receipt."""
+
+    publication: PlatformPluginPublication
+    receipt: SnapshotApplyReceipt
 
 
 class PlatformPluginProfileService:
@@ -58,6 +71,16 @@ class PlatformPluginProfileService:
         actor_id: str | None = None,
     ) -> PlatformPluginPublication:
         """Persist manifests, effective snapshot, audit rows, and envelope."""
+        snapshot = await self._compose_snapshot()
+        return await self._publish_composed(
+            snapshot,
+            version=version,
+            nonce=nonce,
+            actor_id=actor_id,
+        )
+
+    async def _compose_snapshot(self) -> ProfileSnapshot:
+        """Compose the effective snapshot and upsert the manifest catalog."""
         manifests = dict(self._manifest_provider())
         for catalog_row in await self._repository.list_catalog():
             manifests[catalog_row.plugin_id] = parse_plugin_manifest(catalog_row.manifest)
@@ -65,7 +88,17 @@ class PlatformPluginProfileService:
             await self._repository.upsert_catalog_manifest(manifest)
 
         document = await self._effective_document()
-        snapshot = compose_profile(document, manifests)
+        return compose_profile(document, manifests)
+
+    async def _publish_composed(
+        self,
+        snapshot: ProfileSnapshot,
+        *,
+        version: int,
+        nonce: str | None = None,
+        actor_id: str | None = None,
+    ) -> PlatformPluginPublication:
+        """Persist one composed snapshot with audit rows and envelope."""
         envelope = control_envelope(snapshot, version=version, nonce=nonce)
         await self._repository.record_snapshot(
             snapshot,
@@ -89,6 +122,56 @@ class PlatformPluginProfileService:
             snapshot=snapshot,
             envelope=envelope,
         )
+
+    async def publish_and_reconcile_local(
+        self,
+        *,
+        runtime_host: PlatformPluginRuntimeHost,
+        data_plane_id: str = LOCAL_DATA_PLANE_ID,
+        actor_id: str | None = None,
+    ) -> LocalPublicationResult:
+        """Publish the next snapshot version and reconcile the local data plane.
+
+        The local receipt is persisted through the same ACK/NACK evidence path
+        used by remote data planes, so rollout readiness evaluates one uniform
+        apply-state stream.
+        """
+        snapshot = await self._compose_snapshot()
+        latest = await self._repository.latest_snapshot()
+        if latest is not None and latest.digest == snapshot.digest:
+            # Content-addressed dedupe: re-publishing an unchanged composition
+            # is a no-op that reuses the persisted envelope instead of
+            # inflating the version or duplicating audit rows.
+            publication = PlatformPluginPublication(
+                snapshot=snapshot,
+                envelope=control_envelope(
+                    snapshot,
+                    version=latest.version,
+                    nonce=latest.nonce,
+                ),
+            )
+        else:
+            version = 1 if latest is None else latest.version + 1
+            publication = await self._publish_composed(
+                snapshot,
+                version=version,
+                actor_id=actor_id,
+            )
+        receipt = runtime_host.apply(publication.snapshot, publication.envelope)
+        if receipt.accepted:
+            await self.record_ack(
+                publication,
+                data_plane_id=data_plane_id,
+                applied_version=receipt.applied_version or 0,
+            )
+        else:
+            await self.record_nack(
+                publication,
+                data_plane_id=data_plane_id,
+                applied_version=receipt.applied_version or 0,
+                error_message=receipt.error_message or "local reconciliation failed",
+            )
+        return LocalPublicationResult(publication=publication, receipt=receipt)
 
     async def record_ack(
         self,

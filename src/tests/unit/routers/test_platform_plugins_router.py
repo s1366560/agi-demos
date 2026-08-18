@@ -28,10 +28,15 @@ from src.infrastructure.plugins.cutover_readiness import (
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
+from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
 from src.infrastructure.plugins.profile import ProfileSnapshot
 from src.infrastructure.plugins.rollout_readiness import (
     ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
+)
+from src.infrastructure.plugins.runtime_host import (
+    PlatformPluginRuntimeHost,
+    set_platform_plugin_runtime_host,
 )
 
 
@@ -822,3 +827,52 @@ async def test_data_plane_receipt_rejects_stale_version_or_digest(
     assert stale_version.status_code == status.HTTP_409_CONFLICT
     assert stale_digest.status_code == status.HTTP_409_CONFLICT
     assert incomplete_ack.status_code == status.HTTP_409_CONFLICT
+
+
+@pytest.mark.unit
+async def test_publish_endpoint_persists_snapshot_and_local_ack(
+    db_session: AsyncSession,
+) -> None:
+    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
+    set_platform_plugin_runtime_host(host)
+    try:
+        client = make_client(db_session)
+
+        first = client.post("/api/v1/platform-plugins/publish")
+        second = client.post("/api/v1/platform-plugins/publish")
+
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_200_OK
+        first_body = first.json()
+        second_body = second.json()
+        assert first_body["version"] == 1
+        assert second_body["version"] == 1
+        assert second_body["digest"] == first_body["digest"]
+        assert first_body["local_status"] == "ack"
+        assert first_body["profile_id"] == "memstack-default"
+        assert first_body["plugin_count"] == 2
+        assert host.reconciler.applied_version == 1
+        assert host.capabilities.list_capabilities("workspace-runtime")
+
+        snapshot_response = client.get("/api/v1/platform-plugins/snapshot")
+        assert snapshot_response.status_code == status.HTTP_200_OK
+        assert snapshot_response.json()["version"] == 1
+        assert snapshot_response.json()["digest"] == first_body["digest"]
+
+        result = await db_session.execute(
+            select(PlatformPluginApplyStateModel).where(
+                PlatformPluginApplyStateModel.data_plane_id == "python-backend"
+            )
+        )
+        state = result.scalar_one()
+        assert state.status == "ack"
+        assert state.applied_version == 1
+    finally:
+        set_platform_plugin_runtime_host(None)
+
+
+@pytest.mark.unit
+async def test_publish_endpoint_requires_platform_admin(db_session: AsyncSession) -> None:
+    response = make_client(db_session, superuser=False).post("/api/v1/platform-plugins/publish")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
