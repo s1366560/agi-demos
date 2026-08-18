@@ -24,7 +24,8 @@ def upgrade() -> None:
         "platform_plugin_packages",
         sa.Column(
             "manifest",
-            postgresql.JSONB(astext_type=sa.Text()).not_null(),
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
