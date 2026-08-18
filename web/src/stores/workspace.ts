@@ -311,6 +311,8 @@ interface WorkspaceState {
   objectives: CyberObjective[];
   genes: CyberGene[];
   isLoading: boolean;
+  objectivesLoading: boolean;
+  genesLoading: boolean;
   activeSurfaceRequestId: number;
   error: string | null;
   onlineUsers: PresenceUser[];
@@ -601,6 +603,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       chatMessages: [],
       chatLoading: false,
       isLoading: false,
+      objectivesLoading: false,
+      genesLoading: false,
       activeSurfaceRequestId: 0,
       error: null,
       onlineUsers: [],
@@ -706,12 +710,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       loadObjectives: async (tenantId, projectId, workspaceId) => {
-        set({ isLoading: true, error: null });
+        set({ objectivesLoading: true, error: null });
         try {
           const objectives = await workspaceObjectiveService.list(tenantId, projectId, workspaceId);
-          set({ objectives, isLoading: false });
+          set({ objectives, objectivesLoading: false });
         } catch (error) {
-          set({ error: getErrorMessage(error), isLoading: false });
+          set({ error: getErrorMessage(error), objectivesLoading: false });
           throw error;
         }
       },
@@ -752,12 +756,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       loadGenes: async (tenantId, projectId, workspaceId) => {
-        set({ isLoading: true, error: null });
+        set({ genesLoading: true, error: null });
         try {
           const genes = await workspaceGeneService.list(tenantId, projectId, workspaceId);
-          set({ genes, isLoading: false });
+          set({ genes, genesLoading: false });
         } catch (error) {
-          set({ error: getErrorMessage(error), isLoading: false });
+          set({ error: getErrorMessage(error), genesLoading: false });
           throw error;
         }
       },
