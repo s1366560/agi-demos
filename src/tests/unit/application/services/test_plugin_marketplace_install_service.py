@@ -7,6 +7,7 @@ import zipfile
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.plugin_marketplace import (
     MarketplaceArtifactSource,
@@ -31,6 +32,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepository,
 )
 from src.infrastructure.plugins.governance import canonical_plugin_json, sha256_hex
+from src.infrastructure.plugins.package_archive import (
+    PluginPackageArchiveError,
+    verify_plugin_package_archive,
+)
 from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
 
 
@@ -62,6 +67,21 @@ def package_archive(manifest: dict[str, object]) -> bytes:
     with zipfile.ZipFile(output, "w") as bundle:
         bundle.writestr("plugin.manifest.json", manifest_bytes)
         bundle.writestr("runtime/plugin.wasm", runtime)
+        bundle.writestr("checksums.json", json.dumps(checksums, separators=(",", ":")))
+    return output.getvalue()
+
+
+def wrong_runtime_archive() -> bytes:
+    manifest_bytes = json.dumps(base_manifest(), separators=(",", ":")).encode()
+    runtime = b"{}"
+    checksums = {
+        "plugin.manifest.json": hashlib.sha256(manifest_bytes).hexdigest(),
+        "runtime/plugin.json": hashlib.sha256(runtime).hexdigest(),
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle:
+        bundle.writestr("plugin.manifest.json", manifest_bytes)
+        bundle.writestr("runtime/plugin.json", runtime)
         bundle.writestr("checksums.json", json.dumps(checksums, separators=(",", ":")))
     return output.getvalue()
 
@@ -128,7 +148,7 @@ def _request(
 
 
 @pytest.mark.unit
-async def test_marketplace_install_validates_and_persists(db_session):
+async def test_marketplace_install_validates_and_persists(db_session: AsyncSession) -> None:
     private_key = Ed25519PrivateKey.generate()
     public_pem = (
         private_key.public_key()
@@ -185,7 +205,9 @@ async def test_marketplace_install_validates_and_persists(db_session):
 
 
 @pytest.mark.unit
-async def test_marketplace_install_quarantines_tampered_artifact(db_session):
+async def test_marketplace_install_quarantines_tampered_artifact(
+    db_session: AsyncSession,
+) -> None:
     private_key = Ed25519PrivateKey.generate()
     public_pem = (
         private_key.public_key()
@@ -218,7 +240,52 @@ async def test_marketplace_install_quarantines_tampered_artifact(db_session):
 
 
 @pytest.mark.unit
-async def test_marketplace_catalog_approval_and_revocation_fail_closed(db_session):
+def test_plugin_archive_requires_the_exact_runtime_artifact_mapping() -> None:
+    with pytest.raises(PluginPackageArchiveError) as exc_info:
+        verify_plugin_package_archive(wrong_runtime_archive())
+
+    assert "plugin runtime wasm requires exactly runtime/plugin.wasm" in str(exc_info.value)
+
+
+@pytest.mark.unit
+async def test_marketplace_install_quarantines_wrong_runtime_artifact_mapping(
+    db_session: AsyncSession,
+) -> None:
+    private_key = Ed25519PrivateKey.generate()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    archive = wrong_runtime_archive()
+    service = PluginMarketplaceInstallService(
+        PlatformPluginGovernanceRepository(db_session),
+        PlatformPluginRepository(db_session),
+        FakeArtifactClient(archive),
+        trusted_public_keys=(public_pem,),
+    )
+
+    wrong_digest = hashlib.sha256(archive).hexdigest()
+    decision = await service.request_install(
+        request=_request(
+            private_key,
+            public_pem,
+            artifact=wrong_digest,
+            signed_artifact=wrong_digest,
+        )
+    )
+
+    assert decision.status == "quarantined"
+    assert decision.reason == "plugin runtime wasm requires exactly runtime/plugin.wasm"
+
+
+@pytest.mark.unit
+async def test_marketplace_catalog_approval_and_revocation_fail_closed(
+    db_session: AsyncSession,
+) -> None:
     repository = PlatformPluginGovernanceRepository(db_session)
     manifest = {
         "schemaVersion": 1,

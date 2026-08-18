@@ -30,6 +30,13 @@ REQUIRED_FILES = {
     "plugin.manifest.json",
     "checksums.json",
 }
+RUNTIME_ARTIFACT_PATHS: dict[str, str] = {
+    "python-trusted": "runtime/plugin.json",
+    "wasm": "runtime/plugin.wasm",
+    "mcp": "runtime/plugin.json",
+    "subprocess": "runtime/plugin.json",
+    "frontend": "runtime/plugin.json",
+}
 
 
 def verify_plugin_package_archive(data: bytes) -> VerifiedPluginPackage:
@@ -43,6 +50,7 @@ def verify_plugin_package_archive(data: bytes) -> VerifiedPluginPackage:
     manifest = _json_object(files["plugin.manifest.json"], "plugin.manifest.json")
     checksums = _json_object(files["checksums.json"], "checksums.json")
     _verify_checksums(files, checksums)
+    _verify_runtime_artifact(manifest, files)
     runtime_files = tuple(
         (name, raw) for name, raw in sorted(files.items()) if name.startswith("runtime/")
     )
@@ -53,6 +61,16 @@ def verify_plugin_package_archive(data: bytes) -> VerifiedPluginPackage:
         checksums=checksums,
         runtime_files=runtime_files,
     )
+
+
+def _verify_runtime_artifact(manifest: dict[str, Any], files: dict[str, bytes]) -> None:
+    runtime = manifest.get("runtime")
+    expected = RUNTIME_ARTIFACT_PATHS.get(runtime) if isinstance(runtime, str) else None
+    if expected is None:
+        raise PluginPackageArchiveError(f"plugin runtime {runtime!r} has no artifact mapping")
+    runtime_files = sorted(name for name in files if name.startswith("runtime/"))
+    if runtime_files != [expected]:
+        raise PluginPackageArchiveError(f"plugin runtime {runtime} requires exactly {expected}")
 
 
 def _read_archive_files(data: bytes) -> dict[str, bytes]:
