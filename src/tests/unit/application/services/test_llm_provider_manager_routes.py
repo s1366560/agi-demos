@@ -1,12 +1,16 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 
 from src.application.services.llm_provider_manager import LLMProviderManager
+from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.infrastructure.llm.resilience.health_checker import HealthCheckResult, HealthStatus
 from src.infrastructure.plugins.context import PluginScopeContext
+from src.infrastructure.plugins.llm_adapters import LlmAdapterRequest
 from src.infrastructure.plugins.shadow_rollout import (
     queued_event_count,
     reset_shadow_rollout_queue_for_test,
@@ -117,3 +121,61 @@ async def test_llm_shadow_excludes_unselected_tenant(
     manager._record_llm_route_shadow(config, "tenant-excluded", None)
 
     assert queued_event_count() == 0
+
+
+@pytest.mark.unit
+async def test_typed_adapter_provider_replaces_legacy_registry_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[LlmAdapterRequest] = []
+    expected_client = cast(LLMClient, SimpleNamespace(name="adapter-result"))
+
+    class AdapterProvider:
+        def create_adapter(self, request: LlmAdapterRequest) -> LLMClient:
+            requests.append(request)
+            return expected_client
+
+    class HealthyProviders:
+        def register_provider(
+            self,
+            provider_type: ProviderType,
+            provider_config: ProviderConfig,
+        ) -> None:
+            _ = provider_type, provider_config
+
+        def unregister_provider(self, provider_type: ProviderType) -> None:
+            _ = provider_type
+
+        async def get_health(self, provider_type: ProviderType) -> HealthCheckResult:
+            return HealthCheckResult(
+                provider_type=provider_type,
+                status=HealthStatus.HEALTHY,
+            )
+
+    class OpenCircuitBreakers:
+        def get(self, provider_type: ProviderType) -> Any:
+            _ = provider_type
+            return SimpleNamespace(can_execute=lambda: True, record_failure=lambda: None)
+
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=True,
+            platform_plugin_llm_shadow=False,
+        ),
+    )
+    manager = LLMProviderManager(
+        circuit_breaker_registry=cast(Any, OpenCircuitBreakers()),
+        health_checker=cast(Any, HealthyProviders()),
+        adapter_provider=AdapterProvider(),
+    )
+    config = _provider_config()
+    manager.register_provider(config)
+
+    client = await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
+
+    assert client is expected_client
+    assert len(requests) == 1
+    assert requests[0].route is not None
+    assert requests[0].route.model_id == "test-model"
+    assert requests[0].provider_config is config

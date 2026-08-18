@@ -35,7 +35,6 @@ from src.domain.llm_providers.llm_types import LLMClient, LLMConfig
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.plugins import CredentialReference
 from src.domain.ports.plugins import ResolvedLlmRoute
-from src.infrastructure.llm.registry import get_provider_adapter_registry
 from src.infrastructure.llm.resilience import (
     CircuitBreakerRegistry,
     HealthChecker,
@@ -46,6 +45,12 @@ from src.infrastructure.llm.resilience import (
     get_provider_rate_limiter,
 )
 from src.infrastructure.plugins.context import PluginScopeContext
+from src.infrastructure.plugins.llm_adapters import (
+    LegacyLlmAdapterProvider,
+    LlmAdapterProvider,
+    LlmAdapterRequest,
+    freeze_adapter_kwargs,
+)
 from src.infrastructure.plugins.llm_runtime import (
     CredentialLease,
     CredentialLeaseScope,
@@ -91,6 +96,7 @@ class LLMProviderManager:
         rate_limiter: ProviderRateLimiter | None = None,
         health_checker: HealthChecker | None = None,
         redis_client: Redis | None = None,
+        adapter_provider: LlmAdapterProvider | None = None,
     ) -> None:
         """
         Initialize the provider manager.
@@ -103,7 +109,6 @@ class LLMProviderManager:
                 resilience (circuit breaker state + rate limiting).
                 When None, falls back to in-memory implementations.
         """
-        self._registry = get_provider_adapter_registry()
         self._circuit_breakers = circuit_breaker_registry or self._build_circuit_breaker_registry(
             redis_client
         )
@@ -115,6 +120,7 @@ class LLMProviderManager:
             providers=self._route_configs,
             lease_resolver=_NoopCredentialLeaseResolver(),
         )
+        self._adapter_provider = adapter_provider or LegacyLlmAdapterProvider()
 
         # Provider configurations (loaded from database or settings)
         self._provider_configs: dict[ProviderType, ProviderConfig] = {}
@@ -425,16 +431,17 @@ class LLMProviderManager:
             from src.configuration.config import get_settings
 
             rollout_settings = get_settings()
+            resolved_route: ResolvedLlmRoute | None = None
             if rollout_settings.platform_plugin_llm_v2:
-                route = self.resolve_route(
+                resolved_route = self.resolve_route(
                     provider_type,
                     model_id=llm_config.model if llm_config is not None else None,
                 )
                 logger.debug(
                     "Resolved platform LLM route provider=%s model=%s credential_ref=%s",
                     provider_type.value,
-                    route.model_id,
-                    route.credential.ref,
+                    resolved_route.model_id,
+                    resolved_route.credential.ref,
                 )
             elif rollout_settings.platform_plugin_llm_shadow:
                 self._record_llm_route_shadow(
@@ -459,10 +466,13 @@ class LLMProviderManager:
 
             # Try to create adapter
             try:
-                adapter = self._registry.create_adapter(
-                    provider_config=provider_config,
-                    llm_config=llm_config,
-                    **kwargs,
+                adapter = self._adapter_provider.create_adapter(
+                    LlmAdapterRequest(
+                        route=resolved_route,
+                        provider_config=provider_config,
+                        llm_config=llm_config,
+                        adapter_kwargs=freeze_adapter_kwargs(kwargs),
+                    )
                 )
                 logger.debug(f"Created adapter for {provider_type.value}")
                 return adapter
