@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import type { PresenceUser } from '@/types/workspace';
@@ -8,6 +9,25 @@ interface UseWorkspaceWebSocketOptions {
   workspaceId: string | null;
   enabled?: boolean;
   sendMessage: (message: Record<string, unknown>) => void;
+}
+
+/**
+ * Resolve the presence display name for the signed-in user.
+ * Prefers the profile name, falls back to the account email, then 'User'.
+ */
+export function resolvePresenceDisplayName(user: {
+  name?: string | undefined;
+  email?: string | undefined;
+} | null): string {
+  const name = user?.name?.trim();
+  if (name) {
+    return name;
+  }
+  const email = user?.email?.trim();
+  if (email) {
+    return email;
+  }
+  return 'User';
 }
 
 function isPresenceUser(value: unknown): value is PresenceUser {
@@ -47,6 +67,8 @@ export function useWorkspaceWebSocket({
   sendMessage,
 }: UseWorkspaceWebSocketOptions) {
   const subscribedRef = useRef<string | null>(null);
+  const user = useAuthStore((state) => state.user);
+  const displayName = resolvePresenceDisplayName(user);
 
   const subscribe = useCallback(() => {
     if (!workspaceId || !enabled) return;
@@ -54,10 +76,10 @@ export function useWorkspaceWebSocket({
     sendMessage({
       type: 'workspace_presence_join',
       workspace_id: workspaceId,
-      display_name: 'User',
+      display_name: displayName,
     });
     subscribedRef.current = workspaceId;
-  }, [workspaceId, enabled, sendMessage]);
+  }, [workspaceId, enabled, sendMessage, displayName]);
 
   const unsubscribe = useCallback(() => {
     if (!subscribedRef.current) return;

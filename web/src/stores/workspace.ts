@@ -1374,9 +1374,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           return;
         }
         if (type === 'workspace.presence.joined') {
+          const userId = data.user_id;
+          const displayName = data.display_name;
+          if (
+            typeof userId !== 'string' ||
+            userId.length === 0 ||
+            typeof displayName !== 'string'
+          ) {
+            return;
+          }
           const user: PresenceUser = {
-            user_id: data.user_id as string,
-            display_name: data.display_name as string,
+            user_id: userId,
+            display_name: displayName,
             joined_at: new Date().toISOString(),
             last_heartbeat: new Date().toISOString(),
           };
@@ -1384,8 +1393,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const filtered = existing.filter((u) => u.user_id !== user.user_id);
           set({ onlineUsers: [...filtered, user] });
         } else if (type === 'workspace.presence.left') {
+          const userId = data.user_id;
+          if (typeof userId !== 'string' || userId.length === 0) {
+            return;
+          }
           set({
-            onlineUsers: get().onlineUsers.filter((u) => u.user_id !== (data.user_id as string)),
+            onlineUsers: get().onlineUsers.filter((u) => u.user_id !== userId),
           });
         }
       },
@@ -1395,10 +1408,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
           return;
         }
+        const agentId = data.agent_id;
+        const displayName = data.display_name;
+        const status = data.status;
+        if (
+          typeof agentId !== 'string' ||
+          agentId.length === 0 ||
+          typeof displayName !== 'string' ||
+          typeof status !== 'string'
+        ) {
+          return;
+        }
         const agent: PresenceAgent = {
-          agent_id: data.agent_id as string,
-          display_name: data.display_name as string,
-          status: data.status as string,
+          agent_id: agentId,
+          display_name: displayName,
+          status,
         };
         const existing = get().onlineAgents;
         const filtered = existing.filter((a) => a.agent_id !== agent.agent_id);

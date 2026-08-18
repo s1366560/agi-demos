@@ -1549,4 +1549,54 @@ describe('workspace store', () => {
     expect(state.onlineUsers).toEqual([]);
     expect(state.onlineAgents).toEqual([]);
   });
+
+  it('ignores malformed presence and agent status events (W-5 runtime guards)', () => {
+    // Malformed presence joined: user_id missing
+    useWorkspaceStore.getState().handlePresenceEvent({
+      type: 'workspace.presence.joined',
+      data: { display_name: 'NoId' },
+    });
+    // Malformed presence joined: display_name not a string
+    useWorkspaceStore.getState().handlePresenceEvent({
+      type: 'workspace.presence.joined',
+      data: { user_id: 'u-1', display_name: 42 },
+    });
+    expect(useWorkspaceStore.getState().onlineUsers).toEqual([]);
+
+    // Malformed presence left: user_id not a string — must not throw
+    useWorkspaceStore.getState().handlePresenceEvent({
+      type: 'workspace.presence.left',
+      data: { user_id: undefined },
+    });
+    expect(useWorkspaceStore.getState().onlineUsers).toEqual([]);
+
+    // Malformed agent status: status missing
+    useWorkspaceStore.getState().handleAgentStatusEvent({
+      type: 'workspace.agent_status.updated',
+      data: { agent_id: 'agent-1', display_name: 'Agent One' },
+    });
+    // Malformed agent status: agent_id empty
+    useWorkspaceStore.getState().handleAgentStatusEvent({
+      type: 'workspace.agent_status.updated',
+      data: { agent_id: '', display_name: 'Agent One', status: 'idle' },
+    });
+    expect(useWorkspaceStore.getState().onlineAgents).toEqual([]);
+
+    // Well-formed events still pass through the guards
+    useWorkspaceStore.getState().handlePresenceEvent({
+      type: 'workspace.presence.joined',
+      data: { user_id: 'u-1', display_name: 'Ada' },
+    });
+    useWorkspaceStore.getState().handleAgentStatusEvent({
+      type: 'workspace.agent_status.updated',
+      data: { agent_id: 'agent-1', display_name: 'Agent One', status: 'busy' },
+    });
+
+    expect(useWorkspaceStore.getState().onlineUsers).toEqual([
+      expect.objectContaining({ user_id: 'u-1', display_name: 'Ada' }),
+    ]);
+    expect(useWorkspaceStore.getState().onlineAgents).toEqual([
+      expect.objectContaining({ agent_id: 'agent-1', status: 'busy' }),
+    ]);
+  });
 });
