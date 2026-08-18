@@ -48,8 +48,10 @@ from src.infrastructure.plugins.context import PluginScopeContext
 from src.infrastructure.plugins.llm_adapters import (
     LegacyLlmAdapterProvider,
     LlmAdapterProvider,
+    LlmAdapterProviderRegistry,
     LlmAdapterRequest,
     freeze_adapter_kwargs,
+    get_llm_adapter_provider_registry,
 )
 from src.infrastructure.plugins.llm_runtime import (
     CredentialLease,
@@ -97,6 +99,7 @@ class LLMProviderManager:
         health_checker: HealthChecker | None = None,
         redis_client: Redis | None = None,
         adapter_provider: LlmAdapterProvider | None = None,
+        adapter_registry: LlmAdapterProviderRegistry | None = None,
     ) -> None:
         """
         Initialize the provider manager.
@@ -121,6 +124,7 @@ class LLMProviderManager:
             lease_resolver=_NoopCredentialLeaseResolver(),
         )
         self._adapter_provider = adapter_provider or LegacyLlmAdapterProvider()
+        self._adapter_registry = adapter_registry or get_llm_adapter_provider_registry()
 
         # Provider configurations (loaded from database or settings)
         self._provider_configs: dict[ProviderType, ProviderConfig] = {}
@@ -168,6 +172,23 @@ class LLMProviderManager:
                 ProviderType.ANTHROPIC,
             ],
         }
+
+    def _adapter_provider_for(self, provider_id: str) -> LlmAdapterProvider:
+        """Resolve an explicit provider, or use legacy compatibility when allowed."""
+        explicit = self._adapter_registry.get(provider_id)
+        if explicit is not None:
+            return explicit
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        remove_legacy = getattr(settings, "platform_plugin_llm_remove_legacy", False)
+        if remove_legacy and not settings.platform_plugin_llm_v2:
+            raise ValueError("PLATFORM_PLUGIN_LLM_REMOVE_LEGACY requires LLM routes V2")
+        if remove_legacy:
+            raise RuntimeError(
+                "legacy LLM adapter fallback is disabled and no provider is registered"
+            )
+        return self._adapter_provider
 
     @staticmethod
     def _build_circuit_breaker_registry(
@@ -465,8 +486,9 @@ class LLMProviderManager:
                 continue
 
             # Try to create adapter
+            adapter_provider = self._adapter_provider_for(provider_type.value)
             try:
-                adapter = self._adapter_provider.create_adapter(
+                adapter = adapter_provider.create_adapter(
                     LlmAdapterRequest(
                         route=resolved_route,
                         provider_config=provider_config,

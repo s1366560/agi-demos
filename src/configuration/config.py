@@ -408,6 +408,10 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_LLM_V2",
     )
+    platform_plugin_llm_remove_legacy: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_LLM_REMOVE_LEGACY",
+    )
     platform_plugin_llm_shadow: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_LLM_SHADOW",
