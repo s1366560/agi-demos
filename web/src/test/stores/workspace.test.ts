@@ -764,6 +764,113 @@ describe('workspace store', () => {
     expect(state.tasks).toEqual([]);
   });
 
+  it('handleWorkspaceLifecycleEvent reloads the surface for the fallback workspace', async () => {
+    useWorkspaceStore.setState({
+      workspaces: [
+        {
+          id: 'ws-1',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Deleted',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+        {
+          id: 'ws-2',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Remaining',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      currentWorkspace: {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Deleted',
+        created_by: 'u-1',
+        created_at: '2026-03-30T10:00:00Z',
+      } as any,
+      surfaceContext: { tenantId: 't-1', projectId: 'p-1' },
+    });
+    vi.mocked(workspaceService.getById).mockResolvedValueOnce({
+      id: 'ws-2',
+      tenant_id: 't-1',
+      project_id: 'p-1',
+      name: 'Remaining',
+      created_by: 'u-1',
+      created_at: '2026-03-30T10:00:00Z',
+    } as any);
+    vi.mocked(workspaceService.listMembers).mockResolvedValueOnce([]);
+    vi.mocked(workspaceService.listAgents).mockResolvedValueOnce([]);
+    vi.mocked(workspaceBlackboardService.listPosts).mockResolvedValueOnce([]);
+    vi.mocked(workspaceTaskService.list).mockResolvedValueOnce([{ id: 'task-2' }] as any);
+    vi.mocked(workspaceTopologyService.listNodes).mockResolvedValueOnce([]);
+    vi.mocked(workspaceTopologyService.listEdges).mockResolvedValueOnce([]);
+    vi.mocked(workspaceObjectiveService.list).mockResolvedValueOnce([]);
+    vi.mocked(workspaceGeneService.list).mockResolvedValueOnce([]);
+    vi.mocked(workspaceChatService.listMessages).mockResolvedValueOnce([]);
+
+    useWorkspaceStore.getState().handleWorkspaceLifecycleEvent({
+      type: 'workspace_deleted',
+      data: {
+        workspace_id: 'ws-1',
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(useWorkspaceStore.getState().isLoading).toBe(false);
+    });
+
+    expect(workspaceService.getById).toHaveBeenCalledWith('t-1', 'p-1', 'ws-2');
+    const state = useWorkspaceStore.getState();
+    expect(state.currentWorkspace?.id).toBe('ws-2');
+    expect(state.tasks).toEqual([{ id: 'task-2' }]);
+  });
+
+  it('handleWorkspaceLifecycleEvent skips surface reload when no surface was loaded', () => {
+    useWorkspaceStore.setState({
+      workspaces: [
+        {
+          id: 'ws-1',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Deleted',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+        {
+          id: 'ws-2',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Remaining',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      currentWorkspace: {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Deleted',
+        created_by: 'u-1',
+        created_at: '2026-03-30T10:00:00Z',
+      } as any,
+      surfaceContext: null,
+    });
+
+    useWorkspaceStore.getState().handleWorkspaceLifecycleEvent({
+      type: 'workspace_deleted',
+      data: {
+        workspace_id: 'ws-1',
+      },
+    });
+
+    expect(useWorkspaceStore.getState().currentWorkspace?.id).toBe('ws-2');
+    expect(workspaceService.getById).not.toHaveBeenCalled();
+  });
+
   it('loadReplies lets canonical API reply data win over earlier live payloads', async () => {
     useWorkspaceStore.setState({
       currentWorkspace: {

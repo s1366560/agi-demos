@@ -314,6 +314,7 @@ interface WorkspaceState {
   objectivesLoading: boolean;
   genesLoading: boolean;
   activeSurfaceRequestId: number;
+  surfaceContext: { tenantId: string; projectId: string } | null;
   error: string | null;
   onlineUsers: PresenceUser[];
   onlineAgents: PresenceAgent[];
@@ -606,6 +607,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       objectivesLoading: false,
       genesLoading: false,
       activeSurfaceRequestId: 0,
+      surfaceContext: null,
       error: null,
       onlineUsers: [],
       onlineAgents: [],
@@ -652,7 +654,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       loadWorkspaceSurface: async (tenantId, projectId, workspaceId) => {
         const requestId = ++workspaceSurfaceRequestSequence;
-        set({ activeSurfaceRequestId: requestId, isLoading: true, error: null });
+        set({
+          activeSurfaceRequestId: requestId,
+          isLoading: true,
+          error: null,
+          surfaceContext: { tenantId, projectId },
+        });
         try {
           const [
             workspace,
@@ -1336,17 +1343,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           }
         } else if (type === 'workspace_deleted') {
           const workspaceId = data.workspace_id as string;
-          set((state) => {
-            const workspaces = state.workspaces.filter((w) => w.id !== workspaceId);
-            const currentWorkspaceDeleted = state.currentWorkspace?.id === workspaceId;
-            return {
-              ...(currentWorkspaceDeleted ? createEmptySurfaceState() : {}),
-              workspaces,
-              currentWorkspace: currentWorkspaceDeleted
-                ? (workspaces[0] ?? null)
-                : state.currentWorkspace,
-            };
+          const state = get();
+          const workspaces = state.workspaces.filter((w) => w.id !== workspaceId);
+          const currentWorkspaceDeleted = state.currentWorkspace?.id === workspaceId;
+          const nextWorkspace = currentWorkspaceDeleted ? (workspaces[0] ?? null) : null;
+          set({
+            ...(currentWorkspaceDeleted ? createEmptySurfaceState() : {}),
+            workspaces,
+            currentWorkspace: currentWorkspaceDeleted ? nextWorkspace : state.currentWorkspace,
           });
+          // Proactively hydrate the fallback workspace's surface; otherwise
+          // consumers would render an empty panel until some upper-layer
+          // effect happens to reload.
+          const context = get().surfaceContext;
+          if (nextWorkspace && context) {
+            void get()
+              .loadWorkspaceSurface(context.tenantId, context.projectId, nextWorkspace.id)
+              .catch(() => {
+                // Load failure is exposed via state.error.
+              });
+          }
         }
       },
 
