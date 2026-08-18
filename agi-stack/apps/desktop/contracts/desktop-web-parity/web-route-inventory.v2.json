@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "10b3fbd09accdd7c6605ee35da05f00dfea1e6d8",
+  "source_revision": "dde74eaf3cba7e5a8150c7eecfa6a3cdcc927ecc",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
