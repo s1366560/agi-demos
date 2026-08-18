@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use agistack_adapters_device::SqliteCheckpointStore;
 use agistack_adapters_local_tools::LocalToolHost;
@@ -296,6 +301,68 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
     assert_eq!(mismatched.0, StatusCode::CONFLICT);
     assert_eq!(missing_reason.0, StatusCode::BAD_REQUEST);
     assert_eq!(nacked.0, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn repeated_snapshot_apply_is_idempotent_and_under_twenty_ms_p95() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
+    let mut payload = snapshot("placeholder");
+    payload.as_object_mut().expect("payload").remove("digest");
+    let digest = platform_plugin_payload_digest(&payload).expect("canonical digest");
+    payload["digest"] = json!(digest.clone());
+    let body = json!({
+        "version": 7,
+        "nonce": "nonce-7",
+        "digest": digest,
+        "payload": payload
+    });
+
+    let initial = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        body.clone(),
+    )
+    .await;
+    assert_eq!(initial.0, StatusCode::OK);
+    assert_eq!(initial.1["status"], "ack");
+
+    let mut samples = Vec::with_capacity(64);
+    for _ in 0..64 {
+        let started = Instant::now();
+        let repeated = request_json(
+            app.clone(),
+            "POST",
+            "/api/v1/platform-plugins/snapshot",
+            Some("desktop-session"),
+            body.clone(),
+        )
+        .await;
+        samples.push(started.elapsed());
+        assert_eq!(repeated.0, StatusCode::OK);
+        assert_eq!(repeated.1["idempotent"], true);
+    }
+    samples.sort_unstable();
+    let p95 = samples[samples.len() * 95 / 100];
+    assert!(
+        p95 < Duration::from_millis(20),
+        "desktop no-op snapshot apply P95 was {:?}",
+        p95
+    );
+
+    let connection = state.session_store.connection().expect("connection");
+    let record = crate::plugin_snapshots::read_apply_record(&connection)
+        .expect("record")
+        .expect("row");
+    assert_eq!(record.status, "ack");
+    assert_eq!(record.requested_version, 7);
+    assert_eq!(record.applied_version, 7);
 }
 
 #[tokio::test]
