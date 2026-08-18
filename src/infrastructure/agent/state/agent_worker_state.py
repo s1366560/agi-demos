@@ -2846,12 +2846,20 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
     cached = _tools_cache.get(project_id)
     if cached is None:
         return None
+    from src.configuration.config import get_settings
+
+    if _agent_tools_remove_legacy_enabled() and not get_settings().platform_plugin_agent_tools_v2:
+        raise ValueError("PLATFORM_PLUGIN_AGENT_TOOLS_REMOVE_LEGACY requires agent tools V2")
     _publish_scoped_tool_generation(project_id, cached)
     service = _agent_tool_service_if_v2()
     if service is not None:
         current = service.current(PluginScopeContext(project_id=project_id))
         if current is not None:
             return dict(current.tools)
+        if _agent_tools_remove_legacy_enabled():
+            raise RuntimeError(
+                "legacy tool cache fallback is disabled and no scoped tool generation exists"
+            )
     return cached
 
 
@@ -3049,6 +3057,13 @@ def _agent_tool_service_if_v2() -> Any | None:
     if not get_settings().platform_plugin_agent_tools_v2:
         return None
     return get_agent_tool_set_service()
+
+
+def _agent_tools_remove_legacy_enabled() -> bool:
+    """Return the fail-loud removal rehearsal switch without requiring the flag in tests."""
+    from src.configuration.config import get_settings
+
+    return bool(getattr(get_settings(), "platform_plugin_agent_tools_remove_legacy", False))
 
 
 def _publish_scoped_tool_generation(

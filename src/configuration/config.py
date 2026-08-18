@@ -386,6 +386,10 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_TOOLS_V2",
     )
+    platform_plugin_agent_tools_remove_legacy: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_TOOLS_REMOVE_LEGACY",
+    )
     platform_plugin_agent_tools_shadow: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_TOOLS_SHADOW",
