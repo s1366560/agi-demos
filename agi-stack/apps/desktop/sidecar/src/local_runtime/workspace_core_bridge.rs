@@ -33,7 +33,10 @@ use super::{
     session_store::{DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError},
     LocalRuntimeState,
 };
-use crate::plugin_snapshots::{plugin_quota_limits, PluginQuotaLimits, RequestedPluginSnapshot};
+use crate::plugin_snapshots::{
+    plugin_billing_usd_micros_per_call, plugin_quota_limits, PluginQuotaLimits,
+    RequestedPluginSnapshot,
+};
 
 mod contracts;
 mod judge;
@@ -870,6 +873,13 @@ async fn invoke_platform_plugin_tool(
         reserve_plugin_network_request(&plugin_id, quotas.max_network_requests_per_minute)
             .map_err(|error| conflict(&error))?;
     }
+    reserve_plugin_monthly_usage(
+        &state,
+        &plugin_id,
+        plugin_billing_usd_micros_per_call(&plugin.config).map_err(|error| conflict(&error))?,
+        quotas.max_monthly_usd_micros,
+    )
+    .map_err(|error| conflict(&error))?;
     let max_output_bytes = quotas.max_output_bytes.unwrap_or(1024 * 1024);
     let input = request.input.to_string();
     let output = if plugin.runtime == "wasm" {
@@ -934,6 +944,27 @@ fn reserve_plugin_network_request(plugin_id: &str, limit: Option<u64>) -> Result
     }
     window.1 += 1;
     Ok(())
+}
+
+fn reserve_plugin_monthly_usage(
+    state: &Arc<LocalRuntimeState>,
+    plugin_id: &str,
+    charge_usd_micros: u64,
+    max_usd_micros: Option<u64>,
+) -> Result<(), String> {
+    let connection = state
+        .session_store
+        .connection()
+        .map_err(|error| error.to_string())?;
+    crate::plugin_snapshots::initialize_schema(&connection)?;
+    let period = chrono::Utc::now().format("%Y-%m").to_string();
+    crate::plugin_snapshots::reserve_monthly_plugin_usage(
+        &connection,
+        plugin_id,
+        &period,
+        charge_usd_micros,
+        max_usd_micros,
+    )
 }
 
 async fn invoke_mcp_plugin_tool(

@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS desktop_platform_plugin_snapshots (
 );
 "#;
 
+const USAGE_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS desktop_platform_plugin_monthly_usage (
+    plugin_id TEXT PRIMARY KEY,
+    period TEXT NOT NULL,
+    usd_micros INTEGER NOT NULL CHECK (usd_micros >= 0),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)"#;
+
 const ACTIVATION_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS desktop_platform_plugin_activations (
     snapshot_digest TEXT NOT NULL,
@@ -113,7 +121,7 @@ struct PreparedPlugin {
 pub(crate) fn initialize_schema(connection: &Connection) -> Result<(), String> {
     connection
         .execute_batch(&format!(
-            "{TABLE_SQL}{ACTIVATION_TABLE_SQL}{ARTIFACT_TABLE_SQL}"
+            "{TABLE_SQL}{ACTIVATION_TABLE_SQL}{ARTIFACT_TABLE_SQL}{USAGE_TABLE_SQL}"
         ))
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -283,6 +291,78 @@ pub(crate) fn read_runtime_artifact(
         .optional()
         .map_err(|error| error.to_string())?;
     Ok(row)
+}
+
+pub(crate) fn runtime_artifact_storage_bytes(
+    connection: &Connection,
+    plugin_id: &str,
+) -> Result<usize, String> {
+    connection
+        .query_row(
+            "SELECT COALESCE(SUM(LENGTH(runtime_bytes)), 0) FROM desktop_platform_plugin_artifacts WHERE plugin_id = ?1",
+            params![plugin_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|bytes| bytes.max(0) as usize)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn ensure_runtime_artifact_storage(
+    connection: &Connection,
+    plugin_id: &str,
+    incoming_bytes: usize,
+    max_storage_bytes: Option<usize>,
+) -> Result<(), String> {
+    let Some(max_storage_bytes) = max_storage_bytes else {
+        return Ok(());
+    };
+    let current = runtime_artifact_storage_bytes(connection, plugin_id)?;
+    if current.saturating_add(incoming_bytes) > max_storage_bytes {
+        return Err(format!(
+            "plugin {plugin_id} artifacts exceed its storage quota: {} + {incoming_bytes} > {max_storage_bytes}",
+            current
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn reserve_monthly_plugin_usage(
+    connection: &Connection,
+    plugin_id: &str,
+    period: &str,
+    charge_usd_micros: u64,
+    max_usd_micros: Option<u64>,
+) -> Result<(), String> {
+    let limit = max_usd_micros
+        .unwrap_or(i64::MAX as u64)
+        .min(i64::MAX as u64) as i64;
+    let charge = charge_usd_micros.min(i64::MAX as u64) as i64;
+    let updated = connection
+        .execute(
+            r#"
+            INSERT INTO desktop_platform_plugin_monthly_usage (
+                plugin_id, period, usd_micros
+            ) VALUES (?1, ?2, ?3)
+            ON CONFLICT(plugin_id) DO UPDATE SET
+                period = excluded.period,
+                usd_micros = CASE
+                    WHEN desktop_platform_plugin_monthly_usage.period = excluded.period
+                    THEN desktop_platform_plugin_monthly_usage.usd_micros + excluded.usd_micros
+                    ELSE excluded.usd_micros
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE (
+                desktop_platform_plugin_monthly_usage.period = excluded.period
+                AND excluded.usd_micros <= ?4 - desktop_platform_plugin_monthly_usage.usd_micros
+            ) OR desktop_platform_plugin_monthly_usage.period != excluded.period
+            "#,
+            params![plugin_id, period, charge, limit],
+        )
+        .map_err(|error| error.to_string())?;
+    if updated == 0 {
+        return Err(format!("plugin {plugin_id} exceeded its monthly USD quota"));
+    }
+    Ok(())
 }
 
 pub(crate) fn prune_runtime_artifacts(
@@ -601,6 +681,14 @@ fn prepare_plugins(
                 .ok_or_else(|| format!("plugin {plugin_id} config must be an object"))?
                 .insert("quotas".to_string(), quotas.clone());
         }
+        if let Some(billing) = object.get("billing") {
+            billing_usd_micros_per_call_from_value(billing)
+                .map_err(|error| format!("plugin {plugin_id}: {error}"))?;
+            config
+                .as_object_mut()
+                .ok_or_else(|| format!("plugin {plugin_id} config must be an object"))?
+                .insert("billing".to_string(), billing.clone());
+        }
         if runtime != "python-trusted" {
             let artifact = required_runtime_artifact(connection, &plugin_id, &config)?;
             if artifact.runtime != runtime {
@@ -651,6 +739,34 @@ pub(crate) fn manifest_quota_limits(manifest: &Value) -> Result<PluginQuotaLimit
         .and_then(|activation| activation.get("quotas"))
         .unwrap_or(&Value::Null);
     plugin_quota_limits_from_value(quotas)
+}
+
+pub(crate) fn plugin_billing_usd_micros_per_call(config: &Value) -> Result<u64, String> {
+    billing_usd_micros_per_call_from_value(config.get("billing").unwrap_or(&Value::Null))
+}
+
+fn billing_usd_micros_per_call_from_value(value: &Value) -> Result<u64, String> {
+    if value.is_null() {
+        return Ok(0);
+    }
+    let Some(object) = value.as_object() else {
+        return Err("plugin billing must be an object".to_string());
+    };
+    if let Some(unknown) = object
+        .keys()
+        .find(|key| !matches!(key.as_str(), "usd_micros_per_call" | "usdMicrosPerCall"))
+    {
+        return Err(format!("plugin billing field {unknown} is unsupported"));
+    }
+    let Some(rate) = object
+        .get("usd_micros_per_call")
+        .or_else(|| object.get("usdMicrosPerCall"))
+    else {
+        return Err("plugin billing call rate is required".to_string());
+    };
+    rate.as_u64()
+        .filter(|rate| *rate <= i64::MAX as u64)
+        .ok_or_else(|| "plugin billing call rate must be a non-negative integer".to_string())
 }
 
 fn plugin_quota_limits_from_value(value: &Value) -> Result<PluginQuotaLimits, String> {
@@ -952,6 +1068,80 @@ mod tests {
         assert!(read_apply_record(&connection)
             .expect("apply record")
             .is_none());
+    }
+
+    #[test]
+    fn monthly_usage_reservation_is_durable_and_rolls_over_by_period() {
+        let connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+
+        reserve_monthly_plugin_usage(&connection, "plugin", "2026-08", 10, Some(10))
+            .expect("first monthly reservation");
+        assert!(
+            reserve_monthly_plugin_usage(&connection, "plugin", "2026-08", 1, Some(10)).is_err()
+        );
+        let usage: (String, i64) = connection
+            .query_row(
+                "SELECT period, usd_micros FROM desktop_platform_plugin_monthly_usage WHERE plugin_id = 'plugin'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("durable usage");
+        assert_eq!(usage, ("2026-08".to_string(), 10));
+
+        reserve_monthly_plugin_usage(&connection, "plugin", "2026-09", 2, Some(10))
+            .expect("new month resets the durable window");
+        let usage: (String, i64) = connection
+            .query_row(
+                "SELECT period, usd_micros FROM desktop_platform_plugin_monthly_usage WHERE plugin_id = 'plugin'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("rolled usage");
+        assert_eq!(usage, ("2026-09".to_string(), 2));
+    }
+
+    #[test]
+    fn storage_quota_counts_all_verified_artifacts_for_one_plugin() {
+        let connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+        let artifact = RuntimeArtifact {
+            plugin_id: "plugin".to_string(),
+            digest: "a".repeat(64),
+            runtime: "wasm".to_string(),
+            path: "runtime/plugin.wasm".to_string(),
+            bytes: vec![1; 30],
+        };
+        store_runtime_artifact(&connection, &artifact).expect("first artifact");
+
+        assert_eq!(
+            runtime_artifact_storage_bytes(&connection, "plugin").expect("storage"),
+            30
+        );
+        ensure_runtime_artifact_storage(&connection, "plugin", 20, Some(50)).expect("within cap");
+        assert!(ensure_runtime_artifact_storage(&connection, "plugin", 21, Some(50)).is_err());
+    }
+
+    #[test]
+    fn activation_preserves_signed_call_pricing_for_host_enforcement() {
+        let mut connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+        let digest = "9".repeat(64);
+        let mut payload = plugin_snapshot(&digest);
+        payload["plugins"][0]["billing"] = json!({"usd_micros_per_call": 7});
+        let requested = RequestedPluginSnapshot {
+            version: 7,
+            nonce: "nonce-7".to_string(),
+            digest: digest.clone(),
+            payload,
+        };
+
+        let activated = record_ack(&mut connection, &requested).expect("activate pricing");
+
+        assert_eq!(
+            plugin_billing_usd_micros_per_call(&activated[0].config).expect("billing"),
+            7
+        );
     }
 
     #[test]

@@ -122,6 +122,44 @@ def test_manifest_rejects_invalid_or_unknown_resource_quotas() -> None:
 
 
 @pytest.mark.unit
+def test_manifest_parses_signed_call_pricing_for_spend_quotas() -> None:
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "third-party-tool",
+            "version": "1.0.0",
+            "runtime": "mcp",
+            "trust": "signed",
+            "provides": [{"kind": "tool", "id": "echo"}],
+            "activation": {"quotas": {"max_monthly_usd": 0.01}},
+            "billing": {"usdMicrosPerCall": 1_000},
+        }
+    )
+
+    assert manifest.to_payload()["billing"] == {"usd_micros_per_call": 1_000}
+
+
+@pytest.mark.unit
+def test_manifest_rejects_invalid_or_unknown_billing_fields() -> None:
+    with pytest.raises(PluginManifestError) as exc_info:
+        parse_plugin_manifest(
+            {
+                "schemaVersion": 1,
+                "id": "third-party-tool",
+                "version": "1.0.0",
+                "runtime": "mcp",
+                "trust": "signed",
+                "provides": [{"kind": "tool", "id": "echo"}],
+                "billing": {"usdMicrosPerCall": -1, "currency": "USD"},
+            }
+        )
+
+    errors = exc_info.value.errors
+    assert "billing.usdMicrosPerCall must be an integer >= 0" in errors
+    assert "billing has unknown fields: currency" in errors
+
+
+@pytest.mark.unit
 def test_untrusted_plugin_cannot_claim_kernel_capability() -> None:
     with pytest.raises(PluginManifestError) as exc_info:
         parse_plugin_manifest(

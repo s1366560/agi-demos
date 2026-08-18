@@ -9,6 +9,7 @@ from .events import (
 from .manifest import (
     CapabilityKind,
     PluginActivation,
+    PluginBilling,
     PluginManifest,
     PluginManifestError,
     PluginRequirement,
@@ -30,6 +31,7 @@ __all__ = [
     "EventDefinition",
     "MissingNextPolicy",
     "PluginActivation",
+    "PluginBilling",
     "PluginEventMode",
     "PluginGeneration",
     "PluginManifest",

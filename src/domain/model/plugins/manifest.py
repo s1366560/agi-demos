@@ -154,6 +154,17 @@ class PluginActivation:
 
 
 @dataclass(frozen=True)
+class PluginBilling:
+    """Signed pricing facts used by host-side spend quotas."""
+
+    usd_micros_per_call: int = 0
+
+    def to_payload(self) -> dict[str, int]:
+        """Return the canonical billing payload."""
+        return {"usd_micros_per_call": self.usd_micros_per_call}
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     """Immutable, cross-runtime description of a plugin package."""
 
@@ -165,6 +176,7 @@ class PluginManifest:
     requires: tuple[PluginRequirement, ...] = ()
     provides: tuple[ProvidedCapability, ...] = ()
     activation: PluginActivation = field(default_factory=PluginActivation)
+    billing: PluginBilling = field(default_factory=PluginBilling)
 
     @property
     def provided_contracts(self) -> frozenset[str]:
@@ -205,6 +217,7 @@ class PluginManifest:
                     else {}
                 ),
             },
+            **({"billing": self.billing.to_payload()} if self.billing.usd_micros_per_call else {}),
         }
 
     def to_json(self) -> str:
@@ -237,6 +250,7 @@ def parse_plugin_manifest(payload: object) -> PluginManifest:
     requires = _parse_requirements(payload.get("requires"), errors)
     provides = _parse_provides(payload.get("provides"), errors)
     activation = _parse_activation(payload.get("activation"), errors)
+    billing = _parse_billing(payload.get("billing"), errors)
 
     if runtime == PluginRuntimeKind.PYTHON_TRUSTED and trust not in {
         PluginTrust.BUILTIN,
@@ -260,6 +274,7 @@ def parse_plugin_manifest(payload: object) -> PluginManifest:
         requires=requires,
         provides=provides,
         activation=activation,
+        billing=billing,
     )
 
 
@@ -461,6 +476,29 @@ def _parse_activation(value: object, errors: list[str]) -> PluginActivation:
         restart_policy=restart_policy,
         quotas=quotas,
     )
+
+
+def _parse_billing(value: object, errors: list[str]) -> PluginBilling:
+    if value is None:
+        return PluginBilling()
+    if not isinstance(value, dict):
+        errors.append("billing must be an object")
+        return PluginBilling()
+
+    raw_rate = value.get("usdMicrosPerCall", value.get("usd_micros_per_call"))
+    if (
+        raw_rate is None
+        or isinstance(raw_rate, bool)
+        or not isinstance(raw_rate, int)
+        or raw_rate < 0
+    ):
+        errors.append("billing.usdMicrosPerCall must be an integer >= 0")
+        raw_rate = None
+    known = {"usdMicrosPerCall", "usd_micros_per_call"}
+    unknown = sorted(set(value) - known)
+    if unknown:
+        errors.append(f"billing has unknown fields: {', '.join(unknown)}")
+    return PluginBilling(usd_micros_per_call=raw_rate or 0)
 
 
 def _parse_resource_quota(value: object, errors: list[str]) -> PluginResourceQuota:

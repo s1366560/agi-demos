@@ -562,6 +562,85 @@ async fn active_untrusted_wasm_manifest_quotas_are_activated_and_enforced() {
     assert_eq!(active[0].config["quotas"]["max_wasm_fuel"], json!(1));
 }
 
+#[tokio::test]
+async fn signed_call_pricing_enforces_the_durable_monthly_spend_quota() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let app = platform_plugin_router(state.clone()).with_state(state.clone());
+    let runtime = SCORE_V1_WAT.as_bytes().to_vec();
+    let artifact_digest = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&runtime);
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let (mut payload, _initial_digest) = quota_snapshot(
+        active_wasm_snapshot("placeholder", &artifact_digest),
+        json!({"max_monthly_usd": 0.00001, "max_output_bytes": 1024 * 1024}),
+    );
+    payload["plugins"][0]["billing"] = json!({"usd_micros_per_call": 10});
+    let digest = platform_plugin_payload_digest(&payload).expect("priced snapshot digest");
+    payload["digest"] = json!(digest.clone());
+    {
+        let connection = state.session_store.connection().expect("connection");
+        crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
+        crate::plugin_snapshots::store_runtime_artifact(
+            &connection,
+            &crate::plugin_snapshots::RuntimeArtifact {
+                plugin_id: "third-party-tool".to_string(),
+                digest: artifact_digest,
+                runtime: "wasm".to_string(),
+                path: "runtime/plugin.wasm".to_string(),
+                bytes: runtime,
+            },
+        )
+        .expect("artifact");
+    }
+
+    let submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 18,
+            "nonce": "nonce-18",
+            "digest": digest,
+            "payload": payload
+        }),
+    )
+    .await;
+    let first = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-tool", "tool_id": "demo", "input": {"text": "hello"}}),
+    )
+    .await;
+    let second = request_json(
+        app,
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-tool", "tool_id": "demo", "input": {"text": "hello"}}),
+    )
+    .await;
+
+    assert_eq!(submitted.0, StatusCode::OK);
+    assert_eq!(first.0, StatusCode::OK);
+    assert_eq!(second.0, StatusCode::CONFLICT);
+    assert_eq!(
+        second.1["detail"],
+        "plugin third-party-tool exceeded its monthly USD quota"
+    );
+}
+
 fn active_subprocess_snapshot(digest: &str, artifact_digest: &str) -> Value {
     json!({
         "schema_version": 1,

@@ -439,17 +439,16 @@ async fn prepare_runtime_artifacts(
                     reference.plugin_id, reference.layer_digest, error
                 )
             })?;
+        let connection = state.session_store.connection()?;
         let quotas = plugin_snapshots::manifest_quota_limits(&reference.plugin)
             .map_err(|error| format!("plugin {}: {}", reference.plugin_id, error))?;
-        if let Some(max_storage_bytes) = quotas.max_storage_bytes {
-            if runtime_bytes.len() > max_storage_bytes {
-                return Err(format!(
-                    "plugin {} artifact exceeds its storage quota",
-                    reference.plugin_id
-                ));
-            }
-        }
-        let connection = state.session_store.connection()?;
+        plugin_snapshots::ensure_runtime_artifact_storage(
+            &connection,
+            &reference.plugin_id,
+            runtime_bytes.len(),
+            quotas.max_storage_bytes,
+        )
+        .map_err(|error| format!("plugin {}: {}", reference.plugin_id, error))?;
         plugin_snapshots::store_runtime_artifact(
             &connection,
             &plugin_snapshots::RuntimeArtifact {
@@ -1845,6 +1844,93 @@ for raw_line in sys.stdin:
             "payload": payload
         });
         (snapshot, digest)
+    }
+
+    fn stage_wasm_package(
+        control: &ControlPlaneState,
+        url: &Url,
+        version: u64,
+        runtime_bytes: &[u8],
+        max_storage_bytes: usize,
+    ) -> String {
+        let registry = url.as_str().trim_end_matches("/api/v1").to_string();
+        let mut plugin = json!({
+            "schema_version": 1,
+            "id": "storage-quota-tool",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "signed",
+            "provides": [{
+                "kind": "tool",
+                "id": "demo",
+                "contract": "tool:demo",
+                "permissions": ["tools.execute"]
+            }],
+            "activation": {
+                "default_scope": "tenant",
+                "restart_policy": "process-boundary",
+                "quotas": {"max_storage_bytes": max_storage_bytes}
+            },
+            "config": {}
+        });
+        let archive = wasm_package_archive(&plugin, runtime_bytes);
+        let layer_digest = sha256_hex(&archive);
+        let oci_manifest = serde_json::to_vec(&json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "artifactType": "application/vnd.memstack.plugin.v1",
+            "layers": [{
+                "mediaType": "application/vnd.memstack.plugin.bundle.v1+zip",
+                "digest": format!("sha256:{layer_digest}"),
+                "size": archive.len()
+            }]
+        }))
+        .expect("OCI manifest");
+        plugin["config"]["artifact"] = json!({
+            "registry": registry,
+            "repository": "plugins",
+            "manifest_sha256": sha256_hex(&oci_manifest),
+            "layer_sha256": layer_digest
+        });
+        *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
+        *control.oci_layer.lock().expect("OCI layer") = archive;
+        let (snapshot, digest) = control_snapshot_with_plugin(version, plugin);
+        *control.snapshot.lock().expect("snapshot") = snapshot;
+        digest
+    }
+
+    #[tokio::test]
+    async fn cumulative_storage_quota_nacks_new_artifact_and_keeps_last_good() {
+        let runtime = state();
+        let (url, broker, control) = control_plane(json!({})).await;
+        let first_runtime = SCORE_V1_WAT.as_bytes().to_vec();
+        let first_limit = first_runtime.len() + 2;
+        let first_digest = stage_wasm_package(&control, &url, 21, &first_runtime, first_limit);
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("first storage-quota package");
+
+        let second_digest = stage_wasm_package(&control, &url, 22, &[0], first_runtime.len());
+        let error = reconcile_once(&runtime, &broker)
+            .await
+            .expect_err("second artifact must exceed cumulative storage");
+
+        assert!(error.contains("storage quota"));
+        let connection = runtime.session_store.connection().expect("connection");
+        let record = plugin_snapshots::read_apply_record(&connection)
+            .expect("record")
+            .expect("row");
+        assert_eq!(record.status, "nack");
+        assert_eq!(
+            record.applied_digest.as_deref(),
+            Some(first_digest.as_str())
+        );
+        assert_eq!(record.requested_digest, second_digest);
+        assert_eq!(
+            plugin_snapshots::runtime_artifact_storage_bytes(&connection, "storage-quota-tool")
+                .expect("storage bytes"),
+            first_runtime.len()
+        );
     }
 
     #[tokio::test]

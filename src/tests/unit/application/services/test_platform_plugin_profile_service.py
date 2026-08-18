@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.platform_plugin_profile_service import (
     PlatformPluginProfileService,
@@ -12,7 +13,7 @@ from src.infrastructure.plugins.compatibility import activate_profile_snapshot
 
 
 @pytest.mark.unit
-async def test_publish_records_snapshot_audit_and_ack(db_session):
+async def test_publish_records_snapshot_audit_and_ack(db_session: AsyncSession) -> None:
     repository = PlatformPluginRepository(db_session)
     service = PlatformPluginProfileService(repository)
 
@@ -27,7 +28,7 @@ async def test_publish_records_snapshot_audit_and_ack(db_session):
 
 
 @pytest.mark.unit
-async def test_nack_requires_reason_and_retains_applied_version(db_session):
+async def test_nack_requires_reason_and_retains_applied_version(db_session: AsyncSession) -> None:
     repository = PlatformPluginRepository(db_session)
     service = PlatformPluginProfileService(repository)
     publication = await service.publish(version=5)
@@ -48,7 +49,7 @@ async def test_nack_requires_reason_and_retains_applied_version(db_session):
 
 
 @pytest.mark.unit
-def test_snapshot_activation_is_reversible():
+def test_snapshot_activation_is_reversible() -> None:
     snapshot = compose_profile(
         parse_profile_document(
             {
@@ -66,3 +67,32 @@ def test_snapshot_activation_is_reversible():
     assert registry.list_capabilities("workspace-runtime")
     dispose()
     assert registry.list_capabilities("workspace-runtime") == ()
+
+
+@pytest.mark.unit
+def test_snapshot_carries_signed_call_pricing_to_every_data_plane() -> None:
+    snapshot = compose_profile(
+        parse_profile_document(
+            {
+                "profile": {
+                    "id": "billing-test",
+                    "layers": [{"id": "marketplace", "plugins": [{"id": "third-party-tool"}]}],
+                }
+            }
+        ),
+        {
+            "third-party-tool": {
+                "schemaVersion": 1,
+                "id": "third-party-tool",
+                "version": "1.0.0",
+                "runtime": "wasm",
+                "trust": "signed",
+                "provides": [{"kind": "tool", "id": "demo"}],
+                "activation": {"quotas": {"max_monthly_usd": 0.01}},
+                "billing": {"usdMicrosPerCall": 1_000},
+            }
+        },
+    )
+
+    row = next(item for item in snapshot.rows if item.manifest.id == "third-party-tool")
+    assert row.to_payload()["billing"] == {"usd_micros_per_call": 1_000}
