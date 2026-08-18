@@ -423,7 +423,9 @@ async def test_cutover_approval_requires_readiness_and_is_durable(
     await db_session.commit()
     client = make_client(db_session)
 
-    rejected = client.post("/api/v1/platform-plugins/cutover/approve")
+    rejected = client.post(
+        "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
+    )
 
     assert rejected.status_code == status.HTTP_409_CONFLICT
 
@@ -493,13 +495,18 @@ async def test_cutover_approval_requires_readiness_and_is_durable(
     )
     await db_session.commit()
 
-    approved = client.post("/api/v1/platform-plugins/cutover/approve")
+    approved = client.post(
+        "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
+    )
 
     assert approved.status_code == status.HTTP_200_OK
     approval = approved.json()
     assert approval["capability"] == "agent_runtime"
     assert approval["evidence"]["ready"] is True
-    duplicate = client.post("/api/v1/platform-plugins/cutover/approve")
+    assert datetime.fromisoformat(approval["expires_at"].replace("Z", "+00:00")) > now
+    duplicate = client.post(
+        "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
+    )
     assert duplicate.status_code == status.HTTP_409_CONFLICT
 
     readiness = client.get(
@@ -528,7 +535,9 @@ async def test_cutover_approval_and_revocation_require_platform_admin(
 ) -> None:
     client = make_client(db_session, superuser=False)
 
-    approval = client.post("/api/v1/platform-plugins/cutover/approve")
+    approval = client.post(
+        "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
+    )
     revocation = client.post(
         "/api/v1/platform-plugins/cutover/revoke",
         json={"reason": "must be forbidden before authorization"},

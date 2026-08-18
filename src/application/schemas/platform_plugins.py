@@ -113,7 +113,12 @@ class PlatformPluginCutoverApprovalResponse(BaseModel):
     capability: str
     approved_by: str
     approved_at: datetime
+    expires_at: datetime
     evidence: dict[str, Any]
+
+
+class PlatformPluginCutoverApprovalRequest(BaseModel):
+    valid_for_seconds: int = Field(default=7 * 24 * 60 * 60, ge=3_600, le=30 * 24 * 60 * 60)
 
 
 class PlatformPluginCutoverRevocationRequest(BaseModel):

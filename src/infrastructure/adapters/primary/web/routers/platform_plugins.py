@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateRequest,
     PlatformPluginApplyStateResponse,
+    PlatformPluginCutoverApprovalRequest,
     PlatformPluginCutoverApprovalResponse,
     PlatformPluginCutoverReadinessResponse,
     PlatformPluginCutoverRevocationRequest,
@@ -111,6 +112,7 @@ def _cutover_approval_response(
         capability=approval.capability,
         approved_by=approval.approved_by,
         approved_at=approval.approved_at,
+        expires_at=approval.expires_at,
         evidence=approval.evidence,
     )
 
@@ -216,7 +218,10 @@ async def get_platform_plugin_cutover_readiness(
         shadow=shadow,
         rollback_drill=rollback_drill,
     )
-    approval = await repository.latest_active_cutover_approval(capability="agent_runtime")
+    approval = await repository.latest_active_cutover_approval(
+        capability="agent_runtime",
+        now=datetime.now(UTC),
+    )
     return PlatformPluginCutoverReadinessResponse(
         ready=readiness.ready,
         checked_at=readiness.checked_at,
@@ -230,6 +235,7 @@ async def get_platform_plugin_cutover_readiness(
 
 @router.post("/cutover/approve", response_model=PlatformPluginCutoverApprovalResponse)
 async def approve_platform_plugin_cutover(
+    request: PlatformPluginCutoverApprovalRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginCutoverApprovalResponse:
@@ -240,12 +246,18 @@ async def approve_platform_plugin_cutover(
             detail=_("Only a platform administrator may approve this cutover"),
         )
     repository = PlatformPluginRepository(db)
-    if await repository.latest_active_cutover_approval(capability="agent_runtime") is not None:
+    checked_at = datetime.now(UTC)
+    if (
+        await repository.latest_active_cutover_approval(
+            capability="agent_runtime",
+            now=checked_at,
+        )
+        is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=_("A platform plugin cutover approval is already active"),
         )
-    checked_at = datetime.now(UTC)
     shadow = evaluate_shadow_rollout_readiness(
         summary=await repository.shadow_rollout_summary(),
         scope_counts=await repository.shadow_rollout_scope_counts(),
@@ -284,10 +296,12 @@ async def approve_platform_plugin_cutover(
         rollback_drill=_rollback_drill_response(rollback_drill),
         reasons=list(readiness.reasons),
     ).model_dump(mode="json")
+    expires_at = checked_at + timedelta(seconds=request.valid_for_seconds)
     approval = await repository.record_cutover_approval(
         capability="agent_runtime",
         approved_by=current_user.id,
         evidence=evidence,
+        expires_at=expires_at,
     )
     response = _cutover_approval_response(approval)
     await db.commit()

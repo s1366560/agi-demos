@@ -319,8 +319,10 @@ class PlatformPluginRepository:
         self,
         *,
         capability: str = "agent_runtime",
+        now: datetime | None = None,
     ) -> PlatformPluginCutoverApprovalModel | None:
-        """Return the newest non-revoked operator cutover approval."""
+        """Return the newest non-revoked, unexpired operator approval."""
+        checked_at = now or datetime.now(UTC)
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginCutoverApprovalModel)
@@ -335,7 +337,13 @@ class PlatformPluginRepository:
                 .limit(1)
             )
         )
-        return result.scalar_one_or_none()
+        approval = result.scalar_one_or_none()
+        if approval is None:
+            return None
+        expires_at = approval.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        return approval if expires_at > checked_at else None
 
     async def record_cutover_approval(
         self,
@@ -343,6 +351,7 @@ class PlatformPluginRepository:
         capability: str,
         approved_by: str,
         evidence: dict[str, object],
+        expires_at: datetime,
     ) -> PlatformPluginCutoverApprovalModel:
         """Append one immutable cutover approval after readiness passes."""
         model = PlatformPluginCutoverApprovalModel(
@@ -350,6 +359,7 @@ class PlatformPluginRepository:
             capability=capability,
             approved_by=approved_by,
             evidence=dict(evidence),
+            expires_at=expires_at,
         )
         self._session.add(model)
         await self._session.flush()

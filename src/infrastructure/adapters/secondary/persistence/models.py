@@ -3258,6 +3258,7 @@ class PlatformPluginCutoverApprovalModel(IdGeneratorMixin, Base):
         server_default=func.now(),
         nullable=False,
     )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 

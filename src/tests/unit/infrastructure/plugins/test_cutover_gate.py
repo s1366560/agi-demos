@@ -41,9 +41,20 @@ class FakeRepository:
         _ = limit
         return self.apply_events
 
-    async def latest_active_cutover_approval(self, *, capability: str) -> SimpleNamespace | None:
+    async def latest_active_cutover_approval(
+        self,
+        *,
+        capability: str,
+        now: datetime | None = None,
+    ) -> SimpleNamespace | None:
         _ = capability
-        return self.approval
+        if self.approval is None:
+            return None
+        checked_at = now or datetime.now(UTC)
+        expires_at = self.approval.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        return self.approval if expires_at > checked_at else None
 
 
 def settings(*, v2: bool) -> SimpleNamespace:
@@ -183,8 +194,25 @@ async def test_cutover_gate_requires_and_accepts_durable_operator_approval(
         approved_by="platform-admin",
         evidence={"ready": True},
         approved_at=now,
+        expires_at=now + timedelta(hours=1),
         revoked_at=None,
         revocation_reason=None,
     )
 
     assert await ensure_agent_v2_cutover_ready(FakeSession) is True
+
+    repository.approval = SimpleNamespace(
+        id="approval-expired",
+        capability="agent_runtime",
+        approved_by="platform-admin",
+        evidence={"ready": True},
+        approved_at=now - timedelta(hours=2),
+        expires_at=now - timedelta(seconds=1),
+        revoked_at=None,
+        revocation_reason=None,
+    )
+
+    with pytest.raises(CutoverGateError) as expired_error:
+        await ensure_agent_v2_cutover_ready(FakeSession)
+
+    assert "operator_approval:missing" in expired_error.value.reasons

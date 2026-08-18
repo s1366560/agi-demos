@@ -44,7 +44,10 @@ async def ensure_agent_v2_cutover_ready(
     checked_at = datetime.now(UTC)
     async with session_factory() as session:
         repository = PlatformPluginRepository(session)
-        approval = await repository.latest_active_cutover_approval(capability="agent_runtime")
+        approval = await repository.latest_active_cutover_approval(
+            capability="agent_runtime",
+            now=checked_at,
+        )
         if approval is not None:
             logger.info(
                 "Platform plugin agent V2 startup approved by %s at %s",
