@@ -14,6 +14,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginApplyStateEventModel,
     PlatformPluginApplyStateModel,
     User,
 )
@@ -22,6 +23,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 )
 from src.infrastructure.plugins import compose_profile, parse_profile_document
 from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
+from src.infrastructure.plugins.cutover_readiness import (
+    evaluate_platform_plugin_cutover_readiness,
+    evaluate_rollback_drill_readiness,
+)
 from src.infrastructure.plugins.profile import ProfileSnapshot
 from src.infrastructure.plugins.rollout_readiness import (
     evaluate_shadow_rollout_readiness,
@@ -333,6 +338,194 @@ async def test_shadow_rollout_readiness_fails_closed_for_missing_or_stale_eviden
     assert "agent_tools:stale_evidence:agent.tool_generation" in reasons
     assert "agent_events:missing_event:agent.before_step" in reasons
     assert "agent_events:insufficient_scope_coverage" in reasons
+
+
+@pytest.mark.unit
+async def test_cutover_readiness_requires_shadow_parity_and_rollback_drill(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-cutover")
+    await repository.record_snapshot(snapshot, version=101, nonce="cutover-101")
+    await db_session.commit()
+    client = make_client(db_session)
+
+    missing_response = client.get(
+        "/api/v1/platform-plugins/cutover/readiness",
+        params={
+            "minimum_samples_per_event": 1,
+            "minimum_distinct_scopes": 1,
+            "minimum_distinct_data_planes": 1,
+        },
+    )
+
+    assert missing_response.status_code == status.HTTP_200_OK
+    missing = missing_response.json()
+    assert missing["ready"] is False
+    assert missing["rollback_drill"]["ready"] is False
+    assert missing["rollback_drill"]["reasons"] == ["insufficient_rollback_drills:0:1"]
+    assert any(reason.startswith("shadow:") for reason in missing["reasons"])
+
+    await repository.record_apply_state(
+        data_plane_id="desktop-local",
+        snapshot_digest=snapshot.digest,
+        requested_version=101,
+        applied_version=101,
+        status="ack",
+    )
+    await repository.record_apply_state(
+        data_plane_id="desktop-local",
+        snapshot_digest="0" * 64,
+        requested_version=102,
+        applied_version=101,
+        status="nack",
+        error_message="requested layer digest does not match OCI manifest",
+    )
+    corrected = compose_snapshot("router-test-cutover-restored")
+    await repository.record_snapshot(corrected, version=103, nonce="cutover-103")
+    await repository.record_apply_state(
+        data_plane_id="desktop-local",
+        snapshot_digest=corrected.digest,
+        requested_version=103,
+        applied_version=103,
+        status="ack",
+    )
+    await db_session.commit()
+
+    events = await db_session.execute(select(PlatformPluginApplyStateEventModel))
+    assert len(events.scalars().all()) == 3
+    response = client.get(
+        "/api/v1/platform-plugins/cutover/readiness",
+        params={
+            "minimum_samples_per_event": 1,
+            "minimum_distinct_scopes": 1,
+            "minimum_distinct_data_planes": 1,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["rollback_drill"]["ready"] is True
+    assert payload["rollback_drill"]["data_planes"][0]["data_plane_id"] == "desktop-local"
+    assert payload["ready"] is False
+    assert any(reason.startswith("shadow:") for reason in payload["reasons"])
+
+
+@pytest.mark.unit
+def test_rollback_and_cutover_evaluators_fail_closed_on_incomplete_sequences() -> None:
+    now = datetime.now(UTC)
+
+    valid = evaluate_rollback_drill_readiness(events=valid_events(now), checked_at=now)
+    incomplete = evaluate_rollback_drill_readiness(
+        events=[
+            {
+                "id": "event-1",
+                "data_plane_id": "desktop-local",
+                "requested_version": 101,
+                "applied_version": 101,
+                "status": "ack",
+                "error_message": None,
+                "recorded_at": now,
+            }
+        ],
+        checked_at=now,
+    )
+
+    assert valid.ready is True
+    assert incomplete.ready is False
+    assert incomplete.data_planes[0].reasons == (
+        "missing_invalid_config_nack",
+        "missing_restored_ack",
+    )
+
+    combined = evaluate_platform_plugin_cutover_readiness(
+        shadow=_ready_shadow(now),
+        rollback_drill=valid,
+    )
+    assert combined.ready is True
+    assert combined.reasons == ()
+
+    regressed = evaluate_rollback_drill_readiness(
+        events=[
+            *valid_events(now),
+            {
+                "id": "event-4",
+                "data_plane_id": "desktop-local",
+                "requested_version": 104,
+                "applied_version": 103,
+                "status": "nack",
+                "error_message": "control plane restored an older generation",
+                "recorded_at": now,
+            },
+        ],
+        checked_at=now,
+    )
+    assert regressed.ready is False
+    assert regressed.data_planes[0].reasons == ("restored_ack_not_latest",)
+
+
+def _ready_shadow(checked_at: datetime):
+    from src.infrastructure.plugins.rollout_readiness import (
+        ShadowRolloutCapabilityReadiness,
+        ShadowRolloutReadiness,
+    )
+
+    capabilities = [
+        ShadowRolloutCapabilityReadiness(
+            capability=capability,
+            ready=True,
+            total_count=1,
+            equal_count=1,
+            diff_count=0,
+            distinct_scope_count=1,
+            observed_event_count=1,
+            required_event_count=1,
+            last_occurred_at=checked_at,
+            reasons=(),
+        )
+        for capability in ("agent_events", "agent_tools")
+    ]
+    return ShadowRolloutReadiness(
+        ready=True,
+        checked_at=checked_at,
+        minimum_samples_per_event=1,
+        minimum_distinct_scopes=1,
+        maximum_evidence_age_seconds=60,
+        capabilities=tuple(capabilities),
+        reasons=(),
+    )
+
+
+def valid_events(now: datetime) -> list[dict[str, object]]:
+    return [
+        {
+            "id": "event-1",
+            "data_plane_id": "desktop-local",
+            "requested_version": 101,
+            "applied_version": 101,
+            "status": "ack",
+            "error_message": None,
+            "recorded_at": now,
+        },
+        {
+            "id": "event-2",
+            "data_plane_id": "desktop-local",
+            "requested_version": 102,
+            "applied_version": 101,
+            "status": "nack",
+            "error_message": "invalid artifact digest",
+            "recorded_at": now,
+        },
+        {
+            "id": "event-3",
+            "data_plane_id": "desktop-local",
+            "requested_version": 103,
+            "applied_version": 103,
+            "status": "ack",
+            "error_message": None,
+            "recorded_at": now,
+        },
+    ]
 
 
 @pytest.mark.unit

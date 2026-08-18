@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateRequest,
     PlatformPluginApplyStateResponse,
+    PlatformPluginCutoverReadinessResponse,
+    PlatformPluginRollbackDrillDataPlaneResponse,
+    PlatformPluginRollbackDrillReadinessResponse,
     PlatformPluginShadowRolloutCapabilityReadinessResponse,
     PlatformPluginShadowRolloutEventResponse,
     PlatformPluginShadowRolloutReadinessResponse,
@@ -25,12 +28,73 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepository,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.cutover_readiness import (
+    RollbackDrillReadiness,
+    evaluate_platform_plugin_cutover_readiness,
+    evaluate_rollback_drill_readiness,
+)
 from src.infrastructure.plugins.rollout_readiness import (
+    ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
+
+
+def _shadow_readiness_response(
+    readiness: ShadowRolloutReadiness,
+) -> PlatformPluginShadowRolloutReadinessResponse:
+    """Project immutable shadow readiness onto its transport schema."""
+    return PlatformPluginShadowRolloutReadinessResponse(
+        ready=readiness.ready,
+        checked_at=readiness.checked_at,
+        minimum_samples_per_event=readiness.minimum_samples_per_event,
+        minimum_distinct_scopes=readiness.minimum_distinct_scopes,
+        maximum_evidence_age_seconds=readiness.maximum_evidence_age_seconds,
+        capabilities=[
+            PlatformPluginShadowRolloutCapabilityReadinessResponse.model_validate(
+                {
+                    "capability": item.capability,
+                    "ready": item.ready,
+                    "total_count": item.total_count,
+                    "equal_count": item.equal_count,
+                    "diff_count": item.diff_count,
+                    "distinct_scope_count": item.distinct_scope_count,
+                    "observed_event_count": item.observed_event_count,
+                    "required_event_count": item.required_event_count,
+                    "last_occurred_at": item.last_occurred_at,
+                    "reasons": list(item.reasons),
+                }
+            )
+            for item in readiness.capabilities
+        ],
+        reasons=list(readiness.reasons),
+    )
+
+
+def _rollback_drill_response(
+    readiness: RollbackDrillReadiness,
+) -> PlatformPluginRollbackDrillReadinessResponse:
+    """Project immutable rollback readiness onto its transport schema."""
+    return PlatformPluginRollbackDrillReadinessResponse(
+        ready=readiness.ready,
+        checked_at=readiness.checked_at,
+        minimum_distinct_data_planes=readiness.minimum_distinct_data_planes,
+        maximum_evidence_age_seconds=readiness.maximum_evidence_age_seconds,
+        data_planes=[
+            PlatformPluginRollbackDrillDataPlaneResponse.model_validate(
+                {
+                    "data_plane_id": item.data_plane_id,
+                    "ready": item.ready,
+                    "last_recorded_at": item.last_recorded_at,
+                    "reasons": list(item.reasons),
+                }
+            )
+            for item in readiness.data_planes
+        ],
+        reasons=list(readiness.reasons),
+    )
 
 
 @router.get("/shadow-rollout", response_model=PlatformPluginShadowRolloutResponse)
@@ -89,29 +153,56 @@ async def get_shadow_rollout_readiness(
         minimum_distinct_scopes=minimum_distinct_scopes,
         maximum_evidence_age_seconds=maximum_evidence_age_seconds,
     )
-    return PlatformPluginShadowRolloutReadinessResponse(
+    return _shadow_readiness_response(readiness)
+
+
+@router.get("/cutover/readiness", response_model=PlatformPluginCutoverReadinessResponse)
+async def get_platform_plugin_cutover_readiness(
+    minimum_samples_per_event: int = Query(default=100, ge=1, le=1_000_000),
+    minimum_distinct_scopes: int = Query(default=10, ge=1, le=100_000),
+    maximum_shadow_evidence_age_seconds: int = Query(default=900, ge=1, le=86_400),
+    minimum_distinct_data_planes: int = Query(default=1, ge=1, le=10_000),
+    maximum_rollback_evidence_age_seconds: int = Query(default=86_400, ge=1, le=2_592_000),
+    _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginCutoverReadinessResponse:
+    """Require both shadow parity and a real ACK/NACK/restore rollback drill."""
+    repository = PlatformPluginRepository(db)
+    shadow = evaluate_shadow_rollout_readiness(
+        summary=await repository.shadow_rollout_summary(),
+        scope_counts=await repository.shadow_rollout_scope_counts(),
+        checked_at=datetime.now(UTC),
+        minimum_samples_per_event=minimum_samples_per_event,
+        minimum_distinct_scopes=minimum_distinct_scopes,
+        maximum_evidence_age_seconds=maximum_shadow_evidence_age_seconds,
+    )
+    rollback_events = [
+        {
+            "id": event.id,
+            "data_plane_id": event.data_plane_id,
+            "requested_version": event.requested_version,
+            "applied_version": event.applied_version,
+            "status": event.status,
+            "error_message": event.error_message,
+            "recorded_at": event.recorded_at,
+        }
+        for event in await repository.list_apply_state_events(limit=5_000)
+    ]
+    rollback_drill = evaluate_rollback_drill_readiness(
+        events=rollback_events,
+        checked_at=datetime.now(UTC),
+        minimum_distinct_data_planes=minimum_distinct_data_planes,
+        maximum_evidence_age_seconds=maximum_rollback_evidence_age_seconds,
+    )
+    readiness = evaluate_platform_plugin_cutover_readiness(
+        shadow=shadow,
+        rollback_drill=rollback_drill,
+    )
+    return PlatformPluginCutoverReadinessResponse(
         ready=readiness.ready,
         checked_at=readiness.checked_at,
-        minimum_samples_per_event=readiness.minimum_samples_per_event,
-        minimum_distinct_scopes=readiness.minimum_distinct_scopes,
-        maximum_evidence_age_seconds=readiness.maximum_evidence_age_seconds,
-        capabilities=[
-            PlatformPluginShadowRolloutCapabilityReadinessResponse.model_validate(
-                {
-                    "capability": item.capability,
-                    "ready": item.ready,
-                    "total_count": item.total_count,
-                    "equal_count": item.equal_count,
-                    "diff_count": item.diff_count,
-                    "distinct_scope_count": item.distinct_scope_count,
-                    "observed_event_count": item.observed_event_count,
-                    "required_event_count": item.required_event_count,
-                    "last_occurred_at": item.last_occurred_at,
-                    "reasons": list(item.reasons),
-                }
-            )
-            for item in readiness.capabilities
-        ],
+        shadow=_shadow_readiness_response(shadow),
+        rollback_drill=_rollback_drill_response(rollback_drill),
         reasons=list(readiness.reasons),
     )
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.plugins import PluginManifest, PluginScope
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginApplyStateEventModel,
     PlatformPluginApplyStateModel,
     PlatformPluginCapabilityAuditModel,
     PlatformPluginCatalogModel,
@@ -253,7 +254,7 @@ class PlatformPluginRepository:
         status: str,
         error_message: str | None = None,
     ) -> PlatformPluginApplyStateModel:
-        """Upsert the latest ACK/NACK state for a data plane."""
+        """Upsert the latest state and append immutable receipt evidence."""
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginApplyStateModel).where(
@@ -279,8 +280,38 @@ class PlatformPluginRepository:
             existing.applied_version = applied_version
             existing.status = status
             existing.error_message = error_message
+        self._session.add(
+            PlatformPluginApplyStateEventModel(
+                id=PlatformPluginApplyStateEventModel.generate_id(),
+                data_plane_id=data_plane_id,
+                snapshot_digest=snapshot_digest,
+                requested_version=requested_version,
+                applied_version=applied_version,
+                status=status,
+                error_message=error_message,
+            )
+        )
         await self._session.flush()
         return existing
+
+    async def list_apply_state_events(
+        self,
+        *,
+        limit: int = 500,
+    ) -> list[PlatformPluginApplyStateEventModel]:
+        """Return newest ACK/NACK receipts for rollback-drill evaluation."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginApplyStateEventModel)
+                .order_by(
+                    PlatformPluginApplyStateEventModel.recorded_at.desc(),
+                    PlatformPluginApplyStateEventModel.requested_version.desc(),
+                    PlatformPluginApplyStateEventModel.id.desc(),
+                )
+                .limit(max(1, min(limit, 5_000)))
+            )
+        )
+        return list(result.scalars().all())
 
     async def record_shadow_rollout_events(
         self,

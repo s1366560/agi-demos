@@ -81,3 +81,27 @@ class PlatformPluginShadowRolloutReadinessResponse(BaseModel):
     maximum_evidence_age_seconds: int
     capabilities: list[PlatformPluginShadowRolloutCapabilityReadinessResponse]
     reasons: list[str]
+
+
+class PlatformPluginRollbackDrillDataPlaneResponse(BaseModel):
+    data_plane_id: str
+    ready: bool
+    last_recorded_at: datetime | None
+    reasons: list[str]
+
+
+class PlatformPluginRollbackDrillReadinessResponse(BaseModel):
+    ready: bool
+    checked_at: datetime
+    minimum_distinct_data_planes: int
+    maximum_evidence_age_seconds: int
+    data_planes: list[PlatformPluginRollbackDrillDataPlaneResponse]
+    reasons: list[str]
+
+
+class PlatformPluginCutoverReadinessResponse(BaseModel):
+    ready: bool
+    checked_at: datetime
+    shadow: PlatformPluginShadowRolloutReadinessResponse
+    rollback_drill: PlatformPluginRollbackDrillReadinessResponse
+    reasons: list[str]
