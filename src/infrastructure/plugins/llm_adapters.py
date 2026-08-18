@@ -161,11 +161,35 @@ class LlmAdapterProviderRegistry:
             if existing is not None and existing.owner == owner:
                 del self._providers[provider_id]
 
+    def replace(
+        self,
+        provider_id: str,
+        provider: LlmAdapterProvider,
+        *,
+        owner: str,
+    ) -> Callable[[], None]:
+        """Atomically replace a provider owned by the same actor."""
+        normalized_owner = owner.strip()
+        with self._lock:
+            existing = self._providers.get(provider_id.strip())
+            if existing is not None and existing.owner != normalized_owner:
+                raise ValueError(
+                    f"LLM adapter provider {provider_id} is already owned by {existing.owner}"
+                )
+        self.unregister(provider_id.strip(), owner=normalized_owner)
+        return self.register(provider_id, provider, owner=normalized_owner)
+
     def get(self, provider_id: str) -> LlmAdapterProvider | None:
         """Return the currently active explicit provider."""
         with self._lock:
             record = self._providers.get(provider_id)
             return None if record is None else record.provider
+
+    def owner_of(self, provider_id: str) -> str | None:
+        """Return the current provider owner for conflict-safe lifecycle checks."""
+        with self._lock:
+            record = self._providers.get(provider_id)
+            return None if record is None else record.owner
 
     def list(self) -> tuple[LlmAdapterRegistration, ...]:
         """Return deterministic registration inventory."""

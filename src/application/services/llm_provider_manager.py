@@ -47,9 +47,11 @@ from src.infrastructure.llm.resilience import (
 from src.infrastructure.plugins.context import PluginScopeContext
 from src.infrastructure.plugins.llm_adapters import (
     LegacyLlmAdapterProvider,
+    LlmAdapterFactory,
     LlmAdapterProvider,
     LlmAdapterProviderRegistry,
     LlmAdapterRequest,
+    RoutedLlmAdapterProvider,
     freeze_adapter_kwargs,
     get_llm_adapter_provider_registry,
 )
@@ -100,6 +102,7 @@ class LLMProviderManager:
         redis_client: Redis | None = None,
         adapter_provider: LlmAdapterProvider | None = None,
         adapter_registry: LlmAdapterProviderRegistry | None = None,
+        routed_adapter_factory: LlmAdapterFactory | None = None,
     ) -> None:
         """
         Initialize the provider manager.
@@ -125,6 +128,8 @@ class LLMProviderManager:
         )
         self._adapter_provider = adapter_provider or LegacyLlmAdapterProvider()
         self._adapter_registry = adapter_registry or get_llm_adapter_provider_registry()
+        self._routed_adapter_factory = routed_adapter_factory
+        self._routed_adapter_owners: dict[str, str] = {}
 
         # Provider configurations (loaded from database or settings)
         self._provider_configs: dict[ProviderType, ProviderConfig] = {}
@@ -267,6 +272,7 @@ class LLMProviderManager:
         # Register with health checker
         self._health_checker.register_provider(provider_type, provider_config)
         self._register_route_config(provider_config)
+        self._register_routed_adapter(provider_config)
 
         logger.info(f"Registered provider: {provider_type.value}")
 
@@ -275,6 +281,33 @@ class LLMProviderManager:
         self._provider_configs.pop(provider_type, None)
         self._health_checker.unregister_provider(provider_type)
         self._route_configs.pop(provider_type.value, None)
+        self._unregister_routed_adapter(provider_type)
+
+    def _register_routed_adapter(self, provider_config: ProviderConfig) -> None:
+        """Register an explicit routed adapter when legacy removal rehearsal is enabled."""
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        remove_legacy = getattr(settings, "platform_plugin_llm_remove_legacy", False)
+        if not remove_legacy:
+            return
+        if not settings.platform_plugin_llm_v2:
+            raise ValueError("PLATFORM_PLUGIN_LLM_REMOVE_LEGACY requires LLM routes V2")
+        provider_id = provider_config.provider_type.value
+        existing_owner = self._adapter_registry.owner_of(provider_id)
+        if existing_owner is not None and not existing_owner.startswith("llm-provider:"):
+            return
+        owner = f"llm-provider:{provider_config.id}"
+        provider = RoutedLlmAdapterProvider(factory=self._routed_adapter_factory)
+        _ = self._adapter_registry.replace(provider_id, provider, owner=owner)
+        self._routed_adapter_owners[provider_id] = owner
+
+    def _unregister_routed_adapter(self, provider_type: ProviderType) -> None:
+        """Remove a routed adapter only when this manager owns it."""
+        provider_id = provider_type.value
+        owner = self._routed_adapter_owners.pop(provider_id, None)
+        if owner is not None:
+            self._adapter_registry.unregister(provider_id, owner=owner)
 
     def resolve_route(
         self,

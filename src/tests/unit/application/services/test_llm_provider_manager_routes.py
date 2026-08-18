@@ -186,6 +186,71 @@ async def test_typed_adapter_provider_replaces_legacy_registry_seam(
 
 
 @pytest.mark.unit
+async def test_manager_registers_routed_adapter_only_when_legacy_removal_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_client = cast(LLMClient, SimpleNamespace(name="routed-runtime-client"))
+
+    class LegacyProvider:
+        def create_adapter(self, request: LlmAdapterRequest) -> LLMClient:
+            raise AssertionError(f"legacy fallback must not run for {request.provider_config.id}")
+
+    class HealthyProviders:
+        def register_provider(
+            self,
+            provider_type: ProviderType,
+            provider_config: ProviderConfig,
+        ) -> None:
+            _ = provider_type, provider_config
+
+        def unregister_provider(self, provider_type: ProviderType) -> None:
+            _ = provider_type
+
+        async def get_health(self, provider_type: ProviderType) -> HealthCheckResult:
+            return HealthCheckResult(
+                provider_type=provider_type,
+                status=HealthStatus.HEALTHY,
+            )
+
+    class OpenCircuitBreakers:
+        def get(self, provider_type: ProviderType) -> Any:
+            _ = provider_type
+            return SimpleNamespace(can_execute=lambda: True, record_failure=lambda: None)
+
+    def routed_factory(**kwargs: Any) -> LLMClient:
+        assert kwargs["config"].model == "test-model"
+        assert kwargs["config"].base_url == "https://example.test/v1"
+        return expected_client
+
+    registry = LlmAdapterProviderRegistry()
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=True,
+            platform_plugin_llm_remove_legacy=True,
+            platform_plugin_llm_shadow=False,
+            llm_cache_enabled=True,
+        ),
+    )
+    manager = LLMProviderManager(
+        circuit_breaker_registry=cast(Any, OpenCircuitBreakers()),
+        health_checker=cast(Any, HealthyProviders()),
+        adapter_provider=LegacyProvider(),
+        adapter_registry=registry,
+        routed_adapter_factory=routed_factory,
+    )
+    config = _provider_config()
+
+    manager.register_provider(config)
+    assert registry.owner_of("openai") == f"llm-provider:{config.id}"
+    client = await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
+
+    assert client is expected_client
+    manager.unregister_provider(ProviderType.OPENAI)
+    assert registry.get("openai") is None
+
+
+@pytest.mark.unit
 async def test_llm_legacy_removal_uses_only_registered_adapter_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -288,6 +353,7 @@ async def test_llm_legacy_removal_fails_loud_without_registered_provider(
             platform_plugin_llm_v2=True,
             platform_plugin_llm_remove_legacy=True,
             platform_plugin_llm_shadow=False,
+            llm_cache_enabled=True,
         ),
     )
     manager = LLMProviderManager(
@@ -297,6 +363,7 @@ async def test_llm_legacy_removal_fails_loud_without_registered_provider(
         adapter_registry=LlmAdapterProviderRegistry(),
     )
     manager.register_provider(_provider_config())
+    manager._unregister_routed_adapter(ProviderType.OPENAI)
 
     with pytest.raises(RuntimeError, match="legacy LLM adapter fallback is disabled"):
         await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
