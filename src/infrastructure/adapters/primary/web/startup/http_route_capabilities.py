@@ -31,13 +31,9 @@ logger = logging.getLogger(__name__)
 AuthDependency = Callable[..., Any]
 
 
-def build_http_route_capability_assembler(
-    app: FastAPI,
-    *,
+def _registry_inventory(
     registry_routes: Mapping[str, Sequence[Any]],
-    desired_rows: Sequence[Any],
-) -> HttpRouteCapabilityAppAssembler:
-    """Mount one declarative route per active desired-state row."""
+) -> tuple[dict[tuple[str, str], Any], dict[tuple[str, str], str]]:
     handlers: dict[tuple[str, str], Any] = {}
     handler_owners: dict[tuple[str, str], str] = {}
     for _plugin_id, routes in registry_routes.items():
@@ -48,9 +44,14 @@ def build_http_route_capability_assembler(
                 raise HttpRouteMountError(f"multiple plugins registered route {key[0]} {key[1]}")
             handlers[key] = route.handler
             handler_owners[key] = str(route.plugin_name)
+    return handlers, handler_owners
 
+
+def _desired_route_rows(
+    desired_rows: Sequence[Any],
+    handler_owners: Mapping[tuple[str, str], str],
+) -> list[HttpRouteCapabilityRow]:
     rows: list[HttpRouteCapabilityRow] = []
-    route_dependencies: dict[tuple[str, str], AuthDependency] = {}
     for row in desired_rows:
         if not bool(row.enabled):
             continue
@@ -68,17 +69,36 @@ def build_http_route_capability_assembler(
                 authorization_mode=str(row.authorization_mode),
             )
         )
-        route_dependencies[key] = _authorization_dependency(
-            plugin_id=str(row.plugin_id),
-            permission=str(row.permission),
-            authorization=str(row.authorization_mode),
-            path=key[1],
-        )
+    return rows
 
+
+def _route_auth_dependencies(
+    rows: Sequence[HttpRouteCapabilityRow],
+) -> dict[tuple[str, str], AuthDependency]:
+    dependencies: dict[tuple[str, str], AuthDependency] = {}
+    for row in rows:
+        dependencies[(row.method.upper(), row.path)] = _authorization_dependency(
+            plugin_id=row.plugin_id,
+            permission=row.permission,
+            authorization=row.authorization_mode,
+            path=row.path,
+        )
+    return dependencies
+
+
+def build_http_route_capability_assembler(
+    app: FastAPI,
+    *,
+    registry_routes: Mapping[str, Sequence[Any]],
+    desired_rows: Sequence[Any],
+) -> HttpRouteCapabilityAppAssembler:
+    """Build one declarative route assembler without mounting its routes."""
+    _handlers, handler_owners = _registry_inventory(registry_routes)
+    rows = _desired_route_rows(desired_rows, handler_owners)
     return HttpRouteCapabilityAppAssembler(
         HttpRouteMountService(app),
         _fallback_authorization_dependencies(),
-        route_dependencies,
+        _route_auth_dependencies(rows),
     )
 
 
@@ -159,6 +179,25 @@ async def _project_tenant_id(db: AsyncSession, project_id: str, user_id: str) ->
     return str(tenant_id)
 
 
+async def reconcile_http_route_capabilities(
+    app: FastAPI,
+    *,
+    desired_rows: Sequence[Any],
+) -> tuple[int, int]:
+    """Mount/unmount plugin routes to exactly match persisted desired state."""
+    from src.infrastructure.agent.plugins.registry import get_plugin_registry
+
+    assembler = getattr(app.state, "platform_plugin_http_routes", None)
+    if not isinstance(assembler, HttpRouteCapabilityAppAssembler):
+        raise HttpRouteMountError("platform plugin HTTP routes are not installed")
+
+    registry_routes = get_plugin_registry().list_http_routes()
+    handlers, handler_owners = _registry_inventory(registry_routes)
+    rows = _desired_route_rows(desired_rows, handler_owners)
+    assembler.replace_route_auth_dependencies(_route_auth_dependencies(rows))
+    return assembler.reconcile(rows, handlers)
+
+
 async def install_http_route_capabilities(
     app: FastAPI,
     *,
@@ -179,24 +218,8 @@ async def install_http_route_capabilities(
         registry_routes=registry_routes,
         desired_rows=rows,
     )
-    handlers = {
-        (str(route.method).upper(), str(route.path)): route.handler
-        for routes in registry_routes.values()
-        for route in routes
-    }
-    added, removed = assembler.reconcile(
-        [
-            HttpRouteCapabilityRow(
-                plugin_id=row.plugin_id,
-                method=row.method,
-                path=row.path,
-                permission=row.permission,
-                authorization_mode=row.authorization_mode,
-            )
-            for row in rows
-            if row.enabled
-        ],
-        handlers,
-    )
+    handlers, _handler_owners = _registry_inventory(registry_routes)
+    desired = _desired_route_rows(rows, _handler_owners)
+    added, removed = assembler.reconcile(desired, handlers)
     logger.info("Mounted platform plugin HTTP routes added=%d removed=%d", added, removed)
     return assembler

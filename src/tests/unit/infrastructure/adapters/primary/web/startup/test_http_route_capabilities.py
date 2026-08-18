@@ -13,6 +13,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
     build_http_route_capability_assembler,
     install_http_route_capabilities,
+    reconcile_http_route_capabilities,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.http_routes import HttpRouteCapabilityRow
@@ -236,6 +237,78 @@ async def test_install_plugin_routes_is_v2_only_and_mounts_desired_rows(
     assert assembler is not None
     assert len(assembler._mounted) == 1
     assembler.dispose()
+    assert assembler._mounted == {}
+
+
+@pytest.mark.unit
+async def test_reconcile_http_routes_mounts_unmounts_and_replaces_auth_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(platform_plugin_http_route_v2=True),
+    )
+    monkeypatch.setattr(
+        module,
+        "PlatformPluginGovernanceRepository",
+        FakeRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+        lambda: SimpleNamespace(list_http_routes=_registry_routes),
+    )
+    admin_checks: list[tuple[str, bool]] = []
+
+    async def fake_recorded_tenant_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        admin_checks.append((tenant_id, require_admin))
+
+    class DynamicPermissionRepository(FakeRepository):
+        def __init__(self, session: object) -> None:
+            super().__init__(session)
+            self.requested_permissions: list[str] = []
+
+        async def permission_is_granted(
+            self,
+            *,
+            plugin_id: str,
+            permission: str,
+            scope_type: str,
+            scope_id: str,
+        ) -> bool:
+            self.requested_permissions.append(permission)
+            return permission == "plugin.example.admin-read"
+
+    dynamic_repository = DynamicPermissionRepository(FakeSession())
+
+    monkeypatch.setattr(module, "require_tenant_access", fake_recorded_tenant_access)
+    monkeypatch.setattr(module, "PlatformPluginGovernanceRepository", lambda _s: dynamic_repository)
+    app = FastAPI()
+    assembler = await install_http_route_capabilities(app, session_factory=FakeSession)
+    assert assembler is not None
+    app.state.platform_plugin_http_routes = assembler
+
+    changed = SimpleNamespace(
+        **{
+            **DESIRED_ROWS[0].__dict__,
+            "permission": "plugin.example.admin-read",
+            "authorization_mode": "tenant_admin",
+        }
+    )
+    assert await reconcile_http_route_capabilities(app, desired_rows=[changed]) == (0, 1)
+    assert await reconcile_http_route_capabilities(app, desired_rows=[changed]) == (0, 0)
+    response = _client(app).get("/api/v1/plugins/tenant-1/example")
+    assert response.status_code == 200
+    assert admin_checks == [("tenant-1", True)]
+    assert dynamic_repository.requested_permissions == ["plugin.example.admin-read"]
+
+    disabled = SimpleNamespace(**{**DESIRED_ROWS[0].__dict__, "enabled": False})
+    assert await reconcile_http_route_capabilities(app, desired_rows=[disabled]) == (0, 1)
     assert assembler._mounted == {}
 
 

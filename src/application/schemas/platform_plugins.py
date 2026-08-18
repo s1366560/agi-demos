@@ -16,6 +16,29 @@ class PlatformPluginSnapshotResponse(BaseModel):
     payload: dict[str, Any]
 
 
+class PlatformPluginHttpRouteRequest(BaseModel):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str = Field(min_length=1, max_length=512)
+    permission: str = Field(min_length=1, max_length=191)
+    authorization_mode: Literal["tenant_member", "project_member", "tenant_admin"]
+    enabled: bool = True
+
+
+class PlatformPluginHttpRouteResponse(BaseModel):
+    plugin_id: str
+    method: str
+    path: str
+    permission: str
+    authorization_mode: str
+    enabled: bool
+    revision: int
+
+
+class PlatformPluginHttpRouteReconcileResponse(BaseModel):
+    mounted: int
+    unmounted: int
+
+
 class PlatformPluginApplyStateRequest(BaseModel):
     data_plane_id: str = Field(min_length=1)
     snapshot_digest: str = Field(min_length=64, max_length=64)

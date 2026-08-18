@@ -115,6 +115,7 @@ class HttpRouteCapabilityAppAssembler:
         self._auth_dependencies = dict(auth_dependencies)
         self._route_auth_dependencies = dict(route_auth_dependencies or {})
         self._mounted: dict[tuple[str, str], Disposable] = {}
+        self._mounted_definitions: dict[tuple[str, str], HttpRouteDefinition] = {}
 
     def reconcile(
         self,
@@ -143,13 +144,22 @@ class HttpRouteCapabilityAppAssembler:
         for key in tuple(self._mounted):
             if key not in desired:
                 self._mounted.pop(key)()
+                if key in self._mounted_definitions:
+                    del self._mounted_definitions[key]
                 removed += 1
 
         added = 0
         for key, (row, handler) in desired.items():
-            if key in self._mounted:
-                continue
             definition = _definition_from_row(row)
+            if key in self._mounted:
+                existing_definition = self._mounted_definitions.get(key)
+                if existing_definition == definition:
+                    continue
+                self._mounted.pop(key)()
+                if key in self._mounted_definitions:
+                    del self._mounted_definitions[key]
+                removed += 1
+                added -= 1
             auth_dependency = self._route_auth_dependencies.get(
                 key,
                 self._auth_dependencies.get(definition.authorization),
@@ -159,6 +169,7 @@ class HttpRouteCapabilityAppAssembler:
                 handler,
                 auth_dependency=auth_dependency,
             )
+            self._mounted_definitions[key] = definition
             added += 1
         return added, removed
 
@@ -167,6 +178,14 @@ class HttpRouteCapabilityAppAssembler:
         for dispose in tuple(self._mounted.values()):
             dispose()
         self._mounted.clear()
+        self._mounted_definitions.clear()
+
+    def replace_route_auth_dependencies(
+        self,
+        route_auth_dependencies: Mapping[tuple[str, str], Callable[..., Any]],
+    ) -> None:
+        """Replace per-route authorization closures without remounting routes."""
+        self._route_auth_dependencies = dict(route_auth_dependencies)
 
 
 def _definition_from_row(row: HttpRouteCapabilityRow) -> HttpRouteDefinition:

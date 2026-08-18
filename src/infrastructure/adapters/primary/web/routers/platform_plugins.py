@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
@@ -16,6 +16,9 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginCutoverReadinessResponse,
     PlatformPluginCutoverRevocationRequest,
     PlatformPluginCutoverRevocationResponse,
+    PlatformPluginHttpRouteReconcileResponse,
+    PlatformPluginHttpRouteRequest,
+    PlatformPluginHttpRouteResponse,
     PlatformPluginRollbackDrillDataPlaneResponse,
     PlatformPluginRollbackDrillReadinessResponse,
     PlatformPluginShadowRolloutCapabilityReadinessResponse,
@@ -26,10 +29,17 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginSnapshotResponse,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
+    reconcile_http_route_capabilities,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCutoverApprovalModel,
+    PlatformPluginHttpRouteModel,
     User,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
+    PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
@@ -40,6 +50,7 @@ from src.infrastructure.plugins.cutover_readiness import (
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
+from src.infrastructure.plugins.http_routes import HttpRouteMountError
 from src.infrastructure.plugins.rollout_readiness import (
     ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
@@ -114,6 +125,19 @@ def _cutover_approval_response(
         approved_at=approval.approved_at,
         expires_at=approval.expires_at,
         evidence=approval.evidence,
+    )
+
+
+def _http_route_response(route: PlatformPluginHttpRouteModel) -> PlatformPluginHttpRouteResponse:
+    """Project one desired-state route row onto its transport schema."""
+    return PlatformPluginHttpRouteResponse(
+        plugin_id=route.plugin_id,
+        method=route.method,
+        path=route.path,
+        permission=route.permission,
+        authorization_mode=route.authorization_mode,
+        enabled=route.enabled,
+        revision=route.revision,
     )
 
 
@@ -343,6 +367,79 @@ async def revoke_platform_plugin_cutover(
         revoked=True,
         revoked_at=revoked_at,
         reason=request.reason,
+    )
+
+
+@router.get("/http-routes", response_model=list[PlatformPluginHttpRouteResponse])
+async def list_platform_plugin_http_routes(
+    _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PlatformPluginHttpRouteResponse]:
+    """Return declarative plugin HTTP route desired state."""
+    routes = await PlatformPluginGovernanceRepository(db).list_http_routes()
+    return [_http_route_response(route) for route in routes]
+
+
+@router.put(
+    "/http-routes/{plugin_id}",
+    response_model=PlatformPluginHttpRouteResponse,
+)
+async def upsert_platform_plugin_http_route(
+    plugin_id: str,
+    request: PlatformPluginHttpRouteRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginHttpRouteResponse:
+    """Upsert one desired route after platform-admin authorization."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may manage plugin routes"),
+        )
+    repository = PlatformPluginGovernanceRepository(db)
+    route = await repository.upsert_http_route(
+        plugin_id=plugin_id,
+        method=request.method,
+        path=request.path,
+        permission=request.permission,
+        authorization_mode=request.authorization_mode,
+        enabled=request.enabled,
+    )
+    response = _http_route_response(route)
+    await db.commit()
+    return response
+
+
+@router.post(
+    "/http-routes/reconcile",
+    response_model=PlatformPluginHttpRouteReconcileResponse,
+)
+async def reconcile_platform_plugin_http_routes(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginHttpRouteReconcileResponse:
+    """Reconcile mounted routes to persisted desired state without restart."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may reconcile plugin routes"),
+        )
+    rows = await PlatformPluginGovernanceRepository(db).list_http_routes()
+    try:
+        mounted, unmounted = await reconcile_http_route_capabilities(
+            request.app,
+            desired_rows=rows,
+        )
+    except (HttpRouteMountError, ValueError) as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    return PlatformPluginHttpRouteReconcileResponse(
+        mounted=mounted,
+        unmounted=unmounted,
     )
 
 

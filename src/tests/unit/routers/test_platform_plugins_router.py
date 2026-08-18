@@ -16,6 +16,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginApplyStateEventModel,
     PlatformPluginApplyStateModel,
+    PlatformPluginHttpRouteModel,
     User,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
@@ -584,6 +585,43 @@ async def test_cutover_approval_and_revocation_require_platform_admin(
 
     assert approval.status_code == status.HTTP_403_FORBIDDEN
     assert revocation.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.unit
+async def test_http_route_control_plane_upserts_and_reconciles_desired_state(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(db_session)
+
+    created = client.put(
+        "/api/v1/platform-plugins/http-routes/example-plugin",
+        json={
+            "method": "GET",
+            "path": "/api/v1/plugins/{tenant_id}/example",
+            "permission": "plugin.example.read",
+            "authorization_mode": "tenant_member",
+            "enabled": True,
+        },
+    )
+
+    assert created.status_code == status.HTTP_200_OK
+    assert created.json()["revision"] == 1
+    routes = client.get("/api/v1/platform-plugins/http-routes")
+    assert routes.status_code == status.HTTP_200_OK
+    assert len(routes.json()) == 1
+
+    async def fake_reconcile(app: object, *, desired_rows: list[object]) -> tuple[int, int]:
+        assert len(desired_rows) == 1
+        return 1, 0
+
+    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
+    reconciled = client.post("/api/v1/platform-plugins/http-routes/reconcile")
+    assert reconciled.status_code == status.HTTP_200_OK
+    assert reconciled.json() == {"mounted": 1, "unmounted": 0}
+
+    row = await db_session.execute(select(PlatformPluginHttpRouteModel))
+    assert row.scalar_one().plugin_id == "example-plugin"
 
 
 @pytest.mark.unit
