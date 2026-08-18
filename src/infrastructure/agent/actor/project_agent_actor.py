@@ -62,9 +62,11 @@ class ProjectAgentActor:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
-        from src.infrastructure.plugins.cutover_gate import ensure_agent_v2_cutover_ready
+        from src.infrastructure.plugins.cutover_gate import (
+            ensure_platform_plugin_v2_cutover_ready,
+        )
 
-        await ensure_agent_v2_cutover_ready(async_session_factory)
+        await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
         try:
             from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
                 initialize_shadow_rollout_worker,

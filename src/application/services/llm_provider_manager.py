@@ -257,6 +257,80 @@ class LLMProviderManager:
         """Resolve request-scoped provider facts without exposing credentials."""
         return self._route_resolver.resolve(provider_type.value, model_id=model_id)
 
+    def _record_llm_route_shadow(
+        self,
+        provider_config: ProviderConfig,
+        tenant_id: str | None,
+        model_id: str | None,
+    ) -> None:
+        """Persist one bounded legacy/typed route comparison in shadow mode."""
+        from src.configuration.config import get_settings
+        from src.infrastructure.plugins.llm_runtime import LlmRouteResolutionError
+        from src.infrastructure.plugins.rollout_buckets import (
+            is_scope_selected,
+            settings_allowlist,
+            settings_percentage,
+        )
+        from src.infrastructure.plugins.shadow_rollout import (
+            enqueue_shadow_rollout_event,
+            make_shadow_rollout_event,
+        )
+
+        settings = get_settings()
+        normalized_scope = (tenant_id or "").strip()
+        if not is_scope_selected(
+            capability="llm_routes",
+            scope_id=normalized_scope or None,
+            percentage=settings_percentage(settings, "platform_plugin_llm_shadow_percent"),
+            allowlist=settings_allowlist(settings, "platform_plugin_shadow_scope_allowlist"),
+        ):
+            return
+
+        raw_config = provider_config.config
+        model_override = model_id or None
+        legacy = {
+            "provider_id": provider_config.provider_type.value,
+            "model_id": model_override
+            or provider_config.llm_model
+            or provider_config.embedding_model
+            or provider_config.reranker_model
+            or "",
+            "base_url": provider_config.base_url
+            or f"memstack://provider/{provider_config.provider_type.value}",
+            "credential_ref": f"vault://llm-provider/{provider_config.id}",
+            "credential_revision": max(1, int(provider_config.updated_at.timestamp() * 1000)),
+            "timeout_ms": _positive_int(raw_config.get("timeout_seconds"), 120) * 1000,
+            "context_window": _positive_int(raw_config.get("context_window"), 128_000),
+            "max_output_tokens": _positive_int(raw_config.get("max_output_tokens"), 8_192),
+        }
+        try:
+            route = self.resolve_route(provider_config.provider_type, model_id=model_override)
+            typed = {
+                "provider_id": route.provider_id,
+                "model_id": route.model_id,
+                "base_url": route.base_url,
+                "credential_ref": route.credential.ref,
+                "credential_revision": route.credential.revision,
+                "timeout_ms": route.timeout_ms,
+                "context_window": route.context_window,
+                "max_output_tokens": route.max_output_tokens,
+            }
+        except LlmRouteResolutionError as exc:
+            typed = {"error": str(exc)}
+
+        enqueue_shadow_rollout_event(
+            make_shadow_rollout_event(
+                capability="llm_routes",
+                event_name="llm.route",
+                hook_name="provider_route",
+                scope_type="tenant" if normalized_scope else "global",
+                scope_id=normalized_scope or "global",
+                equal=legacy == typed,
+                legacy_payload=legacy,
+                typed_payload=typed,
+            )
+        )
+
     async def lease_route_credential(
         self,
         scope: PluginScopeContext,
@@ -348,7 +422,10 @@ class LLMProviderManager:
             if not provider_config:
                 logger.debug(f"Skipping {provider_type.value}: no configuration registered")
                 continue
-            if self._route_rollout_enabled:
+            from src.configuration.config import get_settings
+
+            rollout_settings = get_settings()
+            if rollout_settings.platform_plugin_llm_v2:
                 route = self.resolve_route(
                     provider_type,
                     model_id=llm_config.model if llm_config is not None else None,
@@ -358,6 +435,12 @@ class LLMProviderManager:
                     provider_type.value,
                     route.model_id,
                     route.credential.ref,
+                )
+            elif rollout_settings.platform_plugin_llm_shadow:
+                self._record_llm_route_shadow(
+                    provider_config,
+                    tenant_id,
+                    llm_config.model if llm_config is not None else None,
                 )
 
             # Check circuit breaker

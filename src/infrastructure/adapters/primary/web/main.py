@@ -143,7 +143,7 @@ from src.infrastructure.llm.resilience.health_checker import (
     stop_health_checker,
 )
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.plugins.cutover_gate import ensure_agent_v2_cutover_ready
+from src.infrastructure.plugins.cutover_gate import ensure_platform_plugin_v2_cutover_ready
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -173,7 +173,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
-    _ = await ensure_agent_v2_cutover_ready(async_session_factory)
+    _ = await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
     shadow_rollout_worker = initialize_shadow_rollout_worker(async_session_factory)
 
     # Initialize Default LLM Provider from environment

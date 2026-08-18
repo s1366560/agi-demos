@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -6,6 +7,10 @@ import pytest
 from src.application.services.llm_provider_manager import LLMProviderManager
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.plugins.context import PluginScopeContext
+from src.infrastructure.plugins.shadow_rollout import (
+    queued_event_count,
+    reset_shadow_rollout_queue_for_test,
+)
 
 
 def _provider_config() -> ProviderConfig:
@@ -49,3 +54,66 @@ async def test_credential_lease_fails_closed_without_vault() -> None:
             PluginScopeContext(tenant_id="tenant"),
             route,
         )
+
+
+@pytest.mark.unit
+async def test_llm_shadow_records_redacted_route_parity_for_selected_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reset_shadow_rollout_queue_for_test()
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=False,
+            platform_plugin_llm_shadow=True,
+            platform_plugin_llm_shadow_percent=100,
+            platform_plugin_shadow_scope_allowlist=None,
+        ),
+    )
+    manager = LLMProviderManager()
+    config = _provider_config()
+    manager.register_provider(config)
+    captured: list[object] = []
+
+    def capture_event(event: object) -> bool:
+        captured.append(event)
+        return True
+
+    monkeypatch.setattr(
+        "src.infrastructure.plugins.shadow_rollout.enqueue_shadow_rollout_event",
+        capture_event,
+    )
+    manager._record_llm_route_shadow(config, "tenant-rollout", None)
+
+    assert len(captured) == 1
+    record = captured[0]
+    assert record.capability == "llm_routes"
+    assert record.event_name == "llm.route"
+    assert record.scope_id == "tenant-rollout"
+    assert record.equal is True
+    assert record.legacy_payload == record.typed_payload
+    assert queued_event_count() == 0
+    reset_shadow_rollout_queue_for_test()
+
+
+@pytest.mark.unit
+async def test_llm_shadow_excludes_unselected_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reset_shadow_rollout_queue_for_test()
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=False,
+            platform_plugin_llm_shadow=True,
+            platform_plugin_llm_shadow_percent=0,
+            platform_plugin_shadow_scope_allowlist=None,
+        ),
+    )
+    manager = LLMProviderManager()
+    config = _provider_config()
+    manager.register_provider(config)
+
+    manager._record_llm_route_shadow(config, "tenant-excluded", None)
+
+    assert queued_event_count() == 0

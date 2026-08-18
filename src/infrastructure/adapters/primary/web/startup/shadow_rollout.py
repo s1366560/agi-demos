@@ -19,7 +19,9 @@ def initialize_shadow_rollout_worker(
     global _worker
     settings = get_settings()
     if not (
-        settings.platform_plugin_agent_events_shadow or settings.platform_plugin_agent_tools_shadow
+        settings.platform_plugin_agent_events_shadow
+        or settings.platform_plugin_agent_tools_shadow
+        or settings.platform_plugin_llm_shadow
     ):
         return None
     _worker = ShadowRolloutWorker(session_factory)

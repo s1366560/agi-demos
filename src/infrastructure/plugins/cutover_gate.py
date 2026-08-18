@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class CutoverGateError(RuntimeError):
-    """Raised when V2 flags precede a durable operator cutover approval."""
+    """Raised when platform-plugin V2 flags precede durable approval."""
 
     def __init__(self, *, reason: str, reasons: tuple[str, ...]) -> None:
         joined = ", ".join(reasons) or "unknown cutover readiness failure"
@@ -29,16 +29,17 @@ class CutoverGateError(RuntimeError):
         self.reasons = reasons
 
 
-async def ensure_agent_v2_cutover_ready(
+async def ensure_platform_plugin_v2_cutover_ready(
     session_factory: Callable[[], Any],
 ) -> bool:
-    """Refuse agent V2 startup unless an operator approval is durable."""
+    """Refuse platform-plugin V2 startup unless approval is durable."""
     from src.configuration.config import get_settings
 
     settings = get_settings()
     events_v2 = bool(getattr(settings, "platform_plugin_agent_events_v2", False))
     tools_v2 = bool(getattr(settings, "platform_plugin_agent_tools_v2", False))
-    if not (events_v2 or tools_v2):
+    llm_v2 = bool(getattr(settings, "platform_plugin_llm_v2", False))
+    if not (events_v2 or tools_v2 or llm_v2):
         return False
 
     checked_at = datetime.now(UTC)
@@ -50,7 +51,7 @@ async def ensure_agent_v2_cutover_ready(
         )
         if approval is not None:
             logger.info(
-                "Platform plugin agent V2 startup approved by %s at %s",
+                "Platform plugin V2 startup approved by %s at %s",
                 approval.approved_by,
                 approval.approved_at,
             )
@@ -74,7 +75,7 @@ async def ensure_agent_v2_cutover_ready(
     else:
         rejected_reasons = ("operator_approval:missing",)
     logger.error(
-        "Platform plugin agent V2 startup rejected: %s",
+        "Platform plugin V2 startup rejected: %s",
         ", ".join(rejected_reasons),
     )
     raise CutoverGateError(

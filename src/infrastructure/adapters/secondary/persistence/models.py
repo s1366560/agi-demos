@@ -3294,7 +3294,7 @@ class PlatformPluginShadowRolloutEventModel(IdGeneratorMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "capability IN ('agent_events', 'agent_tools')",
+            "capability IN ('agent_events', 'agent_tools', 'llm_routes')",
             name="ck_platform_plugin_shadow_capability",
         ),
         CheckConstraint(

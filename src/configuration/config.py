@@ -404,6 +404,12 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_LLM_SHADOW",
     )
+    platform_plugin_llm_shadow_percent: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        alias="PLATFORM_PLUGIN_LLM_SHADOW_PERCENT",
+    )
     platform_plugin_http_route_v2: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_HTTP_ROUTE_V2",

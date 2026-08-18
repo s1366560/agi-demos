@@ -11,7 +11,7 @@ import pytest
 import src.infrastructure.plugins.cutover_gate as cutover_gate_module
 from src.infrastructure.plugins.cutover_gate import (
     CutoverGateError,
-    ensure_agent_v2_cutover_ready,
+    ensure_platform_plugin_v2_cutover_ready,
 )
 
 
@@ -87,11 +87,13 @@ def complete_evidence(now: datetime) -> FakeRepository:
                 )
             ],
             ("agent_tools", "agent.tool_generation"),
+            ("llm_routes", "llm.route"),
         )
     ]
     repository.scope_counts = [
         {"capability": "agent_events", "distinct_scope_count": 10},
         {"capability": "agent_tools", "distinct_scope_count": 10},
+        {"capability": "llm_routes", "distinct_scope_count": 10},
     ]
     repository.apply_events = [
         SimpleNamespace(
@@ -140,7 +142,7 @@ async def test_cutover_gate_skips_database_when_agent_v2_is_disabled(
     def fail_factory() -> Any:
         raise AssertionError("disabled V2 modes must not query cutover evidence")
 
-    assert await ensure_agent_v2_cutover_ready(fail_factory) is False
+    assert await ensure_platform_plugin_v2_cutover_ready(fail_factory) is False
 
 
 @pytest.mark.unit
@@ -155,7 +157,7 @@ async def test_cutover_gate_rejects_v2_without_durable_evidence(
     monkeypatch.setattr(cutover_gate_module, "PlatformPluginRepository", lambda _s: repository)
 
     with pytest.raises(CutoverGateError) as error:
-        await ensure_agent_v2_cutover_ready(FakeSession)
+        await ensure_platform_plugin_v2_cutover_ready(FakeSession)
 
     reasons = error.value.reasons
     assert any(reason.startswith("shadow:agent_events:missing_event:") for reason in reasons)
@@ -181,7 +183,7 @@ async def test_cutover_gate_requires_and_accepts_durable_operator_approval(
     monkeypatch.setattr(cutover_gate_module, "PlatformPluginRepository", lambda _s: repository)
 
     with pytest.raises(CutoverGateError) as error:
-        await ensure_agent_v2_cutover_ready(FakeSession)
+        await ensure_platform_plugin_v2_cutover_ready(FakeSession)
 
     assert "operator_approval:missing" in error.value.reasons
     assert any(
@@ -199,7 +201,7 @@ async def test_cutover_gate_requires_and_accepts_durable_operator_approval(
         revocation_reason=None,
     )
 
-    assert await ensure_agent_v2_cutover_ready(FakeSession) is True
+    assert await ensure_platform_plugin_v2_cutover_ready(FakeSession) is True
 
     repository.approval = SimpleNamespace(
         id="approval-expired",
@@ -213,6 +215,6 @@ async def test_cutover_gate_requires_and_accepts_durable_operator_approval(
     )
 
     with pytest.raises(CutoverGateError) as expired_error:
-        await ensure_agent_v2_cutover_ready(FakeSession)
+        await ensure_platform_plugin_v2_cutover_ready(FakeSession)
 
     assert "operator_approval:missing" in expired_error.value.reasons

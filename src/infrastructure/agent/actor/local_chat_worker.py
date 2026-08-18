@@ -79,10 +79,12 @@ async def _run(request_file: Path) -> int:
     from src.infrastructure.agent.actor.execution import execute_project_chat
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
-    from src.infrastructure.plugins.cutover_gate import ensure_agent_v2_cutover_ready
+    from src.infrastructure.plugins.cutover_gate import (
+        ensure_platform_plugin_v2_cutover_ready,
+    )
 
     _initialize_local_worker_telemetry()
-    _ = await ensure_agent_v2_cutover_ready(async_session_factory)
+    _ = await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
     _initialize_local_shadow_rollout_writer()
 
     payload = _load_payload(request_file)
