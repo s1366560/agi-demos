@@ -1,0 +1,223 @@
+{
+  "schema_version": "1.0.0",
+  "contract": "cross-platform-workspace-websocket-event-types",
+  "description": "Single source of truth for workspace WebSocket event types that MUST stay aligned between the desktop client (agi-stack/apps/desktop) and the web client (web/). Any single-sided addition, rename, or removal of an event type in this contract must be caught by the contract tests on both ends: agi-stack/apps/desktop/tests/workspace-cross-platform-event-contract.test.mjs and web/src/test/stores/workspaceEventContract.test.ts.",
+  "shared_context": {
+    "workspace_id": "ws-contract-1",
+    "tenant_id": "tenant-contract-1",
+    "project_id": "project-contract-1"
+  },
+  "families": {
+    "message": {
+      "description": "Workspace chat message stream events consumed by desktop workspaceMessageEventModel and web WorkspaceStore.handleChatEvent.",
+      "event_types": ["workspace_message_created"]
+    },
+    "task": {
+      "description": "Workspace task stream events consumed by desktop workspaceTaskEventModel and web WorkspaceStore.handleTaskEvent.",
+      "event_types": [
+        "workspace_task_created",
+        "workspace_task_updated",
+        "workspace_task_deleted",
+        "workspace_task_status_changed",
+        "workspace_task_assigned"
+      ]
+    },
+    "member": {
+      "description": "Workspace member roster events consumed by desktop workspaceRosterEventModel and web WorkspaceStore.handleMemberEvent.",
+      "event_types": [
+        "workspace_member_joined",
+        "workspace_member_updated",
+        "workspace_member_left"
+      ]
+    },
+    "agent_binding": {
+      "description": "Workspace agent binding roster events consumed by desktop workspaceRosterEventModel and web WorkspaceStore.handleAgentBindingEvent.",
+      "event_types": ["workspace_agent_bound", "workspace_agent_unbound"]
+    },
+    "lifecycle": {
+      "description": "Workspace lifecycle events consumed by desktop workspaceLifecycleEventModel and web WorkspaceStore.handleWorkspaceLifecycleEvent.",
+      "event_types": ["workspace_updated", "workspace_deleted"]
+    }
+  },
+  "sample_events": {
+    "workspace_message_created": {
+      "type": "workspace_message_created",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "message": {
+          "id": "msg-contract-1",
+          "workspace_id": "ws-contract-1",
+          "content": "contract fixture message",
+          "sender_type": "agent",
+          "sender_id": "agent-contract-1",
+          "created_at": "2026-08-18T06:00:00Z",
+          "mentions": []
+        }
+      }
+    },
+    "workspace_task_created": {
+      "type": "workspace_task_created",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "task_id": "task-contract-1",
+        "title": "contract fixture task",
+        "task": {
+          "id": "task-contract-1",
+          "workspace_id": "ws-contract-1",
+          "title": "contract fixture task",
+          "status": "pending",
+          "created_at": "2026-08-18T06:00:00Z",
+          "metadata": {}
+        }
+      }
+    },
+    "workspace_task_updated": {
+      "type": "workspace_task_updated",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "task_id": "task-contract-1",
+        "changes": { "title": "contract fixture task v2" },
+        "task": {
+          "id": "task-contract-1",
+          "workspace_id": "ws-contract-1",
+          "title": "contract fixture task v2",
+          "status": "pending",
+          "created_at": "2026-08-18T06:00:00Z",
+          "metadata": {}
+        }
+      }
+    },
+    "workspace_task_deleted": {
+      "type": "workspace_task_deleted",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "task_id": "task-contract-1"
+      }
+    },
+    "workspace_task_status_changed": {
+      "type": "workspace_task_status_changed",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "task_id": "task-contract-1",
+        "new_status": "in_progress",
+        "task": {
+          "id": "task-contract-1",
+          "workspace_id": "ws-contract-1",
+          "title": "contract fixture task v2",
+          "status": "in_progress",
+          "created_at": "2026-08-18T06:00:00Z",
+          "metadata": {}
+        }
+      }
+    },
+    "workspace_task_assigned": {
+      "type": "workspace_task_assigned",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "task_id": "task-contract-1",
+        "workspace_agent_id": "wag-contract-1",
+        "task": {
+          "id": "task-contract-1",
+          "workspace_id": "ws-contract-1",
+          "title": "contract fixture task v2",
+          "status": "in_progress",
+          "created_at": "2026-08-18T06:00:00Z",
+          "metadata": {},
+          "workspace_agent_id": "wag-contract-1"
+        }
+      }
+    },
+    "workspace_member_joined": {
+      "type": "workspace_member_joined",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "member": {
+          "id": "member-contract-1",
+          "workspace_id": "ws-contract-1",
+          "user_id": "user-contract-1",
+          "role": "member",
+          "created_at": "2026-08-18T06:00:00Z"
+        }
+      }
+    },
+    "workspace_member_updated": {
+      "type": "workspace_member_updated",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "member": {
+          "id": "member-contract-1",
+          "workspace_id": "ws-contract-1",
+          "user_id": "user-contract-1",
+          "role": "editor",
+          "created_at": "2026-08-18T06:00:00Z"
+        }
+      }
+    },
+    "workspace_member_left": {
+      "type": "workspace_member_left",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "member_id": "member-contract-1",
+        "user_id": "user-contract-1"
+      }
+    },
+    "workspace_agent_bound": {
+      "type": "workspace_agent_bound",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "agent": {
+          "id": "wag-contract-1",
+          "workspace_id": "ws-contract-1",
+          "agent_id": "agent-contract-1",
+          "is_active": true
+        }
+      }
+    },
+    "workspace_agent_unbound": {
+      "type": "workspace_agent_unbound",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "workspace_agent_id": "wag-contract-1"
+      }
+    },
+    "workspace_updated": {
+      "type": "workspace_updated",
+      "data": {
+        "workspace_id": "ws-contract-1",
+        "workspace": {
+          "id": "ws-contract-1",
+          "tenant_id": "tenant-contract-1",
+          "project_id": "project-contract-1",
+          "name": "Contract Fixture Workspace",
+          "created_by": "user-contract-1",
+          "created_at": "2026-08-18T06:00:00Z",
+          "is_archived": false
+        }
+      }
+    },
+    "workspace_deleted": {
+      "type": "workspace_deleted",
+      "data": {
+        "workspace_id": "ws-contract-1"
+      }
+    }
+  },
+  "out_of_scope_event_types": {
+    "workspace_plan_updated": "web-only: plan refresh counter in web WorkspaceStore.handlePlanEvent; desktop refreshes plan snapshots through its own sidecar plan channel, not this stream contract.",
+    "workspace.presence.joined": "web-only: presence protocol consumed by web WorkspaceStore.handlePresenceEvent; desktop does not participate in the presence protocol.",
+    "workspace.presence.left": "web-only: presence protocol consumed by web WorkspaceStore.handlePresenceEvent; desktop does not participate in the presence protocol.",
+    "workspace.agent_status.*": "web-only prefix: agent live status handled by web WorkspaceStore.handleAgentStatusEvent; desktop has no equivalent consumer.",
+    "workspace.topology.*": "web-only prefix: topology graph mutations handled by web WorkspaceStore.handleTopologyEvent; desktop renders topology through its own surfaces.",
+    "blackboard_post_created": "surface-local: web handles blackboard state sync in WorkspaceStore.handleBlackboardEvent while desktop projects the same wire events into a live activity feed (workspaceActivityEventModel); the two consumers have different semantics and are not part of the aligned state contract.",
+    "blackboard_post_updated": "surface-local: see blackboard_post_created.",
+    "blackboard_post_deleted": "surface-local: see blackboard_post_created.",
+    "blackboard_reply_created": "surface-local: see blackboard_post_created.",
+    "blackboard_reply_updated": "surface-local: see blackboard_post_created.",
+    "blackboard_reply_deleted": "surface-local: see blackboard_post_created.",
+    "blackboard_file_created": "surface-local: see blackboard_post_created.",
+    "blackboard_file_updated": "surface-local: see blackboard_post_created.",
+    "blackboard_file_deleted": "surface-local: see blackboard_post_created.",
+    "blackboard_directory_deleted": "surface-local: see blackboard_post_created.",
+    "topology_updated": "surface-local: desktop projects topology updates into its live activity feed; web handles topology graph state separately."
+  }
+}
