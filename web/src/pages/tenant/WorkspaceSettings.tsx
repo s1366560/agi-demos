@@ -254,7 +254,10 @@ export const WorkspaceSettingsPanel: React.FC<{
     try {
       await workspaceService.remove(tenantId, projectId, workspaceId);
       message?.success(t('workspaceSettings.dangerZone.deleteSuccess'));
-      void navigate('../..', { relative: 'path' });
+      // Land on the project workspace list: it always matches a route and
+      // reloads fresh data, unlike '../..' which resolved to a non-route
+      // (/tenant/{t}/project) and left the main area blank.
+      void navigate(`/tenant/${tenantId}/project/${projectId}/workspaces`);
     } catch {
       message?.error(t('workspaceSettings.dangerZone.deleteFailed'));
     } finally {
