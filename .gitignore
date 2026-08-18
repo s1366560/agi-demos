@@ -160,3 +160,6 @@ agi-stack/apps/run-os-prototype/.npm-cache/
 *.tsbuildinfo
 web/vite.config.js
 web/vite.config.d.ts
+
+# JiuwenSwarm runtime file operation logs
+.agent_history/
