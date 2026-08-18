@@ -36,6 +36,22 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * Helper function to extract HTTP status code from an unknown error.
+ * Handles ApiError instances (statusCode property) and axios-like
+ * errors (response.status) so UI can classify 403/409/5xx states.
+ */
+function getErrorStatusCode(error: unknown): number | null {
+  const err = error as UnknownError & { statusCode?: number };
+  if (typeof err.statusCode === 'number') {
+    return err.statusCode;
+  }
+  if (typeof err.response?.status === 'number') {
+    return err.response.status;
+  }
+  return null;
+}
+
 // ============================================================================
 // STATE INTERFACE
 // ============================================================================
@@ -66,6 +82,7 @@ interface MCPState {
 
   // Error state
   error: string | null;
+  errorStatusCode: number | null;
 
   // Actions - Server CRUD
   listServers: (params?: {
@@ -116,6 +133,7 @@ const initialState = {
   syncingServers: new Set<string>(),
   testingServers: new Set<string>(),
   error: null,
+  errorStatusCode: null,
 };
 
 // ============================================================================
@@ -130,7 +148,7 @@ export const useMCPStore = create<MCPState>()(
       // ========== Server CRUD ==========
 
       listServers: async (params = {}) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, errorStatusCode: null });
         try {
           const servers = await mcpAPI.list(params);
           set({
@@ -140,26 +158,26 @@ export const useMCPStore = create<MCPState>()(
           });
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to list MCP servers');
-          set({ error: errorMessage, isLoading: false });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error), isLoading: false });
           throw error;
         }
       },
 
       getServer: async (id: string) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, errorStatusCode: null });
         try {
           const response = await mcpAPI.get(id);
           set({ currentServer: response, isLoading: false });
           return response;
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to get MCP server');
-          set({ error: errorMessage, isLoading: false });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error), isLoading: false });
           throw error;
         }
       },
 
       createServer: async (data: MCPServerCreate) => {
-        set({ isSubmitting: true, error: null });
+        set({ isSubmitting: true, error: null, errorStatusCode: null });
         try {
           const response = await mcpAPI.create(data);
           const { servers } = get();
@@ -171,13 +189,13 @@ export const useMCPStore = create<MCPState>()(
           return response;
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to create MCP server');
-          set({ error: errorMessage, isSubmitting: false });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error), isSubmitting: false });
           throw error;
         }
       },
 
       updateServer: async (id: string, data: MCPServerUpdate) => {
-        set({ isSubmitting: true, error: null });
+        set({ isSubmitting: true, error: null, errorStatusCode: null });
         try {
           const response = await mcpAPI.update(id, data);
           const { servers } = get();
@@ -189,13 +207,13 @@ export const useMCPStore = create<MCPState>()(
           return response;
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to update MCP server');
-          set({ error: errorMessage, isSubmitting: false });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error), isSubmitting: false });
           throw error;
         }
       },
 
       deleteServer: async (id: string) => {
-        set({ isSubmitting: true, error: null });
+        set({ isSubmitting: true, error: null, errorStatusCode: null });
         try {
           await mcpAPI.delete(id);
           const { servers } = get();
@@ -206,7 +224,7 @@ export const useMCPStore = create<MCPState>()(
           });
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to delete MCP server');
-          set({ error: errorMessage, isSubmitting: false });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error), isSubmitting: false });
           throw error;
         }
       },
@@ -225,7 +243,7 @@ export const useMCPStore = create<MCPState>()(
           // Revert on error
           set({ servers: originalServers });
           const errorMessage = getErrorMessage(error, 'Failed to toggle server status');
-          set({ error: errorMessage });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error) });
           throw error;
         }
       },
@@ -240,7 +258,7 @@ export const useMCPStore = create<MCPState>()(
         const { syncingServers } = get();
         const newSyncing = new Set(syncingServers);
         newSyncing.add(id);
-        set({ syncingServers: newSyncing, error: null });
+        set({ syncingServers: newSyncing, error: null, errorStatusCode: null });
 
         try {
           const updatedServer = await mcpAPI.sync(id);
@@ -250,7 +268,7 @@ export const useMCPStore = create<MCPState>()(
           });
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to sync MCP server tools');
-          set({ error: errorMessage });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error) });
           throw error;
         } finally {
           const { syncingServers: currentSyncing } = get();
@@ -264,14 +282,14 @@ export const useMCPStore = create<MCPState>()(
         const { testingServers } = get();
         const newTesting = new Set(testingServers);
         newTesting.add(id);
-        set({ testingServers: newTesting, error: null });
+        set({ testingServers: newTesting, error: null, errorStatusCode: null });
 
         try {
           const response = await mcpAPI.test(id);
           return response;
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to test MCP server connection');
-          set({ error: errorMessage });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error) });
           throw error;
         } finally {
           const { testingServers: currentTesting } = get();
@@ -287,7 +305,7 @@ export const useMCPStore = create<MCPState>()(
           set({ allTools: tools });
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to list all tools');
-          set({ error: errorMessage });
+          set({ error: errorMessage, errorStatusCode: getErrorStatusCode(error) });
           throw error;
         }
       },
@@ -307,7 +325,7 @@ export const useMCPStore = create<MCPState>()(
       // ========== Utility ==========
 
       clearError: () => {
-        set({ error: null });
+        set({ error: null, errorStatusCode: null });
       },
 
       reset: () => {
