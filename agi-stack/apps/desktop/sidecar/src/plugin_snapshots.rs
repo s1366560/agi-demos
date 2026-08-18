@@ -100,6 +100,13 @@ pub(crate) struct PluginQuotaLimits {
     pub(crate) max_monthly_usd_micros: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PluginMonthlyUsageRecord {
+    pub(crate) plugin_id: String,
+    pub(crate) period: String,
+    pub(crate) usd_micros: u64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RuntimeArtifact {
     pub(crate) plugin_id: String,
@@ -363,6 +370,26 @@ pub(crate) fn reserve_monthly_plugin_usage(
         return Err(format!("plugin {plugin_id} exceeded its monthly USD quota"));
     }
     Ok(())
+}
+
+pub(crate) fn read_monthly_plugin_usage(
+    connection: &Connection,
+    plugin_id: &str,
+) -> Result<Option<PluginMonthlyUsageRecord>, String> {
+    connection
+        .query_row(
+            "SELECT period, usd_micros FROM desktop_platform_plugin_monthly_usage WHERE plugin_id = ?1",
+            params![plugin_id],
+            |row| {
+                Ok(PluginMonthlyUsageRecord {
+                    plugin_id: plugin_id.to_string(),
+                    period: row.get(0)?,
+                    usd_micros: row.get::<_, i64>(1)?.max(0) as u64,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn prune_runtime_artifacts(

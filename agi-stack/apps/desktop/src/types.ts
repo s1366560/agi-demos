@@ -1384,6 +1384,17 @@ export type PlatformPluginApplyState = {
   error_message: string | null;
   has_last_good: boolean;
   active_plugins?: PlatformPluginActivationRecord[];
+  quota_usage?: PlatformPluginQuotaUsage[];
+};
+
+export type PlatformPluginQuotaUsage = {
+  plugin_id: string;
+  call_charge_usd_micros: number;
+  monthly_period: string | null;
+  monthly_usd_micros_used: number;
+  monthly_usd_micros_limit: number | null;
+  artifact_storage_bytes: number;
+  artifact_storage_bytes_limit: number | null;
 };
 
 export type PlatformPluginActivationRecord = {

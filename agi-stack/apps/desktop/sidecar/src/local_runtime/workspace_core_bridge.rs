@@ -800,9 +800,38 @@ async fn platform_plugin_apply_state(
     {
         let plugins = crate::plugin_snapshots::read_active_plugins(&connection, applied_digest)
             .map_err(store_error)?;
+        let quota_usage = plugins
+            .iter()
+            .map(|plugin| {
+                let quotas = plugin_quota_limits(&plugin.config).map_err(store_error)?;
+                let monthly_usage = crate::plugin_snapshots::read_monthly_plugin_usage(
+                    &connection,
+                    &plugin.plugin_id,
+                )
+                .map_err(store_error)?;
+                Ok::<Value, BridgeError>(json!({
+                    "plugin_id": plugin.plugin_id,
+                    "call_charge_usd_micros":
+                        plugin_billing_usd_micros_per_call(&plugin.config)
+                            .map_err(store_error)?,
+                    "monthly_period": monthly_usage.as_ref().map(|usage| usage.period.as_str()),
+                    "monthly_usd_micros_used":
+                        monthly_usage.as_ref().map_or(0, |usage| usage.usd_micros),
+                    "monthly_usd_micros_limit": quotas.max_monthly_usd_micros,
+                    "artifact_storage_bytes":
+                        crate::plugin_snapshots::runtime_artifact_storage_bytes(
+                            &connection,
+                            &plugin.plugin_id,
+                        )
+                        .map_err(store_error)?,
+                    "artifact_storage_bytes_limit": quotas.max_storage_bytes,
+                }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let plugins =
             serde_json::to_value(plugins).map_err(|error| store_error(error.to_string()))?;
         object.insert("active_plugins".to_string(), plugins);
+        object.insert("quota_usage".to_string(), json!(quota_usage));
     }
     Ok(value)
 }

@@ -1107,6 +1107,11 @@ const enUS: Record<string, string> = {
   'settings.pluginActivity.snapshotStatus.pending': 'pending',
   'settings.pluginActivity.snapshotStatus.ack': 'acknowledged',
   'settings.pluginActivity.snapshotStatus.nack': 'rejected',
+  'settings.pluginActivity.quotaUsage': 'Plugin quota usage',
+  'settings.pluginActivity.quotaUsageLine':
+    '{plugin}: {period} used {used} / {limit}; artifact storage {storage} / {storageLimit} bytes',
+  'settings.pluginActivity.currentMonth': 'current month',
+  'settings.pluginActivity.unlimited': 'unlimited',
   'settings.platformPluginUi.title': 'Builtin plugin UI slots',
   'settings.platformPluginUi.loading': 'Loading canonical plugin UI…',
   'settings.platformPluginUi.unavailable': 'Canonical plugin UI unavailable',
@@ -5104,6 +5109,11 @@ const zhCN: Record<string, string> = {
   'settings.pluginActivity.snapshotStatus.pending': '等待应用',
   'settings.pluginActivity.snapshotStatus.ack': '已确认',
   'settings.pluginActivity.snapshotStatus.nack': '已拒绝',
+  'settings.pluginActivity.quotaUsage': '插件配额用量',
+  'settings.pluginActivity.quotaUsageLine':
+    '{plugin}：{period} 已用 {used} / {limit}；运行时制品存储 {storage} / {storageLimit} 字节',
+  'settings.pluginActivity.currentMonth': '当前月份',
+  'settings.pluginActivity.unlimited': '不限',
   'settings.platformPluginUi.title': '内置插件 UI 插槽',
   'settings.platformPluginUi.loading': '正在加载规范插件 UI…',
   'settings.platformPluginUi.unavailable': '规范插件 UI 不可用',

@@ -691,7 +691,7 @@ async fn signed_call_pricing_enforces_the_durable_monthly_spend_quota() {
     )
     .await;
     let second = request_json(
-        app,
+        app.clone(),
         "POST",
         "/api/v1/platform-plugins/tools/invoke",
         Some("desktop-session"),
@@ -705,6 +705,32 @@ async fn signed_call_pricing_enforces_the_durable_monthly_spend_quota() {
     assert_eq!(
         second.1["detail"],
         "plugin third-party-tool exceeded its monthly USD quota"
+    );
+
+    let apply_state = request_json(
+        app,
+        "GET",
+        "/api/v1/platform-plugins/apply-state",
+        Some("desktop-session"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(apply_state.0, StatusCode::OK);
+    assert_eq!(
+        apply_state.1["quota_usage"][0]["plugin_id"],
+        "third-party-tool"
+    );
+    assert_eq!(
+        apply_state.1["quota_usage"][0]["monthly_usd_micros_used"],
+        10
+    );
+    assert_eq!(
+        apply_state.1["quota_usage"][0]["monthly_usd_micros_limit"],
+        10
+    );
+    assert_eq!(
+        apply_state.1["quota_usage"][0]["call_charge_usd_micros"],
+        10
     );
 }
 

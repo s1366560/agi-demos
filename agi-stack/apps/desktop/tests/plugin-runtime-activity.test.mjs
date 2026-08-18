@@ -174,6 +174,17 @@ test('desktop platform plugin APIs normalize canonical snapshots and apply recei
         status: 'nack',
         error_message: 'plugin preparation failed',
         has_last_good: true,
+        quota_usage: [
+          {
+            plugin_id: 'builtin-ui',
+            call_charge_usd_micros: 10,
+            monthly_period: '2026-08',
+            monthly_usd_micros_used: 10,
+            monthly_usd_micros_limit: 100,
+            artifact_storage_bytes: 128,
+            artifact_storage_bytes_limit: 1024,
+          },
+        ],
       });
     }
     return Response.json({
@@ -209,6 +220,7 @@ test('desktop platform plugin APIs normalize canonical snapshots and apply recei
     assert.equal(snapshot.plugins[0].runtime, 'frontend');
     assert.equal(state.status, 'nack');
     assert.equal(state.has_last_good, true);
+    assert.equal(state.quota_usage[0].monthly_usd_micros_used, 10);
     assert.deepEqual(calls, [
       ['http://127.0.0.1:8088/api/v1/platform-plugins/snapshot', 'GET'],
       ['http://127.0.0.1:8088/api/v1/platform-plugins/apply-state', 'GET'],

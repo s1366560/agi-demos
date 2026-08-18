@@ -33,6 +33,10 @@ import { useModalDialog } from './useModalDialog';
 
 import './PluginManagementDialogs.css';
 
+function formatPluginUsdMicros(value: number | null, unlimitedLabel: string): string {
+  return value === null ? unlimitedLabel : `$${(value / 1_000_000).toFixed(6)}`;
+}
+
 export function PluginInstallDialog({
   busy,
   error,
@@ -301,6 +305,31 @@ export function PluginRuntimeActivityDialog({
               <code>{management.snapshotState.requested_digest}</code>
               {management.snapshotState.error_message ? (
                 <p>{management.snapshotState.error_message}</p>
+              ) : null}
+              {management.snapshotState.quota_usage?.length ? (
+                <div className="plugin-activity-diagnostics">
+                  <strong>{t('settings.pluginActivity.quotaUsage')}</strong>
+                  {management.snapshotState.quota_usage.map((usage) => (
+                    <p key={usage.plugin_id}>
+                      {t('settings.pluginActivity.quotaUsageLine', {
+                        plugin: usage.plugin_id,
+                        period: usage.monthly_period ?? t('settings.pluginActivity.currentMonth'),
+                        used: formatPluginUsdMicros(
+                          usage.monthly_usd_micros_used,
+                          t('settings.pluginActivity.unlimited'),
+                        ),
+                        limit: formatPluginUsdMicros(
+                          usage.monthly_usd_micros_limit,
+                          t('settings.pluginActivity.unlimited'),
+                        ),
+                        storage: usage.artifact_storage_bytes,
+                        storageLimit:
+                          usage.artifact_storage_bytes_limit ??
+                          t('settings.pluginActivity.unlimited'),
+                      })}
+                    </p>
+                  ))}
+                </div>
               ) : null}
             </div>
           ) : management.snapshotError ? (
