@@ -6,6 +6,17 @@ import pytest
 from src.infrastructure.agent.plugins.registry import HookDispatchResult
 
 
+@pytest.fixture(autouse=True)
+def _legacy_plugin_event_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin these legacy hook-contract tests to the legacy dispatch path."""
+    from src.configuration.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "platform_plugin_agent_events_v2", False)
+    monkeypatch.setattr(settings, "platform_plugin_agent_events_shadow", False)
+    monkeypatch.setattr(settings, "platform_plugin_agent_events_remove_legacy", False)
+
+
 def _make_agent(*, registry=None):
     from src.infrastructure.agent.core.react_agent import ReActAgent
 

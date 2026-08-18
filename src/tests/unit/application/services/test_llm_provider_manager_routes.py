@@ -16,6 +16,7 @@ from src.infrastructure.plugins.llm_adapters import (
     LlmAdapterProviderRegistry,
     LlmAdapterRequest,
     RoutedLlmAdapterProvider,
+    get_llm_adapter_provider_registry,
 )
 from src.infrastructure.plugins.profile import (
     compose_profile,
@@ -41,6 +42,15 @@ def _provider_config() -> ProviderConfig:
         updated_at=datetime.now(UTC),
         api_key_encrypted="encrypted",
     )
+
+
+@pytest.fixture(autouse=True)
+def _clean_global_adapter_registry() -> Any:
+    """Keep default-constructed managers from leaking global registrations."""
+    yield
+    registry = get_llm_adapter_provider_registry()
+    for record in registry.list():
+        registry.unregister(record.provider_id, owner=record.owner)
 
 
 @pytest.mark.unit
@@ -544,3 +554,32 @@ async def test_profile_activated_adapter_serves_strict_removal_end_to_end(
     assert registry.get("openai") is None
     with pytest.raises(RuntimeError, match="no provider is registered"):
         await manager.get_llm_client(preferred_provider=ProviderType.OPENAI)
+
+
+@pytest.mark.unit
+def test_reregistering_provider_with_new_config_id_hands_off_adapter_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: SimpleNamespace(
+            platform_plugin_llm_v2=True,
+            platform_plugin_llm_remove_legacy=True,
+            platform_plugin_llm_shadow=False,
+        ),
+    )
+    registry = LlmAdapterProviderRegistry()
+    manager = LLMProviderManager(adapter_registry=registry)
+    first = _provider_config()
+    second = _provider_config()
+
+    manager.register_provider(first)
+    first_owner = registry.owner_of("openai")
+    manager.register_provider(second)
+    second_owner = registry.owner_of("openai")
+
+    assert first_owner == f"llm-provider:{first.id}"
+    assert second_owner == f"llm-provider:{second.id}"
+
+    manager.unregister_provider(ProviderType.OPENAI)
+    assert registry.get("openai") is None

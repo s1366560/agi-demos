@@ -298,6 +298,11 @@ class LLMProviderManager:
         if existing_owner is not None and not existing_owner.startswith("llm-provider:"):
             return
         owner = f"llm-provider:{provider_config.id}"
+        if existing_owner is not None and existing_owner != owner:
+            # A superseded manager-owned registration (for example after a
+            # provider config replacement) must be released before the new
+            # owner registers; owner-strict replace would reject the handoff.
+            self._adapter_registry.unregister(provider_id, owner=existing_owner)
         provider = RoutedLlmAdapterProvider(factory=self._routed_adapter_factory)
         _ = self._adapter_registry.replace(provider_id, provider, owner=owner)
         self._routed_adapter_owners[provider_id] = owner
