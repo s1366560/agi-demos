@@ -21,12 +21,14 @@ import {
   workspaceTaskService,
 } from '@/services/workspaceService';
 
+import { tokens } from '@/theme/tokens';
 import { formatDistanceToNow } from '@/utils/date';
 import {
   getSandboxCodeRoot,
   getWorkspaceCollaborationMode,
   getWorkspaceUseCase,
 } from '@/utils/workspaceConfig';
+
 
 import {
   calculateWorkspacePlanCompletionRatio,
@@ -568,7 +570,7 @@ export function WorkspaceList() {
                           size="small"
                           showInfo={false}
                           {...(summary && !summary.loading && summary.avgProgress >= 100
-                            ? { strokeColor: '#10b981' }
+                            ? { strokeColor: tokens.status.success }
                             : {})}
                           aria-hidden
                         />

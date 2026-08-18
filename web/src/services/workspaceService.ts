@@ -321,18 +321,6 @@ export const workspaceBlackboardService = {
     return response.json() as Promise<BlackboardReply>;
   },
 
-  getPost: async (
-    tenantId: string,
-    projectId: string,
-    workspaceId: string,
-    postId: string
-  ): Promise<BlackboardPost> => {
-    const response = await apiFetch.get(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`
-    );
-    return response.json() as Promise<BlackboardPost>;
-  },
-
   updatePost: async (
     tenantId: string,
     projectId: string,
@@ -910,19 +898,5 @@ export const workspaceChatService = {
   ): Promise<import('@/types/workspace').WorkspaceMessage> => {
     const response = await apiFetch.post(chatBase(tenantId, projectId, workspaceId), data);
     return response.json() as Promise<import('@/types/workspace').WorkspaceMessage>;
-  },
-
-  getMentions: async (
-    tenantId: string,
-    projectId: string,
-    workspaceId: string,
-    targetId: string,
-    limit?: number
-  ): Promise<import('@/types/workspace').WorkspaceMessage[]> => {
-    let url = `${chatBase(tenantId, projectId, workspaceId)}/mentions/${targetId}`;
-    if (limit !== undefined) url += '?limit=' + String(limit);
-    const response = await apiFetch.get(url);
-    const payload = (await response.json()) as import('@/types/workspace').MessageListResponse;
-    return payload.items;
   },
 };
