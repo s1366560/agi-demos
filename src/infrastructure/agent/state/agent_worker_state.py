@@ -3064,7 +3064,26 @@ def _publish_scoped_tool_generation(
         return
     service = get_agent_tool_set_service()
     scope = PluginScopeContext(project_id=project_id)
-    if service.current(scope) is None or service.shadow_diff(scope, tools):
+    current_inventory, candidate_inventory, differs = service.shadow_comparison(scope, tools)
+    if settings.platform_plugin_agent_tools_shadow and not settings.platform_plugin_agent_tools_v2:
+        from src.infrastructure.plugins.shadow_rollout import (
+            enqueue_shadow_rollout_event,
+            make_shadow_rollout_event,
+        )
+
+        enqueue_shadow_rollout_event(
+            make_shadow_rollout_event(
+                capability="agent_tools",
+                event_name="agent.tool_generation",
+                hook_name="tool_generation",
+                scope_type="project",
+                scope_id=project_id,
+                equal=current_inventory is not None and not differs,
+                legacy_payload=dict(current_inventory or {"state": "uninitialized"}),
+                typed_payload=dict(candidate_inventory),
+            )
+        )
+    if current_inventory is None or differs:
         service.publish(scope, tools)
 
 

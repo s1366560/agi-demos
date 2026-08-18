@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateRequest,
     PlatformPluginApplyStateResponse,
+    PlatformPluginShadowRolloutEventResponse,
+    PlatformPluginShadowRolloutResponse,
+    PlatformPluginShadowRolloutSummaryResponse,
     PlatformPluginSnapshotResponse,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -22,6 +25,41 @@ from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
+
+
+@router.get("/shadow-rollout", response_model=PlatformPluginShadowRolloutResponse)
+async def get_shadow_rollout_evidence(
+    only_diffs: bool = False,
+    limit: int = 50,
+    _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginShadowRolloutResponse:
+    """Return durable shadow rollout summaries and recent comparison evidence."""
+    repository = PlatformPluginRepository(db)
+    summary = await repository.shadow_rollout_summary()
+    events = await repository.list_shadow_rollout_events(
+        limit=limit,
+        only_diffs=only_diffs,
+    )
+    return PlatformPluginShadowRolloutResponse(
+        summary=[PlatformPluginShadowRolloutSummaryResponse.model_validate(row) for row in summary],
+        events=[
+            PlatformPluginShadowRolloutEventResponse.model_validate(
+                {
+                    "capability": event.capability,
+                    "event_name": event.event_name,
+                    "hook_name": event.hook_name,
+                    "scope_type": event.scope_type,
+                    "scope_id": event.scope_id,
+                    "equal": event.equal,
+                    "legacy_payload": event.legacy_payload,
+                    "typed_payload": event.typed_payload,
+                    "occurred_at": event.occurred_at,
+                }
+            )
+            for event in events
+        ],
+    )
 
 
 @router.get("/snapshot", response_model=PlatformPluginSnapshotResponse)

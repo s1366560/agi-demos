@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from typing import Any
+
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins import PluginManifest, PluginScope
@@ -13,6 +15,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCatalogModel,
     PlatformPluginDesiredStateModel,
     PlatformPluginPackageModel,
+    PlatformPluginShadowRolloutEventModel,
     PlatformPluginSnapshotModel,
 )
 from src.infrastructure.plugins.profile import ProfileSnapshot
@@ -278,3 +281,83 @@ class PlatformPluginRepository:
             existing.error_message = error_message
         await self._session.flush()
         return existing
+
+    async def record_shadow_rollout_events(
+        self,
+        records: list[dict[str, Any]],
+    ) -> list[PlatformPluginShadowRolloutEventModel]:
+        """Append a bounded batch of shadow rollout comparisons."""
+        models = [
+            PlatformPluginShadowRolloutEventModel(
+                id=PlatformPluginShadowRolloutEventModel.generate_id(),
+                capability=str(record["capability"]),
+                event_name=str(record["event_name"]),
+                hook_name=str(record["hook_name"]),
+                scope_type=str(record["scope_type"]),
+                scope_id=str(record["scope_id"]),
+                equal=bool(record["equal"]),
+                legacy_payload=dict(record["legacy_payload"]),
+                typed_payload=dict(record["typed_payload"]),
+                occurred_at=record["occurred_at"],
+            )
+            for record in records
+        ]
+        self._session.add_all(models)
+        await self._session.flush()
+        return models
+
+    async def list_shadow_rollout_events(
+        self,
+        *,
+        limit: int,
+        only_diffs: bool = False,
+    ) -> list[PlatformPluginShadowRolloutEventModel]:
+        """Return newest rollout evidence for operator review."""
+        statement = select(PlatformPluginShadowRolloutEventModel).order_by(
+            PlatformPluginShadowRolloutEventModel.occurred_at.desc(),
+            PlatformPluginShadowRolloutEventModel.id.desc(),
+        )
+        if only_diffs:
+            statement = statement.where(PlatformPluginShadowRolloutEventModel.equal.is_(False))
+        result = await self._session.execute(
+            refresh_select_statement(statement.limit(max(1, min(limit, 500))))
+        )
+        return list(result.scalars().all())
+
+    async def shadow_rollout_summary(self) -> list[dict[str, object]]:
+        """Aggregate durable rollout evidence by capability and event."""
+        equal_count = func.sum(
+            case((PlatformPluginShadowRolloutEventModel.equal.is_(True), 1), else_=0)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(
+                    PlatformPluginShadowRolloutEventModel.capability,
+                    PlatformPluginShadowRolloutEventModel.event_name,
+                    func.count().label("total_count"),
+                    equal_count.label("equal_count"),
+                    func.max(PlatformPluginShadowRolloutEventModel.occurred_at).label(
+                        "last_occurred_at"
+                    ),
+                ).group_by(
+                    PlatformPluginShadowRolloutEventModel.capability,
+                    PlatformPluginShadowRolloutEventModel.event_name,
+                )
+            )
+        )
+        rows: list[dict[str, object]] = []
+        for row in result.mappings():
+            total = int(row["total_count"])
+            equal = int(row["equal_count"])
+            rows.append(
+                {
+                    "capability": row["capability"],
+                    "event_name": row["event_name"],
+                    "total_count": total,
+                    "equal_count": equal,
+                    "diff_count": total - equal,
+                    "equal": total > 0 and total == equal,
+                    "last_occurred_at": row["last_occurred_at"],
+                }
+            )
+        return sorted(rows, key=lambda row: (str(row["capability"]), str(row["event_name"])))

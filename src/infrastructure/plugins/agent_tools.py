@@ -151,16 +151,23 @@ class AgentToolSetService:
         tools: Mapping[str, Any],
     ) -> bool:
         """Return whether candidate inventory differs from the current generation."""
+        return self.shadow_comparison(scope, tools)[2]
+
+    def shadow_comparison(
+        self,
+        scope: PluginScopeContext,
+        tools: Mapping[str, Any],
+    ) -> tuple[Mapping[str, str] | None, Mapping[str, str], bool]:
+        """Return current inventory, candidate inventory, and their equality."""
         current = self.current(scope)
-        if current is None:
-            return False
         candidate = {
             tool_id: f"{descriptor.name}:{descriptor.description}"
             for tool_id, descriptor in (
                 (tool_id, legacy_tool_descriptor(tool_id, tool)) for tool_id, tool in tools.items()
             )
         }
-        return candidate != current.shadow_inventory
+        current_inventory = None if current is None else current.shadow_inventory
+        return current_inventory, MappingProxyType(candidate), current_inventory != candidate
 
     def implementation(self, tool_id: str, snapshot: ToolSetSnapshot) -> ToolImplementation:
         """Return a callable adapter for one tool in a pinned generation."""

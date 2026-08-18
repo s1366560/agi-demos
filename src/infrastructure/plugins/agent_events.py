@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -11,6 +10,7 @@ from typing import Any, cast
 from src.domain.model.plugins import PluginEventMode
 
 from .events import EventDispatchResult, PluginEventBus
+from .shadow_rollout import enqueue_shadow_rollout_event, make_shadow_rollout_event
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,8 @@ class AgentPluginEventDispatcher:
     shadow_enabled: bool = False
     max_shadow_diffs: int = 100
     runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
+    scope_type: str = "global"
+    scope_id: str = "global"
     _subscribed_events: set[str] = field(default_factory=set, init=False)
     _shadow_diffs: list[EventShadowDiff] = field(default_factory=list, init=False)
 
@@ -196,6 +198,18 @@ class AgentPluginEventDispatcher:
         self._shadow_diffs.append(diff)
         if len(self._shadow_diffs) > self.max_shadow_diffs:
             del self._shadow_diffs[0]
+        enqueue_shadow_rollout_event(
+            make_shadow_rollout_event(
+                capability="agent_events",
+                event_name=diff.event_name,
+                hook_name=diff.hook_name,
+                scope_type=self.scope_type,
+                scope_id=self.scope_id,
+                equal=diff.equal,
+                legacy_payload=diff.legacy_payload,
+                typed_payload=diff.typed_payload,
+            )
+        )
 
 
 _TYPED_EVENT_BY_HOOK: Mapping[str, str] = {
@@ -231,6 +245,8 @@ def _drop_typed_keys(payload: Mapping[str, Any]) -> dict[str, Any]:
 def create_agent_plugin_event_dispatcher(
     legacy_registry: object | None,
     runtime_hook_overrides: list[dict[str, Any]] | None = None,
+    *,
+    tenant_id: str | None = None,
 ) -> AgentPluginEventDispatcher | None:
     """Create the rollout dispatcher only when a rollout flag is enabled."""
     from src.configuration.config import get_settings
@@ -245,7 +261,6 @@ def create_agent_plugin_event_dispatcher(
         v2_enabled=settings.platform_plugin_agent_events_v2,
         shadow_enabled=settings.platform_plugin_agent_events_shadow,
         runtime_hook_overrides=runtime_hook_overrides or [],
+        scope_type="tenant" if tenant_id else "global",
+        scope_id=tenant_id or "global",
     )
-
-
-_SHADOW_DIFF_COUNTS: defaultdict[str, int] = defaultdict(int)

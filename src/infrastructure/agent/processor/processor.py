@@ -319,13 +319,18 @@ ProcessorEvent = AgentDomainEvent | dict[str, Any]
 def _create_event_dispatcher(
     plugin_registry: Any | None,
     runtime_hook_overrides: list[dict[str, Any]],
+    tenant_id: str | None = None,
 ) -> Any | None:
     """Create the rollout dispatcher only when a flag explicitly enables it."""
     from src.infrastructure.plugins.agent_events import (
         create_agent_plugin_event_dispatcher,
     )
 
-    return create_agent_plugin_event_dispatcher(plugin_registry, runtime_hook_overrides)
+    return create_agent_plugin_event_dispatcher(
+        plugin_registry,
+        runtime_hook_overrides,
+        tenant_id=tenant_id,
+    )
 
 
 class SessionProcessor:
@@ -445,6 +450,9 @@ class SessionProcessor:
         self._plugin_event_dispatcher = config.plugin_event_dispatcher or _create_event_dispatcher(
             config.plugin_registry,
             config.runtime_hook_overrides,
+            str(config.runtime_context.get("tenant_id"))
+            if config.runtime_context.get("tenant_id") is not None
+            else None,
         )
 
         # Session state

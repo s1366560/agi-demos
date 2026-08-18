@@ -105,6 +105,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_sandbox_idle_reaper,
+    initialize_shadow_rollout_worker,
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
@@ -112,6 +113,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
+    shutdown_shadow_rollout_worker,
     shutdown_telemetry_services,
     sync_health_checker_providers,
 )
@@ -170,6 +172,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
+    shadow_rollout_worker = initialize_shadow_rollout_worker(async_session_factory)
 
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
@@ -417,6 +420,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Error tearing down friction/reflection wiring")
 
     await stop_health_checker()
+
+    # Flush in-process shadow evidence before DB dependencies become unavailable.
+    if shadow_rollout_worker is not None:
+        await shutdown_shadow_rollout_worker()
 
     # Stop sandbox idle reaper
     await shutdown_sandbox_idle_reaper()

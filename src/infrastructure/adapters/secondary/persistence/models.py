@@ -3208,6 +3208,44 @@ class PlatformPluginApplyStateModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginShadowRolloutEventModel(IdGeneratorMixin, Base):
+    """Append-only typed/legacy rollout comparison evidence."""
+
+    __tablename__ = "platform_plugin_shadow_rollout_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    capability: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    hook_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    equal: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    legacy_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    typed_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "capability IN ('agent_events', 'agent_tools')",
+            name="ck_platform_plugin_shadow_capability",
+        ),
+        CheckConstraint(
+            "scope_type IN ('global', 'tenant', 'project', 'session')",
+            name="ck_platform_plugin_shadow_scope",
+        ),
+        Index(
+            "ix_platform_plugin_shadow_rollout_lookup",
+            "capability",
+            "event_name",
+            "occurred_at",
+        ),
+    )
+
+
 class PlatformPluginPermissionModel(IdGeneratorMixin, Base):
     """Tenant-approved plugin permission grant."""
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
@@ -167,6 +169,55 @@ async def test_first_data_plane_nack_can_report_no_previously_applied_version(
     apply_state = result.scalar_one()
     assert apply_state.applied_version == 0
     assert apply_state.error_message == "runtime artifact is unavailable"
+
+
+@pytest.mark.unit
+async def test_shadow_rollout_endpoint_returns_summary_and_recent_evidence(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    occurred_at = datetime.now(UTC)
+    await repository.record_shadow_rollout_events(
+        [
+            {
+                "capability": "agent_events",
+                "event_name": "agent.before_request",
+                "hook_name": "before_response",
+                "scope_type": "tenant",
+                "scope_id": "tenant-router",
+                "equal": True,
+                "legacy_payload": {"model": "demo"},
+                "typed_payload": {"model": "demo"},
+                "occurred_at": occurred_at,
+            },
+            {
+                "capability": "agent_tools",
+                "event_name": "agent.tool_generation",
+                "hook_name": "tool_generation",
+                "scope_type": "project",
+                "scope_id": "project-router",
+                "equal": False,
+                "legacy_payload": {"demo": "Demo:Demo"},
+                "typed_payload": {"demo": "Demo:Changed"},
+                "occurred_at": occurred_at,
+            },
+        ]
+    )
+    await db_session.commit()
+
+    response = make_client(db_session).get(
+        "/api/v1/platform-plugins/shadow-rollout",
+        params={"limit": 10},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    summary = {(row["capability"], row["event_name"]): row for row in payload["summary"]}
+    events = {(row["capability"], row["event_name"]): row for row in payload["events"]}
+    assert summary[("agent_events", "agent.before_request")]["equal"] is True
+    assert summary[("agent_tools", "agent.tool_generation")]["equal"] is False
+    assert events[("agent_events", "agent.before_request")]["scope_id"] == "tenant-router"
+    assert events[("agent_tools", "agent.tool_generation")]["scope_id"] == "project-router"
 
 
 @pytest.mark.unit
