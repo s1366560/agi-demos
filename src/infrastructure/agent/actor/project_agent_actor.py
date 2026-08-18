@@ -59,12 +59,15 @@ class ProjectAgentActor:
 
     async def _ensure_shadow_rollout_runtime(self) -> None:
         """Start durable shadow evidence collection for this actor process."""
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.plugins.cutover_gate import ensure_agent_v2_cutover_ready
+
+        await ensure_agent_v2_cutover_ready(async_session_factory)
         try:
             from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
                 initialize_shadow_rollout_worker,
-            )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
             )
 
             initialize_shadow_rollout_worker(async_session_factory)
