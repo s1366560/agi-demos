@@ -15,6 +15,11 @@ from src.configuration.workspace_core import (
 class TestWorkspaceCoreSettings:
     @pytest.fixture(autouse=True)
     def isolate_workspace_core_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ``monkeypatch.delenv`` alone is not enough: pydantic-settings still
+        # reads the ``env_file=".env"`` channel, so a developer machine with a
+        # populated ``.env`` would silently satisfy the fail-closed contract
+        # and flip these tests red. Disable the env-file channel too so CI and
+        # local runs observe the same empty configuration.
         for name in (
             "WORKSPACE_CORE_BASE_URL",
             "WORKSPACE_CORE_SERVICE_TOKEN",
@@ -23,6 +28,7 @@ class TestWorkspaceCoreSettings:
             "WORKSPACE_CORE_AGENT_REGISTRY_TOKEN",
         ):
             monkeypatch.delenv(name, raising=False)
+        monkeypatch.setitem(WorkspaceCoreSettings.model_config, "env_file", None)
 
     def test_defaults_fail_closed_without_connection_contract(
         self,

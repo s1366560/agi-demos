@@ -333,7 +333,7 @@ uv run python scripts/workspace-core/verify-event-parity.py
 uv run pytest src/tests/unit/infrastructure/adapters/primary/web/test_workspace_core_route_manifest.py -q
 uv run python scripts/avernet-bcs/verify-postgres-schema.py
 uv run python scripts/avernet-bcs/verify-workspace-migration.py
-uv run pytest src/tests/unit/infrastructure/workspace_core/test_compatibility.py -q
+uv run pytest src/tests/unit/infrastructure/workspace_core/test_workspace_core_compatibility.py -q
 make -C agi-stack desktop-bundle-smoke
 ```
 

@@ -26,7 +26,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_TURN_TYPE_KEY,
     WORKSPACE_TURN_TYPE_LEADER_REPLAN,
 )
-from src.infrastructure.agent.workspace.workspace_metadata_keys import REMEDIATION_STATUS, TASK_ROLE
+from src.infrastructure.agent.workspace.workspace_metadata_keys import REMEDIATION_STATUS
 
 _DEFAULT_MEMBER = object()
 
@@ -718,36 +718,20 @@ class TestMultipleAgentMentions:
 
 @pytest.mark.unit
 class TestWorkspaceAuthorityContextResolution:
-    async def test_falls_back_to_single_active_root_when_scope_missing(self) -> None:
+    async def test_returns_none_because_core_owns_task_linkage(self) -> None:
         session_factory, _mock_db = _mock_db_session_factory()
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.metadata = {TASK_ROLE: "goal_root"}
-        root_task.archived_at = None
-        root_task.status = "in_progress"
-        repo = MagicMock()
-        repo.find_by_workspace = AsyncMock(return_value=[root_task])
 
-        with patch(
-            "src.application.services.workspace_mention_router.SqlWorkspaceTaskRepository",
-            return_value=repo,
-        ):
-            context = await _resolve_workspace_authority_context(
-                session_factory,
-                workspace_id="ws-1",
-                conversation_scope=None,
-            )
+        context = await _resolve_workspace_authority_context(
+            session_factory,
+            workspace_id="ws-1",
+            conversation_scope=None,
+        )
 
-        assert context == {
-            "context_type": "workspace_worker_runtime",
-            "workspace_binding": {
-                "workspace_id": "ws-1",
-                "root_goal_task_id": "root-1",
-            },
-            "workspace_id": "ws-1",
-            "root_goal_task_id": "root-1",
-            "task_authority": "workspace",
-        }
+        # Legacy Python mention authority is retired; Avernet Workspace Core
+        # owns task linkage, so the resolver must never resolve a local
+        # authority context nor touch the legacy SQL session.
+        assert context is None
+        _mock_db.execute.assert_not_called()
 
 
 @pytest.mark.unit

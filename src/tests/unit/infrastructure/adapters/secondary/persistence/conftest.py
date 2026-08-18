@@ -14,13 +14,18 @@ async def v2_db_session(db_session: AsyncSession) -> AsyncSession:
 
 @pytest.fixture
 async def workspace_test_seed(v2_db_session: AsyncSession) -> dict[str, str]:
-    """Seed minimal tenant/project/user/agent data for workspace repository tests."""
+    """Seed minimal tenant/project/user/agent data for workspace repository tests.
+
+    Workspace rows are intentionally not seeded: the platform SQL Workspace
+    tables were retired when Avernet Workspace Core became the sole runtime
+    authority, and the legacy ORM models now live only in
+    ``src/infrastructure/workspace_core/migration/legacy_models.py``.
+    """
     from src.infrastructure.adapters.secondary.persistence.models import (
         AgentDefinitionModel,
         Project as DBProject,
         Tenant as DBTenant,
         User as DBUser,
-        WorkspaceModel,
     )
 
     user_1 = DBUser(
@@ -83,31 +88,7 @@ async def workspace_test_seed(v2_db_session: AsyncSession) -> dict[str, str]:
         allowed_skills=[],
         allowed_mcp_servers=[],
     )
-    workspaces = [
-        WorkspaceModel(
-            id=workspace_id,
-            tenant_id="tenant-1",
-            project_id="project-1",
-            name=f"Seed Workspace {index}",
-            description="Seed workspace for tests",
-            created_by="user-1",
-            is_archived=False,
-            metadata_json={},
-        )
-        for index, workspace_id in enumerate(
-            [
-                "workspace-1",
-                "workspace-a",
-                "workspace-b",
-                "workspace-list",
-                "workspace-other",
-                "workspace-upd",
-            ],
-            start=1,
-        )
-    ]
-
-    v2_db_session.add_all([user_1, user_2, tenant, project, agent_1, agent_2, *workspaces])
+    v2_db_session.add_all([user_1, user_2, tenant, project, agent_1, agent_2])
     await v2_db_session.flush()
 
     return {
