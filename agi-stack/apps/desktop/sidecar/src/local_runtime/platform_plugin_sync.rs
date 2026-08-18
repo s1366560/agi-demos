@@ -439,6 +439,16 @@ async fn prepare_runtime_artifacts(
                     reference.plugin_id, reference.layer_digest, error
                 )
             })?;
+        let quotas = plugin_snapshots::manifest_quota_limits(&reference.plugin)
+            .map_err(|error| format!("plugin {}: {}", reference.plugin_id, error))?;
+        if let Some(max_storage_bytes) = quotas.max_storage_bytes {
+            if runtime_bytes.len() > max_storage_bytes {
+                return Err(format!(
+                    "plugin {} artifact exceeds its storage quota",
+                    reference.plugin_id
+                ));
+            }
+        }
         let connection = state.session_store.connection()?;
         plugin_snapshots::store_runtime_artifact(
             &connection,

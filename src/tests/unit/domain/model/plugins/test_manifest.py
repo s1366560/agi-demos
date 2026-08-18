@@ -4,7 +4,7 @@ from src.domain.model.plugins import PluginManifestError, parse_plugin_manifest
 
 
 @pytest.mark.unit
-def test_parse_manifest_returns_immutable_capability_contract():
+def test_parse_manifest_returns_immutable_capability_contract() -> None:
     manifest = parse_plugin_manifest(
         {
             "schemaVersion": 1,
@@ -34,7 +34,7 @@ def test_parse_manifest_returns_immutable_capability_contract():
 
 
 @pytest.mark.unit
-def test_parse_manifest_collects_all_validation_errors():
+def test_parse_manifest_collects_all_validation_errors() -> None:
     with pytest.raises(PluginManifestError) as exc_info:
         parse_plugin_manifest(
             {
@@ -56,7 +56,73 @@ def test_parse_manifest_collects_all_validation_errors():
 
 
 @pytest.mark.unit
-def test_untrusted_plugin_cannot_claim_kernel_capability():
+def test_manifest_parses_and_preserves_declared_resource_quotas() -> None:
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "third-party-tool",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "signed",
+            "provides": [{"kind": "tool", "id": "demo", "permissions": ["tools.execute"]}],
+            "activation": {
+                "defaultScope": "tenant",
+                "restartPolicy": "process-boundary",
+                "quotas": {
+                    "max_wasm_fuel": 1000,
+                    "max_wasm_memory_bytes": 65536,
+                    "max_wall_time_ms": 50,
+                    "max_concurrent_calls": 2,
+                    "max_output_bytes": 128,
+                    "max_network_requests_per_minute": 3,
+                    "max_storage_bytes": 1024,
+                    "max_monthly_usd": 0.25,
+                },
+            },
+        }
+    )
+
+    assert manifest.to_payload()["activation"]["quotas"] == {
+        "max_wasm_fuel": 1000,
+        "max_wasm_memory_bytes": 65536,
+        "max_wall_time_ms": 50,
+        "max_concurrent_calls": 2,
+        "max_output_bytes": 128,
+        "max_network_requests_per_minute": 3,
+        "max_storage_bytes": 1024,
+        "max_monthly_usd": 0.25,
+    }
+
+
+@pytest.mark.unit
+def test_manifest_rejects_invalid_or_unknown_resource_quotas() -> None:
+    with pytest.raises(PluginManifestError) as exc_info:
+        parse_plugin_manifest(
+            {
+                "schemaVersion": 1,
+                "id": "third-party-tool",
+                "version": "1.0.0",
+                "runtime": "wasm",
+                "trust": "signed",
+                "provides": [{"kind": "tool", "id": "demo"}],
+                "activation": {
+                    "quotas": {
+                        "max_wasm_fuel": 0,
+                        "max_monthly_usd": "0.25",
+                        "unexpected": 1,
+                    }
+                },
+            }
+        )
+
+    errors = exc_info.value.errors
+    assert "activation.quotas.max_wasm_fuel must be an integer >= 1" in errors
+    assert "activation.quotas.max_monthly_usd must be a number > 0" in errors
+    assert "activation.quotas has unknown fields: unexpected" in errors
+
+
+@pytest.mark.unit
+def test_untrusted_plugin_cannot_claim_kernel_capability() -> None:
     with pytest.raises(PluginManifestError) as exc_info:
         parse_plugin_manifest(
             {

@@ -110,11 +110,47 @@ class ProvidedCapability:
 
 
 @dataclass(frozen=True)
+class PluginResourceQuota:
+    """Resource limits embedded in a signed plugin manifest."""
+
+    max_wasm_fuel: int | None = None
+    max_wasm_memory_bytes: int | None = None
+    max_wall_time_ms: int | None = None
+    max_concurrent_calls: int | None = None
+    max_output_bytes: int | None = None
+    max_network_requests_per_minute: int | None = None
+    max_storage_bytes: int | None = None
+    max_monthly_usd: float | None = None
+
+    def to_payload(self) -> dict[str, int | float]:
+        """Return only explicitly declared limits to preserve manifest stability."""
+        values: dict[str, int | float] = {}
+        if self.max_wasm_fuel is not None:
+            values["max_wasm_fuel"] = self.max_wasm_fuel
+        if self.max_wasm_memory_bytes is not None:
+            values["max_wasm_memory_bytes"] = self.max_wasm_memory_bytes
+        if self.max_wall_time_ms is not None:
+            values["max_wall_time_ms"] = self.max_wall_time_ms
+        if self.max_concurrent_calls is not None:
+            values["max_concurrent_calls"] = self.max_concurrent_calls
+        if self.max_output_bytes is not None:
+            values["max_output_bytes"] = self.max_output_bytes
+        if self.max_network_requests_per_minute is not None:
+            values["max_network_requests_per_minute"] = self.max_network_requests_per_minute
+        if self.max_storage_bytes is not None:
+            values["max_storage_bytes"] = self.max_storage_bytes
+        if self.max_monthly_usd is not None:
+            values["max_monthly_usd"] = self.max_monthly_usd
+        return values
+
+
+@dataclass(frozen=True)
 class PluginActivation:
     """Activation and generation policy declared by a plugin."""
 
     default_scope: PluginScope = PluginScope.TENANT
     restart_policy: PluginRestartPolicy = PluginRestartPolicy.PROCESS_BOUNDARY
+    quotas: PluginResourceQuota = field(default_factory=PluginResourceQuota)
 
 
 @dataclass(frozen=True)
@@ -163,6 +199,11 @@ class PluginManifest:
             "activation": {
                 "default_scope": self.activation.default_scope.value,
                 "restart_policy": self.activation.restart_policy.value,
+                **(
+                    {"quotas": self.activation.quotas.to_payload()}
+                    if self.activation.quotas.to_payload()
+                    else {}
+                ),
             },
         }
 
@@ -409,4 +450,66 @@ def _parse_activation(value: object, errors: list[str]) -> PluginActivation:
         else None
     )
     restart_policy = parsed_restart_policy or PluginRestartPolicy.PROCESS_BOUNDARY
-    return PluginActivation(default_scope=default_scope, restart_policy=restart_policy)
+    raw_quotas = value.get("quotas")
+    quotas = (
+        _parse_resource_quota(raw_quotas, errors)
+        if raw_quotas is not None
+        else PluginResourceQuota()
+    )
+    return PluginActivation(
+        default_scope=default_scope,
+        restart_policy=restart_policy,
+        quotas=quotas,
+    )
+
+
+def _parse_resource_quota(value: object, errors: list[str]) -> PluginResourceQuota:
+    if not isinstance(value, dict):
+        errors.append("activation.quotas must be an object")
+        return PluginResourceQuota()
+
+    integer_fields = {
+        "max_wasm_fuel": 1,
+        "max_wasm_memory_bytes": 64 * 1024,
+        "max_wall_time_ms": 1,
+        "max_concurrent_calls": 1,
+        "max_output_bytes": 1,
+        "max_network_requests_per_minute": 1,
+        "max_storage_bytes": 1,
+    }
+    parsed_integers: dict[str, int] = {}
+    for field_name, minimum in integer_fields.items():
+        raw_value = value.get(field_name)
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < minimum:
+            errors.append(f"activation.quotas.{field_name} must be an integer >= {minimum}")
+            continue
+        parsed_integers[field_name] = raw_value
+
+    raw_monthly_usd = value.get("max_monthly_usd")
+    monthly_usd: float | None = None
+    if raw_monthly_usd is not None:
+        if (
+            isinstance(raw_monthly_usd, bool)
+            or not isinstance(raw_monthly_usd, (int, float))
+            or raw_monthly_usd <= 0
+        ):
+            errors.append("activation.quotas.max_monthly_usd must be a number > 0")
+        else:
+            monthly_usd = float(raw_monthly_usd)
+
+    known = {*integer_fields, "max_monthly_usd"}
+    unknown = sorted(set(value) - known)
+    if unknown:
+        errors.append(f"activation.quotas has unknown fields: {', '.join(unknown)}")
+    return PluginResourceQuota(
+        max_wasm_fuel=parsed_integers.get("max_wasm_fuel"),
+        max_wasm_memory_bytes=parsed_integers.get("max_wasm_memory_bytes"),
+        max_wall_time_ms=parsed_integers.get("max_wall_time_ms"),
+        max_concurrent_calls=parsed_integers.get("max_concurrent_calls"),
+        max_output_bytes=parsed_integers.get("max_output_bytes"),
+        max_network_requests_per_minute=parsed_integers.get("max_network_requests_per_minute"),
+        max_storage_bytes=parsed_integers.get("max_storage_bytes"),
+        max_monthly_usd=monthly_usd,
+    )

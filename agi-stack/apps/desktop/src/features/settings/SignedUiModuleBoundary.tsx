@@ -11,9 +11,19 @@ export type SignedUiModuleBoundaryProps = {
 
 const MAX_MODULE_HTML_BYTES = 1024 * 1024;
 export const SIGNED_UI_MODULE_SANDBOX = 'allow-scripts';
+export const SIGNED_UI_MODULE_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src data:",
+  "font-src data:",
+  "connect-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join('; ');
 
 export function signedModuleDocument(moduleHtml: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Plugin module</title></head><body>${moduleHtml}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${SIGNED_UI_MODULE_CSP}"><meta name="referrer" content="no-referrer"><title>Plugin module</title></head><body>${moduleHtml}</body></html>`;
 }
 
 export function SignedUiModuleBoundary({

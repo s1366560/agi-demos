@@ -1,6 +1,10 @@
 //! Private Workspace Core to Desktop LocalRuntime authority bridge.
 
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc, Mutex, OnceLock},
+    time::Duration,
+};
 
 use axum::{
     body::{to_bytes, Body},
@@ -14,7 +18,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncReadExt;
+use tokio::{
+    io::AsyncReadExt,
+    sync::{OwnedSemaphorePermit, Semaphore},
+};
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -26,7 +33,7 @@ use super::{
     session_store::{DesktopWorkspaceCoreRequestClaim, DesktopWorkspaceCoreRequestClaimError},
     LocalRuntimeState,
 };
-use crate::plugin_snapshots::RequestedPluginSnapshot;
+use crate::plugin_snapshots::{plugin_quota_limits, PluginQuotaLimits, RequestedPluginSnapshot};
 
 mod contracts;
 mod judge;
@@ -38,6 +45,7 @@ mod registry;
 const CALLBACK_TIMEOUT_SECONDS: u64 = 10;
 const MAX_PROXY_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 const MAX_PLATFORM_PLUGIN_MCP_INPUT_BYTES: usize = 256 * 1024;
+const DEFAULT_MAX_CONCURRENT_PLUGIN_CALLS: usize = 16;
 const LOCAL_DESKTOP_USER_ID: &str = "local-user";
 pub(super) const CUTOVER_GENERATION_BIT: u64 = 1 << 63;
 const AUTHORITY_GENERATION_MASK: u64 = CUTOVER_GENERATION_BIT - 1;
@@ -849,9 +857,23 @@ async fn invoke_platform_plugin_tool(
         (plugin, artifact)
     };
 
+    let quotas = plugin_quota_limits(&plugin.config).map_err(|error| conflict(&error))?;
+    let concurrency_permit = acquire_plugin_concurrency_permit(
+        &plugin_id,
+        quotas
+            .max_concurrent_calls
+            .unwrap_or(DEFAULT_MAX_CONCURRENT_PLUGIN_CALLS),
+    )
+    .await
+    .map_err(|error| conflict(&error))?;
+    if matches!(plugin.runtime.as_str(), "mcp" | "subprocess") {
+        reserve_plugin_network_request(&plugin_id, quotas.max_network_requests_per_minute)
+            .map_err(|error| conflict(&error))?;
+    }
+    let max_output_bytes = quotas.max_output_bytes.unwrap_or(1024 * 1024);
     let input = request.input.to_string();
     let output = if plugin.runtime == "wasm" {
-        invoke_wasm_plugin_tool(&tool_id, &plugin, &artifact, &input).await?
+        invoke_wasm_plugin_tool(&tool_id, &plugin, &quotas, &artifact, &input).await?
     } else if plugin.runtime == "mcp" {
         return invoke_mcp_plugin_tool(
             &state,
@@ -860,17 +882,58 @@ async fn invoke_platform_plugin_tool(
             &tool_id,
             request.input,
             &artifact,
+            &quotas,
         )
         .await;
     } else {
-        invoke_subprocess_plugin_tool(&tool_id, &plugin, &artifact).await?
+        invoke_subprocess_plugin_tool(&tool_id, &plugin, &quotas, &artifact).await?
     };
-    if output.len() > 1024 * 1024 {
+    if output.len() > max_output_bytes {
         return Err(conflict("platform plugin tool exceeded its output quota"));
     }
     let result = serde_json::from_str::<Value>(&output)
         .map_err(|_| conflict("platform plugin tool returned invalid JSON"))?;
+    drop(concurrency_permit);
     Ok(Json(result))
+}
+
+async fn acquire_plugin_concurrency_permit(
+    plugin_id: &str,
+    limit: usize,
+) -> Result<OwnedSemaphorePermit, String> {
+    static SEMAPHORES: OnceLock<Mutex<HashMap<String, Arc<Semaphore>>>> = OnceLock::new();
+    let semaphores = SEMAPHORES.get_or_init(Mutex::default);
+    let key = format!("{plugin_id}:{limit}");
+    let semaphore = {
+        let mut semaphores = semaphores.lock().expect("plugin concurrency quota lock");
+        Arc::clone(
+            semaphores
+                .entry(key)
+                .or_insert_with(|| Arc::new(Semaphore::new(limit))),
+        )
+    };
+    semaphore
+        .try_acquire_owned()
+        .map_err(|_| "platform plugin exceeded its concurrent-call quota".to_string())
+}
+
+fn reserve_plugin_network_request(plugin_id: &str, limit: Option<u64>) -> Result<(), String> {
+    let Some(limit) = limit else {
+        return Ok(());
+    };
+    static WINDOWS: OnceLock<Mutex<HashMap<String, (std::time::Instant, u64)>>> = OnceLock::new();
+    let windows = WINDOWS.get_or_init(Mutex::default);
+    let mut windows = windows.lock().expect("plugin network quota lock");
+    let now = std::time::Instant::now();
+    let window = windows.entry(plugin_id.to_string()).or_insert((now, 0));
+    if now.duration_since(window.0) >= Duration::from_secs(60) {
+        *window = (now, 0);
+    }
+    if window.1 >= limit {
+        return Err("platform plugin exceeded its network quota".to_string());
+    }
+    window.1 += 1;
+    Ok(())
 }
 
 async fn invoke_mcp_plugin_tool(
@@ -880,6 +943,7 @@ async fn invoke_mcp_plugin_tool(
     tool_id: &str,
     input: Value,
     artifact: &crate::plugin_snapshots::RuntimeArtifact,
+    quotas: &PluginQuotaLimits,
 ) -> Result<Json<Value>, BridgeError> {
     let encoded_input = serde_json::to_string(&input)
         .map_err(|_| bad_request("platform plugin MCP input is invalid"))?;
@@ -922,32 +986,53 @@ async fn invoke_mcp_plugin_tool(
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     );
-    let outcome = state
+    let call = state
         .mcp_supervisor
-        .call_tool(&scope, &server.id, tool_id, input, &idempotency_key)
-        .await
-        .map_err(|error| conflict(&format!("{}: {}", error.reason_code(), error.detail())))?;
+        .call_tool(&scope, &server.id, tool_id, input, &idempotency_key);
+    let outcome = match quotas.max_wall_time_ms {
+        Some(limit) => tokio::time::timeout(std::time::Duration::from_millis(limit), call)
+            .await
+            .map_err(|_| conflict("platform plugin MCP tool exceeded its wall-time quota"))?,
+        None => call.await,
+    }
+    .map_err(|error| conflict(&format!("{}: {}", error.reason_code(), error.detail())))?;
     if outcome.is_error {
         return Err(conflict("platform plugin MCP tool failed"));
     }
     let result = serde_json::to_value(&outcome.result)
         .map_err(|_| conflict("platform plugin MCP tool returned invalid JSON"))?;
+    if serde_json::to_string(&result)
+        .map(|encoded| encoded.len())
+        .unwrap_or(usize::MAX)
+        > quotas.max_output_bytes.unwrap_or(1024 * 1024)
+    {
+        return Err(conflict(
+            "platform plugin MCP tool exceeded its output quota",
+        ));
+    }
     Ok(Json(result))
 }
 
 async fn invoke_wasm_plugin_tool(
     tool_id: &str,
     plugin: &crate::plugin_snapshots::PluginActivationRecord,
+    quotas: &PluginQuotaLimits,
     artifact: &crate::plugin_snapshots::RuntimeArtifact,
     input: &str,
 ) -> Result<String, BridgeError> {
+    let fuel = quotas.max_wasm_fuel.unwrap_or(DEFAULT_FUEL);
+    let memory = quotas.max_wasm_memory_bytes.unwrap_or(DEFAULT_MEMORY_BYTES);
+    let wall_time = quotas
+        .max_wall_time_ms
+        .map(std::time::Duration::from_millis)
+        .unwrap_or(std::time::Duration::from_secs(5));
     let tool = WasmtimeTool::from_bytes_with_limits(
         tool_id.to_string(),
         plugin.plugin_version.clone(),
         &artifact.bytes,
-        DEFAULT_FUEL,
-        DEFAULT_MEMORY_BYTES,
-        Some(std::time::Duration::from_secs(5)),
+        fuel,
+        memory,
+        Some(wall_time),
     )
     .map_err(|error| unavailable(&format!("platform plugin tool cannot start: {error}")))?;
     tool.invoke(input)
@@ -958,6 +1043,7 @@ async fn invoke_wasm_plugin_tool(
 async fn invoke_subprocess_plugin_tool(
     tool_id: &str,
     plugin: &crate::plugin_snapshots::PluginActivationRecord,
+    quotas: &PluginQuotaLimits,
     artifact: &crate::plugin_snapshots::RuntimeArtifact,
 ) -> Result<String, BridgeError> {
     let definition = serde_json::from_slice::<Value>(&artifact.bytes)
@@ -980,11 +1066,14 @@ async fn invoke_subprocess_plugin_tool(
     }) {
         return Err(bad_request("subprocess plugin command is invalid"));
     }
-    let timeout_ms = definition
+    let mut timeout_ms = definition
         .get("timeout_ms")
         .and_then(Value::as_u64)
         .unwrap_or(1_000)
         .min(5_000);
+    if let Some(quota_ms) = quotas.max_wall_time_ms {
+        timeout_ms = timeout_ms.min(quota_ms);
+    }
     if timeout_ms == 0 {
         return Err(bad_request("subprocess plugin timeout must be positive"));
     }
@@ -1086,7 +1175,8 @@ async fn platform_plugin_frontend_module(
         .get("html")
         .and_then(Value::as_str)
         .ok_or_else(|| unavailable("platform plugin frontend module has no html payload"))?;
-    if html.len() > 1024 * 1024 {
+    let quotas = plugin_quota_limits(&plugin.config).map_err(|error| conflict(&error))?;
+    if html.len() > quotas.max_output_bytes.unwrap_or(1024 * 1024) {
         return Err(conflict(
             "platform plugin frontend module exceeds its quota",
         ));

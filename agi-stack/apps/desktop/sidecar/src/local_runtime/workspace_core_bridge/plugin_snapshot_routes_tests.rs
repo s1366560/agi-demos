@@ -169,7 +169,7 @@ async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good
             "version": 4,
             "nonce": "nonce-4",
             "digest": digest,
-            "payload": payload
+            "payload": payload.clone()
         }),
     )
     .await;
@@ -190,7 +190,7 @@ async fn platform_plugin_snapshot_reconcile_requires_auth_and_persists_last_good
     )
     .await;
     let apply_state = request_json(
-        app,
+        app.clone(),
         "GET",
         "/api/v1/platform-plugins/apply-state",
         Some("desktop-session"),
@@ -257,7 +257,7 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
             "version": 4,
             "nonce": "nonce-4",
             "digest": digest,
-            "payload": payload
+            "payload": payload.clone()
         }),
     )
     .await;
@@ -279,7 +279,7 @@ async fn platform_plugin_snapshot_reconcile_rejects_stale_and_mismatched_receipt
     )
     .await;
     let nacked = request_json(
-        app,
+        app.clone(),
         "POST",
         "/api/v1/platform-plugins/nack",
         Some("desktop-session"),
@@ -410,12 +410,12 @@ for raw_line in sys.stdin:
             "version": 13,
             "nonce": "nonce-13",
             "digest": digest,
-            "payload": payload
+            "payload": payload.clone()
         }),
     )
     .await;
     let invoked = request_json(
-        app,
+        app.clone(),
         "POST",
         "/api/v1/platform-plugins/tools/invoke",
         Some("desktop-session"),
@@ -428,10 +428,64 @@ for raw_line in sys.stdin:
     assert_eq!(invoked.0, StatusCode::OK);
     assert_eq!(invoked.1["content"][0]["type"], "text");
     assert_eq!(invoked.1["content"][0]["text"], r#"{"message": "hello"}"#);
+
+    let (quota_payload, quota_digest) = quota_snapshot(
+        payload,
+        json!({"max_output_bytes": 1, "max_wall_time_ms": 5_000}),
+    );
+    let quota_submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 14,
+            "nonce": "nonce-14",
+            "digest": quota_digest,
+            "payload": quota_payload
+        }),
+    )
+    .await;
+    let quota_invoked = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-mcp", "tool_id": "echo", "input": {"message": "hello"}}),
+    )
+    .await;
+
+    assert_eq!(quota_submitted.0, StatusCode::OK);
+    assert_eq!(quota_invoked.0, StatusCode::CONFLICT);
+    assert_eq!(
+        quota_invoked.1["detail"],
+        "platform plugin MCP tool exceeded its output quota"
+    );
 }
 
 #[tokio::test]
-async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
+async fn plugin_concurrency_and_network_quota_reservations_fail_closed() {
+    let permit = super::acquire_plugin_concurrency_permit("quota-helper", 1)
+        .await
+        .expect("first concurrency reservation");
+    assert!(super::acquire_plugin_concurrency_permit("quota-helper", 1)
+        .await
+        .is_err());
+    drop(permit);
+    assert!(super::acquire_plugin_concurrency_permit("quota-helper", 1)
+        .await
+        .is_ok());
+
+    super::reserve_plugin_network_request("quota-helper", Some(1))
+        .expect("first network reservation");
+    assert_eq!(
+        super::reserve_plugin_network_request("quota-helper", Some(1)),
+        Err("platform plugin exceeded its network quota".to_string())
+    );
+}
+
+#[tokio::test]
+async fn active_untrusted_wasm_manifest_quotas_are_activated_and_enforced() {
     let state = state();
     state
         .session_store
@@ -447,10 +501,15 @@ async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     };
-    let mut payload = active_wasm_snapshot("placeholder", &artifact_digest);
-    payload.as_object_mut().expect("payload").remove("digest");
-    let digest = platform_plugin_payload_digest(&payload).expect("digest");
-    payload["digest"] = json!(digest.clone());
+    let (payload, digest) = quota_snapshot(
+        active_wasm_snapshot("placeholder", &artifact_digest),
+        json!({
+            "max_wasm_fuel": 1,
+            "max_wasm_memory_bytes": 64 * 1024,
+            "max_wall_time_ms": 1_000,
+            "max_output_bytes": 1024 * 1024,
+        }),
+    );
     {
         let connection = state.session_store.connection().expect("connection");
         crate::plugin_snapshots::initialize_schema(&connection).expect("schema");
@@ -476,12 +535,12 @@ async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
             "version": 9,
             "nonce": "nonce-9",
             "digest": digest,
-            "payload": payload
+            "payload": payload.clone()
         }),
     )
     .await;
     let invoked = request_json(
-        app,
+        app.clone(),
         "POST",
         "/api/v1/platform-plugins/tools/invoke",
         Some("desktop-session"),
@@ -491,9 +550,16 @@ async fn active_untrusted_wasm_tool_invocation_is_quota_bounded() {
 
     assert_eq!(submitted.0, StatusCode::OK);
     assert_eq!(submitted.1["status"], "ack");
-    assert_eq!(invoked.0, StatusCode::OK);
-    assert_eq!(invoked.1["score"], 22);
-    assert_eq!(invoked.1["tool"], "demo");
+    assert_eq!(invoked.0, StatusCode::CONFLICT);
+    assert!(invoked.1["detail"]
+        .as_str()
+        .expect("quota detail")
+        .contains("fuel"));
+
+    let connection = state.session_store.connection().expect("connection");
+    let active =
+        crate::plugin_snapshots::read_active_plugins(&connection, &digest).expect("active plugins");
+    assert_eq!(active[0].config["quotas"]["max_wasm_fuel"], json!(1));
 }
 
 fn active_subprocess_snapshot(digest: &str, artifact_digest: &str) -> Value {
@@ -516,6 +582,18 @@ fn active_subprocess_snapshot(digest: &str, artifact_digest: &str) -> Value {
         }],
         "digest": digest
     })
+}
+
+fn quota_snapshot(mut payload: Value, quotas: Value) -> (Value, String) {
+    payload.as_object_mut().expect("payload").remove("digest");
+    payload["plugins"][0]["activation"] = json!({
+        "default_scope": "tenant",
+        "restart_policy": "process-boundary",
+        "quotas": quotas,
+    });
+    let digest = platform_plugin_payload_digest(&payload).expect("quota snapshot digest");
+    payload["digest"] = json!(digest.clone());
+    (payload, digest)
 }
 
 #[tokio::test]
@@ -582,7 +660,7 @@ async fn signed_frontend_module_is_served_only_after_activation() {
     )
     .await;
     let module = request_json(
-        app,
+        app.clone(),
         "GET",
         "/api/v1/platform-plugins/frontend/third-party-ui/module",
         Some("desktop-session"),
@@ -599,6 +677,36 @@ async fn signed_frontend_module_is_served_only_after_activation() {
     assert_eq!(
         module.1["html"],
         "<main id=\"plugin-root\">signed module</main>"
+    );
+
+    let (quota_payload, quota_digest) = quota_snapshot(payload, json!({"max_output_bytes": 1}));
+    let quota_submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 16,
+            "nonce": "nonce-16",
+            "digest": quota_digest,
+            "payload": quota_payload
+        }),
+    )
+    .await;
+    let quota_module = request_json(
+        app,
+        "GET",
+        "/api/v1/platform-plugins/frontend/third-party-ui/module",
+        Some("desktop-session"),
+        json!({}),
+    )
+    .await;
+
+    assert_eq!(quota_submitted.0, StatusCode::OK);
+    assert_eq!(quota_module.0, StatusCode::CONFLICT);
+    assert_eq!(
+        quota_module.1["detail"],
+        "platform plugin frontend module exceeds its quota"
     );
 }
 
@@ -653,7 +761,7 @@ async fn subprocess_plugin_enforces_process_group_wall_time_and_output_quotas() 
             "version": 11,
             "nonce": "nonce-11",
             "digest": digest,
-            "payload": payload
+            "payload": payload.clone()
         }),
     )
     .await;
@@ -674,6 +782,39 @@ async fn subprocess_plugin_enforces_process_group_wall_time_and_output_quotas() 
     assert_eq!(invoked.0, StatusCode::OK);
     assert_eq!(invoked.1["exit_code"], 0);
     assert_eq!(invoked.1["stdout"], "subprocess-ok");
+
+    let (quota_payload, quota_digest) = quota_snapshot(
+        payload,
+        json!({"max_output_bytes": 1, "max_wall_time_ms": 1_000}),
+    );
+    let quota_submitted = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/snapshot",
+        Some("desktop-session"),
+        json!({
+            "version": 15,
+            "nonce": "nonce-15",
+            "digest": quota_digest,
+            "payload": quota_payload
+        }),
+    )
+    .await;
+    let quota_invoked = request_json(
+        app.clone(),
+        "POST",
+        "/api/v1/platform-plugins/tools/invoke",
+        Some("desktop-session"),
+        json!({"plugin_id": "third-party-subprocess", "tool_id": "demo", "input": {}}),
+    )
+    .await;
+
+    assert_eq!(quota_submitted.0, StatusCode::OK);
+    assert_eq!(quota_invoked.0, StatusCode::CONFLICT);
+    assert_eq!(
+        quota_invoked.1["detail"],
+        "platform plugin tool exceeded its output quota"
+    );
 
     let slow_runtime = json!({
         "command": ["/bin/sleep", "2"],
@@ -718,8 +859,8 @@ async fn subprocess_plugin_enforces_process_group_wall_time_and_output_quotas() 
         "/api/v1/platform-plugins/snapshot",
         Some("desktop-session"),
         json!({
-            "version": 12,
-            "nonce": "nonce-12",
+            "version": 17,
+            "nonce": "nonce-17",
             "digest": slow_snapshot_digest,
             "payload": slow_payload
         }),

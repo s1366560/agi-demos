@@ -80,6 +80,18 @@ pub(crate) struct PluginActivationRecord {
     pub(crate) config: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PluginQuotaLimits {
+    pub(crate) max_wasm_fuel: Option<u64>,
+    pub(crate) max_wasm_memory_bytes: Option<usize>,
+    pub(crate) max_wall_time_ms: Option<u64>,
+    pub(crate) max_concurrent_calls: Option<usize>,
+    pub(crate) max_output_bytes: Option<usize>,
+    pub(crate) max_network_requests_per_minute: Option<u64>,
+    pub(crate) max_storage_bytes: Option<usize>,
+    pub(crate) max_monthly_usd_micros: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RuntimeArtifact {
     pub(crate) plugin_id: String,
@@ -569,7 +581,7 @@ fn prepare_plugins(
             capabilities.push(capability.clone());
         }
 
-        let config = object
+        let mut config = object
             .get("config")
             .cloned()
             .unwrap_or_else(|| Value::Object(Default::default()));
@@ -577,6 +589,18 @@ fn prepare_plugins(
             return Err(format!("plugin {plugin_id} config must be an object"));
         }
         validate_config(&config).map_err(|error| format!("plugin {plugin_id}: {error}"))?;
+        if let Some(quotas) = object
+            .get("activation")
+            .and_then(Value::as_object)
+            .and_then(|activation| activation.get("quotas"))
+        {
+            plugin_quota_limits_from_value(quotas)
+                .map_err(|error| format!("plugin {plugin_id}: {error}"))?;
+            config
+                .as_object_mut()
+                .ok_or_else(|| format!("plugin {plugin_id} config must be an object"))?
+                .insert("quotas".to_string(), quotas.clone());
+        }
         if runtime != "python-trusted" {
             let artifact = required_runtime_artifact(connection, &plugin_id, &config)?;
             if artifact.runtime != runtime {
@@ -614,6 +638,110 @@ fn prepare_plugins(
         });
     }
     Ok(prepared)
+}
+
+pub(crate) fn plugin_quota_limits(config: &Value) -> Result<PluginQuotaLimits, String> {
+    plugin_quota_limits_from_value(config.get("quotas").unwrap_or(&Value::Null))
+}
+
+pub(crate) fn manifest_quota_limits(manifest: &Value) -> Result<PluginQuotaLimits, String> {
+    let quotas = manifest
+        .get("activation")
+        .and_then(Value::as_object)
+        .and_then(|activation| activation.get("quotas"))
+        .unwrap_or(&Value::Null);
+    plugin_quota_limits_from_value(quotas)
+}
+
+fn plugin_quota_limits_from_value(value: &Value) -> Result<PluginQuotaLimits, String> {
+    if value.is_null() {
+        return Ok(PluginQuotaLimits {
+            max_wasm_fuel: None,
+            max_wasm_memory_bytes: None,
+            max_wall_time_ms: None,
+            max_concurrent_calls: None,
+            max_output_bytes: None,
+            max_network_requests_per_minute: None,
+            max_storage_bytes: None,
+            max_monthly_usd_micros: None,
+        });
+    }
+    let Some(object) = value.as_object() else {
+        return Err("plugin quotas must be an object".to_string());
+    };
+    let allowed = [
+        "max_wasm_fuel",
+        "max_wasm_memory_bytes",
+        "max_wall_time_ms",
+        "max_concurrent_calls",
+        "max_output_bytes",
+        "max_network_requests_per_minute",
+        "max_storage_bytes",
+        "max_monthly_usd",
+    ];
+    if let Some(unknown) = object.keys().find(|key| !allowed.contains(&key.as_str())) {
+        return Err(format!("plugin quota {unknown} is unsupported"));
+    }
+
+    Ok(PluginQuotaLimits {
+        max_wasm_fuel: positive_u64(object.get("max_wasm_fuel"), "max_wasm_fuel")?,
+        max_wasm_memory_bytes: positive_usize(
+            object.get("max_wasm_memory_bytes"),
+            "max_wasm_memory_bytes",
+            64 * 1024,
+        )?,
+        max_wall_time_ms: positive_u64(object.get("max_wall_time_ms"), "max_wall_time_ms")?,
+        max_concurrent_calls: positive_usize(
+            object.get("max_concurrent_calls"),
+            "max_concurrent_calls",
+            1,
+        )?,
+        max_output_bytes: positive_usize(object.get("max_output_bytes"), "max_output_bytes", 1)?,
+        max_network_requests_per_minute: positive_u64(
+            object.get("max_network_requests_per_minute"),
+            "max_network_requests_per_minute",
+        )?,
+        max_storage_bytes: positive_usize(object.get("max_storage_bytes"), "max_storage_bytes", 1)?,
+        max_monthly_usd_micros: monthly_usd_micros(object.get("max_monthly_usd"))?,
+    })
+}
+
+fn positive_u64(value: Option<&Value>, field: &str) -> Result<Option<u64>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let number = value
+        .as_u64()
+        .ok_or_else(|| format!("plugin quota {field} must be a positive integer"))?;
+    if number == 0 {
+        return Err(format!("plugin quota {field} must be positive"));
+    }
+    Ok(Some(number))
+}
+
+fn positive_usize(
+    value: Option<&Value>,
+    field: &str,
+    minimum: usize,
+) -> Result<Option<usize>, String> {
+    let number = positive_u64(value, field)?;
+    if number.is_some_and(|value| (value as usize) < minimum) {
+        return Err(format!("plugin quota {field} is below its minimum"));
+    }
+    Ok(number.map(|value| value as usize))
+}
+
+fn monthly_usd_micros(value: Option<&Value>) -> Result<Option<u64>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let number = value
+        .as_f64()
+        .ok_or_else(|| "plugin quota max_monthly_usd must be a positive number".to_string())?;
+    if !number.is_finite() || number <= 0.0 {
+        return Err("plugin quota max_monthly_usd must be a positive number".to_string());
+    }
+    Ok(Some((number * 1_000_000.0).round() as u64))
 }
 
 fn bounded_text(value: Option<&Value>, limit: usize, label: &str) -> Result<String, String> {
@@ -797,6 +925,33 @@ mod tests {
             read_active_plugins(&connection, &digest).expect("active plugins"),
             activated
         );
+    }
+
+    #[test]
+    fn activation_rejects_invalid_quota_limits_before_ack() {
+        let mut connection = Connection::open_in_memory().expect("plugin database");
+        initialize_schema(&connection).expect("plugin schema");
+        let digest = "e".repeat(64);
+        let mut payload = plugin_snapshot(&digest);
+        payload["plugins"][0]["activation"] = json!({
+            "default_scope": "tenant",
+            "restart_policy": "process-boundary",
+            "quotas": {"max_wasm_fuel": 0, "unknown": 1}
+        });
+        let requested = RequestedPluginSnapshot {
+            version: 5,
+            nonce: "nonce-5".to_string(),
+            digest: digest.clone(),
+            payload,
+        };
+
+        let error =
+            record_ack(&mut connection, &requested).expect_err("invalid quota must not activate");
+
+        assert!(error.contains("plugin quota unknown is unsupported"));
+        assert!(read_apply_record(&connection)
+            .expect("apply record")
+            .is_none());
     }
 
     #[test]
