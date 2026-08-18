@@ -368,6 +368,10 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_EVENTS_V2",
     )
+    platform_plugin_agent_events_remove_legacy: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_AGENT_EVENTS_REMOVE_LEGACY",
+    )
     platform_plugin_agent_events_shadow: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_EVENTS_SHADOW",

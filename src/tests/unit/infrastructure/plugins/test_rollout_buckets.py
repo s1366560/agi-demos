@@ -22,12 +22,15 @@ from src.infrastructure.plugins.shadow_rollout import (
 
 def settings(
     *,
+    events_v2: bool = False,
     events_shadow: bool = True,
     events_percent: int = 100,
     allowlist: str | None = None,
+    events_remove_legacy: bool = False,
 ) -> SimpleNamespace:
     return SimpleNamespace(
-        platform_plugin_agent_events_v2=False,
+        platform_plugin_agent_events_v2=events_v2,
+        platform_plugin_agent_events_remove_legacy=events_remove_legacy,
         platform_plugin_agent_events_shadow=events_shadow,
         platform_plugin_agent_events_shadow_percent=events_percent,
         platform_plugin_agent_tools_v2=False,
@@ -140,6 +143,25 @@ def test_event_dispatcher_respects_zero_full_and_allowlist_cohorts(
     )
     allowlisted = create_agent_plugin_event_dispatcher(object(), tenant_id="tenant-1")
     assert allowlisted is not None
+
+
+@pytest.mark.unit
+def test_event_legacy_removal_rehearsal_requires_v2(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: settings(events_remove_legacy=True),
+    )
+
+    with pytest.raises(ValueError, match="requires agent events V2"):
+        create_agent_plugin_event_dispatcher(object(), tenant_id="tenant-1")
+
+    monkeypatch.setattr(
+        "src.configuration.config.get_settings",
+        lambda: settings(events_v2=True, events_remove_legacy=True),
+    )
+    dispatcher = create_agent_plugin_event_dispatcher(object(), tenant_id="tenant-1")
+    assert dispatcher is not None
+    assert dispatcher.remove_legacy_fallback is True
 
 
 @pytest.mark.unit

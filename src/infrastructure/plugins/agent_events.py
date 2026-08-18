@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from src.domain.model.plugins import PluginEventMode
 
-from .events import EventDispatchResult, PluginEventBus
+from .events import EventDiagnostic, EventDispatchResult, PluginEventBus
 from .rollout_buckets import (
     is_scope_selected,
     settings_allowlist,
@@ -48,6 +48,7 @@ class AgentPluginEventDispatcher:
     legacy_registry: Any | None
     event_bus: PluginEventBus = field(default_factory=PluginEventBus)
     v2_enabled: bool = False
+    remove_legacy_fallback: bool = False
     shadow_enabled: bool = False
     max_shadow_diffs: int = 100
     runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
@@ -55,6 +56,10 @@ class AgentPluginEventDispatcher:
     scope_id: str = "global"
     _subscribed_events: set[str] = field(default_factory=set, init=False)
     _shadow_diffs: list[EventShadowDiff] = field(default_factory=list, init=False)
+
+    def __post_init__(self) -> None:
+        if self.remove_legacy_fallback and not self.v2_enabled:
+            raise ValueError("legacy event removal requires agent events V2")
 
     async def dispatch(
         self,
@@ -73,7 +78,7 @@ class AgentPluginEventDispatcher:
                 runtime_hook_overrides or list(self.runtime_hook_overrides),
             )
 
-        if self.v2_enabled:
+        if self.v2_enabled and not self.remove_legacy_fallback:
             self._ensure_legacy_adapter(hook_name, event_name)
         legacy = None
         if not self.v2_enabled:
@@ -99,7 +104,22 @@ class AgentPluginEventDispatcher:
                 denied=typed.denied,
             )
         if self.v2_enabled:
-            return typed
+            diagnostics = typed.diagnostics
+            if self.remove_legacy_fallback and not self.event_bus.list_listeners(event_name):
+                diagnostics = (
+                    *diagnostics,
+                    EventDiagnostic(
+                        plugin_id="platform-plugin-kernel",
+                        event=event_name,
+                        code="legacy_fallback_removed",
+                        message=(f"legacy hook {hook_name} has no typed listener for {event_name}"),
+                    ),
+                )
+            return AgentEventDispatchResult(
+                payload=typed.payload,
+                diagnostics=diagnostics,
+                denied=typed.denied,
+            )
         assert legacy is not None
         return legacy
 
@@ -261,6 +281,9 @@ def create_agent_plugin_event_dispatcher(
         settings.platform_plugin_agent_events_v2 or settings.platform_plugin_agent_events_shadow
     ):
         return None
+    remove_legacy = getattr(settings, "platform_plugin_agent_events_remove_legacy", False)
+    if remove_legacy and not settings.platform_plugin_agent_events_v2:
+        raise ValueError("PLATFORM_PLUGIN_AGENT_EVENTS_REMOVE_LEGACY requires agent events V2")
     normalized_tenant_id = (tenant_id or "").strip()
     shadow_selected = settings.platform_plugin_agent_events_v2 or (
         settings.platform_plugin_agent_events_shadow
@@ -282,6 +305,7 @@ def create_agent_plugin_event_dispatcher(
     return AgentPluginEventDispatcher(
         legacy_registry=legacy_registry,
         v2_enabled=settings.platform_plugin_agent_events_v2,
+        remove_legacy_fallback=remove_legacy,
         shadow_enabled=settings.platform_plugin_agent_events_shadow,
         runtime_hook_overrides=runtime_hook_overrides or [],
         scope_type="tenant" if normalized_tenant_id else "global",
