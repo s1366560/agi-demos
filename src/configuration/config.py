@@ -372,6 +372,12 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_EVENTS_SHADOW",
     )
+    platform_plugin_agent_events_shadow_percent: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        alias="PLATFORM_PLUGIN_AGENT_EVENTS_SHADOW_PERCENT",
+    )
     platform_plugin_agent_tools_v2: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_TOOLS_V2",
@@ -379,6 +385,16 @@ class Settings(BaseSettings):
     platform_plugin_agent_tools_shadow: bool = Field(
         default=False,
         alias="PLATFORM_PLUGIN_AGENT_TOOLS_SHADOW",
+    )
+    platform_plugin_agent_tools_shadow_percent: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        alias="PLATFORM_PLUGIN_AGENT_TOOLS_SHADOW_PERCENT",
+    )
+    platform_plugin_shadow_scope_allowlist: str | None = Field(
+        default=None,
+        alias="PLATFORM_PLUGIN_SHADOW_SCOPE_ALLOWLIST",
     )
     platform_plugin_llm_v2: bool = Field(
         default=False,

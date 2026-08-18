@@ -3062,6 +3062,25 @@ def _publish_scoped_tool_generation(
     settings = get_settings()
     if not (settings.platform_plugin_agent_tools_v2 or settings.platform_plugin_agent_tools_shadow):
         return
+    from src.infrastructure.plugins.rollout_buckets import (
+        is_scope_selected,
+        settings_allowlist,
+        settings_percentage,
+    )
+
+    if not settings.platform_plugin_agent_tools_v2 and not is_scope_selected(
+        capability="agent_tools",
+        scope_id=project_id,
+        percentage=settings_percentage(
+            settings,
+            "platform_plugin_agent_tools_shadow_percent",
+        ),
+        allowlist=settings_allowlist(
+            settings,
+            "platform_plugin_shadow_scope_allowlist",
+        ),
+    ):
+        return
     service = get_agent_tool_set_service()
     scope = PluginScopeContext(project_id=project_id)
     current_inventory, candidate_inventory, differs = service.shadow_comparison(scope, tools)

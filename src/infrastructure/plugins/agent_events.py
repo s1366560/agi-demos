@@ -10,6 +10,11 @@ from typing import Any, cast
 from src.domain.model.plugins import PluginEventMode
 
 from .events import EventDispatchResult, PluginEventBus
+from .rollout_buckets import (
+    is_scope_selected,
+    settings_allowlist,
+    settings_percentage,
+)
 from .shadow_rollout import enqueue_shadow_rollout_event, make_shadow_rollout_event
 
 logger = logging.getLogger(__name__)
@@ -256,11 +261,29 @@ def create_agent_plugin_event_dispatcher(
         settings.platform_plugin_agent_events_v2 or settings.platform_plugin_agent_events_shadow
     ):
         return None
+    normalized_tenant_id = (tenant_id or "").strip()
+    shadow_selected = settings.platform_plugin_agent_events_v2 or (
+        settings.platform_plugin_agent_events_shadow
+        and is_scope_selected(
+            capability="agent_events",
+            scope_id=normalized_tenant_id or None,
+            percentage=settings_percentage(
+                settings,
+                "platform_plugin_agent_events_shadow_percent",
+            ),
+            allowlist=settings_allowlist(
+                settings,
+                "platform_plugin_shadow_scope_allowlist",
+            ),
+        )
+    )
+    if not shadow_selected:
+        return None
     return AgentPluginEventDispatcher(
         legacy_registry=legacy_registry,
         v2_enabled=settings.platform_plugin_agent_events_v2,
         shadow_enabled=settings.platform_plugin_agent_events_shadow,
         runtime_hook_overrides=runtime_hook_overrides or [],
-        scope_type="tenant" if tenant_id else "global",
-        scope_id=tenant_id or "global",
+        scope_type="tenant" if normalized_tenant_id else "global",
+        scope_id=normalized_tenant_id or "global",
     )
