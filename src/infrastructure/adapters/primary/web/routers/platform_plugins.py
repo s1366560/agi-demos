@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateRequest,
     PlatformPluginApplyStateResponse,
+    PlatformPluginShadowRolloutCapabilityReadinessResponse,
     PlatformPluginShadowRolloutEventResponse,
+    PlatformPluginShadowRolloutReadinessResponse,
     PlatformPluginShadowRolloutResponse,
     PlatformPluginShadowRolloutSummaryResponse,
     PlatformPluginSnapshotResponse,
@@ -22,6 +25,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepository,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.rollout_readiness import (
+    evaluate_shadow_rollout_readiness,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
@@ -59,6 +65,54 @@ async def get_shadow_rollout_evidence(
             )
             for event in events
         ],
+    )
+
+
+@router.get(
+    "/shadow-rollout/readiness",
+    response_model=PlatformPluginShadowRolloutReadinessResponse,
+)
+async def get_shadow_rollout_readiness(
+    minimum_samples_per_event: int = Query(default=100, ge=1, le=1_000_000),
+    minimum_distinct_scopes: int = Query(default=10, ge=1, le=100_000),
+    maximum_evidence_age_seconds: int = Query(default=900, ge=1, le=86_400),
+    _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginShadowRolloutReadinessResponse:
+    """Return a fail-closed promotion gate for the staged agent rollout."""
+    repository = PlatformPluginRepository(db)
+    readiness = evaluate_shadow_rollout_readiness(
+        summary=await repository.shadow_rollout_summary(),
+        scope_counts=await repository.shadow_rollout_scope_counts(),
+        checked_at=datetime.now(UTC),
+        minimum_samples_per_event=minimum_samples_per_event,
+        minimum_distinct_scopes=minimum_distinct_scopes,
+        maximum_evidence_age_seconds=maximum_evidence_age_seconds,
+    )
+    return PlatformPluginShadowRolloutReadinessResponse(
+        ready=readiness.ready,
+        checked_at=readiness.checked_at,
+        minimum_samples_per_event=readiness.minimum_samples_per_event,
+        minimum_distinct_scopes=readiness.minimum_distinct_scopes,
+        maximum_evidence_age_seconds=readiness.maximum_evidence_age_seconds,
+        capabilities=[
+            PlatformPluginShadowRolloutCapabilityReadinessResponse.model_validate(
+                {
+                    "capability": item.capability,
+                    "ready": item.ready,
+                    "total_count": item.total_count,
+                    "equal_count": item.equal_count,
+                    "diff_count": item.diff_count,
+                    "distinct_scope_count": item.distinct_scope_count,
+                    "observed_event_count": item.observed_event_count,
+                    "required_event_count": item.required_event_count,
+                    "last_occurred_at": item.last_occurred_at,
+                    "reasons": list(item.reasons),
+                }
+            )
+            for item in readiness.capabilities
+        ],
+        reasons=list(readiness.reasons),
     )
 
 

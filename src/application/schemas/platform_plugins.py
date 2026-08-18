@@ -58,3 +58,26 @@ class PlatformPluginShadowRolloutSummaryResponse(BaseModel):
 class PlatformPluginShadowRolloutResponse(BaseModel):
     summary: list[PlatformPluginShadowRolloutSummaryResponse]
     events: list[PlatformPluginShadowRolloutEventResponse]
+
+
+class PlatformPluginShadowRolloutCapabilityReadinessResponse(BaseModel):
+    capability: str
+    ready: bool
+    total_count: int
+    equal_count: int
+    diff_count: int
+    distinct_scope_count: int
+    observed_event_count: int
+    required_event_count: int
+    last_occurred_at: datetime | None
+    reasons: list[str]
+
+
+class PlatformPluginShadowRolloutReadinessResponse(BaseModel):
+    ready: bool
+    checked_at: datetime
+    minimum_samples_per_event: int
+    minimum_distinct_scopes: int
+    maximum_evidence_age_seconds: int
+    capabilities: list[PlatformPluginShadowRolloutCapabilityReadinessResponse]
+    reasons: list[str]

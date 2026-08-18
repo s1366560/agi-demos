@@ -361,3 +361,23 @@ class PlatformPluginRepository:
                 }
             )
         return sorted(rows, key=lambda row: (str(row["capability"]), str(row["event_name"])))
+
+    async def shadow_rollout_scope_counts(self) -> list[dict[str, object]]:
+        """Count independent scopes represented by durable rollout evidence."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(
+                    PlatformPluginShadowRolloutEventModel.capability,
+                    func.count(func.distinct(PlatformPluginShadowRolloutEventModel.scope_id)).label(
+                        "distinct_scope_count"
+                    ),
+                ).group_by(PlatformPluginShadowRolloutEventModel.capability)
+            )
+        )
+        return [
+            {
+                "capability": row["capability"],
+                "distinct_scope_count": int(row["distinct_scope_count"]),
+            }
+            for row in result.mappings()
+        ]
