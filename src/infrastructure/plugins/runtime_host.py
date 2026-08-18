@@ -32,13 +32,17 @@ class PlatformPluginRuntimeHost:
         adapter_registry: LlmAdapterProviderRegistry | None = None,
         llm_adapter_factory: LlmAdapterFactory | None = None,
     ) -> None:
-        self.capabilities = capability_registry or CapabilityRegistry()
         self.adapters = adapter_registry or get_llm_adapter_provider_registry()
         self.reconciler = PlatformPluginSnapshotReconciler(
-            self.capabilities,
+            capability_registry,
             adapter_registry=self.adapters,
             llm_adapter_factory=llm_adapter_factory,
         )
+
+    @property
+    def capabilities(self) -> CapabilityRegistry:
+        """Return the active generation's capability registry."""
+        return self.reconciler.capability_registry
 
     def apply(
         self,

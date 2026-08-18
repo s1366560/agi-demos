@@ -2,20 +2,37 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.plugin_marketplace_install_service import (
+    MarketplaceInstallDecision,
+)
+from src.domain.model.plugins import parse_plugin_manifest
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import plugin_marketplace
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Tenant, User, UserTenant
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginApplyStateModel,
+    Tenant,
+    User,
+    UserTenant,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
+)
+from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
+from src.infrastructure.plugins.runtime_host import (
+    PlatformPluginRuntimeHost,
+    set_platform_plugin_runtime_host,
 )
 
 MANIFEST = {
@@ -56,6 +73,17 @@ def make_client(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = lambda: current_user
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_host() -> Any:
+    """Give every marketplace mutation an isolated local data plane."""
+    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
+    set_platform_plugin_runtime_host(host)
+    try:
+        yield host
+    finally:
+        set_platform_plugin_runtime_host(None)
 
 
 @pytest.mark.unit
@@ -239,3 +267,141 @@ async def test_marketplace_uninstall_removes_desired_state(
     assert desired is None
     assert package is not None
     assert package.install_status == "uninstalled"
+
+
+class _ApprovedInstallService:
+    """Fake install service persisting the same rows as an approved install."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def request_install(self, *, request: Any) -> MarketplaceInstallDecision:
+        governance = PlatformPluginGovernanceRepository(self._db)
+        plugins = PlatformPluginRepository(self._db)
+        await governance.upsert_package(
+            plugin_id=request.plugin_id,
+            version=request.version,
+            publisher=request.publisher,
+            artifact_digest=request.artifact_sha256,
+            manifest=request.manifest,
+            signature={"algorithm": "Ed25519", "public_key_sha256": "b" * 64},
+            provenance={"predicateType": request.provenance.predicate_type},
+            security_scan_status="passed",
+        )
+        await plugins.upsert_catalog_manifest(parse_plugin_manifest(request.manifest))
+        await plugins.set_desired_state(
+            plugin_id=request.plugin_id,
+            enabled=True,
+            config={},
+        )
+        return MarketplaceInstallDecision(
+            status="approved",
+            plugin_id=request.plugin_id,
+            version=request.version,
+            reason="verified",
+            desired_revision=1,
+        )
+
+
+def _install_payload(tenant_id: str) -> dict[str, Any]:
+    return {
+        "plugin_id": "third-party-tool",
+        "version": "1.0.0",
+        "publisher": "memstack",
+        "tenant_id": tenant_id,
+        "artifact": {
+            "registry": "https://registry.example.test",
+            "repository": "memstack/third-party-tool",
+            "manifest_sha256": "c" * 64,
+        },
+        "artifact_sha256": "a" * 64,
+        "manifest": MANIFEST,
+        "signature": {
+            "algorithm": "Ed25519",
+            "public_key_pem": "pem",
+            "signature_base64": "c2ln",
+        },
+        "provenance": {
+            "predicate_type": "https://slsa.dev/provenance/v1",
+            "builder_id": "test-builder",
+            "subject_name": "third-party-tool",
+        },
+        "approved_permissions": ["tools.execute"],
+        "tenant_admin_approved": True,
+        "security_scan_passed": True,
+    }
+
+
+@pytest.mark.unit
+async def test_install_and_uninstall_close_the_snapshot_distribution_loop(
+    db_session: AsyncSession,
+    isolated_runtime_host: PlatformPluginRuntimeHost,
+) -> None:
+    tenant = Tenant(
+        id="marketplace-loop-tenant",
+        name="Loop Tenant",
+        slug="marketplace-loop-tenant",
+        owner_id="marketplace-loop-admin",
+    )
+    user = User(
+        id="marketplace-loop-admin",
+        email="loop-admin@example.com",
+        hashed_password="hashed",
+        full_name="Loop Admin",
+        is_active=True,
+    )
+    db_session.add_all(
+        [
+            tenant,
+            user,
+            UserTenant(
+                id="marketplace-loop-membership",
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role="admin",
+            ),
+        ]
+    )
+    await db_session.commit()
+    client = make_client(db_session, user)
+
+    async def override_service() -> Any:
+        yield _ApprovedInstallService(db_session)
+
+    client.app.dependency_overrides[plugin_marketplace._service] = override_service
+
+    installed = client.post(
+        "/api/v1/plugin-marketplace/packages/third-party-tool/install",
+        json=_install_payload(tenant.id),
+    )
+
+    assert installed.status_code == status.HTTP_202_ACCEPTED
+    assert installed.json()["status"] == "approved"
+
+    plugins = PlatformPluginRepository(db_session)
+    first_snapshot = await plugins.latest_snapshot()
+    assert first_snapshot is not None
+    assert first_snapshot.version == 1
+    installed_ids = [row["id"] for row in first_snapshot.payload["plugins"]]
+    assert "third-party-tool" in installed_ids
+    assert isolated_runtime_host.capabilities.list_capabilities("third-party-tool")
+
+    apply_state = await db_session.execute(
+        select(PlatformPluginApplyStateModel).where(
+            PlatformPluginApplyStateModel.data_plane_id == "python-backend"
+        )
+    )
+    assert apply_state.scalar_one().status == "ack"
+
+    uninstalled = client.post(
+        "/api/v1/plugin-marketplace/packages/third-party-tool/uninstall",
+        json={"version": "1.0.0", "tenant_id": tenant.id},
+    )
+
+    assert uninstalled.status_code == status.HTTP_200_OK
+    second_snapshot = await plugins.latest_snapshot()
+    assert second_snapshot is not None
+    assert second_snapshot.version == 2
+    remaining_ids = [row["id"] for row in second_snapshot.payload["plugins"]]
+    assert "third-party-tool" not in remaining_ids
+    assert isolated_runtime_host.capabilities.list_capabilities("third-party-tool") == ()

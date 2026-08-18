@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,7 +21,7 @@ from .llm_adapters import (
     LlmAdapterProviderRegistry,
     RoutedLlmAdapterProvider,
 )
-from .profile import ProfileSnapshot
+from .profile import PluginSnapshotRow, ProfileSnapshot
 
 Disposable = Callable[[], None]
 
@@ -134,18 +134,74 @@ def _dispose_legacy_plugin(
     return dispose
 
 
+@dataclass(frozen=True)
+class PreparedLlmProvider:
+    """One validated provider instance shared by both registries."""
+
+    manifest_id: str
+    capability_id: str
+    provider: RoutedLlmAdapterProvider
+
+
+@dataclass(frozen=True)
+class PreparedSnapshotActivation:
+    """Pure validation result for one snapshot; no registry has been mutated."""
+
+    snapshot: ProfileSnapshot
+    llm_providers: tuple[PreparedLlmProvider, ...]
+
+
+def prepare_profile_snapshot(
+    snapshot: ProfileSnapshot,
+    *,
+    llm_adapter_factory: LlmAdapterFactory | None = None,
+) -> PreparedSnapshotActivation:
+    """Validate trust gates and construct provider instances without mutation."""
+    providers: list[PreparedLlmProvider] = []
+    for row in snapshot.rows:
+        for capability in row.manifest.provides:
+            if capability.kind.value != "llm_provider":
+                continue
+            if row.manifest.runtime.value != "python-trusted" or row.manifest.trust.value not in {
+                "builtin",
+                "signed",
+            }:
+                raise ValueError("LLM adapter providers require a trusted python runtime")
+            providers.append(
+                PreparedLlmProvider(
+                    manifest_id=row.manifest.id,
+                    capability_id=capability.id,
+                    provider=RoutedLlmAdapterProvider(factory=llm_adapter_factory),
+                )
+            )
+    return PreparedSnapshotActivation(snapshot=snapshot, llm_providers=tuple(providers))
+
+
 def activate_profile_snapshot(
     snapshot: ProfileSnapshot,
     capability_registry: CapabilityRegistry,
     *,
     adapter_registry: LlmAdapterProviderRegistry | None = None,
     llm_adapter_factory: LlmAdapterFactory | None = None,
+    prepared: PreparedSnapshotActivation | None = None,
 ) -> Disposable:
     """Activate every capability declared by a canonical profile snapshot.
 
     This is the Python data-plane activation path. It does not import code or
     resolve secrets; typed host factories supply implementations in later phases.
+
+    When *prepared* is supplied, the trust-gate validation and provider
+    construction from :func:`prepare_profile_snapshot` are reused, letting a
+    reconciler separate validation from mutation.
     """
+    if prepared is None:
+        prepared = prepare_profile_snapshot(snapshot, llm_adapter_factory=llm_adapter_factory)
+    if prepared.snapshot is not snapshot:
+        raise ValueError("prepared activation does not match the snapshot")
+    providers_by_key = {
+        (provider.manifest_id, provider.capability_id): provider.provider
+        for provider in prepared.llm_providers
+    }
     contexts: list[PluginContext] = []
     adapter_disposers: list[Disposable] = []
     pending_context: PluginContext | None = None
@@ -160,49 +216,14 @@ def activate_profile_snapshot(
 
     try:
         for row in snapshot.rows:
-            pending_context = PluginContext(
+            pending_context = _activate_row(
+                row,
                 capability_registry,
-                row.manifest,
-                config=row.config,
+                adapter_registry=adapter_registry,
+                providers_by_key=providers_by_key,
+                adapter_disposers=adapter_disposers,
             )
-            context = pending_context
-            llm_providers: dict[str, RoutedLlmAdapterProvider] = {}
-            if adapter_registry is not None:
-                for capability in row.manifest.provides:
-                    if capability.kind.value != "llm_provider":
-                        continue
-                    if (
-                        row.manifest.runtime.value != "python-trusted"
-                        or row.manifest.trust.value
-                        not in {
-                            "builtin",
-                            "signed",
-                        }
-                    ):
-                        raise ValueError("LLM adapter providers require a trusted python runtime")
-                    provider = RoutedLlmAdapterProvider(factory=llm_adapter_factory)
-                    adapter_disposers.append(
-                        adapter_registry.register(
-                            capability.id,
-                            provider,
-                            owner=row.manifest.id,
-                        )
-                    )
-                    llm_providers[capability.id] = provider
-            for capability in row.manifest.provides:
-                implementation = llm_providers.get(
-                    capability.id,
-                    LegacyCapability(
-                        plugin_id=row.manifest.id,
-                        capability=capability.contract,
-                    ),
-                )
-                _ = context.register_capability(
-                    capability.kind,
-                    capability.id,
-                    implementation,
-                )
-            contexts.append(context)
+            contexts.append(pending_context)
             pending_context = None
     except Exception:
         # A failed activation must not leak partially registered capabilities:
@@ -215,6 +236,50 @@ def activate_profile_snapshot(
         raise
 
     return dispose_all
+
+
+def _activate_row(
+    row: PluginSnapshotRow,
+    capability_registry: CapabilityRegistry,
+    *,
+    adapter_registry: LlmAdapterProviderRegistry | None,
+    providers_by_key: Mapping[tuple[str, str], RoutedLlmAdapterProvider],
+    adapter_disposers: list[Disposable],
+) -> PluginContext:
+    """Register one snapshot row's adapters and capabilities."""
+    context = PluginContext(
+        capability_registry,
+        row.manifest,
+        config=row.config,
+    )
+    if adapter_registry is not None:
+        for capability in row.manifest.provides:
+            provider = providers_by_key.get((row.manifest.id, capability.id))
+            if provider is None:
+                continue
+            adapter_disposers.append(
+                adapter_registry.register(
+                    capability.id,
+                    provider,
+                    owner=row.manifest.id,
+                )
+            )
+    for capability in row.manifest.provides:
+        provider = providers_by_key.get((row.manifest.id, capability.id))
+        implementation: object = (
+            provider
+            if provider is not None
+            else LegacyCapability(
+                plugin_id=row.manifest.id,
+                capability=capability.contract,
+            )
+        )
+        _ = context.register_capability(
+            capability.kind,
+            capability.id,
+            implementation,
+        )
+    return context
 
 
 def register_plugin_activation(

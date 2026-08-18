@@ -22,6 +22,9 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageUninstallRequest,
     MarketplacePackageUninstallResponse,
 )
+from src.application.services.platform_plugin_profile_service import (
+    PlatformPluginProfileService,
+)
 from src.application.services.plugin_marketplace_catalog_service import (
     PluginMarketplaceCatalogService,
 )
@@ -44,9 +47,29 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.package_registry import OciPluginArtifactClient
+from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/plugin-marketplace", tags=["Plugin Marketplace"])
+
+
+async def _republish_after_mutation(db: AsyncSession, actor_id: str) -> None:
+    """Distribute the mutated desired state and reconcile the local data plane.
+
+    A local NACK never rolls back the control-plane mutation; it is recorded as
+    apply-state evidence so rollout readiness can evaluate the failure.
+    """
+    service = PlatformPluginProfileService(PlatformPluginRepository(db))
+    result = await service.publish_and_reconcile_local(
+        runtime_host=get_platform_plugin_runtime_host(),
+        actor_id=actor_id,
+    )
+    if not result.receipt.accepted:
+        logger.warning(
+            "Local platform plugin reconciliation NACKed version %s: %s",
+            result.publication.envelope.version,
+            result.receipt.error_message,
+        )
 
 
 async def _service(
@@ -164,6 +187,7 @@ async def install_package(
     await _require_tenant_admin(db, _current_user, request.tenant_id)
     decision = await service.request_install(request=request)
     if decision.status == "approved":
+        await _republish_after_mutation(db, _current_user.id)
         await db.commit()
     else:
         await db.rollback()
@@ -237,6 +261,7 @@ async def revoke_package(
     except LookupError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await _republish_after_mutation(db, current_user.id)
     await db.commit()
     return MarketplacePackageRevocationResponse(
         plugin_id=result.plugin_id,
@@ -266,6 +291,7 @@ async def uninstall_package(
     except LookupError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await _republish_after_mutation(db, current_user.id)
     await db.commit()
     return MarketplacePackageUninstallResponse(
         plugin_id=result.plugin_id,

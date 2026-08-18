@@ -82,8 +82,7 @@ def _llm_manifest(plugin_id: str, provider_id: str, **kwargs: Any) -> PluginMani
 
 @pytest.mark.unit
 def test_first_apply_activates_capabilities() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     snapshot = _snapshot(_manifest("plugin-a"))
 
     receipt = reconciler.apply(snapshot, control_envelope(snapshot, version=1))
@@ -92,28 +91,26 @@ def test_first_apply_activates_capabilities() -> None:
     assert receipt.applied_version == 1
     assert receipt.applied_digest == snapshot.digest
     assert reconciler.applied_version == 1
-    assert capabilities.list_capabilities("plugin-a")
+    assert reconciler.capability_registry.list_capabilities("plugin-a")
 
 
 @pytest.mark.unit
 def test_same_version_same_digest_is_idempotent_ack() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     snapshot = _snapshot(_manifest("plugin-a"))
     first = reconciler.apply(snapshot, control_envelope(snapshot, version=1))
-    active_records = capabilities.list_capabilities("plugin-a")
+    active_records = reconciler.capability_registry.list_capabilities("plugin-a")
 
     second = reconciler.apply(snapshot, control_envelope(snapshot, version=1))
 
     assert first.status == second.status == "ack"
     assert second.applied_version == 1
-    assert capabilities.list_capabilities("plugin-a") == active_records
+    assert reconciler.capability_registry.list_capabilities("plugin-a") == active_records
 
 
 @pytest.mark.unit
 def test_same_version_new_digest_is_nack_and_retains_generation() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     original = _snapshot(_manifest("plugin-a"))
     reconciler.apply(original, control_envelope(original, version=1))
 
@@ -124,14 +121,13 @@ def test_same_version_new_digest_is_nack_and_retains_generation() -> None:
     assert "digest" in (receipt.error_message or "")
     assert receipt.applied_version == 1
     assert receipt.applied_digest == original.digest
-    assert capabilities.list_capabilities("plugin-a")
-    assert capabilities.list_capabilities("plugin-b") == ()
+    assert reconciler.capability_registry.list_capabilities("plugin-a")
+    assert reconciler.capability_registry.list_capabilities("plugin-b") == ()
 
 
 @pytest.mark.unit
 def test_stale_version_is_nack() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     first = _snapshot(_manifest("plugin-a"))
     reconciler.apply(first, control_envelope(first, version=2))
 
@@ -141,13 +137,12 @@ def test_stale_version_is_nack() -> None:
     assert receipt.status == "nack"
     assert "stale" in (receipt.error_message or "")
     assert reconciler.applied_version == 2
-    assert capabilities.list_capabilities("plugin-b") == ()
+    assert reconciler.capability_registry.list_capabilities("plugin-b") == ()
 
 
 @pytest.mark.unit
 def test_envelope_digest_mismatch_is_nack() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     snapshot = _snapshot(_manifest("plugin-a"))
     envelope = control_envelope(_snapshot(_manifest("plugin-b")), version=1)
 
@@ -156,13 +151,12 @@ def test_envelope_digest_mismatch_is_nack() -> None:
     assert receipt.status == "nack"
     assert "does not match" in (receipt.error_message or "")
     assert reconciler.applied_version is None
-    assert capabilities.list_capabilities() == ()
+    assert reconciler.capability_registry.list_capabilities() == ()
 
 
 @pytest.mark.unit
 def test_unknown_type_url_is_nack() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     snapshot = _snapshot(_manifest("plugin-a"))
     envelope = control_envelope(snapshot, version=1, type_url="types.memstack.ai/other.v9")
 
@@ -193,8 +187,8 @@ def test_failed_activation_retains_last_good_generation() -> None:
     assert "trusted python runtime" in (receipt.error_message or "")
     assert receipt.applied_version == 1
     assert receipt.applied_digest == good.digest
-    assert capabilities.list_capabilities("plugin-a")
-    assert capabilities.list_capabilities("evil-llm") == ()
+    assert reconciler.capability_registry.list_capabilities("plugin-a")
+    assert reconciler.capability_registry.list_capabilities("evil-llm") == ()
     assert adapters.get("openai") is None
 
 
@@ -215,14 +209,13 @@ def test_failed_activation_does_not_leak_partial_registrations() -> None:
 
     assert receipt.status == "nack"
     assert reconciler.applied_version is None
-    assert capabilities.list_capabilities() == ()
+    assert reconciler.capability_registry.list_capabilities() == ()
     assert adapters.list() == ()
 
 
 @pytest.mark.unit
 def test_newer_version_swaps_generation_and_disposes_previous() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     first = _snapshot(_manifest("plugin-a"))
     reconciler.apply(first, control_envelope(first, version=1))
 
@@ -231,14 +224,13 @@ def test_newer_version_swaps_generation_and_disposes_previous() -> None:
 
     assert receipt.status == "ack"
     assert receipt.applied_version == 2
-    assert capabilities.list_capabilities("plugin-a") == ()
-    assert capabilities.list_capabilities("plugin-b")
+    assert reconciler.capability_registry.list_capabilities("plugin-a") == ()
+    assert reconciler.capability_registry.list_capabilities("plugin-b")
 
 
 @pytest.mark.unit
 def test_dispose_tears_down_active_generation() -> None:
-    capabilities = CapabilityRegistry()
-    reconciler = PlatformPluginSnapshotReconciler(capabilities)
+    reconciler = PlatformPluginSnapshotReconciler()
     snapshot = _snapshot(_manifest("plugin-a"))
     reconciler.apply(snapshot, control_envelope(snapshot, version=1))
 
@@ -246,7 +238,7 @@ def test_dispose_tears_down_active_generation() -> None:
 
     assert reconciler.applied_version is None
     assert reconciler.applied_digest is None
-    assert capabilities.list_capabilities() == ()
+    assert reconciler.capability_registry.list_capabilities() == ()
 
 
 @pytest.mark.unit
@@ -267,3 +259,74 @@ def test_llm_adapter_provider_activates_and_swaps_with_generation() -> None:
     assert receipt.status == "ack"
     assert adapters.get("openai") is None
     assert adapters.owner_of("deepseek") == "llm-deepseek"
+
+
+@pytest.mark.unit
+def test_same_plugin_reactivates_across_generations_without_conflict() -> None:
+    reconciler = PlatformPluginSnapshotReconciler()
+    snapshot = _snapshot(_manifest("plugin-a"))
+
+    first = reconciler.apply(snapshot, control_envelope(snapshot, version=1))
+    second_snapshot = _snapshot(_manifest("plugin-a"), _manifest("plugin-b"))
+    second = reconciler.apply(second_snapshot, control_envelope(second_snapshot, version=2))
+
+    assert first.status == "ack"
+    assert second.status == "ack"
+    assert reconciler.capability_registry.list_capabilities("plugin-a")
+    assert reconciler.capability_registry.list_capabilities("plugin-b")
+
+
+@pytest.mark.unit
+def test_adapter_handoff_replaces_same_owner_and_removes_absent_providers() -> None:
+    adapters = LlmAdapterProviderRegistry()
+    reconciler = PlatformPluginSnapshotReconciler(adapter_registry=adapters)
+    first = _snapshot(
+        _llm_manifest("llm-openai", "openai"),
+        _llm_manifest("llm-deepseek", "deepseek"),
+    )
+    reconciler.apply(first, control_envelope(first, version=1))
+    initial_openai = adapters.get("openai")
+    assert initial_openai is not None
+
+    second = _snapshot(_llm_manifest("llm-openai", "openai"))
+    receipt = reconciler.apply(second, control_envelope(second, version=2))
+
+    assert receipt.status == "ack"
+    replacement = adapters.get("openai")
+    assert replacement is not None
+    assert replacement is not initial_openai
+    assert adapters.get("deepseek") is None
+
+
+@pytest.mark.unit
+def test_adapter_owned_by_external_actor_nacks_and_retains_last_good() -> None:
+    adapters = LlmAdapterProviderRegistry()
+    reconciler = PlatformPluginSnapshotReconciler(adapter_registry=adapters)
+    good = _snapshot(_manifest("plugin-a"))
+    reconciler.apply(good, control_envelope(good, version=1))
+
+    adapters.register("openai", object(), owner="external-plugin")  # type: ignore[arg-type]
+    conflicting = _snapshot(_llm_manifest("llm-openai", "openai"))
+    receipt = reconciler.apply(conflicting, control_envelope(conflicting, version=2))
+
+    assert receipt.status == "nack"
+    assert "external-plugin" in (receipt.error_message or "")
+    assert receipt.applied_version == 1
+    assert adapters.owner_of("openai") == "external-plugin"
+    assert reconciler.capability_registry.list_capabilities("plugin-a")
+
+
+@pytest.mark.unit
+def test_manager_owned_adapter_defers_to_profile_generation() -> None:
+    adapters = LlmAdapterProviderRegistry()
+    reconciler = PlatformPluginSnapshotReconciler(adapter_registry=adapters)
+    adapters.register("openai", object(), owner="llm-provider:config-1")  # type: ignore[arg-type]
+
+    snapshot = _snapshot(_llm_manifest("llm-openai", "openai"))
+    receipt = reconciler.apply(snapshot, control_envelope(snapshot, version=1))
+
+    assert receipt.status == "ack"
+    assert adapters.owner_of("openai") == "llm-openai"
+
+    reconciler.dispose()
+    assert adapters.get("openai") is None
