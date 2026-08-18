@@ -109,6 +109,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
+    record_initial_http_route_inventory_shadow,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
     shutdown_docker_services,
@@ -175,6 +176,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_database_schema()
     _ = await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
     shadow_rollout_worker = initialize_shadow_rollout_worker(async_session_factory)
+    _ = await record_initial_http_route_inventory_shadow(async_session_factory)
 
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()

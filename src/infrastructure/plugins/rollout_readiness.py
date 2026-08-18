@@ -19,6 +19,16 @@ REQUIRED_SHADOW_EVENTS: frozenset[tuple[str, str]] = frozenset(
         ("http_routes", "http.route_inventory"),
     }
 )
+CAPABILITY_SCOPE_MINIMUMS: frozenset[tuple[str, int]] = frozenset(
+    {
+        ("http_routes", 1),
+    }
+)
+CAPABILITY_SAMPLE_MINIMUMS: frozenset[tuple[str, int]] = frozenset(
+    {
+        ("http_routes", 1),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -63,8 +73,10 @@ def evaluate_shadow_rollout_readiness(
 
     Every required legacy/typed event must be present at the requested sample
     volume, contain zero durable differences, cover independent scopes, and be
-    recent. The result is deliberately advisory to the operator API; process
-    feature flags remain the actual cutover switch and can still roll back.
+    recent. A capability may declare a smaller complete-inventory threshold when
+    its event represents the entire global surface. The result is deliberately
+    advisory to the operator API; process feature flags remain the actual
+    cutover switch and can still roll back.
     """
     normalized_checked_at = (checked_at or datetime.now(UTC)).astimezone(UTC)
     summary_by_key = {(str(row["capability"]), str(row["event_name"])): row for row in summary}
@@ -72,8 +84,14 @@ def evaluate_shadow_rollout_readiness(
         str(row["capability"]): max(0, int(row["distinct_scope_count"])) for row in scope_counts
     }
     capabilities: list[ShadowRolloutCapabilityReadiness] = []
+    scope_minimums = dict(CAPABILITY_SCOPE_MINIMUMS)
+    sample_minimums = dict(CAPABILITY_SAMPLE_MINIMUMS)
 
     for capability in sorted({key[0] for key in REQUIRED_SHADOW_EVENTS}):
+        capability_sample_minimum = min(
+            minimum_samples_per_event,
+            sample_minimums.get(capability, minimum_samples_per_event),
+        )
         required_events = sorted(
             event for item, event in REQUIRED_SHADOW_EVENTS if item == capability
         )
@@ -98,14 +116,18 @@ def evaluate_shadow_rollout_readiness(
         for row, event in zip(rows, required_events, strict=True):
             if row is None:
                 reasons.append(f"missing_event:{event}")
-            elif int(row["total_count"]) < minimum_samples_per_event:
+            elif int(row["total_count"]) < capability_sample_minimum:
                 reasons.append(f"insufficient_samples:{event}")
 
         if diff_count != 0 or equal_count != total_count or total_count == 0:
             reasons.append("diffs_present")
 
         distinct_scope_count = counts_by_capability.get(capability, 0)
-        if distinct_scope_count < minimum_distinct_scopes:
+        capability_scope_minimum = min(
+            minimum_distinct_scopes,
+            scope_minimums.get(capability, minimum_distinct_scopes),
+        )
+        if distinct_scope_count < capability_scope_minimum:
             reasons.append("insufficient_scope_coverage")
 
         if last_occurred_at is None:

@@ -76,6 +76,7 @@ async def test_http_route_quota_and_package_governance_roundtrip(db_session):
         authorization_mode="tenant_member",
         enabled=False,
     )
+    routes = await repository.list_http_routes()
     await repository.acquire_quota("example-plugin", output_bytes=128)
     await repository.release_quota("example-plugin")
     package = await repository.upsert_package(
@@ -99,6 +100,7 @@ async def test_http_route_quota_and_package_governance_roundtrip(db_session):
     assert isinstance(route, PlatformPluginHttpRouteModel)
     assert route.revision == 2
     assert not route.enabled
+    assert routes == [route]
     assert isinstance(package, PlatformPluginPackageModel)
     assert package.revoked
     assert package.revocation_reason == "publisher compromised"

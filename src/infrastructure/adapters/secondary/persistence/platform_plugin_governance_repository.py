@@ -204,6 +204,18 @@ class PlatformPluginGovernanceRepository:
         await self._session.flush()
         return existing
 
+    async def list_http_routes(self) -> list[PlatformPluginHttpRouteModel]:
+        """Return declarative route desired state deterministically."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginHttpRouteModel).order_by(
+                    PlatformPluginHttpRouteModel.method,
+                    PlatformPluginHttpRouteModel.path,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
     async def acquire_quota(self, plugin_id: str, *, output_bytes: int = 0) -> None:
         """Record one active quota reservation."""
         usage = await self._session.get(PlatformPluginQuotaUsageModel, plugin_id)

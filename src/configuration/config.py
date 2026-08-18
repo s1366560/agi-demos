@@ -414,6 +414,16 @@ class Settings(BaseSettings):
         default=False,
         alias="PLATFORM_PLUGIN_HTTP_ROUTE_V2",
     )
+    platform_plugin_http_route_shadow: bool = Field(
+        default=False,
+        alias="PLATFORM_PLUGIN_HTTP_ROUTE_SHADOW",
+    )
+    platform_plugin_http_route_shadow_percent: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        alias="PLATFORM_PLUGIN_HTTP_ROUTE_SHADOW_PERCENT",
+    )
     agent_max_steps: int = Field(
         default=5000, alias="AGENT_MAX_STEPS"
     )  # Maximum steps for ReActAgent execution
