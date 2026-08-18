@@ -46,6 +46,33 @@ def _shutdown_local_worker_telemetry() -> None:
         logger.debug("Failed to shutdown local worker telemetry", exc_info=True)
 
 
+def _initialize_local_shadow_rollout_writer() -> None:
+    """Start process-local durable shadow evidence collection."""
+    try:
+        from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
+            initialize_shadow_rollout_worker,
+        )
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+
+        _ = initialize_shadow_rollout_worker(async_session_factory)
+    except Exception:
+        logger.warning("Failed to initialize local shadow rollout writer", exc_info=True)
+
+
+async def _shutdown_local_shadow_rollout_writer() -> None:
+    """Drain shadow evidence before the subprocess exits with ``os._exit``."""
+    try:
+        from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
+            shutdown_shadow_rollout_worker,
+        )
+
+        await shutdown_shadow_rollout_worker()
+    except Exception:
+        logger.warning("Failed to drain local shadow rollout writer", exc_info=True)
+
+
 async def _run(request_file: Path) -> int:
     from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
     from src.infrastructure.agent.actor.execution import execute_project_chat
@@ -53,6 +80,7 @@ async def _run(request_file: Path) -> int:
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
 
     _initialize_local_worker_telemetry()
+    _initialize_local_shadow_rollout_writer()
 
     payload = _load_payload(request_file)
     config = ProjectAgentActorConfig(**payload["config"])
@@ -96,6 +124,8 @@ async def _run(request_file: Path) -> int:
         except Exception:
             logger.warning("Failed to publish local chat subprocess crash", exc_info=True)
         return 1
+    finally:
+        await _shutdown_local_shadow_rollout_writer()
 
 
 def _load_payload(request_file: Path) -> dict[str, Any]:

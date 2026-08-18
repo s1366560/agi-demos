@@ -57,6 +57,37 @@ class ProjectAgentActor:
         self._current_conversation_id: str | None = None
         self._current_message_id: str | None = None
 
+    async def _ensure_shadow_rollout_runtime(self) -> None:
+        """Start durable shadow evidence collection for this actor process."""
+        try:
+            from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
+                initialize_shadow_rollout_worker,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            initialize_shadow_rollout_worker(async_session_factory)
+        except Exception:
+            logger.warning(
+                "[ProjectAgentActor] Shadow rollout evidence writer unavailable",
+                exc_info=True,
+            )
+
+    async def _shutdown_shadow_rollout_runtime(self) -> None:
+        """Drain this actor process's shadow evidence before shutdown."""
+        try:
+            from src.infrastructure.adapters.primary.web.startup.shadow_rollout import (
+                shutdown_shadow_rollout_worker,
+            )
+
+            await shutdown_shadow_rollout_worker()
+        except Exception:
+            logger.warning(
+                "[ProjectAgentActor] Failed to drain shadow rollout evidence",
+                exc_info=True,
+            )
+
     @staticmethod
     def actor_id(tenant_id: str, project_id: str, agent_mode: str) -> str:
         return f"agent:{tenant_id}:{project_id}:{agent_mode}"
@@ -239,6 +270,8 @@ class ProjectAgentActor:
         self._tasks.clear()
         self._task_conversations.clear()
         self._abort_signals.clear()
+
+        await self._shutdown_shadow_rollout_runtime()
 
         if self._agent:
             await self._agent.stop()
@@ -478,13 +511,15 @@ class ProjectAgentActor:
             + f":{self._lease_owner_suffix}"
         )
 
-    async def _bootstrap_runtime(self) -> None:
+    async def _bootstrap_runtime(self) -> None:  # noqa: PLR0915
         if self._bootstrapped:
             return
 
         async with self._bootstrap_lock:
             if self._bootstrapped:
                 return  # type: ignore[unreachable]
+
+            await self._ensure_shadow_rollout_runtime()
 
             settings = get_settings()
 

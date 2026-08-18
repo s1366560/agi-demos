@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+import src.infrastructure.agent.actor.local_chat_worker as local_chat_worker_module
+import src.infrastructure.agent.actor.project_agent_actor as project_agent_actor_module
+import src.infrastructure.plugins.shadow_rollout as shadow_rollout_module
 from src.domain.model.plugins import PluginEventMode
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
@@ -264,3 +271,257 @@ async def test_shadow_rollout_worker_batches_without_blocking_dispatch() -> None
     assert first_record["legacy_payload"]["model"]["type"] == "str"
     assert len(first_record["legacy_payload"]["model"]["sha256"]) == 64
     assert queued_event_count() == 0
+
+
+@pytest.mark.integration
+async def test_ray_actor_runtime_owns_shadow_evidence_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_class = cast(
+        type,
+        project_agent_actor_module.ProjectAgentActor.__ray_actor_class__,
+    )
+    actor = actor_class()
+    started: list[object] = []
+    stopped: list[bool] = []
+
+    def fake_initialize(session_factory: object) -> object:
+        started.append(session_factory)
+        return object()
+
+    async def fake_shutdown() -> None:
+        stopped.append(True)
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.startup.shadow_rollout."
+        "initialize_shadow_rollout_worker",
+        fake_initialize,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.startup.shadow_rollout."
+        "shutdown_shadow_rollout_worker",
+        fake_shutdown,
+    )
+
+    await actor._ensure_shadow_rollout_runtime()
+    await actor._shutdown_shadow_rollout_runtime()
+
+    assert len(started) == 1
+    assert stopped == [True]
+
+
+@pytest.mark.integration
+async def test_ray_actor_bootstrap_starts_shadow_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_class = cast(
+        type,
+        project_agent_actor_module.ProjectAgentActor.__ray_actor_class__,
+    )
+    actor = actor_class()
+    lifecycle: list[str] = []
+
+    async def fake_ensure_shadow() -> None:
+        lifecycle.append("shadow")
+
+    monkeypatch.setattr(actor, "_ensure_shadow_rollout_runtime", fake_ensure_shadow)
+    monkeypatch.setattr(
+        project_agent_actor_module,
+        "initialize_default_llm_providers",
+        fake_noop,
+    )
+    monkeypatch.setattr(
+        project_agent_actor_module,
+        "create_native_graph_adapter",
+        fake_graph_adapter,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.set_agent_graph_service",
+        lambda value: None,
+    )
+    monkeypatch.setattr(
+        project_agent_actor_module,
+        "MCPSandboxAdapter",
+        FakeSandboxAdapter,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.sync_mcp_sandbox_adapter_from_docker",
+        fake_async_noop,
+    )
+    monkeypatch.setattr(
+        project_agent_actor_module,
+        "get_settings",
+        lambda: SimpleNamespace(multi_agent_enabled=False),
+    )
+
+    await actor._bootstrap_runtime()
+
+    assert lifecycle == ["shadow"]
+    assert actor._bootstrapped is True
+
+
+def fake_noop() -> None:
+    return None
+
+
+async def fake_async_noop() -> None:
+    return None
+
+
+async def fake_graph_adapter() -> object:
+    return object()
+
+
+class FakeSandboxAdapter:
+    def __init__(self, **kwargs: object) -> None:
+        _ = kwargs
+
+
+@pytest.mark.integration
+async def test_local_chat_subprocess_owns_shadow_evidence_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[object] = []
+    stopped: list[bool] = []
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.startup.shadow_rollout."
+        "initialize_shadow_rollout_worker",
+        lambda session_factory: started.append(session_factory),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.startup.shadow_rollout."
+        "shutdown_shadow_rollout_worker",
+        async_lambda(stopped),
+    )
+
+    local_chat_worker_module._initialize_local_shadow_rollout_writer()
+    await local_chat_worker_module._shutdown_local_shadow_rollout_writer()
+
+    assert len(started) == 1
+    assert stopped == [True]
+
+
+@pytest.mark.integration
+async def test_local_chat_execution_drains_shadow_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.agent.actor.types import ProjectChatResult
+
+    lifecycle: list[str] = []
+    request_file = tmp_path / "request.json"
+    request_file.write_text(
+        json.dumps(
+            {
+                "config": {"tenant_id": "tenant", "project_id": "project"},
+                "request": {
+                    "conversation_id": "conversation",
+                    "message_id": "message",
+                    "user_message": "hello",
+                    "user_id": "user",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeBootstrapper:
+        async def _ensure_local_runtime_bootstrapped(self) -> None:
+            lifecycle.append("local-runtime")
+
+    class FakeAgent:
+        def __init__(self, config: object) -> None:
+            _ = config
+
+        async def initialize(self) -> bool:
+            return True
+
+    async def fake_execute(
+        agent: object,
+        request: object,
+        *,
+        abort_signal: object,
+    ) -> ProjectChatResult:
+        return ProjectChatResult(
+            conversation_id="conversation",
+            message_id="message",
+            content="ok",
+        )
+
+    monkeypatch.setattr(
+        "src.application.services.agent.runtime_bootstrapper.AgentRuntimeBootstrapper",
+        FakeBootstrapper,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.core.project_react_agent.ProjectReActAgent",
+        FakeAgent,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.actor.execution.execute_project_chat",
+        fake_execute,
+    )
+    monkeypatch.setattr(
+        local_chat_worker_module,
+        "_initialize_local_shadow_rollout_writer",
+        lambda: lifecycle.append("start-shadow"),
+    )
+
+    async def stop_shadow() -> None:
+        lifecycle.append("stop-shadow")
+
+    monkeypatch.setattr(
+        local_chat_worker_module,
+        "_shutdown_local_shadow_rollout_writer",
+        stop_shadow,
+    )
+
+    exit_code = await local_chat_worker_module._run(request_file)
+
+    assert exit_code == 0
+    assert lifecycle == ["start-shadow", "local-runtime", "stop-shadow"]
+    assert not request_file.exists()
+
+
+@pytest.mark.integration
+def test_shadow_evidence_queue_fails_open_under_backpressure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shadow_rollout_module, "_queue", asyncio.Queue(maxsize=1))
+    monkeypatch.setattr(shadow_rollout_module, "_dropped_events", 0)
+    first = make_shadow_rollout_event(
+        capability="agent_events",
+        event_name="agent.before_request",
+        hook_name="before_response",
+        scope_type="tenant",
+        scope_id="tenant-rollout",
+        equal=True,
+        legacy_payload={"model": "demo"},
+        typed_payload={"model": "demo"},
+    )
+    second = make_shadow_rollout_event(
+        capability="agent_tools",
+        event_name="agent.tool_generation",
+        hook_name="tool_generation",
+        scope_type="project",
+        scope_id="project-rollout",
+        equal=False,
+        legacy_payload={"demo": "Demo:Demo"},
+        typed_payload={"demo": "Demo:Changed"},
+    )
+
+    assert enqueue_shadow_rollout_event(first) is True
+    started = time.perf_counter_ns()
+    assert enqueue_shadow_rollout_event(second) is False
+    elapsed = time.perf_counter_ns() - started
+
+    assert shadow_rollout_module.dropped_event_count() == 1
+    assert elapsed < 10_000_000
+    assert shadow_rollout_module.queued_event_count() == 1
+
+
+def async_lambda(records: list[bool]):
+    async def record() -> None:
+        records.append(True)
+
+    return record
