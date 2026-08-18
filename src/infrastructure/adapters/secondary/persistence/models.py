@@ -3244,6 +3244,33 @@ class PlatformPluginApplyStateEventModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginCutoverApprovalModel(IdGeneratorMixin, Base):
+    """Durable operator approval of one platform-plugin cutover."""
+
+    __tablename__ = "platform_plugin_cutover_approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    capability: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    approved_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_platform_plugin_cutover_approval_capability_active",
+            "capability",
+            "revoked_at",
+            "approved_at",
+        ),
+    )
+
+
 class PlatformPluginShadowRolloutEventModel(IdGeneratorMixin, Base):
     """Append-only typed/legacy rollout comparison evidence."""
 

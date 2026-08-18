@@ -12,7 +12,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 )
 
 from .cutover_readiness import (
-    PlatformPluginCutoverReadiness,
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
@@ -22,29 +21,38 @@ logger = logging.getLogger(__name__)
 
 
 class CutoverGateError(RuntimeError):
-    """Raised when process V2 flags precede durable cutover evidence."""
+    """Raised when V2 flags precede a durable operator cutover approval."""
 
-    def __init__(self, readiness: PlatformPluginCutoverReadiness) -> None:
-        reasons = ", ".join(readiness.reasons) or "unknown cutover readiness failure"
-        super().__init__(f"platform plugin V2 cutover gate failed: {reasons}")
-        self.readiness = readiness
+    def __init__(self, *, reason: str, reasons: tuple[str, ...]) -> None:
+        joined = ", ".join(reasons) or "unknown cutover readiness failure"
+        super().__init__(f"{reason}: {joined}")
+        self.reasons = reasons
 
 
 async def ensure_agent_v2_cutover_ready(
     session_factory: Callable[[], Any],
-) -> PlatformPluginCutoverReadiness | None:
-    """Refuse agent V2 startup unless durable shadow and drill gates pass."""
+) -> bool:
+    """Refuse agent V2 startup unless an operator approval is durable."""
     from src.configuration.config import get_settings
 
     settings = get_settings()
     events_v2 = bool(getattr(settings, "platform_plugin_agent_events_v2", False))
     tools_v2 = bool(getattr(settings, "platform_plugin_agent_tools_v2", False))
     if not (events_v2 or tools_v2):
-        return None
+        return False
 
     checked_at = datetime.now(UTC)
     async with session_factory() as session:
         repository = PlatformPluginRepository(session)
+        approval = await repository.latest_active_cutover_approval(capability="agent_runtime")
+        if approval is not None:
+            logger.info(
+                "Platform plugin agent V2 startup approved by %s at %s",
+                approval.approved_by,
+                approval.approved_at,
+            )
+            return True
+
         shadow = evaluate_shadow_rollout_readiness(
             summary=await repository.shadow_rollout_summary(),
             scope_counts=await repository.shadow_rollout_scope_counts(),
@@ -59,13 +67,17 @@ async def ensure_agent_v2_cutover_ready(
         rollback_drill=rollback_drill,
     )
     if not readiness.ready:
-        logger.error(
-            "Platform plugin agent V2 startup rejected: %s",
-            ", ".join(readiness.reasons),
-        )
-        raise CutoverGateError(readiness)
-    logger.info("Platform plugin agent V2 startup passed the durable cutover gate")
-    return readiness
+        rejected_reasons = (*readiness.reasons, "operator_approval:missing")
+    else:
+        rejected_reasons = ("operator_approval:missing",)
+    logger.error(
+        "Platform plugin agent V2 startup rejected: %s",
+        ", ".join(rejected_reasons),
+    )
+    raise CutoverGateError(
+        reason="platform plugin V2 cutover gate failed",
+        reasons=rejected_reasons,
+    )
 
 
 def _rollback_events(

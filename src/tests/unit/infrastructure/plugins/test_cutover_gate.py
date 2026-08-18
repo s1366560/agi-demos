@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -29,6 +29,7 @@ class FakeRepository:
         self.summary: list[dict[str, object]] = []
         self.scope_counts: list[dict[str, object]] = []
         self.apply_events: list[SimpleNamespace] = []
+        self.approval: SimpleNamespace | None = None
 
     async def shadow_rollout_summary(self) -> list[dict[str, object]]:
         return self.summary
@@ -39,6 +40,10 @@ class FakeRepository:
     async def list_apply_state_events(self, *, limit: int) -> list[SimpleNamespace]:
         _ = limit
         return self.apply_events
+
+    async def latest_active_cutover_approval(self, *, capability: str) -> SimpleNamespace | None:
+        _ = capability
+        return self.approval
 
 
 def settings(*, v2: bool) -> SimpleNamespace:
@@ -124,7 +129,7 @@ async def test_cutover_gate_skips_database_when_agent_v2_is_disabled(
     def fail_factory() -> Any:
         raise AssertionError("disabled V2 modes must not query cutover evidence")
 
-    assert await ensure_agent_v2_cutover_ready(fail_factory) is None
+    assert await ensure_agent_v2_cutover_ready(fail_factory) is False
 
 
 @pytest.mark.unit
@@ -141,26 +146,45 @@ async def test_cutover_gate_rejects_v2_without_durable_evidence(
     with pytest.raises(CutoverGateError) as error:
         await ensure_agent_v2_cutover_ready(FakeSession)
 
-    reasons = error.value.readiness.reasons
+    reasons = error.value.reasons
     assert any(reason.startswith("shadow:agent_events:missing_event:") for reason in reasons)
     assert "rollback_drill:insufficient_rollback_drills:0:1" in reasons
+    assert "operator_approval:missing" in reasons
 
 
 @pytest.mark.unit
-async def test_cutover_gate_accepts_complete_shadow_and_rollback_evidence(
+async def test_cutover_gate_requires_and_accepts_durable_operator_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = datetime.now(UTC)
     repository = complete_evidence(now)
+    stale_at = now - timedelta(hours=2)
+    for row in repository.summary:
+        row["last_occurred_at"] = stale_at
+    for event in repository.apply_events:
+        event.recorded_at = stale_at
     monkeypatch.setattr(
         "src.configuration.config.get_settings",
         lambda: settings(v2=True),
     )
     monkeypatch.setattr(cutover_gate_module, "PlatformPluginRepository", lambda _s: repository)
 
-    readiness = await ensure_agent_v2_cutover_ready(FakeSession)
+    with pytest.raises(CutoverGateError) as error:
+        await ensure_agent_v2_cutover_ready(FakeSession)
 
-    assert readiness is not None
-    assert readiness.ready is True
-    assert readiness.shadow.ready is True
-    assert readiness.rollback_drill.ready is True
+    assert "operator_approval:missing" in error.value.reasons
+    assert any(
+        reason.startswith("shadow:agent_events:stale_evidence:") for reason in error.value.reasons
+    )
+
+    repository.approval = SimpleNamespace(
+        id="approval-1",
+        capability="agent_runtime",
+        approved_by="platform-admin",
+        evidence={"ready": True},
+        approved_at=now,
+        revoked_at=None,
+        revocation_reason=None,
+    )
+
+    assert await ensure_agent_v2_cutover_ready(FakeSession) is True

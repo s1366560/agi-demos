@@ -41,6 +41,7 @@ class PlatformPluginCutoverReadiness:
     checked_at: datetime
     shadow: ShadowRolloutReadiness
     rollback_drill: RollbackDrillReadiness
+    operator_approved: bool
     reasons: tuple[str, ...]
 
 
@@ -108,6 +109,7 @@ def evaluate_platform_plugin_cutover_readiness(
         shadow=shadow,
         rollback_drill=rollback_drill,
         reasons=reasons,
+        operator_approved=False,
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import case, func, select
@@ -14,6 +15,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginApplyStateModel,
     PlatformPluginCapabilityAuditModel,
     PlatformPluginCatalogModel,
+    PlatformPluginCutoverApprovalModel,
     PlatformPluginDesiredStateModel,
     PlatformPluginPackageModel,
     PlatformPluginShadowRolloutEventModel,
@@ -312,6 +314,61 @@ class PlatformPluginRepository:
             )
         )
         return list(result.scalars().all())
+
+    async def latest_active_cutover_approval(
+        self,
+        *,
+        capability: str = "agent_runtime",
+    ) -> PlatformPluginCutoverApprovalModel | None:
+        """Return the newest non-revoked operator cutover approval."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginCutoverApprovalModel)
+                .where(
+                    PlatformPluginCutoverApprovalModel.capability == capability,
+                    PlatformPluginCutoverApprovalModel.revoked_at.is_(None),
+                )
+                .order_by(
+                    PlatformPluginCutoverApprovalModel.approved_at.desc(),
+                    PlatformPluginCutoverApprovalModel.id.desc(),
+                )
+                .limit(1)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def record_cutover_approval(
+        self,
+        *,
+        capability: str,
+        approved_by: str,
+        evidence: dict[str, object],
+    ) -> PlatformPluginCutoverApprovalModel:
+        """Append one immutable cutover approval after readiness passes."""
+        model = PlatformPluginCutoverApprovalModel(
+            id=PlatformPluginCutoverApprovalModel.generate_id(),
+            capability=capability,
+            approved_by=approved_by,
+            evidence=dict(evidence),
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return model
+
+    async def revoke_active_cutover_approval(
+        self,
+        *,
+        capability: str,
+        reason: str,
+    ) -> PlatformPluginCutoverApprovalModel | None:
+        """Revoke the active approval and retain it as audit history."""
+        approval = await self.latest_active_cutover_approval(capability=capability)
+        if approval is None:
+            return None
+        approval.revoked_at = datetime.now(UTC)
+        approval.revocation_reason = reason
+        await self._session.flush()
+        return approval
 
     async def record_shadow_rollout_events(
         self,

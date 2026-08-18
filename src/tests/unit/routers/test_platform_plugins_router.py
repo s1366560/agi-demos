@@ -29,6 +29,7 @@ from src.infrastructure.plugins.cutover_readiness import (
 )
 from src.infrastructure.plugins.profile import ProfileSnapshot
 from src.infrastructure.plugins.rollout_readiness import (
+    ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
 )
 
@@ -45,7 +46,7 @@ def compose_snapshot(profile_id: str) -> ProfileSnapshot:
     return compose_profile(document, default_builtin_manifests())
 
 
-def make_client(db: AsyncSession) -> TestClient:
+def make_client(db: AsyncSession, *, superuser: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(platform_plugins.router)
 
@@ -59,6 +60,7 @@ def make_client(db: AsyncSession) -> TestClient:
         hashed_password="hashed",
         full_name="Platform Plugin User",
         is_active=True,
+        is_superuser=superuser,
     )
     return TestClient(app)
 
@@ -412,6 +414,131 @@ async def test_cutover_readiness_requires_shadow_parity_and_rollback_drill(
 
 
 @pytest.mark.unit
+async def test_cutover_approval_requires_readiness_and_is_durable(
+    db_session: AsyncSession,
+) -> None:
+    repository = PlatformPluginRepository(db_session)
+    snapshot = compose_snapshot("router-test-cutover-approval")
+    await repository.record_snapshot(snapshot, version=201, nonce="approval-201")
+    await db_session.commit()
+    client = make_client(db_session)
+
+    rejected = client.post("/api/v1/platform-plugins/cutover/approve")
+
+    assert rejected.status_code == status.HTTP_409_CONFLICT
+
+    now = datetime.now(UTC)
+    for event_name in (
+        "agent.before_step",
+        "agent.before_request",
+        "tools.before_execute",
+        "tools.after_execute",
+        "agent.after_turn",
+    ):
+        await repository.record_shadow_rollout_events(
+            [
+                {
+                    "capability": "agent_events",
+                    "event_name": event_name,
+                    "hook_name": event_name.replace(".", "_"),
+                    "scope_type": "tenant",
+                    "scope_id": f"approval-tenant-{scope_index}",
+                    "equal": True,
+                    "legacy_payload": {"value": "same"},
+                    "typed_payload": {"value": "same"},
+                    "occurred_at": now,
+                }
+                for scope_index in range(100)
+            ]
+        )
+    await repository.record_shadow_rollout_events(
+        [
+            {
+                "capability": "agent_tools",
+                "event_name": "agent.tool_generation",
+                "hook_name": "tool_generation",
+                "scope_type": "project",
+                "scope_id": f"approval-project-{scope_index}",
+                "equal": True,
+                "legacy_payload": {"value": "same"},
+                "typed_payload": {"value": "same"},
+                "occurred_at": now,
+            }
+            for scope_index in range(100)
+        ]
+    )
+    await repository.record_apply_state(
+        data_plane_id="approval-desktop",
+        snapshot_digest=snapshot.digest,
+        requested_version=201,
+        applied_version=201,
+        status="ack",
+    )
+    await repository.record_apply_state(
+        data_plane_id="approval-desktop",
+        snapshot_digest="0" * 64,
+        requested_version=202,
+        applied_version=201,
+        status="nack",
+        error_message="invalid artifact digest",
+    )
+    restored = compose_snapshot("router-test-cutover-approval-restored")
+    await repository.record_snapshot(restored, version=203, nonce="approval-203")
+    await repository.record_apply_state(
+        data_plane_id="approval-desktop",
+        snapshot_digest=restored.digest,
+        requested_version=203,
+        applied_version=203,
+        status="ack",
+    )
+    await db_session.commit()
+
+    approved = client.post("/api/v1/platform-plugins/cutover/approve")
+
+    assert approved.status_code == status.HTTP_200_OK
+    approval = approved.json()
+    assert approval["capability"] == "agent_runtime"
+    assert approval["evidence"]["ready"] is True
+    duplicate = client.post("/api/v1/platform-plugins/cutover/approve")
+    assert duplicate.status_code == status.HTTP_409_CONFLICT
+
+    readiness = client.get(
+        "/api/v1/platform-plugins/cutover/readiness",
+        params={"minimum_samples_per_event": 1, "minimum_distinct_scopes": 1},
+    )
+    assert readiness.status_code == status.HTTP_200_OK
+    assert readiness.json()["operator_approved"] is True
+
+    revoked = client.post(
+        "/api/v1/platform-plugins/cutover/revoke",
+        json={"reason": "rollback drill approval was revoked"},
+    )
+    assert revoked.status_code == status.HTTP_200_OK
+    assert revoked.json()["revoked"] is True
+    missing_revoke = client.post(
+        "/api/v1/platform-plugins/cutover/revoke",
+        json={"reason": "already revoked"},
+    )
+    assert missing_revoke.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.unit
+async def test_cutover_approval_and_revocation_require_platform_admin(
+    db_session: AsyncSession,
+) -> None:
+    client = make_client(db_session, superuser=False)
+
+    approval = client.post("/api/v1/platform-plugins/cutover/approve")
+    revocation = client.post(
+        "/api/v1/platform-plugins/cutover/revoke",
+        json={"reason": "must be forbidden before authorization"},
+    )
+
+    assert approval.status_code == status.HTTP_403_FORBIDDEN
+    assert revocation.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.unit
 def test_rollback_and_cutover_evaluators_fail_closed_on_incomplete_sequences() -> None:
     now = datetime.now(UTC)
 
@@ -464,11 +591,8 @@ def test_rollback_and_cutover_evaluators_fail_closed_on_incomplete_sequences() -
     assert regressed.data_planes[0].reasons == ("restored_ack_not_latest",)
 
 
-def _ready_shadow(checked_at: datetime):
-    from src.infrastructure.plugins.rollout_readiness import (
-        ShadowRolloutCapabilityReadiness,
-        ShadowRolloutReadiness,
-    )
+def _ready_shadow(checked_at: datetime) -> ShadowRolloutReadiness:
+    from src.infrastructure.plugins.rollout_readiness import ShadowRolloutCapabilityReadiness
 
     capabilities = [
         ShadowRolloutCapabilityReadiness(

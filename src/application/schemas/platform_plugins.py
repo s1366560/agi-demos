@@ -104,4 +104,24 @@ class PlatformPluginCutoverReadinessResponse(BaseModel):
     checked_at: datetime
     shadow: PlatformPluginShadowRolloutReadinessResponse
     rollback_drill: PlatformPluginRollbackDrillReadinessResponse
+    approval: PlatformPluginCutoverApprovalResponse | None = None
+    operator_approved: bool = False
     reasons: list[str]
+
+
+class PlatformPluginCutoverApprovalResponse(BaseModel):
+    capability: str
+    approved_by: str
+    approved_at: datetime
+    evidence: dict[str, Any]
+
+
+class PlatformPluginCutoverRevocationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=8192)
+
+
+class PlatformPluginCutoverRevocationResponse(BaseModel):
+    capability: str
+    revoked: bool
+    revoked_at: datetime
+    reason: str

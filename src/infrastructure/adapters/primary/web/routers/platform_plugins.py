@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateRequest,
     PlatformPluginApplyStateResponse,
+    PlatformPluginCutoverApprovalResponse,
     PlatformPluginCutoverReadinessResponse,
+    PlatformPluginCutoverRevocationRequest,
+    PlatformPluginCutoverRevocationResponse,
     PlatformPluginRollbackDrillDataPlaneResponse,
     PlatformPluginRollbackDrillReadinessResponse,
     PlatformPluginShadowRolloutCapabilityReadinessResponse,
@@ -23,7 +26,10 @@ from src.application.schemas.platform_plugins import (
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginCutoverApprovalModel,
+    User,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
 )
@@ -94,6 +100,18 @@ def _rollback_drill_response(
             for item in readiness.data_planes
         ],
         reasons=list(readiness.reasons),
+    )
+
+
+def _cutover_approval_response(
+    approval: PlatformPluginCutoverApprovalModel,
+) -> PlatformPluginCutoverApprovalResponse:
+    """Project one approval onto its transport schema."""
+    return PlatformPluginCutoverApprovalResponse(
+        capability=approval.capability,
+        approved_by=approval.approved_by,
+        approved_at=approval.approved_at,
+        evidence=approval.evidence,
     )
 
 
@@ -198,12 +216,119 @@ async def get_platform_plugin_cutover_readiness(
         shadow=shadow,
         rollback_drill=rollback_drill,
     )
+    approval = await repository.latest_active_cutover_approval(capability="agent_runtime")
     return PlatformPluginCutoverReadinessResponse(
         ready=readiness.ready,
         checked_at=readiness.checked_at,
         shadow=_shadow_readiness_response(shadow),
         rollback_drill=_rollback_drill_response(rollback_drill),
+        approval=_cutover_approval_response(approval) if approval is not None else None,
+        operator_approved=approval is not None,
         reasons=list(readiness.reasons),
+    )
+
+
+@router.post("/cutover/approve", response_model=PlatformPluginCutoverApprovalResponse)
+async def approve_platform_plugin_cutover(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginCutoverApprovalResponse:
+    """Record platform-admin approval only after durable readiness passes."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may approve this cutover"),
+        )
+    repository = PlatformPluginRepository(db)
+    if await repository.latest_active_cutover_approval(capability="agent_runtime") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_("A platform plugin cutover approval is already active"),
+        )
+    checked_at = datetime.now(UTC)
+    shadow = evaluate_shadow_rollout_readiness(
+        summary=await repository.shadow_rollout_summary(),
+        scope_counts=await repository.shadow_rollout_scope_counts(),
+        checked_at=checked_at,
+    )
+    rollback_events = [
+        {
+            "id": event.id,
+            "data_plane_id": event.data_plane_id,
+            "requested_version": event.requested_version,
+            "applied_version": event.applied_version,
+            "status": event.status,
+            "error_message": event.error_message,
+            "recorded_at": event.recorded_at,
+        }
+        for event in await repository.list_apply_state_events(limit=5_000)
+    ]
+    rollback_drill = evaluate_rollback_drill_readiness(
+        events=rollback_events,
+        checked_at=checked_at,
+    )
+    readiness = evaluate_platform_plugin_cutover_readiness(
+        shadow=shadow,
+        rollback_drill=rollback_drill,
+    )
+    if not readiness.ready:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_("Cutover readiness failed"),
+            headers={"X-Platform-Plugin-Cutover-Reasons": ",".join(readiness.reasons)},
+        )
+    evidence = PlatformPluginCutoverReadinessResponse(
+        ready=readiness.ready,
+        checked_at=readiness.checked_at,
+        shadow=_shadow_readiness_response(shadow),
+        rollback_drill=_rollback_drill_response(rollback_drill),
+        reasons=list(readiness.reasons),
+    ).model_dump(mode="json")
+    approval = await repository.record_cutover_approval(
+        capability="agent_runtime",
+        approved_by=current_user.id,
+        evidence=evidence,
+    )
+    response = _cutover_approval_response(approval)
+    await db.commit()
+    return response
+
+
+@router.post("/cutover/revoke", response_model=PlatformPluginCutoverRevocationResponse)
+async def revoke_platform_plugin_cutover(
+    request: PlatformPluginCutoverRevocationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginCutoverRevocationResponse:
+    """Revoke the active cutover approval while retaining audit history."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may revoke this cutover"),
+        )
+    repository = PlatformPluginRepository(db)
+    approval = await repository.revoke_active_cutover_approval(
+        capability="agent_runtime",
+        reason=request.reason,
+    )
+    if approval is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("No active platform plugin cutover approval exists"),
+        )
+    revoked_at = approval.revoked_at
+    if revoked_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_("Cutover approval revocation was not persisted"),
+        )
+    capability = approval.capability
+    await db.commit()
+    return PlatformPluginCutoverRevocationResponse(
+        capability=capability,
+        revoked=True,
+        revoked_at=revoked_at,
+        reason=request.reason,
     )
 
 
