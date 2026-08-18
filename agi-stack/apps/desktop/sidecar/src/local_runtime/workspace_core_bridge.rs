@@ -4,7 +4,7 @@ use std::sync::{atomic::Ordering, Arc};
 
 use axum::{
     body::{to_bytes, Body},
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{header::AUTHORIZATION, HeaderMap, HeaderName, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -678,7 +678,7 @@ pub(super) fn platform_plugin_router(
 
 async fn require_platform_plugin_session(
     State(state): State<Arc<LocalRuntimeState>>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     let credential = request
@@ -693,13 +693,14 @@ async fn require_platform_plugin_session(
             .ok()
             .flatten()
     });
-    let Some(_authenticated) = authenticated else {
+    let Some(authenticated) = authenticated else {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({"detail": "authenticated desktop session required"})),
         )
             .into_response();
     };
+    request.extensions_mut().insert(authenticated);
     next.run(request).await
 }
 
@@ -797,6 +798,7 @@ async fn platform_plugin_apply_state(
 
 async fn invoke_platform_plugin_tool(
     State(state): State<Arc<LocalRuntimeState>>,
+    Extension(authenticated): Extension<super::AuthenticatedContext>,
     Json(request): Json<PlatformPluginToolInvocationRequest>,
 ) -> Result<Json<Value>, BridgeError> {
     let plugin_id = request.plugin_id;
@@ -851,7 +853,15 @@ async fn invoke_platform_plugin_tool(
     let output = if plugin.runtime == "wasm" {
         invoke_wasm_plugin_tool(&tool_id, &plugin, &artifact, &input).await?
     } else if plugin.runtime == "mcp" {
-        return invoke_mcp_plugin_tool(&state, &plugin_id, &tool_id, request.input).await;
+        return invoke_mcp_plugin_tool(
+            &state,
+            &authenticated,
+            &plugin_id,
+            &tool_id,
+            request.input,
+            &artifact,
+        )
+        .await;
     } else {
         invoke_subprocess_plugin_tool(&tool_id, &plugin, &artifact).await?
     };
@@ -865,9 +875,11 @@ async fn invoke_platform_plugin_tool(
 
 async fn invoke_mcp_plugin_tool(
     state: &Arc<LocalRuntimeState>,
+    authenticated: &super::AuthenticatedContext,
     plugin_id: &str,
     tool_id: &str,
     input: Value,
+    artifact: &crate::plugin_snapshots::RuntimeArtifact,
 ) -> Result<Json<Value>, BridgeError> {
     let encoded_input = serde_json::to_string(&input)
         .map_err(|_| bad_request("platform plugin MCP input is invalid"))?;
@@ -877,9 +889,16 @@ async fn invoke_mcp_plugin_tool(
         ));
     }
     let scope = McpScope {
-        tenant_id: "local".to_string(),
-        project_id: "local-project".to_string(),
+        tenant_id: authenticated.workspace.tenant_id.clone(),
+        project_id: authenticated.workspace.project_id.clone(),
     };
+    super::platform_plugin_sync::ensure_platform_mcp_runtime(
+        state,
+        &scope,
+        &json!({"id": plugin_id}),
+        artifact,
+    )
+    .map_err(|error| unavailable(&error))?;
     let server_name = format!("platform-plugin-{plugin_id}");
     let server = state
         .mcp_supervisor

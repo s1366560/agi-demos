@@ -349,6 +349,29 @@ impl McpStore {
             .map_err(|_| storage_error())
     }
 
+    pub(super) fn platform_plugin_servers(&self) -> McpResult<Vec<McpServerDefinition>> {
+        self.session_store
+            .with_local_mcp_connection(|connection| {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT id, tenant_id, project_id, name, description, transport,
+                                command_json, cwd, vault_env_refs_json, enabled, revision,
+                                runtime_status, reason_code, discovered_tools_json,
+                                server_info_json, created_at, updated_at
+                         FROM desktop_mcp_servers_v1
+                         WHERE name LIKE 'platform-plugin-%'
+                         ORDER BY tenant_id, project_id, name, id",
+                    )
+                    .map_err(|error| error.to_string())?;
+                let rows = statement
+                    .query_map([], server_from_row)
+                    .map_err(|error| error.to_string())?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(|error| error.to_string())
+            })
+            .map_err(|_| storage_error())
+    }
+
     pub(super) fn mark_enabled_recovery_pending(&self) -> McpResult<()> {
         self.session_store
             .with_local_mcp_connection(|connection| {

@@ -145,9 +145,9 @@ async fn reconcile_once(
         Err(reason) => Some(reject_local_snapshot(state, &snapshot, reason)),
     };
     if receipt.as_ref().is_some_and(|item| item.3 == "nack") {
-        reconcile_mcp_servers(&state, previous_last_good.as_ref())?;
+        reconcile_mcp_servers(&state, previous_last_good.as_ref(), None)?;
     } else {
-        reconcile_mcp_servers(&state, Some(&snapshot.payload))?;
+        reconcile_mcp_servers(&state, Some(&snapshot.payload), previous_last_good.as_ref())?;
     }
     let Some((requested_version, applied_version, digest, status, error_message)) = receipt else {
         return Ok(());
@@ -247,11 +247,43 @@ type ControlPlaneReceipt = Option<(u64, u64, String, String, Option<String>)>;
 fn reconcile_mcp_servers(
     state: &LocalRuntimeState,
     desired_payload: Option<&Value>,
+    previous_payload: Option<&Value>,
 ) -> Result<(), String> {
+    let workspace = state
+        .session_store
+        .workspace_context(super::auth_context::LOCAL_USER_ID)?;
     let scope = McpScope {
-        tenant_id: "local".to_string(),
-        project_id: "local-project".to_string(),
+        tenant_id: workspace.tenant_id,
+        project_id: workspace.project_id,
     };
+    reconcile_mcp_servers_for_scope(state, &scope, desired_payload, previous_payload)
+}
+
+pub(super) fn ensure_platform_mcp_runtime(
+    state: &LocalRuntimeState,
+    scope: &McpScope,
+    plugin: &Value,
+    artifact: &plugin_snapshots::RuntimeArtifact,
+) -> Result<(), String> {
+    let plugin_id = plugin
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "MCP plugin id is missing".to_string())?;
+    let definition = serde_json::from_slice::<Value>(&artifact.bytes)
+        .map_err(|_| format!("MCP plugin {plugin_id} runtime JSON is invalid"))?;
+    state
+        .mcp_supervisor
+        .ensure_platform_plugin_server(scope, plugin_id, &definition, &artifact.digest)
+        .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+    Ok(())
+}
+
+fn reconcile_mcp_servers_for_scope(
+    state: &LocalRuntimeState,
+    scope: &McpScope,
+    desired_payload: Option<&Value>,
+    previous_payload: Option<&Value>,
+) -> Result<(), String> {
     let mut desired_ids = BTreeSet::new();
     if let Some(payload) = desired_payload {
         let plugins = payload
@@ -285,28 +317,43 @@ fn reconcile_mcp_servers(
                         format!("MCP plugin {plugin_id} runtime artifact is unavailable")
                     })?
             };
-            let definition = serde_json::from_slice::<Value>(&artifact.bytes)
-                .map_err(|_| format!("MCP plugin {plugin_id} runtime JSON is invalid"))?;
-            state
-                .mcp_supervisor
-                .ensure_platform_plugin_server(&scope, plugin_id, &definition, &artifact.digest)
-                .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+            ensure_platform_mcp_runtime(state, scope, plugin, &artifact)?;
             desired_ids.insert(plugin_id.to_string());
         }
     }
 
     let servers = state
         .mcp_supervisor
-        .list_servers(&scope)
+        .platform_plugin_servers()
         .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
+    let mut known_plugin_ids = desired_ids.clone();
+    if let Some(payload) = previous_payload {
+        if let Some(plugins) = payload.get("plugins").and_then(Value::as_array) {
+            for plugin in plugins {
+                if plugin.get("runtime").and_then(Value::as_str) == Some("mcp") {
+                    if let Some(plugin_id) = plugin.get("id").and_then(Value::as_str) {
+                        known_plugin_ids.insert(plugin_id.to_string());
+                    }
+                }
+            }
+        }
+    }
     for server in servers {
         let Some(plugin_id) = server.name.strip_prefix("platform-plugin-") else {
             continue;
         };
-        if !desired_ids.contains(plugin_id) {
+        let scope_changed =
+            server.tenant_id != scope.tenant_id || server.project_id != scope.project_id;
+        if known_plugin_ids.contains(plugin_id)
+            && (scope_changed || !desired_ids.contains(plugin_id))
+        {
+            let server_scope = McpScope {
+                tenant_id: server.tenant_id.clone(),
+                project_id: server.project_id.clone(),
+            };
             state
                 .mcp_supervisor
-                .remove_platform_plugin_server(&scope, plugin_id)
+                .remove_platform_plugin_server(&server_scope, plugin_id)
                 .map_err(|error| format!("{}: {}", error.reason_code(), error.detail()))?;
         }
     }
@@ -925,6 +972,8 @@ mod tests {
     use uuid::Uuid;
     use zip::ZipWriter;
 
+    use super::super::auth_context::ContextSwitchRequest;
+    use super::super::mcp_supervisor::{McpServerDefinitionInput, McpTransport};
     use super::*;
     use crate::local_runtime::LocalRuntimeState;
     use crate::trusted_session::{
@@ -1305,16 +1354,16 @@ mod tests {
         });
         *control.oci_manifest.lock().expect("OCI manifest") = oci_manifest;
         *control.oci_layer.lock().expect("OCI layer") = archive;
-        let (snapshot, _) = control_snapshot_with_plugin(9, plugin);
+        let (snapshot, _) = control_snapshot_with_plugin(9, plugin.clone());
         *control.snapshot.lock().expect("snapshot") = snapshot;
 
-        reconcile_once(&runtime, &broker)
-            .await
-            .expect("MCP activate");
         runtime
             .session_store
             .seed_test_session("desktop-session")
             .expect("desktop session");
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("MCP activate");
 
         let scope = McpScope {
             tenant_id: "local".to_string(),
@@ -1328,6 +1377,61 @@ mod tests {
         assert!(server
             .command
             .starts_with(&[python.to_string_lossy().to_string()]));
+
+        let authenticated = runtime
+            .session_store
+            .validate_session_credential(
+                "desktop-session",
+                chrono::Utc::now().timestamp_millis() + 1_000,
+            )
+            .expect("validate desktop session")
+            .expect("authenticated context");
+        runtime
+            .session_store
+            .switch_workspace_context(
+                &authenticated,
+                &ContextSwitchRequest {
+                    tenant_id: "northstar".to_string(),
+                    project_id: "product-strategy".to_string(),
+                    expected_revision: 0,
+                    idempotency_key: "platform-plugin-scope-switch".to_string(),
+                },
+                1_800_000_000_001,
+            )
+            .expect("switch active workspace");
+        reconcile_once(&runtime, &broker)
+            .await
+            .expect("move MCP runtime to active workspace");
+        let switched_scope = McpScope {
+            tenant_id: "northstar".to_string(),
+            project_id: "product-strategy".to_string(),
+        };
+        assert!(runtime
+            .mcp_supervisor
+            .server_by_name(&scope, "platform-plugin-third-party-mcp")
+            .expect("old MCP scope lookup")
+            .is_none());
+        assert!(runtime
+            .mcp_supervisor
+            .server_by_name(&switched_scope, "platform-plugin-third-party-mcp")
+            .expect("switched MCP scope lookup")
+            .is_some());
+        runtime
+            .mcp_supervisor
+            .create_server(
+                &switched_scope,
+                McpServerDefinitionInput {
+                    name: "platform-plugin-unmanaged".to_string(),
+                    description: Some("Manually-created scope probe".to_string()),
+                    transport: McpTransport::Stdio,
+                    command: vec!["/bin/true".to_string()],
+                    cwd: None,
+                    vault_env_refs: BTreeMap::new(),
+                    enabled: true,
+                },
+                "unmanaged-platform-plugin-scope-probe",
+            )
+            .expect("create unmanaged MCP server");
 
         let invocation =
             crate::local_runtime::workspace_core_bridge::platform_plugin_router(runtime.clone())
@@ -1390,6 +1494,20 @@ mod tests {
             "platform plugin MCP request exceeds its input quota"
         );
 
+        plugin["config"]["artifact"]["layer_sha256"] = json!("0".repeat(64));
+        let (bad_snapshot, _) = control_snapshot_with_plugin(10, plugin.clone());
+        *control.snapshot.lock().expect("snapshot") = bad_snapshot;
+        let bad_error = reconcile_once(&runtime, &broker)
+            .await
+            .expect_err("MCP runtime artifact must fail closed");
+        assert!(bad_error.contains("requested layer digest does not match OCI manifest"));
+        assert!(runtime
+            .mcp_supervisor
+            .server_by_name(&switched_scope, "platform-plugin-third-party-mcp")
+            .expect("last-good MCP lookup")
+            .is_some());
+        plugin["config"]["artifact"]["layer_sha256"] = json!(layer_digest);
+
         let mut removal_payload = json!({
             "schema_version": 1,
             "profile_id": "desktop-default",
@@ -1400,8 +1518,8 @@ mod tests {
             platform_plugin_payload_digest(&removal_payload).expect("removal digest");
         removal_payload["digest"] = json!(removal_digest);
         *control.snapshot.lock().expect("snapshot") = json!({
-            "version": 10,
-            "nonce": "nonce-10",
+            "version": 11,
+            "nonce": "nonce-11",
             "profile_id": "desktop-default",
             "digest": removal_digest,
             "payload": removal_payload
@@ -1409,9 +1527,18 @@ mod tests {
         reconcile_once(&runtime, &broker).await.expect("MCP remove");
         assert!(runtime
             .mcp_supervisor
-            .server_by_name(&scope, "platform-plugin-third-party-mcp")
+            .server_by_name(&switched_scope, "platform-plugin-third-party-mcp")
             .expect("MCP removed lookup")
             .is_none());
+        assert!(runtime
+            .mcp_supervisor
+            .server_by_name(&switched_scope, "platform-plugin-unmanaged")
+            .expect("unmanaged MCP lookup")
+            .is_some());
+        runtime
+            .mcp_supervisor
+            .remove_platform_plugin_server(&switched_scope, "unmanaged")
+            .expect("remove unmanaged MCP server");
         {
             let connection = runtime.session_store.connection().expect("connection");
             assert!(plugin_snapshots::read_runtime_artifact(

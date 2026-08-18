@@ -544,6 +544,10 @@ impl McpSupervisor {
         Ok(())
     }
 
+    pub(super) fn platform_plugin_servers(&self) -> McpResult<Vec<McpServerDefinition>> {
+        self.store.platform_plugin_servers()
+    }
+
     pub(super) fn prepare_startup_recovery(&self) -> McpResult<()> {
         let vault_guard = self.credential_vault.lock().map_err(|_| storage_error())?;
         self.store.abandon_unbound_credential_stages()?;

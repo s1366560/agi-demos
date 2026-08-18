@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::session_store::DesktopSessionStore;
 
-const LOCAL_USER_ID: &str = "local-user";
+pub(super) const LOCAL_USER_ID: &str = "local-user";
 const DEFAULT_TENANT_ID: &str = "northstar";
 const DEFAULT_PROJECT_ID: &str = "desktop-client";
 const LEGACY_DEFAULT_TENANT_ID: &str = "local";
@@ -708,7 +708,6 @@ impl DesktopSessionStore {
             .map_err(|error| AuthContextError::Storage(error.to_string()))
     }
 
-    #[cfg(test)]
     pub(super) fn workspace_context(
         &self,
         user_id: &str,
