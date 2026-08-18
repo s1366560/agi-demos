@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from src.domain.llm_providers.llm_types import LLMClient, LLMConfig
 from src.domain.llm_providers.models import ProviderConfig
@@ -45,6 +45,67 @@ class LegacyLlmAdapterProvider:
             llm_config=request.llm_config,
             **dict(request.adapter_kwargs),
         )
+
+
+class LlmAdapterFactory(Protocol):
+    """Factory used by routed providers at the execution boundary."""
+
+    def __call__(
+        self,
+        *,
+        config: LLMConfig,
+        provider_config: ProviderConfig,
+        **kwargs: object,
+    ) -> LLMClient: ...
+
+
+class RoutedLlmAdapterProvider:
+    """Provider that constructs clients from a typed route without the legacy registry."""
+
+    def __init__(self, factory: LlmAdapterFactory | None = None) -> None:
+        self._factory = factory or _default_litellm_factory
+
+    def create_adapter(self, request: LlmAdapterRequest) -> LLMClient:
+        """Create one client from the resolved route and immutable provider facts."""
+        route = request.route
+        if route is None:
+            raise RuntimeError("routed LLM adapters require a resolved platform route")
+        expected_provider = request.provider_config.provider_type.value
+        if route.provider_id != expected_provider:
+            raise RuntimeError(
+                f"LLM route provider {route.provider_id} does not match {expected_provider}"
+            )
+        base_config = request.llm_config or LLMConfig(
+            model=route.model_id,
+            base_url=route.base_url,
+            max_tokens=route.max_output_tokens,
+        )
+        config = replace(
+            base_config,
+            model=route.model_id,
+            base_url=route.base_url,
+        )
+        return self._factory(
+            config=config,
+            provider_config=request.provider_config,
+            **dict(request.adapter_kwargs),
+        )
+
+
+def _default_litellm_factory(
+    *,
+    config: LLMConfig,
+    provider_config: ProviderConfig,
+    **kwargs: object,
+) -> LLMClient:
+    """Construct the existing LiteLLM client without the provider adapter registry."""
+    from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
+
+    return cast(LlmAdapterFactory, LiteLLMClient)(
+        config=config,
+        provider_config=provider_config,
+        **kwargs,
+    )
 
 
 @dataclass(frozen=True)

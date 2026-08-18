@@ -16,6 +16,11 @@ from .builtin_manifests import (
     workspace_runtime_manifest,
 )
 from .context import CapabilityRegistry, PluginContext, PluginScopeContext
+from .llm_adapters import (
+    LlmAdapterFactory,
+    LlmAdapterProviderRegistry,
+    RoutedLlmAdapterProvider,
+)
 from .profile import ProfileSnapshot
 
 Disposable = Callable[[], None]
@@ -132,6 +137,9 @@ def _dispose_legacy_plugin(
 def activate_profile_snapshot(
     snapshot: ProfileSnapshot,
     capability_registry: CapabilityRegistry,
+    *,
+    adapter_registry: LlmAdapterProviderRegistry | None = None,
+    llm_adapter_factory: LlmAdapterFactory | None = None,
 ) -> Disposable:
     """Activate every capability declared by a canonical profile snapshot.
 
@@ -139,24 +147,55 @@ def activate_profile_snapshot(
     resolve secrets; typed host factories supply implementations in later phases.
     """
     contexts: list[PluginContext] = []
+    adapter_disposers: list[Disposable] = []
     for row in snapshot.rows:
         context = PluginContext(
             capability_registry,
             row.manifest,
             config=row.config,
         )
+        llm_providers: dict[str, RoutedLlmAdapterProvider] = {}
+        if adapter_registry is not None:
+            for capability in row.manifest.provides:
+                if capability.kind.value != "llm_provider":
+                    continue
+                if (
+                    row.manifest.runtime.value != "python-trusted"
+                    or row.manifest.trust.value
+                    not in {
+                        "builtin",
+                        "signed",
+                    }
+                ):
+                    raise ValueError("LLM adapter providers require a trusted python runtime")
+                provider = RoutedLlmAdapterProvider(factory=llm_adapter_factory)
+                adapter_disposers.append(
+                    adapter_registry.register(
+                        capability.id,
+                        provider,
+                        owner=row.manifest.id,
+                    )
+                )
+                llm_providers[capability.id] = provider
         for capability in row.manifest.provides:
-            _ = context.register_capability(
-                capability.kind,
+            implementation = llm_providers.get(
                 capability.id,
                 LegacyCapability(
                     plugin_id=row.manifest.id,
                     capability=capability.contract,
                 ),
             )
+            _ = context.register_capability(
+                capability.kind,
+                capability.id,
+                implementation,
+            )
         contexts.append(context)
 
     def dispose() -> None:
+        for adapter_dispose in reversed(adapter_disposers):
+            adapter_dispose()
+        adapter_disposers.clear()
         for context in reversed(contexts):
             context.close()
         contexts.clear()

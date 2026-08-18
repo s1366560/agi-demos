@@ -13,6 +13,7 @@ from src.infrastructure.plugins.context import PluginScopeContext
 from src.infrastructure.plugins.llm_adapters import (
     LlmAdapterProviderRegistry,
     LlmAdapterRequest,
+    RoutedLlmAdapterProvider,
 )
 from src.infrastructure.plugins.shadow_rollout import (
     queued_event_count,
@@ -334,3 +335,32 @@ def test_llm_adapter_registry_is_reversible_and_rejects_ownership_conflict() -> 
     second = registry.register("openai", Provider(), owner="plugin-b")
     assert registry.get("openai") is not None
     second()
+
+
+@pytest.mark.unit
+def test_routed_adapter_provider_builds_client_without_legacy_registry() -> None:
+    manager = LLMProviderManager()
+    config = _provider_config()
+    manager.register_provider(config)
+    route = manager.resolve_route(ProviderType.OPENAI)
+    expected_client = cast(LLMClient, SimpleNamespace(name="routed-client"))
+    captured: list[tuple[object, object]] = []
+
+    def factory(**kwargs: Any) -> LLMClient:
+        captured.append((kwargs["config"], kwargs["provider_config"]))
+        return expected_client
+
+    provider = RoutedLlmAdapterProvider(factory=factory)
+    client = provider.create_adapter(
+        LlmAdapterRequest(
+            route=route,
+            provider_config=config,
+            llm_config=None,
+            adapter_kwargs={},
+        )
+    )
+
+    assert client is expected_client
+    assert captured[0][0].model == "test-model"
+    assert captured[0][0].base_url == "https://example.test/v1"
+    assert captured[0][1] is config
