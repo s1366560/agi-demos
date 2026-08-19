@@ -29,6 +29,29 @@ def _bindings(groups: tuple[str, ...]) -> list[ContainerServiceBinding]:
     return [b for b in CONTAINER_SERVICE_BINDINGS if b.group in groups]
 
 
+
+
+def _assert_equivalence(container: DIContainer, binding: ContainerServiceBinding) -> None:
+    """Assert registry resolution matches facade behavior.
+
+    Retired accessors (e.g. legacy workspace DI rows) raise by design; the
+    registry must surface the same failure. Live accessors match by identity
+    when the facade caches, otherwise by type.
+    """
+    try:
+        facade_first = getattr(container, binding.key)()
+    except Exception as exc:
+        with pytest.raises(type(exc)):
+            container.services.get_or_activate(binding.key)
+        return
+    facade_second = getattr(container, binding.key)()
+    resolved = container.services.get_or_activate(binding.key)
+    if facade_first is facade_second:
+        assert resolved is facade_first
+    else:
+        assert type(resolved) is type(facade_first)
+
+
 _B1_BINDINGS = _bindings(_B1_GROUPS)
 _B1_ACTIVATABLE = [b for b in _B1_BINDINGS if b.key not in _ACTIVATION_SKIP]
 
@@ -50,14 +73,7 @@ class TestServiceBindingsB1:
         ids=[b.key for b in _B1_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        container = DIContainer(db=Mock(), graph_service=Mock())
-        facade_first = getattr(container, binding.key)()
-        facade_second = getattr(container, binding.key)()
-        resolved = container.services.get_or_activate(binding.key)
-        if facade_first is facade_second:
-            assert resolved is facade_first
-        else:
-            assert type(resolved) is type(facade_first)
+        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
 
     @pytest.mark.parametrize(
         "binding",
@@ -85,11 +101,22 @@ class TestServiceBindingsB2:
         ids=[b.key for b in _B2_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        container = DIContainer(db=Mock(), graph_service=Mock())
-        facade_first = getattr(container, binding.key)()
-        facade_second = getattr(container, binding.key)()
-        resolved = container.services.get_or_activate(binding.key)
-        if facade_first is facade_second:
-            assert resolved is facade_first
-        else:
-            assert type(resolved) is type(facade_first)
+        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+
+
+_GROUP_B3 = ("workspace",)
+_B3_BINDINGS = _bindings(_GROUP_B3)
+_B3_ACTIVATABLE = [b for b in _B3_BINDINGS if b.key not in _ACTIVATION_SKIP]
+
+
+@pytest.mark.unit
+class TestServiceBindingsB3:
+    """Batch B3: workspace/blackboard domain."""
+
+    @pytest.mark.parametrize(
+        "binding",
+        _B3_ACTIVATABLE,
+        ids=[b.key for b in _B3_ACTIVATABLE],
+    )
+    def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
+        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
