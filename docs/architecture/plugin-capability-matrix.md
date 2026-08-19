@@ -66,3 +66,13 @@ Status legend:
    `PlatformPluginControlPlaneReconciler` against the Python control plane.
 3. This matrix is the coverage baseline; P1+ phases update the status cells as
    capabilities move to **done**.
+
+## Roadmap progress log (post-P0)
+
+| Phase | Landed | Remaining |
+| --- | --- | --- |
+| P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; `di_bridge` for incremental DI migration; dump-config CLI | Mass migration of `di_container.py` factories (shadow), per-row route patching through profiles |
+| P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins) | Wire the resolver into `SessionProcessor` turn start; model-visible⇒logged shared invariant tests |
+| P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost` (sandboxed iframe, builtin modules, `ui.*` permissions) | Page wiring (settings/conversation/tool-card slots), desktop renderer, keyed renderer registry |
+| P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good | Marketplace → bundle install wiring; admin UI (plugin/profile/row views) |
+| P5 | (pre-existing) `adapters-wasmtime` server/desktop path | Python-side WASM host, subprocess/MCP boundaries, tenant quotas and audit |
