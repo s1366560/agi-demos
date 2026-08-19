@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Protocol
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from src.application.schemas.plugin_marketplace import MarketplacePackageRequest
-from src.domain.model.plugins import parse_plugin_manifest
+from src.domain.model.plugins import PluginManifest, parse_plugin_manifest
 from src.domain.ports.plugins import PluginPermission
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
+)
+from src.infrastructure.plugins.bundle import (
+    PluginBundle,
+    install_bundle_into_profile,
 )
 from src.infrastructure.plugins.governance import (
     MarketplaceCatalogEntry,
@@ -28,6 +33,7 @@ from src.infrastructure.plugins.package_archive import (
     verify_plugin_package_archive,
 )
 from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
+from src.infrastructure.plugins.profile import ProfileLayer, ProfileRow
 
 
 class MarketplaceArtifactClient(Protocol):
@@ -60,12 +66,14 @@ class PluginMarketplaceInstallService:
         *,
         trusted_public_keys: tuple[str, ...] = (),
         trust_gate: PluginTrustGate | None = None,
+        profile_path: str | Path | None = None,
     ) -> None:
         self._repository = repository
         self._plugin_repository = plugin_repository
         self._artifact_client = artifact_client
         self._trust_gate = trust_gate or PluginTrustGate()
         self._keys = trusted_public_keys
+        self._profile_path = Path(profile_path) if profile_path is not None else None
 
     async def request_install(
         self,
@@ -164,6 +172,7 @@ class PluginMarketplaceInstallService:
                     scope_type="tenant",
                     scope_id=request.tenant_id,
                 )
+            self._install_profile_layer(parsed_manifest)
             return MarketplaceInstallDecision(
                 status="approved",
                 plugin_id=request.plugin_id,
@@ -190,3 +199,25 @@ class PluginMarketplaceInstallService:
             version=entry.version,
             reason=reason,
         )
+
+    def _install_profile_layer(self, manifest: PluginManifest) -> None:
+        """Append the approved plugin to the active profile as a bundle layer.
+
+        I4: an approved marketplace install becomes visible to the composed
+        profile (and the HMR reconciler) through the same
+        ``install_bundle_into_profile`` entry the bundle CLI uses. Without a
+        configured profile path the step is skipped (tests, bare runs).
+        """
+        if self._profile_path is None:
+            return
+        bundle = PluginBundle(
+            bundle_id=f"marketplace.{manifest.id}",
+            version=manifest.version,
+            layer=ProfileLayer(
+                id=f"marketplace.{manifest.id}",
+                rows=(ProfileRow(id=manifest.id, enabled=True),),
+            ),
+            manifests=(manifest,),
+            description=f"marketplace install of {manifest.id}",
+        )
+        install_bundle_into_profile(self._profile_path, bundle, replace=True)

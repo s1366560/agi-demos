@@ -347,3 +347,60 @@ async def test_marketplace_catalog_approval_and_revocation_fail_closed(
         == []
     )
     assert uninstall.desired_removed is False
+
+
+@pytest.mark.unit
+async def test_marketplace_install_appends_profile_layer(
+    db_session: AsyncSession, tmp_path
+) -> None:
+    """I4: an approved install lands in the active profile as a bundle layer."""
+    import yaml
+
+    private_key = Ed25519PrivateKey.generate()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "schemaVersion": 1,
+                "profile": {
+                    "id": "test-profile",
+                    "layers": [
+                        {"id": "memstack.kernel-base", "plugins": [{"id": "workspace-runtime"}]}
+                    ],
+                },
+                "patches": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = PluginMarketplaceInstallService(
+        PlatformPluginGovernanceRepository(db_session),
+        PlatformPluginRepository(db_session),
+        FakeArtifactClient(package_archive(base_manifest())),
+        trusted_public_keys=(public_pem,),
+        profile_path=profile_path,
+    )
+
+    decision = await service.request_install(request=_request(private_key, public_pem))
+
+    assert decision.status == "approved"
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    layers = profile["profile"]["layers"]
+    marketplace = next(layer for layer in layers if layer["id"] == "marketplace.third-party-tool")
+    assert marketplace["plugins"] == [{"id": "third-party-tool"}]
+
+    # Re-install is idempotent (replace=True keeps one row).
+    decision = await service.request_install(request=_request(private_key, public_pem))
+    assert decision.status == "approved"
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    assert [layer["id"] for layer in profile["profile"]["layers"]].count(
+        "marketplace.third-party-tool"
+    ) == 1

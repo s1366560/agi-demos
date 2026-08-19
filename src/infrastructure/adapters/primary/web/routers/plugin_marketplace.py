@@ -23,6 +23,7 @@ from src.application.schemas.plugin_marketplace import (
     MarketplacePackageUninstallResponse,
 )
 from src.application.services.platform_plugin_profile_service import (
+    DEFAULT_PROFILE_PATH,
     PlatformPluginProfileService,
 )
 from src.application.services.plugin_marketplace_catalog_service import (
@@ -80,6 +81,7 @@ async def _service(
             PlatformPluginGovernanceRepository(db),
             PlatformPluginRepository(db),
             OciPluginArtifactClient(client),
+            profile_path=DEFAULT_PROFILE_PATH,
         )
 
 
