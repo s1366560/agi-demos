@@ -39,6 +39,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+import { PlatformPluginAdmin } from '@/components/plugins/PlatformPluginAdmin';
 
 import { renderSchemaFormFields, sanitizePluginConfigValues } from './pluginSchemaForm';
 
@@ -1324,6 +1325,9 @@ export const PluginHub: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* I4: platform plugin control-plane admin (cutover gate, profile, rows). */}
+      <PlatformPluginAdmin />
 
       <Modal
         open={pluginConfigModalVisible}
