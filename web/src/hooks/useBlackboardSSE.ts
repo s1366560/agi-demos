@@ -10,9 +10,21 @@ import { classifyWorkspaceEventType } from '@/components/blackboard/blackboardSu
 /**
  * Subscribes to SSE events for a given workspace and routes them
  * to the appropriate workspace store handlers.
+ *
+ * The bridge subscribes to Redis streams with "$" (new entries only), so
+ * events published between the initial surface fetch and the subscription
+ * going live are lost. When the backend acknowledges the subscription, the
+ * unified event service replays it as a synthetic `workspace_subscribed`
+ * event, which triggers a surface refetch to reconcile the gap. `scope`
+ * provides the tenant/project ids needed for that refetch.
  */
-export function useBlackboardSSE(workspaceId: string | null): void {
+export function useBlackboardSSE(
+  workspaceId: string | null,
+  scope?: { tenantId?: string | undefined; projectId?: string | undefined }
+): void {
   const token = useAuthStore((state) => state.token);
+  const tenantId = scope?.tenantId;
+  const projectId = scope?.projectId;
 
   useEffect(() => {
     if (!workspaceId || !token) {
@@ -23,6 +35,18 @@ export function useBlackboardSSE(workspaceId: string | null): void {
     const unsubscribe = unifiedEventService.subscribeWorkspace(workspaceId, (event) => {
       const type = event.type;
       const data = event.data as Record<string, unknown>;
+
+      if (type === 'workspace_subscribed') {
+        // The subscription is live; refetch the authoritative surface so
+        // events missed before it are reconciled.
+        if (data.workspace_id === workspaceId && tenantId && projectId) {
+          store.loadWorkspaceSurface(tenantId, projectId, workspaceId).catch(() => {
+            // Load failure is exposed via state.error.
+          });
+        }
+        return;
+      }
+
       const channel = classifyWorkspaceEventType(type);
 
       switch (channel) {
@@ -64,5 +88,5 @@ export function useBlackboardSSE(workspaceId: string | null): void {
     return () => {
       unsubscribe();
     };
-  }, [workspaceId, token]);
+  }, [workspaceId, token, tenantId, projectId]);
 }

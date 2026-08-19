@@ -204,21 +204,6 @@ test.describe('Workspace Core Flows', () => {
         timeout: 20_000,
       });
 
-      // Warm-up: prove the live event channel is established before deleting,
-      // otherwise the delete may race the subscription (events published before
-      // the bridge's first read are not replayed) and make the test flaky.
-      const warmUpTask = `e2e-warmup-${Date.now()}`;
-      const taskResp = await fetch(`${API_BASE}/api/v1/workspaces/${workspaceA.id}/tasks`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: warmUpTask }),
-      });
-      expect(taskResp.status).toBe(201);
-      await expect(page.getByText(warmUpTask).first()).toBeVisible({ timeout: 30_000 });
-
       await deleteWorkspaceViaApi(token, tenantId, projectId, workspaceA.id);
 
       await expect(page.locator('#workspace-select')).toHaveValue(workspaceB.id, {

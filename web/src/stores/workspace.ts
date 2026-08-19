@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+import { ApiError } from '@/services/client/ApiError';
 import {
   workspaceBlackboardService,
   workspaceService,
@@ -713,6 +714,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ...createEmptySurfaceState(),
             error: getErrorMessage(error),
             isLoading: false,
+            // A 404 here means the workspace is gone (e.g. deleted in the
+            // window between the initial surface fetch and the subscription
+            // going live); record it so consumers refetch the workspace list
+            // and fall back to a live workspace.
+            ...(error instanceof ApiError && error.statusCode === 404
+              ? { lastDeletedWorkspaceId: workspaceId }
+              : {}),
           });
           throw error;
         }

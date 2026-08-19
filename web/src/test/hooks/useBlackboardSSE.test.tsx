@@ -12,6 +12,7 @@ const handlers = {
   handleWorkspaceLifecycleEvent: vi.fn(),
   handleAgentBindingEvent: vi.fn(),
   handleTopologyEvent: vi.fn(),
+  loadWorkspaceSurface: vi.fn(() => Promise.resolve()),
 };
 
 const subscribeWorkspace = vi.fn();
@@ -39,8 +40,14 @@ vi.mock('@/services/unifiedEventService', () => ({
 import { useBlackboardSSE } from '@/hooks/useBlackboardSSE';
 import { classifyWorkspaceEventType } from '@/components/blackboard/blackboardSurfaceContract';
 
-function HookHarness({ workspaceId }: { workspaceId: string | null }) {
-  useBlackboardSSE(workspaceId);
+function HookHarness({
+  workspaceId,
+  scope,
+}: {
+  workspaceId: string | null;
+  scope?: { tenantId?: string; projectId?: string };
+}) {
+  useBlackboardSSE(workspaceId, scope);
   return null;
 }
 
@@ -116,5 +123,46 @@ describe('useBlackboardSSE', () => {
     render(<HookHarness workspaceId="ws-1" />);
 
     expect(subscribeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('refetches the workspace surface when the subscription is acknowledged', () => {
+    const unsubscribe = vi.fn();
+    let callback: ((event: { type: string; data: Record<string, unknown> }) => void) | null = null;
+    subscribeWorkspace.mockImplementation((_workspaceId: string, cb: typeof callback) => {
+      callback = cb;
+      return unsubscribe;
+    });
+
+    render(
+      <HookHarness workspaceId="ws-1" scope={{ tenantId: 'tenant-1', projectId: 'proj-1' }} />
+    );
+
+    callback?.({ type: 'workspace_subscribed', data: { workspace_id: 'ws-1' } });
+
+    expect(handlers.loadWorkspaceSurface).toHaveBeenCalledWith('tenant-1', 'proj-1', 'ws-1');
+    expect(handlers.handleWorkspaceLifecycleEvent).not.toHaveBeenCalled();
+  });
+
+  it('does not refetch when scope ids are missing or the workspace mismatches', () => {
+    const unsubscribe = vi.fn();
+    let callback: ((event: { type: string; data: Record<string, unknown> }) => void) | null = null;
+    subscribeWorkspace.mockImplementation((_workspaceId: string, cb: typeof callback) => {
+      callback = cb;
+      return unsubscribe;
+    });
+
+    render(<HookHarness workspaceId="ws-1" />);
+
+    callback?.({ type: 'workspace_subscribed', data: { workspace_id: 'ws-1' } });
+    expect(handlers.loadWorkspaceSurface).not.toHaveBeenCalled();
+
+    handlers.loadWorkspaceSurface.mockClear();
+    subscribeWorkspace.mockClear();
+
+    render(
+      <HookHarness workspaceId="ws-1" scope={{ tenantId: 'tenant-1', projectId: 'proj-1' }} />
+    );
+    callback?.({ type: 'workspace_subscribed', data: { workspace_id: 'ws-2' } });
+    expect(handlers.loadWorkspaceSurface).not.toHaveBeenCalled();
   });
 });

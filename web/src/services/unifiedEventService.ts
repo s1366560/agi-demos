@@ -75,6 +75,7 @@ interface ServerMessage {
   event_counter?: number | undefined;
   timestamp?: string | undefined;
   action?: string | undefined;
+  workspace_id?: string | undefined;
 }
 
 const CONTROL_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
@@ -530,6 +531,22 @@ class UnifiedEventServiceImpl {
 
   private handleMessage(message: ServerMessage): void {
     const { type, routing_key, conversation_id, project_id, data } = message;
+
+    // Subscribe-then-resync: the bridge subscribes to Redis streams with "$"
+    // (new entries only), so events published between the initial REST fetch
+    // and the live subscription are lost. The subscribe ack marks the stream
+    // as live; surface it to topic handlers so consumers can refetch the
+    // authoritative state and reconcile the gap.
+    if (
+      type === 'ack' &&
+      message.action === 'subscribe_workspace' &&
+      typeof message.workspace_id === 'string'
+    ) {
+      this.dispatchToTopic(`workspace:${message.workspace_id}`, {
+        type: 'workspace_subscribed',
+        data: { workspace_id: message.workspace_id },
+      });
+    }
 
     // Handle internal messages
     if (CONTROL_EVENT_TYPES.has(type)) {

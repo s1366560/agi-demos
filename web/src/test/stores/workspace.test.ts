@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
+import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import {
   workspaceBlackboardService,
   workspaceChatService,
@@ -316,6 +317,38 @@ describe('workspace store', () => {
     expect(state.repliesByPostId).toEqual({});
     expect(state.loadedReplyPostIds).toEqual({});
     expect(workspaceBlackboardService.listReplies).not.toHaveBeenCalled();
+  });
+
+  it('loadWorkspaceSurface records a 404 as a workspace deletion', async () => {
+    useWorkspaceStore.setState({ lastDeletedWorkspaceId: null });
+    vi.mocked(workspaceService.getById).mockRejectedValueOnce(
+      new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Workspace not found', 404)
+    );
+
+    await expect(
+      useWorkspaceStore.getState().loadWorkspaceSurface('t-1', 'p-1', 'ws-1')
+    ).rejects.toThrow('Workspace not found');
+
+    const state = useWorkspaceStore.getState();
+    expect(state.lastDeletedWorkspaceId).toBe('ws-1');
+    expect(state.error).toBe('Workspace not found');
+    expect(state.isLoading).toBe(false);
+  });
+
+  it('loadWorkspaceSurface leaves lastDeletedWorkspaceId untouched on non-404 failures', async () => {
+    useWorkspaceStore.setState({ lastDeletedWorkspaceId: null });
+    vi.mocked(workspaceService.getById).mockRejectedValueOnce(
+      new ApiError(ApiErrorType.SERVER, 'INTERNAL_ERROR', 'boom', 500)
+    );
+
+    await expect(
+      useWorkspaceStore.getState().loadWorkspaceSurface('t-1', 'p-1', 'ws-1')
+    ).rejects.toThrow('boom');
+
+    const state = useWorkspaceStore.getState();
+    expect(state.lastDeletedWorkspaceId).toBeNull();
+    expect(state.error).toBe('boom');
+    expect(state.isLoading).toBe(false);
   });
 
   it('loadReplies fetches replies on demand for the active workspace', async () => {

@@ -246,7 +246,7 @@ export function Blackboard() {
     [projectId, selectedWorkspaceId, tenantId]
   );
 
-  useBlackboardSSE(selectedWorkspaceId);
+  useBlackboardSSE(selectedWorkspaceId, { tenantId, projectId });
 
   const hasSeenWorkspaceSocketConnectedRef = useRef(false);
   const shouldRefreshWorkspaceOnReconnectRef = useRef(false);

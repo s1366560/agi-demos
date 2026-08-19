@@ -339,6 +339,55 @@ describe('unifiedEventService', () => {
 
       expect(logger.debug).not.toHaveBeenCalled();
     });
+
+    it('dispatches workspace_subscribed to the workspace topic on subscribe_workspace ack', () => {
+      const handler = vi.fn();
+      const internal = unifiedEventService as unknown as {
+        subscriptions: Map<string, Set<(event: unknown) => void>>;
+        handleMessage: (message: unknown) => void;
+      };
+      internal.subscriptions.set('workspace:ws-1', new Set([handler]));
+
+      internal.handleMessage({
+        type: 'ack',
+        action: 'subscribe_workspace',
+        workspace_id: 'ws-1',
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect((handler.mock.calls[0] as [Record<string, unknown>])[0]).toEqual({
+        type: 'workspace_subscribed',
+        data: { workspace_id: 'ws-1' },
+      });
+
+      internal.subscriptions.clear();
+    });
+
+    it('stays silent for other acks', () => {
+      const handler = vi.fn();
+      const internal = unifiedEventService as unknown as {
+        subscriptions: Map<string, Set<(event: unknown) => void>>;
+        handleMessage: (message: unknown) => void;
+      };
+      internal.subscriptions.set('workspace:ws-1', new Set([handler]));
+
+      internal.handleMessage({ type: 'ack', action: 'subscribe_workspace' });
+      internal.handleMessage({
+        type: 'ack',
+        action: 'subscribe_workspace',
+        workspace_id: 'ws-2',
+      });
+      internal.handleMessage({
+        type: 'ack',
+        action: 'workspace_presence_join',
+        workspace_id: 'ws-1',
+      });
+      internal.handleMessage({ type: 'ack', data: { action: 'subscribe' } });
+
+      expect(handler).not.toHaveBeenCalled();
+
+      internal.subscriptions.clear();
+    });
   });
 });
 

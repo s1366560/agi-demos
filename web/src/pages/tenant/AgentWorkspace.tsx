@@ -198,8 +198,19 @@ export const AgentWorkspace: FC = () => {
     return serialized.length > 0 ? serialized : undefined;
   }, [effectiveWorkspaceId, queryProjectId, queryProjectInTenant]);
 
-  // Subscribe to workspace SSE events for real-time group chat updates
-  useBlackboardSSE(effectiveWorkspaceId);
+  const effectiveProjectId =
+    activeSelectedProjectId ||
+    tenantCurrentProject?.id ||
+    (tenantProjectsWithResolvedStoredProject.length > 0
+      ? (tenantProjectsWithResolvedStoredProject[0]?.id ?? null)
+      : null);
+
+  // Subscribe to workspace SSE events for real-time group chat updates; the
+  // scope enables the subscribe-then-resync surface refetch.
+  useBlackboardSSE(effectiveWorkspaceId, {
+    tenantId,
+    projectId: effectiveProjectId ?? undefined,
+  });
   useConversationListAutoRefresh(activeSelectedProjectId);
 
   useEffect(() => {
@@ -447,13 +458,6 @@ export const AgentWorkspace: FC = () => {
     setLastProjectId,
     setLastProjectSelectionSource,
   ]);
-
-  const effectiveProjectId =
-    activeSelectedProjectId ||
-    tenantCurrentProject?.id ||
-    (tenantProjectsWithResolvedStoredProject.length > 0
-      ? (tenantProjectsWithResolvedStoredProject[0]?.id ?? null)
-      : null);
 
   // Show loading while initializing projects
   if (initializing || shouldResolveStoredProject || shouldResolveQueryProject) {
