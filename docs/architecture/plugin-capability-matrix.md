@@ -30,8 +30,8 @@ Status legend:
 | `channel` | partial: V1 channel adapter factories (mirrored); connection manager builtin | partial: manifest kind exists | n/a | builtin: WS/control channels in sidecar |
 | `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching is the remaining P1 step | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
 | `cli_command` | partial: V1 CLI commands (mirrored) | gap | n/a | n/a |
-| `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | gap: registry exists server-side, web does not consume slots yet (P3) | gap (P3) |
-| `ui_renderer` | done(backend): slot definitions only | n/a | gap (P3) | gap (P3) |
+| `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | partial: `pluginSlotService` consumes snapshot slots, `PluginSlotHost` sandboxed iframe + protocol landed (P3); page wiring remains | gap (P3) |
+| `ui_renderer` | done(backend): slot definitions only | n/a | partial: same P3 host/protocol covers renderer slots; keyed renderers remain | gap (P3) |
 | `storage` | kernel/builtin: repositories and artifact stores | partial: plugin snapshot/activation/artifact SQLite stores in sidecar | n/a | done: `plugin_snapshots.rs` durable requested/applied state |
 | `graph_backend` | builtin: native graph adapter behind ports (P4 for plugin replacement) | done(adapter): `adapters-neo4j` | n/a | n/a |
 | `retrieval_backend` | builtin: hybrid search / retrieval registry (P4) | gap | n/a | n/a |
@@ -50,6 +50,9 @@ Status legend:
 | V1/V2 inventory unification | `legacy_inventory_bridge.py` (P0) | n/a | n/a |
 | Composition root | `service_registry.py` key/inject/dispose + topological activation (P1 foundation; `di_container.py` migration pending) | static wiring in app bins | static wiring |
 | Config audit (`dump-config`) | `dump_config.py` + `scripts/dump_plugin_profile.py` (layer provenance, canonical JSON digest) | consumes the same canonical JSON | same |
+| Bundle distribution | `bundle.py` `.mspkg` (manifest + layer rows + patches, bounded zip) (P4) | OCI artifact path retained | same |
+| Profile hot-reload | `profile_watch.py` recompose + last-good + envelope events (P4) | `platform_plugin_sync.rs` polling reconciler | same |
+| Agent loop resolution | `agent_loop_runtime.AgentLoopResolver` per-turn `(provider, model)` (P2) | `HarnessRegistry::select` (ADR-0008) | same semantics |
 | Untrusted plugin runtime | not yet (P5) | `adapters-wasmtime` (server/desktop) | `adapters-wasmtime` wired in sidecar |
 | Plugin artifact distribution | package archive/registry (`package_archive.py`, `package_registry.py`) | OCI artifact pull in `platform_plugin_sync.rs` | OCI artifact pull + digest verification |
 

@@ -10,6 +10,7 @@ from src.infrastructure.plugins.di_bridge import (
     registry_accessor,
 )
 from src.infrastructure.plugins.service_registry import (
+    ServiceConflictError,
     ServiceDependencyError,
     ServiceRegistry,
 )
@@ -100,8 +101,6 @@ async def test_duplicate_bind_rejected_unless_replace() -> None:
     container = _FakeContainer()
     bindings = [ServiceBinding(key="redis", accessor="redis_client")]
     bind_container_services(registry, container, bindings)
-
-    from src.infrastructure.plugins.service_registry import ServiceConflictError
 
     with pytest.raises(ServiceConflictError):
         bind_container_services(registry, container, bindings)
