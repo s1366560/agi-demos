@@ -31,6 +31,9 @@
         "paths": {
             "@/*": [
                 "src/*"
+            ],
+            "@agistack/plugin-slots": [
+                "../agi-stack/packages/plugin-slots/src/index.ts"
             ]
         }
     },

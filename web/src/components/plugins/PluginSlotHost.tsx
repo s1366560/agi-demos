@@ -1,11 +1,11 @@
 /**
- * Sandboxed iframe host for plugin slot renderers (P3).
+ * Sandboxed iframe host for plugin slot renderers (P3/I3).
  *
  * The host mounts a slot's module inside a sandboxed iframe, performs the
- * protocol handshake, forwards slot events, and enforces the contract
- * client-side: only builtin module references, `ui.*` permissions, and
- * sandboxed rendering. External modules are rejected by the service before
- * they ever reach this component.
+ * protocol handshake (shared `@agistack/plugin-slots` protocol), forwards
+ * slot events, and enforces the contract client-side: only builtin module
+ * references, `ui.*` permissions, and sandboxed rendering. External modules
+ * are rejected by the service before they ever reach this component.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import {
   decodeSlotMessage,
   encodeSlotMessage,
   isGuestMessageForSlot,
-} from '@/services/pluginSlotProtocol';
+} from '@agistack/plugin-slots';
 
 import type { UiSlotDefinition } from '@/types/pluginSlots';
 
@@ -61,7 +61,9 @@ export function PluginSlotHost({ slot, initPayload, onAction, onError }: PluginS
       }
     };
     window.addEventListener('message', listener);
-    return () => { window.removeEventListener('message', listener); };
+    return () => {
+      window.removeEventListener('message', listener);
+    };
   }, [slot.id, initPayload, onAction, onError]);
 
   const src = `${MODULE_BASE}${encodeURIComponent(slot.moduleRef.replace(/^builtin:/, ''))}`;

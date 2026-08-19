@@ -23,6 +23,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@agistack/plugin-slots': path.resolve(
+        __dirname,
+        '../agi-stack/packages/plugin-slots/src/index.ts'
+      ),
     },
   },
   server: {

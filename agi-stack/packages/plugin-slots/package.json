@@ -1,0 +1,10 @@
+{
+  "name": "@agistack/plugin-slots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared plugin UI slot contract, postMessage protocol, and snapshot extraction for MemStack web and desktop renderers (I3).",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
