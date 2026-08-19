@@ -586,18 +586,22 @@ class WorkspaceCoreClient:
         user_email: str,
         idempotency_key: str,
         request: WorkspaceCoreTaskSessionRequest,
+        project_membership_role: str | None = None,
     ) -> WorkspaceCoreTaskSessionResponse:
         path = (
             f"/internal/v1/tenants/{_path_segment(tenant_id)}/projects/"
             f"{_path_segment(project_id)}/task-sessions"
         )
+        headers = {
+            "X-MemStack-User-ID": user_id,
+            "X-MemStack-User-Email": user_email,
+            "X-Idempotency-Key": idempotency_key,
+        }
+        if project_membership_role is not None:
+            headers["x-memstack-project-membership-role"] = project_membership_role
         payload = await self._post(
             path,
-            headers={
-                "X-MemStack-User-ID": user_id,
-                "X-MemStack-User-Email": user_email,
-                "X-Idempotency-Key": idempotency_key,
-            },
+            headers=headers,
             json_body=request.model_dump(exclude_none=True),
         )
         return self._validate(

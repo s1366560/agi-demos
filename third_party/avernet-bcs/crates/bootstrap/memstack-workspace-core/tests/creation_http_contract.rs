@@ -474,7 +474,13 @@ async fn cloud_create_does_not_mirror_a_desktop_project_principal() -> Result<()
     )?);
 
     let response = workspace_router(state)
-        .oneshot(public_local_create_request()?)
+        .oneshot(public_create_request(
+            json!({
+                "name": "Desktop Local Workspace",
+                "description": "Avernet Desktop authority contract"
+            }),
+            Some("desktop-local-create"),
+        )?)
         .await?;
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);

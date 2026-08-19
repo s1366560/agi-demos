@@ -71,7 +71,7 @@ async def create_avernet_task_session(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | JSONResponse:
     """Commit Core state first, then recoverably correlate the platform Conversation."""
-    await _require_project_access(db, current_user, tenant_id, project_id)
+    project_membership_role = await _require_project_access(db, current_user, tenant_id, project_id)
     client = getattr(request.app.state, "workspace_core_client", None)
     if not isinstance(client, WorkspaceCoreClient):
         raise workspace_core_unavailable_error()
@@ -139,6 +139,7 @@ async def create_avernet_task_session(
             user_email=current_user.email,
             idempotency_key=body.idempotency_key,
             request=core_request,
+            project_membership_role=project_membership_role,
         )
         workspace_id = _validate_core_response(
             core_response,
@@ -203,7 +204,7 @@ async def _require_project_access(
     current_user: User,
     tenant_id: str,
     project_id: str,
-) -> None:
+) -> str | None:
     project = (
         await db.execute(
             refresh_select_statement(
@@ -214,19 +215,20 @@ async def _require_project_access(
     if project is None:
         raise HTTPException(status_code=404, detail=_("Project not found"))
     if getattr(current_user, "is_superuser", False):
-        return
-    membership = (
+        return None
+    role = (
         await db.execute(
             refresh_select_statement(
-                select(UserProject.id).where(
+                select(UserProject.role).where(
                     UserProject.project_id == project_id,
                     UserProject.user_id == current_user.id,
                 )
             )
         )
     ).scalar_one_or_none()
-    if membership is None:
+    if role is None:
         raise HTTPException(status_code=403, detail=_("Access denied"))
+    return str(role)
 
 
 def _stable_id(

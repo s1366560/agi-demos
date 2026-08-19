@@ -15,7 +15,8 @@ use serde_json::Value;
 
 use super::public_api::caller_from_headers;
 use super::{
-    ApiError, WorkspaceCoreAuthority, WorkspaceCoreState, creation::mirror_local_project_principal,
+    ApiError, WorkspaceCoreAuthority, WorkspaceCoreState,
+    creation::{PROJECT_MEMBERSHIP_ROLE_HEADER, mirror_local_project_principal},
     required_header,
 };
 
@@ -94,7 +95,12 @@ pub(super) async fn create_task_session(
     let caller = caller_from_headers(&headers)?;
     let actor_email = required_header(&headers, USER_EMAIL_HEADER)?;
     let idempotency_key = required_header(&headers, IDEMPOTENCY_HEADER)?;
-    if state.authority == WorkspaceCoreAuthority::Local
+    // Mirror the caller's project membership whenever the trusted proxy
+    // vouches for a role. Local (desktop) callers must always send the
+    // header; cloud callers are mirrored only when it is present, keeping
+    // the fail-closed behaviour for unvouched requests.
+    if (state.authority == WorkspaceCoreAuthority::Local
+        || headers.contains_key(PROJECT_MEMBERSHIP_ROLE_HEADER))
         && matches!(request.workspace, WorkspaceRequest::Create { .. })
     {
         mirror_local_project_principal(

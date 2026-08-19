@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -30,7 +31,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
-from src.infrastructure.workspace_core.client import WorkspaceCoreClient
+from src.infrastructure.workspace_core.client import (
+    WorkspaceCoreClient,
+    WorkspaceCoreTaskSessionResponse,
+)
 
 TENANT_ID = "tenant-avernet-task-session"
 PROJECT_ID = "project-avernet-task-session"
@@ -78,14 +82,19 @@ async def _seed_scope(db: AsyncSession, user: User) -> None:
 def _app(
     db: object,
     user: User,
-    handler: Callable[[httpx.Request], Awaitable[httpx.Response]],
+    handler: Callable[[httpx.Request], Awaitable[httpx.Response]] | None = None,
+    *,
+    core_client: WorkspaceCoreClient | None = None,
 ) -> FastAPI:
     app = FastAPI()
     register_task_session_routes(app)
-    app.state.workspace_core_client = WorkspaceCoreClient(
-        _settings(),
-        transport=httpx.MockTransport(handler),
-    )
+    if core_client is None:
+        assert handler is not None
+        core_client = WorkspaceCoreClient(
+            _settings(),
+            transport=httpx.MockTransport(handler),
+        )
+    app.state.workspace_core_client = core_client
 
     async def current_user() -> User:
         return user
@@ -96,6 +105,41 @@ def _app(
     app.dependency_overrides[get_current_user] = current_user
     app.dependency_overrides[get_db] = session
     return app
+
+
+def _mock_core_client(actor_id: str) -> AsyncMock:
+    conversation_id = _stable_id(
+        "conversation",
+        tenant_id=TENANT_ID,
+        project_id=PROJECT_ID,
+        actor_id=actor_id,
+        idempotency_key=IDEMPOTENCY_KEY,
+    )
+    message_id = _stable_id(
+        "message",
+        tenant_id=TENANT_ID,
+        project_id=PROJECT_ID,
+        actor_id=actor_id,
+        idempotency_key=IDEMPOTENCY_KEY,
+    )
+    client = AsyncMock(spec=WorkspaceCoreClient)
+    client.create_task_session.return_value = WorkspaceCoreTaskSessionResponse(
+        receipt_id="core-receipt-role",
+        replayed=False,
+        workspace={
+            "id": "workspace-core-only",
+            "tenant_id": TENANT_ID,
+            "project_id": PROJECT_ID,
+        },
+        initial_message={
+            "id": message_id,
+            "workspace_id": "workspace-core-only",
+            "metadata": {"conversation_id": conversation_id},
+        },
+        policy=None,
+        capability_version="avernet-task-session-v1",
+    )
+    return client
 
 
 class _FailingCommitSession:
@@ -486,3 +530,70 @@ async def test_task_session_maps_core_errors_without_legacy_fallback(
     assert response.status_code == gateway_status
     count = await test_db.scalar(select(func.count()).select_from(Conversation))
     assert count == 0
+
+
+@pytest.mark.unit
+async def test_task_session_passes_membership_role_to_core_client(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    await _seed_scope(test_db, test_user)
+    core_client = _mock_core_client(str(test_user.id))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_app(test_db, test_user, core_client=core_client)),
+        base_url="http://gateway.test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
+            json=_body(),
+        )
+
+    assert response.status_code == 200
+    core_client.create_task_session.assert_awaited_once()
+    kwargs = core_client.create_task_session.await_args.kwargs
+    assert kwargs["project_membership_role"] == "owner"
+
+
+@pytest.mark.unit
+async def test_task_session_superuser_passes_no_membership_role(
+    test_db: AsyncSession,
+    test_user: User,
+) -> None:
+    test_db.add_all(
+        [
+            Tenant(
+                id=TENANT_ID,
+                name="Avernet task-session tenant",
+                slug="avernet-task-session-tenant",
+                owner_id=test_user.id,
+            ),
+            Project(
+                id=PROJECT_ID,
+                tenant_id=TENANT_ID,
+                name="Avernet task-session project",
+                owner_id=test_user.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+    superuser = SimpleNamespace(
+        id=test_user.id,
+        email=test_user.email,
+        is_superuser=True,
+    )
+    core_client = _mock_core_client(str(test_user.id))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_app(test_db, superuser, core_client=core_client)),
+        base_url="http://gateway.test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/task-sessions",
+            json=_body(),
+        )
+
+    assert response.status_code == 200
+    core_client.create_task_session.assert_awaited_once()
+    kwargs = core_client.create_task_session.await_args.kwargs
+    assert kwargs["project_membership_role"] is None

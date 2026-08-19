@@ -106,6 +106,56 @@ async fn desktop_local_task_session_create_mirrors_the_authenticated_project_pri
 }
 
 #[tokio::test]
+async fn cloud_task_session_create_mirrors_the_vouched_project_principal()
+-> Result<(), Box<dyn Error>> {
+    let db = Arc::new(task_session_db().await?);
+    db.execute(DbStatement::new(
+        "DELETE FROM project_principal_memberships WHERE user_id = 'owner-1'",
+    ))
+    .await?;
+    let state = Arc::new(WorkspaceCoreState::new_with_registries(
+        db.clone(),
+        SERVICE_TOKEN.to_string(),
+        DbSqlFlavor::Sqlite,
+        Arc::new(StaticAgentRegistry),
+        Arc::new(StaticProviderRegistry),
+    )?);
+
+    let mut request = task_session_request("Initial objective")?;
+    request
+        .headers_mut()
+        .insert("x-memstack-project-membership-role", "owner".parse()?);
+    let response = workspace_router(state).oneshot(request).await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let rows = db
+        .query(DbStatement::new(
+            "SELECT user_id, participant_actor_id, source_membership_id, role, is_active, \
+             identity_authority FROM project_principal_memberships",
+        ))
+        .await?;
+    let principal = rows.first().ok_or("missing Cloud principal mirror")?;
+    assert_eq!(principal.get_string("user_id")?.as_deref(), Some("owner-1"));
+    assert_eq!(
+        principal.get_string("participant_actor_id")?.as_deref(),
+        Some("owner-1")
+    );
+    assert!(
+        principal
+            .get_string("source_membership_id")?
+            .is_some_and(|value| value.starts_with("memstack:"))
+    );
+    assert_eq!(principal.get_string("role")?.as_deref(), Some("owner"));
+    assert_eq!(principal.get_i64("is_active")?, Some(1));
+    assert_eq!(
+        principal.get_string("identity_authority")?.as_deref(),
+        Some("memstack")
+    );
+    assert_eq!(table_count(db.as_ref(), "workspace_profiles").await?, 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn task_session_create_is_atomic_and_replay_safe() -> Result<(), Box<dyn Error>> {
     let db = Arc::new(task_session_db().await?);
     let state = Arc::new(WorkspaceCoreState::new_with_registries(

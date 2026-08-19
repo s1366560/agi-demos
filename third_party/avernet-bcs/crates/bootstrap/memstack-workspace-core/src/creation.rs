@@ -22,7 +22,7 @@ use super::{ApiError, WorkspaceCoreState, required_header};
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 const PUBLIC_IDEMPOTENCY_HEADER: &str = "idempotency-key";
 const USER_EMAIL_HEADER: &str = "x-memstack-user-email";
-const PROJECT_MEMBERSHIP_ROLE_HEADER: &str = "x-memstack-project-membership-role";
+pub(super) const PROJECT_MEMBERSHIP_ROLE_HEADER: &str = "x-memstack-project-membership-role";
 const WORKSPACE_NAME_MAX_CHARS: usize = 255;
 
 #[derive(Debug, Deserialize)]

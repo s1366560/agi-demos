@@ -18,6 +18,7 @@ from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClientError,
     WorkspaceCoreNotFoundError,
     WorkspaceCorePublicApiCapabilities,
+    WorkspaceCoreTaskSessionRequest,
     WorkspaceRuntimeCallbackAckRequest,
     WorkspaceRuntimeCorrelationRequest,
     WorkspaceRuntimeRecoveryClaimRequest,
@@ -319,6 +320,76 @@ async def test_proxy_request_maps_network_failure_without_fallback() -> None:
             body=b"{}",
             headers=[],
         )
+
+
+def _task_session_request() -> WorkspaceCoreTaskSessionRequest:
+    return WorkspaceCoreTaskSessionRequest(
+        workspace={"kind": "existing", "workspace_id": "workspace-1"},
+        conversation_id="conversation-1",
+        initial_message={
+            "message_id": "message-1",
+            "content": "Review the release",
+            "context_items": [],
+        },
+        capability_mode="work",
+    )
+
+
+def _task_session_response() -> httpx.Response:
+    return httpx.Response(
+        201,
+        json={
+            "receipt_id": "receipt-1",
+            "replayed": False,
+            "workspace": {"id": "workspace-1", "tenant_id": "tenant-1", "project_id": "project-1"},
+            "initial_message": {"id": "message-1", "workspace_id": "workspace-1"},
+            "policy": None,
+            "capability_version": "avernet-task-session-v1",
+        },
+    )
+
+
+@pytest.mark.unit
+async def test_create_task_session_vouches_project_membership_role_when_present() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/internal/v1/tenants/tenant-1/projects/project-1/task-sessions"
+        assert request.headers["x-memstack-project-membership-role"] == "editor"
+        return _task_session_response()
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    response = await client.create_task_session(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        user_email="user-1@example.com",
+        idempotency_key="task-session-key-1",
+        request=_task_session_request(),
+        project_membership_role="editor",
+    )
+
+    assert response.receipt_id == "receipt-1"
+
+
+@pytest.mark.unit
+async def test_create_task_session_omits_project_membership_role_by_default() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert "x-memstack-project-membership-role" not in request.headers
+        return _task_session_response()
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    response = await client.create_task_session(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        user_email="user-1@example.com",
+        idempotency_key="task-session-key-1",
+        request=_task_session_request(),
+    )
+
+    assert response.receipt_id == "receipt-1"
 
 
 class _TrackingResponseStream(httpx.AsyncByteStream):
