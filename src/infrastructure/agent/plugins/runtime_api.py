@@ -1,7 +1,15 @@
-"""Runtime API exposed to plugins."""
+"""Runtime API exposed to plugins.
+
+.. deprecated::
+    ``PluginRuntimeApi`` is the V1 compatibility facade for the platform
+    plugin kernel (``src.infrastructure.plugins``). New plugins should
+    activate through a kernel ``PluginContext`` instead. The facade is kept
+    for one release cycle before removal.
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from .registry import (
@@ -26,12 +34,23 @@ if TYPE_CHECKING:
 class PluginRuntimeApi:
     """API surface available to plugin setup hooks."""
 
+    _deprecation_warned = False
+
     def __init__(
         self,
         plugin_name: str,
         *,
         registry: AgentPluginRegistry | None = None,
     ) -> None:
+        if not PluginRuntimeApi._deprecation_warned:
+            PluginRuntimeApi._deprecation_warned = True
+            warnings.warn(
+                "PluginRuntimeApi (agent plugin V1 API) is deprecated; use the "
+                "platform plugin kernel (src.infrastructure.plugins) for new "
+                "plugins. The V1 facade remains supported for one release cycle.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._plugin_name = plugin_name
         self._registry = registry or get_plugin_registry()
 

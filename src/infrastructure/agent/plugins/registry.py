@@ -1,4 +1,13 @@
-"""Plugin registry for agent runtime extensions."""
+"""Plugin registry for agent runtime extensions.
+
+.. deprecated::
+    This V1 registry is the compatibility facade for the platform plugin
+    kernel (``src.infrastructure.plugins``). Its registrations are mirrored
+    into the kernel ``CapabilityRegistry`` by
+    ``src.infrastructure.plugins.legacy_inventory_bridge``. New plugins
+    should target the kernel manifest and ``PluginContext`` directly. The
+    facade is kept for one release cycle before removal.
+"""
 
 from __future__ import annotations
 
@@ -1437,6 +1446,11 @@ class AgentPluginRegistry:
                     f"SubAgent resolver factory already registered for plugin: {plugin_name}"
                 )
             self._subagent_resolver_factories[plugin_name] = factory
+
+    def list_subagent_resolver_factories(self) -> dict[str, SubAgentResolverFactory]:
+        """Return sub-agent resolver factories keyed by plugin name."""
+        with self._lock:
+            return dict(self._subagent_resolver_factories)
 
     async def build_subagent_resolvers(
         self,
