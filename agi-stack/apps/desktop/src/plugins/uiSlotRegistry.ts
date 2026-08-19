@@ -1,3 +1,9 @@
+/**
+ * Slot contract (I3): structural mirror of `@agistack/plugin-slots`
+ * (`agi-stack/packages/plugin-slots/src/types.ts`). The desktop keeps a
+ * local copy because its test build compiles with rootDir="."; the
+ * `contract` field aligns it with the shared definition.
+ */
 export type UiSlotKind =
   | 'nav_item'
   | 'settings_page'
@@ -14,15 +20,17 @@ export interface UiSlotDefinition {
   readonly pluginId: string;
   readonly slot: UiSlotKind;
   readonly id: string;
+  /** Capability contract id, e.g. `tool-result:memory_search` (renderer key). */
+  readonly contract: string;
   readonly moduleRef: string;
   readonly permission: string;
   readonly sandbox: boolean;
 }
 
-export interface RegisteredUiSlot extends UiSlotDefinition {
+export type RegisteredUiSlot = UiSlotDefinition & {
   readonly trust: PluginTrust;
   readonly runtime: PluginRuntime;
-}
+};
 
 export class UiSlotRegistrationError extends Error {}
 

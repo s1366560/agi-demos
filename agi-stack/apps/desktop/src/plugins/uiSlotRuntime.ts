@@ -57,6 +57,7 @@ export function frontendSlotDefinitions(
         pluginId: plugin.id,
         slot,
         id: capability.id,
+        contract: capability.contract,
         moduleRef: `signed:${artifactDigest}`,
         permission: capability.permissions[0] ?? 'ui.render',
         sandbox: true,

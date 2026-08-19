@@ -84,6 +84,7 @@ import {
   type AgentTaskSignal,
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
+import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
@@ -6231,7 +6232,8 @@ export function App() {
     : commandItems;
 
   const renderChatPanel = () => (
-    <ChatPanel
+    <>
+      <ChatPanel
       api={chatComposerApi}
       conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
       selectedConversationId={selectedConversation?.id ?? null}
@@ -6317,7 +6319,10 @@ export function App() {
       onOpenCommands={openCommandPalette}
       runCompletionSummary={selectedConversation ? runCompletionSummary : null}
       onOpenSessionCanvasTab={openSessionCanvasTab}
-    />
+      />
+      {/* I3: plugin conversation renderers mount below the chat panel. */}
+      <PlatformPluginConversationSlots active config={config} />
+    </>
   );
 
   const renderWorkspaceOverview = () => {
