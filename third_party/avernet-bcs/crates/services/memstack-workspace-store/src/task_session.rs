@@ -203,12 +203,16 @@ fn transaction_steps(
             message_insert(flavor, write),
             DbCountExpectation::exactly(1),
         ),
+        // The correlation row references the message outbox entry via
+        // fk_workspace_message_correlations_outbox, so the outbox insert must
+        // commit first. (SQLite test schemas omit that FK, which is why the
+        // reversed order only fails on Postgres.)
         DbTransactionStep::execute_checked(
-            message_correlation_insert(flavor, write),
+            message_outbox_insert(flavor, write),
             DbCountExpectation::exactly(1),
         ),
         DbTransactionStep::execute_checked(
-            message_outbox_insert(flavor, write),
+            message_correlation_insert(flavor, write),
             DbCountExpectation::exactly(1),
         ),
         DbTransactionStep::execute_checked(
