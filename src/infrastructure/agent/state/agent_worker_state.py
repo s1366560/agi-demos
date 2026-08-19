@@ -3050,13 +3050,33 @@ def _publish_scoped_tool_generation(
     tools: dict[str, Any],
 ) -> None:
     """Publish the current scoped tool generation when it has changed."""
-    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
+    from src.infrastructure.plugins.agent_tools import (
+        LegacyToolBuildError,
+        get_agent_tool_set_service,
+        legacy_tool_descriptor,
+    )
 
+    # The legacy cache can hold tools whose metadata drifted from their cache
+    # key; one malformed entry must not take down the whole toolset, so those
+    # entries are skipped with a warning rather than failing the publish.
+    publishable: dict[str, Any] = {}
+    for tool_id, tool in tools.items():
+        try:
+            _ = legacy_tool_descriptor(tool_id, tool)
+        except LegacyToolBuildError as exc:
+            logger.warning(
+                "Agent Worker: skipping malformed cached tool %s for project %s: %s",
+                tool_id,
+                project_id,
+                exc,
+            )
+            continue
+        publishable[tool_id] = tool
     service = get_agent_tool_set_service()
     scope = PluginScopeContext(project_id=project_id)
-    current_inventory, _candidate_inventory, differs = service.shadow_comparison(scope, tools)
+    current_inventory, _candidate_inventory, differs = service.shadow_comparison(scope, publishable)
     if current_inventory is None or differs:
-        service.publish(scope, tools)
+        service.publish(scope, publishable)
 
 
 def invalidate_all_caches_for_project(

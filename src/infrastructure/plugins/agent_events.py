@@ -48,16 +48,26 @@ class AgentPluginEventDispatcher:
     ) -> AgentEventDispatchResult:
         """Dispatch one hook through its typed event or the legacy registry."""
         effective_payload = dict(payload or {})
+        overrides = (
+            list(runtime_hook_overrides)
+            if runtime_hook_overrides is not None
+            else list(self.runtime_hook_overrides)
+        )
         event_name = _TYPED_EVENT_BY_HOOK.get(hook_name)
         if self.legacy_registry is None or event_name is None:
             return await self._dispatch_legacy(
                 hook_name,
                 effective_payload,
-                runtime_hook_overrides or list(self.runtime_hook_overrides),
+                overrides,
             )
 
         self._ensure_legacy_adapter(hook_name, event_name)
-        typed = await self._dispatch_typed(event_name, effective_payload)
+        typed_payload = dict(effective_payload)
+        # Carry per-dispatch runtime overrides through the typed chain so the
+        # legacy adapter applies the caller's overrides, not the construction
+        # snapshot. The key is stripped before results leave the dispatcher.
+        typed_payload[_RUNTIME_OVERRIDES_KEY] = overrides
+        typed = await self._dispatch_typed(event_name, typed_payload)
         return AgentEventDispatchResult(
             payload=typed.payload,
             diagnostics=typed.diagnostics,
@@ -114,11 +124,12 @@ class AgentPluginEventDispatcher:
         if definition.mode == PluginEventMode.WATERFALL:
 
             async def waterfall_adapter(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+                overrides = _dispatch_overrides(payload, self.runtime_hook_overrides)
                 downstream = await payload["next"]()
                 result = await registry.apply_hook(
                     hook_name,
-                    payload=dict(downstream),
-                    runtime_overrides=self.runtime_hook_overrides,
+                    payload=_strip_dispatch_keys(downstream),
+                    runtime_overrides=overrides,
                 )
                 return cast(Mapping[str, Any], result.payload)
 
@@ -128,8 +139,8 @@ class AgentPluginEventDispatcher:
             async def mutating_adapter(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
                 result = await registry.apply_hook(
                     hook_name,
-                    payload=dict(payload),
-                    runtime_overrides=self.runtime_hook_overrides,
+                    payload=_strip_dispatch_keys(payload),
+                    runtime_overrides=_dispatch_overrides(payload, self.runtime_hook_overrides),
                 )
                 return cast(Mapping[str, Any] | None, result.payload)
 
@@ -139,8 +150,8 @@ class AgentPluginEventDispatcher:
             async def emit_adapter(payload: Mapping[str, Any]) -> None:
                 result = await registry.apply_hook(
                     hook_name,
-                    payload=dict(payload),
-                    runtime_overrides=self.runtime_hook_overrides,
+                    payload=_strip_dispatch_keys(payload),
+                    runtime_overrides=_dispatch_overrides(payload, self.runtime_hook_overrides),
                 )
                 if result.diagnostics:
                     logger.warning(
@@ -162,8 +173,29 @@ _TYPED_EVENT_BY_HOOK: Mapping[str, str] = {
 }
 
 
+_RUNTIME_OVERRIDES_KEY = "__platform_runtime_hook_overrides__"
+
+
+def _dispatch_overrides(
+    payload: Mapping[str, Any],
+    default: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return per-dispatch runtime overrides carried in the typed payload."""
+    overrides = payload.get(_RUNTIME_OVERRIDES_KEY)
+    if isinstance(overrides, list):
+        return overrides
+    return list(default)
+
+
+def _strip_dispatch_keys(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove dispatcher-internal keys before a payload reaches plugins."""
+    return {
+        key: value for key, value in payload.items() if key not in {"next", _RUNTIME_OVERRIDES_KEY}
+    }
+
+
 def _drop_typed_keys(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if key != "next"}
+    return _strip_dispatch_keys(payload)
 
 
 def create_agent_plugin_event_dispatcher(

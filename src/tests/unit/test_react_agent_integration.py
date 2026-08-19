@@ -12,6 +12,7 @@ import pytest
 
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.plugins.registry import HookDispatchResult
+from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -427,8 +428,7 @@ class TestReActAgentWorkspaceDelegation:
         assert payload is not None
         assert payload["workspace_binding"]["workspace_id"] == "ws-new"
         assert (
-            payload["workspace_verification_integrity"]["allow_verification_script_changes"]
-            is True
+            payload["workspace_verification_integrity"]["allow_verification_script_changes"] is True
         )
         assert binding == {"workspace_id": "ws-new", "workspace_task_id": "task-new"}
 
@@ -1023,6 +1023,7 @@ class TestReActAgentWorkspaceDelegation:
             )
         )
         agent.config.plugin_registry = registry
+        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
         agent._stream_skill_state = {
             "matched_skill": None,
             "is_forced": False,
@@ -1126,6 +1127,7 @@ class TestReActAgentWorkspaceDelegation:
             )
         )
         agent.config.plugin_registry = registry
+        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
 
         async def _empty_async_gen(*args, **kwargs):
             if False:
