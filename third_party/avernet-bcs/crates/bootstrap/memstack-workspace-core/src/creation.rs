@@ -144,7 +144,13 @@ pub(super) async fn create_public_workspace(
             "invalid {USER_EMAIL_HEADER} header"
         )));
     }
-    if state.authority == super::WorkspaceCoreAuthority::Local {
+    // Mirror the caller's project membership whenever the trusted proxy
+    // vouches for a role. Local (desktop) callers must always send the
+    // header; cloud callers are mirrored only when it is present, keeping
+    // the fail-closed behaviour for unvouched requests.
+    if state.authority == super::WorkspaceCoreAuthority::Local
+        || headers.contains_key(PROJECT_MEMBERSHIP_ROLE_HEADER)
+    {
         mirror_local_project_principal(
             state.as_ref(),
             tenant_id.as_str(),
@@ -187,8 +193,12 @@ pub(super) async fn mirror_local_project_principal(
         )));
     }
     let source_material = format!("{tenant_id}\0{project_id}\0{user_id}");
+    let identity_authority = match state.authority {
+        super::WorkspaceCoreAuthority::Local => "desktop-sidecar",
+        super::WorkspaceCoreAuthority::Cloud => "memstack",
+    };
     let source_membership_id = format!(
-        "desktop-sidecar:{}",
+        "{identity_authority}:{}",
         hex::encode(Sha256::digest(source_material.as_bytes()))
     );
     let statement = bcs_db_api::DbStatementBuilder::new(state.sql_flavor)
@@ -210,8 +220,10 @@ pub(super) async fn mirror_local_project_principal(
         .bind(role)
         .push_static(", '{}', ")
         .bind(true)
+        .push_static(", ")
+        .bind(identity_authority)
         .push_static(
-            ", 'desktop-sidecar', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) \
+            ", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) \
                       ON CONFLICT (tenant_id, project_id, user_id) DO UPDATE SET \
                       participant_actor_id = excluded.participant_actor_id, \
                       source_membership_id = excluded.source_membership_id, \
