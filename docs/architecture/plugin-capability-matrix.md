@@ -30,8 +30,8 @@ Status legend:
 | `channel` | partial: V1 channel adapter factories (mirrored); connection manager builtin | partial: manifest kind exists | n/a | builtin: WS/control channels in sidecar |
 | `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching via `route:<row_id>` profile patches (I1 B6) | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
 | `cli_command` | partial: V1 CLI commands (mirrored) | gap | n/a | n/a |
-| `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | partial: `pluginSlotService` consumes snapshot slots, `PluginSlotHost` sandboxed iframe + protocol landed (P3); page wiring remains | gap (P3) |
-| `ui_renderer` | done(backend): slot definitions only | n/a | partial: same P3 host/protocol covers renderer slots; keyed renderers remain | gap (P3) |
+| `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | done: shared `@agistack/plugin-slots` contract + keyed renderer registry + outlets mounted in settings/sidebar/toolbar/chat/canvas (I3) | partial: contract aligned (local mirror + contract field); conversation_renderer mounts below the chat panel via SignedUiModuleBoundary (I3) |
+| `ui_renderer` | done(backend): slot definitions only | n/a | done: keyed renderer registry (contract `tool-result:<tool>`) drives tool result cards; sandbox host fallback (I3) | partial: tool_result_renderer preview + signed boundary in settings (I3) |
 | `storage` | kernel/builtin: repositories and artifact stores | partial: plugin snapshot/activation/artifact SQLite stores in sidecar | n/a | done: `plugin_snapshots.rs` durable requested/applied state |
 | `graph_backend` | builtin: native graph adapter behind ports (P4 for plugin replacement) | done(adapter): `adapters-neo4j` | n/a | n/a |
 | `retrieval_backend` | builtin: hybrid search / retrieval registry (P4) | gap | n/a | n/a |
@@ -73,6 +73,6 @@ Status legend:
 | --- | --- | --- |
 | P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; DI migration done (126 bindings, facades cut over I1); dump-config CLI; per-row route patching through profiles | (complete) |
 | P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins); resolver wired into `SessionProcessor` (I2); model-visible=>logged contract tests on both runtimes (I2); `system_prompt_section` seam (I2) | Live `make dev` chat-turn E2E + native desktop smoke (deferred acceptance: needs stack restart + interactive Electron) |
-| P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost` (sandboxed iframe, builtin modules, `ui.*` permissions) | Page wiring (settings/conversation/tool-card slots), desktop renderer, keyed renderer registry |
+| P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost`; shared `@agistack/plugin-slots` package; keyed renderer registry; page outlets (settings/nav/composer/conversation/canvas); tool-result contract renderers; desktop contract alignment + conversation mount (I3) | (complete) |
 | P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good | Marketplace → bundle install wiring; admin UI (plugin/profile/row views) |
 | P5 | (pre-existing) `adapters-wasmtime` server/desktop path | Python-side WASM host, subprocess/MCP boundaries, tenant quotas and audit |
