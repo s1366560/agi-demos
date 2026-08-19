@@ -33,68 +33,6 @@ from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
 )
-from src.infrastructure.adapters.primary.web.routers import (
-    acp,
-    admin_dlq,
-    ai_tools,
-    artifacts,
-    attachments_upload,
-    audit,
-    auth,
-    background_tasks,
-    billing,
-    channels,
-    clusters,
-    cron,
-    data_export,
-    deploy,
-    engines,
-    enhanced_search,
-    episodes,
-    events,
-    genes,
-    graph,
-    graph_stores,
-    instance_channels,
-    instance_files,
-    instance_templates,
-    instances,
-    invitations,
-    llm_providers,
-    maintenance,
-    mcp,
-    memories,
-    notifications,
-    observability,
-    platform_plugins,
-    plugin_marketplace,
-    project_my_work,
-    project_sandbox,
-    projects,
-    recall,
-    reflection,
-    retrieval_stores,
-    sandbox,
-    schema,
-    security_ws,
-    shares,
-    skills,
-    smtp_config,
-    subagents,
-    support,
-    system,
-    tasks,
-    tenant_skill_configs,
-    tenant_webhooks,
-    tenants,
-    terminal,
-    trust,
-    tunnel,
-    webhooks,
-)
-from src.infrastructure.adapters.primary.web.routers.agent import (
-    router as agent_router,
-)
 from src.infrastructure.adapters.primary.web.startup import (
     initialize_artifact_content_orphan_gc_worker,
     initialize_channel_manager,
@@ -119,20 +57,9 @@ from src.infrastructure.adapters.primary.web.startup import (
 from src.infrastructure.adapters.primary.web.startup.graph import (
     shutdown_graph_service,
 )
-from src.infrastructure.adapters.primary.web.websocket import (
-    router as websocket_router,
-)
-from src.infrastructure.adapters.primary.web.workspace_core_routes import (
-    register_workspace_core_routes,
-    register_workspace_core_static_routes,
-)
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
-    install_workspace_core_runtime,
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
-)
-from src.infrastructure.adapters.primary.web.workspace_core_task_sessions import (
-    register_task_session_routes,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -142,6 +69,7 @@ from src.infrastructure.llm.resilience.health_checker import (
     stop_health_checker,
 )
 from src.infrastructure.middleware.rate_limit import limiter
+from src.infrastructure.plugins.route_loader import install_builtin_routes
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -483,7 +411,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         await shutdown_graph_service(graph_service)
 
 
-def create_app(  # noqa: PLR0915
+def create_app(
     *,
     workspace_core_settings: WorkspaceCoreSettings | None = None,
 ) -> FastAPI:
@@ -660,134 +588,13 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     if _static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
-    # Register Routers
+    # Register builtin route rows from the data-driven baseline
+    # (config/plugin-profiles/builtin-routes.v1.json). The loader replays the
+    # exact registration order and prefixes recorded there; the interleaved
+    # workspace-core helpers mount at their baseline positions.
     workspace_core_settings = workspace_core_settings or get_workspace_core_settings()
     app.state.workspace_core_settings = workspace_core_settings
-
-    app.include_router(auth.router, prefix="/api/v1")
-    register_workspace_core_static_routes(app)
-    app.include_router(tenants.router)
-    # Register project sandbox routes before the generic project routes so
-    # /api/v1/projects/sandboxes is not captured as a project id.
-    app.include_router(project_sandbox.router)
-    app.include_router(project_my_work.router)
-    app.include_router(projects.router)
-    app.include_router(agent_router)  # Modular agent router
-    app.include_router(websocket_router)  # WebSocket for agent chat
-    app.include_router(acp.router)  # Agent Client Protocol
-    app.include_router(shares.router)
-    app.include_router(memories.router)
-    app.include_router(graph.router)
-    app.include_router(graph_stores.router)
-    app.include_router(retrieval_stores.router)
-    app.include_router(schema.router)
-    # The Workspace static group above includes routing-policy compatibility;
-    # it must precede these dynamic /{provider_id} routes.
-    app.include_router(llm_providers.router)  # LiteLLM provider management
-
-    # New routers - feature parity with server/
-    app.include_router(episodes.router)
-    app.include_router(recall.router)
-    app.include_router(reflection.router)
-    app.include_router(enhanced_search.router)
-    app.include_router(enhanced_search.memory_router)
-    app.include_router(data_export.router)
-    app.include_router(maintenance.router)
-    app.include_router(tasks.router)
-    register_workspace_core_routes(app)
-    install_workspace_core_runtime(app, workspace_core_settings)
-    register_task_session_routes(app)
-    app.include_router(cron.router)
-    app.include_router(ai_tools.router)
-    app.include_router(background_tasks.router)
-    app.include_router(billing.router)
-    app.include_router(notifications.router)
-    app.include_router(support.router, prefix="/api/v1")
-    app.include_router(support.router)
-
-    # Agent Capability System (L2 Skill + L3 SubAgent)
-    app.include_router(skills.router)
-    app.include_router(tenant_skill_configs.router)
-    app.include_router(subagents.router)
-
-    # MCP Ecosystem Integration (Phase 4)
-    app.include_router(mcp.router)
-
-    # Sandbox (MCP-enabled Docker containers)
-    app.include_router(sandbox.router)
-
-    # Terminal (Interactive shell via WebSocket)
-    app.include_router(terminal.router)
-
-    # Artifacts (Rich output from sandbox/MCP tools)
-    app.include_router(artifacts.router)
-
-    # Attachments (File upload for agent chat)
-    app.include_router(attachments_upload.router)
-
-    # Channel Configuration (IM integrations: Feishu, DingTalk, WeCom)
-    app.include_router(channels.router, prefix="/api/v1")
-
-    # Instance / Deploy / Cluster / Gene Marketplace / Template Marketplace
-    app.include_router(instances.router)
-    app.include_router(instance_files.router)
-    app.include_router(instance_channels.router)
-    app.include_router(deploy.router)
-    app.include_router(clusters.router)
-    app.include_router(genes.router)
-    app.include_router(instance_templates.router)
-
-    # Audit Logs (tenant-scoped read-only audit trail)
-    app.include_router(audit.router)
-
-    # Trust System (graduated autonomy policies and approval decisions)
-    app.include_router(trust.router)
-    app.include_router(trust.workspace_router)
-
-    # SMTP Configuration (tenant-scoped mail server settings)
-    app.include_router(smtp_config.router)
-
-    # Webhooks (Feishu challenge verification + message ingestion)
-    app.include_router(webhooks.router)
-    app.include_router(tenant_webhooks.router, prefix="/api/v1")
-    app.include_router(system.router, prefix="/api/v1")
-    app.include_router(plugin_marketplace.router)
-    app.include_router(platform_plugins.router)
-    app.include_router(events.router)
-
-    # Tunnel (WebSocket reverse tunnel for local sandbox connectivity)
-    app.include_router(tunnel.router)
-
-    # Engines (runtime engine catalog)
-    app.include_router(engines.router)
-
-    # Security WebSocket (pre/post execution security evaluation)
-    app.include_router(security_ws.router)
-
-    # Observability (workspace-scoped event logs, DLQ, circuit state, queues)
-    app.include_router(observability.router)
-    app.include_router(admin_dlq.router)
-
-    app.include_router(invitations.router)
-    app.include_router(invitations.public_router)
-
-    # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
-    from src.infrastructure.agent.pool import create_pool_router, create_project_pool_router
-
-    app.include_router(create_pool_router())
-    app.include_router(create_project_pool_router())
-
-    logger.info("Agent Pool Admin API registered at /api/v1/admin/pool")
-
-    # Voice WebSocket (ASR/TTS streaming pipeline)
-    from src.infrastructure.adapters.primary.web.routers import voice_websocket
-
-    app.include_router(voice_websocket.router)
-    logger.info("Voice WebSocket registered at /api/v1/voice/chat")
-
-    # Host-based sandbox service previews. This catch-all router is intentionally
-    # last so normal API/static routes win for localhost.
-    app.include_router(project_sandbox.preview_router)
+    install_builtin_routes(app, workspace_core_settings=workspace_core_settings)
 
     return app
 

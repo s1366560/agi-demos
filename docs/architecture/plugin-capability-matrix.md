@@ -28,7 +28,7 @@ Status legend:
 | `embedder` | partial: provider-manager backed; capability kind reserved (P1/P4) | gap | n/a | gap |
 | `reranker` | partial: retrieval services builtin; capability kind reserved (P4) | gap | n/a | gap |
 | `channel` | partial: V1 channel adapter factories (mirrored); connection manager builtin | partial: manifest kind exists | n/a | builtin: WS/control channels in sidecar |
-| `http_route` | partial: `HttpRouteMountService` (reversible, auth-enforced) + plugin routes unconditional; 67 builtin routers static in `main.py`, inventoried in `config/plugin-profiles/builtin-routes.v1.json` for the P1 row migration | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
+| `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching is the remaining P1 step | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
 | `cli_command` | partial: V1 CLI commands (mirrored) | gap | n/a | n/a |
 | `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | gap: registry exists server-side, web does not consume slots yet (P3) | gap (P3) |
 | `ui_renderer` | done(backend): slot definitions only | n/a | gap (P3) | gap (P3) |
