@@ -71,6 +71,7 @@ from src.configuration.containers import (
     SandboxContainer,
     TaskContainer,
 )
+from src.configuration.service_bindings import declare_container_services
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
@@ -177,6 +178,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repo
     SqlWorkflowPatternRepository,
 )
 from src.infrastructure.agent.context.window_manager import ContextWindowManager
+from src.infrastructure.plugins.service_registry import ServiceRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +248,13 @@ class DIContainer:
             agent_message_bus_factory=self._infra.agent_message_bus,
         )
 
+        # I1 shadow composition root: every zero-arg accessor is declared as
+        # a lazy service. Facades keep their current behavior until the B6
+        # cutover; the registry is per-container, so with_db() clones get
+        # request-scoped caching while the global container caches singletons.
+        self._services: ServiceRegistry = ServiceRegistry()
+        _ = declare_container_services(self._services, self)
+
     def with_db(self, db: AsyncSession) -> "DIContainer":
         """Create a new container instance with a specific db session.
 
@@ -279,6 +288,11 @@ class DIContainer:
                 "request, db)) before resolving this service."
             )
         return self._db
+
+    @property
+    def services(self) -> ServiceRegistry:
+        """Shadow composition root (I1): lazy service view of the container."""
+        return self._services
 
     def ai_service_factory(self) -> Any:
         """Get the AIServiceFactory singleton."""

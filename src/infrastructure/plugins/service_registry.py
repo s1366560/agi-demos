@@ -53,6 +53,7 @@ class ServiceDeclaration:
     factory: ServiceFactory
     inject: tuple[str, ...] = ()
     owner: str | None = None
+    allow_none: bool = False
 
 
 @dataclass
@@ -152,6 +153,56 @@ class ServiceRegistry:
             raise KeyError(f"no active service for key {normalized}")
         return entry.instance
 
+    def get_or_activate(self, key: str) -> object:
+        """Return the active instance, activating synchronously on first use.
+
+        Lazy counterpart to :meth:`activate_all` for synchronous facades:
+        the declaration's dependencies are activated first (recursively),
+        then the factory runs inline. Factories that return an awaitable are
+        rejected — they must go through :meth:`activate_all` instead.
+        """
+        normalized = _normalize_key(key)
+        with self._lock:
+            return self._activate_sync(normalized, trail=())
+
+    def _activate_sync(self, key: str, trail: tuple[str, ...]) -> object:
+        entry = self._entries.get(key)
+        if entry is not None:
+            return entry.instance
+        declaration = self._declarations.get(key)
+        if declaration is None:
+            raise KeyError(f"no active service or declaration for key {key}")
+        if key in trail:
+            cycle = " -> ".join((*trail, key))
+            raise ServiceDependencyError(f"dependency cycle: {cycle}")
+        for dependency in declaration.inject:
+            _ = self._activate_sync(dependency, (*trail, key))
+        instance = declaration.factory(ServiceContext(self, declaration))
+        if inspect.isawaitable(instance):
+            raise ServiceDependencyError(
+                f"service factory for {key} returned an awaitable; use activate_all() instead"
+            )
+        if instance is None and not declaration.allow_none:
+            raise ServiceDependencyError(f"service factory for {key} returned None")
+        dispose: Disposable | None = None
+        close_method = getattr(instance, "close", None)
+        if callable(close_method):
+
+            def _dispose_instance() -> None:
+                close_method()
+
+            dispose = _dispose_instance
+
+        self._entries[key] = _ServiceEntry(
+            key=key,
+            instance=instance,
+            owner=declaration.owner,
+            dispose=dispose,
+        )
+        self._activation_order.append(key)
+        _ = self._declarations.pop(key, None)
+        return instance
+
     def has(self, key: str) -> bool:
         """Return whether a key currently has an active instance."""
         with self._lock:
@@ -184,6 +235,7 @@ class ServiceRegistry:
                 factory=declaration.factory,
                 inject=tuple(dict.fromkeys(declaration.inject)),
                 owner=declaration.owner,
+                allow_none=declaration.allow_none,
             )
 
     async def activate_all(self) -> tuple[str, ...]:
@@ -226,7 +278,7 @@ class ServiceRegistry:
         instance = declaration.factory(context)
         if inspect.isawaitable(instance):
             instance = await instance
-        if instance is None:
+        if instance is None and not declaration.allow_none:
             raise ServiceDependencyError(f"service factory for {declaration.key} returned None")
         dispose: Disposable | None = None
         close_method = getattr(instance, "close", None)
