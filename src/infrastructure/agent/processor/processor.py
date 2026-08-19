@@ -19,6 +19,7 @@ Reference: OpenCode's SessionProcessor in processor.ts (406 lines)
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import re
@@ -207,6 +208,12 @@ class ProcessorConfig:
     # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
     run_id: str | None = None
 
+    # Pluggable agent loop seam (P2/I2): when a resolver and provider_id are
+    # present, each turn resolves its loop by (provider, model); the builtin
+    # ReAct path is the fallback and the default when no resolver is set.
+    provider_id: str = ""
+    loop_resolver: Any | None = None
+
     # Hard ceilings — defensive bounds against misconfiguration / a malicious
     # agent definition setting absurd values that would let a single ReAct
     # session monopolize a worker indefinitely.
@@ -356,13 +363,12 @@ class SessionProcessor:
         "producing another text-only reply."
     )
     _GOAL_PENDING_REASON_PREFIX = "[GOAL CHECK FEEDBACK]"
-    _NATIVE_TOOL_PROTOCOL_GUIDANCE = (
-        "When a tool is needed, use the runtime's native tool-call protocol and only "
-        "the tools declared for the current step. Never print textual tool-call markup "
-        "such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, or shell command "
-        "code blocks as a substitute for calling a tool. Also never print "
-        "<minimax:tool_call> or <invoke name=...> markup."
+    # Canonical text lives in plugins/prompt_sections.py (I2 capability seam);
+    # the class attribute stays as the backward-compatible alias.
+    from src.infrastructure.plugins.prompt_sections import (
+        NATIVE_TOOL_PROTOCOL_GUIDANCE as _NATIVE_TOOL_PROTOCOL_GUIDANCE,
     )
+
     _WORKSPACE_DELEGATION_RECOVERY_HINT = (
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
         "Call todoread, choose the target child task's workspace_task_id, then retry "
@@ -454,6 +460,7 @@ class SessionProcessor:
         self._state = ProcessorState.IDLE
         self._step_count = 0
         self._no_progress_steps = 0
+        self._loop_selection: Any | None = None
         self._last_process_result: ProcessorResult = ProcessorResult.CONTINUE
         self._current_message: Message | None = None
         self._pending_tool_calls: dict[str, ToolPart] = {}
@@ -602,6 +609,25 @@ class SessionProcessor:
                 if item and item not in target:
                     target.append(item)
 
+    def _merge_prompt_sections(self) -> None:
+        """Merge registry-provided system_prompt_section capabilities (I2).
+
+        Sections arrive through the platform capability registry; when the
+        control plane is not active the collection is empty and the turn is
+        byte-identical to the pre-seam behavior.
+        """
+        try:
+            from src.infrastructure.plugins.prompt_sections import collect_prompt_sections
+            from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
+
+            sections = collect_prompt_sections(get_platform_plugin_runtime_host().capabilities)
+        except Exception:
+            logger.debug("prompt section collection unavailable", exc_info=True)
+            return
+        for section in sections:
+            if section not in self._session_instructions:
+                self._session_instructions.append(section)
+
     async def add_runtime_guidance(self, text: str) -> bool:
         """Append a runtime guidance block to the session-level instructions.
 
@@ -641,8 +667,12 @@ class SessionProcessor:
         lines = [
             "[Runtime Guidance]",
             policy_intro,
-            self._NATIVE_TOOL_PROTOCOL_GUIDANCE,
         ]
+        # The builtin native-tool-protocol guidance ships as a
+        # system_prompt_section capability (I2); when the registry already
+        # supplied it, do not render the hardcoded copy a second time.
+        if self._NATIVE_TOOL_PROTOCOL_GUIDANCE not in instructions:
+            lines.append(self._NATIVE_TOOL_PROTOCOL_GUIDANCE)
         for index, item in enumerate(instructions, start=1):
             lines.extend(
                 [
@@ -1453,6 +1483,7 @@ class SessionProcessor:
         self._no_progress_steps = 0
         self._session_instructions = []
         self._response_instructions = []
+        self._merge_prompt_sections()
         self._tool_reminder_issued_for_streak = False
         self._langfuse_context = effective_langfuse_context
         self._artifact_handler.set_langfuse_context(self._langfuse_context)
@@ -1464,6 +1495,17 @@ class SessionProcessor:
         # task and auto-cleans when the task ends, so concurrent processor
         # runs cannot see each other's state.
         set_current_run_context(run_ctx)
+
+        # Pluggable agent loop seam (P2/I2): resolve this turn's loop by
+        # (provider, model). A non-builtin selection takes over the turn;
+        # anything else falls through to the builtin ReAct path below.
+        self._loop_selection = self._resolve_agent_loop()
+        if self._loop_selection is not None and self._loop_selection.scope != "builtin":
+            async for loop_event in self._dispatch_external_loop(
+                self._loop_selection, session_id, messages, run_ctx
+            ):
+                yield loop_event
+            return
 
         # Emit start event
         yield AgentStartEvent()
@@ -2103,7 +2145,78 @@ class SessionProcessor:
         task_summary = await self._goal_evaluator.summarize_tasks(session_id)
         if task_summary is not None:
             summary["tasks"] = task_summary
+        if self._loop_selection is not None:
+            summary["agent_loop"] = {
+                "loop_id": self._loop_selection.loop_id,
+                "plugin_id": self._loop_selection.plugin_id,
+                "scope": self._loop_selection.scope,
+            }
         return summary
+
+    def _resolve_agent_loop(self) -> Any | None:
+        """Resolve this turn's agent loop by (provider, model).
+
+        Returns ``None`` when the seam is unconfigured or resolution fails;
+        both mean "use the builtin ReAct path" and never fail the turn.
+        """
+        resolver = self.config.loop_resolver
+        provider_id = self.config.provider_id
+        if resolver is None or not provider_id or not self.config.model:
+            return None
+        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolutionError
+
+        try:
+            selection = resolver.resolve(provider_id, self.config.model)
+        except AgentLoopResolutionError as exc:
+            logger.warning(
+                "agent loop resolution failed for %s/%s; using builtin ReAct loop: %s",
+                provider_id,
+                self.config.model,
+                exc,
+            )
+            return None
+        logger.info(
+            "agent loop resolved: scope=%s loop=%s plugin=%s provider=%s model=%s",
+            selection.scope,
+            selection.loop_id,
+            selection.plugin_id,
+            provider_id,
+            self.config.model,
+        )
+        return selection
+
+    async def _dispatch_external_loop(
+        self,
+        selection: Any,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        run_ctx: RunContext,
+    ) -> AsyncIterator[Any]:
+        """Run one turn through a resolved non-builtin agent loop capability.
+
+        The driver contract is structural (callable ``run``); its outcome may
+        be an async iterator of events, an awaitable resolving to one, or a
+        single event/value.
+        """
+        from src.infrastructure.plugins.agent_loop_runtime import validate_loop_implementation
+
+        validate_loop_implementation(selection.implementation)
+        yield AgentStartEvent()
+        context = {
+            "session_id": session_id,
+            "messages": messages,
+            "run_ctx": run_ctx,
+            "config": self.config,
+            "tools": self.tools,
+        }
+        outcome = selection.implementation.run(context)
+        if inspect.isawaitable(outcome):
+            outcome = await outcome
+        if hasattr(outcome, "__aiter__"):
+            async for event in outcome:
+                yield event
+        elif outcome is not None:
+            yield outcome
 
     def _build_trace_url(self, session_id: str) -> str | None:
         """Build Langfuse trace URL if context is available."""

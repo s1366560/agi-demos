@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
+    from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 
@@ -154,6 +155,8 @@ class ProcessorFactory:
         Returns:
             Configured SessionProcessor instance.
         """
+        if config.loop_resolver is None:
+            config.loop_resolver = _default_loop_resolver()
         return SessionProcessor(
             config=config,
             tools=tools,
@@ -162,3 +165,18 @@ class ProcessorFactory:
             command_interceptor=self.command_interceptor,
             tool_pipeline=self.tool_pipeline,
         )
+
+
+def _default_loop_resolver() -> AgentLoopResolver | None:
+    """Build the per-turn agent loop resolver from the platform runtime host.
+
+    Returns ``None`` when the plugin control plane is not active (tests,
+    bare CLI runs); the processor then always uses the builtin ReAct loop.
+    """
+    try:
+        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
+        from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
+
+        return AgentLoopResolver(get_platform_plugin_runtime_host().capabilities)
+    except Exception:
+        return None

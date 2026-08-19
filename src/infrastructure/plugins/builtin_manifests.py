@@ -43,6 +43,11 @@ def sisyphus_runtime_manifest() -> PluginManifest:
             "runtime": "python-trusted",
             "trust": "builtin",
             "provides": [
+                {
+                    "kind": "system_prompt_section",
+                    "id": "native-tool-protocol",
+                    "contract": "prompt-section:native-tool-protocol",
+                },
                 {"kind": "hook", "id": "on_session_start"},
                 {"kind": "hook", "id": "before_response"},
                 {"kind": "hook", "id": "after_tool_execution"},

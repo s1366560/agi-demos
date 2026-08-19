@@ -22,6 +22,10 @@ from .llm_adapters import (
     RoutedLlmAdapterProvider,
 )
 from .profile import PluginSnapshotRow, ProfileSnapshot
+from .prompt_sections import (
+    NATIVE_TOOL_PROTOCOL_GUIDANCE,
+    NATIVE_TOOL_PROTOCOL_SECTION_ID,
+)
 
 Disposable = Callable[[], None]
 
@@ -69,7 +73,7 @@ def register_builtin_kernel_plugins(
             _ = context.register_capability(
                 capability.kind,
                 capability.id,
-                LegacyCapability(plugin_id=manifest.id, capability=capability.contract),
+                _builtin_implementation(manifest, capability),
             )
         legacy_register()
         registrations.append(
@@ -313,3 +317,20 @@ def register_plugin_activation(
         _ = legacy_registry.unregister_plugin(manifest.id)
 
     return dispose
+
+
+def _builtin_implementation(manifest: PluginManifest, capability: object) -> object:
+    """Resolve the live implementation for one builtin capability row.
+
+    Prompt sections register their canonical text (the processor merges it
+    into runtime guidance); everything else keeps the opaque legacy marker.
+    """
+    from src.domain.model.plugins import CapabilityKind, ProvidedCapability
+
+    if isinstance(capability, ProvidedCapability) and (
+        capability.kind == CapabilityKind.SYSTEM_PROMPT_SECTION
+        and capability.id == NATIVE_TOOL_PROTOCOL_SECTION_ID
+    ):
+        return NATIVE_TOOL_PROTOCOL_GUIDANCE
+    contract = getattr(capability, "contract", "")
+    return LegacyCapability(plugin_id=manifest.id, capability=contract)

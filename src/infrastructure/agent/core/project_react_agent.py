@@ -499,9 +499,9 @@ class ProjectReActAgent:
                 "__override_max_tokens": _reasoning_cfg.override_max_tokens,
             }
 
-        control_channel = (
-            RedisControlChannel(redis_client) if redis_client is not None else None
-        )
+        control_channel = RedisControlChannel(redis_client) if redis_client is not None else None
+        _provider_type = getattr(provider_config, "provider_type", "") or ""
+        _provider_id = str(getattr(_provider_type, "value", _provider_type))
         processor_config = ProcessorConfig(
             model=provider_config.llm_model,
             api_key="",
@@ -513,6 +513,7 @@ class ProjectReActAgent:
             provider_options=_provider_opts,
             message_bus=self._message_bus,
             control_channel=control_channel,
+            provider_id=_provider_id,
         )
 
         self._artifact_service = artifact_service
