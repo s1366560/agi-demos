@@ -28,7 +28,7 @@ Status legend:
 | `embedder` | partial: provider-manager backed; capability kind reserved (P1/P4) | gap | n/a | gap |
 | `reranker` | partial: retrieval services builtin; capability kind reserved (P4) | gap | n/a | gap |
 | `channel` | partial: V1 channel adapter factories (mirrored); connection manager builtin | partial: manifest kind exists | n/a | builtin: WS/control channels in sidecar |
-| `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching is the remaining P1 step | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
+| `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching via `route:<row_id>` profile patches (I1 B6) | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
 | `cli_command` | partial: V1 CLI commands (mirrored) | gap | n/a | n/a |
 | `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | partial: `pluginSlotService` consumes snapshot slots, `PluginSlotHost` sandboxed iframe + protocol landed (P3); page wiring remains | gap (P3) |
 | `ui_renderer` | done(backend): slot definitions only | n/a | partial: same P3 host/protocol covers renderer slots; keyed renderers remain | gap (P3) |
@@ -48,7 +48,7 @@ Status legend:
 | Snapshot reconcile (staging + last-good + ACK/NACK) | `snapshot_reconciler.py`, `runtime_host.py` | `profile_reconcile.rs` | `platform_plugin_sync.rs` + `plugin_snapshots.rs` (SQLite last-good) |
 | Registry hot-swap | generation swap + in-flight pinning (`tool_runtime.py`) | `ArcSwap` atomic swap (ADR-0006) | same registry |
 | V1/V2 inventory unification | `legacy_inventory_bridge.py` (P0) | n/a | n/a |
-| Composition root | `service_registry.py` key/inject/dispose + topological activation (P1 foundation; `di_container.py` migration pending) | static wiring in app bins | static wiring |
+| Composition root | done: `service_registry.py` + `configuration/service_bindings.py` (126 accessor rows); container facades resolve through the per-container registry (I1) | static wiring in app bins | static wiring |
 | Config audit (`dump-config`) | `dump_config.py` + `scripts/dump_plugin_profile.py` (layer provenance, canonical JSON digest) | consumes the same canonical JSON | same |
 | Bundle distribution | `bundle.py` `.mspkg` (manifest + layer rows + patches, bounded zip) (P4) | OCI artifact path retained | same |
 | Profile hot-reload | `profile_watch.py` recompose + last-good + envelope events (P4) | `platform_plugin_sync.rs` polling reconciler | same |
@@ -71,7 +71,7 @@ Status legend:
 
 | Phase | Landed | Remaining |
 | --- | --- | --- |
-| P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; `di_bridge` for incremental DI migration; dump-config CLI | Mass migration of `di_container.py` factories (shadow), per-row route patching through profiles |
+| P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; DI migration done (126 bindings, facades cut over I1); dump-config CLI; per-row route patching through profiles | (complete) |
 | P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins) | Wire the resolver into `SessionProcessor` turn start; model-visible⇒logged shared invariant tests |
 | P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost` (sandboxed iframe, builtin modules, `ui.*` permissions) | Page wiring (settings/conversation/tool-card slots), desktop renderer, keyed renderer registry |
 | P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good | Marketplace → bundle install wiring; admin UI (plugin/profile/row views) |
