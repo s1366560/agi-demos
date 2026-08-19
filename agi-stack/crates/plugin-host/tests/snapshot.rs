@@ -48,3 +48,31 @@ fn rejects_untrusted_in_process_plugin() {
     let error = PlatformPluginSnapshot::parse(&raw).unwrap_err();
     assert!(error.to_string().contains("python-trusted"));
 }
+
+#[test]
+fn parses_shared_python_golden_fixture() {
+    // Cross-runtime contract: this file is emitted by the Python control plane
+    // (`uv run python scripts/dump_plugin_profile.py --format json`) and guarded
+    // on the Python side by test_platform_plugin_profile_contract.py.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../shared/fixtures/platform-plugin-profile.v1.json"
+    );
+    let raw = std::fs::read_to_string(path).expect("shared golden fixture must exist");
+    let snapshot = PlatformPluginSnapshot::parse(&raw).unwrap();
+    assert_eq!(snapshot.schema_version, 1);
+    assert_eq!(snapshot.profile_id, "memstack-default");
+    assert!(snapshot.plugins.len() >= 2);
+    assert!(snapshot
+        .plugins
+        .iter()
+        .any(|plugin| plugin.id == "workspace-runtime"));
+    assert!(snapshot
+        .plugins
+        .iter()
+        .any(|plugin| plugin.id == "sisyphus-runtime"));
+    assert!(snapshot
+        .plugins
+        .iter()
+        .all(|plugin| plugin.layer_id == "memstack.kernel-base"));
+}
