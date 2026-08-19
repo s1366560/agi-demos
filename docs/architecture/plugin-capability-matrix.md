@@ -17,8 +17,8 @@ Status legend:
 
 | Capability kind | Python backend | Rust core / sidecar | Web frontend | Desktop app |
 | --- | --- | --- | --- | --- |
-| `agent_loop` | partial: kind relaxed to builtin/signed (python-trusted only); `agent_loop_runtime.AgentLoopResolver` resolves per turn by `(provider, model)` — model > provider > auto(`supports()` priority) > builtin fallback; wiring into `SessionProcessor` remains | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
-| `system_prompt_section` | partial: runtime guidance / agent definition prompts are builtin, not yet capability rows (P2) | gap | n/a | gap |
+| `agent_loop` | partial: kind relaxed to builtin/signed (python-trusted only); `agent_loop_runtime.AgentLoopResolver` resolves per turn by `(provider, model)` — model > provider > auto(`supports()` priority) > builtin fallback; wired into `SessionProcessor` per turn (I2); `system_prompt_section` consumed from the registry with builtin fallback | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
+| `system_prompt_section` | partial: builtin native-tool-protocol row registered; processor merges registry sections with builtin fallback (I2); agent-definition prompts remain builtin | gap | n/a | gap |
 | `tool` | done: V2 tool generations (`tool_runtime.py`) + V1 factories mirrored by `legacy_inventory_bridge.py` | done: `HotPlugRegistry` + `ToolHost` seam (`crates/plugin-host`) | n/a | done: sidecar `authorized_tool_host` consumes the same registry |
 | `skill_provider` | partial: V1 skill factories + loaders; V2 mirroring via bridge; declarative skills are builtin | done: `SkillEngine` (declarative data + Rhai trigger) in `crates/plugin-host` | n/a | partial: available through plugin-host, no profile-driven skills yet |
 | `subagent_provider` | partial: V1 resolver factories (mirrored); subagent runtime builtin | partial: manifest kind exists in `plugin-host` | n/a | done: sidecar `subagent_agent_tool_host` / `subagent_runtime` |
@@ -72,7 +72,7 @@ Status legend:
 | Phase | Landed | Remaining |
 | --- | --- | --- |
 | P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; DI migration done (126 bindings, facades cut over I1); dump-config CLI; per-row route patching through profiles | (complete) |
-| P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins) | Wire the resolver into `SessionProcessor` turn start; model-visible⇒logged shared invariant tests |
+| P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins); resolver wired into `SessionProcessor` (I2); model-visible=>logged contract tests on both runtimes (I2); `system_prompt_section` seam (I2) | Live `make dev` chat-turn E2E + native desktop smoke (deferred acceptance: needs stack restart + interactive Electron) |
 | P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost` (sandboxed iframe, builtin modules, `ui.*` permissions) | Page wiring (settings/conversation/tool-card slots), desktop renderer, keyed renderer registry |
 | P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good | Marketplace → bundle install wiring; admin UI (plugin/profile/row views) |
 | P5 | (pre-existing) `adapters-wasmtime` server/desktop path | Python-side WASM host, subprocess/MCP boundaries, tenant quotas and audit |

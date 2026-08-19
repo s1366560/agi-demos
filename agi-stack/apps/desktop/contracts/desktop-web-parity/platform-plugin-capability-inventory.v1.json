@@ -166,6 +166,21 @@
       ]
     },
     {
+      "capability_id": "native-tool-protocol",
+      "capability_kind": "system_prompt_section",
+      "contract": "prompt-section:native-tool-protocol",
+      "id": "platform-plugin-sisyphus-runtime-system_prompt_section-native-tool-protocol",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "sisyphus-runtime",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
       "capability_id": "after_tool_execution",
       "capability_kind": "hook",
       "contract": "hook:after_tool_execution",
