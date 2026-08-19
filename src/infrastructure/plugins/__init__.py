@@ -16,6 +16,13 @@ from .llm_adapters import (
     get_llm_adapter_provider_registry,
 )
 from .profile import compose_profile, parse_profile_document
+from .service_registry import (
+    ServiceConflictError,
+    ServiceContext,
+    ServiceDeclaration,
+    ServiceDependencyError,
+    ServiceRegistry,
+)
 
 __all__ = [
     "CapabilityRegistry",
@@ -30,6 +37,11 @@ __all__ = [
     "PluginContext",
     "PluginScopeContext",
     "RoutedLlmAdapterProvider",
+    "ServiceConflictError",
+    "ServiceContext",
+    "ServiceDeclaration",
+    "ServiceDependencyError",
+    "ServiceRegistry",
     "compose_profile",
     "get_llm_adapter_provider_registry",
     "parse_profile_document",
