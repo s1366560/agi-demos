@@ -27,7 +27,7 @@ class _RecordingApp:
         self.calls.append({"router": router, "kwargs": kwargs})
 
 
-def _install_with_stub_helpers(app: _RecordingApp) -> tuple[str, ...]:
+def _install_with_stub_helpers(app: _RecordingApp, **extra: Any) -> tuple[str, ...]:
     helper_calls: list[str] = []
 
     def make_helper(name: str):
@@ -47,6 +47,7 @@ def _install_with_stub_helpers(app: _RecordingApp) -> tuple[str, ...]:
         workspace_core_settings=object(),
         inventory_path=_REPO_ROOT / INVENTORY_PATH,
         helper_overrides=overrides,
+        **extra,
     )
     return mounted, helper_calls  # type: ignore[return-value]
 
@@ -121,3 +122,84 @@ def test_malformed_inventory_fails_loud(tmp_path: Path) -> None:
 
     with pytest.raises(RouteLoadError, match="entries"):
         install_builtin_routes(_RecordingApp(), inventory_path=bad)
+
+
+@pytest.mark.unit
+class TestRouteRowPatches:
+    """Per-row profile patching of the builtin route surface (I1 B6)."""
+
+    def _install(self, app: _RecordingApp, **kwargs: Any) -> tuple[str, ...]:
+        mounted, _ = _install_with_stub_helpers(app, **kwargs)
+        return mounted
+
+    def test_disabled_row_is_skipped(self) -> None:
+        from src.infrastructure.plugins.route_loader import RouteRowPatch
+
+        app = _RecordingApp()
+        mounted = self._install(
+            app, row_patches={"tenants": RouteRowPatch(row_id="tenants", enabled=False)}
+        )
+        assert "tenants" not in mounted
+        assert "auth" in mounted
+
+    def test_unknown_patch_target_rejected(self) -> None:
+        from src.infrastructure.plugins.route_loader import RouteRowPatch
+
+        app = _RecordingApp()
+        with pytest.raises(RouteLoadError, match="unknown baseline rows"):
+            self._install(
+                app,
+                row_patches={"no-such-row": RouteRowPatch(row_id="no-such-row", enabled=False)},
+            )
+
+    def test_prefix_replacement(self) -> None:
+        from src.infrastructure.plugins.route_loader import RouteRowPatch
+
+        app = _RecordingApp()
+        self._install(
+            app,
+            row_patches={"auth": RouteRowPatch(row_id="auth", prefix="/api/v2")},
+        )
+        auth_calls = [c for c in app.calls if c["kwargs"].get("prefix") == "/api/v2"]
+        assert len(auth_calls) == 1
+
+    def test_module_replacement_resolves_substitute_router(self) -> None:
+        from src.infrastructure.plugins.route_loader import RouteRowPatch
+
+        app = _RecordingApp()
+        mounted = self._install(
+            app,
+            row_patches={
+                "tenants": RouteRowPatch(
+                    row_id="tenants",
+                    module="src.infrastructure.adapters.primary.web.routers.auth",
+                    expression="auth.router",
+                    prefix="/api/v1",
+                )
+            },
+        )
+        assert "tenants" in mounted
+
+    def test_profile_patch_translation(self) -> None:
+        from src.infrastructure.plugins.profile import ProfilePatch
+        from src.infrastructure.plugins.route_loader import route_patches_from_profile
+
+        patches = route_patches_from_profile(
+            [
+                ProfilePatch(target="route:tenants", enabled=False),
+                ProfilePatch(target="route:auth", config={"prefix": "/api/v2"}),
+                ProfilePatch(target="plugin-row-unrelated", enabled=False),
+                ProfilePatch(target="route:legacy", remove=True),
+            ]
+        )
+        assert set(patches) == {"tenants", "auth", "legacy"}
+        assert patches["tenants"].enabled is False
+        assert patches["legacy"].enabled is False
+        assert patches["auth"].prefix == "/api/v2"
+
+    def test_profile_patch_rejects_unknown_config_keys(self) -> None:
+        from src.infrastructure.plugins.profile import ProfilePatch
+        from src.infrastructure.plugins.route_loader import route_patches_from_profile
+
+        with pytest.raises(RouteLoadError, match="unknown config keys"):
+            route_patches_from_profile([ProfilePatch(target="route:auth", config={"bogus": 1})])
