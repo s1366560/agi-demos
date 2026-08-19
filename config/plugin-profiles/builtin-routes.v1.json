@@ -1,0 +1,516 @@
+{
+  "digest": "688138ab84ee1c191e358d8eb0b4d93309bae75d14af0bfdd4c9cc305c931290",
+  "entries": [
+    {
+      "expression": "install_http_route_capabilities",
+      "kind": "helper",
+      "line": 174,
+      "module": "src.infrastructure.adapters.primary.web.startup.install_http_route_capabilities",
+      "row_id": "http-route-capabilities"
+    },
+    {
+      "expression": "auth.router",
+      "kind": "include_router",
+      "line": 667,
+      "module": "src.infrastructure.adapters.primary.web.routers.auth",
+      "prefix": "/api/v1",
+      "row_id": "auth"
+    },
+    {
+      "expression": "register_workspace_core_static_routes",
+      "kind": "helper",
+      "line": 668,
+      "module": "src.infrastructure.adapters.primary.web.workspace_core_routes.register_workspace_core_static_routes",
+      "row_id": "workspace-core-static"
+    },
+    {
+      "expression": "tenants.router",
+      "kind": "include_router",
+      "line": 669,
+      "module": "src.infrastructure.adapters.primary.web.routers.tenants",
+      "row_id": "tenants"
+    },
+    {
+      "expression": "project_sandbox.router",
+      "kind": "include_router",
+      "line": 672,
+      "module": "src.infrastructure.adapters.primary.web.routers.project_sandbox",
+      "row_id": "project-sandbox"
+    },
+    {
+      "expression": "project_my_work.router",
+      "kind": "include_router",
+      "line": 673,
+      "module": "src.infrastructure.adapters.primary.web.routers.project_my_work",
+      "row_id": "project-my-work"
+    },
+    {
+      "expression": "projects.router",
+      "kind": "include_router",
+      "line": 674,
+      "module": "src.infrastructure.adapters.primary.web.routers.projects",
+      "row_id": "projects"
+    },
+    {
+      "expression": "agent_router",
+      "kind": "include_router",
+      "line": 675,
+      "module": "src.infrastructure.adapters.primary.web.routers.agent.router",
+      "row_id": "agent"
+    },
+    {
+      "expression": "websocket_router",
+      "kind": "include_router",
+      "line": 676,
+      "module": "src.infrastructure.adapters.primary.web.websocket.router",
+      "row_id": "websocket"
+    },
+    {
+      "expression": "acp.router",
+      "kind": "include_router",
+      "line": 677,
+      "module": "src.infrastructure.adapters.primary.web.routers.acp",
+      "row_id": "acp"
+    },
+    {
+      "expression": "shares.router",
+      "kind": "include_router",
+      "line": 678,
+      "module": "src.infrastructure.adapters.primary.web.routers.shares",
+      "row_id": "shares"
+    },
+    {
+      "expression": "memories.router",
+      "kind": "include_router",
+      "line": 679,
+      "module": "src.infrastructure.adapters.primary.web.routers.memories",
+      "row_id": "memories"
+    },
+    {
+      "expression": "graph.router",
+      "kind": "include_router",
+      "line": 680,
+      "module": "src.infrastructure.adapters.primary.web.routers.graph",
+      "row_id": "graph"
+    },
+    {
+      "expression": "graph_stores.router",
+      "kind": "include_router",
+      "line": 681,
+      "module": "src.infrastructure.adapters.primary.web.routers.graph_stores",
+      "row_id": "graph-stores"
+    },
+    {
+      "expression": "retrieval_stores.router",
+      "kind": "include_router",
+      "line": 682,
+      "module": "src.infrastructure.adapters.primary.web.routers.retrieval_stores",
+      "row_id": "retrieval-stores"
+    },
+    {
+      "expression": "schema.router",
+      "kind": "include_router",
+      "line": 683,
+      "module": "src.infrastructure.adapters.primary.web.routers.schema",
+      "row_id": "schema"
+    },
+    {
+      "expression": "llm_providers.router",
+      "kind": "include_router",
+      "line": 686,
+      "module": "src.infrastructure.adapters.primary.web.routers.llm_providers",
+      "row_id": "llm-providers"
+    },
+    {
+      "expression": "episodes.router",
+      "kind": "include_router",
+      "line": 689,
+      "module": "src.infrastructure.adapters.primary.web.routers.episodes",
+      "row_id": "episodes"
+    },
+    {
+      "expression": "recall.router",
+      "kind": "include_router",
+      "line": 690,
+      "module": "src.infrastructure.adapters.primary.web.routers.recall",
+      "row_id": "recall"
+    },
+    {
+      "expression": "reflection.router",
+      "kind": "include_router",
+      "line": 691,
+      "module": "src.infrastructure.adapters.primary.web.routers.reflection",
+      "row_id": "reflection"
+    },
+    {
+      "expression": "enhanced_search.router",
+      "kind": "include_router",
+      "line": 692,
+      "module": "src.infrastructure.adapters.primary.web.routers.enhanced_search",
+      "row_id": "enhanced-search"
+    },
+    {
+      "expression": "enhanced_search.memory_router",
+      "kind": "include_router",
+      "line": 693,
+      "module": "src.infrastructure.adapters.primary.web.routers.enhanced_search",
+      "row_id": "enhanced-search-memory"
+    },
+    {
+      "expression": "data_export.router",
+      "kind": "include_router",
+      "line": 694,
+      "module": "src.infrastructure.adapters.primary.web.routers.data_export",
+      "row_id": "data-export"
+    },
+    {
+      "expression": "maintenance.router",
+      "kind": "include_router",
+      "line": 695,
+      "module": "src.infrastructure.adapters.primary.web.routers.maintenance",
+      "row_id": "maintenance"
+    },
+    {
+      "expression": "tasks.router",
+      "kind": "include_router",
+      "line": 696,
+      "module": "src.infrastructure.adapters.primary.web.routers.tasks",
+      "row_id": "tasks"
+    },
+    {
+      "expression": "register_workspace_core_routes",
+      "kind": "helper",
+      "line": 697,
+      "module": "src.infrastructure.adapters.primary.web.workspace_core_routes.register_workspace_core_routes",
+      "row_id": "workspace-core"
+    },
+    {
+      "expression": "install_workspace_core_runtime",
+      "kind": "helper",
+      "line": 698,
+      "module": "src.infrastructure.adapters.primary.web.workspace_core_runtime.install_workspace_core_runtime",
+      "row_id": "workspace-core-runtime"
+    },
+    {
+      "expression": "register_task_session_routes",
+      "kind": "helper",
+      "line": 699,
+      "module": "src.infrastructure.adapters.primary.web.workspace_core_task_sessions.register_task_session_routes",
+      "row_id": "task-session"
+    },
+    {
+      "expression": "cron.router",
+      "kind": "include_router",
+      "line": 700,
+      "module": "src.infrastructure.adapters.primary.web.routers.cron",
+      "row_id": "cron"
+    },
+    {
+      "expression": "ai_tools.router",
+      "kind": "include_router",
+      "line": 701,
+      "module": "src.infrastructure.adapters.primary.web.routers.ai_tools",
+      "row_id": "ai-tools"
+    },
+    {
+      "expression": "background_tasks.router",
+      "kind": "include_router",
+      "line": 702,
+      "module": "src.infrastructure.adapters.primary.web.routers.background_tasks",
+      "row_id": "background-tasks"
+    },
+    {
+      "expression": "billing.router",
+      "kind": "include_router",
+      "line": 703,
+      "module": "src.infrastructure.adapters.primary.web.routers.billing",
+      "row_id": "billing"
+    },
+    {
+      "expression": "notifications.router",
+      "kind": "include_router",
+      "line": 704,
+      "module": "src.infrastructure.adapters.primary.web.routers.notifications",
+      "row_id": "notifications"
+    },
+    {
+      "expression": "support.router",
+      "kind": "include_router",
+      "line": 705,
+      "module": "src.infrastructure.adapters.primary.web.routers.support",
+      "prefix": "/api/v1",
+      "row_id": "support"
+    },
+    {
+      "expression": "support.router",
+      "kind": "include_router",
+      "line": 706,
+      "module": "src.infrastructure.adapters.primary.web.routers.support",
+      "row_id": "support-2"
+    },
+    {
+      "expression": "skills.router",
+      "kind": "include_router",
+      "line": 709,
+      "module": "src.infrastructure.adapters.primary.web.routers.skills",
+      "row_id": "skills"
+    },
+    {
+      "expression": "tenant_skill_configs.router",
+      "kind": "include_router",
+      "line": 710,
+      "module": "src.infrastructure.adapters.primary.web.routers.tenant_skill_configs",
+      "row_id": "tenant-skill-configs"
+    },
+    {
+      "expression": "subagents.router",
+      "kind": "include_router",
+      "line": 711,
+      "module": "src.infrastructure.adapters.primary.web.routers.subagents",
+      "row_id": "subagents"
+    },
+    {
+      "expression": "mcp.router",
+      "kind": "include_router",
+      "line": 714,
+      "module": "src.infrastructure.adapters.primary.web.routers.mcp",
+      "row_id": "mcp"
+    },
+    {
+      "expression": "sandbox.router",
+      "kind": "include_router",
+      "line": 717,
+      "module": "src.infrastructure.adapters.primary.web.routers.sandbox",
+      "row_id": "sandbox"
+    },
+    {
+      "expression": "terminal.router",
+      "kind": "include_router",
+      "line": 720,
+      "module": "src.infrastructure.adapters.primary.web.routers.terminal",
+      "row_id": "terminal"
+    },
+    {
+      "expression": "artifacts.router",
+      "kind": "include_router",
+      "line": 723,
+      "module": "src.infrastructure.adapters.primary.web.routers.artifacts",
+      "row_id": "artifacts"
+    },
+    {
+      "expression": "attachments_upload.router",
+      "kind": "include_router",
+      "line": 726,
+      "module": "src.infrastructure.adapters.primary.web.routers.attachments_upload",
+      "row_id": "attachments-upload"
+    },
+    {
+      "expression": "channels.router",
+      "kind": "include_router",
+      "line": 729,
+      "module": "src.infrastructure.adapters.primary.web.routers.channels",
+      "prefix": "/api/v1",
+      "row_id": "channels"
+    },
+    {
+      "expression": "instances.router",
+      "kind": "include_router",
+      "line": 732,
+      "module": "src.infrastructure.adapters.primary.web.routers.instances",
+      "row_id": "instances"
+    },
+    {
+      "expression": "instance_files.router",
+      "kind": "include_router",
+      "line": 733,
+      "module": "src.infrastructure.adapters.primary.web.routers.instance_files",
+      "row_id": "instance-files"
+    },
+    {
+      "expression": "instance_channels.router",
+      "kind": "include_router",
+      "line": 734,
+      "module": "src.infrastructure.adapters.primary.web.routers.instance_channels",
+      "row_id": "instance-channels"
+    },
+    {
+      "expression": "deploy.router",
+      "kind": "include_router",
+      "line": 735,
+      "module": "src.infrastructure.adapters.primary.web.routers.deploy",
+      "row_id": "deploy"
+    },
+    {
+      "expression": "clusters.router",
+      "kind": "include_router",
+      "line": 736,
+      "module": "src.infrastructure.adapters.primary.web.routers.clusters",
+      "row_id": "clusters"
+    },
+    {
+      "expression": "genes.router",
+      "kind": "include_router",
+      "line": 737,
+      "module": "src.infrastructure.adapters.primary.web.routers.genes",
+      "row_id": "genes"
+    },
+    {
+      "expression": "instance_templates.router",
+      "kind": "include_router",
+      "line": 738,
+      "module": "src.infrastructure.adapters.primary.web.routers.instance_templates",
+      "row_id": "instance-templates"
+    },
+    {
+      "expression": "audit.router",
+      "kind": "include_router",
+      "line": 741,
+      "module": "src.infrastructure.adapters.primary.web.routers.audit",
+      "row_id": "audit"
+    },
+    {
+      "expression": "trust.router",
+      "kind": "include_router",
+      "line": 744,
+      "module": "src.infrastructure.adapters.primary.web.routers.trust",
+      "row_id": "trust"
+    },
+    {
+      "expression": "trust.workspace_router",
+      "kind": "include_router",
+      "line": 745,
+      "module": "src.infrastructure.adapters.primary.web.routers.trust",
+      "row_id": "trust-workspace"
+    },
+    {
+      "expression": "smtp_config.router",
+      "kind": "include_router",
+      "line": 748,
+      "module": "src.infrastructure.adapters.primary.web.routers.smtp_config",
+      "row_id": "smtp-config"
+    },
+    {
+      "expression": "webhooks.router",
+      "kind": "include_router",
+      "line": 751,
+      "module": "src.infrastructure.adapters.primary.web.routers.webhooks",
+      "row_id": "webhooks"
+    },
+    {
+      "expression": "tenant_webhooks.router",
+      "kind": "include_router",
+      "line": 752,
+      "module": "src.infrastructure.adapters.primary.web.routers.tenant_webhooks",
+      "prefix": "/api/v1",
+      "row_id": "tenant-webhooks"
+    },
+    {
+      "expression": "system.router",
+      "kind": "include_router",
+      "line": 753,
+      "module": "src.infrastructure.adapters.primary.web.routers.system",
+      "prefix": "/api/v1",
+      "row_id": "system"
+    },
+    {
+      "expression": "plugin_marketplace.router",
+      "kind": "include_router",
+      "line": 754,
+      "module": "src.infrastructure.adapters.primary.web.routers.plugin_marketplace",
+      "row_id": "plugin-marketplace"
+    },
+    {
+      "expression": "platform_plugins.router",
+      "kind": "include_router",
+      "line": 755,
+      "module": "src.infrastructure.adapters.primary.web.routers.platform_plugins",
+      "row_id": "platform-plugins"
+    },
+    {
+      "expression": "events.router",
+      "kind": "include_router",
+      "line": 756,
+      "module": "src.infrastructure.adapters.primary.web.routers.events",
+      "row_id": "events"
+    },
+    {
+      "expression": "tunnel.router",
+      "kind": "include_router",
+      "line": 759,
+      "module": "src.infrastructure.adapters.primary.web.routers.tunnel",
+      "row_id": "tunnel"
+    },
+    {
+      "expression": "engines.router",
+      "kind": "include_router",
+      "line": 762,
+      "module": "src.infrastructure.adapters.primary.web.routers.engines",
+      "row_id": "engines"
+    },
+    {
+      "expression": "security_ws.router",
+      "kind": "include_router",
+      "line": 765,
+      "module": "src.infrastructure.adapters.primary.web.routers.security_ws",
+      "row_id": "security-ws"
+    },
+    {
+      "expression": "observability.router",
+      "kind": "include_router",
+      "line": 768,
+      "module": "src.infrastructure.adapters.primary.web.routers.observability",
+      "row_id": "observability"
+    },
+    {
+      "expression": "admin_dlq.router",
+      "kind": "include_router",
+      "line": 769,
+      "module": "src.infrastructure.adapters.primary.web.routers.admin_dlq",
+      "row_id": "admin-dlq"
+    },
+    {
+      "expression": "invitations.router",
+      "kind": "include_router",
+      "line": 771,
+      "module": "src.infrastructure.adapters.primary.web.routers.invitations",
+      "row_id": "invitations"
+    },
+    {
+      "expression": "invitations.public_router",
+      "kind": "include_router",
+      "line": 772,
+      "module": "src.infrastructure.adapters.primary.web.routers.invitations",
+      "row_id": "invitations-public"
+    },
+    {
+      "expression": "create_pool_router()",
+      "kind": "include_router",
+      "line": 777,
+      "module": "src.infrastructure.agent.pool.create_pool_router",
+      "row_id": "create-pool"
+    },
+    {
+      "expression": "create_project_pool_router()",
+      "kind": "include_router",
+      "line": 778,
+      "module": "src.infrastructure.agent.pool.create_project_pool_router",
+      "row_id": "create-project-pool"
+    },
+    {
+      "expression": "voice_websocket.router",
+      "kind": "include_router",
+      "line": 785,
+      "module": "src.infrastructure.adapters.primary.web.routers.voice_websocket",
+      "row_id": "voice-websocket"
+    },
+    {
+      "expression": "project_sandbox.preview_router",
+      "kind": "include_router",
+      "line": 790,
+      "module": "src.infrastructure.adapters.primary.web.routers.project_sandbox",
+      "row_id": "project-sandbox-preview"
+    }
+  ],
+  "schemaVersion": 1,
+  "source": "src/infrastructure/adapters/primary/web/main.py"
+}
