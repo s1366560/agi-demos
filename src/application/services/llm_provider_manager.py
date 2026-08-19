@@ -46,7 +46,6 @@ from src.infrastructure.llm.resilience import (
 )
 from src.infrastructure.plugins.context import PluginScopeContext
 from src.infrastructure.plugins.llm_adapters import (
-    LegacyLlmAdapterProvider,
     LlmAdapterFactory,
     LlmAdapterProvider,
     LlmAdapterProviderRegistry,
@@ -100,7 +99,6 @@ class LLMProviderManager:
         rate_limiter: ProviderRateLimiter | None = None,
         health_checker: HealthChecker | None = None,
         redis_client: Redis | None = None,
-        adapter_provider: LlmAdapterProvider | None = None,
         adapter_registry: LlmAdapterProviderRegistry | None = None,
         routed_adapter_factory: LlmAdapterFactory | None = None,
     ) -> None:
@@ -126,7 +124,6 @@ class LLMProviderManager:
             providers=self._route_configs,
             lease_resolver=_NoopCredentialLeaseResolver(),
         )
-        self._adapter_provider = adapter_provider or LegacyLlmAdapterProvider()
         self._adapter_registry = adapter_registry or get_llm_adapter_provider_registry()
         self._routed_adapter_factory = routed_adapter_factory
         self._routed_adapter_owners: dict[str, str] = {}
@@ -179,21 +176,14 @@ class LLMProviderManager:
         }
 
     def _adapter_provider_for(self, provider_id: str) -> LlmAdapterProvider:
-        """Resolve an explicit provider, or use legacy compatibility when allowed."""
+        """Resolve the registered routed provider for one provider id."""
         explicit = self._adapter_registry.get(provider_id)
         if explicit is not None:
             return explicit
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        remove_legacy = getattr(settings, "platform_plugin_llm_remove_legacy", False)
-        if remove_legacy and not settings.platform_plugin_llm_v2:
-            raise ValueError("PLATFORM_PLUGIN_LLM_REMOVE_LEGACY requires LLM routes V2")
-        if remove_legacy:
-            raise RuntimeError(
-                "legacy LLM adapter fallback is disabled and no provider is registered"
-            )
-        return self._adapter_provider
+        raise RuntimeError(
+            f"no routed LLM adapter provider is registered for {provider_id}; "
+            "register the provider through the manager or a trusted profile plugin"
+        )
 
     @staticmethod
     def _build_circuit_breaker_registry(
@@ -284,15 +274,7 @@ class LLMProviderManager:
         self._unregister_routed_adapter(provider_type)
 
     def _register_routed_adapter(self, provider_config: ProviderConfig) -> None:
-        """Register an explicit routed adapter when legacy removal rehearsal is enabled."""
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        remove_legacy = getattr(settings, "platform_plugin_llm_remove_legacy", False)
-        if not remove_legacy:
-            return
-        if not settings.platform_plugin_llm_v2:
-            raise ValueError("PLATFORM_PLUGIN_LLM_REMOVE_LEGACY requires LLM routes V2")
+        """Register the routed adapter for one provider unconditionally."""
         provider_id = provider_config.provider_type.value
         existing_owner = self._adapter_registry.owner_of(provider_id)
         if existing_owner is not None and not existing_owner.startswith("llm-provider:"):
@@ -321,80 +303,6 @@ class LLMProviderManager:
     ) -> ResolvedLlmRoute:
         """Resolve request-scoped provider facts without exposing credentials."""
         return self._route_resolver.resolve(provider_type.value, model_id=model_id)
-
-    def _record_llm_route_shadow(
-        self,
-        provider_config: ProviderConfig,
-        tenant_id: str | None,
-        model_id: str | None,
-    ) -> None:
-        """Persist one bounded legacy/typed route comparison in shadow mode."""
-        from src.configuration.config import get_settings
-        from src.infrastructure.plugins.llm_runtime import LlmRouteResolutionError
-        from src.infrastructure.plugins.rollout_buckets import (
-            is_scope_selected,
-            settings_allowlist,
-            settings_percentage,
-        )
-        from src.infrastructure.plugins.shadow_rollout import (
-            enqueue_shadow_rollout_event,
-            make_shadow_rollout_event,
-        )
-
-        settings = get_settings()
-        normalized_scope = (tenant_id or "").strip()
-        if not is_scope_selected(
-            capability="llm_routes",
-            scope_id=normalized_scope or None,
-            percentage=settings_percentage(settings, "platform_plugin_llm_shadow_percent"),
-            allowlist=settings_allowlist(settings, "platform_plugin_shadow_scope_allowlist"),
-        ):
-            return
-
-        raw_config = provider_config.config
-        model_override = model_id or None
-        legacy = {
-            "provider_id": provider_config.provider_type.value,
-            "model_id": model_override
-            or provider_config.llm_model
-            or provider_config.embedding_model
-            or provider_config.reranker_model
-            or "",
-            "base_url": provider_config.base_url
-            or f"memstack://provider/{provider_config.provider_type.value}",
-            "credential_ref": f"vault://llm-provider/{provider_config.id}",
-            "credential_revision": max(1, int(provider_config.updated_at.timestamp() * 1000)),
-            "timeout_ms": _positive_int(raw_config.get("timeout_seconds"), 120) * 1000,
-            "context_window": _positive_int(raw_config.get("context_window"), 128_000),
-            "max_output_tokens": _positive_int(raw_config.get("max_output_tokens"), 8_192),
-        }
-        try:
-            route = self.resolve_route(provider_config.provider_type, model_id=model_override)
-            typed = {
-                "provider_id": route.provider_id,
-                "model_id": route.model_id,
-                "base_url": route.base_url,
-                "credential_ref": route.credential.ref,
-                "credential_revision": route.credential.revision,
-                "timeout_ms": route.timeout_ms,
-                "context_window": route.context_window,
-                "max_output_tokens": route.max_output_tokens,
-            }
-        except LlmRouteResolutionError as exc:
-            typed = {"error": str(exc)}
-
-        enqueue_shadow_rollout_event(
-            make_shadow_rollout_event(
-                capability="llm_routes",
-                event_name="llm.route",
-                hook_name="provider_route",
-                scope_type="tenant" if normalized_scope else "global",
-                scope_id=normalized_scope or "global",
-                equal=legacy == typed,
-                legacy_payload=legacy,
-                typed_payload=typed,
-            )
-        )
 
     async def lease_route_credential(
         self,
@@ -487,27 +395,16 @@ class LLMProviderManager:
             if not provider_config:
                 logger.debug(f"Skipping {provider_type.value}: no configuration registered")
                 continue
-            from src.configuration.config import get_settings
-
-            rollout_settings = get_settings()
-            resolved_route: ResolvedLlmRoute | None = None
-            if rollout_settings.platform_plugin_llm_v2:
-                resolved_route = self.resolve_route(
-                    provider_type,
-                    model_id=llm_config.model if llm_config is not None else None,
-                )
-                logger.debug(
-                    "Resolved platform LLM route provider=%s model=%s credential_ref=%s",
-                    provider_type.value,
-                    resolved_route.model_id,
-                    resolved_route.credential.ref,
-                )
-            elif rollout_settings.platform_plugin_llm_shadow:
-                self._record_llm_route_shadow(
-                    provider_config,
-                    tenant_id,
-                    llm_config.model if llm_config is not None else None,
-                )
+            resolved_route = self.resolve_route(
+                provider_type,
+                model_id=llm_config.model if llm_config is not None else None,
+            )
+            logger.debug(
+                "Resolved platform LLM route provider=%s model=%s credential_ref=%s",
+                provider_type.value,
+                resolved_route.model_id,
+                resolved_route.credential.ref,
+            )
 
             # Check circuit breaker
             circuit_breaker = self._circuit_breakers.get(provider_type)
@@ -550,14 +447,6 @@ class LLMProviderManager:
             f"No healthy LLM provider available for operation {operation.value}. "
             f"Last error: {last_error}"
         )
-
-    @property
-    def _route_rollout_enabled(self) -> bool:
-        """Return whether V2 route resolution or shadow comparison is enabled."""
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        return settings.platform_plugin_llm_v2 or settings.platform_plugin_llm_shadow
 
     def _get_provider_order(
         self,

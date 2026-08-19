@@ -319,9 +319,8 @@ ProcessorEvent = AgentDomainEvent | dict[str, Any]
 def _create_event_dispatcher(
     plugin_registry: Any | None,
     runtime_hook_overrides: list[dict[str, Any]],
-    tenant_id: str | None = None,
-) -> Any | None:
-    """Create the rollout dispatcher only when a flag explicitly enables it."""
+) -> Any:
+    """Create the always-on typed event dispatcher for agent hooks."""
     from src.infrastructure.plugins.agent_events import (
         create_agent_plugin_event_dispatcher,
     )
@@ -329,7 +328,6 @@ def _create_event_dispatcher(
     return create_agent_plugin_event_dispatcher(
         plugin_registry,
         runtime_hook_overrides,
-        tenant_id=tenant_id,
     )
 
 
@@ -450,9 +448,6 @@ class SessionProcessor:
         self._plugin_event_dispatcher = config.plugin_event_dispatcher or _create_event_dispatcher(
             config.plugin_registry,
             config.runtime_hook_overrides,
-            str(config.runtime_context.get("tenant_id"))
-            if config.runtime_context.get("tenant_id") is not None
-            else None,
         )
 
         # Session state
@@ -562,34 +557,9 @@ class SessionProcessor:
                     diagnostic_plugin,
                     diagnostic_message,
                 )
-            if result.shadow_diff is not None and not result.shadow_diff.equal:
-                logger.warning(
-                    "Plugin event shadow diff for %s -> %s",
-                    hook_name,
-                    result.shadow_diff.event_name,
-                )
             self._merge_hook_instructions(result.payload)
             return cast(dict[str, Any], result.payload)
-        try:
-            result = await self._plugin_registry.apply_hook(
-                hook_name,
-                payload=effective_payload,
-                runtime_overrides=self.config.runtime_hook_overrides,
-            )
-            for diagnostic in result.diagnostics:
-                log_level = logging.ERROR if diagnostic.level == "error" else logging.WARNING
-                logger.log(
-                    log_level,
-                    "Plugin hook %s diagnostic [%s]: %s",
-                    hook_name,
-                    diagnostic.plugin_name,
-                    diagnostic.message,
-                )
-            self._merge_hook_instructions(result.payload)
-            return cast(dict[str, Any], result.payload)
-        except Exception:
-            logger.warning("Plugin hook %r failed", hook_name, exc_info=True)
-            return effective_payload
+        return effective_payload
 
     def _runtime_hook_context_fields(self) -> dict[str, Any]:
         """Return shared tenant/project fields for runtime hook payloads."""

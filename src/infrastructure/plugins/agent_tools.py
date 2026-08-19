@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -96,6 +95,9 @@ class AgentToolSetService:
         profile_digest: str | None = None,
     ) -> ToolSetSnapshot:
         """Validate, freeze, and publish one generation for a scope."""
+        # Share tool instances across generations: tools are stateful singletons
+        # (locks, connections), so the snapshot freezes the mapping, not the
+        # tool objects themselves.
         normalized_tools = dict(tools)
         descriptors = {
             tool_id: legacy_tool_descriptor(tool_id, tool)
@@ -112,7 +114,7 @@ class AgentToolSetService:
             snapshot = ToolSetSnapshot(
                 generation=generation,
                 scope=scope,
-                tools=MappingProxyType(copy.deepcopy(normalized_tools)),
+                tools=MappingProxyType(normalized_tools),
                 shadow_inventory=MappingProxyType(inventory),
             )
             scope_key = scope.cache_key()

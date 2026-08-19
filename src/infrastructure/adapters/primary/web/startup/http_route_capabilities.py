@@ -203,11 +203,7 @@ async def install_http_route_capabilities(
     *,
     session_factory: Callable[[], Any],
 ) -> HttpRouteCapabilityAppAssembler | None:
-    """Mount desired plugin routes only in V2 mode; fail loudly on drift."""
-    from src.configuration.config import get_settings
-
-    if not get_settings().platform_plugin_http_route_v2:
-        return None
+    """Mount desired plugin routes at startup; fail loudly on drift."""
     from src.infrastructure.agent.plugins.registry import get_plugin_registry
 
     registry_routes = get_plugin_registry().list_http_routes()

@@ -30,23 +30,6 @@ class LlmAdapterProvider(Protocol):
     def create_adapter(self, request: LlmAdapterRequest) -> LLMClient: ...
 
 
-class LegacyLlmAdapterProvider:
-    """Compatibility provider backed by the existing LiteLLM adapter registry."""
-
-    def __init__(self) -> None:
-        from src.infrastructure.llm.registry import get_provider_adapter_registry
-
-        self._registry = get_provider_adapter_registry()
-
-    def create_adapter(self, request: LlmAdapterRequest) -> LLMClient:
-        """Preserve the current adapter registry behavior behind one typed seam."""
-        return self._registry.create_adapter(
-            provider_config=request.provider_config,
-            llm_config=request.llm_config,
-            **dict(request.adapter_kwargs),
-        )
-
-
 class LlmAdapterFactory(Protocol):
     """Factory used by routed providers at the execution boundary."""
 

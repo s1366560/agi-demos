@@ -6,19 +6,9 @@ import pytest
 from src.infrastructure.agent.plugins.registry import HookDispatchResult
 
 
-@pytest.fixture(autouse=True)
-def _legacy_plugin_event_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin these legacy hook-contract tests to the legacy dispatch path."""
-    from src.configuration.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_v2", False)
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_shadow", False)
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_remove_legacy", False)
-
-
 def _make_agent(*, registry=None):
     from src.infrastructure.agent.core.react_agent import ReActAgent
+    from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
 
     agent = ReActAgent(
         model="test-model",
@@ -26,6 +16,7 @@ def _make_agent(*, registry=None):
     )
     if registry is not None:
         agent.config.plugin_registry = registry
+        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
     return agent
 
 
@@ -156,6 +147,12 @@ class TestReActAgentRuntimeHooks:
             events.append(event)
 
         assert events[-1]["type"] == "complete"
+        # after_turn_complete maps to the emit-mode agent.after_turn event, so
+        # the adapted legacy handler runs as a scheduled background task.
+        import asyncio
+
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         registry.apply_hook.assert_awaited_once()
         assert registry.apply_hook.await_args.args[0] == "after_turn_complete"
         payload = registry.apply_hook.await_args.kwargs["payload"]

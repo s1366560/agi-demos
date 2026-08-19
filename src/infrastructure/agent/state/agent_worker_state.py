@@ -2846,21 +2846,17 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
     cached = _tools_cache.get(project_id)
     if cached is None:
         return None
-    from src.configuration.config import get_settings
+    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
 
-    if _agent_tools_remove_legacy_enabled() and not get_settings().platform_plugin_agent_tools_v2:
-        raise ValueError("PLATFORM_PLUGIN_AGENT_TOOLS_REMOVE_LEGACY requires agent tools V2")
     _publish_scoped_tool_generation(project_id, cached)
-    service = _agent_tool_service_if_v2()
-    if service is not None:
-        current = service.current(PluginScopeContext(project_id=project_id))
-        if current is not None:
-            return dict(current.tools)
-        if _agent_tools_remove_legacy_enabled():
-            raise RuntimeError(
-                "legacy tool cache fallback is disabled and no scoped tool generation exists"
-            )
-    return cached
+    service = get_agent_tool_set_service()
+    current = service.current(PluginScopeContext(project_id=project_id))
+    if current is None:
+        raise RuntimeError(
+            "no scoped tool generation exists for a cached project; "
+            "the generation publish step must have failed"
+        )
+    return dict(current.tools)
 
 
 def get_custom_tool_diagnostics(
@@ -3049,74 +3045,16 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
         return 0
 
 
-def _agent_tool_service_if_v2() -> Any | None:
-    """Return the scoped tool service only when V2 rollout is enabled."""
-    from src.configuration.config import get_settings
-    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
-
-    if not get_settings().platform_plugin_agent_tools_v2:
-        return None
-    return get_agent_tool_set_service()
-
-
-def _agent_tools_remove_legacy_enabled() -> bool:
-    """Return the fail-loud removal rehearsal switch without requiring the flag in tests."""
-    from src.configuration.config import get_settings
-
-    return bool(getattr(get_settings(), "platform_plugin_agent_tools_remove_legacy", False))
-
-
 def _publish_scoped_tool_generation(
     project_id: str,
     tools: dict[str, Any],
 ) -> None:
-    """Publish or shadow-compare one scoped legacy tool generation."""
-    from src.configuration.config import get_settings
+    """Publish the current scoped tool generation when it has changed."""
     from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
 
-    settings = get_settings()
-    if not (settings.platform_plugin_agent_tools_v2 or settings.platform_plugin_agent_tools_shadow):
-        return
-    from src.infrastructure.plugins.rollout_buckets import (
-        is_scope_selected,
-        settings_allowlist,
-        settings_percentage,
-    )
-
-    if not settings.platform_plugin_agent_tools_v2 and not is_scope_selected(
-        capability="agent_tools",
-        scope_id=project_id,
-        percentage=settings_percentage(
-            settings,
-            "platform_plugin_agent_tools_shadow_percent",
-        ),
-        allowlist=settings_allowlist(
-            settings,
-            "platform_plugin_shadow_scope_allowlist",
-        ),
-    ):
-        return
     service = get_agent_tool_set_service()
     scope = PluginScopeContext(project_id=project_id)
-    current_inventory, candidate_inventory, differs = service.shadow_comparison(scope, tools)
-    if settings.platform_plugin_agent_tools_shadow and not settings.platform_plugin_agent_tools_v2:
-        from src.infrastructure.plugins.shadow_rollout import (
-            enqueue_shadow_rollout_event,
-            make_shadow_rollout_event,
-        )
-
-        enqueue_shadow_rollout_event(
-            make_shadow_rollout_event(
-                capability="agent_tools",
-                event_name="agent.tool_generation",
-                hook_name="tool_generation",
-                scope_type="project",
-                scope_id=project_id,
-                equal=current_inventory is not None and not differs,
-                legacy_payload=dict(current_inventory or {"state": "uninitialized"}),
-                typed_payload=dict(candidate_inventory),
-            )
-        )
+    current_inventory, _candidate_inventory, differs = service.shadow_comparison(scope, tools)
     if current_inventory is None or differs:
         service.publish(scope, tools)
 

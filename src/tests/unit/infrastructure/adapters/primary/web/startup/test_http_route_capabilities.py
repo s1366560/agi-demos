@@ -208,19 +208,9 @@ def test_plugin_route_v2_requires_scope_path_parameter() -> None:
 
 
 @pytest.mark.unit
-async def test_install_plugin_routes_is_v2_only_and_mounts_desired_rows(
+async def test_install_plugin_routes_mounts_desired_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "src.configuration.config.get_settings",
-        lambda: SimpleNamespace(platform_plugin_http_route_v2=False),
-    )
-    assert await install_http_route_capabilities(FastAPI(), session_factory=FakeSession) is None
-
-    monkeypatch.setattr(
-        "src.configuration.config.get_settings",
-        lambda: SimpleNamespace(platform_plugin_http_route_v2=True),
-    )
     monkeypatch.setattr(
         module,
         "PlatformPluginGovernanceRepository",
@@ -244,10 +234,6 @@ async def test_install_plugin_routes_is_v2_only_and_mounts_desired_rows(
 async def test_reconcile_http_routes_mounts_unmounts_and_replaces_auth_dependencies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "src.configuration.config.get_settings",
-        lambda: SimpleNamespace(platform_plugin_http_route_v2=True),
-    )
     monkeypatch.setattr(
         module,
         "PlatformPluginGovernanceRepository",

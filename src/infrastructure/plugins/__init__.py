@@ -2,7 +2,6 @@
 
 from .context import CapabilityRegistry, PluginContext, PluginScopeContext
 from .llm_adapters import (
-    LegacyLlmAdapterProvider,
     LlmAdapterProvider,
     LlmAdapterProviderRegistry,
     LlmAdapterRegistration,
@@ -14,7 +13,6 @@ from .profile import compose_profile, parse_profile_document
 
 __all__ = [
     "CapabilityRegistry",
-    "LegacyLlmAdapterProvider",
     "LlmAdapterProvider",
     "LlmAdapterProviderRegistry",
     "LlmAdapterRegistration",

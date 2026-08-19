@@ -18,22 +18,6 @@ from src.infrastructure.agent.processor.processor import (
 from src.infrastructure.agent.tools.result import ToolResult
 
 
-@pytest.fixture(autouse=True)
-def _legacy_plugin_event_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin these legacy hook-contract tests to the legacy dispatch path.
-
-    The typed event bus replaces these calls under
-    PLATFORM_PLUGIN_AGENT_EVENTS_V2 + REMOVE_LEGACY; the legacy contract tests
-    remain valid until the legacy path is physically removed.
-    """
-    from src.configuration.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_v2", False)
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_shadow", False)
-    monkeypatch.setattr(settings, "platform_plugin_agent_events_remove_legacy", False)
-
-
 def _make_registry(hook_side_effect=None):
     """Create a mock plugin registry with an async apply_hook."""
     registry = MagicMock()
@@ -205,7 +189,9 @@ class TestNotifyPluginHookHelper:
             pass
 
         after_tool_call = next(
-            call for call in registry.apply_hook.call_args_list if call.args[0] == "after_tool_execution"
+            call
+            for call in registry.apply_hook.call_args_list
+            if call.args[0] == "after_tool_execution"
         )
         payload = after_tool_call.kwargs["payload"]
         assert payload["conversation_id"] == "conv-1"

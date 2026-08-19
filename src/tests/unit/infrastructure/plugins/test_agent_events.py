@@ -1,3 +1,5 @@
+"""Contract tests for the always-on typed agent event dispatcher."""
+
 from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, cast
@@ -27,7 +29,7 @@ class LegacyRegistry:
 
 
 @pytest.mark.unit
-async def test_legacy_mode_dispatches_once_without_typed_adapter() -> None:
+async def test_mapped_hook_flows_through_typed_bus_with_legacy_adaptation() -> None:
     registry = LegacyRegistry()
     dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
 
@@ -35,42 +37,21 @@ async def test_legacy_mode_dispatches_once_without_typed_adapter() -> None:
 
     assert result.payload == {"value": 1, "legacy": True}
     assert registry.calls == ["before_response"]
-    assert result.shadow_diff is None
 
 
 @pytest.mark.unit
-async def test_shadow_mode_compares_typed_and_legacy_paths() -> None:
+async def test_unmapped_hook_dispatches_through_legacy_registry() -> None:
     registry = LegacyRegistry()
-    dispatcher = AgentPluginEventDispatcher(
-        legacy_registry=registry,
-        shadow_enabled=True,
-    )
+    dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
 
-    result = await dispatcher.dispatch("before_response", {"value": 1})
+    result = await dispatcher.dispatch("on_session_start", {"value": 1})
 
     assert result.payload == {"value": 1, "legacy": True}
-    assert result.shadow_diff is not None
-    assert not result.shadow_diff.equal
-    assert registry.calls == ["before_response"]
+    assert registry.calls == ["on_session_start"]
 
 
 @pytest.mark.unit
-async def test_v2_mode_adapts_legacy_handlers_into_typed_waterfall() -> None:
-    registry = LegacyRegistry()
-    dispatcher = AgentPluginEventDispatcher(
-        legacy_registry=registry,
-        v2_enabled=True,
-    )
-
-    result = await dispatcher.dispatch("before_response", {"value": 1})
-
-    assert result.payload == {"value": 1, "legacy": True}
-    assert registry.calls == ["before_response"]
-    assert result.shadow_diff is None
-
-
-@pytest.mark.unit
-async def test_legacy_removal_uses_typed_listener_without_touching_legacy_registry() -> None:
+async def test_typed_listener_runs_ahead_of_the_legacy_adapter() -> None:
     registry = LegacyRegistry()
     bus = PluginEventBus()
 
@@ -79,36 +60,22 @@ async def test_legacy_removal_uses_typed_listener_without_touching_legacy_regist
         return {**downstream, "typed": True}
 
     bus.subscribe("agent.before_request", "typed-plugin", typed_listener)
-    dispatcher = AgentPluginEventDispatcher(
-        legacy_registry=registry,
-        event_bus=bus,
-        v2_enabled=True,
-        remove_legacy_fallback=True,
-    )
+    dispatcher = AgentPluginEventDispatcher(legacy_registry=registry, event_bus=bus)
 
     result = await dispatcher.dispatch("before_response", {"value": 1})
 
-    assert result.payload == {"value": 1, "typed": True}
-    assert registry.calls == []
-    assert result.diagnostics == ()
+    assert result.payload == {"value": 1, "legacy": True, "typed": True}
+    assert registry.calls == ["before_response"]
 
 
 @pytest.mark.unit
-async def test_legacy_removal_fails_loud_when_no_typed_listener_exists() -> None:
-    registry = LegacyRegistry()
-    dispatcher = AgentPluginEventDispatcher(
-        legacy_registry=registry,
-        v2_enabled=True,
-        remove_legacy_fallback=True,
-    )
+async def test_mapped_hook_without_registry_passes_payload_through() -> None:
+    dispatcher = AgentPluginEventDispatcher(legacy_registry=None)
 
     result = await dispatcher.dispatch("before_response", {"value": 1})
 
     assert result.payload == {"value": 1}
-    assert registry.calls == []
-    assert [getattr(diagnostic, "code", None) for diagnostic in result.diagnostics] == [
-        "legacy_fallback_removed"
-    ]
+    assert result.diagnostics == ()
 
 
 @pytest.mark.unit
@@ -119,10 +86,7 @@ async def test_processor_uses_injected_event_dispatcher() -> None:
         return "ok"
 
     registry = LegacyRegistry()
-    dispatcher = AgentPluginEventDispatcher(
-        legacy_registry=registry,
-        v2_enabled=True,
-    )
+    dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
     processor = SessionProcessor(
         config=ProcessorConfig(
             model="test-model",

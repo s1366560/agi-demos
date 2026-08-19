@@ -105,17 +105,14 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_sandbox_idle_reaper,
-    initialize_shadow_rollout_worker,
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
     install_http_route_capabilities,
-    record_initial_http_route_inventory_shadow,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
-    shutdown_shadow_rollout_worker,
     shutdown_telemetry_services,
     sync_health_checker_providers,
 )
@@ -145,7 +142,6 @@ from src.infrastructure.llm.resilience.health_checker import (
     stop_health_checker,
 )
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.plugins.cutover_gate import ensure_platform_plugin_v2_cutover_ready
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -175,9 +171,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
-    _ = await ensure_platform_plugin_v2_cutover_ready(async_session_factory)
-    shadow_rollout_worker = initialize_shadow_rollout_worker(async_session_factory)
-    _ = await record_initial_http_route_inventory_shadow(async_session_factory)
     http_route_assembler = await install_http_route_capabilities(
         app,
         session_factory=async_session_factory,
@@ -436,10 +429,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Error tearing down friction/reflection wiring")
 
     await stop_health_checker()
-
-    # Flush in-process shadow evidence before DB dependencies become unavailable.
-    if shadow_rollout_worker is not None:
-        await shutdown_shadow_rollout_worker()
 
     # Stop sandbox idle reaper
     await shutdown_sandbox_idle_reaper()
