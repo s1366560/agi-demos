@@ -68,3 +68,28 @@ class TestServiceBindingsB1:
         container = DIContainer(db=Mock())
         sub_name, method_name = binding.target.split(".", 1)
         assert callable(getattr(getattr(container, sub_name), method_name))
+
+
+_GROUP_B2 = ("task",)
+_B2_BINDINGS = _bindings(_GROUP_B2)
+_B2_ACTIVATABLE = [b for b in _B2_BINDINGS if b.key not in _ACTIVATION_SKIP]
+
+
+@pytest.mark.unit
+class TestServiceBindingsB2:
+    """Batch B2: task/cron/reflection domain."""
+
+    @pytest.mark.parametrize(
+        "binding",
+        _B2_ACTIVATABLE,
+        ids=[b.key for b in _B2_ACTIVATABLE],
+    )
+    def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
+        container = DIContainer(db=Mock(), graph_service=Mock())
+        facade_first = getattr(container, binding.key)()
+        facade_second = getattr(container, binding.key)()
+        resolved = container.services.get_or_activate(binding.key)
+        if facade_first is facade_second:
+            assert resolved is facade_first
+        else:
+            assert type(resolved) is type(facade_first)
