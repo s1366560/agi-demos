@@ -266,7 +266,9 @@ class TestWorkspaceWebSocket:
         )
 
         async def fake_subscribe(pattern: str, options: SubscriptionOptions | None = None) -> Any:
-            yield chat_event
+            # The chat event lives on the three-segment topic stream only.
+            if pattern.endswith(":*"):
+                yield chat_event
 
         with patch(
             f"{_HANDLER_MODULE}.RedisUnifiedEventBusAdapter",
@@ -309,7 +311,9 @@ class TestWorkspaceWebSocket:
         )
 
         async def fake_subscribe(pattern: str, options: SubscriptionOptions | None = None) -> Any:
-            yield status_event
+            # The agent status event lives on the three-segment topic stream only.
+            if pattern.endswith(":*"):
+                yield status_event
 
         with patch(
             f"{_HANDLER_MODULE}.RedisUnifiedEventBusAdapter",
@@ -353,7 +357,9 @@ class TestWorkspaceWebSocket:
         )
 
         async def fake_subscribe(pattern: str, options: SubscriptionOptions | None = None) -> Any:
-            yield chat_event
+            # The chat event lives on the three-segment topic stream only.
+            if pattern.endswith(":*"):
+                yield chat_event
 
         with (
             patch(f"{_HANDLER_MODULE}.get_topic_manager", return_value=topic_manager),

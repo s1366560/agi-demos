@@ -94,15 +94,41 @@ class SubscribeWorkspaceHandler(WebSocketMessageHandler):
         redis_client: redis.Redis,
     ) -> None:
         bus = RedisUnifiedEventBusAdapter(redis_client)
-        pattern = f"workspace:{workspace_id}:*"
+        # Core publishes lifecycle/mutation events to the bare two-segment
+        # stream (workspace:{id}) while legacy/agent publishers use
+        # three-segment topics (workspace:{id}:chat etc.) — match both.
+        patterns = (f"workspace:{workspace_id}", f"workspace:{workspace_id}:*")
         topic = f"{TopicType.WORKSPACE.value}:{workspace_id}"
         task_key = f"workspace:{workspace_id}"
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        pump_done = object()
+
+        async def pump(pattern: str) -> None:
+            try:
+                async for event in bus.subscribe(
+                    pattern,
+                    SubscriptionOptions(block_ms=1000, batch_size=100),
+                ):
+                    await queue.put(event)
+            finally:
+                await queue.put(pump_done)
+
+        pump_tasks = [asyncio.create_task(pump(pattern)) for pattern in patterns]
+        finished_pumps = 0
         try:
-            async for event in bus.subscribe(
-                pattern,
-                SubscriptionOptions(block_ms=1000, batch_size=100),
-            ):
-                if not await _has_workspace_member(context, workspace_id):
+            while True:
+                event = await queue.get()
+                if event is pump_done:
+                    finished_pumps += 1
+                    if finished_pumps == len(pump_tasks):
+                        break
+                    continue
+                # workspace_deleted must bypass the membership re-check: the
+                # verifier is fail-closed and the workspace no longer exists,
+                # so the check would swallow exactly the event that notifies
+                # the client about the deletion.
+                is_deleted_event = event.envelope.event_type == "workspace_deleted"
+                if not is_deleted_event and not await _has_workspace_member(context, workspace_id):
                     await context.send_error(
                         "Workspace membership required",
                         code="workspace_access_denied",
@@ -123,6 +149,8 @@ class SubscribeWorkspaceHandler(WebSocketMessageHandler):
         except Exception as exc:
             logger.warning("[WS] workspace bridge error: %s", exc)
         finally:
+            for pump_task in pump_tasks:
+                pump_task.cancel()
             await get_topic_manager().unsubscribe(context.session_id, topic)
             manager = context.connection_manager
             if context.session_id in manager.status_tasks:
