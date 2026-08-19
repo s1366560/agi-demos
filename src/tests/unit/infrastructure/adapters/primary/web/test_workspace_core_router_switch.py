@@ -131,10 +131,7 @@ def test_avernet_proxy_routes_keep_only_platform_authentication_dependencies() -
     dependency_calls = [call for route in routes for call in _dependency_calls(route)]
     assert get_current_user in dependency_calls
     assert get_current_actor in dependency_calls
-    assert all(
-        dependency_call in allowed_root_dependencies
-        for dependency_call in dependency_calls
-    )
+    assert all(dependency_call in allowed_root_dependencies for dependency_call in dependency_calls)
 
 
 @pytest.mark.unit
@@ -251,13 +248,17 @@ async def test_avernet_context_proxy_forwards_api_key_identity() -> None:
 async def test_avernet_file_proxy_streams_multipart_and_download_headers() -> None:
     boundary = "workspace-core-stream-boundary"
     upload_body = (
-        f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="parent_path"\r\n\r\n'
-        "/\r\n"
-        f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="file"; filename="large.txt"\r\n'
-        "Content-Type: text/plain\r\n\r\n"
-    ).encode() + b"streamed-payload\r\n" + f"--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="parent_path"\r\n\r\n'
+            "/\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="file"; filename="large.txt"\r\n'
+            "Content-Type: text/plain\r\n\r\n"
+        ).encode()
+        + b"streamed-payload\r\n"
+        + f"--{boundary}--\r\n".encode()
+    )
     response_body = b'{"streamed":true}'
     response_stream = _TrackingResponseStream([response_body[:8], response_body[8:]])
     upstream_chunks: list[bytes] = []
@@ -317,6 +318,107 @@ async def test_avernet_file_proxy_streams_multipart_and_download_headers() -> No
     assert response.headers["etag"] == '"file-revision-1"'
     assert upstream_chunks == [upload_body[:37], upload_body[37:113], upload_body[113:]]
     assert response_stream.closed is True
+
+
+class _FakeRoleResult:
+    def __init__(self, role: str | None) -> None:
+        self._role = role
+
+    def scalar_one_or_none(self) -> str | None:
+        return self._role
+
+
+class _FakeMembershipSession:
+    def __init__(self, role: str | None) -> None:
+        self._role = role
+
+    async def execute(self, _statement: object) -> _FakeRoleResult:
+        return _FakeRoleResult(self._role)
+
+
+class _FakeMembershipSessionFactory:
+    def __init__(self, role: str | None) -> None:
+        self._role = role
+
+    async def __aenter__(self) -> _FakeMembershipSession:
+        return _FakeMembershipSession(self._role)
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+@pytest.mark.unit
+async def test_avernet_proxy_vouches_project_membership_role_on_workspace_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(request.headers)
+        return httpx.Response(201, json={"id": "workspace-1"})
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.workspace_core_routes.async_session_factory",
+        lambda: _FakeMembershipSessionFactory("owner"),
+    )
+
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={"name": "Demo"},
+            headers={"Authorization": "Bearer user-token"},
+        )
+
+    assert response.status_code == 201
+    assert captured["x-memstack-project-membership-role"] == "owner"
+
+
+@pytest.mark.unit
+async def test_avernet_proxy_omits_membership_role_without_project_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(request.headers)
+        return httpx.Response(403, json={"detail": "Access denied"})
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.workspace_core_routes.async_session_factory",
+        lambda: _FakeMembershipSessionFactory(None),
+    )
+
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={"name": "Demo"},
+            headers={"Authorization": "Bearer user-token"},
+        )
+
+    assert response.status_code == 403
+    assert "x-memstack-project-membership-role" not in captured
 
 
 class _TrackingResponseStream(httpx.AsyncByteStream):

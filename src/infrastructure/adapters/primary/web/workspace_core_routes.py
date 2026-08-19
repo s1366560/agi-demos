@@ -9,6 +9,7 @@ from typing import Any, cast
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.routing import APIRoute, request_response
 from pydantic import BaseModel
+from sqlalchemy import select
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -32,6 +33,9 @@ from src.infrastructure.adapters.primary.web.routers import (
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_detail,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.models import UserProject
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
@@ -180,13 +184,18 @@ async def _proxy_workspace_request(
     if not isinstance(client, WorkspaceCoreClient):
         return _workspace_core_unavailable()
 
+    headers = _proxy_request_headers(request, endpoint_values)
+    membership_header = await _project_membership_role_header(request, endpoint_values)
+    if membership_header is not None:
+        headers.append(membership_header)
+
     try:
         upstream = await client.proxy_request(
             method=request.method,
             path=request.url.path,
             query=cast(bytes, request.scope.get("query_string", b"")),
             body=request.stream(),
-            headers=_proxy_request_headers(request, endpoint_values),
+            headers=headers,
         )
     except WorkspaceCoreClientError:
         logger.warning(
@@ -205,6 +214,49 @@ async def _proxy_workspace_request(
         status_code=upstream.status_code,
         headers=response_headers,
     )
+
+
+_PROJECT_CREATE_PATH_SUFFIX = "/workspaces"
+_MEMBERSHIP_ROLE_HEADER = "x-memstack-project-membership-role"
+_MEMBERSHIP_ROLES = frozenset({"owner", "admin", "editor", "member", "viewer"})
+
+
+async def _project_membership_role_header(
+    request: Request,
+    endpoint_values: Mapping[str, Any],
+) -> tuple[str, str] | None:
+    """Vouch the caller's project membership role to Workspace Core.
+
+    Core authorizes workspace creation against its mirrored
+    ``project_principal_memberships`` table, which the offline migration only
+    backfills once. Attaching the caller's ``user_projects`` role on create
+    requests lets Core upsert the mirror row lazily, so workspaces can be
+    created in projects provisioned after the migration ran.
+    """
+    if request.method != "POST":
+        return None
+    if not request.url.path.rstrip("/").endswith(_PROJECT_CREATE_PATH_SUFFIX):
+        return None
+    context_values = _workspace_context_values(request, endpoint_values)
+    project_id = context_values.get("project_id")
+    current_user = endpoint_values.get("current_user")
+    api_key = endpoint_values.get("api_key")
+    user_id = getattr(current_user, "id", None) or getattr(api_key, "user_id", None)
+    if not project_id or user_id is None:
+        return None
+    async with async_session_factory() as session:
+        result = await session.execute(
+            refresh_select_statement(
+                select(UserProject.role).where(
+                    UserProject.user_id == str(user_id),
+                    UserProject.project_id == project_id,
+                )
+            )
+        )
+        role = result.scalar_one_or_none()
+    if role is None:
+        return None
+    return (_MEMBERSHIP_ROLE_HEADER, role if role in _MEMBERSHIP_ROLES else "member")
 
 
 def _proxy_request_headers(
