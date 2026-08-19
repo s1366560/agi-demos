@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "dde74eaf3cba7e5a8150c7eecfa6a3cdcc927ecc",
+  "source_revision": "27621c2cb755e7111f1e762169ff45d09d6d8019",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 661,
+    "audited_sources": 681,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1790,
-    "production_dependency_ownership": 660,
-    "production_dependency_sources": 660,
+    "production_dependency_edges": 1842,
+    "production_dependency_ownership": 680,
+    "production_dependency_sources": 680,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 1
@@ -71,7 +71,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4ecde5958a8effc8b90e92bf49a2c24148a82ba5947fdfa8f228d313f25594a4"
+      "sha256": "sha256:49021fb8b3f2c761b9debb0a5a42202a86e0b97f0b900eefa8d900517c16f326"
     },
     {
       "source_entry": "web/src/components/agent/AgentDefinitionModal.tsx",
@@ -162,7 +162,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:39fce88625c62a429425c985e88db3cc87cf8494439a9b5e5fcd32d06edc7187"
+      "sha256": "sha256:d225bf2e94244f2386a566c43de1ae09c25239142ccca6def71dc2284009dd00"
     },
     {
       "source_entry": "web/src/components/agent/MentionPicker.tsx",
@@ -344,7 +344,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:41cd50ebffde3559c6dbd10b8b49c96f6a8fc13a2cd2c41f560aaf8a2dbee85c"
+      "sha256": "sha256:0fff00e7396f1d2630ed365cfb1b1569f9d3f6b6a0a5a532cdbcd81c463c28e8"
     },
     {
       "source_entry": "web/src/components/agent/canvas/MemStackA2UIViewer.tsx",
@@ -449,7 +449,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:83aebd369a8d071f8ad2995add127b2e3913972fd0432991521d9358d2657ee9"
+      "sha256": "sha256:31391bea45f7ac0893183658d78e268b28477054b6c8ff42f4af8a270991e7fc"
     },
     {
       "source_entry": "web/src/components/agent/chat/MobileSidebarDrawer.tsx",
@@ -1450,7 +1450,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:ddbb5ee3e9fd8bf311f6a5d3ea550fadd8fb98d3bb468a08352017387467db7e"
+      "sha256": "sha256:203ff6c9c67d5a9326a8722141ee5f1fdbae06561c259dacc29f7fded317b4c7"
     },
     {
       "source_entry": "web/src/components/layout/TenantHeader.tsx",
@@ -1633,6 +1633,27 @@
         "production_dependency"
       ],
       "sha256": "sha256:1ee3f2949c33967cfd473f2a97826cae983cc97171126c6cc6705231b23eeae4"
+    },
+    {
+      "source_entry": "web/src/components/plugins/PluginSlotHost.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:2906e19c5563b94b1859fe4c57335f7b201edb0a620b1fbb15b353f4c0bdc303"
+    },
+    {
+      "source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:4cd646afec08bdff95ae5618fb3278c678979acdbb84b021db37238ec3692608"
+    },
+    {
+      "source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f4032d4a90ea4825e6b9033366dfceb4c0b6c7de71ad46343ffa6f287a69851b"
     },
     {
       "source_entry": "web/src/components/project/AgentTeammatesPanel.tsx",
@@ -1884,7 +1905,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c3ed0a5ed107b93c60a559a7d46ed298e3792c124332e94200dcb33c9295dc3b"
+      "sha256": "sha256:82455604b8e9b18f8282022c17278f84e2b94d7728d8956e9ebb4bd54738926f"
     },
     {
       "source_entry": "web/src/components/workspace/chat/ChatMessage.tsx",
@@ -2062,6 +2083,111 @@
       "sha256": "sha256:b1b885facd80c300170e0b4725185fd23d5c04adc6451ecf8ba58af32dfe1e14"
     },
     {
+      "source_entry": "web/src/components/workspace/settings/AutonomySection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:90d07d5b9c16670469eed6b55cee81085b25168d4f14118f89394b204b4e2f0c"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/CodeContextSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:50766fbc041fcc81057c0816b2f9e33302453d3dcbae2ffb872514442b0069bd"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DangerZoneSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:787db2949919a8243650aa5d0b835eb3f1733be682b60e074dbd327aff114003"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DeliveryCommandsSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:cbc746541d8dfd8ddcfc3914cb2b034ccffb4eacc81504636e318c153d605af8"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DeliveryDroneSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:82a794d07c60032c2474148f779b9b8eeaec308883488374d5f5f0b7c03b72d8"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:0a4ea00172cc12652c73f144dc2ba27d64f5b2f9bfe5b5932c95c97d4ef450dd"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DeliveryServicesSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:8075f448e6984ae819975ea8c636c97095bb12a34842e68fd894f51acddd3165"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/DraftNumberInput.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:28f628b7292ef2abb2968f3116c05216a1b2eaaedccc580506dc922097a98030"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/GeneralSettingsSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:c7183ec780ef81b4da140b63b56a9bc08d2b558911d567719b9875c32ba292ab"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:e265ffbc73c8571858ea14f3b3d5bd68d334169a22ff0ec57c2abe88fc83c911"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/MetadataSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:815745e9f57b31c6f862bea1d0ee5b2df7caf2d63f1fc19f3efb886d2252f5fb"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/OperatingModelSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:c7f3a95be3580fd69b4a6b6a9338d8fea4f6ac886a609c8eba83707f3dec242a"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/SettingsHeader.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:34ed79ea5d37475f8f0a6c67ebb854366edd5a10e8cf5cd0926574a4839a0aa1"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/SourceControlSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:cdb2029cf7214b5a03f1edb2f2cefc112bb9c8d9d65c25d6bdfc53655270ef93"
+    },
+    {
+      "source_entry": "web/src/components/workspace/settings/SummarySection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:b74784472821d240f0025521948c96c93c1ddfd8e26c65890c39fc7932213596"
+    },
+    {
       "source_entry": "web/src/components/workspace/taskBoardCreateModel.ts",
       "roles": [
         "production_dependency"
@@ -2137,14 +2263,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:f41255871355cac297b8817c96aff2e6f91fa6b58ca37d3513ba7c845ed15aaf"
+      "sha256": "sha256:b61e7e28304e5c3d809b559b326a963757843a1da0eecd671a19a13dfeb9699f"
     },
     {
       "source_entry": "web/src/hooks/useBlackboardSSE.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:3260a53dd96fe2578104c667520a58463a5dfa08ea5b2beee2d0b69442acb694"
+      "sha256": "sha256:ac9a5fdd4ff64c0bc2ee913c937ccc5057df10f005682bd62a3099c8eaf9a631"
     },
     {
       "source_entry": "web/src/hooks/useConversationListAutoRefresh.ts",
@@ -2403,7 +2529,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:49ab15a486fe732c3b3dc270b677e21a739c5a3459c5caa7da0a86046c3aaec7"
+      "sha256": "sha256:ddc5bc02941df227b2f068c9ad31c5d139c27c87dbbe5b310b34e2bd324624a6"
     },
     {
       "source_entry": "web/src/pages/project/CommunitiesList.tsx",
@@ -2508,7 +2634,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:08412807b15760aa231a5701b84be31128107f7295d65cd75126f09c1f01c7a8"
+      "sha256": "sha256:38f155e1a81c1c08ce20545c5a72a714b1b29e3a6290d18061b158cd1d76451e"
     },
     {
       "source_entry": "web/src/pages/project/Support.tsx",
@@ -2648,7 +2774,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:49a773dc6086cbb17d447622404aee973a389800541eaaa1b2355aea8d1d91b0"
+      "sha256": "sha256:bb217181d7616807baf08b8a565204c14bbf482324afe35e028b764fece8039c"
     },
     {
       "source_entry": "web/src/pages/tenant/Analytics.tsx",
@@ -2984,14 +3110,14 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:56394b90987d3cd8bdfb71aa7d77057028ba8aba87668e8c9b7a55c63d8fcef3"
+      "sha256": "sha256:4a9e90b96f68d4e8cb28d4fdc8ebb0962d5c6042ba78840c1f2e3a349c8c65da"
     },
     {
       "source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:44c26a887e42c3f6b2af032266c7b4edd02342e82eb353c808277e6ced8ec530"
+      "sha256": "sha256:0de5cf1f200c91156615b82139d2c1a093d0600f76ab04ccbc2ed83606245bee"
     },
     {
       "source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx",
@@ -3498,6 +3624,20 @@
       "sha256": "sha256:5e1d65e88aaf3df6e9055997ccd27b4cde728634d9a9b7e44e4b19d196f12fe9"
     },
     {
+      "source_entry": "web/src/services/pluginRendererRegistry.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:3de4dd01685e2ec1d2aba131f4e893822d0f8465012e82b215512642a39d793e"
+    },
+    {
+      "source_entry": "web/src/services/pluginSlotService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:46ea270bccec5cc3c8a3663e0acb1bb69bc0d57b096658a830a11776e9236bef"
+    },
+    {
       "source_entry": "web/src/services/poolService.ts",
       "roles": [
         "production_dependency"
@@ -3656,7 +3796,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:25be888797e65d5857d52b0bc30dfd31c0818d0e7666f2cd00bfe0a8b8b87257"
+      "sha256": "sha256:0c312bd88a90e0a7c893216e5bab86c150de965390cb112c467d7d2dc92bb575"
     },
     {
       "source_entry": "web/src/services/webhookService.ts",
@@ -3670,7 +3810,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:f7014e3bc00d13d7b5c71349299f434289175f132549de1a09f7a9647eb346f8"
+      "sha256": "sha256:05cb01c670c29460e8f5f315eb81826c7e1307dc685ec6d73fb9fceafdf2f504"
     },
     {
       "source_entry": "web/src/stores/agent/a2uiEnvelopeContract.ts",
@@ -3922,7 +4062,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:62e6a12e65c9cee779432e7ff3c10e64ea0706504d0e7daaacdb1f930a3237fe"
+      "sha256": "sha256:18624a60efdf15f00e00c45a655cddf647f038f6e32e59ab5df61efabfdf2ac4"
     },
     {
       "source_entry": "web/src/stores/mcpAppStore.ts",
@@ -4027,7 +4167,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:b4f054feb0bb13a2e4b3a3934cdbb7e6fc0c4a627bb1f45a09e9fee8100db4ee"
+      "sha256": "sha256:fa746a048212678dcafc67437026e9add910cf2c4cdccb284ae3c99ead6d5451"
     },
     {
       "source_entry": "web/src/theme/ThemeProvider.tsx",
@@ -4650,7 +4790,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:11c60e16a62800b21308b3b61df9158d282c8bf3f41bab9c5c7e42ae2475bde4"
+      "sha256": "sha256:6bd84d78feb7c815e9be06ed27fe1b92a7a2a862b1b016ec1dce6fbea87b7a8f"
     }
   ],
   "canonical_navigation_targets": [
@@ -9882,6 +10022,11 @@
     {
       "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/AgentChatContent.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -10303,6 +10448,11 @@
       "from_source_entry": "web/src/components/agent/InputToolbar.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/chat/VoiceWaveform.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/InputToolbar.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
     },
     {
       "from_source_entry": "web/src/components/agent/InputToolbar.tsx",
@@ -10792,6 +10942,11 @@
     {
       "from_source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/artifactService.ts"
     },
     {
@@ -10923,6 +11078,11 @@
       "from_source_entry": "web/src/components/agent/chat/MessageStream.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/agent/chat/MarkdownContent.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/chat/MessageStream.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx"
     },
     {
       "from_source_entry": "web/src/components/agent/chat/MessageStream.tsx",
@@ -12282,6 +12442,11 @@
     {
       "from_source_entry": "web/src/components/layout/TenantChatSidebar.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/layout/TenantChatSidebar.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
     },
     {
@@ -12798,6 +12963,36 @@
       "from_source_entry": "web/src/components/mcp/useMcpProjectScope.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/tenant.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotHost.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/pluginRendererRegistry.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/pluginSlotService.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotHost.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/pluginRendererRegistry.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/pluginSlotService.ts"
     },
     {
       "from_source_entry": "web/src/components/project/AgentTeammatesPanel.tsx",
@@ -13413,6 +13608,146 @@
       "from_source_entry": "web/src/components/workspace/presence/PresenceBar.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/workspace.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/AutonomySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/AutonomySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/workspaceSettingsModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/CodeContextSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DangerZoneSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DangerZoneSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliveryCommandsSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliveryDroneSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DraftNumberInput.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliveryDroneSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DeliveryCommandsSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DeliveryDroneSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DeliveryServicesSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DraftNumberInput.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliveryServicesSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DraftNumberInput.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/DeliveryServicesSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/GeneralSettingsSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/workspaceSettingsModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/workspaceService.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MembersSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/stores/workspace.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/MetadataSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/OperatingModelSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/OperatingModelSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/workspaceSettingsModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/SettingsHeader.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/blackboard/HostedProjectionBadge.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/SourceControlSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/SourceControlSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/workspaceSettingsModel.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/workspace/settings/SummarySection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
     },
     {
       "from_source_entry": "web/src/components/workspace/taskBoardSignals.ts",
@@ -14323,6 +14658,11 @@
       "from_source_entry": "web/src/pages/project/ProjectOverview.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/logger.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/project/Settings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
     },
     {
       "from_source_entry": "web/src/pages/project/Settings.tsx",
@@ -16252,17 +16592,17 @@
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceList.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/theme/tokens.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceList.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/utils/date.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceList.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/workspaceConfig.ts"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/components/blackboard/HostedProjectionBadge.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
@@ -16277,12 +16617,62 @@
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/hooks/useUnsavedChangesWarning.ts"
+      "to_source_entry": "web/src/components/workspace/settings/AutonomySection.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/pages/tenant/WorkspaceSettingsPrimitives.tsx"
+      "to_source_entry": "web/src/components/workspace/settings/CodeContextSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DangerZoneSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/DeliverySection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/GeneralSettingsSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/MembersSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/MetadataSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/OperatingModelSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/SettingsHeader.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/SourceControlSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/workspace/settings/SummarySection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/hooks/useUnsavedChangesWarning.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/WorkspaceSettings.tsx",
@@ -16773,6 +17163,11 @@
       "from_source_entry": "web/src/services/playbookService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/pluginSlotService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/poolService.ts",
@@ -17688,6 +18083,11 @@
       "from_source_entry": "web/src/stores/workspace.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/blackboard/blackboardSurfaceContract.ts"
+    },
+    {
+      "from_source_entry": "web/src/stores/workspace.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/ApiError.ts"
     },
     {
       "from_source_entry": "web/src/stores/workspace.ts",
@@ -20183,6 +20583,34 @@
       "source_entry": "web/src/components/mcp/useMcpProjectScope.ts"
     },
     {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/plugins/PluginSlotHost.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/plugins/PluginToolResultRenderer.tsx"
+    },
+    {
       "classification": "owned",
       "owner_source_entries": [
         "web/src/pages/project/Team.tsx"
@@ -20717,6 +21145,126 @@
       ],
       "reason_code": "single_routed_source_reachability",
       "source_entry": "web/src/components/workspace/presence/PresenceBar.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/AutonomySection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/CodeContextSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DangerZoneSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DeliveryCommandsSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DeliveryDroneSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DeliverySection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DeliveryServicesSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/DraftNumberInput.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/GeneralSettingsSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/MembersSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/MetadataSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/OperatingModelSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/SettingsHeader.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/SourceControlSection.tsx"
+    },
+    {
+      "classification": "owned",
+      "owner_source_entries": [
+        "web/src/pages/project/Blackboard.tsx"
+      ],
+      "reason_code": "single_routed_source_reachability",
+      "source_entry": "web/src/components/workspace/settings/SummarySection.tsx"
     },
     {
       "classification": "owned",
@@ -23067,6 +23615,26 @@
     {
       "classification": "shared",
       "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/pluginRendererRegistry.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/pluginSlotService.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
         "web/src/pages/admin/PoolDashboard.tsx",
         "web/src/pages/tenant/AgentWorkspace.tsx",
         "web/src/pages/tenant/UnifiedRuntimes.tsx"
@@ -23960,11 +24528,12 @@
       "source_entry": "web/src/theme/index.ts"
     },
     {
-      "classification": "owned",
+      "classification": "shared",
       "owner_source_entries": [
-        "web/src/pages/tenant/AgentWorkspace.tsx"
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/WorkspaceList.tsx"
       ],
-      "reason_code": "single_routed_source_reachability",
+      "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/theme/tokens.ts"
     },
     {
@@ -25149,6 +25718,9 @@
     "web/src/components/mcp/styles.ts",
     "web/src/components/mcp/types.ts",
     "web/src/components/mcp/useMcpProjectScope.ts",
+    "web/src/components/plugins/PluginSlotHost.tsx",
+    "web/src/components/plugins/PluginSlotOutlet.tsx",
+    "web/src/components/plugins/PluginToolResultRenderer.tsx",
     "web/src/components/project/AgentTeammatesPanel.tsx",
     "web/src/components/project/BackendStoreSelectors.tsx",
     "web/src/components/project/EditMemoryModal.tsx",
@@ -25210,6 +25782,21 @@
     "web/src/components/workspace/objectives/ObjectiveList.tsx",
     "web/src/components/workspace/presence/PresenceAvatar.tsx",
     "web/src/components/workspace/presence/PresenceBar.tsx",
+    "web/src/components/workspace/settings/AutonomySection.tsx",
+    "web/src/components/workspace/settings/CodeContextSection.tsx",
+    "web/src/components/workspace/settings/DangerZoneSection.tsx",
+    "web/src/components/workspace/settings/DeliveryCommandsSection.tsx",
+    "web/src/components/workspace/settings/DeliveryDroneSection.tsx",
+    "web/src/components/workspace/settings/DeliverySection.tsx",
+    "web/src/components/workspace/settings/DeliveryServicesSection.tsx",
+    "web/src/components/workspace/settings/DraftNumberInput.tsx",
+    "web/src/components/workspace/settings/GeneralSettingsSection.tsx",
+    "web/src/components/workspace/settings/MembersSection.tsx",
+    "web/src/components/workspace/settings/MetadataSection.tsx",
+    "web/src/components/workspace/settings/OperatingModelSection.tsx",
+    "web/src/components/workspace/settings/SettingsHeader.tsx",
+    "web/src/components/workspace/settings/SourceControlSection.tsx",
+    "web/src/components/workspace/settings/SummarySection.tsx",
     "web/src/components/workspace/taskBoardCreateModel.ts",
     "web/src/components/workspace/taskBoardSignals.ts",
     "web/src/config/navigation.ts",
@@ -25415,6 +26002,8 @@
     "web/src/services/patternService.ts",
     "web/src/services/planService.ts",
     "web/src/services/playbookService.ts",
+    "web/src/services/pluginRendererRegistry.ts",
+    "web/src/services/pluginSlotService.ts",
     "web/src/services/poolService.ts",
     "web/src/services/projectAgentService.ts",
     "web/src/services/projectSandboxService.ts",
