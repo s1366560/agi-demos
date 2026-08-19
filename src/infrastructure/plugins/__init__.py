@@ -1,6 +1,7 @@
 """Platform plugin kernel shared by Python services."""
 
 from .context import CapabilityRegistry, PluginContext, PluginScopeContext
+from .dump_config import DumpConfigError, dump_profile
 from .legacy_inventory_bridge import (
     LegacyInventoryBridge,
     LegacyInventoryDiagnostic,
@@ -26,6 +27,7 @@ from .service_registry import (
 
 __all__ = [
     "CapabilityRegistry",
+    "DumpConfigError",
     "LegacyInventoryBridge",
     "LegacyInventoryDiagnostic",
     "LegacyInventorySyncReceipt",
@@ -43,6 +45,7 @@ __all__ = [
     "ServiceDependencyError",
     "ServiceRegistry",
     "compose_profile",
+    "dump_profile",
     "get_llm_adapter_provider_registry",
     "parse_profile_document",
 ]

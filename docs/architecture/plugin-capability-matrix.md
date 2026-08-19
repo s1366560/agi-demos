@@ -49,6 +49,7 @@ Status legend:
 | Registry hot-swap | generation swap + in-flight pinning (`tool_runtime.py`) | `ArcSwap` atomic swap (ADR-0006) | same registry |
 | V1/V2 inventory unification | `legacy_inventory_bridge.py` (P0) | n/a | n/a |
 | Composition root | `service_registry.py` key/inject/dispose + topological activation (P1 foundation; `di_container.py` migration pending) | static wiring in app bins | static wiring |
+| Config audit (`dump-config`) | `dump_config.py` + `scripts/dump_plugin_profile.py` (layer provenance, canonical JSON digest) | consumes the same canonical JSON | same |
 | Untrusted plugin runtime | not yet (P5) | `adapters-wasmtime` (server/desktop) | `adapters-wasmtime` wired in sidecar |
 | Plugin artifact distribution | package archive/registry (`package_archive.py`, `package_registry.py`) | OCI artifact pull in `platform_plugin_sync.rs` | OCI artifact pull + digest verification |
 
