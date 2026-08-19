@@ -73,6 +73,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
+import { PluginSlotOutlet } from '../../plugins/PluginSlotOutlet';
 import { useMarkdownPlugins } from '../chat/markdownPlugins';
 import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
@@ -2280,6 +2281,8 @@ export const CanvasPanel = memo<{
         ) : (
           <CanvasEmptyState />
         )}
+        {/* I3: plugin mcp_canvas slots reuse the canvas event channel. */}
+        <PluginSlotOutlet kind="mcp_canvas" />
       </div>
     </div>
   );

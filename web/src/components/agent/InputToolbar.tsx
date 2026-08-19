@@ -18,6 +18,7 @@ import {
 
 import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
 
+import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { AgentSwitcher } from './AgentSwitcher';
@@ -338,6 +339,8 @@ export const InputToolbar = memo<InputToolbarProps>(
               </span>
             </LazyButton>
           )}
+          {/* I3: plugin composer actions mount after the send control. */}
+          <PluginSlotOutlet kind="composer_action" />
         </div>
       </div>
     );

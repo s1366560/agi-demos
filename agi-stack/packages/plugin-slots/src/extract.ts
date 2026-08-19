@@ -42,6 +42,7 @@ function toSlotDefinition(
   kind: string,
   capability: {
     id: string;
+    contract?: string;
     config_schema?: Record<string, unknown>;
     permissions?: string[] | undefined;
   }
@@ -77,6 +78,7 @@ function toSlotDefinition(
     pluginId,
     slot: slot as UiSlotKind,
     id: capability.id,
+    contract: capability.contract ?? '',
     moduleRef,
     permission,
     sandbox,

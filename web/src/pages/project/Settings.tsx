@@ -45,6 +45,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { formatDateTime } from '@/utils/date';
 
+import { PluginSlotOutlet } from '../../components/plugins/PluginSlotOutlet';
 import { projectAPI } from '../../services/api';
 import { projectSandboxService } from '../../services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
@@ -1101,6 +1102,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           <Advanced />
           <Sandbox projectId={currentProject.id} />
           <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
+          {/* I3: plugin settings sections mount after the builtin sections. */}
+          <PluginSlotOutlet kind="settings_page" />
         </div>
       </div>
     </div>

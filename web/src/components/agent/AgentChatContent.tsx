@@ -70,6 +70,7 @@ import {
   downloadConversationMarkdown,
   downloadConversationPdf,
 } from '../../utils/exportConversation';
+import { PluginSlotOutlet } from '../plugins/PluginSlotOutlet';
 import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
 import { deriveAgentChatTenantId } from './agentChatScope';
@@ -1440,6 +1441,8 @@ ${content}`;
         >
           {chatColumn}
           {statusBarWithLayout}
+          {/* I3: plugin conversation renderers mount below the stream. */}
+          <PluginSlotOutlet kind="conversation_renderer" />
         </main>
       </div>
     );

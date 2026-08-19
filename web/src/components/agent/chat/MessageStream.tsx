@@ -38,6 +38,7 @@ import {
 
 import { formatFileSize, formatDurationMs } from '../../../utils/format';
 import { foldTextWithMetadata } from '../../../utils/toolResultUtils';
+import { PluginToolResultRenderer } from '../../plugins/PluginToolResultRenderer';
 
 import { MarkdownContent } from './MarkdownContent';
 
@@ -922,7 +923,11 @@ export function ToolExecutionCardDisplay({
 
             {/* Success Result */}
             {status === 'success' && formattedResult && (
-              <ToolResultDisplay result={formattedResult} isError={false} />
+              <PluginToolResultRenderer
+                toolName={toolName}
+                result={formattedResult}
+                fallback={<ToolResultDisplay result={formattedResult} isError={false} />}
+              />
             )}
 
             {/* Error Result */}

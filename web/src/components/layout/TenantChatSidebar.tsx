@@ -48,6 +48,7 @@ import {
   groupTenantTopNavItems,
   isContextualTopNavItemActive,
 } from '@/components/layout/tenantNavigation';
+import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
 import { LazyButton, LazyInput, LazyTooltip, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
@@ -2068,6 +2069,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           </p>
         ) : null}
       </AppModal>
+      {/* I3: plugin nav items mount at the end of the sidebar. */}
+      <PluginSlotOutlet kind="nav_item" />
     </aside>
   );
 };

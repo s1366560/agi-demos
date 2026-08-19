@@ -45,6 +45,19 @@ export async function refreshPluginSlots(): Promise<UiSlotDefinition[]> {
   return cachedSlots;
 }
 
+/**
+ * Find the `tool_result_renderer` slot for one tool, if any (I3): the
+ * contract convention is `tool-result:<toolName>`, with the capability id
+ * equal to the tool name as a fallback.
+ */
+export function findToolResultSlot(toolName: string): UiSlotDefinition | undefined {
+  return cachedSlots.find(
+    (slot) =>
+      slot.slot === 'tool_result_renderer' &&
+      (slot.contract === `tool-result:${toolName}` || slot.id === toolName)
+  );
+}
+
 /** Test hook: reset the module-level cache. */
 export function resetPluginSlotsForTests(): void {
   cachedSlots = [];

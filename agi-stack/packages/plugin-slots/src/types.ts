@@ -15,6 +15,8 @@ export interface UiSlotDefinition {
   pluginId: string;
   slot: UiSlotKind;
   id: string;
+  /** Capability contract id, e.g. `tool-result:memory_search` (renderer key). */
+  contract: string;
   moduleRef: string;
   permission: string;
   sandbox: boolean;
