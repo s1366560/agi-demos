@@ -2,11 +2,10 @@
 
 import json
 from typing import Any, cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.processor.goal_evaluator import (
     GoalEvaluator,
@@ -18,6 +17,9 @@ from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_SESSION_ROLE_KEY,
+)
+from src.infrastructure.workspace_core.legacy_runtime import (
+    LegacyWorkspaceRuntimeRetiredError,
 )
 
 
@@ -414,60 +416,23 @@ class TestProcessorGoalCompletion:
 
     @pytest.mark.asyncio
     async def test_workspace_authority_uses_root_goal_task_instead_of_todoread(self) -> None:
-        task = WorkspaceTask(
-            id="root-1",
-            workspace_id="ws-1",
-            title="Root goal",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.IN_PROGRESS,
-            metadata={"task_role": "goal_root"},
-        )
-
+        """Workspace root goal reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
-            tools={"todoread": create_todoread_tool([{"id": "t1", "status": "completed"}])},
+            tools={},
             runtime_context={
                 "task_authority": "workspace",
                 "workspace_id": "ws-1",
                 "root_goal_task_id": "root-1",
             },
         )
-        session = AsyncMock()
 
-        class _Repo:
-            def __init__(self, db: Any) -> None:
-                del db
-
-            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
-                assert task_id == "root-1"
-                return task
-
-            async def find_by_root_goal_task_id(self, workspace_id: str, root_goal_task_id: str):
-                assert workspace_id == "ws-1"
-                assert root_goal_task_id == "root-1"
-                return []
-
-        with (
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
-            ) as session_factory,
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
-                _Repo,
-            ),
-        ):
-            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
-            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await evaluator.evaluate_goal_completion(
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_goal_completion(
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
 
-        assert result.achieved is False
-        assert result.source == "workspace_tasks"
-        assert result.reason == "Workspace root goal task is not complete"
-
-    @pytest.mark.asyncio
     async def test_workspace_contract_role_skips_root_goal_task_lookup(self) -> None:
         evaluator = GoalEvaluator(
             llm_client=None,
@@ -513,15 +478,7 @@ class TestProcessorGoalCompletion:
 
     @pytest.mark.asyncio
     async def test_workspace_authority_requires_goal_evidence(self) -> None:
-        task = WorkspaceTask(
-            id="root-1",
-            workspace_id="ws-1",
-            title="Root goal",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.DONE,
-            metadata={"task_role": "goal_root"},
-        )
-
+        """Goal evidence reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
             tools={},
@@ -531,56 +488,15 @@ class TestProcessorGoalCompletion:
                 "root_goal_task_id": "root-1",
             },
         )
-        session = AsyncMock()
 
-        class _Repo:
-            def __init__(self, db: Any) -> None:
-                del db
-
-            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
-                assert task_id == "root-1"
-                return task
-
-            async def find_by_root_goal_task_id(self, workspace_id: str, root_goal_task_id: str):
-                assert workspace_id == "ws-1"
-                assert root_goal_task_id == "root-1"
-                return []
-
-        with (
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
-            ) as session_factory,
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
-                _Repo,
-            ),
-        ):
-            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
-            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await evaluator.evaluate_goal_completion(
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_goal_completion(
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
 
-        assert result.achieved is False
-        assert result.should_stop is True
-        assert result.source == "workspace_tasks"
-
-    @pytest.mark.asyncio
     async def test_workspace_authority_blocks_on_replan_required(self) -> None:
-        task = WorkspaceTask(
-            id="root-1",
-            workspace_id="ws-1",
-            title="Root goal",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.IN_PROGRESS,
-            metadata={
-                "task_role": "goal_root",
-                "remediation_status": "replan_required",
-                "remediation_summary": "1 child task blocked; root goal requires replan or intervention",
-            },
-        )
-
+        """Replan gating reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
             tools={},
@@ -590,57 +506,15 @@ class TestProcessorGoalCompletion:
                 "root_goal_task_id": "root-1",
             },
         )
-        session = AsyncMock()
 
-        class _Repo:
-            def __init__(self, db: Any) -> None:
-                del db
-
-            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
-                assert task_id == "root-1"
-                return task
-
-            async def find_by_root_goal_task_id(self, workspace_id: str, root_goal_task_id: str):
-                assert workspace_id == "ws-1"
-                assert root_goal_task_id == "root-1"
-                return []
-
-        with (
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
-            ) as session_factory,
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
-                _Repo,
-            ),
-        ):
-            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
-            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await evaluator.evaluate_goal_completion(
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_goal_completion(
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
 
-        assert result.achieved is False
-        assert result.should_stop is True
-        assert result.source == "workspace_tasks"
-        assert "requires replan" in result.reason
-
-    @pytest.mark.asyncio
     async def test_workspace_authority_ready_for_completion_keeps_loop_open(self) -> None:
-        task = WorkspaceTask(
-            id="root-1",
-            workspace_id="ws-1",
-            title="Root goal",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.IN_PROGRESS,
-            metadata={
-                "task_role": "goal_root",
-                "remediation_status": "ready_for_completion",
-                "remediation_summary": "All child tasks are done; root goal should now validate completion evidence",
-            },
-        )
-
+        """Completion gating reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
             tools={},
@@ -650,43 +524,13 @@ class TestProcessorGoalCompletion:
                 "root_goal_task_id": "root-1",
             },
         )
-        session = AsyncMock()
 
-        class _Repo:
-            def __init__(self, db: Any) -> None:
-                del db
-
-            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
-                assert task_id == "root-1"
-                return task
-
-            async def find_by_root_goal_task_id(self, workspace_id: str, root_goal_task_id: str):
-                assert workspace_id == "ws-1"
-                assert root_goal_task_id == "root-1"
-                return []
-
-        with (
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
-            ) as session_factory,
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
-                _Repo,
-            ),
-        ):
-            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
-            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await evaluator.evaluate_goal_completion(
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_goal_completion(
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
 
-        assert result.achieved is False
-        assert result.should_stop is False
-        assert result.source == "workspace_tasks"
-        assert "validate completion evidence" in result.reason
-
-    @pytest.mark.asyncio
     async def test_no_tasks_uses_llm_self_check_true(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks([])
         evaluator._llm_client = AsyncMock()
@@ -772,23 +616,7 @@ class TestProcessorGoalCompletion:
 
     @pytest.mark.asyncio
     async def test_workspace_authority_rejects_terminal_children_without_attempt_evidence(self) -> None:
-        root = WorkspaceTask(
-            id="root-1",
-            workspace_id="ws-1",
-            title="Root goal",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.DONE,
-            metadata={"task_role": "goal_root", "goal_evidence": {"summary": "done"}},
-        )
-        child = WorkspaceTask(
-            id="child-1",
-            workspace_id="ws-1",
-            title="Child",
-            created_by="user-1",
-            status=WorkspaceTaskStatus.DONE,
-            metadata={"task_role": "execution_task", "root_goal_task_id": "root-1"},
-        )
-
+        """Terminal-child evidence reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
             tools={},
@@ -798,37 +626,9 @@ class TestProcessorGoalCompletion:
                 "root_goal_task_id": "root-1",
             },
         )
-        session = AsyncMock()
 
-        class _Repo:
-            def __init__(self, db: Any) -> None:
-                del db
-
-            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
-                assert task_id == "root-1"
-                return root
-
-            async def find_by_root_goal_task_id(self, workspace_id: str, root_goal_task_id: str):
-                assert workspace_id == "ws-1"
-                assert root_goal_task_id == "root-1"
-                return [child]
-
-        with (
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
-            ) as session_factory,
-            patch(
-                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
-                _Repo,
-            ),
-        ):
-            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
-            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await evaluator.evaluate_goal_completion(
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await evaluator.evaluate_goal_completion(
                 session_id="session-1",
                 messages=[{"role": "user", "content": "finish task"}],
             )
-
-        assert result.achieved is False
-        assert result.should_stop is True
-        assert result.reason == "Workspace execution tasks are missing attempt/adjudication evidence"

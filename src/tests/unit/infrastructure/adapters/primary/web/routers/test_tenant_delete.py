@@ -45,8 +45,6 @@ async def test_tenant_delete_scope_locks_parent_before_stable_project_tree() -> 
             ["project-b", "project-a"],
             ["project-a", "project-b"],
             ["membership-2", "membership-1"],
-            ["workspace-b", "workspace-a"],
-            ["member-2", "member-1"],
         ]
     )
 
@@ -60,11 +58,11 @@ async def test_tenant_delete_scope_locks_parent_before_stable_project_tree() -> 
     assert project_ids == ["project-a", "project-b"]
     rendered = [_postgres_sql(statement) for statement in session.statements]
     lock_statements = [sql for sql in rendered if "FOR UPDATE" in sql]
-    assert len(lock_statements) == 5
+    # Workspaces are owned by Avernet Core; the platform delete scope locks
+    # only tenants, projects, and user_projects.
+    assert len(lock_statements) == 3
     assert "FROM tenants" in lock_statements[0]
     assert "FROM projects" in lock_statements[1]
     assert "ORDER BY projects.id" in lock_statements[1]
     assert "FROM user_projects" in lock_statements[2]
-    assert "FROM workspaces" in lock_statements[3]
-    assert "FROM workspace_members" in lock_statements[4]
     assert "ORDER BY projects.id" in rendered[1]

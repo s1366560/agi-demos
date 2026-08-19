@@ -565,15 +565,20 @@ def _validate_terminal_mappings(manifest: Mapping[str, Any], *, repo_root: Path)
         if actual != expected:
             raise EventParityError(f"terminal mapping drift for {state}")
 
-    runtime_source = (
-        repo_root
-        / "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/runtime.rs"
-    ).read_text(encoding="utf-8")
+    # Terminal outbox events are emitted from the workspace core outbox writer
+    # and the store's runtime terminal SQL layer; read both evidence sources.
+    outbox_sources = "\n".join(
+        (repo_root / relative).read_text(encoding="utf-8")
+        for relative in (
+            "third_party/avernet-bcs/crates/bootstrap/memstack-workspace-core/src/outbox.rs",
+            "third_party/avernet-bcs/crates/services/memstack-workspace-store/src/runtime_terminal/sql.rs",
+        )
+    )
     provider_source = (
         repo_root / "src/infrastructure/workspace_core/agent_runtime_provider.py"
     ).read_text(encoding="utf-8")
     for _, _, timeline_event, outbox_event, _ in _TERMINAL_STATES.values():
-        if outbox_event not in runtime_source:
+        if outbox_event not in outbox_sources:
             raise EventParityError(f"Avernet terminal outbox evidence is missing {outbox_event}")
         if timeline_event not in provider_source:
             raise EventParityError(f"Agent terminal history evidence is missing {timeline_event}")

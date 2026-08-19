@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import Request
 from pydantic import ValidationError
 
 from src.application.services.hitl_response_contract import (
@@ -128,6 +129,7 @@ async def test_v2_hitl_response_claims_revision_one_and_returns_authority(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -173,6 +175,7 @@ async def test_v2_hitl_response_replays_same_key_and_payload_without_republishin
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -211,6 +214,7 @@ async def test_v2_hitl_response_rejects_same_key_with_different_payload(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(answer="different answer"),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -238,6 +242,7 @@ async def test_v2_hitl_response_rejects_stale_pending_revision(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(expected_revision=2),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -279,6 +284,7 @@ async def test_v2_hitl_response_lost_claim_replays_winning_receipt(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
@@ -316,6 +322,7 @@ async def test_v2_hitl_response_losing_client_gets_answered_authority(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(idempotency_key="web:req-1:clarification"),
         current_user=SimpleNamespace(id="user-2"),
         tenant_id="tenant-1",
@@ -346,6 +353,7 @@ async def test_v2_hitl_response_returns_structured_expiry(
     publish, db = _wire_router(monkeypatch, repo)
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=_request(),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",

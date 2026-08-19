@@ -1,6 +1,6 @@
 {
   "evidenceVersion": 2,
-  "schemaRevision": "f0a1b2c3d4e6",
+  "schemaRevision": "822cd9402ce6",
   "implementationSourcePatterns": [
     "src/domain/ports/services/workspace_authority_port.py",
     "src/infrastructure/adapters/primary/web/workspace_authority.py",

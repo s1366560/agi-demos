@@ -51,7 +51,7 @@ def test_implementation_ledger_matches_complete_capabilities() -> None:
     assert ledger["ledgerVersion"] == 2
     assert len(ledger["sourceSha256"]) == 64
     assert ledger["sourceRevision"] == f"sha256:{ledger['sourceSha256']}"
-    assert ledger["schemaRevision"] == "f0a1b2c3d4e6"
+    assert ledger["schemaRevision"] == generator._alembic_head(REPO_ROOT)
     assert len(ledger["evidenceSourcesSha256"]) == 64
     assert ledger["evidenceSuiteCount"] == 6
     assert len(ledger["routes"]) == 92

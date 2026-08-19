@@ -81,6 +81,14 @@ def blackboard_file_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient,
 
     monkeypatch.setattr(router_mod, "_file_service_from_request", lambda request, db: service)
 
+    # The platform-side outbox publisher is retired (Avernet Core owns event
+    # delivery); the alias is retained for tests, so stub it to a no-op.
+    monkeypatch.setattr(
+        router_mod,
+        "publish_workspace_event",
+        AsyncMock(return_value=None),
+    )
+
     return TestClient(app), service
 
 

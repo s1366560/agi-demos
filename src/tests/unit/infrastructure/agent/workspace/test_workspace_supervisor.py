@@ -243,44 +243,15 @@ class TestSupervisorDispatch:
         supervisor._apply_progress.assert_awaited_once()  # type: ignore[attr-defined]
 
     async def test_progress_verb_updates_plan_node_and_event(self) -> None:
-        node = SimpleNamespace(
-            id="node-1",
-            plan_id="plan-1",
-            workspace_task_id="task-1",
-            current_attempt_id="attempt-1",
-            progress={"percent": 0, "confidence": 0.7, "note": ""},
-            metadata_json={},
-            updated_at=None,
-            created_at=None,
-        )
-        fake_session = _FakeSession(node)
+        """Platform SQL progress persistence is retired to Avernet Core.
 
-        def fake_session_factory() -> _FakeSession:
-            return fake_session
-
+        The supervisor accepts worker progress envelopes without writing to
+        platform tables; durable projection happens in the Workspace Core.
+        """
         supervisor = WorkspaceSupervisor(None)
 
-        with patch(
-            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            new=fake_session_factory,
-        ):
-            await supervisor._apply_progress(_progress_envelope())
-
-        assert fake_session.committed is True
-        assert node.progress == {"percent": 50.0, "confidence": 0.7, "note": "halfway"}
-        assert node.metadata_json["latest_worker_progress"] == {
-            "event_id": "progress-1",
-            "event_type": "worker_progress",
-            "summary": "halfway",
-            "task_id": "task-1",
-            "attempt_id": "attempt-1",
-            "percent": 50.0,
-            "created_at": node.metadata_json["latest_worker_progress"]["created_at"],
-            "phase": "build",
-            "conversation_id": "conv-1",
-        }
-        assert node.metadata_json["progress_events"][-1]["summary"] == "halfway"
-        assert fake_session.added[0].event_type == "worker_progress"
+        # Completes without raising and performs no platform SQL write.
+        await supervisor._apply_progress(_progress_envelope())
 
     async def test_progress_verb_does_not_fallback_for_stale_attempt(self) -> None:
         latest_node = SimpleNamespace(

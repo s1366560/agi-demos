@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -18,6 +17,9 @@ from src.infrastructure.agent.workspace.workspace_context_builder import (
     format_timestamp,
     format_workspace_context,
     truncate,
+)
+from src.infrastructure.workspace_core.legacy_runtime import (
+    LegacyWorkspaceRuntimeRetiredError,
 )
 
 _NOW = datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC)
@@ -299,93 +301,17 @@ class TestBuildWorkspaceContext:
         result = await build_workspace_context("p-1", "")
         assert result is None
 
-    async def test_returns_none_when_no_workspace(self) -> None:
-        mock_session = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
+    async def test_retired_platform_lookup_fails_closed(self) -> None:
+        """The dynamic Workspace context lookup is retired to Avernet Core."""
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="retired"):
+            await build_workspace_context("p-1", "t-1")
 
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.async_session_factory",
-                return_value=mock_session,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceRepository"
-            ) as mock_repo_cls,
-        ):
-            mock_repo = mock_repo_cls.return_value
-            mock_repo.find_by_project = AsyncMock(return_value=[])
-            result = await build_workspace_context("p-1", "t-1")
-            assert result is None
+    async def test_retired_lookup_raises_before_any_query(self) -> None:
+        """Retirement fires before the retired SQL query composition runs."""
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
+            await build_workspace_context("p-1", "t-1")
 
-    async def test_returns_context_when_workspace_exists(self) -> None:
-        ws = _make_workspace()
-        members = [_make_member()]
-        agents = [_make_agent()]
-        messages = [_make_message()]
-        posts = [_make_post()]
-        tasks: list[object] = []
-        objectives: list[object] = []
-        tasks = [_make_root_task()]
-
-        mock_session = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.async_session_factory",
-                return_value=mock_session,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceRepository"
-            ) as mock_ws_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceMemberRepository"
-            ) as mock_member_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceAgentRepository"
-            ) as mock_agent_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceMessageRepository"
-            ) as mock_msg_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlBlackboardRepository"
-            ) as mock_bb_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceTaskRepository"
-            ) as mock_task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder."
-                "SqlWorkspaceTaskSessionAttemptRepository"
-            ) as mock_attempt_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_context_builder.SqlCyberObjectiveRepository"
-            ) as mock_objective_repo_cls,
-        ):
-            mock_ws_repo_cls.return_value.find_by_project = AsyncMock(return_value=[ws])
-            mock_member_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=members)
-            mock_agent_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=agents)
-            mock_msg_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=messages)
-            mock_bb_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=posts)
-            mock_task_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=tasks)
-            mock_attempt_repo_cls.return_value.find_by_workspace_task_ids = AsyncMock(
-                return_value={}
-            )
-            mock_objective_repo_cls.return_value.find_by_workspace = AsyncMock(
-                return_value=objectives
-            )
-
-            result = await build_workspace_context("p-1", "t-1")
-            assert result is not None
-            assert "Test Workspace" in result
-            assert "<members>" in result
-            assert "<agents>" in result
-
-    async def test_returns_none_on_exception(self) -> None:
-        with patch(
-            "src.infrastructure.agent.workspace.workspace_context_builder.async_session_factory",
-            side_effect=RuntimeError("DB down"),
-        ):
-            result = await build_workspace_context("p-1", "t-1")
-            assert result is None
+    async def test_retired_lookup_raises_instead_of_swallowing_errors(self) -> None:
+        """The retired path fails loudly rather than returning stale context."""
+        with pytest.raises(LegacyWorkspaceRuntimeRetiredError):
+            await build_workspace_context("p-1", "t-1")

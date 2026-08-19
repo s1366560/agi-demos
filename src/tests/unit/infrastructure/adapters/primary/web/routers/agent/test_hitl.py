@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from src.configuration.config import get_settings
 from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus, HITLRequestType
@@ -65,6 +65,7 @@ async def test_respond_to_hitl_rejects_type_mismatch(monkeypatch) -> None:
 
     with pytest.raises(HTTPException, match="HITL type does not match request") as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
             request=request,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
@@ -161,6 +162,7 @@ async def test_respond_to_hitl_rejects_unauthorized_user(monkeypatch) -> None:
 
     with pytest.raises(HTTPException, match="Access denied") as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
             request=request,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
@@ -189,6 +191,7 @@ async def test_respond_to_hitl_rejects_non_target_user(monkeypatch) -> None:
 
     with pytest.raises(HTTPException, match="Access denied") as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
             request=HITLResponseRequest(
                 request_id="req-1",
                 hitl_type="env_var",
@@ -260,6 +263,7 @@ async def test_respond_to_hitl_rejects_invalid_env_var_shape(monkeypatch) -> Non
         match="env_var responses must include exactly one of values/cancelled/timeout",
     ) as exc_info:
         await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
             request=request,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
@@ -291,6 +295,7 @@ async def test_respond_to_hitl_accepts_permission_metadata_type(monkeypatch) -> 
     )
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=HITLResponseRequest(
             request_id="req-1",
             hitl_type="permission",
@@ -326,6 +331,7 @@ async def test_respond_to_hitl_reopens_pending_request_when_delivery_fails(monke
     monkeypatch.setattr(hitl_router, "_user_has_hitl_access", AsyncMock(return_value=True))
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=HITLResponseRequest(
             request_id="req-1",
             hitl_type="env_var",
@@ -362,6 +368,7 @@ async def test_respond_to_hitl_rejects_expired_request(monkeypatch) -> None:
     monkeypatch.setattr(hitl_router, "_user_has_hitl_access", AsyncMock(return_value=True))
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=HITLResponseRequest(
             request_id="req-1",
             hitl_type="env_var",
@@ -406,6 +413,7 @@ async def test_respond_to_hitl_returns_authority_after_losing_atomic_claim(monke
     )
 
     response = await hitl_router.respond_to_hitl(
+            http_request=MagicMock(spec=Request),
         request=HITLResponseRequest(
             request_id="req-1",
             hitl_type="clarification",
