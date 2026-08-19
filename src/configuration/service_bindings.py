@@ -617,6 +617,7 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         group="agent",
         target="skill_evolution_plugin",
         inject=("skill_service",),
+        allow_none=True,
     ),
     ContainerServiceBinding(
         key="event_log_repository", group="agent", target="event_log_repository", inject=()

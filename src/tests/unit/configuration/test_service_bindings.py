@@ -29,8 +29,6 @@ def _bindings(groups: tuple[str, ...]) -> list[ContainerServiceBinding]:
     return [b for b in CONTAINER_SERVICE_BINDINGS if b.group in groups]
 
 
-
-
 def _assert_equivalence(container: DIContainer, binding: ContainerServiceBinding) -> None:
     """Assert registry resolution matches facade behavior.
 
@@ -117,6 +115,42 @@ class TestServiceBindingsB3:
         "binding",
         _B3_ACTIVATABLE,
         ids=[b.key for b in _B3_ACTIVATABLE],
+    )
+    def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
+        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+
+
+_GROUP_B4 = ("instance",)
+_B4_BINDINGS = _bindings(_GROUP_B4)
+_B4_ACTIVATABLE = [b for b in _B4_BINDINGS if b.key not in _ACTIVATION_SKIP]
+
+
+@pytest.mark.unit
+class TestServiceBindingsB4:
+    """Batch B4: gene/evolution/instance domain."""
+
+    @pytest.mark.parametrize(
+        "binding",
+        _B4_ACTIVATABLE,
+        ids=[b.key for b in _B4_ACTIVATABLE],
+    )
+    def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
+        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+
+
+_GROUP_B5 = ("agent",)
+_B5_BINDINGS = _bindings(_GROUP_B5)
+_B5_ACTIVATABLE = [b for b in _B5_BINDINGS if b.key not in _ACTIVATION_SKIP]
+
+
+@pytest.mark.unit
+class TestServiceBindingsB5:
+    """Batch B5: agent/llm/sandbox/mcp domain."""
+
+    @pytest.mark.parametrize(
+        "binding",
+        _B5_ACTIVATABLE,
+        ids=[b.key for b in _B5_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
         _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
