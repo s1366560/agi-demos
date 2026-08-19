@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useWorkspaceActions } from '@/stores/workspace';
+import { useWorkspaceActions, useWorkspaceStore } from '@/stores/workspace';
 
 import { workspaceService } from '@/services/workspaceService';
 
@@ -134,12 +134,23 @@ export function useBlackboardLifecycle({
     };
   }, [hydrateSurface, projectId, selectedWorkspaceId, tenantId]);
 
+  const lastDeletedWorkspaceId = useWorkspaceStore((state) => state.lastDeletedWorkspaceId);
+
+  // When the selected workspace is deleted from another session, the store
+  // records the deletion; refetch the list so the selection falls back to a
+  // live workspace instead of rendering the deleted one's stale surface.
+  useEffect(() => {
+    if (!lastDeletedWorkspaceId || lastDeletedWorkspaceId !== selectedWorkspaceId) {
+      return;
+    }
+    void loadWorkspaces();
+  }, [lastDeletedWorkspaceId, selectedWorkspaceId, loadWorkspaces]);
+
   useEffect(() => {
     if (!requestedWorkspaceId) {
       appliedRequestedWorkspaceIdRef.current = null;
       return;
     }
-
     const nextRequestedWorkspaceId = resolveRequestedWorkspaceSelection(
       requestedWorkspaceId,
       appliedRequestedWorkspaceIdRef.current,

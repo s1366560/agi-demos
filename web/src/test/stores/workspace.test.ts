@@ -762,6 +762,7 @@ describe('workspace store', () => {
     expect(state.currentWorkspace?.id).toBe('ws-2');
     expect(state.posts).toEqual([]);
     expect(state.tasks).toEqual([]);
+    expect(state.lastDeletedWorkspaceId).toBe('ws-1');
   });
 
   it('handleWorkspaceLifecycleEvent reloads the surface for the fallback workspace', async () => {

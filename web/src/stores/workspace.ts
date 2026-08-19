@@ -315,6 +315,7 @@ interface WorkspaceState {
   genesLoading: boolean;
   activeSurfaceRequestId: number;
   surfaceContext: { tenantId: string; projectId: string } | null;
+  lastDeletedWorkspaceId: string | null;
   error: string | null;
   onlineUsers: PresenceUser[];
   onlineAgents: PresenceAgent[];
@@ -608,6 +609,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       genesLoading: false,
       activeSurfaceRequestId: 0,
       surfaceContext: null,
+      lastDeletedWorkspaceId: null,
       error: null,
       onlineUsers: [],
       onlineAgents: [],
@@ -1351,6 +1353,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ...(currentWorkspaceDeleted ? createEmptySurfaceState() : {}),
             workspaces,
             currentWorkspace: currentWorkspaceDeleted ? nextWorkspace : state.currentWorkspace,
+            lastDeletedWorkspaceId: workspaceId,
           });
           // Proactively hydrate the fallback workspace's surface; otherwise
           // consumers would render an empty panel until some upper-layer
