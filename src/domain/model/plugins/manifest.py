@@ -258,9 +258,15 @@ def parse_plugin_manifest(payload: object) -> PluginManifest:
     }:
         errors.append("runtime python-trusted requires builtin or signed trust")
 
-    protected_kinds = {CapabilityKind.AGENT_LOOP, CapabilityKind.CREDENTIAL_SOURCE}
-    if any(item.kind in protected_kinds for item in provides) and trust != PluginTrust.BUILTIN:
-        errors.append("agent_loop and credential_source capabilities must be builtin")
+    if any(item.kind == CapabilityKind.CREDENTIAL_SOURCE for item in provides) and (
+        trust != PluginTrust.BUILTIN
+    ):
+        errors.append("credential_source capabilities must be builtin")
+    if any(item.kind == CapabilityKind.AGENT_LOOP for item in provides):
+        if trust not in {PluginTrust.BUILTIN, PluginTrust.SIGNED}:
+            errors.append("agent_loop capabilities require builtin or signed trust")
+        if runtime != PluginRuntimeKind.PYTHON_TRUSTED:
+            errors.append("agent_loop capabilities require the python-trusted runtime")
 
     if errors:
         raise PluginManifestError(errors)

@@ -173,4 +173,54 @@ def test_untrusted_plugin_cannot_claim_kernel_capability() -> None:
             }
         )
 
-    assert "agent_loop and credential_source capabilities must be builtin" in exc_info.value.errors
+    assert "agent_loop capabilities require the python-trusted runtime" in exc_info.value.errors
+
+
+@pytest.mark.unit
+def test_signed_python_plugin_may_claim_agent_loop() -> None:
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "signed-loop",
+            "version": "0.1.0",
+            "runtime": "python-trusted",
+            "trust": "signed",
+            "provides": [{"kind": "agent_loop", "id": "default"}],
+        }
+    )
+
+    assert manifest.provides[0].kind.value == "agent_loop"
+
+
+@pytest.mark.unit
+def test_untrusted_plugin_cannot_claim_agent_loop() -> None:
+    with pytest.raises(PluginManifestError) as exc_info:
+        parse_plugin_manifest(
+            {
+                "schemaVersion": 1,
+                "id": "untrusted-loop",
+                "version": "0.1.0",
+                "runtime": "mcp",
+                "trust": "untrusted",
+                "provides": [{"kind": "agent_loop", "id": "default"}],
+            }
+        )
+
+    assert "agent_loop capabilities require builtin or signed trust" in exc_info.value.errors
+
+
+@pytest.mark.unit
+def test_signed_plugin_cannot_claim_credential_source() -> None:
+    with pytest.raises(PluginManifestError) as exc_info:
+        parse_plugin_manifest(
+            {
+                "schemaVersion": 1,
+                "id": "signed-vault",
+                "version": "0.1.0",
+                "runtime": "python-trusted",
+                "trust": "signed",
+                "provides": [{"kind": "credential_source", "id": "vault"}],
+            }
+        )
+
+    assert "credential_source capabilities must be builtin" in exc_info.value.errors

@@ -17,7 +17,7 @@ Status legend:
 
 | Capability kind | Python backend | Rust core / sidecar | Web frontend | Desktop app |
 | --- | --- | --- | --- | --- |
-| `agent_loop` | builtin (`SessionProcessor`/ReAct); kind reserved builtin-only; loop seam is P2 | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
+| `agent_loop` | partial: kind relaxed to builtin/signed (python-trusted only); `agent_loop_runtime.AgentLoopResolver` resolves per turn by `(provider, model)` — model > provider > auto(`supports()` priority) > builtin fallback; wiring into `SessionProcessor` remains | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
 | `system_prompt_section` | partial: runtime guidance / agent definition prompts are builtin, not yet capability rows (P2) | gap | n/a | gap |
 | `tool` | done: V2 tool generations (`tool_runtime.py`) + V1 factories mirrored by `legacy_inventory_bridge.py` | done: `HotPlugRegistry` + `ToolHost` seam (`crates/plugin-host`) | n/a | done: sidecar `authorized_tool_host` consumes the same registry |
 | `skill_provider` | partial: V1 skill factories + loaders; V2 mirroring via bridge; declarative skills are builtin | done: `SkillEngine` (declarative data + Rhai trigger) in `crates/plugin-host` | n/a | partial: available through plugin-host, no profile-driven skills yet |
