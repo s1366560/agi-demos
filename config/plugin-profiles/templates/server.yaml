@@ -1,0 +1,13 @@
+# Server profile template: every trusted builtin enabled (the full control
+# plane with database-backed memory and skill evolution available).
+schemaVersion: 1
+profile:
+  id: memstack-server
+  layers:
+    - id: memstack.kernel-base
+      plugins:
+        - id: workspace-runtime
+        - id: sisyphus-runtime
+        - id: memory-runtime
+        - id: skill-evolution
+patches: []

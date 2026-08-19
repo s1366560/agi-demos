@@ -13,6 +13,7 @@ from src.infrastructure.plugins.bundle import (
     BundleError,
     PluginBundle,
     bundle_to_profile_layer,
+    install_bundle_into_profile,
     read_bundle,
     write_bundle,
 )
@@ -145,3 +146,55 @@ def test_not_a_zip_fails(tmp_path: Path) -> None:
 
     with pytest.raises(BundleError, match="zip"):
         read_bundle(path)
+
+
+def _profile_file(tmp_path: Path) -> Path:
+    path = tmp_path / "profile.yaml"
+    path.write_text(
+        (
+            "schemaVersion: 1\n"
+            "profile:\n"
+            "  id: test-profile\n"
+            "  layers:\n"
+            "    - id: base\n"
+            "      plugins:\n"
+            "        - id: workspace-runtime\n"
+            "patches: []\n"
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.unit
+def test_install_bundle_appends_layer_and_patches(tmp_path: Path) -> None:
+    profile = _profile_file(tmp_path)
+    bundle = _bundle(patches=(ProfilePatch(target="echo-tools", enabled=False),))
+
+    payload = install_bundle_into_profile(profile, bundle)
+
+    layer_ids = [layer["id"] for layer in payload["profile"]["layers"]]
+    assert layer_ids == ["base", "acme.layer"]
+    new_layer = payload["profile"]["layers"][1]
+    assert new_layer["plugins"] == [{"id": "echo-tools", "config": {"level": 2}}]
+    assert payload["patches"] == [{"target": "echo-tools", "enabled": False}]
+
+    # The rewritten document still composes against the original manifests.
+    import yaml
+
+    reloaded = yaml.safe_load(profile.read_text(encoding="utf-8"))
+    assert reloaded["profile"]["layers"][1]["id"] == "acme.layer"
+
+
+@pytest.mark.unit
+def test_install_bundle_rejects_duplicate_layer_unless_replace(tmp_path: Path) -> None:
+    profile = _profile_file(tmp_path)
+    bundle = _bundle()
+    install_bundle_into_profile(profile, bundle)
+
+    with pytest.raises(BundleError, match="already contains layer"):
+        install_bundle_into_profile(profile, bundle)
+
+    payload = install_bundle_into_profile(profile, bundle, replace=True)
+    layer_ids = [layer["id"] for layer in payload["profile"]["layers"]]
+    assert layer_ids == ["base", "acme.layer"]

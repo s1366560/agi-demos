@@ -371,12 +371,27 @@ def _validate_requirements(
 
     for plugin_id, manifest in active_manifests.items():
         for requirement in manifest.requires:
-            owner = contract_owners.get(requirement.capability)
-            if owner is None:
-                errors.append(
-                    f"plugin {plugin_id} requires missing capability {_required_contract(requirement, plugin_id)}"
-                )
+            provider_id = _requirement_owner(
+                requirement,
+                {key: owner[0] for key, owner in contract_owners.items()},
+            )
+            if provider_id is None:
+                base_matches = {
+                    key
+                    for key in contract_owners
+                    if key.rsplit("@", 1)[0] == requirement.capability
+                }
+                if len(base_matches) > 1:
+                    errors.append(
+                        f"plugin {plugin_id} requires ambiguous capability "
+                        f"{_required_contract(requirement, plugin_id)}; pin it with @plugin-id"
+                    )
+                else:
+                    errors.append(
+                        f"plugin {plugin_id} requires missing capability {_required_contract(requirement, plugin_id)}"
+                    )
                 continue
+            owner = provider_id, active_manifests[provider_id]
             provider_id, provider_manifest = owner
             if provider_id == plugin_id:
                 errors.append(
@@ -410,7 +425,7 @@ def _dependency_order(active_manifests: Mapping[str, PluginManifest]) -> Sequenc
         visiting.add(plugin_id)
         manifest = active_manifests[plugin_id]
         for requirement in manifest.requires:
-            provider_id = provider_by_contract.get(_required_contract(requirement, plugin_id))
+            provider_id = _requirement_owner(requirement, provider_by_contract)
             if provider_id is not None and provider_id != plugin_id:
                 visit(provider_id)
         visiting.remove(plugin_id)
@@ -436,3 +451,22 @@ def _provided_contract(capability: ProvidedCapability, plugin_id: str) -> str:
 def _required_contract(requirement: PluginRequirement, plugin_id: str) -> str:
     contract = requirement.capability
     return f"{contract}@{plugin_id}"
+
+
+def _requirement_owner(
+    requirement: PluginRequirement,
+    provider_by_contract: Mapping[str, str],
+) -> str | None:
+    """Resolve a requirement to its provider: exact ``@plugin`` pin, else a
+    unique base-contract match; ambiguous or absent matches return None."""
+    pinned = provider_by_contract.get(requirement.capability)
+    if pinned is not None:
+        return pinned
+    matches = {
+        owner
+        for key, owner in provider_by_contract.items()
+        if key.rsplit("@", 1)[0] == requirement.capability
+    }
+    if len(matches) == 1:
+        return matches.pop()
+    return None

@@ -1,0 +1,11 @@
+# Headless profile template: one-shot runner with no durable memory or
+# evolution loops; the smallest composition that still runs a session.
+schemaVersion: 1
+profile:
+  id: memstack-headless
+  layers:
+    - id: memstack.kernel-base
+      plugins:
+        - id: workspace-runtime
+        - id: sisyphus-runtime
+patches: []

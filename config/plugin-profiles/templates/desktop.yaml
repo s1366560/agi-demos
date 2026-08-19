@@ -1,0 +1,14 @@
+# Desktop profile template: local runtime with durable memory; skill
+# evolution stays off until its server-side dependencies are configured.
+schemaVersion: 1
+profile:
+  id: memstack-desktop
+  layers:
+    - id: memstack.kernel-base
+      plugins:
+        - id: workspace-runtime
+        - id: sisyphus-runtime
+        - id: memory-runtime
+        - id: skill-evolution
+          enabled: false
+patches: []

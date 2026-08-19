@@ -12,6 +12,11 @@ _IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 _CAPABILITY_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 _PERMISSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,191}$")
 _CONTRACT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,191}$")
+# Requirements may pin the owning plugin (`contract@plugin-id`) so a
+# required provider is unique even when several plugins share a contract.
+_REQUIREMENT_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9._:-]{0,191}(?:@[a-z0-9][a-z0-9._-]{0,63})?$"
+)
 _VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
@@ -344,8 +349,10 @@ def _parse_requirements(value: object, errors: list[str]) -> tuple[PluginRequire
             errors.append(f"requires[{index}] must be an object")
             continue
         capability = raw_item.get("capability")
-        if not isinstance(capability, str) or not _CONTRACT_PATTERN.fullmatch(capability):
-            errors.append(f"requires[{index}].capability must match {_CONTRACT_PATTERN.pattern}")
+        if not isinstance(capability, str) or not _REQUIREMENT_PATTERN.fullmatch(capability):
+            errors.append(
+                f"requires[{index}].capability must match {_REQUIREMENT_PATTERN.pattern}"
+            )
             continue
         if capability in seen:
             errors.append(f"requires[{index}].capability is declared more than once")

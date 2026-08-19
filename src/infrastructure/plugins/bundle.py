@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from src.domain.model.plugins import PluginManifest, parse_plugin_manifest
 
 from .profile import ProfileLayer, ProfilePatch, ProfileRow, _parse_patch
@@ -32,6 +34,7 @@ __all__ = [
     "BundleError",
     "PluginBundle",
     "bundle_to_profile_layer",
+    "install_bundle_into_profile",
     "read_bundle",
     "write_bundle",
 ]
@@ -113,6 +116,76 @@ def write_bundle(path: Path, bundle: PluginBundle) -> None:
 def bundle_to_profile_layer(bundle: PluginBundle) -> ProfileLayer:
     """Return the profile layer a marketplace install would append."""
     return bundle.layer
+
+
+def install_bundle_into_profile(
+    profile_path: Path,
+    bundle: PluginBundle,
+    *,
+    replace: bool = False,
+) -> dict[str, Any]:
+    """Append a bundle's layer and patches to a profile document on disk.
+
+    Returns the updated profile payload. A layer id collision fails loud
+    unless ``replace`` is set, matching the whole-row patch semantics.
+    """
+    try:
+        payload = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BundleError(f"cannot read profile {profile_path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise BundleError(f"cannot parse profile {profile_path}: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("profile"), dict):
+        raise BundleError(f"profile {profile_path} must hold a profile object")
+
+    profile = payload["profile"]
+    layers = profile.setdefault("layers", [])
+    if not isinstance(layers, list):
+        raise BundleError(f"profile {profile_path} layers must be an array")
+    existing = next(
+        (index for index, layer in enumerate(layers) if layer.get("id") == bundle.layer.id),
+        None,
+    )
+    if existing is not None and not replace:
+        raise BundleError(
+            f"profile {profile_path} already contains layer {bundle.layer.id}; pass replace=True"
+        )
+
+    layer_payload = {
+        "id": bundle.layer.id,
+        "plugins": [
+            {
+                "id": row.id,
+                **({} if row.enabled else {"enabled": row.enabled}),
+                **({"config": dict(row.config)} if row.config else {}),
+            }
+            for row in bundle.layer.rows
+        ],
+    }
+    if existing is None:
+        layers.append(layer_payload)
+    else:
+        layers[existing] = layer_payload
+
+    if bundle.patches:
+        patches = payload.setdefault("patches", [])
+        if not isinstance(patches, list):
+            raise BundleError(f"profile {profile_path} patches must be an array")
+        for patch in bundle.patches:
+            patches.append(
+                {
+                    "target": patch.target,
+                    **({"enabled": patch.enabled} if patch.enabled is not None else {}),
+                    **({"config": dict(patch.config)} if patch.config is not None else {}),
+                    **({"remove": patch.remove} if patch.remove else {}),
+                }
+            )
+
+    profile_path.write_text(
+        yaml.safe_dump(payload, sort_keys=False),
+        encoding="utf-8",
+    )
+    return payload
 
 
 def _read_zip(raw: bytes, path: Path) -> dict[str, bytes]:

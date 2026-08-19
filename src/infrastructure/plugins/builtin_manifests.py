@@ -92,7 +92,10 @@ def skill_evolution_manifest() -> PluginManifest:
             "runtime": "python-trusted",
             "trust": "builtin",
             "requires": [
-                {"capability": "skill_provider:workspace-task-harness", "minVersion": "1.0.0"}
+                {
+                    "capability": "agent-skill:workspace-task-harness@workspace-runtime",
+                    "minVersion": "1.0.0",
+                }
             ],
             "provides": [
                 {"kind": "hook", "id": "after_tool_execution"},
