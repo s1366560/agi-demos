@@ -18,28 +18,13 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunAuthorityModel,
     AgentRunInputModel,
     Conversation,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 
 
 async def _add_run(test_db, test_project_db, test_user) -> AgentPlanRunModel:
     now = datetime.now(UTC)
-    workspace = WorkspaceModel(
-        id="run-authority-workspace",
-        tenant_id=test_project_db.tenant_id,
-        project_id=test_project_db.id,
-        name="Run authority workspace",
-        created_by=test_user.id,
-        metadata_json={"capability_mode": "code"},
-    )
-    membership = WorkspaceMemberModel(
-        id="run-authority-workspace-member",
-        workspace_id=workspace.id,
-        user_id=test_user.id,
-        role="owner",
-        invited_by=test_user.id,
-    )
+    # Workspace rows are Core-owned since c84f19b55; conversations keep the
+    # workspace linkage as a plain foreign key string.
     conversation = Conversation(
         id="run-authority-conversation",
         project_id=test_project_db.id,
@@ -49,7 +34,7 @@ async def _add_run(test_db, test_project_db, test_user) -> AgentPlanRunModel:
         status="active",
         agent_config={},
         message_count=0,
-        workspace_id=workspace.id,
+        workspace_id="run-authority-workspace",
     )
     version = AgentPlanVersionModel(
         id="run-authority-plan",
@@ -92,7 +77,7 @@ async def _add_run(test_db, test_project_db, test_user) -> AgentPlanRunModel:
         created_at=run.created_at,
         updated_at=run.updated_at,
     )
-    test_db.add_all([workspace, membership, conversation, version, run, authority])
+    test_db.add_all([conversation, version, run, authority])
     await test_db.commit()
     return run
 

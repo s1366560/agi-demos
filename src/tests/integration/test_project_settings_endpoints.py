@@ -19,8 +19,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     ToolExecutionRecord,
     User,
     UserProject,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 
 
@@ -225,7 +223,7 @@ class TestDeleteProjectEndpoint:
         result = await db.execute(select(UserProject).where(UserProject.project_id == project_id))
         assert result.scalar_one_or_none() is None
 
-    async def test_delete_project_removes_workspace_and_task_session_receipt(
+    async def test_delete_project_removes_task_session_receipt(
         self,
         authenticated_async_client: AsyncClient,
         db: AsyncSession,
@@ -250,19 +248,8 @@ class TestDeleteProjectEndpoint:
             role="owner",
             permissions={"admin": True},
         )
-        workspace = WorkspaceModel(
-            id=str(uuid4()),
-            tenant_id=test_tenant_db.id,
-            project_id=project.id,
-            name="Task workspace",
-            created_by=test_user.id,
-        )
-        workspace_member = WorkspaceMemberModel(
-            id=str(uuid4()),
-            workspace_id=workspace.id,
-            user_id=test_user.id,
-            role="owner",
-        )
+        # Workspace rows are Core-owned since c84f19b55; the receipt keeps the
+        # workspace linkage as a plain string.
         receipt = TaskSessionCreationReceiptModel(
             id=str(uuid4()),
             actor_user_id=test_user.id,
@@ -270,10 +257,10 @@ class TestDeleteProjectEndpoint:
             project_id=project.id,
             idempotency_key="delete-project-task-session",
             payload_hash="a" * 64,
-            workspace_id=workspace.id,
+            workspace_id=str(uuid4()),
             response_json={"tombstone": True},
         )
-        db.add_all([project, user_project, workspace, workspace_member, receipt])
+        db.add_all([project, user_project, receipt])
         await db.commit()
 
         response = await authenticated_async_client.delete(f"/api/v1/projects/{project.id}")
@@ -281,8 +268,6 @@ class TestDeleteProjectEndpoint:
         assert response.status_code == 204
         for model, item_id in [
             (Project, project.id),
-            (WorkspaceModel, workspace.id),
-            (WorkspaceMemberModel, workspace_member.id),
             (TaskSessionCreationReceiptModel, receipt.id),
         ]:
             result = await db.execute(select(model).where(model.id == item_id))

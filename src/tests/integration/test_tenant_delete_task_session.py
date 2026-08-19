@@ -14,8 +14,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
     UserTenant,
-    WorkspaceMemberModel,
-    WorkspaceModel,
 )
 
 
@@ -27,8 +25,6 @@ async def test_delete_tenant_removes_project_task_session_roots(
 ) -> None:
     tenant_id = str(uuid4())
     project_id = str(uuid4())
-    workspace_id = str(uuid4())
-    member_id = str(uuid4())
     receipt_id = str(uuid4())
     tenant = Tenant(
         id=tenant_id,
@@ -58,19 +54,8 @@ async def test_delete_tenant_removes_project_task_session_roots(
         role="owner",
         permissions={"admin": True},
     )
-    workspace = WorkspaceModel(
-        id=workspace_id,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        name="Task workspace",
-        created_by=test_user.id,
-    )
-    workspace_member = WorkspaceMemberModel(
-        id=member_id,
-        workspace_id=workspace_id,
-        user_id=test_user.id,
-        role="owner",
-    )
+    # Workspace rows are Core-owned since c84f19b55; the receipt keeps the
+    # workspace linkage as a plain string.
     receipt = TaskSessionCreationReceiptModel(
         id=receipt_id,
         actor_user_id=test_user.id,
@@ -78,7 +63,7 @@ async def test_delete_tenant_removes_project_task_session_roots(
         project_id=project_id,
         idempotency_key="delete-tenant-task-session",
         payload_hash="b" * 64,
-        workspace_id=workspace_id,
+        workspace_id=str(uuid4()),
         response_json={"tombstone": True},
     )
     db.add_all(
@@ -87,8 +72,6 @@ async def test_delete_tenant_removes_project_task_session_roots(
             membership,
             project,
             project_membership,
-            workspace,
-            workspace_member,
             receipt,
         ]
     )
@@ -100,8 +83,6 @@ async def test_delete_tenant_removes_project_task_session_roots(
     for model, item_id in [
         (Tenant, tenant_id),
         (Project, project_id),
-        (WorkspaceModel, workspace_id),
-        (WorkspaceMemberModel, member_id),
         (TaskSessionCreationReceiptModel, receipt_id),
     ]:
         result = await db.execute(select(model).where(model.id == item_id))
