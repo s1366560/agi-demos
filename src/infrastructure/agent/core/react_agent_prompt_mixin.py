@@ -109,6 +109,14 @@ class _PromptAgent(Protocol):
         tenant_agent_config: TenantAgentConfig,
     ) -> str: ...
 
+    async def _load_selected_agent_native(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> Agent | None: ...
+
 
 class PromptMixin:
     """Prompt-building helpers (system prompt, runtime profile, agent loading)."""
@@ -350,6 +358,44 @@ class PromptMixin:
         )
 
     async def _load_selected_agent(
+        self: _PromptAgent,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> Agent | None:
+        """Load an explicit agent definition through the active v2 Provider."""
+        from src.infrastructure.plugins.v2.agent_definition import (
+            AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+            AgentDefinitionResolverV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        try:
+            operation = current_operation_context_v2()
+        except RuntimeV2Error as exc:
+            if exc.code != "operation_context_not_pinned":
+                raise
+            return await self._load_selected_agent_native(
+                agent_id=agent_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+        resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, AgentDefinitionResolverV2):
+            raise RuntimeError("v2 agent-definition resolver has an invalid implementation")
+        return cast(
+            Agent | None,
+            await resolver.resolve(
+                loader=self._load_selected_agent_native,
+                agent_id=agent_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            ),
+        )
+
+    async def _load_selected_agent_native(
         self: _PromptAgent,
         *,
         agent_id: str,

@@ -40,6 +40,15 @@
         "digest": "sha256:e168f18efecdcad3ad499cd6bc8e4cb70a9b276263c1cd13e305b83d458ccd7b",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/definition",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_definition:_apply_agent_definition_resolver_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee41e0d41b3da76351fc",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],
