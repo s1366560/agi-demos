@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -112,6 +112,39 @@ class RouteTableV2:
         await self._app(scope, receive, send)
 
 
+class RouteTableBuilderV2:
+    """Mutable staging-only route contributions that freeze into one immutable table."""
+
+    def __init__(self) -> None:
+        self._definitions: list[RouteDefinitionV2] = []
+        self._frozen: RouteTableV2 | None = None
+
+    @property
+    def definitions(self) -> tuple[RouteDefinitionV2, ...]:
+        return tuple(self._definitions)
+
+    def contribute(self, definition: RouteDefinitionV2) -> Callable[[], Awaitable[None]]:
+        if self._frozen is not None:
+            raise RuntimeV2Error(
+                "route_table_frozen",
+                "route contributions are closed after the generation table is frozen",
+            )
+        candidate = (*self._definitions, definition)
+        _validate_routes(candidate)
+        self._definitions.append(definition)
+
+        async def dispose() -> None:
+            if definition in self._definitions:
+                self._definitions.remove(definition)
+
+        return dispose
+
+    def freeze(self) -> RouteTableV2:
+        if self._frozen is None:
+            self._frozen = RouteTableV2(self._definitions)
+        return self._frozen
+
+
 @dataclass(frozen=True, kw_only=True)
 class RoutePublicationV2:
     descriptor: PluginGenerationDescriptorV2
@@ -201,6 +234,7 @@ __all__ = [
     "OpenApiSnapshotV2",
     "RouteDefinitionV2",
     "RoutePublicationV2",
+    "RouteTableBuilderV2",
     "RouteTableRegistryV2",
     "RouteTableV2",
 ]

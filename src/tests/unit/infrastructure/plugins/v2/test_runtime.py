@@ -21,7 +21,13 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeV2,
     TrustKindV2,
 )
+from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from src.infrastructure.plugins.v2.protocol import build_profile_snapshot_v2
+from src.infrastructure.plugins.v2.route_effects import (
+    ROUTE_TABLE_BUILDER_SERVICE_V2,
+    route_contribution_definition_v2,
+    route_table_builder_definition_v2,
+)
 from src.infrastructure.plugins.v2.runtime import (
     FiberPhaseV2,
     GenerationManagerV2,
@@ -226,6 +232,103 @@ async def test_inactive_fiber_rejects_new_effects() -> None:
         captured["context"].provide("service:late", object())
 
     assert error.value.code == "inactive_effect"
+
+
+@pytest.mark.unit
+async def test_route_contribution_effect_freezes_and_unloads_with_its_fiber() -> None:
+    builder = RouteTableBuilderV2()
+    provider_entry = _entry("route-builder", "builtin://runtime/route-builder")
+    contributor_entry = _entry(
+        "route-contributor",
+        "builtin://runtime/route-contributor",
+        inject={"route_table": ROUTE_TABLE_BUILDER_SERVICE_V2},
+    )
+    route = RouteDefinitionV2(
+        owner_entry_id=contributor_entry.entry_id,
+        path="/api/v2/contributed",
+        methods=("GET",),
+        endpoint=lambda: {"ok": True},
+        name="contributed-route",
+    )
+    generation = await LoaderV2(
+        (
+            route_table_builder_definition_v2(
+                module_ref=provider_entry.module_ref,
+                builder=builder,
+            ),
+            route_contribution_definition_v2(
+                module_ref=contributor_entry.module_ref,
+                routes=(route,),
+            ),
+        )
+    ).stage(_snapshot(1, (provider_entry, contributor_entry)))
+
+    assert generation.resolve(
+        ROUTE_TABLE_BUILDER_SERVICE_V2,
+        _scope(ScopeKindV2.ROOT),
+    ) is builder
+    assert builder.definitions == (route,)
+    frozen = builder.freeze()
+    with pytest.raises(RuntimeV2Error) as error:
+        builder.contribute(
+            replace(route, path="/api/v2/late", name="late-route"),
+        )
+    assert error.value.code == "route_table_frozen"
+
+    await generation.dispose()
+
+    assert builder.definitions == ()
+    assert frozen.definitions == (route,)
+
+
+@pytest.mark.unit
+async def test_route_contribution_conflict_rolls_back_staged_effects() -> None:
+    builder = RouteTableBuilderV2()
+    provider_entry = _entry("route-builder", "builtin://runtime/route-builder")
+    first_entry = _entry(
+        "first-route",
+        "builtin://runtime/first-route",
+        inject={"route_table": ROUTE_TABLE_BUILDER_SERVICE_V2},
+    )
+    second_entry = _entry(
+        "second-route",
+        "builtin://runtime/second-route",
+        inject={"route_table": ROUTE_TABLE_BUILDER_SERVICE_V2},
+    )
+    first_route = RouteDefinitionV2(
+        owner_entry_id=first_entry.entry_id,
+        path="/api/v2/conflict",
+        methods=("GET",),
+        endpoint=lambda: {"owner": "first"},
+        name="first-route",
+    )
+    second_route = replace(
+        first_route,
+        owner_entry_id=second_entry.entry_id,
+        endpoint=lambda: {"owner": "second"},
+        name="second-route",
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(
+            (
+                route_table_builder_definition_v2(
+                    module_ref=provider_entry.module_ref,
+                    builder=builder,
+                ),
+                route_contribution_definition_v2(
+                    module_ref=first_entry.module_ref,
+                    routes=(first_route,),
+                ),
+                route_contribution_definition_v2(
+                    module_ref=second_entry.module_ref,
+                    routes=(second_route,),
+                ),
+            )
+        ).stage(_snapshot(1, (provider_entry, first_entry, second_entry)))
+
+    assert error.value.code == "route_conflict"
+    assert builder.definitions == ()
 
 
 @pytest.mark.unit
