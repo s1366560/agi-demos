@@ -1,0 +1,19 @@
+schema_version: 2
+profile:
+  id: memstack-default-v2
+  entries:
+    - entry_id: runtime-generation-boundary
+      parent_entry_id: null
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/generation-boundary
+      enabled: true
+      config:
+        protocol_version: 2
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+patches: []

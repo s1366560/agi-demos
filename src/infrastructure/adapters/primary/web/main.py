@@ -57,6 +57,11 @@ from src.infrastructure.adapters.primary.web.startup import (
 from src.infrastructure.adapters.primary.web.startup.graph import (
     shutdown_graph_service,
 )
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    plugin_runtime_host_v2_from_scope,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
@@ -70,6 +75,7 @@ from src.infrastructure.llm.resilience.health_checker import (
 )
 from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.route_loader import install_builtin_routes
+from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -152,6 +158,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     app.state.container = container
     app.state.workflow_engine = workflow_engine
     app.state.graph_service = graph_service
+    await initialize_plugin_runtime_v2(app)
 
     # Register WebSocket manager for lifecycle state notifications
     initialize_websocket_manager()
@@ -304,6 +311,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Failed to wire reflection runtime -- loop disabled")
 
     yield
+
+    # Stop v2 Fibers while their process services are still available. Starlette
+    # has already drained request tasks, so no new HTTP generation lease can start.
+    await shutdown_plugin_runtime_v2(app)
 
     # Remove plugin-owned routes before application state services unwind.
     http_routes = getattr(app.state, "platform_plugin_http_routes", None)
@@ -571,6 +582,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     from src.infrastructure.i18n.middleware import LocaleMiddleware
 
     app.add_middleware(LocaleMiddleware)
+    app.add_middleware(
+        PluginGenerationMiddlewareV2,
+        host_provider=plugin_runtime_host_v2_from_scope,
+    )
 
     # Configure rate limiting
     app.state.limiter = limiter

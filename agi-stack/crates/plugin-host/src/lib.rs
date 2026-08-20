@@ -47,6 +47,7 @@ pub mod host;
 pub mod manifest;
 pub mod native;
 pub mod profile_reconcile;
+pub mod protocol_v2;
 pub mod reconcile;
 pub mod registry;
 pub mod skill;
@@ -61,6 +62,12 @@ pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
 pub use profile_reconcile::{
     PlatformPluginActivator, PlatformPluginEnvelope, PlatformPluginSnapshotReconciler,
     PluginActivation, PluginApplyReceipt, PluginApplyStatus,
+};
+pub use protocol_v2::{
+    parse_profile_snapshot_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
+    GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2,
+    PluginProtocolV2Error, RuntimeGenerationV2, RuntimeV2Error,
+    PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL_V2,
 };
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};

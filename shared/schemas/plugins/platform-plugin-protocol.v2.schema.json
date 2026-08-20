@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.memstack.ai/plugins/platform-plugin-protocol.v2.schema.json",
+  "title": "MemStack Platform Plugin Protocol V2",
+  "oneOf": [
+    { "$ref": "#/$defs/PluginManifestV2" },
+    { "$ref": "#/$defs/ProfileSnapshotV2" },
+    { "$ref": "#/$defs/ControlPlaneEnvelopeV2" },
+    { "$ref": "#/$defs/SnapshotApplyReceiptV2" }
+  ],
+  "$defs": {
+    "ScopeKindV2": {
+      "type": "string",
+      "enum": ["root", "tenant", "project", "session"]
+    },
+    "RuntimeKindV2": {
+      "type": "string",
+      "enum": ["python-trusted", "rust-native", "wasm", "mcp", "subprocess", "frontend"]
+    },
+    "TrustKindV2": {
+      "type": "string",
+      "enum": ["builtin", "signed", "tenant-approved", "untrusted"]
+    },
+    "RestartPolicyV2": {
+      "type": "string",
+      "enum": ["hot-generation", "process-boundary"]
+    },
+    "ApplyStatusV2": {
+      "type": "string",
+      "enum": ["ack", "nack"]
+    },
+    "ScopeV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/ScopeKindV2" },
+        "tenant_id": { "type": ["string", "null"], "minLength": 1 },
+        "project_id": { "type": ["string", "null"], "minLength": 1 },
+        "session_id": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "QuotaV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_wasm_fuel": { "type": "integer", "minimum": 0 },
+        "max_wasm_memory_bytes": { "type": "integer", "minimum": 0 },
+        "max_wall_time_ms": { "type": "integer", "minimum": 0 },
+        "max_concurrent_calls": { "type": "integer", "minimum": 0 },
+        "max_output_bytes": { "type": "integer", "minimum": 0 },
+        "max_network_requests_per_minute": { "type": "integer", "minimum": 0 },
+        "max_storage_bytes": { "type": "integer", "minimum": 0 },
+        "max_monthly_usd_micros": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ArtifactReferenceV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "source"],
+      "properties": {
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "source": { "type": "string", "minLength": 1 },
+        "signature": { "type": ["string", "null"] },
+        "provenance": { "type": ["string", "null"] }
+      }
+    },
+    "PluginModuleV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module_ref", "entrypoint", "artifact"],
+      "properties": {
+        "module_ref": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://.+$" },
+        "entrypoint": { "type": "string", "minLength": 1 },
+        "artifact": { "$ref": "#/$defs/ArtifactReferenceV2" }
+      }
+    },
+    "PluginManifestV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "plugin_id",
+        "version",
+        "runtime",
+        "trust",
+        "modules",
+        "permissions",
+        "quotas"
+      ],
+      "properties": {
+        "schema_version": { "const": 2, "type": "integer" },
+        "plugin_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$" },
+        "runtime": { "$ref": "#/$defs/RuntimeKindV2" },
+        "trust": { "$ref": "#/$defs/TrustKindV2" },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/PluginModuleV2" }
+        },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "quotas": { "$ref": "#/$defs/QuotaV2" }
+      }
+    },
+    "ProfileEntryV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_id",
+        "parent_entry_id",
+        "plugin_ref",
+        "module_ref",
+        "enabled",
+        "config",
+        "inject",
+        "isolate",
+        "scope",
+        "permissions",
+        "quotas",
+        "restart_policy"
+      ],
+      "properties": {
+        "entry_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "parent_entry_id": { "type": ["string", "null"] },
+        "plugin_ref": { "type": "string", "minLength": 1 },
+        "module_ref": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://.+$" },
+        "enabled": { "type": "boolean" },
+        "config": { "type": "object" },
+        "inject": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "isolate": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "scope": { "$ref": "#/$defs/ScopeV2" },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "quotas": { "$ref": "#/$defs/QuotaV2" },
+        "restart_policy": { "$ref": "#/$defs/RestartPolicyV2" }
+      }
+    },
+    "ProfileSnapshotV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "profile_id", "generation", "manifests", "entries", "digest"],
+      "properties": {
+        "schema_version": { "const": 2, "type": "integer" },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "manifests": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PluginManifestV2" }
+        },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProfileEntryV2" }
+        },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "ControlPlaneEnvelopeV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "nonce", "snapshot_digest", "type_url"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "nonce": { "type": "string", "minLength": 1 },
+        "snapshot_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "type_url": { "const": "types.memstack.ai/plugin.profile.v2", "type": "string" }
+      }
+    },
+    "SnapshotApplyReceiptV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "requested_version",
+        "requested_digest",
+        "applied_version",
+        "applied_digest",
+        "error_code",
+        "error_message"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/ApplyStatusV2" },
+        "requested_version": { "type": "integer", "minimum": 1 },
+        "requested_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "applied_version": { "type": ["integer", "null"], "minimum": 1 },
+        "applied_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "error_code": { "type": ["string", "null"] },
+        "error_message": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

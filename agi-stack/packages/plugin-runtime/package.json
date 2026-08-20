@@ -1,0 +1,10 @@
+{
+  "name": "@agistack/plugin-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared MemStack plugin protocol v2 and client generation runtime.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

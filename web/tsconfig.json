@@ -34,6 +34,9 @@
             ],
             "@agistack/plugin-slots": [
                 "../agi-stack/packages/plugin-slots/src/index.ts"
+            ],
+            "@agistack/plugin-runtime": [
+                "../agi-stack/packages/plugin-runtime/src/index.ts"
             ]
         }
     },
