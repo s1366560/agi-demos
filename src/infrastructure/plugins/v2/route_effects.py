@@ -10,11 +10,12 @@ from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error
 
 ROUTE_TABLE_BUILDER_SERVICE_V2 = "service:http.route-table-builder"
 ROUTE_TABLE_BUILDER_INJECT_V2 = "route_table"
+ROUTE_TABLE_BUILDER_MODULE_V2 = "builtin://memstack/http/route-table-builder"
 
 
 def route_table_builder_definition_v2(
     *,
-    module_ref: str,
+    module_ref: str = ROUTE_TABLE_BUILDER_MODULE_V2,
     builder: RouteTableBuilderV2 | None = None,
 ) -> PluginDefinitionV2:
     """Provide one builder owned by the staging generation's provider Fiber."""
@@ -73,6 +74,7 @@ def route_contribution_definition_v2(
 
 __all__ = [
     "ROUTE_TABLE_BUILDER_INJECT_V2",
+    "ROUTE_TABLE_BUILDER_MODULE_V2",
     "ROUTE_TABLE_BUILDER_SERVICE_V2",
     "route_contribution_definition_v2",
     "route_table_builder_definition_v2",

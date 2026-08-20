@@ -15,6 +15,15 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/http/route-table-builder",
+      "entrypoint": "src.infrastructure.plugins.v2.route_effects:route_table_builder_definition_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:7de45bd69889fe515f1e1736ac44de22952363d5d926d0fabebdd8ce8995f60c",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/agent/loop",
       "entrypoint": "src.infrastructure.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2",
       "targets": ["python"],

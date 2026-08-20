@@ -10,6 +10,7 @@ import pytest
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.infrastructure.plugins.route_inventory import INVENTORY_PATH
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
+from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2
 
 _ROOT = Path(__file__).resolve().parents[6]
 
@@ -33,3 +34,22 @@ def test_shadow_graph_replays_every_runtime_owned_inventory_row() -> None:
     assert "/api/v1/agent/ws" in {signature[0] for signature in graph.route_signatures}
     assert "/api/v1/auth/token" in {signature[0] for signature in graph.route_signatures}
     assert any(methods for _path, _name, methods in graph.route_signatures)
+
+
+@pytest.mark.unit
+def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
+    route = RouteDefinitionV2(
+        owner_entry_id="dynamic-route",
+        path="/api/v2/dynamic",
+        methods=("GET",),
+        endpoint=lambda: {"dynamic": True},
+        name="dynamic-route",
+    )
+
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(route,),
+    )
+
+    assert graph.table.definitions == (route,)
+    assert ("/api/v2/dynamic", "dynamic-route", ("GET",)) in graph.route_signatures

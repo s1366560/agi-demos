@@ -8,9 +8,11 @@ from pathlib import Path
 from fastapi import FastAPI
 from starlette.types import Scope
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
+from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
+from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,18 @@ async def initialize_plugin_runtime_v2(app: FastAPI) -> PlatformPluginRuntimeHos
     if distribution is None:
         await host.close()
         raise RuntimeError("plugin runtime v2 published without a current distribution")
+    generation = host.manager.current
+    if generation is None:
+        await host.close()
+        raise RuntimeError("plugin runtime v2 published without a current generation")
+    route_builder = generation.resolve(
+        ROUTE_TABLE_BUILDER_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(route_builder, RouteTableBuilderV2):
+        await host.close()
+        raise RuntimeError("plugin runtime v2 published an invalid route table builder")
+    contributed_routes = route_builder.freeze().definitions
     workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
     if workspace_core_settings is None:
         from src.configuration.workspace_core import get_workspace_core_settings
@@ -46,6 +60,7 @@ async def initialize_plugin_runtime_v2(app: FastAPI) -> PlatformPluginRuntimeHos
         workspace_core_settings = get_workspace_core_settings()
     route_graph = build_builtin_route_graph_v2(
         workspace_core_settings=workspace_core_settings,
+        route_definitions=contributed_routes,
     )
     route_registry = RouteTableRegistryV2()
     route_publication = await route_registry.publish(distribution.descriptor, route_graph.table)

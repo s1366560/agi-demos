@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,7 +11,7 @@ from starlette.routing import BaseRoute
 
 from src.infrastructure.plugins.route_loader import install_builtin_routes
 
-from .http_routes import RouteTableV2
+from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definitions_v2
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,7 +21,11 @@ class BuiltinRouteGraphV2:
     route_signatures: tuple[tuple[str, str, tuple[str, ...]], ...]
 
 
-def build_builtin_route_graph_v2(*, workspace_core_settings: object) -> BuiltinRouteGraphV2:
+def build_builtin_route_graph_v2(
+    *,
+    workspace_core_settings: object,
+    route_definitions: Sequence[RouteDefinitionV2] = (),
+) -> BuiltinRouteGraphV2:
     """Replay the authoritative 72-row inventory into an invisible private graph."""
     private_app = FastAPI(
         docs_url=None,
@@ -32,8 +37,10 @@ def build_builtin_route_graph_v2(*, workspace_core_settings: object) -> BuiltinR
         private_app,
         workspace_core_settings=workspace_core_settings,
     )
+    definitions = tuple(route_definitions)
+    install_route_definitions_v2(private_app, definitions)
     return BuiltinRouteGraphV2(
-        table=RouteTableV2.from_fastapi_graph(private_app),
+        table=RouteTableV2.from_fastapi_graph(private_app, definitions=definitions),
         mounted_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )

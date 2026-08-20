@@ -15,7 +15,6 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
-from .boundary import current_generation_v2
 from .runtime import RuntimeV2Error
 
 
@@ -55,18 +54,7 @@ class RouteTableV2:
             openapi_url=None,
             title="MemStack Plugin Routes",
         )
-        for route in routes:
-            app.add_api_route(
-                route.path,
-                route.endpoint,
-                methods=list(route.methods),
-                name=route.name,
-                dependencies=list(route.dependencies),
-                tags=list(route.tags),
-                status_code=route.status_code,
-                response_model=route.response_model,
-                include_in_schema=route.include_in_schema,
-            )
+        install_route_definitions_v2(app, routes)
         self._definitions = routes
         self._routes: tuple[BaseRoute, ...] = tuple(app.router.routes)
         self._app: ASGIApp = app
@@ -204,6 +192,8 @@ class GenerationRouteDispatcherV2:
         self._registry = registry
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        from .boundary import current_generation_v2
+
         descriptor = current_generation_v2().descriptor
         publication = self._registry.resolve(descriptor)
         await publication.table(scope, receive, send)
@@ -229,6 +219,41 @@ def _validate_routes(routes: tuple[RouteDefinitionV2, ...]) -> None:
             seen.add(key)
 
 
+def install_route_definitions_v2(
+    app: FastAPI,
+    definitions: Sequence[RouteDefinitionV2],
+) -> None:
+    """Atomically validate and mount staged definitions onto a private graph."""
+    routes = tuple(definitions)
+    _validate_routes(routes)
+    existing = {
+        (str(method).upper(), path)
+        for mounted in app.router.routes
+        if isinstance((path := getattr(mounted, "path", None)), str)
+        for method in (getattr(mounted, "methods", None) or ())
+    }
+    for route in routes:
+        for method in route.methods:
+            key = method.upper(), route.path
+            if key in existing:
+                raise RuntimeV2Error(
+                    "route_conflict",
+                    f"v2 route conflicts with private graph {key[0]} {key[1]}",
+                )
+    for route in routes:
+        app.add_api_route(
+            route.path,
+            route.endpoint,
+            methods=list(route.methods),
+            name=route.name,
+            dependencies=list(route.dependencies),
+            tags=list(route.tags),
+            status_code=route.status_code,
+            response_model=route.response_model,
+            include_in_schema=route.include_in_schema,
+        )
+
+
 __all__ = [
     "GenerationRouteDispatcherV2",
     "OpenApiSnapshotV2",
@@ -237,4 +262,5 @@ __all__ = [
     "RouteTableBuilderV2",
     "RouteTableRegistryV2",
     "RouteTableV2",
+    "install_route_definitions_v2",
 ]
