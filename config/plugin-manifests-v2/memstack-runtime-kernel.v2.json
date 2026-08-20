@@ -31,6 +31,15 @@
         "digest": "sha256:40cce8ce0c0c4bc39f5887cb28b330ffbbb0660acc7f37c39c40807b55eecb1e",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool-set",
+      "entrypoint": "src.infrastructure.plugins.v2.tool_set:_apply_tool_set_resolver_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:e168f18efecdcad3ad499cd6bc8e4cb70a9b276263c1cd13e305b83d458ccd7b",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],

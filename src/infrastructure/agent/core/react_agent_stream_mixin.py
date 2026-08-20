@@ -76,6 +76,38 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _resolve_current_tools_from_runtime_v2(
+    agent: object,
+    selection_context: ToolSelectionContext,
+) -> tuple[dict[str, Any], list[Any]]:
+    """Resolve tools from v2, with a development fallback outside operation boundaries."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.tool_set import (
+        TOOL_SET_RESOLVER_SERVICE_V2,
+        ToolSetResolverV2,
+    )
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        operation = None
+    if operation is None:
+        get_current_tools = getattr(agent, "_get_current_tools", None)
+        if not callable(get_current_tools):
+            raise TypeError("agent has no callable _get_current_tools")
+        return cast(
+            tuple[dict[str, Any], list[Any]],
+            get_current_tools(selection_context=selection_context),
+        )
+    resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, ToolSetResolverV2):
+        raise RuntimeError("v2 tool-set resolver has an invalid implementation")
+    return resolver.resolve(agent=agent, selection_context=selection_context)
+
+
 def _normalize_preferred_language(value: object) -> str | None:
     return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
 
@@ -701,8 +733,9 @@ class StreamMixin:
 
         Sets self._stream_tools_to_use.
         """
-        _current_raw_tools, current_tool_definitions = self._get_current_tools(
-            selection_context=selection_context
+        _current_raw_tools, current_tool_definitions = _resolve_current_tools_from_runtime_v2(
+            self,
+            selection_context,
         )
         if self._last_tool_selection_trace:
             removed_total = sum(len(step.removed_tools) for step in self._last_tool_selection_trace)
@@ -808,7 +841,10 @@ class StreamMixin:
         if self._use_dynamic_tools and self._tool_provider is not None:
 
             def _tool_provider_wrapper() -> list[ToolDefinition]:
-                _, tool_defs = self._get_current_tools(selection_context=selection_context)
+                _, tool_defs = _resolve_current_tools_from_runtime_v2(
+                    self,
+                    selection_context,
+                )
                 return list(tool_defs)
 
             tool_provider = _tool_provider_wrapper

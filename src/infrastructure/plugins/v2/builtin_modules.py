@@ -9,6 +9,7 @@ from typing import Any
 from .agent_loop import builtin_agent_loop_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2
 from .system_prompt import builtin_system_prompt_definition_v2
+from .tool_set import builtin_tool_set_definition_v2
 
 RUNTIME_BOUNDARY_MODULE_V2 = "builtin://memstack/runtime/generation-boundary"
 RUNTIME_BOUNDARY_SERVICE_V2 = "service:runtime-generation-boundary"
@@ -49,4 +50,5 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         ),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
+        builtin_tool_set_definition_v2(),
     )
