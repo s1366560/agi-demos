@@ -22,7 +22,20 @@ def build_default_retrieval_factory(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     embedding_service: EmbeddingService | None = None,
 ) -> RetrievalBackendFactory:
-    """Construct a factory with all v1 retrieval backend builders."""
+    """Construct a factory with all v1 retrieval backend builders.
+
+    Builtin builders (memstack_pgvector, weknora_remote) are registered
+    first; plugin-provided ``retrieval_backend`` capability rows then
+    contribute additional builders keyed by capability id (= engine type).
+    With no rows active the factory is byte-identical to the builtin
+    composition.
+    """
+    from src.domain.model.plugins import CapabilityKind
+    from src.infrastructure.plugins.backend_runtime import iter_backend_builders
+    from src.infrastructure.plugins.runtime_host import (
+        get_platform_plugin_runtime_host,
+    )
+
     factory = RetrievalBackendFactory()
 
     def build_memstack_pgvector(store: RetrievalStore) -> Any:  # noqa: ANN401
@@ -44,4 +57,9 @@ def build_default_retrieval_factory(
 
     factory.register_builder(ENGINE_MEMSTACK_PGVECTOR, build_memstack_pgvector)
     factory.register_builder(ENGINE_WEKNORA_REMOTE, build_weknora_remote)
+    for row in iter_backend_builders(
+        get_platform_plugin_runtime_host().capabilities,
+        CapabilityKind.RETRIEVAL_BACKEND,
+    ):
+        factory.register_builder(row.capability_id, row.implementation)  # type: ignore[arg-type]
     return factory

@@ -143,6 +143,50 @@ def memory_backends_manifest() -> PluginManifest:
     )
 
 
+def platform_backends_manifest() -> PluginManifest:
+    """Return the manifest for the builtin platform backend providers (R3b/R3c).
+
+    Declares the builtin ``graph_backend``, ``retrieval_backend``,
+    ``workflow_engine``, and ``telemetry_exporter`` rows so the control
+    plane inventory surfaces them. Runtime behavior: graph/retrieval
+    factories consume plugin rows as additional engine builders; workflow
+    engine resolves through the DI seam with builtin-absent preserved;
+    telemetry falls back to a noop exporter.
+    """
+    return _manifest(
+        {
+            "schemaVersion": 1,
+            "id": "platform-backends",
+            "version": "1.0.0",
+            "runtime": "python-trusted",
+            "trust": "builtin",
+            "provides": [
+                {
+                    "kind": "graph_backend",
+                    "id": "default",
+                    "contract": "graph-backend:neo4j",
+                },
+                {
+                    "kind": "retrieval_backend",
+                    "id": "default",
+                    "contract": "retrieval-backend:pgvector",
+                },
+                {
+                    "kind": "workflow_engine",
+                    "id": "default",
+                    "contract": "workflow-engine:none",
+                },
+                {
+                    "kind": "telemetry_exporter",
+                    "id": "default",
+                    "contract": "telemetry-exporter:noop",
+                },
+            ],
+            "activation": {"defaultScope": "tenant"},
+        }
+    )
+
+
 def default_builtin_manifests() -> dict[str, PluginManifest]:
     """Return the deterministic first-party trusted plugin catalog."""
     manifests = (
@@ -151,5 +195,6 @@ def default_builtin_manifests() -> dict[str, PluginManifest]:
         memory_runtime_manifest(),
         skill_evolution_manifest(),
         memory_backends_manifest(),
+        platform_backends_manifest(),
     )
     return {manifest.id: manifest for manifest in manifests}

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
 from src.configuration.config import Settings
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+
+
+def _validate_workflow_engine(implementation: object) -> None:
+    """Assert a workflow engine row exposes the port surface."""
+    if not callable(getattr(implementation, "start_workflow", None)):
+        raise TypeError("workflow_engine capability must expose the WorkflowEnginePort surface")
 
 
 class InfraContainer:
@@ -104,7 +110,34 @@ class InfraContainer:
         )
 
     def workflow_engine_port(self) -> WorkflowEnginePort | None:
-        """Get WorkflowEnginePort for workflow orchestration."""
+        """Get WorkflowEnginePort for workflow orchestration.
+
+        R3c seam: an active plugin ``workflow_engine`` capability row wins
+        (validated for the port surface); otherwise the engine injected at
+        construction is returned, which may legitimately be None
+        (builtin-absent semantics preserved).
+        """
+        from src.domain.model.plugins import CapabilityKind
+        from src.infrastructure.plugins.backend_runtime import (
+            BackendResolutionError,
+            resolve_backend,
+        )
+        from src.infrastructure.plugins.runtime_host import (
+            get_platform_plugin_runtime_host,
+        )
+
+        try:
+            selection = resolve_backend(
+                get_platform_plugin_runtime_host().capabilities,
+                CapabilityKind.WORKFLOW_ENGINE,
+                validator=_validate_workflow_engine,
+            )
+        except BackendResolutionError:
+            return self._workflow_engine
+        return cast(WorkflowEnginePort, selection.implementation)
+
+    def _legacy_workflow_engine_port(self) -> WorkflowEnginePort | None:
+        """Return the constructor-injected engine without the plugin seam."""
         return self._workflow_engine
 
     def sandbox_adapter(self) -> Any:

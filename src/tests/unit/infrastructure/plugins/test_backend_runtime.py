@@ -338,6 +338,240 @@ class TestBuiltinManifestRows:
         assert (CapabilityKind.EMBEDDER, "default") in kinds
         assert (CapabilityKind.RERANKER, "default") in kinds
 
+    def test_platform_backends_manifest_declares_remaining_kinds(self) -> None:
+        from src.infrastructure.plugins.builtin_manifests import (
+            default_builtin_manifests,
+        )
+
+        manifests = default_builtin_manifests()
+        assert "platform-backends" in manifests
+        kinds = {(cap.kind, cap.id) for cap in manifests["platform-backends"].provides}
+        assert (CapabilityKind.GRAPH_BACKEND, "default") in kinds
+        assert (CapabilityKind.RETRIEVAL_BACKEND, "default") in kinds
+        assert (CapabilityKind.WORKFLOW_ENGINE, "default") in kinds
+        assert (CapabilityKind.TELEMETRY_EXPORTER, "default") in kinds
+
+
+@pytest.mark.unit
+class TestIterBackendBuilders:
+    def test_empty_registry_returns_no_rows(self) -> None:
+        from src.infrastructure.plugins.backend_runtime import iter_backend_builders
+
+        assert iter_backend_builders(CapabilityRegistry(), CapabilityKind.GRAPH_BACKEND) == ()
+        assert iter_backend_builders(None, CapabilityKind.GRAPH_BACKEND) == ()
+
+    def test_callable_rows_in_deterministic_order(self) -> None:
+        from src.infrastructure.plugins.backend_runtime import iter_backend_builders
+
+        registry = CapabilityRegistry()
+
+        def builder_b(store: Any) -> Any:
+            return store
+
+        def builder_a(store: Any) -> Any:
+            return store
+
+        registry.register(
+            _signed_manifest("graph_backend", "zeta"),
+            CapabilityKind.GRAPH_BACKEND,
+            "zeta",
+            builder_b,
+        )
+        registry.register(
+            _signed_manifest("graph_backend", "alpha"),
+            CapabilityKind.GRAPH_BACKEND,
+            "alpha",
+            builder_a,
+        )
+
+        rows = iter_backend_builders(registry, CapabilityKind.GRAPH_BACKEND)
+
+        assert [row.capability_id for row in rows] == ["alpha", "zeta"]
+        assert all(row.scope == "plugin" for row in rows)
+
+    def test_non_callable_rows_skipped(self) -> None:
+        from src.infrastructure.plugins.backend_runtime import iter_backend_builders
+
+        registry = CapabilityRegistry()
+        registry.register(
+            _signed_manifest("graph_backend", "bad"),
+            CapabilityKind.GRAPH_BACKEND,
+            "bad",
+            object(),
+        )
+
+        assert iter_backend_builders(registry, CapabilityKind.GRAPH_BACKEND) == ()
+
+
+@pytest.mark.unit
+class TestBackendFactorySeams:
+    def test_graph_factory_registers_plugin_builders(self, isolated_runtime_host: Any) -> None:
+        from src.infrastructure.graph.backend_factory import build_default_factory
+
+        def plugin_builder(store: Any) -> Any:
+            return ("plugin", store)
+
+        isolated_runtime_host.register(
+            _signed_manifest("graph_backend", "pluginengine"),
+            CapabilityKind.GRAPH_BACKEND,
+            "pluginengine",
+            plugin_builder,
+        )
+
+        factory = build_default_factory()
+
+        from src.domain.model.graph_store.graph_store import GraphStore
+
+        store = GraphStore(
+            id="s1",
+            tenant_id="t1",
+            name="s",
+            engine_type="pluginengine",
+        )
+        assert factory.build(store) == ("plugin", store)
+
+    def test_graph_factory_builtin_composition_unchanged(self, isolated_runtime_host: Any) -> None:
+        from src.infrastructure.graph.backend_factory import build_default_factory
+
+        factory = build_default_factory()
+
+        from src.domain.model.graph_store.graph_store import GraphStore
+
+        store = GraphStore(
+            id="s1",
+            tenant_id="t1",
+            name="s",
+            engine_type="unknown-engine",
+        )
+        with pytest.raises(ValueError, match="Unsupported graph engine type"):
+            factory.build(store)
+
+    def test_retrieval_factory_registers_plugin_builders(self, isolated_runtime_host: Any) -> None:
+        from src.infrastructure.retrieval.backend_factory import (
+            build_default_retrieval_factory,
+        )
+
+        def plugin_builder(store: Any) -> Any:
+            return ("plugin-retrieval", store)
+
+        isolated_runtime_host.register(
+            _signed_manifest("retrieval_backend", "pluginengine"),
+            CapabilityKind.RETRIEVAL_BACKEND,
+            "pluginengine",
+            plugin_builder,
+        )
+
+        factory = build_default_retrieval_factory()
+
+        from src.domain.model.retrieval_store import RetrievalStore
+
+        store = RetrievalStore(
+            id="s1",
+            tenant_id="t1",
+            name="s",
+            engine_type="pluginengine",
+        )
+        assert factory.build(store) == ("plugin-retrieval", store)
+
+
+@pytest.mark.unit
+class TestWorkflowEngineSeam:
+    def test_plugin_row_wins(self, isolated_runtime_host: Any) -> None:
+        from src.configuration.containers.infra_container import InfraContainer
+
+        class _Engine:
+            async def start_workflow(self, *args: Any, **kwargs: Any) -> None:
+                return None
+
+        engine = _Engine()
+        isolated_runtime_host.register(
+            _signed_manifest("workflow_engine"),
+            CapabilityKind.WORKFLOW_ENGINE,
+            "default",
+            engine,
+        )
+
+        container = InfraContainer()
+
+        assert container.workflow_engine_port() is engine
+
+    def test_builtin_absent_preserved(self, isolated_runtime_host: Any) -> None:
+        from src.configuration.containers.infra_container import InfraContainer
+
+        container = InfraContainer()
+
+        assert container.workflow_engine_port() is None
+
+    def test_injected_engine_wins_over_absent_plugin(self, isolated_runtime_host: Any) -> None:
+        from src.configuration.containers.infra_container import InfraContainer
+
+        class _Engine:
+            async def start_workflow(self, *args: Any, **kwargs: Any) -> None:
+                return None
+
+        engine = _Engine()
+        container = InfraContainer(workflow_engine=engine)  # type: ignore[arg-type]
+
+        assert container.workflow_engine_port() is engine
+
+    def test_malformed_plugin_row_raises(self, isolated_runtime_host: Any) -> None:
+        from src.configuration.containers.infra_container import InfraContainer
+
+        isolated_runtime_host.register(
+            _signed_manifest("workflow_engine"),
+            CapabilityKind.WORKFLOW_ENGINE,
+            "default",
+            object(),
+        )
+
+        container = InfraContainer()
+        with pytest.raises(TypeError, match="WorkflowEnginePort"):
+            container.workflow_engine_port()
+
+
+@pytest.mark.unit
+class TestTelemetrySeam:
+    def test_noop_builtin_when_no_plugin_row(self) -> None:
+        from src.infrastructure.plugins.backend_adapters import NoopTelemetryExporter
+        from src.infrastructure.plugins.backend_runtime import (
+            resolve_telemetry_exporter,
+        )
+
+        resolution = resolve_telemetry_exporter(CapabilityRegistry())
+
+        assert resolution.scope == "builtin"
+        assert isinstance(resolution.implementation, NoopTelemetryExporter)
+
+    async def test_noop_export_accepts_records(self) -> None:
+        from src.infrastructure.plugins.backend_adapters import NoopTelemetryExporter
+
+        exporter = NoopTelemetryExporter()
+        from src.domain.model.plugins import PluginScopeContext
+
+        scope = PluginScopeContext(tenant_id="t1", project_id=None, session_id=None)
+        await exporter.export(scope, [{"k": "v"}])
+
+    def test_plugin_row_wins(self) -> None:
+        from src.infrastructure.plugins.backend_runtime import (
+            resolve_telemetry_exporter,
+        )
+
+        class _Exporter:
+            async def export(self, scope: Any, records: Any) -> None:
+                return None
+
+        registry = CapabilityRegistry()
+        registry.register(
+            _signed_manifest("telemetry_exporter"),
+            CapabilityKind.TELEMETRY_EXPORTER,
+            "default",
+            _Exporter(),
+        )
+
+        resolution = resolve_telemetry_exporter(registry)
+
+        assert resolution.scope == "plugin"
+
 
 @pytest.mark.unit
 class TestHybridSearchRerankerSeam:

@@ -29,7 +29,9 @@ __all__ = [
     "BACKEND_CAPABILITY_KINDS",
     "BackendResolution",
     "BackendResolutionError",
+    "iter_backend_builders",
     "resolve_backend",
+    "resolve_telemetry_exporter",
 ]
 
 #: Capability kinds wired through this seam in R3.
@@ -115,3 +117,56 @@ def resolve_backend(
     message = f"no {kind.value} capability registered as {capability_id!r}"
     message += " and no builtin default was supplied"
     raise BackendResolutionError(message)
+
+
+def iter_backend_builders(
+    registry: CapabilityRegistry | None,
+    kind: CapabilityKind,
+) -> tuple[BackendResolution, ...]:
+    """Return plugin rows of one backend kind whose implementation is callable.
+
+    Builder-style backends (graph_backend, retrieval_backend) contribute
+    factory builders keyed by capability id (used as the engine type).
+    Non-callable rows are skipped with a warning; they never fail factory
+    construction. Rows are returned in deterministic plugin-id order.
+    """
+    if registry is None:
+        return ()
+    rows: list[BackendResolution] = []
+    for record in registry.list_capabilities():
+        if record.kind != kind:
+            continue
+        if not callable(record.implementation):
+            logger.warning(
+                "backend %s:%s from plugin %s is not callable; skipped",
+                kind.value,
+                record.capability_id,
+                record.plugin_id,
+            )
+            continue
+        rows.append(
+            BackendResolution(
+                kind=kind,
+                capability_id=record.capability_id,
+                plugin_id=record.plugin_id,
+                scope="plugin",
+                implementation=record.implementation,
+            )
+        )
+    rows.sort(key=lambda row: (row.capability_id, row.plugin_id))
+    return tuple(rows)
+
+
+def resolve_telemetry_exporter(registry: CapabilityRegistry | None) -> BackendResolution:
+    """Resolve the telemetry exporter, falling back to the noop builtin.
+
+    Telemetry is best-effort by design: when no plugin row is active the
+    builtin noop exporter keeps resolution total (R3c).
+    """
+    from .backend_adapters import NoopTelemetryExporter
+
+    return resolve_backend(
+        registry,
+        CapabilityKind.TELEMETRY_EXPORTER,
+        builtin=NoopTelemetryExporter(),
+    )

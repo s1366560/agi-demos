@@ -14,7 +14,9 @@ import logging
 from typing import TYPE_CHECKING, Any, override
 
 from src.domain.llm_providers.base import BaseReranker
+from src.domain.model.plugins import PluginScopeContext
 from src.domain.model.plugins.runtime import CredentialReference
+from src.domain.ports.plugins.backends import TelemetryExporterCapability
 from src.domain.ports.plugins.contracts import (
     EmbedderCapability,
     RerankerCapability,
@@ -22,11 +24,14 @@ from src.domain.ports.plugins.contracts import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from src.domain.llm_providers.models import ProviderConfig
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "NoopTelemetryExporter",
     "PluginEmbedderAdapter",
     "PluginRerankerAdapter",
     "route_from_provider_config",
@@ -66,9 +71,7 @@ def validate_backend_implementation(implementation: object, protocol: type) -> N
     """Assert a backend implementation satisfies its domain contract."""
     if not isinstance(implementation, protocol):
         impl_name = type(implementation).__name__
-        raise TypeError(
-            f"backend implementation {impl_name} does not satisfy {protocol.__name__}"
-        )
+        raise TypeError(f"backend implementation {impl_name} does not satisfy {protocol.__name__}")
 
 
 class PluginEmbedderAdapter:
@@ -158,3 +161,22 @@ class PluginRerankerAdapter(BaseReranker):
         if not result.scores:
             raise ValueError("reranker returned no scores for a single passage")
         return float(result.scores[0])
+
+
+class NoopTelemetryExporter:
+    """Builtin telemetry exporter: accepts records and drops them (R3c).
+
+    Registered as the ``telemetry_exporter`` builtin so resolution always
+    succeeds even when no observability backend is configured.
+    """
+
+    async def export(
+        self,
+        scope: PluginScopeContext,
+        records: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Discard telemetry records."""
+        return None
+
+
+assert isinstance(NoopTelemetryExporter(), TelemetryExporterCapability)

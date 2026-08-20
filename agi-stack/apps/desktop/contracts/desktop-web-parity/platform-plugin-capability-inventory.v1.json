@@ -151,6 +151,66 @@
       ]
     },
     {
+      "capability_id": "default",
+      "capability_kind": "graph_backend",
+      "contract": "graph-backend:neo4j",
+      "id": "platform-plugin-platform-backends-graph_backend-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "platform-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "default",
+      "capability_kind": "retrieval_backend",
+      "contract": "retrieval-backend:pgvector",
+      "id": "platform-plugin-platform-backends-retrieval_backend-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "platform-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "default",
+      "capability_kind": "telemetry_exporter",
+      "contract": "telemetry-exporter:noop",
+      "id": "platform-plugin-platform-backends-telemetry_exporter-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "platform-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "default",
+      "capability_kind": "workflow_engine",
+      "contract": "workflow-engine:none",
+      "id": "platform-plugin-platform-backends-workflow_engine-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "platform-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
       "capability_id": "after_tool_execution",
       "capability_kind": "hook",
       "contract": "hook:after_tool_execution",

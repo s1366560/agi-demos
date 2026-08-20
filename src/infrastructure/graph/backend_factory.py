@@ -113,11 +113,28 @@ def build_arcadedb_backend(store: GraphStore) -> Any:  # noqa: ANN401
 
 
 def build_default_factory() -> GraphBackendFactory:
-    """Construct the default factory with all registered backend builders."""
+    """Construct the default factory with all registered backend builders.
+
+    Builtin builders (Neo4j, ArcadeDB) are registered first; plugin-provided
+    ``graph_backend`` capability rows then contribute additional builders
+    keyed by capability id (= engine type). With no rows active the factory
+    is byte-identical to the builtin composition.
+    """
+    from src.domain.model.plugins import CapabilityKind
+    from src.infrastructure.plugins.backend_runtime import iter_backend_builders
+    from src.infrastructure.plugins.runtime_host import (
+        get_platform_plugin_runtime_host,
+    )
+
     factory = GraphBackendFactory()
     factory.register_builder(ENGINE_NEO4J, build_neo4j_backend)
     factory.register_builder(ENGINE_ARCADEDB, build_arcadedb_backend)
     # Apache AGE (Postgres) is a future builder.
+    for row in iter_backend_builders(
+        get_platform_plugin_runtime_host().capabilities,
+        CapabilityKind.GRAPH_BACKEND,
+    ):
+        factory.register_builder(row.capability_id, row.implementation)  # type: ignore[arg-type]
     return factory
 
 
