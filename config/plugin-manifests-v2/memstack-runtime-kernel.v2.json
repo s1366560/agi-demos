@@ -22,6 +22,15 @@
         "digest": "sha256:93425e44167aea4e1cbe718606ee2115183f45126e56a7c77ba33ff6f4cd286e",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/system-prompt",
+      "entrypoint": "src.infrastructure.plugins.v2.system_prompt:_apply_system_prompt_builder_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:40cce8ce0c0c4bc39f5887cb28b330ffbbb0660acc7f37c39c40807b55eecb1e",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],

@@ -32,6 +32,36 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _build_system_prompt_from_runtime_v2(
+    *,
+    manager: object,
+    context: PromptContext,
+    subagent: object | None,
+) -> str | None:
+    """Return a v2 provider result, or None outside an admitted operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.system_prompt import (
+        SYSTEM_PROMPT_BUILDER_SERVICE_V2,
+        SystemPromptBuilderV2,
+    )
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        return None
+    builder = operation.require(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
+    if not isinstance(builder, SystemPromptBuilderV2):
+        raise RuntimeError("v2 system prompt builder has an invalid implementation")
+    return await builder.build(
+        manager=manager,
+        context=context,
+        subagent=subagent,
+    )
+
+
 class _PromptAgent(Protocol):
     """Subset of ``ReActAgent`` state used by :class:`PromptMixin`."""
 
@@ -301,7 +331,16 @@ class PromptMixin:
             selected_agent_name=selected_agent_name,
         )
 
-        # Use SystemPromptManager to build the prompt
+        # Use the generation-scoped provider when the turn was admitted by v2.
+        plugin_prompt = await _build_system_prompt_from_runtime_v2(
+            manager=self.prompt_manager,
+            context=context,
+            subagent=subagent,
+        )
+        if plugin_prompt is not None:
+            return plugin_prompt
+
+        # Development fallback for callers outside a v2 operation boundary.
         return cast(
             str,
             await self.prompt_manager.build_system_prompt(
