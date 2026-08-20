@@ -162,6 +162,22 @@ def _authorization_dependency(
     return dependency
 
 
+def build_route_authorization_dependency(
+    *,
+    plugin_id: str,
+    permission: str,
+    authorization: str,
+    path: str,
+) -> AuthDependency:
+    """Build the scoped authorization dependency used by staged v2 route effects."""
+    return _authorization_dependency(
+        plugin_id=plugin_id,
+        permission=permission,
+        authorization=authorization,
+        path=path,
+    )
+
+
 async def _project_tenant_id(db: AsyncSession, project_id: str, user_id: str) -> str:
     result = await db.execute(
         refresh_select_statement(

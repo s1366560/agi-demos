@@ -8,6 +8,7 @@ from typing import Any
 
 from .agent_definition import builtin_agent_definition_v2
 from .agent_loop import builtin_agent_loop_definition_v2
+from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
@@ -53,6 +54,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
             provides=(RUNTIME_BOUNDARY_SERVICE_V2,),
         ),
         route_table_builder_definition_v2(),
+        legacy_http_route_bridge_definition_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),

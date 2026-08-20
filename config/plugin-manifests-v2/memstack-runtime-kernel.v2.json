@@ -24,6 +24,15 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/http/legacy-route-bridge",
+      "entrypoint": "src.infrastructure.plugins.v2.legacy_http_route_bridge:legacy_http_route_bridge_definition_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:6f7051c956ccfa4f11f3043fde81218ccd168478954e78da33022af509804012",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/agent/loop",
       "entrypoint": "src.infrastructure.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2",
       "targets": ["python"],
