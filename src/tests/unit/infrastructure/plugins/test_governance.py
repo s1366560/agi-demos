@@ -245,3 +245,59 @@ def test_revoked_publisher_key_never_installs() -> None:
 
     with pytest.raises(PluginTrustGateError, match="package revoked"):
         verifier.verify(entry, artifact_sha256=artifact)
+
+
+@pytest.mark.unit
+def test_trust_gate_allows_untrusted_wasm_tool_only_manifest() -> None:
+    """I5: untrusted + wasm + tool-only passes the shape gate."""
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "untrusted-tool",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "untrusted",
+            "provides": [{"kind": "tool", "id": "demo", "permissions": ["tools.execute"]}],
+        }
+    )
+    decision = PluginTrustGate().decide(manifest, frozenset({PluginPermission.TOOLS_EXECUTE}))
+    assert decision.allowed is True
+
+
+@pytest.mark.unit
+def test_trust_gate_rejects_untrusted_non_tool_capabilities() -> None:
+    """I5: untrusted manifests may only provide PlainCapability(Tool) rows."""
+    manifest = parse_plugin_manifest(
+        {
+            "schemaVersion": 1,
+            "id": "untrusted-hook",
+            "version": "1.0.0",
+            "runtime": "wasm",
+            "trust": "untrusted",
+            "provides": [
+                {"kind": "tool", "id": "demo", "permissions": ["tools.execute"]},
+                {"kind": "hook", "id": "on_session_start"},
+            ],
+        }
+    )
+    decision = PluginTrustGate().decide(manifest, frozenset({PluginPermission.TOOLS_EXECUTE}))
+    assert decision.allowed is False
+    assert "only provide tool capabilities" in decision.reason
+
+
+@pytest.mark.unit
+def test_manifest_rejects_untrusted_python_trusted_runtime() -> None:
+    """I5: the python-trusted boundary is closed at manifest parse time."""
+    from src.domain.model.plugins import PluginManifestError
+
+    with pytest.raises(PluginManifestError, match="python-trusted"):
+        parse_plugin_manifest(
+            {
+                "schemaVersion": 1,
+                "id": "untrusted-python",
+                "version": "1.0.0",
+                "runtime": "python-trusted",
+                "trust": "untrusted",
+                "provides": [{"kind": "tool", "id": "demo", "permissions": ["tools.execute"]}],
+            }
+        )

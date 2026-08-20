@@ -16,7 +16,12 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from src.domain.model.plugins import PluginManifest, PluginRuntimeKind, PluginTrust
+from src.domain.model.plugins import (
+    CapabilityKind,
+    PluginManifest,
+    PluginRuntimeKind,
+    PluginTrust,
+)
 from src.domain.ports.plugins import (
     RUNTIME_PERMISSIONS,
     PluginPermission,
@@ -54,6 +59,18 @@ class PluginTrustGate:
             return self._deny(
                 manifest, "untrusted plugin cannot use python-trusted runtime", frozenset()
             )
+        if manifest.trust == PluginTrust.UNTRUSTED:
+            non_tool = sorted(
+                {capability.kind.value for capability in manifest.provides}
+                - {CapabilityKind.TOOL.value}
+            )
+            if non_tool:
+                return self._deny(
+                    manifest,
+                    "untrusted plugin may only provide tool capabilities; "
+                    f"got {','.join(non_tool)}",
+                    frozenset(),
+                )
         if not requested.issubset(allowed):
             return self._deny(
                 manifest,
