@@ -8,10 +8,16 @@ import asyncio
 import contextlib
 import json
 import logging
-import os
 from typing import Any, cast, override
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
+from src.infrastructure.mcp.process_boundary import (
+    MCPProcessBoundaryPolicy,
+    classify_trust_tier,
+    emit_process_audit,
+    sanitize_subprocess_env,
+    spawn_mcp_server_process,
+)
 from src.infrastructure.mcp.transport.base import (
     BaseTransport,
     MCPTransportClosedError,
@@ -34,6 +40,7 @@ class StdioTransport(BaseTransport):
         super().__init__(config)
         self._process: asyncio.subprocess.Process | None = None
         self._initialized = False
+        self._policy: MCPProcessBoundaryPolicy | None = None
 
     @override
     async def start(self, config: TransportConfig) -> None:
@@ -64,20 +71,17 @@ class StdioTransport(BaseTransport):
             if isinstance(command, str):
                 command = [command]
 
-            # Prepare environment
-            env = None
-            if config.environment:
-                env = {**os.environ, **config.environment}
+            # Boundary policy: scrubbed environment + bounded stdout stream.
+            self._policy = MCPProcessBoundaryPolicy.for_tier(classify_trust_tier(command))
+            env = sanitize_subprocess_env(config.environment, tier=self._policy.tier)
 
             logger.info(f"Starting MCP server: {' '.join(command)}")
 
-            self._process = await asyncio.create_subprocess_exec(
-                command[0],
-                *command[1:],
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            self._process = await spawn_mcp_server_process(
+                command,
                 env=env,
+                server_name=command[0],
+                policy=self._policy,
             )
 
             self._is_open = True
@@ -180,6 +184,7 @@ class StdioTransport(BaseTransport):
                 except TimeoutError:
                     with contextlib.suppress(ProcessLookupError):
                         proc.kill()
+                    self._audit_process_event("mcp_server_kill", reason="shutdown_timeout")
                     await proc.wait()
             except asyncio.CancelledError:
                 with contextlib.suppress(ProcessLookupError):
@@ -250,15 +255,41 @@ class StdioTransport(BaseTransport):
                     self._process.returncode,
                     len(stderr),
                 )
+                self._audit_process_event("mcp_server_exit", returncode=self._process.returncode)
+            self._audit_process_event("mcp_server_timeout", timeout_seconds=timeout)
+            if self._policy is not None and self._policy.kill_on_timeout:
+                with contextlib.suppress(ProcessLookupError):
+                    self._process.kill()
+                self._audit_process_event("mcp_server_kill", reason="timeout")
             raise
 
         if not line:
             stderr = await self._process.stderr.read() if self._process.stderr else b""
             logger.error("Process closed connection stderr_bytes=%s", len(stderr))
+            self._audit_process_event("mcp_server_exit", returncode=self._process.returncode)
             raise MCPTransportClosedError("Process closed connection")
 
         logger.debug(f"Received: {line.decode()[:200]}...")
         return cast(dict[str, Any], json.loads(line.decode()))
+
+    def _audit_process_event(self, event: str, **extra: object) -> None:
+        """Emit a boundary audit event for this server process."""
+        command = cast(
+            "list[str] | str | None", self._config.command if self._config else None
+        )
+        server = ""
+        if isinstance(command, str):
+            server = command
+        elif command:
+            server = command[0]
+        emit_process_audit(
+            {
+                "event": event,
+                "server_name": server,
+                "trust_tier": (self._policy.tier.value if self._policy else "unknown"),
+                **extra,
+            }
+        )
 
     # High-level API methods
 

@@ -15,9 +15,16 @@ import asyncio
 import contextlib
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any, cast
+
+from src.infrastructure.mcp.process_boundary import (
+    MCPProcessBoundaryPolicy,
+    classify_trust_tier,
+    emit_process_audit,
+    sanitize_subprocess_env,
+    spawn_mcp_server_process,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +102,7 @@ class MCPSubprocessClient:
         self.env = env
         self.timeout = timeout
         self._proc: asyncio.subprocess.Process | None = None
+        self._policy: MCPProcessBoundaryPolicy | None = None
         self._request_id = 0
         self._lock = asyncio.Lock()
         self.server_info: dict[str, Any] | None = None
@@ -117,10 +125,10 @@ class MCPSubprocessClient:
         """
         timeout = timeout or self.timeout
 
-        # Build environment
-        env = os.environ.copy()
-        if self.env:
-            env.update(self.env)
+        # Boundary policy: scrubbed environment + bounded stdout stream.
+        command_line = [self.command, *self.args]
+        self._policy = MCPProcessBoundaryPolicy.for_tier(classify_trust_tier(command_line))
+        env = sanitize_subprocess_env(self.env, tier=self._policy.tier)
 
         logger.info(
             "Starting MCP subprocess command_set=%s args_count=%s",
@@ -129,15 +137,13 @@ class MCPSubprocessClient:
         )
 
         try:
-            # Use a larger buffer limit for stdout to handle large responses (e.g., screenshots)
-            # Default is 2^16 (65536), we increase to 2^24 (16MB) to handle base64 images
-            self._proc = await asyncio.create_subprocess_exec(
-                self.command,
-                *self.args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            # The stdout buffer limit comes from the boundary policy (16 MiB
+            # default) to handle large responses such as base64 screenshots.
+            self._proc = await spawn_mcp_server_process(
+                command_line,
                 env=env,
+                server_name=self.command,
+                policy=self._policy,
             )
 
             # Send initialize request
@@ -263,6 +269,7 @@ class MCPSubprocessClient:
                 logger.warning("MCP subprocess did not terminate, killing")
                 with contextlib.suppress(ProcessLookupError):
                     proc.kill()
+                self._audit_process_event("mcp_server_kill", reason="shutdown_timeout")
                 await proc.wait()
         except asyncio.CancelledError:
             # Outer task cancelled mid-teardown — still force-kill so we don't
@@ -423,6 +430,13 @@ class MCPSubprocessClient:
                 if response_str:
                     return cast(dict[str, Any] | None, json.loads(response_str))
 
+                if self._proc.returncode is not None:
+                    self._audit_process_event(
+                        "mcp_server_exit",
+                        returncode=self._proc.returncode,
+                        method=method,
+                    )
+
             except TimeoutError:
                 stderr_text = await self._read_stderr()
                 logger.error(
@@ -431,12 +445,30 @@ class MCPSubprocessClient:
                     timeout,
                     len(stderr_text),
                 )
+                self._audit_process_event(
+                    "mcp_server_timeout", method=method, timeout_seconds=timeout
+                )
+                if self._policy is not None and self._policy.kill_on_timeout:
+                    with contextlib.suppress(ProcessLookupError):
+                        self._proc.kill()
+                    self._audit_process_event("mcp_server_kill", reason="timeout")
             except json.JSONDecodeError as e:
                 logger.error("MCP response parse error error_type=%s", type(e).__name__)
             except Exception as e:
                 logger.error("MCP request error error_type=%s", type(e).__name__)
 
             return None
+
+    def _audit_process_event(self, event: str, **extra: object) -> None:
+        """Emit a boundary audit event for this server process."""
+        emit_process_audit(
+            {
+                "event": event,
+                "server_name": self.command,
+                "trust_tier": (self._policy.tier.value if self._policy else "unknown"),
+                **extra,
+            }
+        )
 
     async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
