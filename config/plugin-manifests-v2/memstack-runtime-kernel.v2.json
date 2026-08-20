@@ -58,6 +58,15 @@
         "digest": "sha256:b5d32e313b41bd898961e189cd8e36ab7704d23baad6dcc8ee84f266fae0a434",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/plugins/selection-judge",
+      "entrypoint": "src.infrastructure.plugins.v2.selection_judge:_apply_plugin_selection_judge_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:26a9f8ac163ef161009d7138809ef602fda88585a9bb404677d797b105158dc6",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],
