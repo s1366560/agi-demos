@@ -32,6 +32,7 @@ _operation_context: ContextVar[OperationContextV2 | None] = ContextVar(
 OPERATION_DB_SESSION_SERVICE_V2 = "service:operation.db-session"
 OPERATION_IDENTITY_SERVICE_V2 = "service:operation.identity"
 OPERATION_METADATA_SERVICE_V2 = "service:operation.metadata"
+OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2 = "service:operation.plugin-distribution"
 OPERATION_VAULT_LEASE_SERVICE_V2 = "service:operation.vault-lease"
 
 

@@ -1,7 +1,7 @@
 """Unit tests for ProjectAgentActor HITL resume paths."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,8 +9,11 @@ from src.infrastructure.adapters.secondary.persistence import (
     database as database_mod,
     sql_hitl_request_repository as hitl_repo_mod,
 )
-from src.infrastructure.agent.actor import project_agent_actor
-from src.infrastructure.agent.hitl import coordinator as coordinator_mod
+from src.infrastructure.agent.actor import execution as execution_mod, project_agent_actor
+from src.infrastructure.agent.hitl import (
+    coordinator as coordinator_mod,
+    utils as hitl_utils_mod,
+)
 
 
 def _build_actor() -> object:
@@ -81,3 +84,63 @@ class TestProjectAgentActor:
             "req-1",
             lease_owner="agent:tenant-1:project-1:plan:lease-1",
         )
+
+    async def test_resume_continue_request_admits_persisted_generation(self, monkeypatch) -> None:
+        actor = _build_actor()
+        repo = SimpleNamespace(claim_for_processing=AsyncMock(return_value=object()))
+        session = AsyncMock()
+        session_cm = AsyncMock()
+        session_cm.__aenter__.return_value = session
+        session_cm.__aexit__.return_value = False
+        generation = {
+            "profile_id": "default-v2",
+            "generation": 7,
+            "digest": "a" * 64,
+        }
+        state = SimpleNamespace(
+            plugin_generation=generation,
+            tenant_id="tenant-1",
+            project_id="project-1",
+            conversation_id="conv-1",
+            message_id="msg-1",
+            user_id="user-1",
+        )
+        admission_context = AsyncMock()
+        admission_context.__aenter__.return_value = object()
+        admission_context.__aexit__.return_value = False
+        admit = MagicMock(return_value=admission_context)
+        actor._plugin_admission_v2 = SimpleNamespace(admit=admit)
+        heartbeat = AsyncMock()
+        heartbeat.__aenter__.return_value = None
+        heartbeat.__aexit__.return_value = False
+        continue_mock = AsyncMock(
+            return_value=SimpleNamespace(hitl_pending=False, is_error=False)
+        )
+
+        monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
+        monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
+        monkeypatch.setattr(hitl_utils_mod, "processing_lease_heartbeat", lambda *_a, **_k: heartbeat)
+        monkeypatch.setattr(
+            execution_mod,
+            "load_hitl_state_for_resume",
+            AsyncMock(return_value=state),
+        )
+        monkeypatch.setattr(project_agent_actor, "continue_project_chat", continue_mock)
+
+        result = await actor._resume_continue_request(
+            request_id="req-1",
+            response_data={"answer": "ok"},
+            conversation_id="conv-1",
+            message_id="msg-1",
+        )
+
+        assert result == {
+            "status": "continued",
+            "request_id": "req-1",
+            "ack": True,
+            "durably_completed": True,
+        }
+        assert admit.call_args.kwargs["descriptor_payload"] == generation
+        assert admit.call_args.kwargs["distribution_payload"] is None
+        assert admit.call_args.kwargs["operation_id"] == "hitl-resume:req-1"
+        continue_mock.assert_awaited_once()

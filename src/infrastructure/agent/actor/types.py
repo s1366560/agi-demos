@@ -62,6 +62,8 @@ class ProjectChatRequest:
     canonical_run_id: str | None = None
     # Process-safe v2 generation identity; never contains host/runtime objects.
     plugin_generation: dict[str, str | int] | None = None
+    # Complete validated v2 snapshot/envelope JSON used to admit a remote data plane.
+    plugin_distribution: dict[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

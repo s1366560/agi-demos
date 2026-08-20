@@ -1,18 +1,84 @@
 """Unit tests for ProjectAgentActor scheduling behavior."""
 
 import asyncio
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
-from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChatResult
+from src.infrastructure.agent.actor.types import (
+    ProjectAgentActorConfig,
+    ProjectChatRequest,
+    ProjectChatResult,
+)
+from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+_ROOT = Path(__file__).resolve().parents[6]
 
 
 def _actor_instance() -> Any:
     actor_class = ProjectAgentActor.__ray_metadata__.modified_class
     return actor_class()
+
+
+@pytest.mark.unit
+async def test_actor_admits_complete_distribution_and_pins_turn_generation() -> None:
+    source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="generation-1",
+    )
+    first = source.current_distribution
+    assert first is not None
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=2,
+        version=2,
+        nonce="generation-2",
+    )
+    second = source.current_distribution
+    assert second is not None
+
+    actor = _actor_instance()
+    actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    request = ProjectChatRequest(
+        conversation_id="conversation-a",
+        message_id="message-a",
+        user_message="hello",
+        user_id="user-a",
+        plugin_generation=first.descriptor.to_payload(),
+        plugin_distribution=first.to_payload(),
+    )
+
+    async with actor._admit_plugin_turn(request):
+        operation = current_operation_context_v2()
+        assert operation.descriptor == first.descriptor
+        publication = await actor._plugin_admission_v2.host.apply_distribution(
+            second.to_payload()
+        )
+        assert publication.accepted
+        assert operation.descriptor == first.descriptor
+        assert actor._plugin_admission_v2.host.manager.current is not None
+        assert actor._plugin_admission_v2.host.manager.current.descriptor == second.descriptor
+
+    with pytest.raises(RuntimeV2Error) as stale:
+        async with actor._admit_plugin_turn(request):
+            pass
+    assert stale.value.code == "stale_version"
+    assert actor._plugin_admission_v2.host.manager.current is not None
+    assert actor._plugin_admission_v2.host.manager.current.descriptor == second.descriptor
+
+    await actor._plugin_admission_v2.close()
+    await source.close()
 
 
 @pytest.mark.unit

@@ -808,6 +808,12 @@ async def _load_hitl_state(
     return state
 
 
+async def load_hitl_state_for_resume(request_id: str) -> HITLAgentState | None:
+    """Load persisted HITL state before admitting its generation boundary."""
+    redis_client = await _get_redis_client()
+    return await _load_hitl_state(HITLStateStore(redis_client), request_id)
+
+
 def _hitl_state_not_found_result(start_time: float) -> ProjectChatResult:
     """Build an error result when HITL state cannot be found."""
     return ProjectChatResult(

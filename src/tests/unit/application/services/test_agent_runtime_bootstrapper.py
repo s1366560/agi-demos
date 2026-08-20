@@ -276,6 +276,16 @@ async def test_start_chat_actor_local_mode_uses_local_only(
         "src.infrastructure.security.encryption_service",
         get_encryption_service=lambda: encryption_service,
     )
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+    distribution = {
+        "descriptor": descriptor,
+        "snapshot": {"schema_version": 2},
+        "envelope": {"version": 7},
+    }
 
     with (
         patch.dict(
@@ -298,6 +308,10 @@ async def test_start_chat_actor_local_mode_uses_local_only(
             return_value=tenant_agent_config,
         ),
         patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock) as local_run_mock,
+        patch(
+            "src.application.services.agent.runtime_bootstrapper._current_plugin_distribution_v2",
+            return_value=(descriptor, distribution),
+        ),
         patch("asyncio.create_task", side_effect=_capture_task) as create_task_mock,
     ):
         actor_id = await bootstrapper.start_chat_actor(
@@ -315,6 +329,8 @@ async def test_start_chat_actor_local_mode_uses_local_only(
     queued = AgentRuntimeBootstrapper._local_chat_queues["conv-1"].get_nowait()
     assert queued.request.preferred_language == "zh-CN"
     assert queued.request.automation_run_id == queued.request.message_id == "msg-1"
+    assert queued.request.plugin_generation == descriptor
+    assert queued.request.plugin_distribution == distribution
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
 

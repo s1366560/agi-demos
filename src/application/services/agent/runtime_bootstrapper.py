@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from subprocess import DEVNULL
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -49,6 +49,41 @@ _WORKSPACE_CONTRACT_STAGES = frozenset(
     }
 )
 _WORKSPACE_WORKER_STAGES = frozenset({"worker_launch"})
+
+
+def _current_plugin_distribution_v2() -> tuple[
+    dict[str, str | int] | None,
+    dict[str, Any] | None,
+]:
+    """Return process-safe v2 distribution data for the pinned operation, if any."""
+    from src.infrastructure.plugins.v2.boundary import (
+        OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+        current_generation_descriptor_v2,
+        current_operation_context_v2,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        plugin_generation = current_generation_descriptor_v2().to_payload()
+    except RuntimeV2Error as exc:
+        if exc.code != "generation_not_pinned":
+            raise
+        return None, None
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        return plugin_generation, None
+
+    distribution_value = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+    if not isinstance(distribution_value, dict):
+        raise RuntimeError("plugin operation distribution must be an object")
+    plugin_distribution = dict(cast(dict[str, Any], distribution_value))
+    if plugin_distribution.get("descriptor") != plugin_generation:
+        raise RuntimeError("plugin operation distribution does not match the pinned generation")
+    return plugin_generation, plugin_distribution
 
 
 @dataclass(frozen=True)
@@ -450,17 +485,7 @@ class AgentRuntimeBootstrapper:
             enable_subagents=True,
         )
 
-        from src.infrastructure.plugins.v2.boundary import (
-            current_generation_descriptor_v2,
-        )
-        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-
-        try:
-            plugin_generation = current_generation_descriptor_v2().to_payload()
-        except RuntimeV2Error as exc:
-            if exc.code != "generation_not_pinned":
-                raise
-            plugin_generation = None
+        plugin_generation, plugin_distribution = _current_plugin_distribution_v2()
 
         chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
@@ -486,6 +511,7 @@ class AgentRuntimeBootstrapper:
             automation_run_id=automation_run_id,
             canonical_run_id=canonical_run_id,
             plugin_generation=plugin_generation,
+            plugin_distribution=plugin_distribution,
         )
 
         if runtime_mode == "local":
@@ -1166,7 +1192,49 @@ class AgentRuntimeBootstrapper:
             except Exception:
                 pass  # Plan Mode awareness is optional
 
-            result = await execute_project_chat(agent, request, abort_signal=abort_signal)
+            from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+            from src.infrastructure.plugins.v2.boundary import (
+                OPERATION_IDENTITY_SERVICE_V2,
+                OPERATION_METADATA_SERVICE_V2,
+            )
+            from src.infrastructure.plugins.v2.builtin_modules import (
+                builtin_runtime_definitions_v2,
+            )
+            from src.infrastructure.plugins.v2.runtime_host import (
+                DataPlaneGenerationAdmissionV2,
+            )
+
+            admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+            try:
+                async with admission.admit(
+                    descriptor_payload=request.plugin_generation,
+                    distribution_payload=request.plugin_distribution,
+                    operation_id=f"local-turn:{request.message_id}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=config.tenant_id,
+                        project_id=config.project_id,
+                        session_id=request.conversation_id,
+                    ),
+                    services={
+                        OPERATION_IDENTITY_SERVICE_V2: {
+                            "tenant_id": config.tenant_id,
+                            "user_id": request.user_id,
+                        },
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "local-agent-turn",
+                            "conversation_id": request.conversation_id,
+                            "message_id": request.message_id,
+                        },
+                    },
+                ):
+                    result = await execute_project_chat(
+                        agent,
+                        request,
+                        abort_signal=abort_signal,
+                    )
+            finally:
+                await admission.close()
 
             if result.is_error:
                 logger.warning(

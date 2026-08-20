@@ -25,6 +25,9 @@ from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
     build_profile_snapshot_v2,
     canonical_json_v2,
+    control_envelope_v2,
+    control_envelope_v2_to_payload,
+    parse_control_envelope_v2,
     parse_profile_snapshot_v2,
     profile_snapshot_v2_to_payload,
 )
@@ -101,6 +104,36 @@ def test_build_and_parse_snapshot_round_trips_and_derives_digest() -> None:
 
     assert reparsed == snapshot
     assert len(snapshot.digest) == 64
+
+
+@pytest.mark.unit
+def test_control_envelope_round_trips_through_strict_schema() -> None:
+    snapshot = build_profile_snapshot_v2(
+        profile_id="default-v2",
+        generation=1,
+        manifests=(_manifest("builtin://example/root"),),
+        entries=(_entry("root", "builtin://example/root"),),
+    )
+    envelope = control_envelope_v2(snapshot, version=7, nonce="distribution-7")
+
+    reparsed = parse_control_envelope_v2(control_envelope_v2_to_payload(envelope))
+
+    assert reparsed == envelope
+
+
+@pytest.mark.unit
+def test_control_envelope_rejects_v1_type_url() -> None:
+    payload = {
+        "version": 1,
+        "nonce": "legacy",
+        "snapshot_digest": "a" * 64,
+        "type_url": "types.memstack.ai/plugin.profile.v1",
+    }
+
+    with pytest.raises(PluginProtocolV2Error) as error:
+        parse_control_envelope_v2(payload)
+
+    assert error.value.code == "schema_validation_failed"
 
 
 @pytest.mark.unit

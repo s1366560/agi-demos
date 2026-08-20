@@ -100,6 +100,19 @@ def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
     return _manifest_from_payload(payload)
 
 
+def parse_control_envelope_v2(payload: object) -> ControlPlaneEnvelopeV2:
+    """Validate and parse the distribution envelope accepted by v2 data planes."""
+    if not isinstance(payload, dict):
+        raise PluginProtocolV2Error("invalid_envelope", "control envelope must be an object")
+    _validate_schema("ControlPlaneEnvelopeV2", payload)
+    return ControlPlaneEnvelopeV2(
+        version=payload["version"],
+        nonce=payload["nonce"],
+        snapshot_digest=payload["snapshot_digest"],
+        type_url=payload["type_url"],
+    )
+
+
 def build_profile_snapshot_v2(
     *,
     profile_id: str,
@@ -139,6 +152,11 @@ def control_envelope_v2(
 def profile_snapshot_v2_to_payload(snapshot: ProfileSnapshotV2) -> dict[str, Any]:
     """Return the complete JSON-compatible snapshot representation."""
     return cast(dict[str, Any], _json_value(asdict(snapshot)))
+
+
+def control_envelope_v2_to_payload(envelope: ControlPlaneEnvelopeV2) -> dict[str, Any]:
+    """Return the complete JSON-compatible control envelope representation."""
+    return cast(dict[str, Any], _json_value(asdict(envelope)))
 
 
 def _schema() -> dict[str, Any]:

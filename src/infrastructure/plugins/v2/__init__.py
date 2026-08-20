@@ -9,6 +9,8 @@ from .protocol import (
     PluginProtocolV2Error,
     build_profile_snapshot_v2,
     canonical_json_v2,
+    control_envelope_v2_to_payload,
+    parse_control_envelope_v2,
     parse_profile_snapshot_v2,
     profile_snapshot_v2_to_payload,
 )
@@ -36,6 +38,8 @@ __all__ = [
     "PluginProtocolV2Error",
     "build_profile_snapshot_v2",
     "canonical_json_v2",
+    "control_envelope_v2_to_payload",
+    "parse_control_envelope_v2",
     "parse_profile_snapshot_v2",
     "profile_snapshot_v2_to_payload",
 ]

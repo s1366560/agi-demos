@@ -24,7 +24,12 @@ from src.infrastructure.plugins.v2.builtin_modules import (
     RuntimeBoundaryServiceV2,
     builtin_runtime_definitions_v2,
 )
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.protocol import PluginProtocolV2Error
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import (
+    DataPlaneGenerationAdmissionV2,
+    PlatformPluginRuntimeHostV2,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 
@@ -81,6 +86,66 @@ async def test_host_bootstraps_strict_profile_and_exposes_generation_lease() -> 
         assert isinstance(boundary, RuntimeBoundaryServiceV2)
         assert generation.snapshot.profile_id == "memstack-default-v2"
     await host.close()
+
+
+@pytest.mark.unit
+async def test_remote_host_validates_complete_distribution_before_publish() -> None:
+    source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=4,
+        nonce="distribution-4",
+    )
+    distribution = source.current_distribution
+    assert distribution is not None
+    target = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+
+    publication = await target.apply_distribution(distribution.to_payload())
+
+    assert publication.accepted
+    assert target.current_distribution == distribution
+
+    mismatched = distribution.to_payload()
+    mismatched["descriptor"] = {**mismatched["descriptor"], "generation": 2}
+    with pytest.raises(ValueError, match="does not match snapshot"):
+        await target.apply_distribution(mismatched)
+    assert target.manager.current is not None
+    assert target.manager.current.descriptor == distribution.descriptor
+
+    incompatible = distribution.to_payload()
+    incompatible["snapshot"] = {"schema_version": 1, "plugins": []}
+    with pytest.raises(PluginProtocolV2Error) as error:
+        await target.apply_distribution(incompatible)
+    assert error.value.code == "incompatible_schema_version"
+    assert target.manager.current is not None
+    assert target.manager.current.descriptor == distribution.descriptor
+
+    await target.close()
+    await source.close()
+
+
+@pytest.mark.unit
+async def test_remote_admission_rejects_retired_descriptor_without_distribution() -> None:
+    admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+
+    with pytest.raises(RuntimeV2Error) as error:
+        async with admission.admit(
+            descriptor_payload=descriptor,
+            distribution_payload=None,
+            operation_id="hitl-resume:request-a",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            pass
+
+    assert error.value.code == "generation_payload_required"
+    await admission.close()
 
 
 @pytest.mark.unit
