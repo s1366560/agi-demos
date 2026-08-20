@@ -8,7 +8,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from starlette.types import Scope
 
+from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 logger = logging.getLogger(__name__)
@@ -33,10 +35,32 @@ async def initialize_plugin_runtime_v2(app: FastAPI) -> PlatformPluginRuntimeHos
             f"{publication.receipt.error_code}: {publication.receipt.error_message}"
         )
     app.state.platform_plugin_runtime_v2 = host
+    distribution = host.current_distribution
+    if distribution is None:
+        await host.close()
+        raise RuntimeError("plugin runtime v2 published without a current distribution")
+    workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
+    if workspace_core_settings is None:
+        from src.configuration.workspace_core import get_workspace_core_settings
+
+        workspace_core_settings = get_workspace_core_settings()
+    route_graph = build_builtin_route_graph_v2(
+        workspace_core_settings=workspace_core_settings,
+    )
+    route_registry = RouteTableRegistryV2()
+    route_publication = await route_registry.publish(distribution.descriptor, route_graph.table)
+    app.state.platform_plugin_route_registry_v2 = route_registry
+    app.state.platform_plugin_route_graph_v2 = route_graph
     logger.info(
         "Published plugin runtime v2 generation=%d digest=%s",
         publication.snapshot.generation,
         publication.snapshot.digest,
+    )
+    logger.info(
+        "Published shadow HTTP route generation=%d rows=%d routes=%d",
+        route_publication.descriptor.generation,
+        len(route_graph.mounted_row_ids),
+        len(route_graph.route_signatures),
     )
     return host
 
@@ -48,6 +72,8 @@ async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
         return
     await host.close()
     app.state.platform_plugin_runtime_v2 = None
+    app.state.platform_plugin_route_registry_v2 = None
+    app.state.platform_plugin_route_graph_v2 = None
 
 
 def plugin_runtime_host_v2_from_scope(scope: Scope) -> PlatformPluginRuntimeHostV2:

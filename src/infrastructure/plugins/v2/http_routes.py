@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
+from starlette.routing import Router
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
@@ -69,6 +70,20 @@ class RouteTableV2:
         self._definitions = routes
         self._app: ASGIApp = app
         self._openapi = MappingProxyType(app.openapi())
+
+    @classmethod
+    def from_fastapi_graph(
+        cls,
+        app: FastAPI,
+        *,
+        definitions: Sequence[RouteDefinitionV2] = (),
+    ) -> RouteTableV2:
+        """Freeze an already assembled private FastAPI graph without re-registering routes."""
+        instance = cls.__new__(cls)
+        instance._definitions = tuple(definitions)
+        instance._app = Router(routes=list(app.router.routes))
+        instance._openapi = MappingProxyType(app.openapi())
+        return instance
 
     @property
     def definitions(self) -> tuple[RouteDefinitionV2, ...]:
