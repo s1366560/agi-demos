@@ -19,6 +19,7 @@ from .runtime import (
     FiberV2,
     GenerationManagerV2,
     LoaderV2,
+    OperationContextV2,
     PluginDefinitionV2,
 )
 
@@ -29,6 +30,7 @@ __all__ = [
     "FiberV2",
     "GenerationManagerV2",
     "LoaderV2",
+    "OperationContextV2",
     "PlatformPluginSnapshotReconcilerV2",
     "PluginDefinitionV2",
     "PluginProtocolV2Error",

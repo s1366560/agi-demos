@@ -22,7 +22,12 @@ from .manifest import (
     parse_plugin_manifest,
     parse_plugin_manifest_json,
 )
-from .runtime import CredentialReference, PluginGeneration, PluginScopeContext
+from .runtime import (
+    CredentialReference,
+    PluginGeneration,
+    PluginGenerationDescriptorV2,
+    PluginScopeContext,
+)
 
 __all__ = [
     "PLATFORM_PLUGIN_EVENTS",
@@ -34,6 +39,7 @@ __all__ = [
     "PluginBilling",
     "PluginEventMode",
     "PluginGeneration",
+    "PluginGenerationDescriptorV2",
     "PluginManifest",
     "PluginManifestError",
     "PluginRequirement",

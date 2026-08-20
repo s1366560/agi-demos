@@ -450,6 +450,18 @@ class AgentRuntimeBootstrapper:
             enable_subagents=True,
         )
 
+        from src.infrastructure.plugins.v2.boundary import (
+            current_generation_descriptor_v2,
+        )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        try:
+            plugin_generation = current_generation_descriptor_v2().to_payload()
+        except RuntimeV2Error as exc:
+            if exc.code != "generation_not_pinned":
+                raise
+            plugin_generation = None
+
         chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
             message_id=message_id,
@@ -473,6 +485,7 @@ class AgentRuntimeBootstrapper:
             api_auth_token=api_auth_token,
             automation_run_id=automation_run_id,
             canonical_run_id=canonical_run_id,
+            plugin_generation=plugin_generation,
         )
 
         if runtime_mode == "local":

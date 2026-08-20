@@ -25,6 +25,9 @@ from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
     get_dispatcher_manager,
 )
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    plugin_runtime_host_v2_from_scope,
+)
 from src.infrastructure.adapters.primary.web.websocket._limits import (
     InboundMessageTooLarge,
     receive_json_with_limit,
@@ -196,6 +199,7 @@ async def agent_websocket_endpoint(
                         db=message_db,
                         container=container,
                         session_factory=async_session_factory,
+                        plugin_runtime_host_v2=plugin_runtime_host_v2_from_scope(websocket.scope),
                         api_key=api_key,
                     )
                     await message_router.route(context, data)

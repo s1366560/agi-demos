@@ -229,6 +229,11 @@ async def test_execute_project_chat_passes_abort_signal(
         user_id="user-1",
         conversation_context=[],
         preferred_language="zh-CN",
+        plugin_generation={
+            "profile_id": "default-v2",
+            "generation": 7,
+            "digest": "a" * 64,
+        },
     )
     abort_signal = asyncio.Event()
 
@@ -268,6 +273,7 @@ async def test_execute_project_chat_passes_abort_signal(
         error=None,
     )
     assert agent.execute_chat_kwargs["preferred_language"] == "zh-CN"
+    assert agent.execute_chat_kwargs["plugin_generation"] == request.plugin_generation
 
 
 @pytest.mark.unit

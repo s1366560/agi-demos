@@ -21,8 +21,10 @@ from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
     ProfileEntryV2,
     ProfileSnapshotV2,
+    ScopeKindV2,
     ScopeV2,
 )
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 type AsyncDisposerV2 = Callable[[], None | Awaitable[None]]
 type EffectResultV2 = (
@@ -153,8 +155,9 @@ class _ProviderRecord:
 
 
 class _ProviderStore:
-    def __init__(self) -> None:
+    def __init__(self, parent: _ProviderStore | None = None) -> None:
         self._records: list[_ProviderRecord] = []
+        self._parent = parent
 
     def add(self, record: _ProviderRecord) -> AsyncDisposerV2:
         if any(
@@ -176,13 +179,9 @@ class _ProviderStore:
         return dispose
 
     def resolve(self, service: str, scope: ScopeV2, isolation: str | None) -> object:
-        candidates = [
-            item
-            for item in self._records
-            if item.service == service
-            and item.isolation == isolation
-            and _scope_contains(item.scope, scope)
-        ]
+        candidates = self._candidates(service, scope, isolation)
+        if self._parent is not None:
+            candidates.extend(self._parent._candidates(service, scope, isolation))
         if not candidates:
             raise RuntimeV2Error(
                 "missing_service",
@@ -197,6 +196,20 @@ class _ProviderStore:
             )
         return candidates[0].value
 
+    def _candidates(
+        self,
+        service: str,
+        scope: ScopeV2,
+        isolation: str | None,
+    ) -> list[_ProviderRecord]:
+        return [
+            item
+            for item in self._records
+            if item.service == service
+            and item.isolation == isolation
+            and _scope_contains(item.scope, scope)
+        ]
+
 
 @dataclass(frozen=True)
 class _ListenerRecord:
@@ -207,8 +220,9 @@ class _ListenerRecord:
 
 
 class _EventBusV2:
-    def __init__(self) -> None:
+    def __init__(self, parent: _EventBusV2 | None = None) -> None:
         self._listeners: list[_ListenerRecord] = []
+        self._parent = parent
 
     def add(self, record: _ListenerRecord) -> AsyncDisposerV2:
         self._listeners.append(record)
@@ -220,11 +234,13 @@ class _EventBusV2:
         return dispose
 
     def listeners(self, event: str, scope: ScopeV2) -> tuple[_ListenerRecord, ...]:
-        return tuple(
+        inherited = () if self._parent is None else self._parent.listeners(event, scope)
+        local = tuple(
             item
             for item in self._listeners
             if item.event == event and _scope_contains(item.scope, scope)
         )
+        return (*inherited, *local)
 
 
 class ContextV2:
@@ -479,10 +495,12 @@ class RuntimeGenerationV2:
         snapshot: ProfileSnapshotV2,
         fibers: Sequence[FiberV2],
         providers: _ProviderStore,
+        events: _EventBusV2,
     ) -> None:
         self.snapshot = snapshot
         self.fibers = tuple(fibers)
         self._providers = providers
+        self._events = events
         self._lease_count = 0
         self._retired = False
         self._disposed = False
@@ -495,6 +513,14 @@ class RuntimeGenerationV2:
     def digest(self) -> str:
         return self.snapshot.digest
 
+    @property
+    def descriptor(self) -> PluginGenerationDescriptorV2:
+        return PluginGenerationDescriptorV2(
+            profile_id=self.snapshot.profile_id,
+            generation=self.snapshot.generation,
+            digest=self.snapshot.digest,
+        )
+
     def resolve(self, service: str, scope: ScopeV2, *, isolation: str | None = None) -> object:
         if self._disposed:
             raise RuntimeV2Error("disposed_generation", "generation is disposed")
@@ -506,6 +532,81 @@ class RuntimeGenerationV2:
         for fiber in reversed(self.fibers):
             await fiber.dispose()
         self._disposed = True
+
+
+class OperationContextV2:
+    """An isolated, disposable service overlay for one request, turn, or operation."""
+
+    def __init__(
+        self,
+        *,
+        generation: RuntimeGenerationV2,
+        operation_id: str,
+        scope: ScopeV2,
+    ) -> None:
+        self.generation = generation
+        self.operation_id = operation_id
+        self.phase = FiberPhaseV2.PENDING
+        self._effects = _EffectStack(lambda: self.phase)
+        providers = _ProviderStore(generation._providers)
+        events = _EventBusV2(generation._events)
+        root = ContextV2(
+            entry_id=f"operation:{operation_id}",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            providers=providers,
+            events=events,
+            effects=self._effects,
+            privileged=True,
+        )
+        contexts = [root]
+        for child_scope in _operation_scope_chain(scope)[1:]:
+            contexts.append(contexts[-1].extend(scope=child_scope))
+        self.contexts = tuple(contexts)
+        self.context = self.contexts[-1]
+
+    @property
+    def descriptor(self) -> PluginGenerationDescriptorV2:
+        return self.generation.descriptor
+
+    async def __aenter__(self) -> OperationContextV2:
+        if self.phase is not FiberPhaseV2.PENDING:
+            raise RuntimeV2Error(
+                "invalid_operation_transition",
+                f"cannot start operation from {self.phase}",
+            )
+        self.phase = FiberPhaseV2.LOADING
+        self.phase = FiberPhaseV2.ACTIVE
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        await self.dispose()
+
+    def provide(self, service: str, value: object, *, label: str | None = None) -> AsyncDisposerV2:
+        return self.context.provide(service, value, label=label)
+
+    def get(self, service: str, default: object = None) -> object:
+        return self.context.get(service, default)
+
+    def require(self, service: str) -> object:
+        return self.context.require(service)
+
+    async def effect(
+        self,
+        setup: Callable[[], EffectResultV2 | Awaitable[EffectResultV2]],
+        *,
+        label: str,
+    ) -> None:
+        await self.context.effect(setup, label=label)
+
+    async def dispose(self) -> None:
+        if self.phase is FiberPhaseV2.DISPOSED:
+            return
+        if self.phase is FiberPhaseV2.PENDING:
+            self.phase = FiberPhaseV2.DISPOSED
+            return
+        self.phase = FiberPhaseV2.UNLOADING
+        await self._effects.dispose()
+        self.phase = FiberPhaseV2.DISPOSED
 
 
 class LoaderV2:
@@ -567,7 +668,12 @@ class LoaderV2:
             for fiber in reversed(fibers):
                 await fiber.dispose()
             raise
-        return RuntimeGenerationV2(snapshot=snapshot, fibers=fibers, providers=providers)
+        return RuntimeGenerationV2(
+            snapshot=snapshot,
+            fibers=fibers,
+            providers=providers,
+            events=events,
+        )
 
 
 def project_snapshot_entries_v2(
@@ -682,6 +788,35 @@ def _scope_contains(parent: ScopeV2, child: ScopeV2) -> bool:
     return True
 
 
+def _operation_scope_chain(scope: ScopeV2) -> tuple[ScopeV2, ...]:
+    root = ScopeV2(kind=ScopeKindV2.ROOT)
+    if scope.kind is ScopeKindV2.ROOT:
+        return (root,)
+    if scope.tenant_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "tenant scope identifier is required")
+    tenant = ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=scope.tenant_id)
+    if scope.kind is ScopeKindV2.TENANT:
+        return root, tenant
+    if scope.project_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "project scope identifier is required")
+    project = ScopeV2(
+        kind=ScopeKindV2.PROJECT,
+        tenant_id=scope.tenant_id,
+        project_id=scope.project_id,
+    )
+    if scope.kind is ScopeKindV2.PROJECT:
+        return root, tenant, project
+    if scope.session_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "session scope identifier is required")
+    session = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id=scope.tenant_id,
+        project_id=scope.project_id,
+        session_id=scope.session_id,
+    )
+    return root, tenant, project, session
+
+
 def _entry_order(
     entries: Mapping[str, ProfileEntryV2],
     definitions: Mapping[str, PluginDefinitionV2],
@@ -754,6 +889,7 @@ __all__ = [
     "GenerationLeaseV2",
     "GenerationManagerV2",
     "LoaderV2",
+    "OperationContextV2",
     "PluginDefinitionV2",
     "RuntimeGenerationV2",
     "RuntimeV2Error",

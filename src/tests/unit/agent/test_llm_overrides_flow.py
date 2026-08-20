@@ -642,12 +642,18 @@ class TestProjectReActAgentForwarding:
             return_value=None,
         ):
             overrides = {"temperature": 0.5, "max_tokens": 1024}
+            plugin_generation = {
+                "profile_id": "default-v2",
+                "generation": 7,
+                "digest": "a" * 64,
+            }
             events = []
             async for event in agent.execute_chat(
                 conversation_id="conv-1",
                 user_message="test",
                 user_id="u1",
                 llm_overrides=overrides,
+                plugin_generation=plugin_generation,
             ):
                 events.append(event)
 
@@ -655,6 +661,7 @@ class TestProjectReActAgentForwarding:
         mock_react_agent.stream.assert_called_once()
         call_kwargs = mock_react_agent.stream.call_args[1]
         assert call_kwargs["llm_overrides"] == overrides
+        assert call_kwargs["plugin_generation"] == plugin_generation
 
     async def test_forwards_model_override_to_react_agent_stream(self) -> None:
         """execute_chat() forwards model_override kwarg to ReActAgent.stream()."""

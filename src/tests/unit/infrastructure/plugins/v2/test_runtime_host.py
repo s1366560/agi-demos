@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
     PluginGenerationMiddlewareV2,
+    attach_current_generation_v2,
     current_generation_v2,
+    current_operation_context_v2,
+    pin_operation_context_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import (
     RUNTIME_BOUNDARY_SERVICE_V2,
@@ -20,6 +27,37 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"profile_id": "default-v2", "generation": 1, "digest": "a" * 64, "extra": 1},
+        {"profile_id": "", "generation": 1, "digest": "a" * 64},
+        {"profile_id": "default-v2", "generation": True, "digest": "a" * 64},
+        {"profile_id": "default-v2", "generation": 0, "digest": "a" * 64},
+        {"profile_id": "default-v2", "generation": 1, "digest": "A" * 64},
+        {"profile_id": "default-v2", "generation": 1, "digest": "a" * 63},
+    ],
+)
+def test_generation_descriptor_rejects_noncanonical_payload(payload: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="plugin generation"):
+        PluginGenerationDescriptorV2.from_payload(payload)
+
+
+@pytest.mark.unit
+def test_generation_descriptor_round_trips_canonical_payload() -> None:
+    payload: dict[str, Any] = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+
+    descriptor = PluginGenerationDescriptorV2.from_payload(payload)
+
+    assert descriptor.to_payload() == payload
 
 
 @pytest.mark.unit
@@ -102,6 +140,62 @@ async def test_http_middleware_pins_one_generation_until_response_finishes() -> 
     assert messages[-1]["body"] == b"ok"
     with pytest.raises(RuntimeError, match="not pinned"):
         current_generation_v2()
+    await host.close()
+
+
+@pytest.mark.unit
+async def test_operation_boundary_pins_old_generation_until_cleanup_finishes() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+    )
+    scope = ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-a")
+
+    async with pin_operation_context_v2(
+        host,
+        operation_id="turn-a",
+        scope=scope,
+        services={OPERATION_DB_SESSION_SERVICE_V2: "db-a"},
+    ) as operation:
+        await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=2,
+            version=2,
+            nonce="generation-2",
+        )
+        assert operation.descriptor.generation == 1
+        assert current_operation_context_v2() is operation
+        assert operation.require(OPERATION_DB_SESSION_SERVICE_V2) == "db-a"
+        run_context = RunContext()
+        attach_current_generation_v2(run_context)
+        assert run_context.plugin_generation == operation.descriptor
+        mismatched_context = RunContext(
+            plugin_generation=PluginGenerationDescriptorV2(
+                profile_id="memstack-default-v2",
+                generation=2,
+                digest="b" * 64,
+            )
+        )
+        with pytest.raises(RuntimeError, match="does not match the pinned operation"):
+            attach_current_generation_v2(mismatched_context)
+        assert host.manager.current is not None
+        assert host.manager.current.generation == 2
+        assert isinstance(
+            operation.generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2, ScopeV2(kind=ScopeKindV2.ROOT)
+            ),
+            RuntimeBoundaryServiceV2,
+        )
+
+    with pytest.raises(RuntimeError, match="generation is disposed"):
+        operation.generation.resolve(
+            RUNTIME_BOUNDARY_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
+        )
     await host.close()
 
 

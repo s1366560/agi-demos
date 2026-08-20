@@ -865,11 +865,14 @@ class StreamMixin:
         abort_signal: asyncio.Event | None,
         matched_skill: Skill | None,
         agent_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process events from SessionProcessor and yield converted events.
 
         Sets self._stream_final_content and self._stream_success.
         """
+        from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+
         from .processor import RunContext as _RunContext
 
         self._stream_final_content = ""
@@ -883,6 +886,11 @@ class StreamMixin:
                 if langfuse_context
                 else None,
                 agent_id=agent_id,
+                plugin_generation=(
+                    PluginGenerationDescriptorV2.from_payload(plugin_generation)
+                    if plugin_generation is not None
+                    else None
+                ),
             )
             async for domain_event in processor.process(
                 session_id=langfuse_context["conversation_id"],
@@ -1421,6 +1429,7 @@ class StreamMixin:
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
         canonical_run_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -2122,6 +2131,7 @@ class StreamMixin:
             abort_signal=abort_signal,
             matched_skill=matched_skill,
             agent_id=agent_id,
+            plugin_generation=plugin_generation,
         ):
             yield event
 

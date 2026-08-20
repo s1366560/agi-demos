@@ -26,6 +26,7 @@ from src.infrastructure.plugins.v2.runtime import (
     FiberPhaseV2,
     GenerationManagerV2,
     LoaderV2,
+    OperationContextV2,
     PluginDefinitionV2,
     RuntimeV2Error,
 )
@@ -439,3 +440,59 @@ async def test_generation_lease_pins_old_generation_until_release() -> None:
     await new_lease.release()
     await manager.close()
     assert disposed == [1, 2]
+
+
+@pytest.mark.unit
+async def test_operation_context_derives_scope_chain_and_isolates_temporary_services() -> None:
+    entry = _entry("root", "builtin://runtime/root")
+    generation = await LoaderV2(
+        [PluginDefinitionV2(module_ref=entry.module_ref, apply=lambda _context, _config: None)]
+    ).stage(_snapshot(3, (entry,)))
+    scope = _scope(
+        ScopeKindV2.SESSION,
+        tenant_id="tenant-a",
+        project_id="project-a",
+        session_id="session-a",
+    )
+
+    first = OperationContextV2(generation=generation, operation_id="turn-a", scope=scope)
+    second = OperationContextV2(generation=generation, operation_id="turn-b", scope=scope)
+    async with first, second:
+        first.provide("service:db-session", "db-a")
+        second.provide("service:db-session", "db-b")
+
+        assert [context.scope.kind for context in first.contexts] == [
+            ScopeKindV2.ROOT,
+            ScopeKindV2.TENANT,
+            ScopeKindV2.PROJECT,
+            ScopeKindV2.SESSION,
+        ]
+        assert first.require("service:db-session") == "db-a"
+        assert second.require("service:db-session") == "db-b"
+
+    with pytest.raises(RuntimeV2Error) as error:
+        first.provide("service:late", object())
+    assert error.value.code == "inactive_effect"
+
+
+@pytest.mark.unit
+async def test_operation_context_disposes_temporary_effects_in_lifo_order() -> None:
+    entry = _entry("root", "builtin://runtime/root")
+    generation = await LoaderV2(
+        [PluginDefinitionV2(module_ref=entry.module_ref, apply=lambda _context, _config: None)]
+    ).stage(_snapshot(4, (entry,)))
+    disposed: list[str] = []
+    operation = OperationContextV2(
+        generation=generation,
+        operation_id="background-a",
+        scope=_scope(ScopeKindV2.ROOT),
+    )
+
+    async with operation:
+        await operation.effect(lambda: lambda: disposed.append("first"), label="first")
+        await operation.effect(lambda: lambda: disposed.append("second"), label="second")
+
+    assert disposed == ["second", "first"]
+    assert operation.descriptor.profile_id == "runtime-v2-tests"
+    assert operation.descriptor.generation == 4
+    assert operation.descriptor.digest == generation.digest

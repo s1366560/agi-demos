@@ -60,6 +60,8 @@ class ProjectChatRequest:
     automation_run_id: str | None = None
     # Server-owned canonical AgentRun authority. Defaults to message_id for root chat.
     canonical_run_id: str | None = None
+    # Process-safe v2 generation identity; never contains host/runtime objects.
+    plugin_generation: dict[str, str | int] | None = None
 
 
 @dataclass(frozen=True)

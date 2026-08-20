@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.processor.run_context import RunContext
 
@@ -77,6 +78,7 @@ class TestRunContextDataclass:
         assert ctx.trace_id is None
         assert ctx.langfuse_context is None
         assert ctx.start_time > 0
+        assert ctx.plugin_generation is None
 
     def test_all_fields_set(self) -> None:
         """RunContext accepts all fields."""
@@ -87,11 +89,18 @@ class TestRunContextDataclass:
             conversation_id="conv-1",
             trace_id="trace-1",
             langfuse_context=lf_ctx,
+            plugin_generation=PluginGenerationDescriptorV2(
+                profile_id="default-v2",
+                generation=7,
+                digest="a" * 64,
+            ),
         )
         assert ctx.abort_signal is event
         assert ctx.conversation_id == "conv-1"
         assert ctx.trace_id == "trace-1"
         assert ctx.langfuse_context is lf_ctx
+        assert ctx.plugin_generation is not None
+        assert ctx.plugin_generation.generation == 7
 
     def test_start_time_auto_set(self) -> None:
         """RunContext auto-generates start_time."""

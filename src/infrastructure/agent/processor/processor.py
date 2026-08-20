@@ -1468,6 +1468,10 @@ class SessionProcessor:
                 conversation_id=(langfuse_context or {}).get("conversation_id"),
             )
 
+        from src.infrastructure.plugins.v2.boundary import attach_current_generation_v2
+
+        attach_current_generation_v2(run_ctx)
+
         effective_langfuse_context = run_ctx.langfuse_context
         if run_ctx.conversation_id:
             if effective_langfuse_context is None:

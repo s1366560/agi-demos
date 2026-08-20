@@ -1063,6 +1063,7 @@ async def execute_project_chat(  # noqa: PLR0915
             preferred_language=request.preferred_language,
             api_auth_token=request.api_auth_token,
             canonical_run_id=run_authority_id,
+            plugin_generation=request.plugin_generation,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -1267,6 +1268,7 @@ async def handle_hitl_pending(
         canonical_run_id=request.canonical_run_id,
         agent_id=request.agent_id,
         parent_session_id=request.parent_session_id,
+        plugin_generation=request.plugin_generation,
         step_count=getattr(agent, "_step_count", 0),
         timeout_seconds=hitl_exception.timeout_seconds,
         pending_tool_call_id=hitl_exception.tool_call_id,
@@ -1396,6 +1398,7 @@ async def continue_project_chat(  # noqa: PLR0915
             tenant_id=state.tenant_id,
             message_id=state.message_id,
             canonical_run_id=run_authority_id,
+            plugin_generation=state.plugin_generation,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us

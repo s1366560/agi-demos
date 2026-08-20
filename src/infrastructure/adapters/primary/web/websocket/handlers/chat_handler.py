@@ -310,7 +310,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             )
             run = await ensure_chat_run_authority(
                 context.db,
-                conversation=conversation,
+                conversation=cast(Any, conversation),
                 run_id=execution_message_id,
                 request_message=user_message,
                 client_message_id=client_message_id,
@@ -1390,49 +1390,138 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
 ) -> None:
     """Create a fresh DB-scoped agent service for the long-running stream."""
     async with context.fresh_db_context() as stream_context:
-        client_turn_claimed = False
-        if client_message_id is not None:
-            if client_payload_hash is None or execution_message_id is None:
-                raise ValueError("Client turn authority is incomplete")
-            from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository import (
-                SqlAgentClientTurnRepository,
+        host = getattr(stream_context, "plugin_runtime_host_v2", None)
+        if host is not None:
+            from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+            from src.infrastructure.plugins.v2.boundary import (
+                OPERATION_DB_SESSION_SERVICE_V2,
+                OPERATION_IDENTITY_SERVICE_V2,
+                OPERATION_METADATA_SERVICE_V2,
+                pin_operation_context_v2,
             )
 
-            turn_repo = SqlAgentClientTurnRepository(stream_context.db)
-            client_turn_claimed = await turn_repo.try_start(
-                conversation_id=conversation_id,
-                client_message_id=client_message_id,
-                payload_hash=client_payload_hash,
-            )
-            if not client_turn_claimed:
-                return
+            async with pin_operation_context_v2(
+                host,
+                operation_id=f"agent-turn:{execution_message_id or conversation_id}",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.SESSION,
+                    tenant_id=stream_context.tenant_id,
+                    project_id=project_id,
+                    session_id=conversation_id,
+                ),
+                services={
+                    OPERATION_DB_SESSION_SERVICE_V2: stream_context.db,
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": stream_context.tenant_id,
+                        "user_id": stream_context.user_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "agent-turn",
+                        "conversation_id": conversation_id,
+                        "execution_message_id": execution_message_id,
+                    },
+                },
+            ):
+                await _stream_agent_with_scoped_session(
+                    stream_context=stream_context,
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    project_id=project_id,
+                    preferred_language=preferred_language,
+                    attachment_ids=attachment_ids,
+                    file_metadata=file_metadata,
+                    forced_skill_name=forced_skill_name,
+                    app_model_context=app_model_context,
+                    image_attachments=image_attachments,
+                    agent_id=agent_id,
+                    mentions=mentions,
+                    client_message_id=client_message_id,
+                    client_payload_hash=client_payload_hash,
+                    execution_message_id=execution_message_id,
+                )
+            return
 
-        try:
-            from src.configuration.factories import create_llm_client
+        await _stream_agent_with_scoped_session(
+            stream_context=stream_context,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            project_id=project_id,
+            preferred_language=preferred_language,
+            attachment_ids=attachment_ids,
+            file_metadata=file_metadata,
+            forced_skill_name=forced_skill_name,
+            app_model_context=app_model_context,
+            image_attachments=image_attachments,
+            agent_id=agent_id,
+            mentions=mentions,
+            client_message_id=client_message_id,
+            client_payload_hash=client_payload_hash,
+            execution_message_id=execution_message_id,
+        )
 
-            llm = await create_llm_client(stream_context.tenant_id)
-            agent_service = stream_context.get_scoped_container().agent_service(llm)
-            await stream_agent_to_websocket(
-                agent_service=agent_service,
-                context=stream_context,
-                conversation_id=conversation_id,
-                user_message=user_message,
-                project_id=project_id,
-                preferred_language=preferred_language,
-                attachment_ids=attachment_ids,
-                file_metadata=file_metadata,
-                forced_skill_name=forced_skill_name,
-                app_model_context=_sanitize_client_app_model_context(app_model_context),
-                image_attachments=image_attachments,
-                agent_id=agent_id,
-                mentions=mentions,
-                execution_message_id=execution_message_id,
-            )
-        finally:
-            # If setup failed before the user event commit, roll back the
-            # uncommitted ACCEPTED -> STARTED CAS so a replay can safely retry.
-            if client_turn_claimed and stream_context.db.in_transaction():
-                await stream_context.db.rollback()
+
+async def _stream_agent_with_scoped_session(  # noqa: PLR0913
+    *,
+    stream_context: MessageContext,
+    conversation_id: str,
+    user_message: str,
+    project_id: str,
+    preferred_language: str | None,
+    attachment_ids: list[str] | None,
+    file_metadata: list[dict[str, Any]] | None,
+    forced_skill_name: str | None,
+    app_model_context: dict[str, Any] | None,
+    image_attachments: list[str] | None,
+    agent_id: str | None,
+    mentions: list[str] | None,
+    client_message_id: str | None,
+    client_payload_hash: str | None,
+    execution_message_id: str | None,
+) -> None:
+    """Run one admitted turn inside its already-pinned generation and DB scope."""
+    client_turn_claimed = False
+    if client_message_id is not None:
+        if client_payload_hash is None or execution_message_id is None:
+            raise ValueError("Client turn authority is incomplete")
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_repository import (
+            SqlAgentClientTurnRepository,
+        )
+
+        turn_repo = SqlAgentClientTurnRepository(stream_context.db)
+        client_turn_claimed = await turn_repo.try_start(
+            conversation_id=conversation_id,
+            client_message_id=client_message_id,
+            payload_hash=client_payload_hash,
+        )
+        if not client_turn_claimed:
+            return
+
+    try:
+        from src.configuration.factories import create_llm_client
+
+        llm = await create_llm_client(stream_context.tenant_id)
+        agent_service = stream_context.get_scoped_container().agent_service(llm)
+        await stream_agent_to_websocket(
+            agent_service=agent_service,
+            context=stream_context,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            project_id=project_id,
+            preferred_language=preferred_language,
+            attachment_ids=attachment_ids,
+            file_metadata=file_metadata,
+            forced_skill_name=forced_skill_name,
+            app_model_context=_sanitize_client_app_model_context(app_model_context),
+            image_attachments=image_attachments,
+            agent_id=agent_id,
+            mentions=mentions,
+            execution_message_id=execution_message_id,
+        )
+    finally:
+        # If setup failed before the user event commit, roll back the
+        # uncommitted ACCEPTED -> STARTED CAS so a replay can safely retry.
+        if client_turn_claimed and stream_context.db.in_transaction():
+            await stream_context.db.rollback()
 
 
 async def stream_agent_to_websocket(  # noqa: PLR0913

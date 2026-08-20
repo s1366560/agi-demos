@@ -905,6 +905,7 @@ class ProjectReActAgent:
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
         canonical_run_id: str | None = None,
+        plugin_generation: dict[str, str | int] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -984,6 +985,7 @@ class ProjectReActAgent:
                 tenant_agent_config_data=tenant_agent_config_data,
                 preferred_language=preferred_language,
                 api_auth_token=api_auth_token,
+                plugin_generation=plugin_generation,
                 attachment_content=(
                     [
                         {
