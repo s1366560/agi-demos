@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, cast, override
 
 from fastapi import FastAPI
+from starlette.datastructures import URLPath
+from starlette.routing import BaseRoute, Match, NoMatchFound
 from starlette.types import Receive, Scope, Send
 
 from src.infrastructure.plugins.v2.http_routes import (
@@ -13,14 +15,50 @@ from src.infrastructure.plugins.v2.http_routes import (
 )
 
 
-class ApplicationGenerationRouteDispatcherV2:
-    """Resolve the current route registry from outer application state per request."""
+class ApplicationGenerationRouteDispatcherV2(BaseRoute):
+    """Selectively dispatch routes contributed by the current plugin generation."""
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        app = scope.get("app")
-        registry = getattr(getattr(app, "state", None), "platform_plugin_route_registry_v2", None)
+    name = "plugin-generation-v2"
+
+    def __init__(self, app: FastAPI) -> None:
+        super().__init__()
+        self._outer_app = app
+
+    def _registry(self) -> RouteTableRegistryV2:
+        registry = getattr(
+            self._outer_app.state,
+            "platform_plugin_route_registry_v2",
+            None,
+        )
         if not isinstance(registry, RouteTableRegistryV2):
             raise RuntimeError("plugin route registry v2 is not initialized")
+        return registry
+
+    @override
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        if scope["type"] not in {"http", "websocket"}:
+            return Match.NONE, {}
+        registry = self._registry()
+        if scope["type"] == "websocket":
+            publication = registry.current
+            if publication is None:
+                raise RuntimeError("plugin route generation v2 is not published")
+        else:
+            from src.infrastructure.plugins.v2.boundary import current_generation_v2
+
+            publication = registry.resolve(current_generation_v2().descriptor)
+        match = publication.table.match(scope)
+        return match, {"endpoint": self} if match is not Match.NONE else {}
+
+    @override
+    def url_path_for(self, name: str, /, **path_params: object) -> URLPath:
+        if name != self.name or path_params:
+            raise NoMatchFound(name, path_params)
+        return URLPath(path="/", protocol="http")
+
+    @override
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
+        registry = self._registry()
         if scope["type"] == "websocket":
             publication = registry.current
             if publication is None:
@@ -31,7 +69,7 @@ class ApplicationGenerationRouteDispatcherV2:
 
 
 def mount_generation_http_dispatcher_v2(app: FastAPI) -> None:
-    """Mount one stable catch-all dispatcher and bind docs to its current publication."""
+    """Install one stable selective dispatcher and bind docs to its publication."""
     original_openapi = app.openapi
 
     def generation_openapi() -> dict[str, Any]:
@@ -41,7 +79,7 @@ def mount_generation_http_dispatcher_v2(app: FastAPI) -> None:
         return original_openapi()
 
     cast(Any, app).openapi = generation_openapi
-    app.mount("/", ApplicationGenerationRouteDispatcherV2(), name="plugin-generation-v2")
+    app.router.routes.append(ApplicationGenerationRouteDispatcherV2(app))
 
 
 __all__ = [

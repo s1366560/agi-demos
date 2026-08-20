@@ -1,8 +1,10 @@
 import pytest
 from fastapi.routing import APIRoute
-from starlette.routing import Mount
 
 from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
+    ApplicationGenerationRouteDispatcherV2,
+)
 
 
 def _routes() -> list[APIRoute]:
@@ -25,7 +27,7 @@ def test_generation_dispatcher_precedes_non_kernel_builtin_routes() -> None:
     dispatcher_index = next(
         index
         for index, route in enumerate(routes)
-        if isinstance(route, Mount) and route.name == "plugin-generation-v2"
+        if isinstance(route, ApplicationGenerationRouteDispatcherV2)
     )
     auth_index = next(
         index

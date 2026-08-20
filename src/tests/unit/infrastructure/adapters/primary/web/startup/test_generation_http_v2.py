@@ -42,6 +42,10 @@ async def test_kernel_precedes_dispatcher_and_dispatcher_precedes_legacy_fallbac
     async def legacy() -> dict[str, str]:
         return {"source": "legacy"}
 
+    @app.get("/api/dynamic")
+    async def dynamic() -> dict[str, str]:
+        return {"source": "dynamic-fallback"}
+
     async def plugin() -> dict[str, str]:
         return {"source": "generation"}
 
@@ -82,9 +86,11 @@ async def test_kernel_precedes_dispatcher_and_dispatcher_precedes_legacy_fallbac
     ):
         kernel_response = await client.get("/kernel")
         plugin_response = await client.get("/api/value")
+        dynamic_response = await client.get("/api/dynamic")
 
     assert kernel_response.json() == {"source": "kernel"}
     assert plugin_response.json() == {"source": "generation"}
+    assert dynamic_response.json() == {"source": "dynamic-fallback"}
     assert app.openapi() == dict(publication.openapi.schema)
     await host.close()
 

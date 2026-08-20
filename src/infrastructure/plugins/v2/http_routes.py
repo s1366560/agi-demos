@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
-from starlette.routing import Router
+from starlette.routing import BaseRoute, Match, Router
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
@@ -68,6 +68,7 @@ class RouteTableV2:
                 include_in_schema=route.include_in_schema,
             )
         self._definitions = routes
+        self._routes: tuple[BaseRoute, ...] = tuple(app.router.routes)
         self._app: ASGIApp = app
         self._openapi = MappingProxyType(app.openapi())
 
@@ -81,7 +82,8 @@ class RouteTableV2:
         """Freeze an already assembled private FastAPI graph without re-registering routes."""
         instance = cls.__new__(cls)
         instance._definitions = tuple(definitions)
-        instance._app = Router(routes=list(app.router.routes))
+        instance._routes = tuple(app.router.routes)
+        instance._app = Router(routes=list(instance._routes))
         instance._openapi = MappingProxyType(app.openapi())
         return instance
 
@@ -94,6 +96,17 @@ class RouteTableV2:
         descriptor: PluginGenerationDescriptorV2,
     ) -> OpenApiSnapshotV2:
         return OpenApiSnapshotV2(descriptor=descriptor, schema=self._openapi)
+
+    def match(self, scope: Scope) -> Match:
+        """Return the strongest structural match without executing the private graph."""
+        partial = False
+        for route in self._routes:
+            match, _child_scope = route.matches(scope)
+            if match is Match.FULL:
+                return Match.FULL
+            if match is Match.PARTIAL:
+                partial = True
+        return Match.PARTIAL if partial else Match.NONE
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         await self._app(scope, receive, send)
