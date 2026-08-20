@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -27,11 +27,14 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
-    from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
+
+
+class AgentLoopResolverLike(Protocol):
+    def resolve(self, provider_id: str, model_id: str) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -167,12 +170,27 @@ class ProcessorFactory:
         )
 
 
-def _default_loop_resolver() -> AgentLoopResolver | None:
+def _default_loop_resolver() -> AgentLoopResolverLike | None:
     """Build the per-turn agent loop resolver from the platform runtime host.
 
     Returns ``None`` when the plugin control plane is not active (tests,
     bare CLI runs); the processor then always uses the builtin ReAct loop.
     """
+    from src.infrastructure.plugins.v2.agent_loop import AGENT_LOOP_RESOLVER_SERVICE_V2
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+    else:
+        resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+        if not callable(getattr(resolver, "resolve", None)):
+            raise RuntimeError("v2 agent loop resolver has no callable resolve method")
+        return cast(AgentLoopResolverLike, resolver)
+
     try:
         from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
         from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host

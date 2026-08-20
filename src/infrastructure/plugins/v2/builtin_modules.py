@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .agent_loop import builtin_agent_loop_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2
 
 RUNTIME_BOUNDARY_MODULE_V2 = "builtin://memstack/runtime/generation-boundary"
@@ -45,4 +46,5 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
             apply=_apply_runtime_boundary,
             provides=(RUNTIME_BOUNDARY_SERVICE_V2,),
         ),
+        builtin_agent_loop_definition_v2(),
     )

@@ -13,6 +13,15 @@
         "digest": "sha256:5b577e0c8be69c0807c332bdbbeddf6e6e40d92a1127c599b734aec3da67a17f",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/loop",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:93425e44167aea4e1cbe718606ee2115183f45126e56a7c77ba33ff6f4cd286e",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],
