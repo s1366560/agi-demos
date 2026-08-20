@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
+    from src.domain.llm_providers.base import BaseReranker
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.graph.distributed_transaction_coordinator import (
         DistributedTransactionCoordinator,
@@ -134,6 +135,7 @@ class NativeGraphAdapter(GraphStorePort):
         enable_reflexion: bool = True,
         reflexion_max_iterations: int = 2,
         auto_clear_embeddings: bool = True,
+        reranker: BaseReranker | None = None,
     ) -> None:
         """
         Initialize native graph adapter.
@@ -146,11 +148,14 @@ class NativeGraphAdapter(GraphStorePort):
             enable_reflexion: Enable reflexion iteration for entity extraction
             reflexion_max_iterations: Max reflexion iterations (default: 2)
             auto_clear_embeddings: Auto-clear embeddings on dimension mismatch
+            reranker: Optional reranker capability (BaseReranker surface) used
+                by hybrid search; None (default) keeps the builtin ordering.
         """
         self._neo4j_client = neo4j_client
         self._llm_client = llm_client
         self._embedding_service = embedding_service
         self._queue_port = queue_port
+        self._reranker = reranker
         self._enable_reflexion = enable_reflexion
         self._reflexion_max_iterations = reflexion_max_iterations
         self._auto_clear_embeddings = auto_clear_embeddings
@@ -276,6 +281,7 @@ class NativeGraphAdapter(GraphStorePort):
                 neo4j_client=self._neo4j_client,
                 embedding_service=embedding_service,
                 search_config=GraphSearchConfig(),
+                reranker=self._reranker,
             )
         return self._hybrid_search
 

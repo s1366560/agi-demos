@@ -1,6 +1,36 @@
 {
   "capabilities": [
     {
+      "capability_id": "default",
+      "capability_kind": "embedder",
+      "contract": "embedder:litellm",
+      "id": "platform-plugin-memory-backends-embedder-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
+      "capability_id": "default",
+      "capability_kind": "reranker",
+      "contract": "reranker:litellm",
+      "id": "platform-plugin-memory-backends-reranker-default",
+      "kind": "platform_plugin_capability",
+      "permissions": [],
+      "plugin_id": "memory-backends",
+      "plugin_version": "1.0.0",
+      "surfaces": [
+        "desktop_cloud",
+        "local_online",
+        "local_offline"
+      ]
+    },
+    {
       "capability_id": "after_turn_complete",
       "capability_kind": "hook",
       "contract": "hook:after_turn_complete",

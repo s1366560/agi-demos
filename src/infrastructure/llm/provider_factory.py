@@ -21,6 +21,10 @@ if TYPE_CHECKING:
     from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
     from src.infrastructure.llm.litellm.pooled_llm_client import PooledLLMClient
     from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
+    from src.infrastructure.plugins.backend_adapters import (
+        PluginEmbedderAdapter,
+        PluginRerankerAdapter,
+    )
 
 from src.application.services.provider_resolution_service import (
     ProviderResolutionService,
@@ -142,12 +146,54 @@ class AIServiceFactory:
     def create_embedder(
         provider_config: ProviderConfig,
         embedding_dim: int | None = None,
-    ) -> LiteLLMEmbedder:
-        """Create a ``LiteLLMEmbedder`` from a resolved provider config.
+    ) -> LiteLLMEmbedder | PluginEmbedderAdapter:
+        """Create the embedder from a resolved provider config.
+
+        When the platform plugin registry has an active ``embedder``
+        capability row, the plugin implementation (validated against the
+        domain ``EmbedderCapability`` contract) wins and is exposed through
+        the same legacy surface. Otherwise the builtin ``LiteLLMEmbedder``
+        is returned unchanged.
 
         Returns:
-            Configured ``LiteLLMEmbedder`` instance.
+            Configured embedder (builtin ``LiteLLMEmbedder`` or plugin adapter).
         """
+        from src.domain.model.plugins import CapabilityKind
+        from src.domain.ports.plugins.contracts import EmbedderCapability
+        from src.infrastructure.plugins.backend_adapters import (
+            PluginEmbedderAdapter,
+            route_from_provider_config,
+            validate_backend_implementation,
+        )
+        from src.infrastructure.plugins.backend_runtime import (
+            BackendResolutionError,
+            resolve_backend,
+        )
+        from src.infrastructure.plugins.runtime_host import (
+            get_platform_plugin_runtime_host,
+        )
+
+        registry = get_platform_plugin_runtime_host().capabilities
+        try:
+            selection = resolve_backend(
+                registry,
+                CapabilityKind.EMBEDDER,
+                validator=lambda impl: validate_backend_implementation(impl, EmbedderCapability),
+            )
+        except BackendResolutionError:
+            selection = None
+        if selection is not None:
+            model_id = provider_config.embedding_model or ""
+            logger.info(
+                "Using plugin embedder capability plugin_id=%s",
+                selection.plugin_id,
+            )
+            return PluginEmbedderAdapter(
+                selection.implementation,  # type: ignore[arg-type]
+                route_from_provider_config(provider_config, model_id=model_id),
+                embedding_dim=embedding_dim,
+            )
+
         from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
 
         return LiteLLMEmbedder(config=provider_config, embedding_dim=embedding_dim)
@@ -191,12 +237,53 @@ class AIServiceFactory:
     @staticmethod
     def create_reranker(
         provider_config: ProviderConfig,
-    ) -> LiteLLMReranker:
-        """Create a ``LiteLLMReranker`` from a resolved provider config.
+    ) -> LiteLLMReranker | PluginRerankerAdapter:
+        """Create the reranker from a resolved provider config.
+
+        When the platform plugin registry has an active ``reranker``
+        capability row, the plugin implementation (validated against the
+        domain ``RerankerCapability`` contract) wins and is exposed through
+        the ``BaseReranker`` surface. Otherwise the builtin
+        ``LiteLLMReranker`` is returned unchanged.
 
         Returns:
-            Configured ``LiteLLMReranker`` instance.
+            Configured reranker (builtin ``LiteLLMReranker`` or plugin adapter).
         """
+        from src.domain.model.plugins import CapabilityKind
+        from src.domain.ports.plugins.contracts import RerankerCapability
+        from src.infrastructure.plugins.backend_adapters import (
+            PluginRerankerAdapter,
+            route_from_provider_config,
+            validate_backend_implementation,
+        )
+        from src.infrastructure.plugins.backend_runtime import (
+            BackendResolutionError,
+            resolve_backend,
+        )
+        from src.infrastructure.plugins.runtime_host import (
+            get_platform_plugin_runtime_host,
+        )
+
+        registry = get_platform_plugin_runtime_host().capabilities
+        try:
+            selection = resolve_backend(
+                registry,
+                CapabilityKind.RERANKER,
+                validator=lambda impl: validate_backend_implementation(impl, RerankerCapability),
+            )
+        except BackendResolutionError:
+            selection = None
+        if selection is not None:
+            model_id = provider_config.reranker_model or ""
+            logger.info(
+                "Using plugin reranker capability plugin_id=%s",
+                selection.plugin_id,
+            )
+            return PluginRerankerAdapter(
+                selection.implementation,  # type: ignore[arg-type]
+                route_from_provider_config(provider_config, model_id=model_id),
+            )
+
         from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
 
         return LiteLLMReranker(config=provider_config)

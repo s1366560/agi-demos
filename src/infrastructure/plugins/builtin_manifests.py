@@ -111,6 +111,38 @@ def skill_evolution_manifest() -> PluginManifest:
     )
 
 
+def memory_backends_manifest() -> PluginManifest:
+    """Return the manifest for the builtin memory backend providers (R3a).
+
+    Declares the builtin ``embedder`` and ``reranker`` rows so the control
+    plane inventory surfaces them; the runtime seam resolves these kinds
+    through the capability registry with the LiteLLM implementations as the
+    builtin fallback.
+    """
+    return _manifest(
+        {
+            "schemaVersion": 1,
+            "id": "memory-backends",
+            "version": "1.0.0",
+            "runtime": "python-trusted",
+            "trust": "builtin",
+            "provides": [
+                {
+                    "kind": "embedder",
+                    "id": "default",
+                    "contract": "embedder:litellm",
+                },
+                {
+                    "kind": "reranker",
+                    "id": "default",
+                    "contract": "reranker:litellm",
+                },
+            ],
+            "activation": {"defaultScope": "tenant"},
+        }
+    )
+
+
 def default_builtin_manifests() -> dict[str, PluginManifest]:
     """Return the deterministic first-party trusted plugin catalog."""
     manifests = (
@@ -118,5 +150,6 @@ def default_builtin_manifests() -> dict[str, PluginManifest]:
         sisyphus_runtime_manifest(),
         memory_runtime_manifest(),
         skill_evolution_manifest(),
+        memory_backends_manifest(),
     )
     return {manifest.id: manifest for manifest in manifests}

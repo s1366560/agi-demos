@@ -14,7 +14,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.neo4j_client import Neo4jClient
@@ -22,6 +22,9 @@ from src.infrastructure.graph.schemas import HybridSearchResult, SearchResultIte
 from src.infrastructure.memory.mmr import mmr_rerank
 from src.infrastructure.memory.query_expansion import extract_keywords
 from src.infrastructure.memory.temporal_decay import apply_temporal_decay
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.base import BaseReranker
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +109,7 @@ class HybridSearch:
         vector_weight: float = DEFAULT_VECTOR_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
         search_config: GraphSearchConfig | None = None,
+        reranker: "BaseReranker | None" = None,
     ) -> None:
         """
         Initialize hybrid search.
@@ -120,6 +124,9 @@ class HybridSearch:
             vector_weight: Weight for vector search results
             keyword_weight: Weight for keyword search results
             search_config: Configuration for MMR, temporal decay, and query expansion
+            reranker: Optional reranker capability (BaseReranker surface). When
+                provided, its scores replace the fused score for the final
+                ordering; when None (default) the pipeline is unchanged.
         """
         self._neo4j_client = neo4j_client
         self._embedding_service = embedding_service
@@ -130,6 +137,7 @@ class HybridSearch:
         self._vector_weight = vector_weight
         self._keyword_weight = keyword_weight
         self._search_config = search_config or GraphSearchConfig()
+        self._reranker = reranker
 
     async def search(
         self,
@@ -164,6 +172,7 @@ class HybridSearch:
         all_results = combined_entities + episode_results
         all_results.sort(key=lambda x: x.score, reverse=True)
         all_results = self._apply_post_processing(all_results)
+        all_results = await self._apply_reranker(query, all_results)
         limited_results = all_results[:limit]
         return HybridSearchResult(
             items=limited_results,
@@ -291,6 +300,36 @@ class HybridSearch:
 
         # Convert back to SearchResultItem
         return [_dict_to_item(d) for d in dicts]
+
+    async def _apply_reranker(
+        self,
+        query: str,
+        items: list[SearchResultItem],
+    ) -> list[SearchResultItem]:
+        """Re-score results through an active reranker capability (R3a seam).
+
+        With no reranker configured the builtin pipeline order is returned
+        unchanged. When one is active, its scores replace the fused score
+        for the final ordering; reranker failures fall back to the builtin
+        ordering rather than failing the search.
+        """
+        if self._reranker is None or len(items) < 2:
+            return items
+        passages = [item.content or item.summary or item.name or "" for item in items]
+        try:
+            ranked: list[tuple[str, float]] = await self._reranker.rank(query, passages)
+        except Exception:
+            logger.warning("reranker capability failed; keeping fused ordering", exc_info=True)
+            return items
+        score_by_passage: dict[str, float] = {}
+        for passage, score in ranked:
+            score_by_passage.setdefault(passage, score)
+        reranked = [
+            item.model_copy(update={"score": score_by_passage.get(passage, item.score)})
+            for item, passage in zip(items, passages, strict=True)
+        ]
+        reranked.sort(key=lambda x: x.score, reverse=True)
+        return reranked
 
     async def vector_search(
         self,
