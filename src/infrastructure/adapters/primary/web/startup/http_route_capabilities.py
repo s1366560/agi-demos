@@ -136,18 +136,15 @@ async def reconcile_http_route_capabilities(
     desired_rows: Sequence[Any],
 ) -> tuple[int, int]:
     """Mount/unmount plugin routes to exactly match persisted desired state."""
-    from src.infrastructure.agent.plugins.registry import get_plugin_registry
-
     assembler = getattr(app.state, "platform_plugin_http_routes", None)
-    if not isinstance(assembler, HttpRouteCapabilityAppAssembler):
-        raise HttpRouteMountError("platform plugin HTTP routes are not installed")
-
     coordinator = getattr(app.state, "platform_plugin_http_route_publication_v2", None)
     if isinstance(coordinator, HttpRoutePublicationCoordinatorV2):
 
         def publish_graph(graph: object) -> None:
             app.state.platform_plugin_route_graph_v2 = graph
-            assembler.dispose()
+            if isinstance(assembler, HttpRouteCapabilityAppAssembler):
+                assembler.dispose()
+                app.state.platform_plugin_http_routes = None
 
         result = await coordinator.reconcile(
             desired_rows,
@@ -155,11 +152,26 @@ async def reconcile_http_route_capabilities(
         )
         return result.mounted, result.unmounted
 
+    if not isinstance(assembler, HttpRouteCapabilityAppAssembler):
+        raise HttpRouteMountError("platform plugin HTTP routes are not installed")
+
+    from src.infrastructure.agent.plugins.registry import get_plugin_registry
+
     registry_routes = get_plugin_registry().list_http_routes()
     handlers, handler_owners = _registry_inventory(registry_routes)
     rows = _desired_route_rows(desired_rows, handler_owners)
     assembler.replace_route_auth_dependencies(_route_auth_dependencies(rows))
     return assembler.reconcile(rows, handlers)
+
+
+async def load_desired_http_route_capabilities(
+    *,
+    session_factory: Callable[[], Any],
+) -> tuple[Any, ...]:
+    """Read persisted desired route rows without mutating the outer FastAPI graph."""
+    async with session_factory() as session:
+        rows = await PlatformPluginGovernanceRepository(session).list_http_routes()
+    return tuple(rows)
 
 
 async def install_http_route_capabilities(
@@ -171,8 +183,7 @@ async def install_http_route_capabilities(
     from src.infrastructure.agent.plugins.registry import get_plugin_registry
 
     registry_routes = get_plugin_registry().list_http_routes()
-    async with session_factory() as session:
-        rows = await PlatformPluginGovernanceRepository(session).list_http_routes()
+    rows = await load_desired_http_route_capabilities(session_factory=session_factory)
     assembler = build_http_route_capability_assembler(
         app,
         registry_routes=registry_routes,

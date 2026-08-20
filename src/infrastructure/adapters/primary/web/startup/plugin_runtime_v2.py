@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from starlette.types import Scope
@@ -12,6 +14,7 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
+from src.infrastructure.plugins.v2.legacy_http_route_bridge import project_legacy_http_routes_v2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
@@ -23,49 +26,58 @@ DEFAULT_PROFILE_V2_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.ya
 DEFAULT_MANIFEST_V2_PATHS = (_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",)
 
 
-async def initialize_plugin_runtime_v2(app: FastAPI) -> PlatformPluginRuntimeHostV2:
+async def initialize_plugin_runtime_v2(
+    app: FastAPI,
+    *,
+    desired_http_route_rows: Sequence[Any] = (),
+) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    publication = await host.bootstrap(
-        profile_path=DEFAULT_PROFILE_V2_PATH,
-        manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
-        generation=1,
-        version=1,
-    )
-    if not publication.accepted:
-        await host.close()
-        raise RuntimeError(
-            "plugin runtime v2 bootstrap failed: "
-            f"{publication.receipt.error_code}: {publication.receipt.error_message}"
+    try:
+        publication = await host.bootstrap(
+            profile_path=DEFAULT_PROFILE_V2_PATH,
+            manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
+            generation=1,
+            version=1,
+            profile_projector=lambda document: project_legacy_http_routes_v2(
+                document,
+                desired_http_route_rows,
+            ),
         )
-    app.state.platform_plugin_runtime_v2 = host
-    distribution = host.current_distribution
-    if distribution is None:
-        await host.close()
-        raise RuntimeError("plugin runtime v2 published without a current distribution")
-    generation = host.manager.current
-    if generation is None:
-        await host.close()
-        raise RuntimeError("plugin runtime v2 published without a current generation")
-    route_builder = generation.resolve(
-        ROUTE_TABLE_BUILDER_SERVICE_V2,
-        ScopeV2(kind=ScopeKindV2.ROOT),
-    )
-    if not isinstance(route_builder, RouteTableBuilderV2):
-        await host.close()
-        raise RuntimeError("plugin runtime v2 published an invalid route table builder")
-    contributed_routes = route_builder.freeze().definitions
-    workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
-    if workspace_core_settings is None:
-        from src.configuration.workspace_core import get_workspace_core_settings
+        if not publication.accepted:
+            failure = publication.receipt
+            raise RuntimeError(
+                f"plugin runtime v2 bootstrap failed: {failure.error_code}: {failure.error_message}"
+            )
+        distribution = host.current_distribution
+        if distribution is None:
+            raise RuntimeError("plugin runtime v2 published without a current distribution")
+        generation = host.manager.current
+        if generation is None:
+            raise RuntimeError("plugin runtime v2 published without a current generation")
+        route_builder = generation.resolve(
+            ROUTE_TABLE_BUILDER_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
+        )
+        if not isinstance(route_builder, RouteTableBuilderV2):
+            raise RuntimeError("plugin runtime v2 published an invalid route table builder")
+        contributed_routes = route_builder.freeze().definitions
+        workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
+        if workspace_core_settings is None:
+            from src.configuration.workspace_core import get_workspace_core_settings
 
-        workspace_core_settings = get_workspace_core_settings()
-    route_graph = build_builtin_route_graph_v2(
-        workspace_core_settings=workspace_core_settings,
-        route_definitions=contributed_routes,
-    )
-    route_registry = RouteTableRegistryV2()
-    route_publication = await route_registry.publish(distribution.descriptor, route_graph.table)
+            workspace_core_settings = get_workspace_core_settings()
+        route_graph = build_builtin_route_graph_v2(
+            workspace_core_settings=workspace_core_settings,
+            route_definitions=contributed_routes,
+        )
+        route_registry = RouteTableRegistryV2()
+        route_publication = await route_registry.publish(distribution.descriptor, route_graph.table)
+    except Exception:
+        await host.close()
+        raise
+
+    app.state.platform_plugin_runtime_v2 = host
     app.state.platform_plugin_route_registry_v2 = route_registry
     app.state.platform_plugin_route_graph_v2 = route_graph
     app.state.platform_plugin_http_route_publication_v2 = HttpRoutePublicationCoordinatorV2(

@@ -13,6 +13,8 @@ from src.infrastructure.plugins.route_loader import install_builtin_routes
 
 from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definitions_v2
 
+_ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
+
 
 @dataclass(frozen=True, kw_only=True)
 class BuiltinRouteGraphV2:
@@ -38,12 +40,34 @@ def build_builtin_route_graph_v2(
         workspace_core_settings=workspace_core_settings,
     )
     definitions = tuple(route_definitions)
-    install_route_definitions_v2(private_app, definitions)
+    _install_generation_routes_before_root_catch_all(private_app, definitions)
     return BuiltinRouteGraphV2(
         table=RouteTableV2.from_fastapi_graph(private_app, definitions=definitions),
         mounted_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )
+
+
+def _install_generation_routes_before_root_catch_all(
+    app: FastAPI,
+    definitions: Sequence[RouteDefinitionV2],
+) -> None:
+    """Keep declared routes reachable ahead of the host-preview fallback."""
+    if not definitions:
+        return
+    existing_count = len(app.router.routes)
+    install_route_definitions_v2(app, definitions)
+    contributed = app.router.routes[existing_count:]
+    del app.router.routes[existing_count:]
+    insertion_index = next(
+        (
+            index
+            for index, route in enumerate(app.router.routes)
+            if getattr(route, "path", None) == _ROOT_PREVIEW_CATCH_ALL
+        ),
+        len(app.router.routes),
+    )
+    app.router.routes[insertion_index:insertion_index] = contributed
 
 
 def route_signatures_v2(

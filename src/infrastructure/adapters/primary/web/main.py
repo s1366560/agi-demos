@@ -46,7 +46,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
-    install_http_route_capabilities,
+    load_desired_http_route_capabilities,
     mount_generation_http_dispatcher_v2,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
@@ -106,11 +106,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
-    http_route_assembler = await install_http_route_capabilities(
-        app,
+    desired_http_route_rows = await load_desired_http_route_capabilities(
         session_factory=async_session_factory,
     )
-    app.state.platform_plugin_http_routes = http_route_assembler
 
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
@@ -159,7 +157,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     app.state.container = container
     app.state.workflow_engine = workflow_engine
     app.state.graph_service = graph_service
-    await initialize_plugin_runtime_v2(app)
+    await initialize_plugin_runtime_v2(
+        app,
+        desired_http_route_rows=desired_http_route_rows,
+    )
 
     # Register WebSocket manager for lifecycle state notifications
     initialize_websocket_manager()

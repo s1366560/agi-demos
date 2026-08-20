@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +21,7 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
-from .composer import compose_profile_v2, load_profile_document_v2
+from .composer import ProfileDocumentV2, compose_profile_v2, load_profile_document_v2
 from .protocol import (
     control_envelope_v2,
     control_envelope_v2_to_payload,
@@ -173,11 +173,15 @@ class PlatformPluginRuntimeHostV2:
         generation: int,
         version: int,
         nonce: str | None = None,
+        profile_projector: Callable[[ProfileDocumentV2], ProfileDocumentV2] | None = None,
     ) -> PlatformPluginPublicationV2:
         """Load strict v2 files and publish the initial production generation."""
         manifests = _load_manifests(manifest_paths)
+        document = load_profile_document_v2(profile_path)
+        if profile_projector is not None:
+            document = profile_projector(document)
         snapshot = compose_profile_v2(
-            load_profile_document_v2(profile_path),
+            document,
             manifests,
             generation=generation,
         )

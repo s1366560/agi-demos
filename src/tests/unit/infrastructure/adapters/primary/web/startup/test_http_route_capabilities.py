@@ -14,6 +14,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
     build_http_route_capability_assembler,
     install_http_route_capabilities,
+    load_desired_http_route_capabilities,
     reconcile_http_route_capabilities,
 )
 from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 import (
@@ -235,6 +236,17 @@ async def test_install_plugin_routes_mounts_desired_rows(
 
 
 @pytest.mark.unit
+async def test_load_desired_routes_reads_without_mounting_outer_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(module, "PlatformPluginGovernanceRepository", FakeRepository)
+
+    rows = await load_desired_http_route_capabilities(session_factory=FakeSession)
+
+    assert rows == tuple(DESIRED_ROWS)
+
+
+@pytest.mark.unit
 async def test_reconcile_http_routes_mounts_unmounts_and_replaces_auth_dependencies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -332,6 +344,24 @@ async def test_reconcile_uses_v2_publication_then_retires_outer_dynamic_fallback
 
     assert await reconcile_http_route_capabilities(app, desired_rows=DESIRED_ROWS) == (1, 0)
     assert assembler._mounted == {}
+    assert app.state.platform_plugin_route_graph_v2 is graph
+
+
+@pytest.mark.unit
+async def test_reconcile_uses_v2_publication_without_legacy_assembler() -> None:
+    app = FastAPI()
+    graph = object()
+
+    async def publish(_rows: object, *, on_commit: object) -> SimpleNamespace:
+        assert callable(on_commit)
+        on_commit(graph)
+        return SimpleNamespace(mounted=1, unmounted=0)
+
+    coordinator = Mock(spec=HttpRoutePublicationCoordinatorV2)
+    coordinator.reconcile = AsyncMock(side_effect=publish)
+    app.state.platform_plugin_http_route_publication_v2 = coordinator
+
+    assert await reconcile_http_route_capabilities(app, desired_rows=DESIRED_ROWS) == (1, 0)
     assert app.state.platform_plugin_route_graph_v2 is graph
 
 

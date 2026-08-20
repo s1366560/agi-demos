@@ -53,3 +53,25 @@ def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
 
     assert graph.table.definitions == (route,)
     assert ("/api/v2/dynamic", "dynamic-route", ("GET",)) in graph.route_signatures
+
+
+@pytest.mark.unit
+def test_generation_route_precedes_root_preview_catch_all() -> None:
+    async def dynamic(tenant_id: str) -> dict[str, str]:
+        return {"tenant_id": tenant_id, "source": "generation"}
+
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="dynamic-route",
+                path="/plugin-startup/{tenant_id}/hello",
+                methods=("GET",),
+                endpoint=dynamic,
+                name="dynamic-route",
+            ),
+        ),
+    )
+
+    paths = [path for path, _name, _methods in graph.route_signatures]
+    assert paths.index("/plugin-startup/{tenant_id}/hello") < paths.index("/{path:path}")

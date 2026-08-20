@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -89,6 +90,24 @@ async def test_host_bootstraps_strict_profile_and_exposes_generation_lease() -> 
 
 
 @pytest.mark.unit
+async def test_host_bootstrap_projects_profile_before_generation_one_composition() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+
+    publication = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        profile_projector=lambda document: replace(document, profile_id="projected-default-v2"),
+    )
+
+    assert publication.accepted
+    assert publication.snapshot.profile_id == "projected-default-v2"
+    assert publication.snapshot.generation == 1
+    await host.close()
+
+
+@pytest.mark.unit
 async def test_host_resolves_distribution_for_a_pinned_retired_generation() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
@@ -108,9 +127,7 @@ async def test_host_resolves_distribution_for_a_pinned_retired_generation() -> N
     ) as operation:
         await host.bootstrap(
             profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
-            manifest_paths=(
-                _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
-            ),
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
             generation=2,
             version=2,
             nonce="distribution-2",
