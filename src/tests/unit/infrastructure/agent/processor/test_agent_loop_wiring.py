@@ -66,6 +66,14 @@ class TestAgentLoopWiring:
         resolver = _default_loop_resolver()
         assert isinstance(resolver, AgentLoopResolver)
 
+    def test_factory_default_resolver_resolves_builtin_scope(self) -> None:
+        """The default resolver resolves to builtin scope (never raises)."""
+        resolver = _default_loop_resolver()
+        assert resolver is not None
+        selection = resolver.resolve("zai_coding", "auto")
+        assert selection.scope == "builtin"
+        assert selection.plugin_id == "memstack-kernel"
+
     def test_resolve_returns_none_without_resolver(self) -> None:
         processor = SessionProcessor(config=ProcessorConfig(model="m"), tools=[])
         assert processor._resolve_agent_loop() is None

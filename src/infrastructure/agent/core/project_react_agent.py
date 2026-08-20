@@ -596,6 +596,7 @@ class ProjectReActAgent:
             subagents=self._subagents,
             artifact_service=self._artifact_service,
             llm_client=llm_client,
+            provider_id=_provider_id,
             resource_sync_service=self._session_context.resource_sync_service,
             graph_service=graph_service,
             memory_runtime=memory_runtime,

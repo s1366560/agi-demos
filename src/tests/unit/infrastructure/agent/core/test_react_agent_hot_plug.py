@@ -279,3 +279,24 @@ class TestHotPlugScenarios:
         # Back to 1 builtin tool
         _, defs3 = agent._get_current_tools()
         assert len(defs3) == 1
+
+
+class TestRequestScopedConfigSeamForwarding:
+    """Regression: the request-scoped config copy must keep the I2 loop seam."""
+
+    def test_provider_id_and_loop_resolver_forwarded(self):
+        """_stream_create_processor_config must forward provider_id/loop_resolver."""
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+
+        resolver = object()
+        agent = ReActAgent(model="test-model", tools={})
+        agent.config.provider_id = "zai_coding"
+        agent.config.loop_resolver = resolver
+
+        new_config = agent._stream_create_processor_config(
+            agent.config,
+            ToolSelectionContext(),
+        )
+
+        assert new_config.provider_id == "zai_coding"
+        assert new_config.loop_resolver is resolver

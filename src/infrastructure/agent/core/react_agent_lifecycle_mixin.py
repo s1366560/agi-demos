@@ -69,6 +69,7 @@ class _LifecycleAgent(Protocol):
     _stream_cached_summary: Any
     _stream_tools_to_use: Any
     _stream_final_content: Any
+    _stream_execution_summary: dict[str, Any] | None
     _stream_success: Any
     _filesystem_skills_loaded: Any
     _skill_mcp_manager: Any
@@ -152,6 +153,7 @@ class LifecycleMixin:
         self._stream_tools_to_use: list[ToolDefinition] = []
         self._stream_final_content = ""
         self._stream_success = False
+        self._stream_execution_summary: dict[str, Any] | None = None
 
     def _init_prompt_and_context(
         self: _LifecycleAgent,
@@ -379,6 +381,7 @@ class LifecycleMixin:
         max_steps: int,
         message_bus: object | None,
         control_channel: Any | None,
+        provider_id: str = "",
     ) -> None:
         """Initialize tool definitions and processor config."""
         if cached_tool_definitions is not None:
@@ -422,4 +425,5 @@ class LifecycleMixin:
             provider_options=_provider_opts,
             message_bus=message_bus,
             control_channel=control_channel,
+            provider_id=provider_id,
         )

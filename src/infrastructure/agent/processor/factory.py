@@ -177,6 +177,23 @@ def _default_loop_resolver() -> AgentLoopResolver | None:
         from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
         from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
 
-        return AgentLoopResolver(get_platform_plugin_runtime_host().capabilities)
+        return AgentLoopResolver(
+            get_platform_plugin_runtime_host().capabilities,
+            builtin_loop=_BuiltinReActLoop(),
+        )
     except Exception:
         return None
+
+
+class _BuiltinReActLoop:
+    """Sentinel for the builtin ReAct loop in per-turn resolution (I2).
+
+    Lets ``AgentLoopResolver`` resolve ``scope="builtin"`` instead of raising
+    when no plugin row matches, so the selection is recorded in the execution
+    summary. The processor never dispatches builtin-scope selections to the
+    driver contract — it continues on the native ReAct path — so ``run`` is
+    unreachable by construction.
+    """
+
+    async def run(self, context: object) -> None:
+        raise NotImplementedError("builtin ReAct loop is the in-process default path")

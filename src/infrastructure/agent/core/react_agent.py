@@ -201,10 +201,11 @@ class ReActAgent(
     _stream_tools_to_use: list[ToolDefinition]
     _stream_final_content: str
     _stream_success: bool
+    _stream_execution_summary: dict[str, Any] | None
     # _intent_gate
     _intent_gate: IntentGate
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913, PLR0915
         self,
         model: str,
         tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
@@ -251,6 +252,9 @@ class ReActAgent(
         artifact_service: ArtifactService | None = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
         llm_client: LLMClient | None = None,
+        # Provider id for the per-turn agent loop seam (P2/I2); empty disables
+        # resolution and keeps the builtin ReAct loop.
+        provider_id: str = "",
         # Skill resource sync service for sandbox resource injection
         resource_sync_service: Any | None = None,
         # Graph service for SubAgent memory sharing (Phase 5.1)
@@ -361,6 +365,7 @@ class ReActAgent(
         self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
+        self._provider_id = provider_id  # Per-turn agent loop seam (P2/I2)
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._workspace_manager = workspace_manager  # Workspace persona/soul file loader
@@ -441,6 +446,7 @@ class ReActAgent(
             max_steps,
             message_bus,
             control_channel,
+            provider_id=provider_id,
         )
         self._reset_stream_state()
 

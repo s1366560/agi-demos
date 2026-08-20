@@ -236,6 +236,7 @@ class _StreamAgent(Protocol):
     _stream_cached_summary: Any
     _stream_tools_to_use: Any
     _stream_final_content: Any
+    _stream_execution_summary: dict[str, Any] | None
     _stream_success: Any
 
     # delegated methods (live on ReActAgent or sibling mixins)
@@ -847,6 +848,8 @@ class StreamMixin:
             message_bus=config.message_bus,
             control_channel=config.control_channel,
             run_id=config.run_id,
+            provider_id=config.provider_id,
+            loop_resolver=config.loop_resolver,
         )
         if tool_provider is not None:
             logger.debug(
@@ -886,6 +889,8 @@ class StreamMixin:
                 messages=messages,
                 run_ctx=run_ctx,
             ):
+                if isinstance(domain_event, AgentCompleteEvent):
+                    self._stream_execution_summary = domain_event.execution_summary
                 event = self._convert_domain_event(domain_event, agent_id=agent_id)
                 if event:
                     if event.get("type") == "text_delta":
@@ -946,6 +951,7 @@ class StreamMixin:
             AgentCompleteEvent(
                 content=final_content,
                 skill_used=(matched_skill.name if matched_skill else None),
+                execution_summary=self._stream_execution_summary,
             ).to_event_dict(),
         )
 
