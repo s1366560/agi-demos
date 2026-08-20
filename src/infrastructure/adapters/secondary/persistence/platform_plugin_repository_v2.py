@@ -25,6 +25,14 @@ from src.infrastructure.plugins.v2.runtime_host import (
 PYTHON_API_DATA_PLANE_ID_V2 = "python-api-v2"
 
 
+class PlatformPluginLedgerV2Error(ValueError):
+    """Stable v2 publication/receipt conflict for control-plane transports."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
 @dataclass(frozen=True, kw_only=True)
 class PlatformPluginLedgerRecordV2:
     """One requested publication and its latest data-plane state."""
@@ -124,6 +132,75 @@ class PlatformPluginRepositoryV2:
             raise RuntimeError("plugin v2 last-good publication is missing")
         return dict(publication.distribution)
 
+    async def latest_requested_distribution(self) -> dict[str, Any] | None:
+        """Return the newest complete requested distribution for polling data planes."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginV2PublicationModel).order_by(
+                    PlatformPluginV2PublicationModel.requested_version.desc(),
+                    PlatformPluginV2PublicationModel.created_at.desc(),
+                    PlatformPluginV2PublicationModel.id.desc(),
+                )
+            )
+        )
+        publication = result.scalars().first()
+        return None if publication is None else dict(publication.distribution)
+
+    async def record_data_plane_receipt(
+        self,
+        *,
+        data_plane_id: str,
+        nonce: str,
+        receipt: SnapshotApplyReceiptV2,
+    ) -> PlatformPluginV2ApplyStateModel:
+        """Bind one external receipt to the exact immutable publication nonce."""
+        if not data_plane_id.strip():
+            raise PlatformPluginLedgerV2Error("data_plane_id_invalid", "data_plane_id is required")
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginV2PublicationModel).where(
+                    PlatformPluginV2PublicationModel.nonce == nonce
+                )
+            )
+        )
+        publication = result.scalar_one_or_none()
+        if publication is None:
+            raise PlatformPluginLedgerV2Error(
+                "publication_not_found",
+                "plugin v2 publication nonce is unknown",
+            )
+        _validate_external_receipt(publication, receipt)
+        state_result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginV2ApplyStateModel).where(
+                    PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id
+                )
+            )
+        )
+        state = state_result.scalar_one_or_none()
+        if state is not None:
+            if receipt.requested_version < state.requested_version:
+                raise PlatformPluginLedgerV2Error(
+                    "stale_receipt",
+                    "plugin v2 receipt requested version is older than recorded state",
+                )
+            if (
+                receipt.requested_version == state.requested_version
+                and receipt.requested_digest != state.requested_digest
+            ):
+                raise PlatformPluginLedgerV2Error(
+                    "version_digest_conflict",
+                    "plugin v2 receipt changes digest within a requested version",
+                )
+        try:
+            return await self._record_receipt(
+                publication,
+                receipt,
+                data_plane_id=data_plane_id,
+            )
+        except ValueError as exc:
+            raise PlatformPluginLedgerV2Error("last_good_mismatch", str(exc)) from exc
+
     async def _record_receipt(
         self,
         publication: PlatformPluginV2PublicationModel,
@@ -139,6 +216,8 @@ class PlatformPluginRepositoryV2:
             )
         )
         state = result.scalar_one_or_none()
+        if state is not None and _state_matches_receipt(publication, receipt, state):
+            return cast(PlatformPluginV2ApplyStateModel, state)
         applied_publication_id = _applied_publication_id(
             publication,
             receipt,
@@ -201,6 +280,36 @@ def _validate_receipt(publication: PlatformPluginPublicationV2) -> None:
         raise ValueError("plugin v2 NACK receipt requires an error code and message")
 
 
+def _validate_external_receipt(
+    publication: PlatformPluginV2PublicationModel,
+    receipt: SnapshotApplyReceiptV2,
+) -> None:
+    if (
+        receipt.requested_version != publication.requested_version
+        or receipt.requested_digest != publication.snapshot_digest
+    ):
+        raise PlatformPluginLedgerV2Error(
+            "receipt_publication_mismatch",
+            "plugin v2 receipt does not match publication",
+        )
+    if receipt.status is ApplyStatusV2.ACK:
+        if (
+            receipt.applied_version != receipt.requested_version
+            or receipt.applied_digest != receipt.requested_digest
+            or receipt.error_code is not None
+            or receipt.error_message is not None
+        ):
+            raise PlatformPluginLedgerV2Error(
+                "receipt_invalid",
+                "plugin v2 ACK receipt is inconsistent",
+            )
+    elif not receipt.error_code or not receipt.error_message:
+        raise PlatformPluginLedgerV2Error(
+            "receipt_invalid",
+            "plugin v2 NACK receipt requires an error code and message",
+        )
+
+
 def _applied_publication_id(
     publication: PlatformPluginV2PublicationModel,
     receipt: SnapshotApplyReceiptV2,
@@ -216,8 +325,26 @@ def _applied_publication_id(
     return previous_id
 
 
+def _state_matches_receipt(
+    publication: PlatformPluginV2PublicationModel,
+    receipt: SnapshotApplyReceiptV2,
+    state: PlatformPluginV2ApplyStateModel,
+) -> bool:
+    return (
+        state.requested_publication_id == publication.id
+        and state.requested_version == receipt.requested_version
+        and state.requested_digest == receipt.requested_digest
+        and state.applied_version == receipt.applied_version
+        and state.applied_digest == receipt.applied_digest
+        and state.status == receipt.status.value
+        and state.error_code == receipt.error_code
+        and state.error_message == receipt.error_message
+    )
+
+
 __all__ = [
     "PYTHON_API_DATA_PLANE_ID_V2",
     "PlatformPluginLedgerRecordV2",
+    "PlatformPluginLedgerV2Error",
     "PlatformPluginRepositoryV2",
 ]

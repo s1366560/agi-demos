@@ -66,6 +66,20 @@ class PlatformPluginApplyStateResponse(BaseModel):
     status: Literal["ack", "nack"]
 
 
+class PlatformPluginDistributionResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    descriptor: dict[str, Any]
+    snapshot: dict[str, Any]
+    envelope: dict[str, Any]
+
+
+class PlatformPluginApplyStateResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    data_plane_id: str
+    nonce: str
+    receipt: dict[str, Any]
+
+
 class PlatformPluginShadowRolloutEventResponse(BaseModel):
     capability: str
     event_name: str

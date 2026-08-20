@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.domain.model.plugins.generated_v2 import (
+    ApplyStatusV2,
     ArtifactReferenceV2,
     DataPlaneTargetV2,
     PluginManifestV2,
@@ -29,7 +30,9 @@ from src.infrastructure.plugins.v2.protocol import (
     control_envelope_v2_to_payload,
     parse_control_envelope_v2,
     parse_profile_snapshot_v2,
+    parse_snapshot_apply_receipt_v2,
     profile_snapshot_v2_to_payload,
+    snapshot_apply_receipt_v2_to_payload,
 )
 
 _DIGEST = "sha256:" + "a" * 64
@@ -132,6 +135,43 @@ def test_control_envelope_rejects_v1_type_url() -> None:
 
     with pytest.raises(PluginProtocolV2Error) as error:
         parse_control_envelope_v2(payload)
+
+    assert error.value.code == "schema_validation_failed"
+
+
+@pytest.mark.unit
+def test_snapshot_apply_receipt_round_trips_through_strict_schema() -> None:
+    payload = {
+        "status": "ack",
+        "requested_version": 7,
+        "requested_digest": "a" * 64,
+        "applied_version": 7,
+        "applied_digest": "a" * 64,
+        "error_code": None,
+        "error_message": None,
+    }
+
+    receipt = parse_snapshot_apply_receipt_v2(payload)
+
+    assert receipt.status is ApplyStatusV2.ACK
+    assert snapshot_apply_receipt_v2_to_payload(receipt) == payload
+
+
+@pytest.mark.unit
+def test_snapshot_apply_receipt_rejects_unknown_fields() -> None:
+    payload = {
+        "status": "nack",
+        "requested_version": 8,
+        "requested_digest": "b" * 64,
+        "applied_version": None,
+        "applied_digest": None,
+        "error_code": "staging_failed",
+        "error_message": "rejected",
+        "legacy_status": "failed",
+    }
+
+    with pytest.raises(PluginProtocolV2Error) as error:
+        parse_snapshot_apply_receipt_v2(payload)
 
     assert error.value.code == "schema_validation_failed"
 

@@ -33,6 +33,9 @@ def test_shadow_graph_replays_every_runtime_owned_inventory_row() -> None:
     assert len(graph.route_signatures) == len(set(graph.route_signatures))
     assert "/api/v1/agent/ws" in {signature[0] for signature in graph.route_signatures}
     assert "/api/v1/auth/token" in {signature[0] for signature in graph.route_signatures}
+    assert "/api/v1/platform-plugins/v2/distribution" in {
+        signature[0] for signature in graph.route_signatures
+    }
     assert any(methods for _path, _name, methods in graph.route_signatures)
 
 

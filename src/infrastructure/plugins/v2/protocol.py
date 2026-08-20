@@ -15,6 +15,7 @@ import jsonschema
 import rfc8785
 
 from src.domain.model.plugins.generated_v2 import (
+    ApplyStatusV2,
     ArtifactReferenceV2,
     ControlPlaneEnvelopeV2,
     DataPlaneTargetV2,
@@ -27,6 +28,7 @@ from src.domain.model.plugins.generated_v2 import (
     RuntimeKindV2,
     ScopeKindV2,
     ScopeV2,
+    SnapshotApplyReceiptV2,
     TrustKindV2,
 )
 
@@ -113,6 +115,23 @@ def parse_control_envelope_v2(payload: object) -> ControlPlaneEnvelopeV2:
     )
 
 
+def parse_snapshot_apply_receipt_v2(payload: object) -> SnapshotApplyReceiptV2:
+    """Validate and parse the exact ACK/NACK shape shared by v2 data planes."""
+    if not isinstance(payload, dict):
+        raise PluginProtocolV2Error("invalid_receipt", "snapshot receipt must be an object")
+    raw = cast(dict[str, Any], payload)
+    _validate_schema("SnapshotApplyReceiptV2", raw)
+    return SnapshotApplyReceiptV2(
+        status=ApplyStatusV2(raw["status"]),
+        requested_version=raw["requested_version"],
+        requested_digest=raw["requested_digest"],
+        applied_version=raw["applied_version"],
+        applied_digest=raw["applied_digest"],
+        error_code=raw["error_code"],
+        error_message=raw["error_message"],
+    )
+
+
 def build_profile_snapshot_v2(
     *,
     profile_id: str,
@@ -157,6 +176,13 @@ def profile_snapshot_v2_to_payload(snapshot: ProfileSnapshotV2) -> dict[str, Any
 def control_envelope_v2_to_payload(envelope: ControlPlaneEnvelopeV2) -> dict[str, Any]:
     """Return the complete JSON-compatible control envelope representation."""
     return cast(dict[str, Any], _json_value(asdict(envelope)))
+
+
+def snapshot_apply_receipt_v2_to_payload(
+    receipt: SnapshotApplyReceiptV2,
+) -> dict[str, Any]:
+    """Return the complete JSON-compatible v2 receipt representation."""
+    return cast(dict[str, Any], _json_value(asdict(receipt)))
 
 
 def _schema() -> dict[str, Any]:

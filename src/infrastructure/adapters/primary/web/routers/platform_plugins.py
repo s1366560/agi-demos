@@ -67,8 +67,11 @@ from src.infrastructure.plugins.rollout_readiness import (
 from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginPublicationV2
 
+from .platform_plugins_v2 import router as protocol_v2_router
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
+router.include_router(protocol_v2_router)
 
 
 def _shadow_readiness_response(
