@@ -47,6 +47,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_websocket_manager,
     initialize_workflow_engine,
     install_http_route_capabilities,
+    mount_generation_http_dispatcher_v2,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
     shutdown_docker_services,
@@ -74,7 +75,7 @@ from src.infrastructure.llm.resilience.health_checker import (
     stop_health_checker,
 )
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.plugins.route_loader import install_builtin_routes
+from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 
 logger = logging.getLogger(__name__)
@@ -603,13 +604,27 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     if _static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
+    # Authentication remains a non-pluginized kernel route during v2 cutover.
+    from src.infrastructure.adapters.primary.web.routers import auth
+
+    app.include_router(auth.router, prefix="/api/v1")
+
+    # One stable catch-all route resolves the generation pinned by middleware.
+    # Legacy registrations remain after it as an unreachable rollback surface
+    # until REST/WS parity and native acceptance are complete.
+    mount_generation_http_dispatcher_v2(app)
+
     # Register builtin route rows from the data-driven baseline
     # (config/plugin-profiles/builtin-routes.v1.json). The loader replays the
     # exact registration order and prefixes recorded there; the interleaved
     # workspace-core helpers mount at their baseline positions.
     workspace_core_settings = workspace_core_settings or get_workspace_core_settings()
     app.state.workspace_core_settings = workspace_core_settings
-    install_builtin_routes(app, workspace_core_settings=workspace_core_settings)
+    install_builtin_routes(
+        app,
+        workspace_core_settings=workspace_core_settings,
+        row_patches={"auth": RouteRowPatch(row_id="auth", enabled=False)},
+    )
 
     return app
 

@@ -25,6 +25,7 @@ from .channels import (
 from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
+from .generation_http_v2 import mount_generation_http_dispatcher_v2
 from .graph import initialize_graph_service
 from .http_route_capabilities import install_http_route_capabilities
 from .llm import initialize_llm_providers, sync_health_checker_providers
@@ -51,6 +52,7 @@ __all__ = [
     "initialize_websocket_manager",
     "initialize_workflow_engine",
     "install_http_route_capabilities",
+    "mount_generation_http_dispatcher_v2",
     "reload_channel_manager_connections",
     "set_message_router",
     "shutdown_artifact_content_orphan_gc_worker",
