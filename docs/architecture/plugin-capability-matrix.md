@@ -17,7 +17,7 @@ Status legend:
 
 | Capability kind | Python backend | Rust core / sidecar | Web frontend | Desktop app |
 | --- | --- | --- | --- | --- |
-| `agent_loop` | partial: kind relaxed to builtin/signed (python-trusted only); `agent_loop_runtime.AgentLoopResolver` resolves per turn by `(provider, model)` — model > provider > auto(`supports()` priority) > builtin fallback; wired into `SessionProcessor` per turn (I2); `system_prompt_section` consumed from the registry with builtin fallback | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
+| `agent_loop` | done: kind relaxed to builtin/signed (python-trusted only); `agent_loop_runtime.AgentLoopResolver` resolves per turn by `(provider, model)` — model > provider > auto(`supports()` priority) > builtin fallback; wired into `SessionProcessor` per turn (I2/R1); live WS verification records `loop_id`/`plugin_id`/`scope=builtin` in the execution summary; `system_prompt_section` consumed from the registry with builtin fallback | done: `RuntimeHarness` embedded + CLI backend (ADR-0008, `crates/core`, `adapters-cli-harness`) | n/a | done: embedded harness via sidecar local runtime |
 | `system_prompt_section` | partial: builtin native-tool-protocol row registered; processor merges registry sections with builtin fallback (I2); agent-definition prompts remain builtin | gap | n/a | gap |
 | `tool` | done: V2 tool generations (`tool_runtime.py`) + V1 factories mirrored by `legacy_inventory_bridge.py` | done: `HotPlugRegistry` + `ToolHost` seam (`crates/plugin-host`) | n/a | done: sidecar `authorized_tool_host` consumes the same registry |
 | `skill_provider` | partial: V1 skill factories + loaders; V2 mirroring via bridge; declarative skills are builtin | done: `SkillEngine` (declarative data + Rhai trigger) in `crates/plugin-host` | n/a | partial: available through plugin-host, no profile-driven skills yet |
@@ -25,19 +25,19 @@ Status legend:
 | `hook` | done: typed event bus (`events.py`) with 4 dispatch modes + legacy adaptation (`agent_events.py`) | partial: `hooks` manifest field; host hook execution server-side | n/a | partial |
 | `policy` | kernel: tool pipeline, permission manager, hook security policy | partial: `tool_authority` / authorized hosts enforce policy in sidecar | n/a | done: authority metadata + authorized dispatch (desktop local mode) |
 | `llm_provider` | done: V2 routed adapter providers are the only path (V2 cutover, `llm_adapters.py`, `llm_runtime.py`) | done: `adapters-http-llm` behind core ports | n/a | done: sidecar provider management + credential vault leases |
-| `embedder` | partial: provider-manager backed; capability kind reserved (P1/P4) | gap | n/a | gap |
-| `reranker` | partial: retrieval services builtin; capability kind reserved (P4) | gap | n/a | gap |
+| `embedder` | done(server): builtin manifest row + registry-first `BackendCapabilityResolver`; adapter preserves the existing LiteLLM embedder facade as the builtin fallback (R3a) | gap | n/a | gap |
+| `reranker` | done(server): builtin manifest row + registry-first `BackendCapabilityResolver`; hybrid-search reranking uses the capability seam with the existing LiteLLM facade as fallback (R3a) | gap | n/a | gap |
 | `channel` | partial: V1 channel adapter factories (mirrored); connection manager builtin | partial: manifest kind exists | n/a | builtin: WS/control channels in sidecar |
 | `http_route` | done(mount): builtin surface mounts from `builtin-routes.v1.json` via `route_loader.install_builtin_routes` (order/prefix preserved); `HttpRouteMountService` adds reversible plugin routes; per-row profile patching via `route:<row_id>` profile patches (I1 B6) | builtin: axum routers in server/sidecar | n/a | builtin: sidecar route modules |
 | `cli_command` | partial: V1 CLI commands (mirrored) | gap | n/a | n/a |
 | `ui_slot` | done(backend): `UiSlotRegistry` allowlist, builtin/signed only, sandbox enforced | n/a | done: shared `@agistack/plugin-slots` contract + keyed renderer registry + outlets mounted in settings/sidebar/toolbar/chat/canvas (I3) | partial: contract aligned (local mirror + contract field); conversation_renderer mounts below the chat panel via SignedUiModuleBoundary (I3) |
 | `ui_renderer` | done(backend): slot definitions only | n/a | done: keyed renderer registry (contract `tool-result:<tool>`) drives tool result cards; sandbox host fallback (I3) | partial: tool_result_renderer preview + signed boundary in settings (I3) |
 | `storage` | kernel/builtin: repositories and artifact stores | partial: plugin snapshot/activation/artifact SQLite stores in sidecar | n/a | done: `plugin_snapshots.rs` durable requested/applied state |
-| `graph_backend` | builtin: native graph adapter behind ports (P4 for plugin replacement) | done(adapter): `adapters-neo4j` | n/a | n/a |
-| `retrieval_backend` | builtin: hybrid search / retrieval registry (P4) | gap | n/a | n/a |
-| `workflow_engine` | builtin: workflow engine + background managers (P4) | partial: sidecar automation dispatcher/worker | n/a | partial: automation worker |
+| `graph_backend` | done(server): builtin manifest row + registry-resolved backend builders layered after the native graph composition; builtin fallback and `project_id` scoping are preserved (R3b) | done(adapter): `adapters-neo4j` | n/a | n/a |
+| `retrieval_backend` | done(server): builtin manifest row + registry-resolved backend builders layered after the hybrid-search/retrieval composition (R3b) | gap | n/a | n/a |
+| `workflow_engine` | done(server): builtin manifest row + registry-first resolution; the previous builtin-absent `None` behavior remains unchanged when no row is active (R3c) | partial: sidecar automation dispatcher/worker | n/a | partial: automation worker |
 | `credential_source` | kernel: application credential vault; kind reserved builtin-only, never a plugin provider | kernel: sidecar `application_vault` | n/a | kernel: desktop vault + trusted session broker |
-| `telemetry_exporter` | builtin: OTel/Jaeger stack (P4) | builtin: tracing | n/a | builtin |
+| `telemetry_exporter` | done(server): builtin manifest row + registry-first resolution with a total noop builtin fallback (R3c) | builtin: tracing | n/a | builtin |
 
 ## Cross-runtime mechanisms (P0 verified)
 
@@ -54,6 +54,7 @@ Status legend:
 | Profile hot-reload | `profile_watch.py` recompose + last-good + envelope events (P4) | `platform_plugin_sync.rs` polling reconciler | same |
 | Agent loop resolution | `agent_loop_runtime.AgentLoopResolver` per-turn `(provider, model)` (P2) | `HarnessRegistry::select` (ADR-0008) | same semantics |
 | Untrusted plugin runtime | done (I5): `wasm_host.py` (wasmtime, fuel + digest + fresh store per call) + `subprocess_host.py` (JSON-RPC, timeout kill, crash isolation); untrusted manifests restricted to tool capabilities at the trust gate; `plugin_audit` events + `ResourceQuotaEnforcer` wired | `adapters-wasmtime` (server/desktop) | `adapters-wasmtime` wired in sidecar |
+| MCP stdio process boundary | done (R2): shared `process_boundary.py` adds trust tiers, allowlist-scrubbed child environments, bounded stdout, untrusted timeout-kill, crash isolation, and `plugin_audit` lifecycle events without changing MCP JSON-RPC framing | n/a | desktop-local MCP servers inherit the Python boundary when launched through the backend |
 | Plugin artifact distribution | package archive/registry (`package_archive.py`, `package_registry.py`) | OCI artifact pull in `platform_plugin_sync.rs` | OCI artifact pull + digest verification |
 
 ## P0 exit criteria mapping
@@ -72,7 +73,7 @@ Status legend:
 | Phase | Landed | Remaining |
 | --- | --- | --- |
 | P1 | Route surface mounts from `builtin-routes.v1.json` via `route_loader`; `ServiceRegistry` composition root; DI migration done (126 bindings, facades cut over I1); dump-config CLI; per-row route patching through profiles | (complete) |
-| P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins); resolver wired into `SessionProcessor` (I2); model-visible=>logged contract tests on both runtimes (I2); `system_prompt_section` seam (I2) | Live `make dev` chat-turn E2E + native desktop smoke (deferred acceptance: needs stack restart + interactive Electron) |
+| P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins); resolver wired into the live `SessionProcessor` path (I2/R1); live WS chat verified builtin resolution and `agent_loop={loop_id, plugin_id, scope}` in the execution summary; `system_prompt_section` seam (I2); canonical native Electron launch, provider connection/model discovery, and outbound chat request verified | Native provider-backed completion remains externally blocked: the available Kimi and GLM credentials returned quota/credit failures (403/429), so no successful native reply is claimed |
 | P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost`; shared `@agistack/plugin-slots` package; keyed renderer registry; page outlets (settings/nav/composer/conversation/canvas); tool-result contract renderers; desktop contract alignment + conversation mount (I3) | (complete) |
-| P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good; approved marketplace installs land in the active profile via `install_bundle_into_profile` (I4); PluginHub control-plane admin (cutover gate + profile + row views) (I4) | (complete); reserved backend kinds (embedder/reranker/graph/retrieval/workflow/telemetry) deferred post-P5 by decision |
-| P5 | Python WASM host + subprocess boundary + trust-gate tool-only shape for untrusted + quota/audit wiring (I5) | MCP server boundary hardening (follow-up) |
+| P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good; approved marketplace installs land in the active profile via `install_bundle_into_profile` (I4); PluginHub control-plane admin (cutover gate + profile + row views) (I4); embedder/reranker/graph/retrieval/workflow/telemetry backend capability seams and builtin manifests landed (R3a–R3c) | (complete) |
+| P5 | Python WASM host + subprocess boundary + trust-gate tool-only shape for untrusted + quota/audit wiring (I5); MCP stdio server spawns hardened through the shared trust/environment/output/timeout/audit boundary (R2) | (complete) |
