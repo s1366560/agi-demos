@@ -3244,6 +3244,136 @@ class PlatformPluginApplyStateEventModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
+    """Append-only requested protocol-v2 snapshot distribution."""
+
+    __tablename__ = "platform_plugin_v2_publications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    profile_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    snapshot_digest: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    type_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    distribution: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "generation > 0 AND requested_version > 0",
+            name="ck_platform_plugin_v2_publication_versions",
+        ),
+        CheckConstraint(
+            "length(snapshot_digest) = 64",
+            name="ck_platform_plugin_v2_publication_digest",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_profile_generation",
+            "profile_id",
+            "generation",
+        ),
+    )
+
+
+class PlatformPluginV2ApplyStateModel(IdGeneratorMixin, Base):
+    """Latest requested receipt and retained last-good v2 publication per data plane."""
+
+    __tablename__ = "platform_plugin_v2_apply_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    requested_publication_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_publication_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
+            name="ck_platform_plugin_v2_apply_versions",
+        ),
+        CheckConstraint(
+            "status IN ('ack', 'nack')",
+            name="ck_platform_plugin_v2_apply_status",
+        ),
+        CheckConstraint(
+            "(applied_publication_id IS NULL AND applied_version IS NULL "
+            "AND applied_digest IS NULL) OR "
+            "(applied_publication_id IS NOT NULL AND applied_version IS NOT NULL "
+            "AND applied_digest IS NOT NULL)",
+            name="ck_platform_plugin_v2_apply_last_good",
+        ),
+    )
+
+
+class PlatformPluginV2ApplyStateEventModel(IdGeneratorMixin, Base):
+    """Append-only protocol-v2 ACK/NACK evidence."""
+
+    __tablename__ = "platform_plugin_v2_apply_state_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    requested_publication_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_publication_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
+            name="ck_platform_plugin_v2_apply_event_versions",
+        ),
+        CheckConstraint(
+            "status IN ('ack', 'nack')",
+            name="ck_platform_plugin_v2_apply_event_status",
+        ),
+        Index(
+            "ix_platform_plugin_v2_apply_event_plane_recorded",
+            "data_plane_id",
+            "recorded_at",
+        ),
+    )
+
+
 class PlatformPluginCutoverApprovalModel(IdGeneratorMixin, Base):
     """Durable operator approval of one platform-plugin cutover."""
 

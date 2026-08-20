@@ -28,7 +28,20 @@ from src.infrastructure.plugins.v2.protocol import control_envelope_v2
 from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.runtime_host import (
+    PlatformPluginPublicationV2,
+    PlatformPluginRuntimeHostV2,
+)
+
+
+class HttpRoutePublicationRejectedV2(HttpRouteMountError):
+    """A route generation NACK carrying the durable publication evidence."""
+
+    def __init__(self, publication: PlatformPluginPublicationV2) -> None:
+        self.publication = publication
+        super().__init__(
+            publication.receipt.error_message or "plugin route generation staging failed"
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -39,6 +52,7 @@ class HttpRouteReconcilePublicationV2:
     unmounted: int
     route_publication: RoutePublicationV2
     graph: BuiltinRouteGraphV2 | None
+    plugin_publication: PlatformPluginPublicationV2 | None
 
 
 class HttpRoutePublicationCoordinatorV2:
@@ -84,6 +98,7 @@ class HttpRoutePublicationCoordinatorV2:
                     unmounted=0,
                     route_publication=current,
                     graph=None,
+                    plugin_publication=None,
                 )
 
             manifests = {
@@ -130,9 +145,7 @@ class HttpRoutePublicationCoordinatorV2:
                 publication_stager=stage_routes,
             )
             if not publication.accepted:
-                raise HttpRouteMountError(
-                    publication.receipt.error_message or "plugin route generation staging failed"
-                )
+                raise HttpRoutePublicationRejectedV2(publication)
             if staged_graph is None or staged_route_publication is None:
                 raise RuntimeError("accepted plugin route generation has no staged route graph")
             if on_commit is not None:
@@ -142,6 +155,7 @@ class HttpRoutePublicationCoordinatorV2:
                 unmounted=unmounted,
                 route_publication=staged_route_publication,
                 graph=staged_graph,
+                plugin_publication=publication,
             )
 
 
@@ -159,5 +173,6 @@ def _route_change_counts(
 
 __all__ = [
     "HttpRoutePublicationCoordinatorV2",
+    "HttpRoutePublicationRejectedV2",
     "HttpRouteReconcilePublicationV2",
 ]

@@ -2,25 +2,36 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.plugins.generated_v2 import ApplyStatusV2, SnapshotApplyReceiptV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    DEFAULT_MANIFEST_V2_PATHS,
+    DEFAULT_PROFILE_V2_PATH,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginApplyStateEventModel,
     PlatformPluginApplyStateModel,
     PlatformPluginHttpRouteModel,
+    PlatformPluginV2ApplyStateEventModel,
+    PlatformPluginV2ApplyStateModel,
     User,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins import compose_profile, parse_profile_document
 from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
@@ -28,6 +39,7 @@ from src.infrastructure.plugins.cutover_readiness import (
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
+from src.infrastructure.plugins.http_routes import HttpRouteMountError
 from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
 from src.infrastructure.plugins.profile import ProfileSnapshot
 from src.infrastructure.plugins.rollout_readiness import (
@@ -38,6 +50,8 @@ from src.infrastructure.plugins.runtime_host import (
     PlatformPluginRuntimeHost,
     set_platform_plugin_runtime_host,
 )
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 
 def compose_snapshot(profile_id: str) -> ProfileSnapshot:
@@ -69,6 +83,19 @@ def make_client(db: AsyncSession, *, superuser: bool = True) -> TestClient:
         is_superuser=superuser,
     )
     return TestClient(app)
+
+
+async def v2_publication(*, generation: int, version: int, nonce: str):
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=DEFAULT_PROFILE_V2_PATH,
+        manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
+        generation=generation,
+        version=version,
+        nonce=nonce,
+    )
+    await host.close()
+    return publication
 
 
 @pytest.mark.unit
@@ -616,7 +643,13 @@ async def test_http_route_control_plane_upserts_and_reconciles_desired_state(
     assert routes.status_code == status.HTTP_200_OK
     assert len(routes.json()) == 1
 
-    async def fake_reconcile(app: object, *, desired_rows: list[object]) -> tuple[int, int]:
+    async def fake_reconcile(
+        app: object,
+        *,
+        desired_rows: list[object],
+        on_publication: object,
+    ) -> tuple[int, int]:
+        assert callable(on_publication)
         assert len(desired_rows) == 1
         return 1, 0
 
@@ -627,6 +660,88 @@ async def test_http_route_control_plane_upserts_and_reconciles_desired_state(
 
     row = await db_session.execute(select(PlatformPluginHttpRouteModel))
     assert row.scalar_one().plugin_id == "example-plugin"
+
+
+@pytest.mark.unit
+async def test_http_route_reconcile_persists_v2_ack_in_request_transaction(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication = await v2_publication(generation=1, version=1, nonce="router-ledger-ack")
+
+    async def fake_reconcile(
+        app: object,
+        *,
+        desired_rows: list[object],
+        on_publication: object,
+    ) -> tuple[int, int]:
+        _ = app, desired_rows
+        assert callable(on_publication)
+        await on_publication(publication)
+        return 1, 0
+
+    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
+
+    response = make_client(db_session).post("/api/v1/platform-plugins/http-routes/reconcile")
+
+    assert response.status_code == status.HTTP_200_OK
+    state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
+    assert state is not None
+    assert state.status == "ack"
+    assert state.requested_version == 1
+    assert state.applied_version == 1
+
+
+@pytest.mark.unit
+async def test_http_route_reconcile_commits_v2_nack_and_retains_last_good(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = await v2_publication(generation=1, version=1, nonce="router-ledger-first")
+    requested = await v2_publication(generation=2, version=2, nonce="router-ledger-nack")
+    nack = replace(
+        requested,
+        receipt=SnapshotApplyReceiptV2(
+            status=ApplyStatusV2.NACK,
+            requested_version=2,
+            requested_digest=requested.snapshot.digest,
+            applied_version=1,
+            applied_digest=first.snapshot.digest,
+            error_code="publication_staging_failed",
+            error_message="route graph rejected",
+        ),
+    )
+    await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
+        first,
+        data_plane_id="python-api-v2",
+    )
+    await db_session.commit()
+
+    async def fake_reconcile(
+        app: object,
+        *,
+        desired_rows: list[object],
+        on_publication: object,
+    ) -> tuple[int, int]:
+        _ = app, desired_rows
+        assert callable(on_publication)
+        await on_publication(nack)
+        raise HttpRouteMountError("route graph rejected")
+
+    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
+
+    response = make_client(db_session).post("/api/v1/platform-plugins/http-routes/reconcile")
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
+    assert state is not None
+    assert state.status == "nack"
+    assert state.requested_version == 2
+    assert state.applied_version == 1
+    event_count = await db_session.scalar(
+        select(func.count()).select_from(PlatformPluginV2ApplyStateEventModel)
+    )
+    assert event_count == 2
 
 
 @pytest.mark.unit

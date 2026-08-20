@@ -48,6 +48,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PYTHON_API_DATA_PLANE_ID_V2,
+    PlatformPluginRepositoryV2,
+)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.cutover_readiness import (
     RollbackDrillReadiness,
@@ -61,6 +65,7 @@ from src.infrastructure.plugins.rollout_readiness import (
     evaluate_shadow_rollout_readiness,
 )
 from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginPublicationV2
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
@@ -432,17 +437,33 @@ async def reconcile_platform_plugin_http_routes(
             detail=_("Only a platform administrator may reconcile plugin routes"),
         )
     rows = await PlatformPluginGovernanceRepository(db).list_http_routes()
+    ledger_recorded = False
+
+    async def record_publication(publication: PlatformPluginPublicationV2) -> None:
+        nonlocal ledger_recorded
+        _ = await PlatformPluginRepositoryV2(db).record_publication_and_receipt(
+            publication,
+            data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
+        )
+        ledger_recorded = True
+
     try:
         mounted, unmounted = await reconcile_http_route_capabilities(
             request.app,
             desired_rows=rows,
+            on_publication=record_publication,
         )
     except (HttpRouteMountError, ValueError) as exc:
-        await db.rollback()
+        if ledger_recorded:
+            await db.commit()
+        else:
+            await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    if ledger_recorded:
+        await db.commit()
     return PlatformPluginHttpRouteReconcileResponse(
         mounted=mounted,
         unmounted=unmounted,

@@ -160,6 +160,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_plugin_runtime_v2(
         app,
         desired_http_route_rows=desired_http_route_rows,
+        session_factory=async_session_factory,
     )
 
     # Register WebSocket manager for lifecycle state notifications

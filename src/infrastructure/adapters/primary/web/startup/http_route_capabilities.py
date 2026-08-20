@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
@@ -20,9 +20,13 @@ from src.infrastructure.plugins.http_routes import (
     HttpRouteMountError,
     HttpRouteMountService,
 )
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginPublicationV2
 
 from .http_route_authorization_v2 import build_route_authorization_dependency_v2
-from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
+from .http_route_publication_v2 import (
+    HttpRoutePublicationCoordinatorV2,
+    HttpRoutePublicationRejectedV2,
+)
 
 logger = logging.getLogger(__name__)
 AuthDependency = Callable[..., Any]
@@ -134,6 +138,7 @@ async def reconcile_http_route_capabilities(
     app: FastAPI,
     *,
     desired_rows: Sequence[Any],
+    on_publication: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
 ) -> tuple[int, int]:
     """Mount/unmount plugin routes to exactly match persisted desired state."""
     assembler = getattr(app.state, "platform_plugin_http_routes", None)
@@ -146,10 +151,17 @@ async def reconcile_http_route_capabilities(
                 assembler.dispose()
                 app.state.platform_plugin_http_routes = None
 
-        result = await coordinator.reconcile(
-            desired_rows,
-            on_commit=publish_graph,
-        )
+        try:
+            result = await coordinator.reconcile(
+                desired_rows,
+                on_commit=publish_graph,
+            )
+        except HttpRoutePublicationRejectedV2 as exc:
+            if on_publication is not None:
+                await on_publication(exc.publication)
+            raise
+        if result.plugin_publication is not None and on_publication is not None:
+            await on_publication(result.plugin_publication)
         return result.mounted, result.unmounted
 
     if not isinstance(assembler, HttpRouteCapabilityAppAssembler):

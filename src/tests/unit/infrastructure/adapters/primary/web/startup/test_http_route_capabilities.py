@@ -336,7 +336,7 @@ async def test_reconcile_uses_v2_publication_then_retires_outer_dynamic_fallback
     async def publish(_rows: object, *, on_commit: object) -> SimpleNamespace:
         assert callable(on_commit)
         on_commit(graph)
-        return SimpleNamespace(mounted=1, unmounted=0)
+        return SimpleNamespace(mounted=1, unmounted=0, plugin_publication=None)
 
     coordinator = Mock(spec=HttpRoutePublicationCoordinatorV2)
     coordinator.reconcile = AsyncMock(side_effect=publish)
@@ -355,14 +355,24 @@ async def test_reconcile_uses_v2_publication_without_legacy_assembler() -> None:
     async def publish(_rows: object, *, on_commit: object) -> SimpleNamespace:
         assert callable(on_commit)
         on_commit(graph)
-        return SimpleNamespace(mounted=1, unmounted=0)
+        return SimpleNamespace(mounted=1, unmounted=0, plugin_publication="publication")
 
     coordinator = Mock(spec=HttpRoutePublicationCoordinatorV2)
     coordinator.reconcile = AsyncMock(side_effect=publish)
     app.state.platform_plugin_http_route_publication_v2 = coordinator
 
-    assert await reconcile_http_route_capabilities(app, desired_rows=DESIRED_ROWS) == (1, 0)
+    recorded: list[object] = []
+
+    async def record(publication: object) -> None:
+        recorded.append(publication)
+
+    assert await reconcile_http_route_capabilities(
+        app,
+        desired_rows=DESIRED_ROWS,
+        on_publication=record,
+    ) == (1, 0)
     assert app.state.platform_plugin_route_graph_v2 is graph
+    assert recorded == ["publication"]
 
 
 async def fake_noop_tenant_access(

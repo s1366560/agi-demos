@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 import (
     HttpRoutePublicationCoordinatorV2,
+    HttpRoutePublicationRejectedV2,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
@@ -106,6 +107,8 @@ async def test_reconcile_stages_new_generation_then_publishes_routes_and_openapi
     assert result.route_publication is registry.current
     assert result.route_publication.descriptor == current.descriptor
     assert result.route_publication.openapi.descriptor == current.descriptor
+    assert result.plugin_publication is not None
+    assert result.plugin_publication.accepted
     assert "/api/v1/plugins/{tenant_id}/example" in result.route_publication.openapi.schema["paths"]
     assert registry.resolve(old_generation.descriptor) is first_route_publication
     assert fallback.disposals == 1
@@ -116,6 +119,7 @@ async def test_reconcile_stages_new_generation_then_publishes_routes_and_openapi
     )
     assert repeated.mounted == 0
     assert repeated.unmounted == 0
+    assert repeated.plugin_publication is None
     assert host.current_distribution is current
     assert fallback.disposals == 1
 
@@ -160,9 +164,14 @@ async def test_private_graph_conflict_nacks_without_exposing_staged_generation(
     active = host.current_distribution
     route_publication = registry.current
 
-    with pytest.raises(HttpRouteMountError, match="conflicts with private graph"):
+    with pytest.raises(
+        HttpRoutePublicationRejectedV2,
+        match="conflicts with private graph",
+    ) as error:
         await coordinator.reconcile((_row(path=conflicting_path),))
 
+    assert not error.value.publication.accepted
+    assert error.value.publication.receipt.error_code == "publication_staging_failed"
     assert host.current_distribution is active
     assert registry.current is route_publication
     await host.close()

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
@@ -16,6 +19,13 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     plugin_runtime_host_v2_from_scope,
     shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginV2ApplyStateEventModel,
+    PlatformPluginV2ApplyStateModel,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
@@ -147,6 +157,83 @@ async def test_generation_one_projects_desired_routes_without_outer_mount(
     assert response.status_code == 200
     assert response.json() == {"tenant_id": "tenant-1", "source": "generation-one"}
     await host.close()
+
+
+@pytest.mark.unit
+async def test_restart_uses_durable_last_good_instead_of_unpublished_desired_rows(
+    db_session: AsyncSession,
+) -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    first_app = FastAPI()
+    first = await initialize_plugin_runtime_v2(
+        first_app,
+        session_factory=session_factory,
+    )
+    first_distribution = first.current_distribution
+    assert first_distribution is not None
+    assert (
+        await PlatformPluginRepositoryV2(db_session).last_good_distribution("python-api-v2")
+        == first_distribution.to_payload()
+    )
+    await first.close()
+
+    restarted_app = FastAPI()
+    restarted = await initialize_plugin_runtime_v2(
+        restarted_app,
+        desired_http_route_rows=(_desired_route(path="not-an-absolute-path"),),
+        session_factory=session_factory,
+    )
+
+    restarted_distribution = restarted.current_distribution
+    assert restarted_distribution is not None
+    assert restarted_distribution.to_payload() == first_distribution.to_payload()
+    assert configured_legacy_http_routes_v2(restarted_distribution.snapshot.entries) == ()
+    await restarted.close()
+
+
+@pytest.mark.unit
+async def test_restart_nack_is_durable_and_retains_last_good(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    first_app = FastAPI()
+    first = await initialize_plugin_runtime_v2(first_app, session_factory=session_factory)
+    first_distribution = first.current_distribution
+    assert first_distribution is not None
+    await first.close()
+
+    def reject_route_graph(**_kwargs: object) -> None:
+        raise RuntimeError("route graph rejected during restart")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2.build_builtin_route_graph_v2",
+        reject_route_graph,
+    )
+
+    with pytest.raises(RuntimeV2Error, match="route graph rejected during restart"):
+        await initialize_plugin_runtime_v2(FastAPI(), session_factory=session_factory)
+
+    state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
+    assert state is not None
+    assert state.status == "nack"
+    assert state.requested_version == 1
+    assert state.applied_version == 1
+    assert state.applied_digest == first_distribution.descriptor.digest
+    assert (
+        await PlatformPluginRepositoryV2(db_session).last_good_distribution("python-api-v2")
+        == first_distribution.to_payload()
+    )
+    event_count = await db_session.scalar(
+        select(func.count()).select_from(PlatformPluginV2ApplyStateEventModel)
+    )
+    assert event_count == 2
 
 
 @pytest.mark.unit

@@ -94,6 +94,11 @@ class PlatformPluginRuntimeHostV2:
             return None
         return self._distributions.get(current)
 
+    @property
+    def current_publication(self) -> PlatformPluginPublicationV2 | None:
+        """Return the accepted publication paired with the active generation."""
+        return self._current_publication
+
     def distribution_for_generation(
         self,
         generation: RuntimeGenerationV2,
@@ -144,6 +149,8 @@ class PlatformPluginRuntimeHostV2:
     async def apply_distribution(
         self,
         payload: Mapping[str, object],
+        *,
+        publication_stager: GenerationPublicationStagerV2 | None = None,
     ) -> PlatformPluginPublicationV2:
         """Validate a complete process-safe distribution before staging it locally."""
         if set(payload) != {"descriptor", "snapshot", "envelope"}:
@@ -163,7 +170,11 @@ class PlatformPluginRuntimeHostV2:
         )
         if descriptor != expected:
             raise ValueError("plugin distribution descriptor does not match snapshot")
-        return await self.apply(snapshot, envelope)
+        return await self.apply(
+            snapshot,
+            envelope,
+            publication_stager=publication_stager,
+        )
 
     async def bootstrap(
         self,
@@ -174,6 +185,7 @@ class PlatformPluginRuntimeHostV2:
         version: int,
         nonce: str | None = None,
         profile_projector: Callable[[ProfileDocumentV2], ProfileDocumentV2] | None = None,
+        publication_stager: GenerationPublicationStagerV2 | None = None,
     ) -> PlatformPluginPublicationV2:
         """Load strict v2 files and publish the initial production generation."""
         manifests = _load_manifests(manifest_paths)
@@ -188,6 +200,7 @@ class PlatformPluginRuntimeHostV2:
         return await self.apply(
             snapshot,
             control_envelope_v2(snapshot, version=version, nonce=nonce),
+            publication_stager=publication_stager,
         )
 
     async def acquire(self) -> GenerationLeaseV2:
