@@ -89,6 +89,42 @@ async def test_host_bootstraps_strict_profile_and_exposes_generation_lease() -> 
 
 
 @pytest.mark.unit
+async def test_host_resolves_distribution_for_a_pinned_retired_generation() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="distribution-1",
+    )
+    first = host.current_distribution
+    assert first is not None
+
+    async with pin_operation_context_v2(
+        host,
+        operation_id="old-turn",
+        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+    ) as operation:
+        await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(
+                _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+            ),
+            generation=2,
+            version=2,
+            nonce="distribution-2",
+        )
+        second = host.current_distribution
+        assert second is not None
+
+        assert host.distribution_for_generation(operation.generation) == first
+        assert second.descriptor.generation == 2
+
+    await host.close()
+
+
+@pytest.mark.unit
 async def test_remote_host_validates_complete_distribution_before_publish() -> None:
     source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await source.bootstrap(

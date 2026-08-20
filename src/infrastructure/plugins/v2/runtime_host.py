@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
+from weakref import WeakKeyDictionary
 
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
@@ -36,6 +37,7 @@ from .runtime import (
     LoaderV2,
     OperationContextV2,
     PluginDefinitionV2,
+    RuntimeGenerationV2,
     RuntimeV2Error,
 )
 
@@ -75,7 +77,11 @@ class PlatformPluginRuntimeHostV2:
     def __init__(self, definitions: Sequence[PluginDefinitionV2] = ()) -> None:
         self.loader = LoaderV2(definitions)
         self.reconciler = PlatformPluginSnapshotReconcilerV2(self.loader)
+        self._apply_lock = asyncio.Lock()
         self._current_publication: PlatformPluginPublicationV2 | None = None
+        self._distributions: WeakKeyDictionary[
+            RuntimeGenerationV2, PlatformPluginDistributionV2
+        ] = WeakKeyDictionary()
 
     @property
     def manager(self) -> GenerationManagerV2:
@@ -83,15 +89,23 @@ class PlatformPluginRuntimeHostV2:
 
     @property
     def current_distribution(self) -> PlatformPluginDistributionV2 | None:
-        publication = self._current_publication
         current = self.manager.current
-        if publication is None or current is None:
+        if current is None:
             return None
-        return PlatformPluginDistributionV2(
-            descriptor=current.descriptor,
-            snapshot=publication.snapshot,
-            envelope=publication.envelope,
-        )
+        return self._distributions.get(current)
+
+    def distribution_for_generation(
+        self,
+        generation: RuntimeGenerationV2,
+    ) -> PlatformPluginDistributionV2:
+        """Return the immutable distribution paired with one exact leased generation."""
+        distribution = self._distributions.get(generation)
+        if distribution is None or distribution.descriptor != generation.descriptor:
+            raise RuntimeV2Error(
+                "generation_distribution_unavailable",
+                "plugin distribution is unavailable for the leased generation",
+            )
+        return distribution
 
     async def apply(
         self,
@@ -99,15 +113,27 @@ class PlatformPluginRuntimeHostV2:
         envelope: ControlPlaneEnvelopeV2,
     ) -> PlatformPluginPublicationV2:
         """Stage and atomically publish one snapshot, retaining last-good on NACK."""
-        receipt = await self.reconciler.apply(snapshot, envelope)
-        publication = PlatformPluginPublicationV2(
-            snapshot=snapshot,
-            envelope=envelope,
-            receipt=receipt,
-        )
-        if publication.accepted:
-            self._current_publication = publication
-        return publication
+        async with self._apply_lock:
+            receipt = await self.reconciler.apply(snapshot, envelope)
+            publication = PlatformPluginPublicationV2(
+                snapshot=snapshot,
+                envelope=envelope,
+                receipt=receipt,
+            )
+            if publication.accepted:
+                self._current_publication = publication
+                current = self.manager.current
+                if current is None:
+                    raise RuntimeV2Error(
+                        "generation_publication_missing",
+                        "accepted plugin snapshot did not publish a runtime generation",
+                    )
+                self._distributions[current] = PlatformPluginDistributionV2(
+                    descriptor=current.descriptor,
+                    snapshot=publication.snapshot,
+                    envelope=publication.envelope,
+                )
+            return publication
 
     async def apply_distribution(
         self,
@@ -156,7 +182,8 @@ class PlatformPluginRuntimeHostV2:
 
     async def acquire(self) -> GenerationLeaseV2:
         """Acquire the complete generation used by one data-plane boundary."""
-        return await self.manager.acquire()
+        async with self._apply_lock:
+            return await self.manager.acquire()
 
     async def close(self) -> None:
         """Retire the active generation and dispose it after leases drain."""

@@ -1401,9 +1401,6 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
                 pin_operation_context_v2,
             )
 
-            distribution = host.current_distribution
-            if distribution is None:
-                raise RuntimeError("plugin runtime v2 has no accepted distribution")
             async with pin_operation_context_v2(
                 host,
                 operation_id=f"agent-turn:{execution_message_id or conversation_id}",
@@ -1424,9 +1421,13 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
                         "conversation_id": conversation_id,
                         "execution_message_id": execution_message_id,
                     },
-                    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2: distribution.to_payload(),
                 },
-            ):
+            ) as operation:
+                distribution = host.distribution_for_generation(operation.generation)
+                operation.provide(
+                    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+                    distribution.to_payload(),
+                )
                 await _stream_agent_with_scoped_session(
                     stream_context=stream_context,
                     conversation_id=conversation_id,
