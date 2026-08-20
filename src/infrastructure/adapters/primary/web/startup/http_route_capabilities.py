@@ -6,16 +6,10 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import FastAPI, HTTPException, status
 
 from src.domain.ports.plugins import HttpAuthorizationMode
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
@@ -26,6 +20,9 @@ from src.infrastructure.plugins.http_routes import (
     HttpRouteMountError,
     HttpRouteMountService,
 )
+
+from .http_route_authorization_v2 import build_route_authorization_dependency_v2
+from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
 
 logger = logging.getLogger(__name__)
 AuthDependency = Callable[..., Any]
@@ -123,76 +120,14 @@ def _authorization_dependency(
     authorization: str,
     path: str,
 ) -> AuthDependency:
-    mode = HttpAuthorizationMode(authorization)
-    required_scope = (
-        "tenant_id" if mode is not HttpAuthorizationMode.PROJECT_MEMBER else "project_id"
-    )
-    if f"{{{required_scope}}}" not in path:
-        raise ValueError(f"plugin route {path} must expose {{{required_scope}}} for authorization")
-
-    async def dependency(
-        request: Request,
-        current_user: User = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
-    ) -> str:
-        scope_id = str(request.path_params[required_scope])
-        if mode is HttpAuthorizationMode.PROJECT_MEMBER:
-            tenant_id = await _project_tenant_id(db, scope_id, current_user.id)
-        else:
-            tenant_id = scope_id
-        await require_tenant_access(
-            db,
-            current_user,
-            tenant_id,
-            require_admin=mode is HttpAuthorizationMode.TENANT_ADMIN,
-        )
-        granted = await PlatformPluginGovernanceRepository(db).permission_is_granted(
-            plugin_id=plugin_id,
-            permission=permission,
-            scope_type="project" if mode is HttpAuthorizationMode.PROJECT_MEMBER else "tenant",
-            scope_id=scope_id,
-        )
-        if not granted:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_("Plugin route permission is required"),
-            )
-        return scope_id
-
-    return dependency
-
-
-def build_route_authorization_dependency(
-    *,
-    plugin_id: str,
-    permission: str,
-    authorization: str,
-    path: str,
-) -> AuthDependency:
-    """Build the scoped authorization dependency used by staged v2 route effects."""
-    return _authorization_dependency(
+    return build_route_authorization_dependency_v2(
         plugin_id=plugin_id,
         permission=permission,
         authorization=authorization,
         path=path,
+        tenant_access=require_tenant_access,
+        repository_factory=PlatformPluginGovernanceRepository,
     )
-
-
-async def _project_tenant_id(db: AsyncSession, project_id: str, user_id: str) -> str:
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.tenant_id)
-            .join(UserProject, UserProject.project_id == Project.id)
-            .where(Project.id == project_id, UserProject.user_id == user_id)
-        )
-    )
-    tenant_id = result.scalar_one_or_none()
-    if tenant_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Project access required"),
-        )
-    return str(tenant_id)
 
 
 async def reconcile_http_route_capabilities(
@@ -206,6 +141,19 @@ async def reconcile_http_route_capabilities(
     assembler = getattr(app.state, "platform_plugin_http_routes", None)
     if not isinstance(assembler, HttpRouteCapabilityAppAssembler):
         raise HttpRouteMountError("platform plugin HTTP routes are not installed")
+
+    coordinator = getattr(app.state, "platform_plugin_http_route_publication_v2", None)
+    if isinstance(coordinator, HttpRoutePublicationCoordinatorV2):
+
+        def publish_graph(graph: object) -> None:
+            app.state.platform_plugin_route_graph_v2 = graph
+            assembler.dispose()
+
+        result = await coordinator.reconcile(
+            desired_rows,
+            on_commit=publish_graph,
+        )
+        return result.mounted, result.unmounted
 
     registry_routes = get_plugin_registry().list_http_routes()
     handlers, handler_owners = _registry_inventory(registry_routes)

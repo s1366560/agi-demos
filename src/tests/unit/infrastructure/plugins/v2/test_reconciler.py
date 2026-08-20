@@ -17,7 +17,10 @@ from src.infrastructure.plugins.v2.protocol import (
     PLUGIN_PROFILE_TYPE_URL_V2,
     parse_profile_snapshot_v2,
 )
-from src.infrastructure.plugins.v2.reconciler import PlatformPluginSnapshotReconcilerV2
+from src.infrastructure.plugins.v2.reconciler import (
+    PlatformPluginSnapshotReconcilerV2,
+    PreparedGenerationPublicationV2,
+)
 from src.infrastructure.plugins.v2.runtime import LoaderV2, PluginDefinitionV2
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -41,12 +44,23 @@ def _envelope(snapshot, version: int, **changes):
     return ControlPlaneEnvelopeV2(**values)
 
 
-def _loader(*, fail: bool = False, activations: list[str] | None = None) -> LoaderV2:
+def _loader(
+    *,
+    fail: bool = False,
+    activations: list[str] | None = None,
+    disposals: list[str] | None = None,
+) -> LoaderV2:
     seen = activations if activations is not None else []
+    disposed = disposals if disposals is not None else []
 
     def provider(context, _config):
         seen.append("provider")
         context.provide("service:clock", 7)
+
+        def dispose() -> None:
+            disposed.append("provider")
+
+        return dispose
 
     def consumer(context, _config):
         seen.append("consumer")
@@ -146,6 +160,76 @@ async def test_failed_staging_nacks_and_keeps_last_good_generation() -> None:
     assert receipt.error_code == "staging_failed"
     assert receipt.applied_version == 1
     assert reconciler.manager.current is active
+
+
+@pytest.mark.unit
+async def test_publication_prepare_failure_disposes_staging_and_keeps_last_good() -> None:
+    snapshot = _snapshot()
+    disposals: list[str] = []
+    reconciler = PlatformPluginSnapshotReconcilerV2(_loader(disposals=disposals))
+    await reconciler.apply(snapshot, _envelope(snapshot, 1))
+    active = reconciler.manager.current
+    changed = replace(snapshot, generation=8, digest="2" * 64)
+
+    async def fail_prepare(_generation):
+        raise ValueError("route graph conflict")
+
+    receipt = await reconciler.apply(
+        changed,
+        _envelope(changed, 2),
+        publication_stager=fail_prepare,
+    )
+
+    assert receipt.status == ApplyStatusV2.NACK
+    assert receipt.error_code == "publication_staging_failed"
+    assert reconciler.manager.current is active
+    assert disposals == ["provider"]
+
+
+@pytest.mark.unit
+async def test_prepared_publication_commits_with_generation_or_rolls_back_on_failure() -> None:
+    snapshot = _snapshot()
+    reconciler = PlatformPluginSnapshotReconcilerV2(_loader())
+    events: list[str] = []
+
+    async def prepare(_generation):
+        return PreparedGenerationPublicationV2(
+            commit=lambda: events.append("commit"),
+            rollback=lambda: events.append("rollback"),
+        )
+
+    receipt = await reconciler.apply(
+        snapshot,
+        _envelope(snapshot, 1),
+        publication_stager=prepare,
+    )
+
+    assert receipt.status == ApplyStatusV2.ACK
+    assert events == ["commit"]
+
+    changed = replace(snapshot, generation=8, digest="2" * 64)
+
+    async def prepare_failed_commit(_generation):
+        def fail_commit() -> None:
+            events.append("commit-failed")
+            raise RuntimeError("cannot activate route table")
+
+        return PreparedGenerationPublicationV2(
+            commit=fail_commit,
+            rollback=lambda: events.append("rollback"),
+        )
+
+    active = reconciler.manager.current
+    failed = await reconciler.apply(
+        changed,
+        _envelope(changed, 2),
+        publication_stager=prepare_failed_commit,
+    )
+
+    assert failed.status == ApplyStatusV2.NACK
+    assert failed.error_code == "publication_commit_failed"
+    assert reconciler.manager.current is active
+    assert events == ["commit", "commit-failed", "rollback"]
 
 
 @pytest.mark.unit

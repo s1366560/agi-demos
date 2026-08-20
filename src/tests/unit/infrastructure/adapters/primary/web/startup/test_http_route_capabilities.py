@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
@@ -14,6 +15,9 @@ from src.infrastructure.adapters.primary.web.startup.http_route_capabilities imp
     build_http_route_capability_assembler,
     install_http_route_capabilities,
     reconcile_http_route_capabilities,
+)
+from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 import (
+    HttpRoutePublicationCoordinatorV2,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.http_routes import HttpRouteCapabilityRow
@@ -296,6 +300,39 @@ async def test_reconcile_http_routes_mounts_unmounts_and_replaces_auth_dependenc
     disabled = SimpleNamespace(**{**DESIRED_ROWS[0].__dict__, "enabled": False})
     assert await reconcile_http_route_capabilities(app, desired_rows=[disabled]) == (0, 1)
     assert assembler._mounted == {}
+
+
+@pytest.mark.unit
+async def test_reconcile_uses_v2_publication_then_retires_outer_dynamic_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        module,
+        "PlatformPluginGovernanceRepository",
+        FakeRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+        lambda: SimpleNamespace(list_http_routes=_registry_routes),
+    )
+    app = FastAPI()
+    assembler = await install_http_route_capabilities(app, session_factory=FakeSession)
+    assert assembler is not None
+    app.state.platform_plugin_http_routes = assembler
+    graph = object()
+
+    async def publish(_rows: object, *, on_commit: object) -> SimpleNamespace:
+        assert callable(on_commit)
+        on_commit(graph)
+        return SimpleNamespace(mounted=1, unmounted=0)
+
+    coordinator = Mock(spec=HttpRoutePublicationCoordinatorV2)
+    coordinator.reconcile = AsyncMock(side_effect=publish)
+    app.state.platform_plugin_http_route_publication_v2 = coordinator
+
+    assert await reconcile_http_route_capabilities(app, desired_rows=DESIRED_ROWS) == (1, 0)
+    assert assembler._mounted == {}
+    assert app.state.platform_plugin_route_graph_v2 is graph
 
 
 async def fake_noop_tenant_access(

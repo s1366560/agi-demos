@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+import inspect
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
@@ -15,7 +17,21 @@ from src.domain.model.plugins.generated_v2 import (
 )
 
 from .protocol import PLUGIN_PROFILE_TYPE_URL_V2
-from .runtime import GenerationManagerV2, LoaderV2
+from .runtime import AsyncDisposerV2, GenerationManagerV2, LoaderV2, RuntimeGenerationV2
+
+
+@dataclass(frozen=True, kw_only=True)
+class PreparedGenerationPublicationV2:
+    """Companion state staged before a generation and committed under its manager lock."""
+
+    commit: Callable[[], None]
+    rollback: AsyncDisposerV2
+
+
+type GenerationPublicationStagerV2 = Callable[
+    [RuntimeGenerationV2],
+    Awaitable[PreparedGenerationPublicationV2],
+]
 
 
 class PlatformPluginSnapshotReconcilerV2:
@@ -44,6 +60,8 @@ class PlatformPluginSnapshotReconcilerV2:
         self,
         snapshot: ProfileSnapshotV2,
         envelope: ControlPlaneEnvelopeV2,
+        *,
+        publication_stager: GenerationPublicationStagerV2 | None = None,
     ) -> SnapshotApplyReceiptV2:
         async with self._lock:
             envelope_error = self._validate_envelope(snapshot, envelope)
@@ -61,15 +79,36 @@ class PlatformPluginSnapshotReconcilerV2:
                         "process_boundary_required",
                         f"hot update changes process-boundary entries: {', '.join(blocked_entries)}",
                     )
+            staging: RuntimeGenerationV2 | None = None
+            prepared: PreparedGenerationPublicationV2 | None = None
             try:
                 staging = await self.loader.stage(snapshot)
+                if publication_stager is not None:
+                    prepared = await publication_stager(staging)
             except Exception as exc:
+                if staging is not None:
+                    await staging.dispose()
+                code = "staging_failed" if staging is None else "publication_staging_failed"
+                stage = "snapshot" if staging is None else "companion publication"
                 return self._nack(
                     envelope,
-                    "staging_failed",
-                    f"snapshot staging failed: {type(exc).__name__}: {exc}",
+                    code,
+                    f"{stage} staging failed: {type(exc).__name__}: {exc}",
                 )
-            await self.manager.publish(staging)
+            try:
+                _ = await self.manager.publish(
+                    staging,
+                    commit=None if prepared is None else prepared.commit,
+                )
+            except Exception as exc:
+                if prepared is not None:
+                    await _invoke_disposer(prepared.rollback)
+                await staging.dispose()
+                return self._nack(
+                    envelope,
+                    "publication_commit_failed",
+                    f"companion publication commit failed: {type(exc).__name__}: {exc}",
+                )
             self._applied_version = envelope.version
             self._applied_digest = envelope.snapshot_digest
             return self._ack(envelope)
@@ -174,4 +213,14 @@ def _enabled_entries(snapshot: ProfileSnapshotV2) -> Mapping[str, ProfileEntryV2
     return {entry.entry_id: entry for entry in snapshot.entries if entry.enabled}
 
 
-__all__ = ["PlatformPluginSnapshotReconcilerV2"]
+async def _invoke_disposer(disposer: AsyncDisposerV2) -> None:
+    result = disposer()
+    if inspect.isawaitable(result):
+        await result
+
+
+__all__ = [
+    "GenerationPublicationStagerV2",
+    "PlatformPluginSnapshotReconcilerV2",
+    "PreparedGenerationPublicationV2",
+]

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from fastapi import Depends
 
+from src.domain.model.plugins.generated_v2 import ProfileEntryV2
 from src.domain.ports.plugins import (
     HttpAuthorizationMode,
     HttpRouteDefinition,
@@ -68,6 +69,18 @@ def project_legacy_http_routes_v2(
         config={"routes": [row.to_payload() for row in rows]},
     )
     return replace(document, entries=tuple(entries))
+
+
+def configured_legacy_http_routes_v2(
+    entries: Sequence[ProfileEntryV2],
+) -> tuple[LegacyHttpRouteRowV2, ...]:
+    """Read the canonical bridge row from one already validated profile snapshot."""
+    matches = [entry for entry in entries if entry.entry_id == LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2]
+    if len(matches) != 1:
+        raise ValueError(
+            f"profile must contain exactly one {LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2} entry"
+        )
+    return _rows_from_config(matches[0].config)
 
 
 def legacy_http_route_bridge_definition_v2(
@@ -267,11 +280,11 @@ def _legacy_inventory() -> Mapping[str, Sequence[Any]]:
 
 
 def _legacy_authorization(row: LegacyHttpRouteRowV2) -> Callable[..., Any]:
-    from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
-        build_route_authorization_dependency,
+    from src.infrastructure.adapters.primary.web.startup.http_route_authorization_v2 import (
+        build_route_authorization_dependency_v2,
     )
 
-    return build_route_authorization_dependency(
+    return build_route_authorization_dependency_v2(
         plugin_id=row.plugin_id,
         permission=row.permission,
         authorization=row.authorization_mode,
@@ -283,6 +296,7 @@ __all__ = [
     "LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2",
     "LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2",
     "LegacyHttpRouteRowV2",
+    "configured_legacy_http_routes_v2",
     "legacy_http_route_bridge_definition_v2",
     "project_legacy_http_routes_v2",
 ]

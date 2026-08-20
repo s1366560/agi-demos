@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
+from threading import RLock
 from types import MappingProxyType
 from typing import Any
 
@@ -144,32 +144,65 @@ class RouteTableRegistryV2:
     """Atomically publish route/OpenAPI pairs while retaining leased generations."""
 
     def __init__(self) -> None:
-        self._lock = asyncio.Lock()
-        self._by_digest: dict[str, RoutePublicationV2] = {}
+        self._lock = RLock()
+        self._by_descriptor: dict[PluginGenerationDescriptorV2, RoutePublicationV2] = {}
         self._current: RoutePublicationV2 | None = None
 
     @property
     def current(self) -> RoutePublicationV2 | None:
         return self._current
 
-    async def publish(
+    def stage(
         self,
         descriptor: PluginGenerationDescriptorV2,
         table: RouteTableV2,
     ) -> RoutePublicationV2:
+        """Prepare a route/OpenAPI pair without changing the visible current table."""
         publication = RoutePublicationV2(
             descriptor=descriptor,
             table=table,
             openapi=table.openapi_snapshot(descriptor),
         )
-        async with self._lock:
-            self._by_digest[descriptor.digest] = publication
+        with self._lock:
+            if descriptor in self._by_descriptor:
+                raise RuntimeV2Error(
+                    "route_generation_conflict",
+                    "HTTP route table is already staged for the plugin generation",
+                )
+            self._by_descriptor[descriptor] = publication
+        return publication
+
+    def activate(self, publication: RoutePublicationV2) -> None:
+        """Make one exactly staged route/OpenAPI pair visible without awaiting."""
+        with self._lock:
+            staged = self._by_descriptor.get(publication.descriptor)
+            if staged is not publication:
+                raise RuntimeV2Error(
+                    "route_generation_not_staged",
+                    "HTTP route table must be staged before activation",
+                )
             self._current = publication
+
+    def discard(self, publication: RoutePublicationV2) -> None:
+        """Remove a failed, invisible staged publication."""
+        with self._lock:
+            staged = self._by_descriptor.get(publication.descriptor)
+            if staged is publication and self._current is not publication:
+                del self._by_descriptor[publication.descriptor]
+
+    async def publish(
+        self,
+        descriptor: PluginGenerationDescriptorV2,
+        table: RouteTableV2,
+    ) -> RoutePublicationV2:
+        publication = self.stage(descriptor, table)
+        self.activate(publication)
         return publication
 
     def resolve(self, descriptor: PluginGenerationDescriptorV2) -> RoutePublicationV2:
-        publication = self._by_digest.get(descriptor.digest)
-        if publication is None or publication.descriptor != descriptor:
+        with self._lock:
+            publication = self._by_descriptor.get(descriptor)
+        if publication is None:
             raise RuntimeV2Error(
                 "route_generation_unavailable",
                 "HTTP route table is unavailable for the pinned plugin generation",
@@ -177,10 +210,8 @@ class RouteTableRegistryV2:
         return publication
 
     async def retire(self, descriptor: PluginGenerationDescriptorV2) -> None:
-        async with self._lock:
-            publication = self._by_digest.get(descriptor.digest)
-            if publication is not None and publication.descriptor == descriptor:
-                del self._by_digest[descriptor.digest]
+        with self._lock:
+            publication = self._by_descriptor.pop(descriptor, None)
             if self._current is publication:
                 self._current = None
 

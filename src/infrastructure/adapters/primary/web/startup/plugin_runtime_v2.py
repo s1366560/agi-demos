@@ -15,6 +15,8 @@ from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, Route
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
+from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
+
 logger = logging.getLogger(__name__)
 _ROOT = Path(__file__).resolve().parents[6]
 DEFAULT_PROFILE_V2_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -66,6 +68,11 @@ async def initialize_plugin_runtime_v2(app: FastAPI) -> PlatformPluginRuntimeHos
     route_publication = await route_registry.publish(distribution.descriptor, route_graph.table)
     app.state.platform_plugin_route_registry_v2 = route_registry
     app.state.platform_plugin_route_graph_v2 = route_graph
+    app.state.platform_plugin_http_route_publication_v2 = HttpRoutePublicationCoordinatorV2(
+        host=host,
+        registry=route_registry,
+        workspace_core_settings=workspace_core_settings,
+    )
     logger.info(
         "Published plugin runtime v2 generation=%d digest=%s",
         publication.snapshot.generation,
@@ -89,6 +96,7 @@ async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     app.state.platform_plugin_runtime_v2 = None
     app.state.platform_plugin_route_registry_v2 = None
     app.state.platform_plugin_route_graph_v2 = None
+    app.state.platform_plugin_http_route_publication_v2 = None
 
 
 def plugin_runtime_host_v2_from_scope(scope: Scope) -> PlatformPluginRuntimeHostV2:

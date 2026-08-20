@@ -26,6 +26,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert host.manager.current is not None
     route_registry = app.state.platform_plugin_route_registry_v2
     route_graph = app.state.platform_plugin_route_graph_v2
+    assert app.state.platform_plugin_http_route_publication_v2 is not None
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
@@ -52,6 +53,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert host.manager.current is None
     assert app.state.platform_plugin_route_registry_v2 is None
     assert app.state.platform_plugin_route_graph_v2 is None
+    assert app.state.platform_plugin_http_route_publication_v2 is None
 
 
 @pytest.mark.unit

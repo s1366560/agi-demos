@@ -723,9 +723,17 @@ class GenerationManagerV2:
     def current(self) -> RuntimeGenerationV2 | None:
         return self._current
 
-    async def publish(self, generation: RuntimeGenerationV2) -> RuntimeGenerationV2 | None:
+    async def publish(
+        self,
+        generation: RuntimeGenerationV2,
+        *,
+        commit: Callable[[], None] | None = None,
+    ) -> RuntimeGenerationV2 | None:
+        """Publish one generation with an optional no-await companion commit."""
         dispose: RuntimeGenerationV2 | None = None
         async with self._lock:
+            if commit is not None:
+                commit()
             previous = self._current
             self._current = generation
             if previous is not None:

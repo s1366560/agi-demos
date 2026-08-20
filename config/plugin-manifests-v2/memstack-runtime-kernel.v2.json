@@ -28,7 +28,7 @@
       "entrypoint": "src.infrastructure.plugins.v2.legacy_http_route_bridge:legacy_http_route_bridge_definition_v2",
       "targets": ["python"],
       "artifact": {
-        "digest": "sha256:6f7051c956ccfa4f11f3043fde81218ccd168478954e78da33022af509804012",
+        "digest": "sha256:aa58e3be49786a1f2123f6f2e2eee3f9de1e676cfd490a2bfa4dc7311a90b204",
         "source": "package://builtin/memstack-runtime-kernel"
       }
     },

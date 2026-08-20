@@ -30,7 +30,7 @@ from .protocol import (
     parse_profile_snapshot_v2,
     profile_snapshot_v2_to_payload,
 )
-from .reconciler import PlatformPluginSnapshotReconcilerV2
+from .reconciler import GenerationPublicationStagerV2, PlatformPluginSnapshotReconcilerV2
 from .runtime import (
     GenerationLeaseV2,
     GenerationManagerV2,
@@ -111,10 +111,16 @@ class PlatformPluginRuntimeHostV2:
         self,
         snapshot: ProfileSnapshotV2,
         envelope: ControlPlaneEnvelopeV2,
+        *,
+        publication_stager: GenerationPublicationStagerV2 | None = None,
     ) -> PlatformPluginPublicationV2:
         """Stage and atomically publish one snapshot, retaining last-good on NACK."""
         async with self._apply_lock:
-            receipt = await self.reconciler.apply(snapshot, envelope)
+            receipt = await self.reconciler.apply(
+                snapshot,
+                envelope,
+                publication_stager=publication_stager,
+            )
             publication = PlatformPluginPublicationV2(
                 snapshot=snapshot,
                 envelope=envelope,

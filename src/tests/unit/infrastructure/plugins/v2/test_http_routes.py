@@ -51,6 +51,30 @@ def test_route_table_rejects_conflicts_without_mutating_outer_routes() -> None:
 
 
 @pytest.mark.unit
+async def test_route_table_stages_without_visibility_until_atomic_activation() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+    )
+    distribution = host.current_distribution
+    assert distribution is not None
+    registry = RouteTableRegistryV2()
+
+    staged = registry.stage(distribution.descriptor, _table("one"))
+
+    assert registry.current is None
+    assert registry.resolve(distribution.descriptor) is staged
+
+    registry.activate(staged)
+    assert registry.current is staged
+    assert registry.current.openapi.descriptor == distribution.descriptor
+    await host.close()
+
+
+@pytest.mark.unit
 async def test_dispatch_and_openapi_are_pinned_to_the_same_generation() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
@@ -72,9 +96,7 @@ async def test_dispatch_and_openapi_are_pinned_to_the_same_generation() -> None:
     ):
         await host.bootstrap(
             profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
-            manifest_paths=(
-                _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
-            ),
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
             generation=2,
             version=2,
             nonce="route-generation-2",
