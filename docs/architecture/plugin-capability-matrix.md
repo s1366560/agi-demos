@@ -53,7 +53,7 @@ Status legend:
 | Bundle distribution | `bundle.py` `.mspkg` (manifest + layer rows + patches, bounded zip) (P4) | OCI artifact path retained | same |
 | Profile hot-reload | `profile_watch.py` recompose + last-good + envelope events (P4) | `platform_plugin_sync.rs` polling reconciler | same |
 | Agent loop resolution | `agent_loop_runtime.AgentLoopResolver` per-turn `(provider, model)` (P2) | `HarnessRegistry::select` (ADR-0008) | same semantics |
-| Untrusted plugin runtime | not yet (P5) | `adapters-wasmtime` (server/desktop) | `adapters-wasmtime` wired in sidecar |
+| Untrusted plugin runtime | done (I5): `wasm_host.py` (wasmtime, fuel + digest + fresh store per call) + `subprocess_host.py` (JSON-RPC, timeout kill, crash isolation); untrusted manifests restricted to tool capabilities at the trust gate; `plugin_audit` events + `ResourceQuotaEnforcer` wired | `adapters-wasmtime` (server/desktop) | `adapters-wasmtime` wired in sidecar |
 | Plugin artifact distribution | package archive/registry (`package_archive.py`, `package_registry.py`) | OCI artifact pull in `platform_plugin_sync.rs` | OCI artifact pull + digest verification |
 
 ## P0 exit criteria mapping
@@ -75,4 +75,4 @@ Status legend:
 | P2 | `AgentLoopResolver` per-turn `(provider, model)` seam; `agent_loop` relaxed to builtin/signed (python-trusted); requirement resolution fixed (`@plugin` pins); resolver wired into `SessionProcessor` (I2); model-visible=>logged contract tests on both runtimes (I2); `system_prompt_section` seam (I2) | Live `make dev` chat-turn E2E + native desktop smoke (deferred acceptance: needs stack restart + interactive Electron) |
 | P3 | Web slot consumption: `pluginSlotService` + `pluginSlotProtocol` + `PluginSlotHost`; shared `@agistack/plugin-slots` package; keyed renderer registry; page outlets (settings/nav/composer/conversation/canvas); tool-result contract renderers; desktop contract alignment + conversation mount (I3) | (complete) |
 | P4 | `.mspkg` bundle format + install CLI; profile templates (server/desktop/headless); `profile_watch` hot-reload with last-good; approved marketplace installs land in the active profile via `install_bundle_into_profile` (I4); PluginHub control-plane admin (cutover gate + profile + row views) (I4) | (complete); reserved backend kinds (embedder/reranker/graph/retrieval/workflow/telemetry) deferred post-P5 by decision |
-| P5 | (pre-existing) `adapters-wasmtime` server/desktop path | Python-side WASM host, subprocess/MCP boundaries, tenant quotas and audit |
+| P5 | Python WASM host + subprocess boundary + trust-gate tool-only shape for untrusted + quota/audit wiring (I5) | MCP server boundary hardening (follow-up) |
