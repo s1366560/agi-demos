@@ -1605,7 +1605,45 @@ async def _persist_events(
     events: list[dict[str, Any]],
     correlation_id: str | None = None,
 ) -> None:
-    """Persist agent events to database."""
+    """Persist agent events through the active generation, with a native fallback."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.session_event_log import (
+        SESSION_EVENT_LOG_WRITER_SERVICE_V2,
+        SessionEventLogWriterV2,
+    )
+
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        await _persist_events_native(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            events=events,
+            correlation_id=correlation_id,
+        )
+        return
+    provider = operation.require(SESSION_EVENT_LOG_WRITER_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogWriterV2):
+        raise RuntimeError("v2 session event-log writer has an invalid implementation")
+    await provider.persist(
+        writer=_persist_events_native,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        events=events,
+        correlation_id=correlation_id,
+    )
+
+
+async def _persist_events_native(
+    conversation_id: str,
+    message_id: str,
+    events: list[dict[str, Any]],
+    correlation_id: str | None = None,
+) -> None:
+    """Persist agent events in the existing ordered SQL transaction."""
     from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert
 

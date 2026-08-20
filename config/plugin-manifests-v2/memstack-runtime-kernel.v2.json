@@ -49,6 +49,15 @@
         "digest": "sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee41e0d41b3da76351fc",
         "source": "package://builtin/memstack-runtime-kernel"
       }
+    },
+    {
+      "module_ref": "builtin://memstack/session/event-log",
+      "entrypoint": "src.infrastructure.plugins.v2.session_event_log:_apply_session_event_log_writer_v2",
+      "targets": ["python"],
+      "artifact": {
+        "digest": "sha256:b5d32e313b41bd898961e189cd8e36ab7704d23baad6dcc8ee84f266fae0a434",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
     }
   ],
   "permissions": [],
