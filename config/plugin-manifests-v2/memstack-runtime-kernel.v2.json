@@ -8,6 +8,7 @@
     {
       "module_ref": "builtin://memstack/runtime/generation-boundary",
       "entrypoint": "src.infrastructure.plugins.v2.builtin_modules:_apply_runtime_boundary",
+      "targets": ["python"],
       "artifact": {
         "digest": "sha256:5b577e0c8be69c0807c332bdbbeddf6e6e40d92a1127c599b734aec3da67a17f",
         "source": "package://builtin/memstack-runtime-kernel"

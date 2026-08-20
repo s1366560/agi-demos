@@ -1,5 +1,6 @@
 import { digestV2 } from './canonical';
 import type {
+  DataPlaneTargetV2,
   PluginManifestV2,
   ProfileEntryV2,
   ProfileSnapshotV2,
@@ -94,13 +95,18 @@ function parseManifest(value: unknown, index: number): PluginManifestV2 {
     trust,
     modules: arrayValue(payload.modules, 'modules').map((moduleValue, moduleIndex) => {
       const module = objectValue(moduleValue, `modules[${moduleIndex}]`);
-      exactKeys(module, ['module_ref', 'entrypoint', 'artifact']);
+      exactKeys(module, ['module_ref', 'entrypoint', 'artifact', 'targets']);
       const artifact = objectValue(module.artifact, 'artifact');
       allowedKeys(artifact, ['digest', 'source', 'signature', 'provenance']);
       requiredKeys(artifact, ['digest', 'source']);
       return {
         module_ref: stringValue(module.module_ref, 'module_ref'),
         entrypoint: stringValue(module.entrypoint, 'entrypoint'),
+        targets: enumArray(
+          module.targets,
+          ['python', 'rust-server', 'desktop-sidecar', 'web', 'desktop-renderer'] as const,
+          'module.targets'
+        ) as ReadonlyArray<DataPlaneTargetV2>,
         artifact: {
           digest: artifactDigestValue(artifact.digest),
           source: stringValue(artifact.source, 'artifact.source'),
@@ -212,7 +218,8 @@ function validateSemantics(snapshot: ProfileSnapshotV2): void {
         `entry ${entry.entry_id} references missing plugin ${entry.plugin_ref}`
       );
     }
-    if (!manifest.modules.some((module) => module.module_ref === entry.module_ref)) {
+    const module = manifest.modules.find((item) => item.module_ref === entry.module_ref);
+    if (!module) {
       fail('missing_module', `entry ${entry.entry_id} references a module outside its plugin`);
     }
     if (entry.parent_entry_id !== null) {
@@ -222,6 +229,19 @@ function validateSemantics(snapshot: ProfileSnapshotV2): void {
       }
       if (!scopeContains(parent.scope, entry.scope)) {
         fail('invalid_parent_scope', `entry ${entry.entry_id} is outside its parent scope`);
+      }
+      const parentManifest = manifests.get(parent.plugin_ref);
+      const parentModule = parentManifest?.modules.find(
+        (item) => item.module_ref === parent.module_ref
+      );
+      if (!parentModule) {
+        fail('missing_module', `parent ${parent.entry_id} references a module outside its plugin`);
+      }
+      if (!module.targets.every((target) => parentModule.targets.includes(target))) {
+        fail(
+          'invalid_parent_targets',
+          `entry ${entry.entry_id} targets are outside parent ${parent.entry_id}`
+        );
       }
     }
   }
@@ -357,6 +377,20 @@ function enumValue<const T extends readonly string[]>(
     fail('schema_validation_failed', `${name} has an unsupported value`);
   }
   return value as T[number];
+}
+
+function enumArray<const T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+  name: string
+): T[number][] {
+  const result = arrayValue(value, name).map((item, index) =>
+    enumValue(item, allowed, `${name}[${index}]`)
+  );
+  if (result.length === 0 || new Set(result).size !== result.length) {
+    fail('schema_validation_failed', `${name} must contain unique values`);
+  }
+  return result;
 }
 
 function digestValue(value: unknown, name: string): string {

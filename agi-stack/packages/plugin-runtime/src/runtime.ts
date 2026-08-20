@@ -1,4 +1,10 @@
-import type { ProfileEntryV2, ProfileSnapshotV2, ScopeKindV2, ScopeV2 } from './generated';
+import type {
+  DataPlaneTargetV2,
+  ProfileEntryV2,
+  ProfileSnapshotV2,
+  ScopeKindV2,
+  ScopeV2,
+} from './generated';
 
 export type AsyncDisposerV2 = () => void | Promise<void>;
 export type EffectResultV2 =
@@ -357,7 +363,10 @@ export class RuntimeGenerationV2 {
 export class LoaderV2 {
   private readonly definitions = new Map<string, PluginDefinitionV2>();
 
-  constructor(definitions: Iterable<PluginDefinitionV2> = []) {
+  constructor(
+    definitions: Iterable<PluginDefinitionV2> = [],
+    private readonly target: DataPlaneTargetV2 = 'web'
+  ) {
     for (const definition of definitions) this.registerModule(definition);
   }
 
@@ -373,7 +382,9 @@ export class LoaderV2 {
 
   async stage(snapshot: ProfileSnapshotV2): Promise<RuntimeGenerationV2> {
     const entries = new Map(
-      snapshot.entries.filter((entry) => entry.enabled).map((entry) => [entry.entry_id, entry])
+      projectSnapshotEntriesV2(snapshot, this.target)
+        .filter((entry) => entry.enabled)
+        .map((entry) => [entry.entry_id, entry])
     );
     const definitions = new Map<string, PluginDefinitionV2>();
     for (const entry of entries.values()) {
@@ -413,6 +424,22 @@ export class LoaderV2 {
     }
     return new RuntimeGenerationV2(snapshot, fibers, services);
   }
+}
+
+export function projectSnapshotEntriesV2(
+  snapshot: ProfileSnapshotV2,
+  target: DataPlaneTargetV2
+): ReadonlyArray<ProfileEntryV2> {
+  const moduleTargets = new Map(
+    snapshot.manifests.flatMap((manifest) =>
+      manifest.modules.map(
+        (module) => [`${manifest.plugin_id}\0${module.module_ref}`, module.targets] as const
+      )
+    )
+  );
+  return snapshot.entries.filter((entry) =>
+    moduleTargets.get(`${entry.plugin_ref}\0${entry.module_ref}`)?.includes(target)
+  );
 }
 
 export class GenerationLeaseV2 {

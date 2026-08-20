@@ -22,7 +22,7 @@ CONFORMANCE_FIXTURE_PATH = ROOT / "shared/fixtures/plugin-runtime-conformance.v2
 
 
 def _schema() -> dict[str, Any]:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    return cast("dict[str, Any]", json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
 
 
 def _ref_name(value: str) -> str:
@@ -248,7 +248,7 @@ def _typescript_string(value: str) -> str:
 
 
 def _canonical_document(value: object) -> str:
-    return rfc8785.dumps(cast(Any, value)).decode("utf-8") + "\n"
+    return rfc8785.dumps(cast("Any", value)).decode("utf-8") + "\n"
 
 
 def _snapshot_fixture() -> dict[str, Any]:
@@ -272,11 +272,13 @@ def _snapshot_fixture() -> dict[str, Any]:
                         "module_ref": "builtin://conformance/root-provider",
                         "entrypoint": "conformance:root_provider",
                         "artifact": artifact,
+                        "targets": ["python", "rust-server", "web"],
                     },
                     {
                         "module_ref": "builtin://conformance/session-consumer",
                         "entrypoint": "conformance:session_consumer",
                         "artifact": artifact,
+                        "targets": ["python", "rust-server", "web"],
                     },
                 ],
                 "permissions": ["service.clock.read"],
@@ -325,7 +327,7 @@ def _snapshot_fixture() -> dict[str, Any]:
 
 def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     canonical_input = {"z": 1.0, "中文": "值", "a": 2}
-    canonical = rfc8785.dumps(canonical_input)
+    canonical = rfc8785.dumps(cast("Any", canonical_input))
     return {
         "schema_version": 2,
         "snapshot_digest": snapshot["digest"],
@@ -339,6 +341,13 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
         ],
         "dependency_order": {
             "expected": ["root-provider", "session-consumer"],
+        },
+        "target_projection": {
+            "python": ["root-provider", "session-consumer"],
+            "rust-server": ["root-provider", "session-consumer"],
+            "desktop-sidecar": [],
+            "web": ["root-provider", "session-consumer"],
+            "desktop-renderer": [],
         },
         "scope_lookup": [
             {

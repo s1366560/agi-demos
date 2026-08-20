@@ -7,8 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use generated::*;
 pub use runtime::{
-    ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2, GenerationManagerV2, LoaderV2,
-    PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2, RuntimeV2Error,
+    project_snapshot_entries_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
+    GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2,
+    RuntimeV2Error,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -42,6 +43,8 @@ pub enum PluginProtocolV2Error {
     InvalidScope(String),
     #[error("entry {entry_id} scope is outside parent {parent_id}")]
     InvalidParentScope { entry_id: String, parent_id: String },
+    #[error("entry {entry_id} targets are outside parent {parent_id}")]
+    InvalidParentTargets { entry_id: String, parent_id: String },
 }
 
 /// Parse a strict v2 snapshot and independently verify its RFC 8785 digest.
@@ -79,6 +82,19 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
     for manifest in &snapshot.manifests {
         if manifest.schema_version != 2 {
             return Err(PluginProtocolV2Error::IncompatibleSchemaVersion);
+        }
+        for module in &manifest.modules {
+            let has_duplicate_target = module
+                .targets
+                .iter()
+                .enumerate()
+                .any(|(index, target)| module.targets[..index].contains(target));
+            if module.targets.is_empty() || has_duplicate_target {
+                return Err(PluginProtocolV2Error::InvalidShape(format!(
+                    "module {} targets must be non-empty and unique",
+                    module.module_ref
+                )));
+            }
         }
         if manifest_by_id
             .insert(manifest.plugin_id.clone(), manifest)
@@ -125,6 +141,38 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
                     })?;
             if !scope_contains(&parent.scope, &entry.scope) {
                 return Err(PluginProtocolV2Error::InvalidParentScope {
+                    entry_id: entry.entry_id.clone(),
+                    parent_id: parent_id.clone(),
+                });
+            }
+            let child_module = manifest
+                .modules
+                .iter()
+                .find(|module| module.module_ref == entry.module_ref)
+                .ok_or_else(|| PluginProtocolV2Error::MissingModule {
+                    entry_id: entry.entry_id.clone(),
+                    plugin_id: entry.plugin_ref.clone(),
+                })?;
+            let parent_manifest = manifest_by_id.get(&parent.plugin_ref).ok_or_else(|| {
+                PluginProtocolV2Error::MissingManifest {
+                    entry_id: parent.entry_id.clone(),
+                    plugin_id: parent.plugin_ref.clone(),
+                }
+            })?;
+            let parent_module = parent_manifest
+                .modules
+                .iter()
+                .find(|module| module.module_ref == parent.module_ref)
+                .ok_or_else(|| PluginProtocolV2Error::MissingModule {
+                    entry_id: parent.entry_id.clone(),
+                    plugin_id: parent.plugin_ref.clone(),
+                })?;
+            if !child_module
+                .targets
+                .iter()
+                .all(|target| parent_module.targets.contains(target))
+            {
+                return Err(PluginProtocolV2Error::InvalidParentTargets {
                     entry_id: entry.entry_id.clone(),
                     parent_id: parent_id.clone(),
                 });

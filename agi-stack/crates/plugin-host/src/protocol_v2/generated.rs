@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 5754a10a8e17beb69de1f7d93f3efb610a1b22d0a8c11dac101c5b064022bead
+// Schema SHA-256: 369fbb2d64ce126a216f875034280f53cb82f7c91b09caa017ff27d1d38ab985
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 use std::collections::BTreeMap;
@@ -47,6 +47,16 @@ pub enum RestartPolicyV2 {
 pub enum ApplyStatusV2 {
     Ack,
     Nack,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DataPlaneTargetV2 {
+    Python,
+    RustServer,
+    DesktopSidecar,
+    Web,
+    DesktopRenderer,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -99,6 +109,7 @@ pub struct PluginModuleV2 {
     pub module_ref: String,
     pub entrypoint: String,
     pub artifact: ArtifactReferenceV2,
+    pub targets: Vec<DataPlaneTargetV2>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

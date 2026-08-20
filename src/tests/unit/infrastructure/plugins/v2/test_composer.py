@@ -25,6 +25,7 @@ def _manifest_payload() -> dict:
             {
                 "module_ref": "builtin://runtime/provider",
                 "entrypoint": "runtime:provider",
+                "targets": ["python"],
                 "artifact": {
                     "digest": "sha256:" + "a" * 64,
                     "source": "package://builtin/runtime-spine",
@@ -33,6 +34,7 @@ def _manifest_payload() -> dict:
             {
                 "module_ref": "builtin://runtime/consumer",
                 "entrypoint": "runtime:consumer",
+                "targets": ["python"],
                 "artifact": {
                     "digest": "sha256:" + "a" * 64,
                     "source": "package://builtin/runtime-spine",

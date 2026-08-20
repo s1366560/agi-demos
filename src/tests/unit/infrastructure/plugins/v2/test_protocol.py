@@ -10,6 +10,7 @@ import pytest
 
 from src.domain.model.plugins.generated_v2 import (
     ArtifactReferenceV2,
+    DataPlaneTargetV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -47,6 +48,7 @@ def _manifest(*module_refs: str) -> PluginManifestV2:
                     digest=_DIGEST,
                     source="package://builtin/example-plugin",
                 ),
+                targets=(DataPlaneTargetV2.PYTHON,),
             )
             for module_ref in module_refs
         ),
@@ -127,6 +129,24 @@ def test_unknown_field_is_rejected() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("targets", [[], ["python", "python"]])
+def test_module_targets_must_be_non_empty_and_unique(targets: list[str]) -> None:
+    snapshot = build_profile_snapshot_v2(
+        profile_id="default-v2",
+        generation=1,
+        manifests=(_manifest("builtin://example/root"),),
+        entries=(_entry("root", "builtin://example/root"),),
+    )
+    payload = profile_snapshot_v2_to_payload(snapshot)
+    payload["manifests"][0]["modules"][0]["targets"] = targets
+
+    with pytest.raises(PluginProtocolV2Error) as error:
+        parse_profile_snapshot_v2(payload)
+
+    assert error.value.code == "schema_validation_failed"
+
+
+@pytest.mark.unit
 def test_digest_mismatch_is_rejected() -> None:
     snapshot = build_profile_snapshot_v2(
         profile_id="default-v2",
@@ -189,6 +209,40 @@ def test_parent_must_contain_child_scope() -> None:
 
 
 @pytest.mark.unit
+def test_child_module_targets_must_be_subset_of_parent_targets() -> None:
+    manifest = replace(
+        _manifest("builtin://example/parent", "builtin://example/child"),
+        modules=(
+            replace(
+                _manifest("builtin://example/parent").modules[0],
+                targets=(DataPlaneTargetV2.PYTHON,),
+            ),
+            replace(
+                _manifest("builtin://example/child").modules[0],
+                targets=(DataPlaneTargetV2.PYTHON, DataPlaneTargetV2.WEB),
+            ),
+        ),
+    )
+
+    with pytest.raises(PluginProtocolV2Error) as error:
+        build_profile_snapshot_v2(
+            profile_id="default-v2",
+            generation=1,
+            manifests=(manifest,),
+            entries=(
+                _entry("parent", "builtin://example/parent"),
+                _entry(
+                    "child",
+                    "builtin://example/child",
+                    parent_entry_id="parent",
+                ),
+            ),
+        )
+
+    assert error.value.code == "invalid_parent_targets"
+
+
+@pytest.mark.unit
 def test_scope_identifiers_must_match_scope_kind() -> None:
     manifest = _manifest("builtin://example/root")
     invalid = replace(
@@ -215,5 +269,12 @@ def test_shared_snapshot_and_conformance_fixtures_are_self_consistent() -> None:
     conformance = json.loads(conformance_path.read_text(encoding="utf-8"))
 
     assert snapshot.digest == conformance["snapshot_digest"]
+    assert conformance["target_projection"] == {
+        "desktop-renderer": [],
+        "desktop-sidecar": [],
+        "python": ["root-provider", "session-consumer"],
+        "rust-server": ["root-provider", "session-consumer"],
+        "web": ["root-provider", "session-consumer"],
+    }
     vector = conformance["canonical_json"][0]
     assert canonical_json_v2(vector["input"]).decode("utf-8") == vector["expected"]

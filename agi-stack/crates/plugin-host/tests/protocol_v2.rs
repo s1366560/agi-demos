@@ -4,8 +4,9 @@ use std::{
 };
 
 use agistack_plugin_host::{
-    parse_profile_snapshot_v2, ContextV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
-    PluginModuleRuntimeV2, PluginProtocolV2Error, RuntimeV2Error,
+    parse_profile_snapshot_v2, project_snapshot_entries_v2, ContextV2, DataPlaneTargetV2,
+    GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2,
+    PluginProtocolV2Error, RuntimeV2Error,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -105,6 +106,65 @@ fn shared_snapshot_digest_and_canonical_vector_match_python() {
     let vector = &conformance["canonical_json"][0];
     let canonical = serde_jcs::to_string(&vector["input"]).expect("JCS vector must serialize");
     assert_eq!(canonical, vector["expected"]);
+    for (target, expected) in [
+        (
+            DataPlaneTargetV2::Python,
+            &conformance["target_projection"]["python"],
+        ),
+        (
+            DataPlaneTargetV2::RustServer,
+            &conformance["target_projection"]["rust-server"],
+        ),
+        (
+            DataPlaneTargetV2::DesktopSidecar,
+            &conformance["target_projection"]["desktop-sidecar"],
+        ),
+        (
+            DataPlaneTargetV2::Web,
+            &conformance["target_projection"]["web"],
+        ),
+        (
+            DataPlaneTargetV2::DesktopRenderer,
+            &conformance["target_projection"]["desktop-renderer"],
+        ),
+    ] {
+        let projected: Vec<&str> = project_snapshot_entries_v2(&snapshot, &target)
+            .into_iter()
+            .map(|entry| entry.entry_id.as_str())
+            .collect();
+        assert_eq!(
+            serde_json::to_value(projected).expect("projection must encode"),
+            *expected
+        );
+    }
+}
+
+#[test]
+fn child_targets_must_be_a_subset_of_parent_targets() {
+    let mut changed: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    changed["manifests"][0]["modules"][1]["targets"] =
+        serde_json::json!(["python", "rust-server", "web", "desktop-renderer"]);
+
+    assert!(matches!(
+        parse_profile_snapshot_v2(&changed.to_string()),
+        Err(PluginProtocolV2Error::InvalidParentTargets { .. })
+    ));
+}
+
+#[test]
+fn module_targets_must_be_non_empty_and_unique() {
+    for targets in [
+        serde_json::json!([]),
+        serde_json::json!(["python", "python"]),
+    ] {
+        let mut changed: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        changed["manifests"][0]["modules"][0]["targets"] = targets;
+
+        assert!(matches!(
+            parse_profile_snapshot_v2(&changed.to_string()),
+            Err(PluginProtocolV2Error::InvalidShape(_))
+        ));
+    }
 }
 
 #[test]
@@ -153,6 +213,22 @@ fn loader_resolves_inject_and_disposes_effects_in_lifo_order() {
         manager.publish(Arc::clone(&generation)).await;
         manager.close().await;
         assert_eq!(*lock(&disposed), vec!["module", "listener"]);
+    });
+}
+
+#[test]
+fn loader_skips_entries_outside_its_data_plane_target() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
+        let generation = LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            std::iter::empty::<PluginDefinitionV2>(),
+        )
+        .stage(snapshot)
+        .await
+        .expect("empty projection must stage");
+
+        assert!(generation.phases().is_empty());
     });
 }
 

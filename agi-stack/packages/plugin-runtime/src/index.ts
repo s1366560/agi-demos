@@ -6,6 +6,7 @@ export {
   GenerationLeaseV2,
   GenerationManagerV2,
   LoaderV2,
+  projectSnapshotEntriesV2,
   RuntimeV2Error,
   type AsyncDisposerV2,
   type EffectResultV2,

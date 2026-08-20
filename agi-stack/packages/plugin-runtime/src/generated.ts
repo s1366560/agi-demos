@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 5754a10a8e17beb69de1f7d93f3efb610a1b22d0a8c11dac101c5b064022bead
+// Schema SHA-256: 369fbb2d64ce126a216f875034280f53cb82f7c91b09caa017ff27d1d38ab985
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 export type ScopeKindV2 = 'root' | 'tenant' | 'project' | 'session';
@@ -17,6 +17,13 @@ export type TrustKindV2 = 'builtin' | 'signed' | 'tenant-approved' | 'untrusted'
 export type RestartPolicyV2 = 'hot-generation' | 'process-boundary';
 
 export type ApplyStatusV2 = 'ack' | 'nack';
+
+export type DataPlaneTargetV2 =
+  | 'python'
+  | 'rust-server'
+  | 'desktop-sidecar'
+  | 'web'
+  | 'desktop-renderer';
 
 export interface ScopeV2 {
   readonly kind: ScopeKindV2;
@@ -47,6 +54,7 @@ export interface PluginModuleV2 {
   readonly module_ref: string;
   readonly entrypoint: string;
   readonly artifact: ArtifactReferenceV2;
+  readonly targets: ReadonlyArray<DataPlaneTargetV2>;
 }
 
 export interface PluginManifestV2 {

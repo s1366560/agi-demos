@@ -10,6 +10,7 @@ import pytest
 
 from src.domain.model.plugins.generated_v2 import (
     ArtifactReferenceV2,
+    DataPlaneTargetV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -82,6 +83,7 @@ def _snapshot(generation: int, entries: tuple[ProfileEntryV2, ...]):
                 digest=_ARTIFACT_DIGEST,
                 source=f"package://builtin/{entry.entry_id}",
             ),
+            targets=(DataPlaneTargetV2.PYTHON,),
         )
         for entry in entries
     )
@@ -168,6 +170,42 @@ async def test_failed_activation_rolls_back_all_contributions() -> None:
         await loader.stage(_snapshot(1, (provider_entry, failing_entry)))
 
     assert disposed == ["provider"]
+
+
+@pytest.mark.unit
+async def test_loader_activates_only_entries_for_its_data_plane_target() -> None:
+    python_entry = _entry("python", "builtin://runtime/python")
+    web_entry = _entry("web", "builtin://runtime/web")
+    snapshot = _snapshot(1, (python_entry, web_entry))
+    snapshot = replace(
+        snapshot,
+        manifests=(
+            replace(
+                snapshot.manifests[0],
+                modules=(
+                    snapshot.manifests[0].modules[0],
+                    replace(
+                        snapshot.manifests[0].modules[1],
+                        targets=(DataPlaneTargetV2.WEB,),
+                    ),
+                ),
+            ),
+        ),
+    )
+    activated: list[str] = []
+
+    loader = LoaderV2(
+        [
+            PluginDefinitionV2(
+                module_ref=python_entry.module_ref,
+                apply=lambda _context, _config: activated.append("python"),
+            )
+        ]
+    )
+    generation = await loader.stage(snapshot)
+
+    assert activated == ["python"]
+    assert [fiber.entry.entry_id for fiber in generation.fibers] == ["python"]
 
 
 @pytest.mark.unit

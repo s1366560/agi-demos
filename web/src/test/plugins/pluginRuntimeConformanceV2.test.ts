@@ -7,6 +7,7 @@ import {
   LoaderV2,
   parseProfileSnapshotV2,
   PluginProtocolV2Error,
+  projectSnapshotEntriesV2,
   RuntimeV2Error,
   type PluginDefinitionV2,
   type ProfileSnapshotV2,
@@ -25,6 +26,7 @@ const CONFORMANCE = JSON.parse(
     readonly input: unknown;
     readonly expected: string;
   }>;
+  readonly target_projection: Readonly<Record<string, ReadonlyArray<string>>>;
 };
 
 function definitions(options: {
@@ -73,7 +75,47 @@ describe('plugin runtime v2 conformance', () => {
 
     expect(canonicalJsonV2(vector.input)).toBe(vector.expected);
     expect(snapshot.digest).toBe(CONFORMANCE.snapshot_digest);
+    for (const target of [
+      'python',
+      'rust-server',
+      'desktop-sidecar',
+      'web',
+      'desktop-renderer',
+    ] as const) {
+      expect(projectSnapshotEntriesV2(snapshot, target).map((entry) => entry.entry_id)).toEqual(
+        CONFORMANCE.target_projection[target]
+      );
+    }
   });
+
+  it('rejects child module targets outside the parent targets', async () => {
+    const snapshot = structuredClone(SNAPSHOT) as {
+      manifests: Array<{ modules: Array<{ targets: string[] }> }>;
+    };
+    const child = snapshot.manifests[0]?.modules[1];
+    if (!child) throw new Error('child module is missing');
+    child.targets.push('desktop-renderer');
+
+    await expect(parseProfileSnapshotV2(snapshot)).rejects.toMatchObject({
+      code: 'invalid_parent_targets',
+    });
+  });
+
+  it.each([[], ['python', 'python']])(
+    'rejects non-unique or empty module targets: %j',
+    async (targets) => {
+      const snapshot = structuredClone(SNAPSHOT) as {
+        manifests: Array<{ modules: Array<{ targets: string[] }> }>;
+      };
+      const module = snapshot.manifests[0]?.modules[0];
+      if (!module) throw new Error('root module is missing');
+      module.targets = targets;
+
+      await expect(parseProfileSnapshotV2(snapshot)).rejects.toMatchObject({
+        code: 'schema_validation_failed',
+      });
+    }
+  );
 
   it('rejects v1, unknown fields, and digest mutation', async () => {
     await expect(parseProfileSnapshotV2({ schema_version: 1, plugins: [] })).rejects.toMatchObject({
@@ -122,6 +164,13 @@ describe('plugin runtime v2 conformance', () => {
     expect(() => manager.acquire()).toThrowError(
       expect.objectContaining({ code: 'generation_unavailable' })
     );
+  });
+
+  it('skips entries outside the loader data plane target', async () => {
+    const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+    const generation = await new LoaderV2([], 'desktop-renderer').stage(snapshot);
+
+    expect(generation.fibers).toEqual([]);
   });
 
   it('pins old generation services until the old lease is released', async () => {

@@ -13,7 +13,9 @@ use async_trait::async_trait;
 use serde_json::Value;
 use thiserror::Error;
 
-use super::{scope_contains, scope_rank, ProfileEntryV2, ProfileSnapshotV2, ScopeV2};
+use super::{
+    scope_contains, scope_rank, DataPlaneTargetV2, ProfileEntryV2, ProfileSnapshotV2, ScopeV2,
+};
 
 type BoxEffectFutureV2 = Pin<Box<dyn Future<Output = Result<(), RuntimeV2Error>> + Send + 'static>>;
 pub type EffectDisposerV2 = Box<dyn FnOnce() -> BoxEffectFutureV2 + Send + 'static>;
@@ -355,15 +357,24 @@ impl FiberV2 {
 
 pub struct LoaderV2 {
     definitions: BTreeMap<String, PluginDefinitionV2>,
+    target: DataPlaneTargetV2,
 }
 
 impl LoaderV2 {
     pub fn new(definitions: impl IntoIterator<Item = PluginDefinitionV2>) -> Self {
+        Self::for_target(DataPlaneTargetV2::RustServer, definitions)
+    }
+
+    pub fn for_target(
+        target: DataPlaneTargetV2,
+        definitions: impl IntoIterator<Item = PluginDefinitionV2>,
+    ) -> Self {
         Self {
             definitions: definitions
                 .into_iter()
                 .map(|item| (item.module_ref.clone(), item))
                 .collect(),
+            target,
         }
     }
 
@@ -385,12 +396,12 @@ impl LoaderV2 {
         &self,
         snapshot: ProfileSnapshotV2,
     ) -> Result<Arc<RuntimeGenerationV2>, RuntimeV2Error> {
-        let entries: BTreeMap<String, ProfileEntryV2> = snapshot
-            .entries
-            .iter()
-            .filter(|entry| entry.enabled)
-            .map(|entry| (entry.entry_id.clone(), entry.clone()))
-            .collect();
+        let entries: BTreeMap<String, ProfileEntryV2> =
+            project_snapshot_entries_v2(&snapshot, &self.target)
+                .into_iter()
+                .filter(|entry| entry.enabled)
+                .map(|entry| (entry.entry_id.clone(), entry.clone()))
+                .collect();
         let mut definitions = BTreeMap::new();
         for entry in entries.values() {
             let definition = self
@@ -432,6 +443,24 @@ impl LoaderV2 {
             lifecycle: Mutex::new(GenerationLifecycleV2::default()),
         }))
     }
+}
+
+pub fn project_snapshot_entries_v2<'a>(
+    snapshot: &'a ProfileSnapshotV2,
+    target: &DataPlaneTargetV2,
+) -> Vec<&'a ProfileEntryV2> {
+    snapshot
+        .entries
+        .iter()
+        .filter(|entry| {
+            snapshot.manifests.iter().any(|manifest| {
+                manifest.plugin_id == entry.plugin_ref
+                    && manifest.modules.iter().any(|module| {
+                        module.module_ref == entry.module_ref && module.targets.contains(target)
+                    })
+            })
+        })
+        .collect()
 }
 
 #[derive(Default)]

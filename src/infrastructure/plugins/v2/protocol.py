@@ -17,6 +17,7 @@ import rfc8785
 from src.domain.model.plugins.generated_v2 import (
     ArtifactReferenceV2,
     ControlPlaneEnvelopeV2,
+    DataPlaneTargetV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -171,18 +172,18 @@ def _validate_snapshot_semantics(payload: Mapping[str, Any]) -> None:
     manifest_by_id = _unique_by(manifests, "plugin_id", "duplicate_plugin_id")
     entry_by_id = _unique_by(entries, "entry_id", "duplicate_entry_id")
 
-    modules_by_plugin: dict[str, set[str]] = {}
+    modules_by_plugin: dict[str, dict[str, Mapping[str, Any]]] = {}
     for plugin_id, manifest in manifest_by_id.items():
-        module_refs = {module["module_ref"] for module in manifest["modules"]}
-        if len(module_refs) != len(manifest["modules"]):
+        modules = {module["module_ref"]: module for module in manifest["modules"]}
+        if len(modules) != len(manifest["modules"]):
             _fail("duplicate_module_ref", f"plugin {plugin_id} declares duplicate module_ref")
-        modules_by_plugin[plugin_id] = module_refs
+        modules_by_plugin[plugin_id] = modules
 
     for entry_id, entry in entry_by_id.items():
         plugin_ref = entry["plugin_ref"]
         if plugin_ref not in manifest_by_id:
             _fail("missing_manifest", f"entry {entry_id} references missing plugin {plugin_ref}")
-        if entry["module_ref"] not in modules_by_plugin.get(plugin_ref, set()):
+        if entry["module_ref"] not in modules_by_plugin.get(plugin_ref, {}):
             _fail(
                 "missing_module",
                 f"entry {entry_id} references module outside plugin {plugin_ref}",
@@ -195,12 +196,22 @@ def _validate_snapshot_semantics(payload: Mapping[str, Any]) -> None:
     _validate_parent_tree(entry_by_id)
     for entry_id, entry in entry_by_id.items():
         parent_id = entry["parent_entry_id"]
-        if parent_id is not None and not _scope_contains(
-            entry_by_id[parent_id]["scope"], entry["scope"]
-        ):
+        if parent_id is None:
+            continue
+        parent = entry_by_id[parent_id]
+        if not _scope_contains(parent["scope"], entry["scope"]):
             _fail(
                 "invalid_parent_scope",
                 f"entry {entry_id} scope is outside parent {parent_id}",
+            )
+        child_targets = set(modules_by_plugin[entry["plugin_ref"]][entry["module_ref"]]["targets"])
+        parent_targets = set(
+            modules_by_plugin[parent["plugin_ref"]][parent["module_ref"]]["targets"]
+        )
+        if not child_targets.issubset(parent_targets):
+            _fail(
+                "invalid_parent_targets",
+                f"entry {entry_id} targets are outside parent {parent_id}",
             )
 
 
@@ -288,6 +299,7 @@ def _manifest_from_payload(payload: Mapping[str, Any]) -> PluginManifestV2:
             module_ref=item["module_ref"],
             entrypoint=item["entrypoint"],
             artifact=ArtifactReferenceV2(**item["artifact"]),
+            targets=tuple(DataPlaneTargetV2(target) for target in item["targets"]),
         )
         for item in payload["modules"]
     )

@@ -17,7 +17,12 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol
 
-from src.domain.model.plugins.generated_v2 import ProfileEntryV2, ProfileSnapshotV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import (
+    DataPlaneTargetV2,
+    ProfileEntryV2,
+    ProfileSnapshotV2,
+    ScopeV2,
+)
 
 type AsyncDisposerV2 = Callable[[], None | Awaitable[None]]
 type EffectResultV2 = (
@@ -506,8 +511,14 @@ class RuntimeGenerationV2:
 class LoaderV2:
     """Stages a complete generation from a strict snapshot and trusted module catalog."""
 
-    def __init__(self, definitions: Sequence[PluginDefinitionV2] = ()) -> None:
+    def __init__(
+        self,
+        definitions: Sequence[PluginDefinitionV2] = (),
+        *,
+        target: DataPlaneTargetV2 = DataPlaneTargetV2.PYTHON,
+    ) -> None:
         self._definitions = {item.module_ref: item for item in definitions}
+        self._target = target
 
     def register_module(self, definition: PluginDefinitionV2) -> None:
         if definition.module_ref in self._definitions:
@@ -518,7 +529,11 @@ class LoaderV2:
         self._definitions[definition.module_ref] = definition
 
     async def stage(self, snapshot: ProfileSnapshotV2) -> RuntimeGenerationV2:
-        enabled = {entry.entry_id: entry for entry in snapshot.entries if entry.enabled}
+        enabled = {
+            entry.entry_id: entry
+            for entry in project_snapshot_entries_v2(snapshot, self._target)
+            if entry.enabled
+        }
         definitions: dict[str, PluginDefinitionV2] = {}
         for entry in enabled.values():
             definition = self._definitions.get(entry.module_ref)
@@ -553,6 +568,23 @@ class LoaderV2:
                 await fiber.dispose()
             raise
         return RuntimeGenerationV2(snapshot=snapshot, fibers=fibers, providers=providers)
+
+
+def project_snapshot_entries_v2(
+    snapshot: ProfileSnapshotV2,
+    target: DataPlaneTargetV2,
+) -> tuple[ProfileEntryV2, ...]:
+    """Project a fully validated snapshot onto one data plane without mutating it."""
+    module_targets = {
+        (manifest.plugin_id, module.module_ref): module.targets
+        for manifest in snapshot.manifests
+        for module in manifest.modules
+    }
+    return tuple(
+        entry
+        for entry in snapshot.entries
+        if target in module_targets[(entry.plugin_ref, entry.module_ref)]
+    )
 
 
 class GenerationLeaseV2:
@@ -725,4 +757,5 @@ __all__ = [
     "PluginDefinitionV2",
     "RuntimeGenerationV2",
     "RuntimeV2Error",
+    "project_snapshot_entries_v2",
 ]
