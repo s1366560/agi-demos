@@ -270,6 +270,180 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_generate_title_reads_typed_turn_admission_model_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-typed-title",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Typed admission title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    event_repo = SimpleNamespace(
+        get_events=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    event_type="turn_admitted",
+                    event_data={
+                        "role": "assistant",
+                        "content": "legacy fallback must not be used",
+                        "model_message": {
+                            "role": "user",
+                            "content": "Plan the typed admission migration",
+                        },
+                    },
+                )
+            ]
+        )
+    )
+    title_llm = object()
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        get_title_llm=AsyncMock(return_value=title_llm),
+        generate_conversation_title=AsyncMock(return_value=conversation.title),
+        update_conversation_title=AsyncMock(return_value=conversation),
+    )
+    container = SimpleNamespace(
+        agent_service=lambda _llm: agent_service,
+        agent_execution_event_repository=lambda: event_repo,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+
+    response = await conversations_router.generate_conversation_title(
+        conversation_id=conversation.id,
+        request=_request_with_container(container),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        db=_db_with_project_access(),
+    )
+
+    assert response.title == "Typed admission title"
+    agent_service.generate_conversation_title.assert_awaited_once_with(
+        first_message="Plan the typed admission migration",
+        llm=title_llm,
+    )
+    event_repo.get_events.assert_awaited_once()
+    assert event_repo.get_events.await_args.kwargs["event_types"] == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_summary_projects_typed_turn_admission_as_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-typed-summary",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Typed summary",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    event_repo = SimpleNamespace(
+        get_events=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    event_type="turn_admitted",
+                    event_data={
+                        "content": "legacy fallback must not be used",
+                        "model_message": {
+                            "role": "user",
+                            "content": "Summarize typed history",
+                        },
+                    },
+                ),
+                SimpleNamespace(
+                    event_type="assistant_message",
+                    event_data={"role": "assistant", "content": "Typed history is ready."},
+                ),
+            ]
+        )
+    )
+    title_llm = SimpleNamespace(
+        ainvoke=AsyncMock(return_value=SimpleNamespace(content="Typed admission summary"))
+    )
+    conversation_repo = SimpleNamespace(save_and_commit=AsyncMock())
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        get_title_llm=AsyncMock(return_value=title_llm),
+        _conversation_repo=conversation_repo,
+    )
+    container = SimpleNamespace(
+        agent_service=lambda _llm: agent_service,
+        agent_execution_event_repository=lambda: event_repo,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+
+    response = await conversations_router.generate_summary(
+        conversation_id=conversation.id,
+        request=_request_with_container(container),
+        project_id=conversation.project_id,
+        current_user=SimpleNamespace(id=conversation.user_id),
+        tenant_id=conversation.tenant_id,
+        db=_db_with_project_access(),
+    )
+
+    prompt = title_llm.ainvoke.await_args.args[0][1].content
+    assert "user: Summarize typed history" in prompt
+    assert "assistant: Typed history is ready." in prompt
+    assert "legacy fallback must not be used" not in prompt
+    assert response.summary == "Typed admission summary"
+    conversation_repo.save_and_commit.assert_awaited_once_with(conversation)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "model_message",
+    [
+        None,
+        {"role": "assistant", "content": "not user input"},
+        {"role": "user", "content": {"text": "not a string"}},
+    ],
+)
+def test_conversation_projection_rejects_malformed_typed_turn_admission(
+    model_message: object,
+) -> None:
+    event = SimpleNamespace(
+        event_type="turn_admitted",
+        event_data={
+            "role": "user",
+            "content": "legacy fallback must not be used",
+            "model_message": model_message,
+        },
+    )
+
+    assert conversations_router._project_conversation_message(event) is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_list_conversations_expands_workspace_group_and_names(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -1715,8 +1889,7 @@ async def test_conversation_invariant_errors_are_sanitized() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_workspace_roster_invariant_errors_are_sanitized(
-) -> None:
+async def test_workspace_roster_invariant_errors_are_sanitized() -> None:
     conversation = SimpleNamespace(
         conversation_mode=None,
         tenant_id="tenant-1",

@@ -805,6 +805,10 @@ def _event_row(event: AgentExecutionEvent) -> dict[str, Any]:
 
 
 def _event_summary(event: AgentExecutionEvent) -> str:
+    if event.event_type == "turn_admitted":
+        admitted_content = _typed_admitted_user_content(event)
+        return admitted_content[:240] if admitted_content else event.event_type
+
     payload = event.event_data if isinstance(event.event_data, Mapping) else {}
     for key in ("message", "content", "summary", "error"):
         value = payload.get(key)
@@ -815,6 +819,8 @@ def _event_summary(event: AgentExecutionEvent) -> str:
 
 def _has_user_input(events: Sequence[AgentExecutionEvent]) -> bool:
     for event in events:
+        if event.event_type == "turn_admitted" and _typed_admitted_user_content(event) is not None:
+            return True
         if event.event_type == "user_message":
             return True
         if event.event_type == "message":
@@ -826,11 +832,25 @@ def _has_user_input(events: Sequence[AgentExecutionEvent]) -> bool:
 
 def _latest_user_input_time(events: Sequence[AgentExecutionEvent]) -> datetime | None:
     for event in events:
+        if event.event_type == "turn_admitted" and _typed_admitted_user_content(event) is not None:
+            return event.created_at
         if event.event_type == "user_message":
             return event.created_at
         if event.event_type == "message" and _event_role(event) == "user":
             return event.created_at
     return None
+
+
+def _typed_admitted_user_content(event: AgentExecutionEvent) -> str | None:
+    """Read typed user content without inferring from legacy payload fields."""
+    payload = event.event_data if isinstance(event.event_data, Mapping) else {}
+    raw_model_message = payload.get("model_message")
+    if not isinstance(raw_model_message, Mapping):
+        return None
+    if raw_model_message.get("role") != "user":
+        return None
+    content = raw_model_message.get("content")
+    return content if isinstance(content, str) else None
 
 
 def _has_assistant_output(events: Sequence[AgentExecutionEvent]) -> bool:

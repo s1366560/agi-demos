@@ -242,7 +242,7 @@ class TestSessionCommServiceGetHistory:
         msg_repo = AsyncMock()
         msg_repo.list_by_conversation.return_value = []
         event_repo = AsyncMock()
-        event_repo.get_message_events.return_value = [
+        event_repo.get_events.return_value = [
             _make_event(message_id="evt-user", content="Hi"),
             _make_event(
                 event_id="evt-2",
@@ -259,10 +259,14 @@ class TestSessionCommServiceGetHistory:
 
         assert [message["role"] for message in result["messages"]] == ["user", "assistant"]
         assert [message["content"] for message in result["messages"]] == ["Hi", "Hello"]
-        event_repo.get_message_events.assert_awaited_once_with(
-            conversation_id="conv-1",
-            limit=2,
-        )
+        event_repo.get_events.assert_awaited_once()
+        assert event_repo.get_events.await_args.kwargs["conversation_id"] == "conv-1"
+        assert event_repo.get_events.await_args.kwargs["limit"] == 2
+        assert event_repo.get_events.await_args.kwargs["event_types"] == {
+            "assistant_message",
+            "turn_admitted",
+            "user_message",
+        }
 
     async def test_merges_system_messages_with_event_history(self) -> None:
         conv = _make_conversation(message_count=3)
@@ -278,7 +282,7 @@ class TestSessionCommServiceGetHistory:
             )
         ]
         event_repo = AsyncMock()
-        event_repo.get_message_events.return_value = [
+        event_repo.get_events.return_value = [
             _make_event(message_id="evt-user", content="Hi"),
             _make_event(
                 event_id="evt-2",
@@ -299,6 +303,109 @@ class TestSessionCommServiceGetHistory:
             "system",
         ]
         assert result["messages"][-1]["content"] == "Peer note"
+
+    async def test_projects_typed_turn_admission_from_model_message(self) -> None:
+        conv = _make_conversation(message_count=2)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = []
+        event_repo = AsyncMock()
+        event_repo.get_events.return_value = [
+            AgentExecutionEvent(
+                id="admission-event-row",
+                conversation_id="conv-1",
+                message_id="admission-message-row",
+                event_type="turn_admitted",
+                event_data={
+                    "message_id": "payload-message-id",
+                    "role": "assistant",
+                    "content": "legacy fallback must not be used",
+                    "model_message": {
+                        "role": "user",
+                        "content": "Typed session history input",
+                    },
+                },
+                event_time_us=1,
+                event_counter=0,
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            ),
+            _make_event(
+                event_id="assistant-event-row",
+                message_id="assistant-message-row",
+                event_type="assistant_message",
+                role="assistant",
+                content="Done",
+                created_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ),
+        ]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
+
+        result = await svc.get_session_history("proj-1", "conv-1", limit=2)
+
+        assert result["messages"][0] == {
+            "id": "admission-message-row",
+            "role": "user",
+            "content": "Typed session history input",
+            "message_type": "text",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+
+    @pytest.mark.parametrize(
+        "model_message",
+        [
+            None,
+            {"role": "assistant", "content": "not user input"},
+            {"role": "user", "content": ["not", "text"]},
+        ],
+    )
+    def test_rejects_malformed_typed_turn_admission(self, model_message: object) -> None:
+        event = AgentExecutionEvent(
+            id="malformed-admission",
+            conversation_id="conv-1",
+            message_id="admission-message-row",
+            event_type="turn_admitted",
+            event_data={
+                "role": "user",
+                "content": "legacy fallback must not be used",
+                "model_message": model_message,
+            },
+            event_time_us=1,
+            event_counter=0,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+        assert SessionCommService._history_message_from_event(event) is None
+
+    async def test_malformed_only_event_history_falls_back_to_db_messages(self) -> None:
+        conv = _make_conversation(message_count=1)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = [
+            _make_message(msg_id="db-user", content="DB fallback")
+        ]
+        event_repo = AsyncMock()
+        event_repo.get_events.return_value = [
+            AgentExecutionEvent(
+                id="malformed-admission",
+                conversation_id="conv-1",
+                message_id="admission-message-row",
+                event_type="turn_admitted",
+                event_data={
+                    "content": "legacy fallback must not be used",
+                    "model_message": {"role": "assistant", "content": "not user input"},
+                },
+                event_time_us=1,
+                event_counter=0,
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        ]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
+
+        result = await svc.get_session_history("proj-1", "conv-1")
+
+        assert [message["content"] for message in result["messages"]] == ["DB fallback"]
 
 
 @pytest.mark.unit
@@ -525,7 +632,7 @@ class TestSessionsHistoryTool:
         msg_repo = AsyncMock()
         msg_repo.list_by_conversation.return_value = []
         event_repo = AsyncMock()
-        event_repo.get_message_events.return_value = [
+        event_repo.get_events.return_value = [
             _make_event(message_id="evt-user", content="Hi from events")
         ]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)

@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from src.infrastructure.adapters.primary.web.routers.agent.messages import (
     _DISPLAYABLE_EVENTS,
     _build_completion_map,
@@ -48,6 +50,82 @@ def test_displayable_events_include_legacy_subagent_timeline_events() -> None:
 
 def test_displayable_events_include_persisted_act_delta() -> None:
     assert "act_delta" in _DISPLAYABLE_EVENTS
+
+
+def test_displayable_events_include_typed_turn_admission() -> None:
+    assert "turn_admitted" in _DISPLAYABLE_EVENTS
+
+
+def test_build_timeline_projects_typed_turn_admission_as_user_message() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="turn_admitted",
+                event_data={
+                    "message_id": "payload-message-id",
+                    "role": "assistant",
+                    "content": "legacy payload must not win",
+                    "model_message": {
+                        "role": "user",
+                        "content": "Inspect the typed admission",
+                    },
+                },
+                message_id="event-row-message-id",
+            )
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline == [
+        {
+            "id": "turn_admitted-1000-0",
+            "type": "user_message",
+            "eventTimeUs": 1_000,
+            "eventCounter": 0,
+            "timestamp": 1,
+            "message_id": "event-row-message-id",
+            "content": "Inspect the typed admission",
+            "role": "user",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "model_message",
+    [
+        None,
+        {"role": "assistant", "content": "not admitted user input"},
+        {"role": "user", "content": {"text": "not a string"}},
+    ],
+)
+def test_build_timeline_rejects_malformed_typed_turn_admission(
+    model_message: object,
+) -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="turn_admitted",
+                event_data={
+                    "role": "user",
+                    "content": "legacy fallback must not be used",
+                    "model_message": model_message,
+                },
+            )
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline == []
 
 
 def test_displayable_events_exclude_derived_workspace_and_cost_state() -> None:

@@ -6,6 +6,7 @@ Endpoints for conversation messages, execution history, and status.
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
@@ -188,6 +189,9 @@ _DISPLAYABLE_EVENTS.update(
         # Contract-agent tool calls can persist only streaming act_delta rows
         # when the final tool call terminates the session before a full act row.
         "act_delta",
+        # V2 turn admission is the authoritative user-message event. History
+        # projects its typed model_message while retaining the persisted row id.
+        "turn_admitted",
         # Per-tool skill progress is part of the WebSocket contract but predates
         # the canonical AgentEventType registry.
         "skill_tool_start",
@@ -405,6 +409,29 @@ def _build_user_message(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         metadata["forcedSkillName"] = data["forced_skill_name"]
     if metadata:
         item["metadata"] = metadata
+    return item
+
+
+def _build_turn_admitted(
+    data: dict[str, Any],
+    event: Any,
+    **_kwargs: Any,
+) -> dict[str, Any] | object:
+    """Project a valid typed turn admission onto the public user-message shape."""
+    raw_model_message = data.get("model_message")
+    if not isinstance(raw_model_message, Mapping):
+        return _SKIP_EVENT_SENTINEL
+    if raw_model_message.get("role") != "user":
+        return _SKIP_EVENT_SENTINEL
+    content = raw_model_message.get("content")
+    if not isinstance(content, str):
+        return _SKIP_EVENT_SENTINEL
+
+    projected_data = dict(data)
+    projected_data["message_id"] = event.message_id
+    projected_data["content"] = content
+    item = _build_user_message(projected_data)
+    item["__timeline_type"] = "user_message"
     return item
 
 
@@ -1199,6 +1226,7 @@ def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
 
 # Dispatch dict: event_type -> builder function
 _EVENT_BUILDERS: dict[str, Any] = {
+    "turn_admitted": _build_turn_admitted,
     "user_message": _build_user_message,
     "assistant_message": _build_assistant_message,
     "thought": _build_thought,

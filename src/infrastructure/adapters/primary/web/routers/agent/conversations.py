@@ -5,6 +5,7 @@ CRUD operations for Agent conversations.
 
 import logging
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -20,8 +21,9 @@ from sqlalchemy.sql.functions import FunctionElement
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
-from src.domain.model.agent import ConversationStatus
+from src.domain.model.agent import AgentExecutionEvent, ConversationStatus
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
+from src.domain.ports.repositories.agent_repository import AgentExecutionEventRepository
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityNotFoundError,
@@ -69,6 +71,56 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_CONVERSATION_MESSAGE_EVENT_TYPES = {
+    "assistant_message",
+    "turn_admitted",
+    "user_message",
+}
+_CONVERSATION_ROLE_BY_EVENT_TYPE = {
+    "assistant_message": "assistant",
+    "user_message": "user",
+}
+_EVENT_TIME_UPPER_BOUND = (1 << 63) - 1
+
+
+async def _load_conversation_message_events(
+    event_repository: AgentExecutionEventRepository,
+    *,
+    conversation_id: str,
+    limit: int,
+) -> list[AgentExecutionEvent]:
+    """Load the latest public message events, including V2 turn admission."""
+    return await event_repository.get_events(
+        conversation_id=conversation_id,
+        limit=limit,
+        event_types=_CONVERSATION_MESSAGE_EVENT_TYPES,
+        before_time_us=_EVENT_TIME_UPPER_BOUND,
+    )
+
+
+def _project_conversation_message(event: AgentExecutionEvent) -> tuple[str, str] | None:
+    """Return a role/content pair only for an explicitly typed message event."""
+    event_type = getattr(event.event_type, "value", event.event_type)
+    payload = event.event_data if isinstance(event.event_data, Mapping) else {}
+    if event_type == "turn_admitted":
+        raw_model_message = payload.get("model_message")
+        if not isinstance(raw_model_message, Mapping):
+            return None
+        if raw_model_message.get("role") != "user":
+            return None
+        content = raw_model_message.get("content")
+        if not isinstance(content, str):
+            return None
+        return ("user", content)
+
+    role = _CONVERSATION_ROLE_BY_EVENT_TYPE.get(event_type)
+    content = payload.get("content")
+    if role is None or not isinstance(content, str):
+        return None
+    return (role, content)
+
+
 CONVERSATION_LIST_DEFAULT_LIMIT = 10
 WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
 
@@ -1342,17 +1394,17 @@ async def generate_conversation_title(
         if not conversation:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-        message_events = await agent_service.get_conversation_messages(
+        message_events = await _load_conversation_message_events(
+            container.agent_execution_event_repository(),
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
             limit=10,
         )
 
         first_user_message = None
         for event in message_events:
-            if event.event_type == "user_message":
-                first_user_message = event.event_data.get("content", "")
+            projected_message = _project_conversation_message(event)
+            if projected_message is not None and projected_message[0] == "user":
+                first_user_message = projected_message[1]
                 break
 
         if not first_user_message:
@@ -1420,17 +1472,18 @@ async def generate_summary(
         if not conversation:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-        message_events = await agent_service.get_conversation_messages(
+        message_events = await _load_conversation_message_events(
+            container.agent_execution_event_repository(),
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
             limit=50,
         )
 
         messages_text = ""
         for event in message_events:
-            role = event.event_type.replace("_message", "")
-            content = event.event_data.get("content", "")
+            projected_message = _project_conversation_message(event)
+            if projected_message is None:
+                continue
+            role, content = projected_message
             if content:
                 messages_text += f"{role}: {content[:500]}\n"
 
