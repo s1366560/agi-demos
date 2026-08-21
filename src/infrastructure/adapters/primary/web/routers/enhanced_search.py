@@ -8,26 +8,20 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_store_port import (
-    GraphStorePort,
-    GraphStorePort as GraphServicePort,
-)
-from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
+from src.domain.ports.services.graph_store_port import GraphStorePort as GraphServicePort
 
 # Use Cases & DI Container
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_graph_store,
-    get_graph_store as get_graph_service,
-    get_retrieval_store,
-)
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.graph import (
     _entity_type_from_props_or_labels,
     _graph_project_scope,
     _sanitize_graph_value,
 )
+from src.infrastructure.adapters.primary.web.search_application_authority_v2 import (
+    SearchApplicationAuthorityV2,
+    search_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
 from src.infrastructure.i18n import gettext as _
 
@@ -184,19 +178,19 @@ async def search_advanced(
     project_id: str | None = Body(None, description="Project filter"),
     since: str | None = Body(None, description="Filter by creation date (ISO format)"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Perform advanced search with configurable strategy and reranking.
 
     Uses NativeGraphAdapter's hybrid search (vector + keyword + RRF fusion).
     """
+    db = search_application.db
+    graph_service = search_application.services.graph_service
     logger.info(f"search_advanced called: query='{query}', project_id='{project_id}'")
     try:
-        if not graph_service:
-            raise HTTPException(status_code=503, detail=_("Graph service not available"))
-
         # Use NativeGraphAdapter's search method
         results = await _search_graph_service_for_scope(
             graph_service,
@@ -266,8 +260,9 @@ async def search_by_graph_traversal(
     tenant_id: str | None = Body(None, description="Tenant filter"),
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Search by traversing the knowledge graph from a starting entity.
@@ -275,10 +270,9 @@ async def search_by_graph_traversal(
     This performs graph traversal to find related entities, episodes, and communities.
     Useful for exploring connections and discovering related content.
     """
+    db = search_application.db
+    graph_store = search_application.services.graph_service
     try:
-        if graph_store is None:
-            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
-
         start_project_id = await graph_store.get_entity_project_id(start_entity_uuid)
         if start_project_id is None:
             raise HTTPException(status_code=404, detail=_("Entity not found"))
@@ -342,18 +336,18 @@ async def search_by_community(
     tenant_id: str | None = Body(None, description="Tenant filter"),
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Search within a community for related content.
 
     This finds all entities and optionally episodes within a specific community.
     """
+    db = search_application.db
+    graph_store = search_application.services.graph_service
     try:
-        if graph_store is None:
-            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
-
         community_project_id = await graph_store.get_community_project_id(community_uuid)
         if community_project_id is None:
             raise HTTPException(status_code=404, detail=_("Community not found"))
@@ -397,8 +391,9 @@ async def search_temporal(
     tenant_id: str | None = Body(None, description="Tenant filter"),
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Search within a temporal window.
@@ -406,9 +401,9 @@ async def search_temporal(
     Performs semantic search restricted to a specific time range.
     Useful for finding memories from specific periods.
     """
+    db = search_application.db
+    graph_store = search_application.services.graph_service
     try:
-        if graph_store is None:
-            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         parsed_since = _parse_optional_datetime(since, "since")
         parsed_until = _parse_optional_datetime(until, "until")
 
@@ -462,8 +457,9 @@ async def search_with_facets(
     tenant_id: str | None = Body(None, description="Tenant filter"),
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Search with faceted filtering.
@@ -471,9 +467,9 @@ async def search_with_facets(
     Performs semantic search with additional filters and returns facet counts
     for UI filtering controls.
     """
+    db = search_application.db
+    graph_store = search_application.services.graph_service
     try:
-        if graph_store is None:
-            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         parsed_since = _parse_optional_datetime(since, "since")
 
         # Resolve scope + access (empty scope => no accessible projects).
@@ -549,19 +545,21 @@ async def search_with_facets(
 @router.get("/capabilities")
 async def get_search_capabilities(
     current_user: User = Depends(get_current_user),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get available search capabilities and configuration.
 
     Returns information about available search types and their parameters.
     """
+    graph_store = search_application.services.graph_service
     graph_backend_available = False
-    if graph_store is not None:
-        try:
-            graph_backend_available = await graph_store.health_probe()
-        except Exception:
-            logger.warning("Graph capability health probe failed", exc_info=True)
+    try:
+        graph_backend_available = await graph_store.health_probe()
+    except Exception:
+        logger.warning("Graph capability health probe failed", exc_info=True)
 
     graph_backend = (
         {
@@ -682,9 +680,9 @@ async def get_search_capabilities(
 async def memory_search(
     params: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
-    retrieval_store: RetrievalStorePort | None = Depends(get_retrieval_store),
+    search_application: SearchApplicationAuthorityV2 = Depends(
+        search_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Search memories using hybrid search.
@@ -692,6 +690,9 @@ async def memory_search(
     This endpoint consolidates search functionality.
     Supports semantic search, keyword search, and graph traversal.
     """
+    db = search_application.db
+    graph_service = search_application.services.graph_service
+    retrieval_store = search_application.services.retrieval_store
     try:
         query = params.get("query", "")
         limit = params.get("limit", 10)
@@ -699,9 +700,6 @@ async def memory_search(
 
         if not query:
             raise HTTPException(status_code=400, detail=_("Query is required"))
-
-        if not graph_service and not retrieval_store:
-            raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
         results: list[Any] = []
         if retrieval_store is not None and project_id:
@@ -724,7 +722,7 @@ async def memory_search(
                 for item in retrieval_results
             )
 
-        if graph_service is not None and len(results) < limit:
+        if len(results) < limit:
             graph_results = await _search_graph_service_for_scope(
                 graph_service,
                 query=query,

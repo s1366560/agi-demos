@@ -32,6 +32,7 @@ from .project_tenant_services import project_tenant_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
+from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
@@ -91,6 +92,7 @@ def builtin_runtime_definitions_v2(
         ),
         graph_runtime_definition_v2(graph_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
+        search_service_definition_v2(),
         *memory_service_definitions_v2(),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),

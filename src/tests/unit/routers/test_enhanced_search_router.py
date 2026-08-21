@@ -1,5 +1,8 @@
 """Unit tests for enhanced search router scope and query safety."""
 
+from functools import partial
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -7,13 +10,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.enhanced_search import (
-    get_search_capabilities,
-    memory_search,
-    search_advanced,
-    search_by_community,
-    search_by_graph_traversal,
-    search_temporal,
-    search_with_facets,
+    get_search_capabilities as _get_search_capabilities,
+    memory_search as _memory_search,
+    search_advanced as _search_advanced,
+    search_by_community as _search_by_community,
+    search_by_graph_traversal as _search_by_graph_traversal,
+    search_temporal as _search_temporal,
+    search_with_facets as _search_with_facets,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
@@ -21,6 +24,39 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+
+
+async def _call_with_search_authority(
+    endpoint: Any,
+    *args: Any,
+    db: AsyncSession | None = None,
+    graph_service: object | None = None,
+    graph_store: object | None = None,
+    retrieval_store: object | None = None,
+    **kwargs: Any,
+) -> Any:
+    if graph_service is not None and graph_store is not None:
+        raise ValueError("test search authority accepts one graph resource")
+    graph_resource = graph_service if graph_service is not None else graph_store
+    if graph_resource is None:
+        raise ValueError("test search authority requires a graph resource")
+    authority = SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(
+            graph_service=graph_resource,
+            retrieval_store=retrieval_store,
+        ),
+    )
+    return await endpoint(*args, search_application=authority, **kwargs)
+
+
+get_search_capabilities = partial(_call_with_search_authority, _get_search_capabilities)
+memory_search = partial(_call_with_search_authority, _memory_search)
+search_advanced = partial(_call_with_search_authority, _search_advanced)
+search_by_community = partial(_call_with_search_authority, _search_by_community)
+search_by_graph_traversal = partial(_call_with_search_authority, _search_by_graph_traversal)
+search_temporal = partial(_call_with_search_authority, _search_temporal)
+search_with_facets = partial(_call_with_search_authority, _search_with_facets)
 
 
 def _store_with_entity_project(project_id: str | None) -> Mock:

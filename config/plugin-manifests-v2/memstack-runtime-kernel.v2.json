@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:4f5ded43a2ca76840f8ca473c2b5ea6c2491d226b2c0868106f27df8ec12c333",
+        "digest": "sha256:6fb5004709d6fdc86cdbf457c10e516e6816300e2c6fe9380657fff2358f1cd7",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -348,6 +348,48 @@
       "artifact": {
         "digest": "sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036e564b30881251e44c11a001",
         "source": "repo+python://src/infrastructure/plugins/v2/memory_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/search-services",
+      "entrypoint": "src.infrastructure.plugins.v2.search_services:_apply_search_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.search-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "graph_runtime",
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "retrieval_runtime",
+              "service": "service:retrieval.env-runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-runtime-services", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:bd0988868e506bb66a92652d7580c30cffd36d77519fbb363419839159e2c01f",
+      "artifact": {
+        "digest": "sha256:66c9227f5681c7c737958b99cd49ac370662a171fb608342e63376abc10e051a",
+        "source": "repo+python://src/infrastructure/plugins/v2/search_services.py"
       }
     },
     {

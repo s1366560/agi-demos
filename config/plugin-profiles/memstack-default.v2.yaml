@@ -77,6 +77,22 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-search-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/search-services
+      enabled: true
+      config:
+        strategy: generation-runtime-services
+      inject:
+        graph_runtime: service:graph.runtime
+        retrieval_runtime: service:retrieval.env-runtime
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-project-tenant-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
