@@ -894,7 +894,7 @@ fn read_archive_object<'a>(
     serde_json::from_slice(bytes).map_err(|_| format!("plugin archive file {name} is invalid JSON"))
 }
 
-fn validate_cloud_base_url(record: &TrustedSessionRecord) -> Result<Url, String> {
+pub(super) fn validate_cloud_base_url(record: &TrustedSessionRecord) -> Result<Url, String> {
     let url = Url::parse(&record.api_base_url)
         .map_err(|_| "trusted cloud API base URL is invalid".to_string())?;
     let loopback = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
@@ -912,7 +912,7 @@ fn username_password_empty(url: &Url) -> bool {
     url.username().is_empty() && url.password().is_none()
 }
 
-fn control_plane_url(base: &Url, suffix: &str) -> Result<Url, String> {
+pub(super) fn control_plane_url(base: &Url, suffix: &str) -> Result<Url, String> {
     let base_path = base.path().trim_end_matches('/');
     let prefix = if base_path.ends_with("/api/v1") {
         base_path.to_string()

@@ -98,6 +98,8 @@ mod mcp_supervisor_tests;
 mod parity_routes;
 pub(crate) mod platform_plugin_sync;
 pub(crate) use platform_plugin_sync::PlatformPluginControlPlaneReconciler;
+mod platform_plugin_sync_v2;
+pub(crate) use platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2;
 mod provider_credentials;
 mod provider_management;
 mod provider_probe;
@@ -403,6 +405,16 @@ impl LocalRuntimeService {
         trusted_sessions: crate::trusted_session::TrustedSessionBroker,
     ) -> platform_plugin_sync::PlatformPluginControlPlaneReconciler {
         platform_plugin_sync::PlatformPluginControlPlaneReconciler::start(
+            Arc::clone(&self.state),
+            trusted_sessions,
+        )
+    }
+
+    pub(crate) fn start_platform_plugin_control_plane_v2(
+        &self,
+        trusted_sessions: crate::trusted_session::TrustedSessionBroker,
+    ) -> platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2 {
+        platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2::start(
             Arc::clone(&self.state),
             trusted_sessions,
         )

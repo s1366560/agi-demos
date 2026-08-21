@@ -64,9 +64,11 @@ pub use profile_reconcile::{
     PluginActivation, PluginApplyReceipt, PluginApplyStatus,
 };
 pub use protocol_v2::{
-    parse_profile_snapshot_v2, project_snapshot_entries_v2, ContextV2, DataPlaneTargetV2,
-    FiberPhaseV2, FiberV2, GenerationLeaseV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
-    PluginModuleRuntimeV2, PluginProtocolV2Error, RuntimeGenerationV2, RuntimeV2Error,
+    parse_control_plane_distribution_v2, parse_profile_snapshot_v2, project_snapshot_entries_v2,
+    ApplyStatusV2, ContextV2, ControlPlaneDistributionV2, DataPlaneTargetV2, FiberPhaseV2, FiberV2,
+    GenerationLeaseV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
+    PluginGenerationDescriptorV2, PluginModuleRuntimeV2, PluginProtocolV2Error,
+    PluginSnapshotReconcilerV2, RuntimeGenerationV2, RuntimeV2Error, SnapshotApplyReceiptV2,
     PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL_V2,
 };
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};

@@ -1,11 +1,17 @@
 //! Strict v2 wire protocol and executor-neutral generation runtime.
 
+mod distribution;
 mod generated;
+mod reconciler;
 mod runtime;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub use distribution::{
+    parse_control_plane_distribution_v2, ControlPlaneDistributionV2, PluginGenerationDescriptorV2,
+};
 pub use generated::*;
+pub use reconciler::PluginSnapshotReconcilerV2;
 pub use runtime::{
     project_snapshot_entries_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
     GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2,
@@ -45,6 +51,8 @@ pub enum PluginProtocolV2Error {
     InvalidParentScope { entry_id: String, parent_id: String },
     #[error("entry {entry_id} targets are outside parent {parent_id}")]
     InvalidParentTargets { entry_id: String, parent_id: String },
+    #[error("plugin distribution is inconsistent: {0}")]
+    DistributionMismatch(String),
 }
 
 /// Parse a strict v2 snapshot and independently verify its RFC 8785 digest.

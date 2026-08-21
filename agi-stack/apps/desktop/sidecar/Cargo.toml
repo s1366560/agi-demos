@@ -33,6 +33,7 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+thiserror.workspace = true
 url = "2"
 uuid = { version = "1", features = ["v4", "v5"] }
 zeroize = "1"

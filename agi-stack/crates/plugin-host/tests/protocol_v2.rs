@@ -4,17 +4,62 @@ use std::{
 };
 
 use agistack_plugin_host::{
-    parse_profile_snapshot_v2, project_snapshot_entries_v2, ContextV2, DataPlaneTargetV2,
-    GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2,
-    PluginProtocolV2Error, RuntimeV2Error,
+    parse_control_plane_distribution_v2, parse_profile_snapshot_v2, project_snapshot_entries_v2,
+    ApplyStatusV2, ContextV2, DataPlaneTargetV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
+    PluginModuleRuntimeV2, PluginProtocolV2Error, PluginSnapshotReconcilerV2, RuntimeV2Error,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 const SNAPSHOT: &str = include_str!("../../../../shared/fixtures/platform-plugin-profile.v2.json");
 const CONFORMANCE: &str =
     include_str!("../../../../shared/fixtures/plugin-runtime-conformance.v2.json");
+
+fn distribution(snapshot: Value, version: u64, nonce: &str) -> String {
+    let digest = snapshot["digest"]
+        .as_str()
+        .expect("snapshot digest")
+        .to_owned();
+    serde_json::json!({
+        "schema_version": 2,
+        "descriptor": {
+            "profile_id": snapshot["profile_id"],
+            "generation": snapshot["generation"],
+            "digest": digest,
+        },
+        "snapshot": snapshot,
+        "envelope": {
+            "version": version,
+            "nonce": nonce,
+            "snapshot_digest": digest,
+            "type_url": "types.memstack.ai/plugin.profile.v2",
+        },
+    })
+    .to_string()
+}
+
+fn snapshot_with_target(target: &str) -> Value {
+    let mut snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    for module in snapshot["manifests"][0]["modules"]
+        .as_array_mut()
+        .expect("fixture modules")
+    {
+        module["targets"]
+            .as_array_mut()
+            .expect("fixture targets")
+            .push(Value::String(target.to_owned()));
+    }
+    let mut digest_payload = snapshot.clone();
+    digest_payload
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("digest");
+    let canonical = serde_jcs::to_vec(&digest_payload).expect("snapshot must canonicalize");
+    snapshot["digest"] = Value::String(format!("{:x}", Sha256::digest(canonical)));
+    snapshot
+}
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
@@ -79,7 +124,16 @@ fn loader(
     disposed: Arc<Mutex<Vec<String>>>,
     observed: Arc<Mutex<Vec<u64>>>,
 ) -> LoaderV2 {
-    LoaderV2::new([
+    LoaderV2::new(definitions(value, fail, disposed, observed))
+}
+
+fn definitions(
+    value: u64,
+    fail: bool,
+    disposed: Arc<Mutex<Vec<String>>>,
+    observed: Arc<Mutex<Vec<u64>>>,
+) -> [PluginDefinitionV2; 2] {
+    [
         PluginDefinitionV2 {
             module_ref: "builtin://conformance/root-provider".into(),
             provides: vec!["service:clock".into()],
@@ -90,7 +144,7 @@ fn loader(
             provides: Vec::new(),
             module: Arc::new(SessionConsumer { observed, fail }),
         },
-    ])
+    ]
 }
 
 #[test]
@@ -168,6 +222,17 @@ fn module_targets_must_be_non_empty_and_unique() {
 }
 
 #[test]
+fn unknown_data_plane_target_is_rejected() {
+    let mut changed: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    changed["manifests"][0]["modules"][0]["targets"][0] = Value::String("unknown-plane".into());
+
+    assert!(matches!(
+        parse_profile_snapshot_v2(&changed.to_string()),
+        Err(PluginProtocolV2Error::InvalidShape(_))
+    ));
+}
+
+#[test]
 fn v1_unknown_fields_and_digest_mutation_are_rejected() {
     assert_eq!(
         parse_profile_snapshot_v2(r#"{"schema_version":1,"plugins":[]}"#),
@@ -187,6 +252,145 @@ fn v1_unknown_fields_and_digest_mutation_are_rejected() {
         parse_profile_snapshot_v2(&changed.to_string()),
         Err(PluginProtocolV2Error::DigestMismatch { .. })
     ));
+}
+
+#[test]
+fn distribution_validates_the_full_snapshot_before_target_projection() {
+    let mut invalid: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    invalid["entries"][0]["plugin_ref"] = Value::String("missing-plugin".into());
+
+    assert!(matches!(
+        parse_control_plane_distribution_v2(&distribution(invalid, 11, "nonce-invalid")),
+        Err(PluginProtocolV2Error::MissingManifest { .. })
+    ));
+}
+
+#[test]
+fn distribution_rejects_v1_and_mismatched_descriptor_or_envelope() {
+    assert_eq!(
+        parse_control_plane_distribution_v2(r#"{"schema_version":1}"#),
+        Err(PluginProtocolV2Error::IncompatibleSchemaVersion)
+    );
+
+    let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    let mut mismatched: Value = serde_json::from_str(&distribution(snapshot, 11, "nonce-mismatch"))
+        .expect("distribution must parse");
+    mismatched["envelope"]["snapshot_digest"] = Value::String("0".repeat(64));
+    assert!(matches!(
+        parse_control_plane_distribution_v2(&mismatched.to_string()),
+        Err(PluginProtocolV2Error::DistributionMismatch(_))
+    ));
+}
+
+#[test]
+fn desktop_reconciler_acks_only_its_empty_target_projection() {
+    block_on(async {
+        let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        let distribution =
+            parse_control_plane_distribution_v2(&distribution(snapshot, 11, "nonce-desktop"))
+                .expect("distribution must parse");
+        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            std::iter::empty::<PluginDefinitionV2>(),
+        ));
+
+        let receipt = reconciler.apply(&distribution).await;
+
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        assert_eq!(receipt.applied_version, Some(11));
+        assert_eq!(
+            receipt.applied_digest,
+            Some(distribution.snapshot.digest.clone())
+        );
+        let lease = reconciler
+            .manager()
+            .acquire()
+            .expect("generation must publish");
+        assert!(lease
+            .generation()
+            .expect("generation must remain active")
+            .phases()
+            .is_empty());
+        lease.release().await.expect("lease must release");
+        reconciler.close().await;
+    });
+}
+
+#[test]
+fn desktop_reconciler_activates_non_empty_catalog_and_nacks_missing_definition() {
+    block_on(async {
+        let snapshot = snapshot_with_target("desktop-sidecar");
+        let distribution =
+            parse_control_plane_distribution_v2(&distribution(snapshot, 11, "nonce-desktop"))
+                .expect("distribution must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            definitions(42, false, Arc::clone(&disposed), Arc::clone(&observed)),
+        ));
+
+        let receipt = reconciler.apply(&distribution).await;
+
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        assert_eq!(*lock(&observed), vec![42]);
+        let lease = reconciler
+            .manager()
+            .acquire()
+            .expect("generation must publish");
+        assert_eq!(
+            lease
+                .generation()
+                .expect("generation must remain active")
+                .phases()
+                .len(),
+            2
+        );
+        lease.release().await.expect("lease must release");
+        reconciler.close().await;
+
+        let mut missing = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            std::iter::empty::<PluginDefinitionV2>(),
+        ));
+        let receipt = missing.apply(&distribution).await;
+        assert_eq!(receipt.status, ApplyStatusV2::Nack);
+        assert_eq!(
+            receipt.error_code.as_deref(),
+            Some("generation_apply_failed")
+        );
+        assert!(receipt
+            .error_message
+            .as_deref()
+            .is_some_and(|message| message.contains("is unavailable")));
+        assert!(missing.manager().acquire().is_err());
+        missing.close().await;
+    });
+}
+
+#[test]
+fn reconciler_nacks_stale_versions_and_retains_last_good() {
+    block_on(async {
+        let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        let first =
+            parse_control_plane_distribution_v2(&distribution(snapshot.clone(), 11, "nonce-11"))
+                .expect("first distribution must parse");
+        let stale = parse_control_plane_distribution_v2(&distribution(snapshot, 10, "nonce-10"))
+            .expect("stale distribution must parse");
+        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+            DataPlaneTargetV2::DesktopSidecar,
+            std::iter::empty::<PluginDefinitionV2>(),
+        ));
+
+        assert_eq!(reconciler.apply(&first).await.status, ApplyStatusV2::Ack);
+        let receipt = reconciler.apply(&stale).await;
+
+        assert_eq!(receipt.status, ApplyStatusV2::Nack);
+        assert_eq!(receipt.error_code.as_deref(), Some("stale_version"));
+        assert_eq!(receipt.applied_version, Some(11));
+        assert_eq!(receipt.applied_digest, Some(first.snapshot.digest.clone()));
+        reconciler.close().await;
+    });
 }
 
 #[test]
