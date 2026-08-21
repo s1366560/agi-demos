@@ -27,6 +27,7 @@ from .channel_adapters import (
 )
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
+from .memory_services import memory_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
@@ -87,6 +88,7 @@ def builtin_runtime_definitions_v2(
             apply=_apply_runtime_boundary,
         ),
         graph_runtime_definition_v2(graph_runtime_factory),
+        *memory_service_definitions_v2(),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),

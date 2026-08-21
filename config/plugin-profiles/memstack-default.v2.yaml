@@ -31,6 +31,36 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-memory-repository-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/memory-repository-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-memory-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/memory-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        repository_provider: service:persistence.memory-repository-provider
+        graph_runtime: service:graph.runtime
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-project-tenant-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

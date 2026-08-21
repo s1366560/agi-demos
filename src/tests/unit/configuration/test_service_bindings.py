@@ -17,7 +17,7 @@ from src.configuration.service_bindings import (
     ContainerServiceBinding,
 )
 
-_B1_GROUPS = ("infra", "memory", "auth")
+_B1_GROUPS = ("infra", "auth")
 
 # Accessors whose first call performs environment-dependent work (Docker
 # recovery, credential chains). Their bindings are validated structurally
@@ -56,7 +56,7 @@ _B1_ACTIVATABLE = [b for b in _B1_BINDINGS if b.key not in _ACTIVATION_SKIP]
 
 @pytest.mark.unit
 class TestServiceBindingsB1:
-    """Batch B1: infra singletons + memory domain + auth domain."""
+    """Batch B1: infra singletons + auth domain."""
 
     def test_container_declares_b1_services(self) -> None:
         container = DIContainer(db=Mock(), graph_service=Mock())

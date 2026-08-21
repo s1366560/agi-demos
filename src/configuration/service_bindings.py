@@ -48,7 +48,6 @@ class ContainerServiceBinding:
 
 BINDING_GROUPS: tuple[str, ...] = (
     "infra",
-    "memory",
     "auth",
     "task",
     "workspace",
@@ -109,43 +108,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         key="sandbox_event_publisher",
         group="infra",
         target="_infra.sandbox_event_publisher",
-        inject=(),
-    ),
-    # --- memory ---
-    ContainerServiceBinding(
-        key="memory_repository", group="memory", target="_memory.memory_repository", inject=()
-    ),
-    ContainerServiceBinding(
-        key="memory_service", group="memory", target="_memory.memory_service", inject=()
-    ),
-    ContainerServiceBinding(
-        key="search_service", group="memory", target="_memory.search_service", inject=()
-    ),
-    ContainerServiceBinding(
-        key="create_memory_use_case",
-        group="memory",
-        target="_memory.create_memory_use_case",
-        inject=(),
-    ),
-    ContainerServiceBinding(
-        key="get_memory_use_case", group="memory", target="_memory.get_memory_use_case", inject=()
-    ),
-    ContainerServiceBinding(
-        key="list_memories_use_case",
-        group="memory",
-        target="_memory.list_memories_use_case",
-        inject=(),
-    ),
-    ContainerServiceBinding(
-        key="delete_memory_use_case",
-        group="memory",
-        target="_memory.delete_memory_use_case",
-        inject=(),
-    ),
-    ContainerServiceBinding(
-        key="search_memory_use_case",
-        group="memory",
-        target="_memory.search_memory_use_case",
         inject=(),
     ),
     # --- auth ---

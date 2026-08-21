@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:93fe7f1a7b3db7d27455d231ef8e4cc685c315aaa58ff6627ea4e0d5ccac3c96",
+        "digest": "sha256:0f387949d858e87a8cb601d871e432b4cdbecd67880138436650835f4b8b8731",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -237,6 +237,79 @@
       "artifact": {
         "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/memory-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.memory_services:_apply_memory_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.memory-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:d9c7c7e26ceb80c94ca84eef57e89cce3f63a3b610625c00b27462afe4797e22",
+      "artifact": {
+        "digest": "sha256:8f8146843b5d3c97e829d570cb156721bdd5f336a3822ac65e64204b60174d4b",
+        "source": "repo+python://src/infrastructure/plugins/v2/memory_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/memory-services",
+      "entrypoint": "src.infrastructure.plugins.v2.memory_services:_apply_memory_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.memory-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repository_provider",
+              "service": "service:persistence.memory-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "graph_runtime",
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9b0cc154125370c5a9913b2041782490251dd2ac3a10cc5d4c47a4a3f196d48f",
+      "artifact": {
+        "digest": "sha256:8f8146843b5d3c97e829d570cb156721bdd5f336a3822ac65e64204b60174d4b",
+        "source": "repo+python://src/infrastructure/plugins/v2/memory_services.py"
       }
     },
     {

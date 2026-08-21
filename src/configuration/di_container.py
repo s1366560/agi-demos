@@ -20,9 +20,7 @@ from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
 from src.application.services.instance_template_service import InstanceTemplateService
-from src.application.services.memory_service import MemoryService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
-from src.application.services.search_service import SearchService
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
 from src.application.services.topology_service import TopologyService
@@ -42,15 +40,6 @@ from src.application.use_cases.agent import (
     ListConversationsUseCase,
     SynthesizeResultsUseCase,
 )
-from src.application.use_cases.memory.create_memory import (
-    CreateMemoryUseCase as MemCreateMemoryUseCase,
-)
-from src.application.use_cases.memory.delete_memory import (
-    DeleteMemoryUseCase as MemDeleteMemoryUseCase,
-)
-from src.application.use_cases.memory.get_memory import GetMemoryUseCase as MemGetMemoryUseCase
-from src.application.use_cases.memory.list_memories import ListMemoriesUseCase
-from src.application.use_cases.memory.search_memory import SearchMemoryUseCase
 from src.application.use_cases.task import (
     CreateTaskUseCase,
     GetTaskUseCase,
@@ -64,7 +53,6 @@ from src.configuration.containers import (
     CronContainer,
     InfraContainer,
     InstanceContainer,
-    MemoryContainer,
     ProjectContainer,
     SandboxContainer,
     TaskContainer,
@@ -91,7 +79,6 @@ from src.domain.ports.repositories.instance_repository import InstanceRepository
 from src.domain.ports.repositories.instance_template_repository import (
     InstanceTemplateRepository,
 )
-from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
@@ -206,7 +193,6 @@ class DIContainer:
 
         # Create sub-containers
         self._auth = AuthContainer(db=db)
-        self._memory = MemoryContainer(db=db, graph_service=graph_service)
         self._task = TaskContainer(db=db)
         self._cron = CronContainer(db=db)
         self._project = ProjectContainer(
@@ -321,36 +307,6 @@ class DIContainer:
 
     def api_key_repository(self) -> APIKeyRepository:
         return cast(APIKeyRepository, self._services.get_or_activate("api_key_repository"))
-
-    # === Memory Container delegates ===
-
-    def memory_repository(self) -> MemoryRepository:
-        return cast(MemoryRepository, self._services.get_or_activate("memory_repository"))
-
-    def memory_service(self) -> MemoryService:
-        return cast(MemoryService, self._services.get_or_activate("memory_service"))
-
-    def search_service(self) -> SearchService:
-        return cast(SearchService, self._services.get_or_activate("search_service"))
-
-    def create_memory_use_case(self) -> MemCreateMemoryUseCase:
-        return cast(
-            MemCreateMemoryUseCase, self._services.get_or_activate("create_memory_use_case")
-        )
-
-    def get_memory_use_case(self) -> MemGetMemoryUseCase:
-        return cast(MemGetMemoryUseCase, self._services.get_or_activate("get_memory_use_case"))
-
-    def list_memories_use_case(self) -> ListMemoriesUseCase:
-        return cast(ListMemoriesUseCase, self._services.get_or_activate("list_memories_use_case"))
-
-    def delete_memory_use_case(self) -> MemDeleteMemoryUseCase:
-        return cast(
-            MemDeleteMemoryUseCase, self._services.get_or_activate("delete_memory_use_case")
-        )
-
-    def search_memory_use_case(self) -> SearchMemoryUseCase:
-        return cast(SearchMemoryUseCase, self._services.get_or_activate("search_memory_use_case"))
 
     # === Task Container delegates ===
 
