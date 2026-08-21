@@ -6,7 +6,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .agent_definition import builtin_agent_definition_v2
+from .agent_definition import (
+    builtin_agent_definition_contribution_v2,
+    builtin_agent_definition_v2,
+)
 from .agent_loop import builtin_agent_loop_definition_v2
 from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -41,7 +44,7 @@ def _apply_runtime_boundary(
     protocol_version = config.get("protocol_version")
     if protocol_version != 2:
         raise ValueError("runtime generation boundary requires protocol_version 2")
-    context.provide(
+    _ = context.provide(
         RUNTIME_BOUNDARY_SERVICE_V2,
         RuntimeBoundaryServiceV2(
             protocol_version=protocol_version,
@@ -49,7 +52,7 @@ def _apply_runtime_boundary(
         ),
         label="runtime-generation-boundary",
     )
-    context.provide(
+    _ = context.provide(
         AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
         PinnedAgentRuntimeDispatcherV2(),
         label="agent-runtime-dispatcher",
@@ -70,6 +73,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
         builtin_agent_definition_v2(),
+        builtin_agent_definition_contribution_v2(),
         builtin_session_event_log_definition_v2(),
         builtin_plugin_selection_judge_definition_v2(),
         *sisyphus_runtime_definitions_v2(),

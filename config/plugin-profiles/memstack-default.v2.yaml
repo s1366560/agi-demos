@@ -107,6 +107,118 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-all-access
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:all-access
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-sisyphus
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:sisyphus
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-workspace-planner
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:workspace-planner
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-workspace-verifier
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:workspace-verifier
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-workspace-iteration-reviewer
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:workspace-iteration-reviewer
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-workspace-supervisor
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:workspace-supervisor
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-workspace-worktree-manager
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/definition-contribution
+      enabled: true
+      config:
+        strategy: builtin-agent
+        agent_id: builtin:workspace-worktree-manager
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-session-event-log
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

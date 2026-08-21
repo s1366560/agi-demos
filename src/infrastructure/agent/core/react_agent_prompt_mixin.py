@@ -24,7 +24,7 @@ from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 from ..plugins.policy_context import PolicyContext
 from ..plugins.selection_pipeline import ToolSelectionContext
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
-from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID, get_builtin_agent_by_id
+from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from ..sisyphus.prompt_builder import SisyphusPromptBuilder, SisyphusPromptContext
 from .react_agent_profile import AgentRuntimeProfile
 
@@ -377,15 +377,7 @@ class PromptMixin:
         tenant_id: str,
         project_id: str,
     ) -> Agent | None:
-        """Load the selected runtime agent from built-ins, orchestrator, or DB."""
-        builtin_agent = get_builtin_agent_by_id(
-            agent_id,
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        if builtin_agent is not None:
-            return builtin_agent
-
+        """Load one persisted runtime agent from the orchestrator or database."""
         from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
 
         orchestrator = get_agent_orchestrator()

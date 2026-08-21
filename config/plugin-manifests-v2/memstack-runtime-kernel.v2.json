@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:8adc2598a4fdb9e63cb861875a9c17f2ae9514105f85b272c4ff8fdf563fcfa5",
+        "digest": "sha256:1c8a873953de723a4d8cdbfbf600bbfbd1931a32e8d26df4a6f64d81c54bdd60",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -383,6 +383,7 @@
       "contract": {
         "services": {
           "provides": [
+            { "service": "service:agent-definition-catalog", "version": "1.0.0" },
             { "service": "service:agent-definition-resolver", "version": "1.0.0" }
           ],
           "requires": []
@@ -398,9 +399,53 @@
           }
         }
       },
-      "contract_digest": "sha256:f99de77f9e769cfcd7b94c22638ebd23d17e74decf0b6a9b9a0f995f2b510163",
+      "contract_digest": "sha256:e8e12b66e3ad3e84bfa48f0558d56eadd8cd2ebe418b54e7795b842dc21aeaa6",
       "artifact": {
-        "digest": "sha256:4aa0eca5c0164c60a4cbf553158515dacddad06be6da505c98ab41ab5f8a1f5d",
+        "digest": "sha256:10994c124a162a858c9735555319e71ef840c48a3cf9f36b963bc61ec2507619",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/definition-contribution",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_definition:_apply_builtin_agent_definition_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:agent-definition-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["agent_id", "strategy"],
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "enum": [
+                "builtin:all-access",
+                "builtin:sisyphus",
+                "builtin:workspace-planner",
+                "builtin:workspace-verifier",
+                "builtin:workspace-iteration-reviewer",
+                "builtin:workspace-supervisor",
+                "builtin:workspace-worktree-manager"
+              ]
+            },
+            "strategy": { "const": "builtin-agent", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:94a9f647f558aa8cf89e7cc4d3361336e451bafff6bf5dad13e6e117e5b5ffd6",
+      "artifact": {
+        "digest": "sha256:10994c124a162a858c9735555319e71ef840c48a3cf9f36b963bc61ec2507619",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
       }
     },

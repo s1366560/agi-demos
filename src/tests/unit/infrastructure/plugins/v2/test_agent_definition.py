@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -10,16 +12,24 @@ import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_ALL_ACCESS_ID
 from src.infrastructure.plugins.v2.agent_definition import (
+    AGENT_DEFINITION_CONTRIBUTION_MODULE_V2,
     AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+    BUILTIN_AGENT_DEFINITION_IDS_V2,
+    AgentDefinitionCatalogV2,
     AgentDefinitionResolverV2,
 )
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
+from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
+_PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
+_MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
 class _AlternativeAgentDefinitionResolver:
@@ -30,6 +40,39 @@ class _AlternativeAgentDefinitionResolver:
     async def resolve(self, **kwargs: object) -> object:
         self.calls.append(kwargs)
         return self.result
+
+
+@pytest.mark.unit
+async def test_agent_definition_contribution_disposer_removes_exact_entry() -> None:
+    catalog = AgentDefinitionCatalogV2()
+    disposer = catalog.register(
+        "agent-a",
+        lambda tenant_id, project_id: SimpleNamespace(
+            id="agent-a",
+            tenant_id=tenant_id,
+            project_id=project_id,
+        ),
+    )
+
+    resolved = catalog.resolve(
+        agent_id="agent-a",
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+    assert resolved is not None
+    assert isinstance(resolved, SimpleNamespace)
+    assert resolved.id == "agent-a"
+
+    await disposer()
+
+    assert (
+        catalog.resolve(
+            agent_id="agent-a",
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+        is None
+    )
 
 
 @pytest.mark.unit
@@ -110,6 +153,32 @@ async def test_agent_definition_accepts_structural_non_builtin_provider() -> Non
 
 
 @pytest.mark.unit
+async def test_native_agent_loader_has_no_builtin_lookup_branch() -> None:
+    agent = ReActAgent(model="test-model", tools={})
+    agent._session_factory = None
+
+    with (
+        patch(
+            "src.infrastructure.agent.core.react_agent_prompt_mixin.get_builtin_agent_by_id",
+            side_effect=AssertionError("builtin lookup must be a V2 contribution"),
+            create=True,
+        ) as builtin_lookup,
+        patch(
+            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            return_value=None,
+        ),
+    ):
+        result = await agent._load_selected_agent_native(
+            agent_id=BUILTIN_ALL_ACCESS_ID,
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert result is None
+    builtin_lookup.assert_not_called()
+
+
+@pytest.mark.unit
 async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(monkeypatch) -> None:
     agent = ReActAgent(model="test-model", tools={})
     route_event = {"type": "route"}
@@ -161,32 +230,87 @@ async def test_react_agent_consumes_generation_agent_definition_provider() -> No
         generation=1,
         version=1,
     )
-    selected = SimpleNamespace(id="agent-v2")
     agent = ReActAgent(model="test-model", tools={})
 
     async with pin_operation_context_v2(
         host,
         operation_id="agent-definition-consumer",
         scope=ScopeV2(kind=ScopeKindV2.ROOT),
-    ) as operation:
-        resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
-        assert isinstance(resolver, AgentDefinitionResolverV2)
+    ):
         with patch.object(
-            AgentDefinitionResolverV2,
-            "resolve",
+            agent,
+            "_load_selected_agent_native",
             new_callable=AsyncMock,
-            return_value=selected,
-        ) as resolve:
+        ) as native_loader:
             result = await agent._load_selected_agent(
-                agent_id="agent-v2",
+                agent_id=BUILTIN_ALL_ACCESS_ID,
                 tenant_id="tenant-a",
                 project_id="project-a",
             )
 
-    assert result is selected
-    resolve.assert_awaited_once()
-    assert resolve.await_args.kwargs["loader"] == agent._load_selected_agent_native
+    assert result is not None
+    assert result.id == BUILTIN_ALL_ACCESS_ID
+    assert result.tenant_id == "tenant-a"
+    assert result.project_id == "project-a"
+    native_loader.assert_not_awaited()
     await host.close()
+
+
+@pytest.mark.unit
+def test_every_builtin_agent_is_an_explicit_profile_entry() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    declared = {
+        entry.config["agent_id"]
+        for entry in document.entries
+        if entry.module_ref == AGENT_DEFINITION_CONTRIBUTION_MODULE_V2
+    }
+
+    assert declared == set(BUILTIN_AGENT_DEFINITION_IDS_V2)
+
+
+@pytest.mark.unit
+async def test_disabling_builtin_agent_entry_removes_capability_without_fallback() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    disabled = replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref == AGENT_DEFINITION_CONTRIBUTION_MODULE_V2
+            and entry.config.get("agent_id") == BUILTIN_ALL_ACCESS_ID
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(
+        disabled,
+        {manifest.plugin_id: manifest},
+        generation=2,
+    )
+    generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+    manager = GenerationManagerV2()
+    await manager.publish(generation)
+    native_loader = AsyncMock(return_value=SimpleNamespace(id=BUILTIN_ALL_ACCESS_ID))
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="disabled-builtin-agent",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+            assert isinstance(resolver, AgentDefinitionResolverV2)
+            result = await resolver.resolve(
+                loader=native_loader,
+                agent_id=BUILTIN_ALL_ACCESS_ID,
+                tenant_id="tenant-a",
+                project_id="project-a",
+            )
+    finally:
+        await manager.close()
+
+    assert result is None
+    native_loader.assert_not_awaited()
 
 
 @pytest.mark.unit
