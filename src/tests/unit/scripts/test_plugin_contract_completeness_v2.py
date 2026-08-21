@@ -113,6 +113,72 @@ def _write_repository(
     )
 
 
+def _write_external_repository(
+    root: Path,
+    *,
+    source: str,
+    contract: dict[str, object],
+    target: str,
+    language: str,
+    entrypoint: str = "example:apply",
+    targets: tuple[str, ...] | None = None,
+) -> None:
+    extension = {"rust": "rs", "typescript": "ts"}[language]
+    source_bytes = source.encode("utf-8")
+    source_relative = Path(f"src/example/plugin.{extension}")
+    module = {
+        "module_ref": "builtin://example/module",
+        "entrypoint": entrypoint,
+        "artifact": {
+            "digest": artifact_digest_v2(source_bytes),
+            "source": f"repo+{language}://{source_relative.as_posix()}",
+        },
+        "targets": list(targets if targets is not None else (target,)),
+        "contract": contract,
+        "contract_digest": f"sha256:{'b' * 64}",
+    }
+    manifest = {
+        "schema_version": 2,
+        "plugin_id": "example",
+        "version": "1.0.0",
+        "runtime": "rust-native" if language == "rust" else "frontend",
+        "trust": "builtin",
+        "modules": [module],
+        "permissions": [],
+        "quotas": {},
+    }
+    catalog = {
+        "schema_version": 2,
+        "catalog_digest": f"sha256:{'c' * 64}",
+        "modules": [
+            {
+                "plugin_id": manifest["plugin_id"],
+                "plugin_version": manifest["version"],
+                "module_ref": module["module_ref"],
+                "entrypoint": module["entrypoint"],
+                "artifact_source": module["artifact"]["source"],
+                "artifact_digest": module["artifact"]["digest"],
+                "targets": module["targets"],
+                "contract": contract,
+                "contract_digest": module["contract_digest"],
+            }
+        ],
+    }
+
+    manifest_path = root / "config/plugin-manifests-v2/example.v2.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    catalog_path = root / "shared/catalogs/plugin-module-catalog.v2.json"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    source_path = root / source_relative
+    source_path.parent.mkdir(parents=True)
+    source_path.write_bytes(source_bytes)
+    generator_path = root / "scripts/generate_plugin_protocol_v2.py"
+    generator_path.parent.mkdir(parents=True)
+    generator_path.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+
 @pytest.mark.unit
 def test_declared_context_calls_and_generated_catalog_are_complete(tmp_path: Path) -> None:
     contract = _contract(
@@ -156,6 +222,19 @@ def test_entrypoint_byte_drift_fails_artifact_attestation(tmp_path: Path) -> Non
     issues = check_repository(tmp_path)
 
     assert [issue.code for issue in issues] == ["artifact_digest_mismatch"]
+
+
+@pytest.mark.unit
+def test_python_entrypoint_without_typed_context_fails_closed(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="def apply(context: object, _config: object) -> None:\n    pass\n",
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["unclassified_entrypoint_context"]
 
 
 @pytest.mark.unit
@@ -386,13 +465,13 @@ def test_target_without_static_scanner_fails_closed(tmp_path: Path) -> None:
         tmp_path,
         contract=_contract(),
         source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
-        targets=("rust-server",),
+        targets=("unknown-target",),
     )
 
     issues = check_repository(tmp_path)
 
     assert [issue.code for issue in issues] == ["unsupported_target_completeness"]
-    assert "rust-server" in issues[0].detail
+    assert "unknown-target" in issues[0].detail
 
 
 @pytest.mark.unit

@@ -23,6 +23,13 @@ _METHOD_KEYWORDS = {
     "on": ("event",),
     "dispatch": ("event",),
 }
+_CONTEXT_METHODS = frozenset(_METHOD_KEYWORDS)
+_METHOD_DECLARATION = {
+    "provide": ("services", "provides", "service"),
+    "require": ("services", "requires", "alias"),
+    "on": ("events", "handles", "event"),
+    "dispatch": ("events", "emits", "event"),
+}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,6 +60,39 @@ class _ManifestModuleV2:
     targets: tuple[str, ...]
     contract: Mapping[str, Any]
     contract_digest: str
+
+
+def _contract_declarations(
+    module: _ManifestModuleV2,
+    source_path: str,
+    issues: list[ContractCompletenessIssueV2],
+) -> Mapping[str, frozenset[str]]:
+    result: dict[str, frozenset[str]] = {}
+    try:
+        for method, (section, collection, field) in _METHOD_DECLARATION.items():
+            section_value = module.contract[section]
+            if not isinstance(section_value, Mapping):
+                raise TypeError(f"contract.{section} must be an object")
+            rows = section_value[collection]
+            if not isinstance(rows, list):
+                raise TypeError(f"contract.{section}.{collection} must be an array")
+            values: list[str] = []
+            for row in rows:
+                if not isinstance(row, Mapping) or not isinstance(row.get(field), str):
+                    raise TypeError(f"contract.{section}.{collection} rows require string {field}")
+                values.append(cast("str", row[field]))
+            result[method] = frozenset(values)
+    except (KeyError, TypeError) as exc:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="invalid_module_contract",
+                path=source_path,
+                module_ref=module.module_ref,
+                detail=str(exc),
+            )
+        )
+        return {method: frozenset() for method in _CONTEXT_METHODS}
+    return result
 
 
 def _check_operation_context_dispatches(
@@ -303,6 +343,7 @@ __all__ = [
     "_annotation_name",
     "_call_name",
     "_check_operation_context_dispatches",
+    "_contract_declarations",
     "_literal_call_key",
     "_python_module_path",
     "_relative",

@@ -8,7 +8,6 @@ import ast
 import json
 import subprocess
 import sys
-from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -23,53 +22,61 @@ from src.domain.model.plugins.artifact_attestation_v2 import (  # noqa: E402
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+
     from scripts.plugin_contract_completeness_support_v2 import (
         ContractCompletenessIssueV2,
         _annotation_name,
         _call_name,
         _check_operation_context_dispatches,
+        _contract_declarations,
         _literal_call_key,
         _ManifestModuleV2,
         _python_module_path,
         _relative,
         _static_string_constants,
     )
+    from scripts.plugin_contract_external_scanners_v2 import check_external_entrypoint_v2
 elif __package__:
     from .plugin_contract_completeness_support_v2 import (
         ContractCompletenessIssueV2,
         _annotation_name,
         _call_name,
         _check_operation_context_dispatches,
+        _contract_declarations,
         _literal_call_key,
         _ManifestModuleV2,
         _python_module_path,
         _relative,
         _static_string_constants,
     )
+    from .plugin_contract_external_scanners_v2 import check_external_entrypoint_v2
 else:
     from plugin_contract_completeness_support_v2 import (
         ContractCompletenessIssueV2,
         _annotation_name,
         _call_name,
         _check_operation_context_dispatches,
+        _contract_declarations,
         _literal_call_key,
         _ManifestModuleV2,
         _python_module_path,
         _relative,
         _static_string_constants,
     )
+    from plugin_contract_external_scanners_v2 import check_external_entrypoint_v2
 
 MANIFEST_GLOB_V2 = "config/plugin-manifests-v2/*.json"
 CATALOG_PATH_V2 = Path("shared/catalogs/plugin-module-catalog.v2.json")
 GENERATOR_PATH_V2 = Path("scripts/generate_plugin_protocol_v2.py")
 
 _CONTEXT_METHODS = frozenset({"provide", "require", "on", "dispatch"})
-_STATIC_COMPLETENESS_TARGETS_V2 = frozenset({"python"})
-_METHOD_DECLARATION = {
-    "provide": ("services", "provides", "service"),
-    "require": ("services", "requires", "alias"),
-    "on": ("events", "handles", "event"),
-    "dispatch": ("events", "emits", "event"),
+_TARGET_SCANNER_V2 = {
+    "python": "python",
+    "rust-server": "rust",
+    "desktop-sidecar": "rust",
+    "web": "typescript",
+    "desktop-renderer": "typescript",
 }
 
 
@@ -80,17 +87,25 @@ def check_repository(root: Path) -> tuple[ContractCompletenessIssueV2, ...]:
     modules = _load_manifest_modules(repository, issues)
     _check_catalog(repository, modules, issues)
     for module in modules:
-        if "python" in module.targets:
-            _check_python_entrypoint(repository, module, issues)
-        for target in sorted(set(module.targets) - _STATIC_COMPLETENESS_TARGETS_V2):
-            issues.append(
-                ContractCompletenessIssueV2(
-                    code="unsupported_target_completeness",
-                    path=_relative(module.path, repository),
-                    module_ref=module.module_ref,
-                    detail=f"target {target} has no static contract completeness scanner",
+        scanner_kinds: set[str] = set()
+        for target in module.targets:
+            scanner = _TARGET_SCANNER_V2.get(target)
+            if scanner is None:
+                issues.append(
+                    ContractCompletenessIssueV2(
+                        code="unsupported_target_completeness",
+                        path=_relative(module.path, repository),
+                        module_ref=module.module_ref,
+                        detail=f"target {target} has no static contract completeness scanner",
+                    )
                 )
-            )
+            else:
+                scanner_kinds.add(scanner)
+        for scanner in sorted(scanner_kinds):
+            if scanner == "python":
+                _check_python_entrypoint(repository, module, issues)
+            else:
+                check_external_entrypoint_v2(repository, module, scanner, issues)
     _check_operation_context_dispatches(repository, modules, issues)
     _check_generated_outputs(repository, issues)
     return tuple(sorted(issues, key=_issue_key))
@@ -399,6 +414,17 @@ def _check_python_entrypoint(
 
     declarations = _contract_declarations(module, relative_source, issues)
     nodes = _entrypoint_nodes(entrypoint, functions, module, relative_source, issues)
+    if not any(_context_parameter_names(node) for node in nodes):
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="unclassified_entrypoint_context",
+                path=relative_source,
+                line=entrypoint.lineno,
+                module_ref=module.module_ref,
+                detail="entrypoint apply graph has no typed ContextV2 parameter",
+            )
+        )
+        return
     constants = _static_string_constants(root, module_name, tree)
     for node in nodes:
         _check_context_calls(node, declarations, constants, module, relative_source, issues)
@@ -534,39 +560,6 @@ def _entrypoint_nodes(
             seen.add(referenced)
             reachable.append(referenced)
     return tuple(reachable)
-
-
-def _contract_declarations(
-    module: _ManifestModuleV2,
-    source_path: str,
-    issues: list[ContractCompletenessIssueV2],
-) -> Mapping[str, frozenset[str]]:
-    result: dict[str, frozenset[str]] = {}
-    try:
-        for method, (section, collection, field) in _METHOD_DECLARATION.items():
-            section_value = module.contract[section]
-            if not isinstance(section_value, Mapping):
-                raise TypeError(f"contract.{section} must be an object")
-            rows = section_value[collection]
-            if not isinstance(rows, list):
-                raise TypeError(f"contract.{section}.{collection} must be an array")
-            values: list[str] = []
-            for row in rows:
-                if not isinstance(row, Mapping) or not isinstance(row.get(field), str):
-                    raise TypeError(f"contract.{section}.{collection} rows require string {field}")
-                values.append(cast("str", row[field]))
-            result[method] = frozenset(values)
-    except (KeyError, TypeError) as exc:
-        issues.append(
-            ContractCompletenessIssueV2(
-                code="invalid_module_contract",
-                path=source_path,
-                module_ref=module.module_ref,
-                detail=str(exc),
-            )
-        )
-        return {method: frozenset() for method in _CONTEXT_METHODS}
-    return result
 
 
 def _check_context_calls(
