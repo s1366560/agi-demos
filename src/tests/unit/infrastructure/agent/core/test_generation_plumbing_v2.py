@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from src.infrastructure.agent.core.react_agent_stream_mixin import StreamMixin
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class _RecordingProcessor:
@@ -17,6 +18,16 @@ class _RecordingProcessor:
         self.run_context = kwargs["run_ctx"]
         if False:
             yield None
+
+
+class _MissingServiceProcessor:
+    async def process(self, **_kwargs: Any):
+        if False:
+            yield None
+        raise RuntimeV2Error(
+            "service_not_found",
+            "required agent-loop service is unavailable",
+        )
 
 
 @pytest.mark.unit
@@ -43,3 +54,28 @@ async def test_stream_restores_process_safe_generation_payload_into_run_context(
     assert events == []
     assert processor.run_context.plugin_generation.profile_id == "default-v2"
     assert processor.run_context.plugin_generation.generation == 7
+
+
+@pytest.mark.unit
+async def test_stream_preserves_structured_v2_failure_code() -> None:
+    events = [
+        event
+        async for event in StreamMixin()._stream_process_events(  # type: ignore[arg-type]
+            processor=_MissingServiceProcessor(),  # type: ignore[arg-type]
+            messages=[],
+            langfuse_context={"conversation_id": "conversation-a"},
+            abort_signal=None,
+            matched_skill=None,
+        )
+    ]
+
+    assert events == [
+        {
+            "type": "error",
+            "data": {
+                "message": "required agent-loop service is unavailable",
+                "code": "service_not_found",
+            },
+            "timestamp": events[0]["timestamp"],
+        }
+    ]

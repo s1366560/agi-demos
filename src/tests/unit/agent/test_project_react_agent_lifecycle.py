@@ -16,6 +16,7 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
@@ -711,6 +712,45 @@ class TestProjectReActAgentLifecycleNotifications:
         ]
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
+
+    @pytest.mark.asyncio
+    async def test_execute_chat_preserves_structured_v2_failure_code(
+        self,
+        agent_config,
+        mock_notifier,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+
+        async def missing_service_stream(**_kwargs):
+            if False:
+                yield None
+            raise RuntimeV2Error(
+                "service_not_found",
+                "required agent-loop service is unavailable",
+            )
+
+        mock_react = MagicMock()
+        mock_react.stream = missing_service_stream
+        agent._react_agent = mock_react
+
+        with patch(
+            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            return_value=mock_notifier,
+        ):
+            events = [
+                event
+                async for event in agent.execute_chat(
+                    conversation_id="test-conv",
+                    user_message="Hello",
+                    user_id="test-user",
+                )
+            ]
+
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert events[0]["data"]["code"] == "service_not_found"
+        assert events[0]["data"]["message"] == "required agent-loop service is unavailable"
 
 
 class TestProjectReActAgentNotificationContent:

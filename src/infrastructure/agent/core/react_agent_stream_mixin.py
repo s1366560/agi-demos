@@ -1085,11 +1085,12 @@ class StreamMixin:
         except Exception as e:
             logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)
             self._stream_success = False
+            error_code = e.code if isinstance(e, RuntimeV2Error) else type(e).__name__
             yield cast(
                 dict[str, Any],
                 AgentErrorEvent(
                     message=str(e),
-                    code=type(e).__name__,
+                    code=error_code,
                 ).to_event_dict(),
             )
 

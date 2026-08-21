@@ -44,6 +44,7 @@ from typing import Any
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -1017,7 +1018,8 @@ class ProjectReActAgent:
                 f"ProjectReActAgent[{self.project_key}]: Chat execution error: {e}", exc_info=True
             )
 
-            yield self._make_error_event(error_message, "CHAT_EXECUTION_ERROR")
+            error_code = e.code if isinstance(e, RuntimeV2Error) else "CHAT_EXECUTION_ERROR"
+            yield self._make_error_event(error_message, error_code)
 
         finally:
             self._status.active_chats -= 1
