@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:1c8a873953de723a4d8cdbfbf600bbfbd1931a32e8d26df4a6f64d81c54bdd60",
+        "digest": "sha256:7120528b314505a9dfe25bf6154a0a7e9948aed2a849b394fda4565a4145c193",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -447,6 +447,101 @@
       "artifact": {
         "digest": "sha256:10994c124a162a858c9735555319e71ef840c48a3cf9f36b963bc61ec2507619",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/capability-set",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_capabilities:_apply_agent_capability_catalog_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent-capability-catalog", "version": "1.0.0" },
+            { "service": "service:agent-capability-resolver", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "ordered-contributions", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:63e5184af7372e743d6fd6816017c81db4a1259bf845207ba64694007fc720f0",
+      "artifact": {
+        "digest": "sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020637c49e904c556cf68",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_capabilities.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/skill-contribution",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_capabilities:_apply_skill_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:agent-capability-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "strategy"],
+          "properties": {
+            "source_id": { "const": "agent-owned-skills", "type": "string" },
+            "strategy": { "const": "agent-runtime-state", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:628afbe88257ec446db86ad721698b1e0d8278232a74629be47522eea7bdb3a9",
+      "artifact": {
+        "digest": "sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020637c49e904c556cf68",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_capabilities.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/subagent-contribution",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_capabilities:_apply_subagent_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:agent-capability-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "strategy"],
+          "properties": {
+            "source_id": { "const": "agent-owned-subagents", "type": "string" },
+            "strategy": { "const": "agent-runtime-state", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8d588df843b95d9a70e58bad29b96c985419732bfa3abc64918d91084a590fc3",
+      "artifact": {
+        "digest": "sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020637c49e904c556cf68",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_capabilities.py"
       }
     },
     {

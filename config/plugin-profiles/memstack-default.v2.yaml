@@ -219,6 +219,52 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-capability-set
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/capability-set
+      enabled: true
+      config:
+        strategy: ordered-contributions
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-skill-contribution
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill-contribution
+      enabled: true
+      config:
+        strategy: agent-runtime-state
+        source_id: agent-owned-skills
+      inject:
+        catalog: service:agent-capability-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-subagent-contribution
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/subagent-contribution
+      enabled: true
+      config:
+        strategy: agent-runtime-state
+        source_id: agent-owned-subagents
+      inject:
+        catalog: service:agent-capability-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-session-event-log
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

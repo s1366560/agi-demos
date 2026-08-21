@@ -6,6 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .agent_capabilities import (
+    builtin_agent_capability_definition_v2,
+    builtin_skill_contribution_v2,
+    builtin_subagent_contribution_v2,
+)
 from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
@@ -74,6 +79,9 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         builtin_tool_set_definition_v2(),
         builtin_agent_definition_v2(),
         builtin_agent_definition_contribution_v2(),
+        builtin_agent_capability_definition_v2(),
+        builtin_skill_contribution_v2(),
+        builtin_subagent_contribution_v2(),
         builtin_session_event_log_definition_v2(),
         builtin_plugin_selection_judge_definition_v2(),
         *sisyphus_runtime_definitions_v2(),
