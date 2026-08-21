@@ -4,12 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 TOOL_SET_MODULE_V2 = "builtin://memstack/agent/tool-set"
 TOOL_SET_RESOLVER_SERVICE_V2 = "service:tool-set-resolver"
+
+
+@runtime_checkable
+class ToolSetResolverProtocolV2(Protocol):
+    """Structural contract consumed by generation-scoped tool callers."""
+
+    def resolve(
+        self,
+        *,
+        agent: object,
+        selection_context: object | None,
+    ) -> tuple[dict[str, Any], list[Any]]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -61,6 +73,7 @@ def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
 __all__ = [
     "TOOL_SET_MODULE_V2",
     "TOOL_SET_RESOLVER_SERVICE_V2",
+    "ToolSetResolverProtocolV2",
     "ToolSetResolverV2",
     "builtin_tool_set_definition_v2",
 ]

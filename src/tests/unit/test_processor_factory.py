@@ -257,6 +257,28 @@ class TestCreateForSubagent:
 class TestCreateForMain:
     """Tests for ProcessorFactory.create_for_main()."""
 
+    @pytest.fixture(autouse=True)
+    def _pin_v2_loop_resolver(self):
+        with patch(
+            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            return_value=MagicMock(),
+        ) as resolver:
+            yield resolver
+
+    def test_stale_caller_resolver_is_replaced_from_pinned_operation(
+        self,
+        factory: ProcessorFactory,
+        sample_tools: list[ToolDefinition],
+        _pin_v2_loop_resolver: MagicMock,
+    ) -> None:
+        stale_resolver = object()
+        config = ProcessorConfig(model="custom-model", loop_resolver=stale_resolver)
+
+        processor = factory.create_for_main(config, sample_tools)
+
+        assert processor.config.loop_resolver is _pin_v2_loop_resolver.return_value
+        _pin_v2_loop_resolver.assert_called_once_with()
+
     def test_config_passed_through(
         self,
         factory: ProcessorFactory,

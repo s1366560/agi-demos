@@ -37,6 +37,20 @@ class _ToolAgent:
         return {"read": object()}, [object()]
 
 
+class _AlternativeToolSetResolver:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, object]] = []
+
+    def resolve(
+        self,
+        *,
+        agent: object,
+        selection_context: object,
+    ) -> tuple[dict[str, object], list[object]]:
+        self.calls.append((agent, selection_context))
+        return {"alternative": object()}, [object()]
+
+
 @pytest.mark.unit
 def test_tool_set_requires_pinned_v2_operation_without_native_fallback() -> None:
     agent = _ToolAgent()
@@ -70,6 +84,26 @@ def test_tool_set_propagates_missing_v2_service_without_native_fallback() -> Non
 
     assert error.value.code == "missing_service"
     operation.require.assert_called_once_with(TOOL_SET_RESOLVER_SERVICE_V2)
+    assert agent.contexts == []
+
+
+@pytest.mark.unit
+def test_tool_set_accepts_structural_non_builtin_provider() -> None:
+    agent = _ToolAgent()
+    selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
+    provider = _AlternativeToolSetResolver()
+    operation = Mock()
+    operation.require.return_value = provider
+
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
+
+    assert set(raw_tools) == {"alternative"}
+    assert len(definitions) == 1
+    assert provider.calls == [(agent, selection)]
     assert agent.contexts == []
 
 

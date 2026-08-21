@@ -5,12 +5,25 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 SYSTEM_PROMPT_MODULE_V2 = "builtin://memstack/agent/system-prompt"
 SYSTEM_PROMPT_BUILDER_SERVICE_V2 = "service:system-prompt-builder"
+
+
+@runtime_checkable
+class SystemPromptBuilderProtocolV2(Protocol):
+    """Structural contract consumed by generation-scoped prompt callers."""
+
+    async def build(
+        self,
+        *,
+        manager: object,
+        context: object,
+        subagent: object | None,
+    ) -> str: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -62,6 +75,7 @@ def builtin_system_prompt_definition_v2() -> PluginDefinitionV2:
 __all__ = [
     "SYSTEM_PROMPT_BUILDER_SERVICE_V2",
     "SYSTEM_PROMPT_MODULE_V2",
+    "SystemPromptBuilderProtocolV2",
     "SystemPromptBuilderV2",
     "builtin_system_prompt_definition_v2",
 ]

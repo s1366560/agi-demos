@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
@@ -13,6 +13,20 @@ AGENT_DEFINITION_MODULE_V2 = "builtin://memstack/agent/definition"
 AGENT_DEFINITION_RESOLVER_SERVICE_V2 = "service:agent-definition-resolver"
 
 type AgentDefinitionLoaderV2 = Callable[..., object | Awaitable[object | None] | None]
+
+
+@runtime_checkable
+class AgentDefinitionResolverProtocolV2(Protocol):
+    """Structural contract consumed by generation-scoped definition callers."""
+
+    async def resolve(
+        self,
+        *,
+        loader: AgentDefinitionLoaderV2,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> object | None: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,6 +82,7 @@ def builtin_agent_definition_v2() -> PluginDefinitionV2:
 __all__ = [
     "AGENT_DEFINITION_MODULE_V2",
     "AGENT_DEFINITION_RESOLVER_SERVICE_V2",
+    "AgentDefinitionResolverProtocolV2",
     "AgentDefinitionResolverV2",
     "builtin_agent_definition_v2",
 ]

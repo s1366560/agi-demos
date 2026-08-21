@@ -46,6 +46,21 @@ class _PromptAgent(PromptMixin):
         return {}, [_PromptTool()]
 
 
+class _AlternativePromptBuilder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, object, object | None]] = []
+
+    async def build(
+        self,
+        *,
+        manager: object,
+        context: object,
+        subagent: object | None,
+    ) -> str:
+        self.calls.append((manager, context, subagent))
+        return "prompt-from-alternative-provider"
+
+
 @pytest.mark.unit
 async def test_prompt_mixin_requires_pinned_v2_operation_without_native_fallback() -> None:
     agent = _PromptAgent()
@@ -95,6 +110,27 @@ async def test_prompt_mixin_propagates_missing_v2_service_without_native_fallbac
     assert error.value.code == "missing_service"
     operation.require.assert_called_once_with(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
     native_build.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_prompt_mixin_accepts_structural_non_builtin_provider() -> None:
+    agent = _PromptAgent()
+    provider = _AlternativePromptBuilder()
+    operation = Mock()
+    operation.require.return_value = provider
+
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        prompt = await agent._build_system_prompt(
+            user_query="hello",
+            conversation_context=[],
+        )
+
+    assert prompt == "prompt-from-alternative-provider"
+    operation.require.assert_called_once_with(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
+    assert len(provider.calls) == 1
 
 
 @pytest.mark.unit

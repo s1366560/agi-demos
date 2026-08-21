@@ -81,12 +81,12 @@ def _resolve_current_tools_from_runtime_v2(
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
     from src.infrastructure.plugins.v2.tool_set import (
         TOOL_SET_RESOLVER_SERVICE_V2,
-        ToolSetResolverV2,
+        ToolSetResolverProtocolV2,
     )
 
     operation = current_operation_context_v2()
     resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
-    if not isinstance(resolver, ToolSetResolverV2):
+    if not isinstance(resolver, ToolSetResolverProtocolV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
     return resolver.resolve(agent=agent, selection_context=selection_context)
 

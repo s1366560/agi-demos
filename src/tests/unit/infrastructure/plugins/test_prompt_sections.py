@@ -11,19 +11,11 @@ from src.domain.model.plugins import (
     PluginTrust,
     ProvidedCapability,
 )
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-)
 from src.infrastructure.plugins.compatibility import register_builtin_kernel_plugins
 from src.infrastructure.plugins.context import CapabilityRegistry, PluginContext
 from src.infrastructure.plugins.prompt_sections import (
     NATIVE_TOOL_PROTOCOL_GUIDANCE,
     collect_prompt_sections,
-)
-from src.infrastructure.plugins.runtime_host import (
-    PlatformPluginRuntimeHost,
-    set_platform_plugin_runtime_host,
 )
 
 
@@ -82,34 +74,3 @@ class TestProcessorPromptSectionMerge:
         registry = CapabilityRegistry()
         register_builtin_kernel_plugins(registry, AgentPluginRegistry())
         assert NATIVE_TOOL_PROTOCOL_GUIDANCE in collect_prompt_sections(registry)
-
-    def test_processor_merges_sections_without_duplicating_guidance(self) -> None:
-        host = PlatformPluginRuntimeHost()
-        _register_section(
-            host.capabilities, "p1", "native-tool-protocol", NATIVE_TOOL_PROTOCOL_GUIDANCE
-        )
-        set_platform_plugin_runtime_host(host)
-        try:
-            processor = SessionProcessor(config=ProcessorConfig(model="m"), tools=[])
-            processor._session_instructions = []
-            processor._response_instructions = []
-            processor._merge_prompt_sections()
-            message = processor._build_runtime_guidance_message()
-            assert message is not None
-            assert message["content"].count("native tool-call protocol") == 1
-        finally:
-            set_platform_plugin_runtime_host(None)
-
-    def test_processor_fallback_is_byte_identical_without_registry(self) -> None:
-        set_platform_plugin_runtime_host(None)
-        try:
-            processor = SessionProcessor(config=ProcessorConfig(model="m"), tools=[])
-            processor._session_instructions = ["keep me"]
-            processor._response_instructions = []
-            processor._merge_prompt_sections()
-            message = processor._build_runtime_guidance_message()
-            assert message is not None
-            assert "keep me" in message["content"]
-            assert message["content"].count("native tool-call protocol") == 1
-        finally:
-            set_platform_plugin_runtime_host(None)

@@ -186,6 +186,30 @@ class TestAgentLoopWiring:
         assert processor._loop_selection.scope == "builtin"
         assert loop.contexts == []
 
+    async def test_process_does_not_read_v1_prompt_section_runtime_host(self) -> None:
+        resolver = BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=_ExternalLoop(),
+        )
+        processor = SessionProcessor(
+            config=ProcessorConfig(
+                model="v3",
+                provider_id="deepseek",
+                loop_resolver=resolver,
+            ),
+            tools=[],
+        )
+
+        with patch(
+            "src.infrastructure.plugins.runtime_host.get_platform_plugin_runtime_host"
+        ) as get_runtime_host:
+            events = processor.process("s1", [{"role": "user", "content": "hi"}])
+            await anext(events)
+            await events.aclose()
+
+        get_runtime_host.assert_not_called()
+
     async def test_process_dispatches_external_loop(self) -> None:
         registry = CapabilityRegistry()
         loop = _ExternalLoop()

@@ -42,12 +42,12 @@ async def _build_system_prompt_from_runtime_v2(
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
     from src.infrastructure.plugins.v2.system_prompt import (
         SYSTEM_PROMPT_BUILDER_SERVICE_V2,
-        SystemPromptBuilderV2,
+        SystemPromptBuilderProtocolV2,
     )
 
     operation = current_operation_context_v2()
     builder = operation.require(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
-    if not isinstance(builder, SystemPromptBuilderV2):
+    if not isinstance(builder, SystemPromptBuilderProtocolV2):
         raise RuntimeError("v2 system prompt builder has an invalid implementation")
     return await builder.build(
         manager=manager,
@@ -349,13 +349,13 @@ class PromptMixin:
         """Load an explicit agent definition through the active v2 Provider."""
         from src.infrastructure.plugins.v2.agent_definition import (
             AGENT_DEFINITION_RESOLVER_SERVICE_V2,
-            AgentDefinitionResolverV2,
+            AgentDefinitionResolverProtocolV2,
         )
         from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
         operation = current_operation_context_v2()
         resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
-        if not isinstance(resolver, AgentDefinitionResolverV2):
+        if not isinstance(resolver, AgentDefinitionResolverProtocolV2):
             raise RuntimeError("v2 agent-definition resolver has an invalid implementation")
         return cast(
             Agent | None,

@@ -609,25 +609,6 @@ class SessionProcessor:
                 if item and item not in target:
                     target.append(item)
 
-    def _merge_prompt_sections(self) -> None:
-        """Merge registry-provided system_prompt_section capabilities (I2).
-
-        Sections arrive through the platform capability registry; when the
-        control plane is not active the collection is empty and the turn is
-        byte-identical to the pre-seam behavior.
-        """
-        try:
-            from src.infrastructure.plugins.prompt_sections import collect_prompt_sections
-            from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
-
-            sections = collect_prompt_sections(get_platform_plugin_runtime_host().capabilities)
-        except Exception:
-            logger.debug("prompt section collection unavailable", exc_info=True)
-            return
-        for section in sections:
-            if section not in self._session_instructions:
-                self._session_instructions.append(section)
-
     async def add_runtime_guidance(self, text: str) -> bool:
         """Append a runtime guidance block to the session-level instructions.
 
@@ -1487,7 +1468,6 @@ class SessionProcessor:
         self._no_progress_steps = 0
         self._session_instructions = []
         self._response_instructions = []
-        self._merge_prompt_sections()
         self._tool_reminder_issued_for_streak = False
         self._langfuse_context = effective_langfuse_context
         self._artifact_handler.set_langfuse_context(self._langfuse_context)

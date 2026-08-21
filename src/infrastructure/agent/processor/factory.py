@@ -162,8 +162,7 @@ class ProcessorFactory:
         Returns:
             Configured SessionProcessor instance.
         """
-        if config.loop_resolver is None:
-            config.loop_resolver = _default_loop_resolver()
+        config.loop_resolver = _default_loop_resolver()
         return SessionProcessor(
             config=config,
             tools=tools,

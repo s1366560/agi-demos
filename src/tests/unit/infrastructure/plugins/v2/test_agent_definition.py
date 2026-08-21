@@ -22,6 +22,16 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 _ROOT = Path(__file__).resolve().parents[6]
 
 
+class _AlternativeAgentDefinitionResolver:
+    def __init__(self, result: object) -> None:
+        self.result = result
+        self.calls: list[dict[str, object]] = []
+
+    async def resolve(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return self.result
+
+
 @pytest.mark.unit
 async def test_agent_definition_requires_pinned_v2_operation_without_native_fallback() -> None:
     agent = ReActAgent(model="test-model", tools={})
@@ -74,6 +84,29 @@ async def test_agent_definition_propagates_missing_v2_service_without_native_fal
     assert error.value.code == "missing_service"
     operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
     native_loader.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_agent_definition_accepts_structural_non_builtin_provider() -> None:
+    selected = SimpleNamespace(id="agent-v2")
+    provider = _AlternativeAgentDefinitionResolver(selected)
+    operation = Mock()
+    operation.require.return_value = provider
+    agent = ReActAgent(model="test-model", tools={})
+
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        result = await agent._load_selected_agent(
+            agent_id="agent-v2",
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert result is selected
+    operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+    assert provider.calls[0]["loader"] == agent._load_selected_agent_native
 
 
 @pytest.mark.unit
