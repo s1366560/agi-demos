@@ -85,8 +85,24 @@ profile:
       module_ref: builtin://memstack/agent/tool-set
       enabled: true
       config:
-        strategy: dynamic-agent-tools
+        strategy: ordered-contributions
       inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-tool-contribution
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool-contribution
+      enabled: true
+      config:
+        strategy: agent-runtime-state
+        source_id: agent-owned-tools
+      inject:
+        catalog: service:tool-set-catalog
       isolate: {}
       scope:
         kind: root

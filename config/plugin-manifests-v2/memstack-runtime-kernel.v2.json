@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:7120528b314505a9dfe25bf6154a0a7e9948aed2a849b394fda4565a4145c193",
+        "digest": "sha256:e483a22194bf3ef42898b809259a9e87cfdcf0526618082cf6f4a79199b09a05",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -355,6 +355,7 @@
       "contract": {
         "services": {
           "provides": [
+            { "service": "service:tool-set-catalog", "version": "1.0.0" },
             { "service": "service:tool-set-resolver", "version": "1.0.0" }
           ],
           "requires": []
@@ -366,13 +367,46 @@
           "additionalProperties": false,
           "required": ["strategy"],
           "properties": {
-            "strategy": { "const": "dynamic-agent-tools", "type": "string" }
+            "strategy": { "const": "ordered-contributions", "type": "string" }
           }
         }
       },
-      "contract_digest": "sha256:8e57e4aea3b75d1738529834589217af77df8dfed1e0a653b582d801b4c4ae1f",
+      "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:98005a928be109d03a2e1e93a8817f1c1b6f9794d9cd559ebe1789d1b911ec4e",
+        "digest": "sha256:89fefb5c3183582a405a6ed81a86a0e36ff8a6207f37a37bf2b072767c820e25",
+        "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool-contribution",
+      "entrypoint": "src.infrastructure.plugins.v2.tool_set:_apply_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "strategy"],
+          "properties": {
+            "source_id": { "const": "agent-owned-tools", "type": "string" },
+            "strategy": { "const": "agent-runtime-state", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:385a335e22998bd614720905669feb1e68546284685eb3978ce656fed1edd782",
+      "artifact": {
+        "digest": "sha256:89fefb5c3183582a405a6ed81a86a0e36ff8a6207f37a37bf2b072767c820e25",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
