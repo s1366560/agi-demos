@@ -12,6 +12,8 @@ from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.actor.types import ProjectChatRequest
+from src.infrastructure.agent.hitl.state_store import HITLAgentState
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +58,16 @@ class _TerminalWorkspaceStatusAgent(_FakeAgent):
             "type": "status",
             "data": {"status": "goal_achieved:workspace_contract_submitted"},
         }
+
+
+class _ModelMessageCommitAgent(_FakeAgent):
+    async def execute_chat(self, **kwargs):
+        self.execute_chat_kwargs = kwargs
+        yield {
+            "type": MODEL_MESSAGE_COMMITTED_EVENT_V2,
+            "data": {"model_message": {"role": "assistant", "content": "done"}},
+        }
+        yield {"type": "complete", "data": {"content": "done"}}
 
 
 def _jwt_like_token() -> str:
@@ -441,6 +453,90 @@ async def test_execute_project_chat_flushes_terminal_workspace_status_immediatel
     assert persist_events.await_count == 1
     persisted_events = persist_events.await_args.kwargs["events"]
     assert [event["type"] for event in persisted_events] == ["status"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_flushes_model_message_commit_immediately() -> None:
+    agent = _ModelMessageCommitAgent()
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+    )
+    persist_events = AsyncMock()
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=persist_events),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(agent=agent, request=request)
+
+    assert result.is_error is False
+    assert persist_events.await_count == 2
+    assert [
+        [event["type"] for event in awaited.kwargs["events"]]
+        for awaited in persist_events.await_args_list
+    ] == [[MODEL_MESSAGE_COMMITTED_EVENT_V2], ["complete"]]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_continue_project_chat_flushes_model_message_commit_immediately() -> None:
+    agent = _ModelMessageCommitAgent()
+    state = HITLAgentState(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        tenant_id="tenant-1",
+        project_id="proj-1",
+        hitl_request_id="request-1",
+        hitl_type="clarification",
+        hitl_request_data={"question": "Proceed?"},
+        messages=[],
+        user_message="hello",
+        user_id="user-1",
+    )
+    persist_events = AsyncMock()
+
+    with (
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_load_hitl_state", new=AsyncMock(return_value=state)),
+        patch.object(execution, "_validate_hitl_resume_request", return_value=None),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=persist_events),
+        patch.object(execution, "_project_automation_runtime_running", new=AsyncMock()),
+        patch.object(execution, "_project_automation_stream_terminal", new=AsyncMock()),
+        patch(
+            "src.infrastructure.agent.hitl.coordinator.mark_hitl_request_completed",
+            new=AsyncMock(return_value=False),
+        ),
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.continue_project_chat(
+            agent=agent,
+            request_id="request-1",
+            response_data={"response": "yes"},
+        )
+
+    assert result.is_error is False
+    assert persist_events.await_count == 2
+    assert [
+        [event["type"] for event in awaited.kwargs["events"]]
+        for awaited in persist_events.await_args_list
+    ] == [[MODEL_MESSAGE_COMMITTED_EVENT_V2], ["complete"]]
 
 
 @pytest.mark.unit

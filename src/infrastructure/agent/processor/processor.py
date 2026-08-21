@@ -61,6 +61,7 @@ from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentSteeredEvent,
 )
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -2030,14 +2031,14 @@ class SessionProcessor:
             return
         self._last_process_result = ProcessorResult.CONTINUE
 
-    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Append current message and tool results to the message list."""
+    def _current_step_model_messages(self) -> list[dict[str, Any]]:
+        """Return the exact ordered messages exposed to the next model step."""
         if not self._current_message:
-            return
-        messages.append(cast(dict[str, Any], self._current_message.to_llm_format()))
+            return []
+        model_messages = [cast(dict[str, Any], self._current_message.to_llm_format())]
         for part in self._current_message.get_tool_parts():
             if part.status == ToolState.COMPLETED:
-                messages.append(
+                model_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": part.call_id,
@@ -2045,13 +2046,26 @@ class SessionProcessor:
                     }
                 )
             elif part.status == ToolState.ERROR:
-                messages.append(
+                model_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": part.call_id,
                         "content": f"Error: {part.error}",
                     }
                 )
+        return model_messages
+
+    @staticmethod
+    def _model_message_committed_event(model_message: Mapping[str, Any]) -> dict[str, Any]:
+        """Wrap one model-visible message in the authoritative V2 event shape."""
+        return {
+            "type": MODEL_MESSAGE_COMMITTED_EVENT_V2,
+            "data": {"model_message": dict(model_message)},
+        }
+
+    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Append current message and tool results to the message list."""
+        messages.extend(self._current_step_model_messages())
 
     async def _emit_completion_events(
         self,
@@ -2560,17 +2574,6 @@ class SessionProcessor:
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
-        # Create new assistant message
-        self._current_message = Message(
-            session_id=session_id,
-            role=MessageRole.ASSISTANT,
-        )
-        self._goal_evaluator.set_current_message(self._current_message)
-
-        # Reset pending tool calls
-        self._pending_tool_calls = {}
-        self._pending_tool_args = {}
-
         base_step_messages = list(messages)
 
         # Inject skill reminder for multi-step forced skill execution
@@ -2621,10 +2624,10 @@ class SessionProcessor:
         # Create LLM stream with optional client (provides circuit breaker + rate limiter)
         llm_stream = LLMStream(stream_config, llm_client=self._llm_client)
 
-        # Track state for this step
+        # Successful-attempt state used after the retry loop.
         text_buffer = ""
         reasoning_buffer = ""
-        tool_calls_completed: list[str] = []
+        sequential_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
         deferred_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
         step_tokens = TokenUsage()
         step_cost = 0.0
@@ -2633,6 +2636,23 @@ class SessionProcessor:
         # Process LLM stream with retry
         attempt = 0
         while True:
+            # An unsuccessful stream attempt is never model-visible. Rebuild all
+            # message construction state so partial text/tool calls cannot leak
+            # into a later successful attempt or be executed twice.
+            self._current_message = Message(
+                session_id=session_id,
+                role=MessageRole.ASSISTANT,
+            )
+            self._goal_evaluator.set_current_message(self._current_message)
+            self._pending_tool_calls = {}
+            self._pending_tool_args = {}
+            text_buffer = ""
+            reasoning_buffer = ""
+            sequential_tool_calls = []
+            deferred_tool_calls = []
+            step_tokens = TokenUsage()
+            step_cost = 0.0
+            finish_reason = "stop"
             try:
                 step_messages = list(base_step_messages)
                 runtime_guidance = self._build_runtime_guidance_message()
@@ -2829,20 +2849,16 @@ class SessionProcessor:
                                 display=tool_display,
                             )
 
-                            # Execute tool: check parallel mode
+                            # Execute tools only after the complete LLM response
+                            # has been committed. This prevents failed stream
+                            # attempts from replaying tool side effects and makes
+                            # HITL waits recoverable from the assistant tool call.
                             _is_hitl = self._check_hitl_dispatch(tool_name)
                             if not self.config.enable_parallel_tool_execution or _is_hitl:
-                                # Sequential: execute immediately
-                                async for tool_event in self._execute_tool(
-                                    session_id,
-                                    call_id,
-                                    tool_name,
-                                    arguments,
-                                ):
-                                    yield tool_event
-                                tool_calls_completed.append(call_id)
+                                sequential_tool_calls.append(
+                                    (session_id, call_id, tool_name, arguments)
+                                )
                             else:
-                                # Parallel: defer execution
                                 deferred_tool_calls.append(
                                     (session_id, call_id, tool_name, arguments)
                                 )
@@ -2910,7 +2926,7 @@ class SessionProcessor:
                         "session_id": session_id,
                         "step_count": self._step_count,
                         "response_text": text_buffer,
-                        "tool_call_count": len(tool_calls_completed) + len(deferred_tool_calls),
+                        "tool_call_count": len(sequential_tool_calls) + len(deferred_tool_calls),
                     },
                 )
                 if reminder_injected and not reminder_consumed:
@@ -2939,6 +2955,21 @@ class SessionProcessor:
                 else:
                     # Not retryable or max retries exceeded
                     raise
+
+        # Commit the complete assistant response before any tool execution.
+        # Actor persistence treats this event as an immediate durability
+        # boundary, so an interactive wait cannot lose its tool-call context.
+        assistant_message = self._current_step_model_messages()[0]
+        yield self._model_message_committed_event(assistant_message)
+
+        for sid, cid, tool_name, arguments in sequential_tool_calls:
+            async for tool_event in self._execute_tool(
+                sid,
+                cid,
+                tool_name,
+                arguments,
+            ):
+                yield tool_event
 
         # After stream completes, execute deferred tool calls in parallel
         if deferred_tool_calls:
@@ -2979,7 +3010,9 @@ class SessionProcessor:
                     cid, events = result
                     for ev in events:
                         yield ev
-                    tool_calls_completed.append(cid)
+        for model_message in self._current_step_model_messages()[1:]:
+            yield self._model_message_committed_event(model_message)
+
         # Update message tokens and cost
         self._current_message.tokens = {
             "input": step_tokens.input,

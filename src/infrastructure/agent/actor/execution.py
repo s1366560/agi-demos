@@ -55,6 +55,7 @@ from src.infrastructure.agent.events.converter import normalize_event_dict
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.subagent.announce_service import AnnounceService
+from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -336,6 +337,8 @@ def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
     elif event_type == "status":
         status = event.get("data", {}).get("status")
         side.should_flush_events = status in _TERMINAL_WORKSPACE_STATUS_MESSAGES
+    elif event_type == MODEL_MESSAGE_COMMITTED_EVENT_V2:
+        side.should_flush_events = True
     elif event_type == "context_summary_generated":
         side.summary_data = event.get("data")
     elif event_type == "mcp_app_result":
