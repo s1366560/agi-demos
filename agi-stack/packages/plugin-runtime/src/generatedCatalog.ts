@@ -22,8 +22,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:e78168736dc4999fb0703fefcc62ce3d549a0a499944138e0641b26ff7',
-  '223363","modules":[{"artifact_digest":"sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49a',
+  '{"catalog_digest":"sha256:335aff27bc2a2f139e8e14c609eeeb982ed54871ace97390efff17fcaa',
+  'c4dae5","modules":[{"artifact_digest":"sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49a',
   'ff05abee41e0d41b3da76351fc","contract":{"config_schema":{"$schema":"https://json-sch',
   'ema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":',
   '{"const":"explicit-id","type":"string"}},"required":["strategy"],"type":"object"},"e',
@@ -106,12 +106,12 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additiona',
   'lProperties":false,"properties":{"strategy":{"const":"ordered-sql-event-log","type":',
   '"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"handles":[',
-  ']},"services":{"provides":[{"service":"service:session-event-log-writer","version":"',
-  '1.0.0"}],"requires":[]}},"contract_digest":"sha256:237ee7bc301139410e9dfe47f6ea3d1dc',
-  '6b97fb4f4c1558be240b13a1a5350bc","entrypoint":"src.infrastructure.plugins.v2.session',
-  '_event_log:_apply_session_event_log_writer_v2","module_ref":"builtin://memstack/sess',
-  'ion/event-log","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targe',
-  'ts":["python"]}],"schema_version":2}\n',
+  ']},"services":{"provides":[{"service":"service:session-event-log","version":"1.0.0"}',
+  '],"requires":[]}},"contract_digest":"sha256:081387f06d341da12450daedda2583999da04ae1',
+  '34406a5f5c7804dcc64f0b9c","entrypoint":"src.infrastructure.plugins.v2.session_event_',
+  'log:_apply_session_event_log_v2","module_ref":"builtin://memstack/session/event-log"',
+  ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]',
+  '}],"schema_version":2}\n',
 ].join('');
 
 export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
@@ -119,4 +119,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:e78168736dc4999fb0703fefcc62ce3d549a0a499944138e0641b26ff7223363' as const;
+  'sha256:335aff27bc2a2f139e8e14c609eeeb982ed54871ace97390efff17fcaac4dae5' as const;

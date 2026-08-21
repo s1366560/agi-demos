@@ -226,12 +226,12 @@
     },
     {
       "module_ref": "builtin://memstack/session/event-log",
-      "entrypoint": "src.infrastructure.plugins.v2.session_event_log:_apply_session_event_log_writer_v2",
+      "entrypoint": "src.infrastructure.plugins.v2.session_event_log:_apply_session_event_log_v2",
       "targets": ["python"],
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:session-event-log-writer", "version": "1.0.0" }
+            { "service": "service:session-event-log", "version": "1.0.0" }
           ],
           "requires": []
         },
@@ -246,7 +246,7 @@
           }
         }
       },
-      "contract_digest": "sha256:237ee7bc301139410e9dfe47f6ea3d1dc6b97fb4f4c1558be240b13a1a5350bc",
+      "contract_digest": "sha256:081387f06d341da12450daedda2583999da04ae134406a5f5c7804dcc64f0b9c",
       "artifact": {
         "digest": "sha256:b5d32e313b41bd898961e189cd8e36ab7704d23baad6dcc8ee84f266fae0a434",
         "source": "package://builtin/memstack-runtime-kernel"

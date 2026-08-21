@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         AutomationRuntimeIdentity,
     )
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
+    from src.infrastructure.plugins.v2.session_event_log import SessionEventLogServiceV2
 
 import redis.asyncio as aioredis
 
@@ -26,10 +27,7 @@ from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
     RedisAgentMessageBusAdapter,
 )
-from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
-    apply_run_input_applied_projection,
-    settle_agent_run,
-)
+from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import settle_agent_run
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
@@ -37,7 +35,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     _sanitize_event_data_for_postgres,
-    apply_conversation_event_projection_delta,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     mark_agent_run_running,
@@ -268,13 +265,6 @@ _PERSIST_INTERVAL_SECONDS = 30
 # TTL refresh interval for agent running state (seconds).
 _TTL_REFRESH_INTERVAL_SECONDS = 60
 
-_SKIP_PERSIST_EVENT_TYPES = {
-    "thought_start",
-    "thought_delta",
-    "text_delta",
-    "text_start",
-}
-_MESSAGE_EVENT_TYPES = {"user_message", "assistant_message"}
 _HITL_REQUEST_EVENT_TYPES = frozenset(
     {
         "clarification_asked",
@@ -327,108 +317,6 @@ class _StreamState:
             self.error_message = side.error_message
         if side.summary_data is not None:
             self.summary_save_data = side.summary_data
-
-
-@dataclass(frozen=True)
-class _PersistableEvent:
-    """Normalized event payload ready for database persistence."""
-
-    event_type: str
-    event_data: dict[str, Any]
-    event_time_us: int
-    event_counter: int
-
-
-def _sanitize_persistable_event(event: _PersistableEvent | None) -> _PersistableEvent | None:
-    """Redact sensitive payload values before stream events leave actor memory."""
-    if event is None:
-        return None
-    return _PersistableEvent(
-        event_type=event.event_type,
-        event_data=dict(_sanitize_event_data_for_postgres(event.event_data)),
-        event_time_us=event.event_time_us,
-        event_counter=event.event_counter,
-    )
-
-
-def _terminal_workspace_status_event(
-    event_data: dict[str, Any],
-    *,
-    event_time_us: int,
-    event_counter: int,
-    has_assistant_message: bool,
-) -> tuple[_PersistableEvent | None, bool]:
-    """Build a visible history item for terminal workspace status events."""
-    status = str(event_data.get("status", ""))
-    content = _TERMINAL_WORKSPACE_STATUS_MESSAGES.get(status)
-    if not content or has_assistant_message:
-        return None, False
-    return (
-        _PersistableEvent(
-            event_type="assistant_message",
-            event_data={
-                "content": content,
-                "message_id": str(uuid.uuid4()),
-                "role": "assistant",
-                "source": "terminal_workspace_status",
-                "status": status,
-            },
-            event_time_us=event_time_us,
-            event_counter=event_counter,
-        ),
-        True,
-    )
-
-
-def _complete_event_for_persistence(
-    raw_event_data: dict[str, Any],
-    event_data: dict[str, Any],
-    *,
-    event_time_us: int,
-    event_counter: int,
-    has_text_end_messages: bool,
-    has_complete_assistant_message: bool,
-) -> tuple[_PersistableEvent | None, bool]:
-    """Build persistence payload for complete events."""
-    if not (has_text_end_messages or has_complete_assistant_message):
-        content = str(event_data.get("content", "")).strip()
-        has_completion_metadata = any(
-            raw_event_data.get(field) for field in ("artifacts", "trace_url", "execution_summary")
-        )
-        if not (content or has_completion_metadata):
-            return None, False
-        complete_event_data: dict[str, Any] = {
-            "content": content,
-            "message_id": str(uuid.uuid4()),
-            "role": "assistant",
-            "source": "complete",
-        }
-        if raw_event_data.get("artifacts"):
-            complete_event_data["artifacts"] = raw_event_data["artifacts"]
-        if raw_event_data.get("trace_url"):
-            complete_event_data["trace_url"] = raw_event_data["trace_url"]
-        if raw_event_data.get("execution_summary"):
-            complete_event_data["execution_summary"] = raw_event_data["execution_summary"]
-        return (
-            _PersistableEvent(
-                event_type="assistant_message",
-                event_data=complete_event_data,
-                event_time_us=event_time_us,
-                event_counter=event_counter,
-            ),
-            True,
-        )
-    if has_text_end_messages:
-        return (
-            _PersistableEvent(
-                event_type="complete",
-                event_data=event_data,
-                event_time_us=event_time_us,
-                event_counter=event_counter,
-            ),
-            False,
-        )
-    return None, False
 
 
 def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
@@ -840,13 +728,6 @@ def _init_continue_time_gen(
     ):
         return EventTimeGenerator(db_time_us, db_counter)
     return EventTimeGenerator(state.last_event_time_us, state.last_event_counter)
-
-
-def _coerce_event_int(value: object, default: int = 0) -> int:
-    try:
-        return int(cast(Any, value))
-    except (TypeError, ValueError):
-        return default
 
 
 def _build_hitl_context(
@@ -1573,30 +1454,28 @@ async def continue_project_chat(  # noqa: PLR0915
 
 
 async def _get_last_db_event_time(conversation_id: str) -> tuple[int, int]:
-    """Get the last (event_time_us, event_counter) for a conversation from DB."""
-    from sqlalchemy import select
+    """Get the durable tail cursor from the pinned generation's log service."""
+    provider = _session_event_log_service_v2()
+    cursor = await provider.last_cursor(conversation_id=conversation_id)
+    return (cursor.event_time_us, cursor.event_counter)
 
-    try:
-        async with async_session_factory() as session:
-            result = await session.execute(
-                select(
-                    AgentExecutionEvent.event_time_us,
-                    AgentExecutionEvent.event_counter,
-                )
-                .where(AgentExecutionEvent.conversation_id == conversation_id)
-                .order_by(
-                    AgentExecutionEvent.event_time_us.desc(),
-                    AgentExecutionEvent.event_counter.desc(),
-                )
-                .limit(1)
-            )
-            row = result.one_or_none()
-            if row is None:
-                return (0, 0)
-            return (row[0], row[1])
-    except Exception as e:
-        logger.warning(f"[ActorExecution] Failed to get last DB event time: {e}")
-        return (0, 0)
+
+def _session_event_log_service_v2() -> SessionEventLogServiceV2:
+    """Resolve the authoritative log service from the pinned operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.session_event_log import (
+        SESSION_EVENT_LOG_SERVICE_V2,
+        SessionEventLogServiceV2,
+    )
+
+    provider = current_operation_context_v2().require(SESSION_EVENT_LOG_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogServiceV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "v2 session event-log service has an invalid implementation",
+        )
+    return provider
 
 
 async def _persist_events(
@@ -1605,207 +1484,13 @@ async def _persist_events(
     events: list[dict[str, Any]],
     correlation_id: str | None = None,
 ) -> None:
-    """Persist agent events through the active generation, with a native fallback."""
-    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-    from src.infrastructure.plugins.v2.session_event_log import (
-        SESSION_EVENT_LOG_WRITER_SERVICE_V2,
-        SessionEventLogWriterV2,
-    )
-
-    try:
-        operation = current_operation_context_v2()
-    except RuntimeV2Error as exc:
-        if exc.code != "operation_context_not_pinned":
-            raise
-        await _persist_events_native(
-            conversation_id=conversation_id,
-            message_id=message_id,
-            events=events,
-            correlation_id=correlation_id,
-        )
-        return
-    provider = operation.require(SESSION_EVENT_LOG_WRITER_SERVICE_V2)
-    if not isinstance(provider, SessionEventLogWriterV2):
-        raise RuntimeError("v2 session event-log writer has an invalid implementation")
-    await provider.persist(
-        writer=_persist_events_native,
+    """Persist agent events through the pinned generation's authoritative log."""
+    provider = _session_event_log_service_v2()
+    await provider.append(
         conversation_id=conversation_id,
         message_id=message_id,
         events=events,
         correlation_id=correlation_id,
-    )
-
-
-async def _persist_events_native(
-    conversation_id: str,
-    message_id: str,
-    events: list[dict[str, Any]],
-    correlation_id: str | None = None,
-) -> None:
-    """Persist agent events in the existing ordered SQL transaction."""
-    from sqlalchemy import select
-    from sqlalchemy.dialects.postgresql import insert
-
-    try:
-        async with async_session_factory() as session, session.begin():
-            existing_assistant_result = await session.execute(
-                select(AgentExecutionEvent.event_data).where(
-                    AgentExecutionEvent.conversation_id == conversation_id,
-                    AgentExecutionEvent.message_id == message_id,
-                    AgentExecutionEvent.event_type == "assistant_message",
-                )
-            )
-            existing_assistant_events = [
-                event_data
-                for event_data in existing_assistant_result.scalars().all()
-                if isinstance(event_data, dict)
-            ]
-            has_text_end_messages = any(
-                event_data.get("source") == "text_end" for event_data in existing_assistant_events
-            )
-            has_complete_assistant_message = any(
-                event_data.get("source") == "complete" for event_data in existing_assistant_events
-            )
-            inserted_message_count = 0
-            latest_event_time_us = 0
-
-            for event in events:
-                (
-                    persistable_event,
-                    has_text_end_messages,
-                    has_complete_assistant_message,
-                ) = _prepare_event_for_persistence(
-                    event,
-                    has_text_end_messages=has_text_end_messages,
-                    has_complete_assistant_message=has_complete_assistant_message,
-                )
-                if persistable_event is None:
-                    continue
-
-                stmt = (
-                    insert(AgentExecutionEvent)
-                    .values(
-                        id=str(uuid.uuid4()),
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        event_type=persistable_event.event_type,
-                        event_data=persistable_event.event_data,
-                        event_time_us=persistable_event.event_time_us,
-                        event_counter=persistable_event.event_counter,
-                        correlation_id=correlation_id,
-                        created_at=datetime.now(UTC),
-                    )
-                    .on_conflict_do_nothing(
-                        index_elements=["conversation_id", "event_time_us", "event_counter"]
-                    )
-                    .returning(
-                        AgentExecutionEvent.event_type,
-                        AgentExecutionEvent.event_time_us,
-                    )
-                )
-                insert_result = await session.execute(stmt)
-                inserted_row = insert_result.one_or_none()
-                if inserted_row is None:
-                    continue
-                inserted_event_type, inserted_event_time = inserted_row
-                if inserted_event_type in _MESSAGE_EVENT_TYPES:
-                    inserted_message_count += 1
-                if inserted_event_type == "run_input_applied":
-                    await apply_run_input_applied_projection(
-                        session,
-                        event_data=persistable_event.event_data,
-                    )
-                latest_event_time_us = max(latest_event_time_us, int(inserted_event_time))
-
-            await apply_conversation_event_projection_delta(
-                session,
-                conversation_id,
-                inserted_message_count=inserted_message_count,
-                latest_event_time_us=latest_event_time_us or None,
-            )
-    except Exception as e:
-        logger.error(
-            f"[ActorExecution] Failed to persist {len(events)} events "
-            f"for conversation {conversation_id}: {e}",
-            exc_info=True,
-        )
-
-
-def _prepare_event_for_persistence(
-    event: dict[str, Any],
-    *,
-    has_text_end_messages: bool,
-    has_complete_assistant_message: bool,
-) -> tuple[_PersistableEvent | None, bool, bool]:
-    """Normalize a stream event into the shape persisted by the actor."""
-    normalized_event = normalize_event_dict(event)
-    persistable_event: _PersistableEvent | None = None
-    next_has_text_end_messages = has_text_end_messages
-    next_has_complete_assistant_message = has_complete_assistant_message
-
-    if normalized_event is not None:
-        event_type = str(normalized_event.get("type", "unknown"))
-        if event_type not in _SKIP_PERSIST_EVENT_TYPES:
-            raw_event_data = normalized_event.get("data", {})
-            event_data = dict(raw_event_data)
-            evt_time_us = _coerce_event_int(normalized_event.get("event_time_us", 0))
-            evt_counter = _coerce_event_int(normalized_event.get("event_counter", 0))
-
-            if event_type == "text_end":
-                full_text = str(event_data.get("full_text", "")).strip()
-                if full_text:
-                    persistable_event = _PersistableEvent(
-                        event_type="assistant_message",
-                        event_data={
-                            "content": full_text,
-                            "message_id": str(uuid.uuid4()),
-                            "role": "assistant",
-                            "source": "text_end",
-                        },
-                        event_time_us=evt_time_us,
-                        event_counter=evt_counter,
-                    )
-                    next_has_text_end_messages = True
-            elif event_type == "complete":
-                persistable_event, complete_created_message = _complete_event_for_persistence(
-                    raw_event_data,
-                    event_data,
-                    event_time_us=evt_time_us,
-                    event_counter=evt_counter,
-                    has_text_end_messages=has_text_end_messages,
-                    has_complete_assistant_message=has_complete_assistant_message,
-                )
-                if complete_created_message:
-                    next_has_complete_assistant_message = True
-            elif event_type == "status":
-                persistable_event, status_created_message = _terminal_workspace_status_event(
-                    event_data,
-                    event_time_us=evt_time_us,
-                    event_counter=evt_counter,
-                    has_assistant_message=(has_text_end_messages or has_complete_assistant_message),
-                )
-                if status_created_message:
-                    next_has_complete_assistant_message = True
-                if persistable_event is None:
-                    persistable_event = _PersistableEvent(
-                        event_type=event_type,
-                        event_data=event_data,
-                        event_time_us=evt_time_us,
-                        event_counter=evt_counter,
-                    )
-            else:
-                persistable_event = _PersistableEvent(
-                    event_type=event_type,
-                    event_data=event_data,
-                    event_time_us=evt_time_us,
-                    event_counter=evt_counter,
-                )
-
-    return (
-        _sanitize_persistable_event(persistable_event),
-        next_has_text_end_messages,
-        next_has_complete_assistant_message,
     )
 
 

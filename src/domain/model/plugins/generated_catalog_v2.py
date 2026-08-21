@@ -5,8 +5,8 @@
 from typing import Final
 
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:e78168736dc4999fb0703fefcc62ce3d549a0a499944138e0641b26ff72233'
-    '63","modules":[{"artifact_digest":"sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee'
+    '{"catalog_digest":"sha256:335aff27bc2a2f139e8e14c609eeeb982ed54871ace97390efff17fcaac4da'
+    'e5","modules":[{"artifact_digest":"sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee'
     '41e0d41b3da76351fc","contract":{"config_schema":{"$schema":"https://json-schema.org/draf'
     't/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"explic'
     'it-id","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"'
@@ -85,15 +85,15 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '84f266fae0a434","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/20'
     '20-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-sq'
     'l-event-log","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits'
-    '":[],"handles":[]},"services":{"provides":[{"service":"service:session-event-log-writer"'
-    ',"version":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:237ee7bc301139410e9dfe47f'
-    '6ea3d1dc6b97fb4f4c1558be240b13a1a5350bc","entrypoint":"src.infrastructure.plugins.v2.ses'
-    'sion_event_log:_apply_session_event_log_writer_v2","module_ref":"builtin://memstack/sess'
-    'ion/event-log","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":'
-    '["python"]}],"schema_version":2}\n'
+    '":[],"handles":[]},"services":{"provides":[{"service":"service:session-event-log","versi'
+    'on":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:081387f06d341da12450daedda258399'
+    '9da04ae134406a5f5c7804dcc64f0b9c","entrypoint":"src.infrastructure.plugins.v2.session_ev'
+    'ent_log:_apply_session_event_log_v2","module_ref":"builtin://memstack/session/event-log"'
+    ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],"'
+    'schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:e78168736dc4999fb0703fefcc62ce3d549a0a499944138e0641b26ff7223363"
+    "sha256:335aff27bc2a2f139e8e14c609eeeb982ed54871ace97390efff17fcaac4dae5"
 )
 
 __all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]
