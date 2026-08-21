@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:97486798000ffc3a832a00b03614ca66870a2060ab9369a82d99cd7b9a6c7652",
+        "digest": "sha256:4e40761c775eeedc4576be04726f517b0e4995b1f28ce04ac62317a772d233dd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -273,6 +273,74 @@
       "artifact": {
         "digest": "sha256:d8c7300d11588122c04b639d2bc6c94ef7fc8a1ae7382d411b247ad523890acc",
         "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/backend-store-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.backend_store_services:_apply_backend_store_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.backend-store-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:26828dca5d24b5abaaaeb665e90fc4e8d2ba2c276775f3e902201b6eb35de9f9",
+      "artifact": {
+        "digest": "sha256:4fea12f6172c7a5b9733e8e833b66df39cf100c861650d1fd6827b690ad7368f",
+        "source": "repo+python://src/infrastructure/plugins/v2/backend_store_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/backend-store-shadow",
+      "entrypoint": "src.infrastructure.plugins.v2.backend_store_services:_apply_backend_store_shadow_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.backend-store-shadow",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.backend-store-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "structural-parity", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:dfa387f0258bbb5066e4eb54735099c175501ea25cb2df31c568d158de3224b1",
+      "artifact": {
+        "digest": "sha256:4fea12f6172c7a5b9733e8e833b66df39cf100c861650d1fd6827b690ad7368f",
+        "source": "repo+python://src/infrastructure/plugins/v2/backend_store_services.py"
       }
     },
     {

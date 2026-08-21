@@ -20,6 +20,7 @@ from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
 )
+from .backend_store_services import backend_store_service_definitions_v2
 from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
@@ -86,6 +87,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         route_table_builder_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
+        *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),

@@ -16,6 +16,9 @@ from src.application.services.graph_store_service import (
     GraphStoreService,
     GraphStoreValidationError,
 )
+from src.infrastructure.adapters.primary.web.backend_store_shadow_v2 import (
+    backend_store_shadow_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -29,6 +32,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repositor
 from src.infrastructure.graph.backend_factory import build_default_factory
 from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX, get_graph_backend_registry
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.backend_store_services import BackendStoreShadowEvidenceV2
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/graph-stores", tags=["graph-stores"])
@@ -81,6 +85,9 @@ def _map_error(exc: Exception) -> HTTPException:
 async def list_store_types(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _backend_store_shadow: BackendStoreShadowEvidenceV2 = Depends(
+        backend_store_shadow_dependency_v2
+    ),
 ) -> dict[str, Any]:
     _ = current_user
     service = _service(db)
