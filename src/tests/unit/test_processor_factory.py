@@ -9,7 +9,7 @@ Tests for:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -134,6 +134,7 @@ class TestProcessorFactoryImmutability:
         assert f.base_model == ""
         assert f.base_api_key is None
         assert f.base_url is None
+        assert f.base_provider_id == ""
 
 
 # ============================================================================
@@ -144,6 +145,31 @@ class TestProcessorFactoryImmutability:
 @pytest.mark.unit
 class TestCreateForSubagent:
     """Tests for ProcessorFactory.create_for_subagent()."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_v2_loop_resolver(self):
+        with patch(
+            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            return_value=MagicMock(),
+        ) as resolver:
+            yield resolver
+
+    def test_pinned_v2_loop_resolver_and_provider_are_propagated(
+        self,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+        _pin_v2_loop_resolver: MagicMock,
+    ) -> None:
+        factory = ProcessorFactory(
+            base_model="gemini-2.0-flash",
+            base_provider_id="gemini",
+        )
+
+        processor = factory.create_for_subagent(inherit_subagent, sample_tools)
+
+        assert processor.config.loop_resolver is _pin_v2_loop_resolver.return_value
+        assert processor.config.provider_id == "gemini"
+        _pin_v2_loop_resolver.assert_called_once_with()
 
     def test_inherit_model_uses_base_model(
         self,
@@ -243,6 +269,7 @@ class TestCreateForMain:
             temperature=0.3,
             max_tokens=2048,
             max_steps=5,
+            loop_resolver=object(),
         )
 
         processor = factory.create_for_main(config, sample_tools)
@@ -259,7 +286,7 @@ class TestCreateForMain:
         mock_artifact_service: MagicMock,
     ) -> None:
         """Shared deps should be injected for main processor too."""
-        config = ProcessorConfig(model="test-model")
+        config = ProcessorConfig(model="test-model", loop_resolver=object())
         processor = factory.create_for_main(config, sample_tools)
 
         assert processor.permission_manager is mock_permission_manager
@@ -271,7 +298,7 @@ class TestCreateForMain:
         sample_tools: list[ToolDefinition],
     ) -> None:
         """Forced skill name/tools on config should be preserved."""
-        config = ProcessorConfig(model="test-model")
+        config = ProcessorConfig(model="test-model", loop_resolver=object())
         config.forced_skill_name = "my-skill"
         config.forced_skill_tools = ["tool_a", "tool_b"]
 
@@ -279,6 +306,17 @@ class TestCreateForMain:
 
         assert processor.config.forced_skill_name == "my-skill"
         assert processor.config.forced_skill_tools == ["tool_a", "tool_b"]
+
+    def test_react_agent_propagates_provider_to_subagent_factory(self) -> None:
+        from src.infrastructure.agent.core.react_agent import ReActAgent
+
+        agent = ReActAgent(
+            model="test-model",
+            tools={},
+            provider_id="test-provider",
+        )
+
+        assert agent._processor_factory.base_provider_id == "test-provider"
 
 
 # ============================================================================

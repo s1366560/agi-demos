@@ -37,21 +37,15 @@ async def _build_system_prompt_from_runtime_v2(
     manager: object,
     context: PromptContext,
     subagent: object | None,
-) -> str | None:
-    """Return a v2 provider result, or None outside an admitted operation."""
+) -> str:
+    """Build the prompt through the required provider in the pinned v2 operation."""
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
     from src.infrastructure.plugins.v2.system_prompt import (
         SYSTEM_PROMPT_BUILDER_SERVICE_V2,
         SystemPromptBuilderV2,
     )
 
-    try:
-        operation = current_operation_context_v2()
-    except RuntimeV2Error as exc:
-        if exc.code != "operation_context_not_pinned":
-            raise
-        return None
+    operation = current_operation_context_v2()
     builder = operation.require(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
     if not isinstance(builder, SystemPromptBuilderV2):
         raise RuntimeError("v2 system prompt builder has an invalid implementation")
@@ -339,22 +333,10 @@ class PromptMixin:
             selected_agent_name=selected_agent_name,
         )
 
-        # Use the generation-scoped provider when the turn was admitted by v2.
-        plugin_prompt = await _build_system_prompt_from_runtime_v2(
+        return await _build_system_prompt_from_runtime_v2(
             manager=self.prompt_manager,
             context=context,
             subagent=subagent,
-        )
-        if plugin_prompt is not None:
-            return plugin_prompt
-
-        # Development fallback for callers outside a v2 operation boundary.
-        return cast(
-            str,
-            await self.prompt_manager.build_system_prompt(
-                context=context,
-                subagent=subagent,
-            ),
         )
 
     async def _load_selected_agent(
@@ -370,18 +352,8 @@ class PromptMixin:
             AgentDefinitionResolverV2,
         )
         from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
-        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        try:
-            operation = current_operation_context_v2()
-        except RuntimeV2Error as exc:
-            if exc.code != "operation_context_not_pinned":
-                raise
-            return await self._load_selected_agent_native(
-                agent_id=agent_id,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
+        operation = current_operation_context_v2()
         resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
         if not isinstance(resolver, AgentDefinitionResolverV2):
             raise RuntimeError("v2 agent-definition resolver has an invalid implementation")
@@ -486,10 +458,7 @@ class PromptMixin:
         agent_max_iterations_explicit = (
             selected_agent is not None
             and selected_agent.has_explicit_max_iterations()
-            and not (
-                is_workspace_worker_runtime
-                and _is_workspace_plan_team_agent(selected_agent)
-            )
+            and not (is_workspace_worker_runtime and _is_workspace_plan_team_agent(selected_agent))
         )
         effective_max_steps = (
             selected_agent.max_iterations

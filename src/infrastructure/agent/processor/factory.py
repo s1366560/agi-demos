@@ -51,6 +51,7 @@ class ProcessorFactory:
         artifact_service: Artifact service for rich outputs.
         command_interceptor: Command interceptor for slash commands (main agent only).
         base_model: Default model name (used when SubAgent inherits).
+        base_provider_id: Provider identity inherited by SubAgent turns.
         base_api_key: API key for LLM calls.
         base_url: Base URL for LLM API.
         tool_pipeline: ToolPipeline | None = None
@@ -61,6 +62,7 @@ class ProcessorFactory:
     artifact_service: ArtifactService | None = None
     command_interceptor: CommandInterceptor | None = None
     base_model: str = ""
+    base_provider_id: str = ""
     base_api_key: str | None = None
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
@@ -131,6 +133,8 @@ class ProcessorFactory:
             message_bus=self.message_bus,
             control_channel=self.control_channel,
             run_id=run_id,
+            provider_id=self.base_provider_id,
+            loop_resolver=_default_loop_resolver(),
         )
 
         return SessionProcessor(
@@ -170,48 +174,13 @@ class ProcessorFactory:
         )
 
 
-def _default_loop_resolver() -> AgentLoopResolverLike | None:
-    """Build the per-turn agent loop resolver from the platform runtime host.
-
-    Returns ``None`` when the plugin control plane is not active (tests,
-    bare CLI runs); the processor then always uses the builtin ReAct loop.
-    """
+def _default_loop_resolver() -> AgentLoopResolverLike:
+    """Resolve the required agent-loop service from the pinned v2 operation."""
     from src.infrastructure.plugins.v2.agent_loop import AGENT_LOOP_RESOLVER_SERVICE_V2
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    try:
-        operation = current_operation_context_v2()
-    except RuntimeV2Error as exc:
-        if exc.code != "operation_context_not_pinned":
-            raise
-    else:
-        resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
-        if not callable(getattr(resolver, "resolve", None)):
-            raise RuntimeError("v2 agent loop resolver has no callable resolve method")
-        return cast(AgentLoopResolverLike, resolver)
-
-    try:
-        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolver
-        from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
-
-        return AgentLoopResolver(
-            get_platform_plugin_runtime_host().capabilities,
-            builtin_loop=_BuiltinReActLoop(),
-        )
-    except Exception:
-        return None
-
-
-class _BuiltinReActLoop:
-    """Sentinel for the builtin ReAct loop in per-turn resolution (I2).
-
-    Lets ``AgentLoopResolver`` resolve ``scope="builtin"`` instead of raising
-    when no plugin row matches, so the selection is recorded in the execution
-    summary. The processor never dispatches builtin-scope selections to the
-    driver contract — it continues on the native ReAct path — so ``run`` is
-    unreachable by construction.
-    """
-
-    async def run(self, context: object) -> None:
-        raise NotImplementedError("builtin ReAct loop is the in-process default path")
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+    if not callable(getattr(resolver, "resolve", None)):
+        raise RuntimeError("v2 agent loop resolver has no callable resolve method")
+    return cast(AgentLoopResolverLike, resolver)

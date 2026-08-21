@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from src.domain.events.agent_events import AgentStartEvent
@@ -12,15 +14,18 @@ from src.domain.model.plugins import (
     PluginTrust,
     ProvidedCapability,
 )
-from src.infrastructure.agent.processor.factory import _default_loop_resolver
+from src.infrastructure.agent.processor.factory import ProcessorFactory, _default_loop_resolver
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
 from src.infrastructure.plugins.agent_loop_runtime import (
+    AgentLoopResolutionError,
     AgentLoopResolver,
 )
 from src.infrastructure.plugins.context import CapabilityRegistry, PluginContext
+from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class _ExternalLoop:
@@ -62,33 +67,65 @@ def _register_loop(
 
 @pytest.mark.unit
 class TestAgentLoopWiring:
-    def test_factory_default_resolver_comes_from_runtime_host(self) -> None:
-        resolver = _default_loop_resolver()
-        assert isinstance(resolver, AgentLoopResolver)
+    def test_factory_default_resolver_requires_pinned_v2_operation(self) -> None:
+        with pytest.raises(RuntimeV2Error) as error:
+            _default_loop_resolver()
 
-    def test_factory_default_resolver_resolves_builtin_scope(self) -> None:
-        """The default resolver resolves to builtin scope (never raises)."""
-        resolver = _default_loop_resolver()
-        assert resolver is not None
-        selection = resolver.resolve("zai_coding", "auto")
-        assert selection.scope == "builtin"
-        assert selection.plugin_id == "memstack-kernel"
+        assert error.value.code == "operation_context_not_pinned"
 
-    def test_resolve_returns_none_without_resolver(self) -> None:
+    def test_factory_main_processor_does_not_use_v1_runtime_host_fallback(self) -> None:
+        config = ProcessorConfig(model="m", provider_id="provider")
+
+        with (
+            patch(
+                "src.infrastructure.plugins.runtime_host.get_platform_plugin_runtime_host"
+            ) as get_runtime_host,
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            ProcessorFactory().create_for_main(config, [])
+
+        assert error.value.code == "operation_context_not_pinned"
+        get_runtime_host.assert_not_called()
+
+    def test_resolve_fails_without_resolver(self) -> None:
         processor = SessionProcessor(config=ProcessorConfig(model="m"), tools=[])
-        assert processor._resolve_agent_loop() is None
 
-    def test_resolve_returns_none_without_provider_id(self) -> None:
+        with pytest.raises(RuntimeV2Error) as error:
+            processor._resolve_agent_loop()
+
+        assert error.value.code == "agent_loop_resolver_missing"
+
+    def test_resolve_fails_without_provider_id(self) -> None:
+        resolver = MagicMock()
+        processor = SessionProcessor(
+            config=ProcessorConfig(model="m", loop_resolver=resolver),
+            tools=[],
+        )
+
+        with pytest.raises(RuntimeV2Error) as error:
+            processor._resolve_agent_loop()
+
+        assert error.value.code == "agent_loop_provider_missing"
+        resolver.resolve.assert_not_called()
+
+    def test_resolve_fails_without_model_id(self) -> None:
+        resolver = MagicMock()
         processor = SessionProcessor(
             config=ProcessorConfig(
-                model="m", loop_resolver=AgentLoopResolver(CapabilityRegistry())
+                model="",
+                provider_id="deepseek",
+                loop_resolver=resolver,
             ),
             tools=[],
         )
-        assert processor._resolve_agent_loop() is None
 
-    def test_resolve_falls_back_to_none_on_resolution_error(self) -> None:
-        # Empty registry with no builtin default -> resolution error -> builtin path.
+        with pytest.raises(RuntimeV2Error) as error:
+            processor._resolve_agent_loop()
+
+        assert error.value.code == "agent_loop_model_missing"
+        resolver.resolve.assert_not_called()
+
+    def test_resolve_wraps_resolution_error_without_builtin_fallback(self) -> None:
         processor = SessionProcessor(
             config=ProcessorConfig(
                 model="m",
@@ -97,24 +134,57 @@ class TestAgentLoopWiring:
             ),
             tools=[],
         )
-        assert processor._resolve_agent_loop() is None
 
-    def test_resolve_returns_builtin_selection(self) -> None:
-        registry = CapabilityRegistry()
-        _register_loop(
-            registry, "memstack-kernel", "default", _ExternalLoop(), trust=PluginTrust.BUILTIN
+        with pytest.raises(RuntimeV2Error) as error:
+            processor._resolve_agent_loop()
+
+        assert error.value.code == "agent_loop_resolution_failed"
+        assert isinstance(error.value.__cause__, AgentLoopResolutionError)
+
+    def test_resolve_returns_explicit_v2_builtin_selection(self) -> None:
+        loop = _ExternalLoop()
+        resolver = BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=loop,
         )
         processor = SessionProcessor(
             config=ProcessorConfig(
                 model="v3",
                 provider_id="deepseek",
-                loop_resolver=AgentLoopResolver(registry),
+                loop_resolver=resolver,
             ),
             tools=[],
         )
         selection = processor._resolve_agent_loop()
         assert selection is not None
         assert selection.scope == "builtin"
+        assert selection.implementation is loop
+
+    async def test_process_keeps_explicit_v2_builtin_selection_on_native_path(self) -> None:
+        loop = _ExternalLoop()
+        resolver = BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=loop,
+        )
+        processor = SessionProcessor(
+            config=ProcessorConfig(
+                model="v3",
+                provider_id="deepseek",
+                loop_resolver=resolver,
+            ),
+            tools=[],
+        )
+
+        events = processor.process("s1", [{"role": "user", "content": "hi"}])
+        first = await anext(events)
+        await events.aclose()
+
+        assert isinstance(first, AgentStartEvent)
+        assert processor._loop_selection is not None
+        assert processor._loop_selection.scope == "builtin"
+        assert loop.contexts == []
 
     async def test_process_dispatches_external_loop(self) -> None:
         registry = CapabilityRegistry()

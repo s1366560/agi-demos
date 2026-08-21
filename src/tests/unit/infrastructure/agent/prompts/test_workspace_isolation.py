@@ -71,6 +71,15 @@ class _ProjectPromptAgent(PromptMixin):
         return {}, [_PromptTool("read", "read file")]
 
 
+async def _build_prompt_through_v2_provider(
+    *,
+    manager: SystemPromptManager,
+    context: PromptContext,
+    subagent: object | None,
+) -> str:
+    return await manager.build_system_prompt(context=context, subagent=subagent)
+
+
 pytestmark = pytest.mark.unit
 
 
@@ -203,6 +212,15 @@ class TestSystemPromptIsolation:
 
 
 class TestPromptMixinWorkspaceContextIsolation:
+    @pytest.fixture(autouse=True)
+    def _use_v2_prompt_provider(self):
+        with patch(
+            "src.infrastructure.agent.core.react_agent_prompt_mixin."
+            "_build_system_prompt_from_runtime_v2",
+            new=_build_prompt_through_v2_provider,
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_project_chat_with_workspace_manager_omits_dynamic_workspace_context(
         self,

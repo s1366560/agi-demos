@@ -252,8 +252,7 @@ class ReActAgent(
         artifact_service: ArtifactService | None = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
         llm_client: LLMClient | None = None,
-        # Provider id for the per-turn agent loop seam (P2/I2); empty disables
-        # resolution and keeps the builtin ReAct loop.
+        # Provider id for the required per-turn v2 agent-loop resolution.
         provider_id: str = "",
         # Skill resource sync service for sandbox resource injection
         resource_sync_service: Any | None = None,
@@ -365,7 +364,7 @@ class ReActAgent(
         self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
-        self._provider_id = provider_id  # Per-turn agent loop seam (P2/I2)
+        self._provider_id = provider_id
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._workspace_manager = workspace_manager  # Workspace persona/soul file loader
@@ -462,6 +461,7 @@ class ReActAgent(
             artifact_service=self.artifact_service,
             command_interceptor=command_interceptor,
             base_model=self.model,
+            base_provider_id=self._provider_id,
             base_api_key=self.api_key,
             base_url=self.base_url,
             plugin_registry=get_plugin_registry(),

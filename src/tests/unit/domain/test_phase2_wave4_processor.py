@@ -392,7 +392,11 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        processor = factory.create_for_subagent(subagent, [dummy_tool], run_id="run-42")
+        with patch(
+            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            return_value=object(),
+        ):
+            processor = factory.create_for_subagent(subagent, [dummy_tool], run_id="run-42")
 
         assert processor.config.control_channel is channel
         assert processor.config.run_id == "run-42"
@@ -422,7 +426,11 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        processor = factory.create_for_subagent(subagent, [dummy_tool])
+        with patch(
+            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            return_value=object(),
+        ):
+            processor = factory.create_for_subagent(subagent, [dummy_tool])
 
         assert processor.config.control_channel is None
         assert processor.config.run_id is None

@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.commands.types import CommandResult
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
+    from src.infrastructure.plugins.v2.agent_loop import AgentLoopSelectionV2
 
 from src.domain.model.agent.hitl_types import HITLType
 from src.domain.ports.agent.control_channel_port import ControlChannelPort
@@ -208,9 +209,8 @@ class ProcessorConfig:
     # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
     run_id: str | None = None
 
-    # Pluggable agent loop seam (P2/I2): when a resolver and provider_id are
-    # present, each turn resolves its loop by (provider, model); the builtin
-    # ReAct path is the fallback and the default when no resolver is set.
+    # Required v2 agent-loop seam: every turn resolves by (provider, model).
+    # The native ReAct path is selected only by an explicit builtin selection.
     provider_id: str = ""
     loop_resolver: Any | None = None
 
@@ -1500,9 +1500,9 @@ class SessionProcessor:
         # runs cannot see each other's state.
         set_current_run_context(run_ctx)
 
-        # Pluggable agent loop seam (P2/I2): resolve this turn's loop by
-        # (provider, model). A non-builtin selection takes over the turn;
-        # anything else falls through to the builtin ReAct path below.
+        # Resolve this turn through the required v2 seam. A non-builtin
+        # selection takes over; only an explicit builtin selection continues
+        # through the native ReAct path below.
         self._loop_selection = self._resolve_agent_loop()
         if self._loop_selection is not None and self._loop_selection.scope != "builtin":
             async for loop_event in self._dispatch_external_loop(
@@ -2157,28 +2157,43 @@ class SessionProcessor:
             }
         return summary
 
-    def _resolve_agent_loop(self) -> Any | None:
-        """Resolve this turn's agent loop by (provider, model).
+    def _resolve_agent_loop(self) -> Any:
+        """Resolve the required v2 agent-loop selection for this turn."""
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        Returns ``None`` when the seam is unconfigured or resolution fails;
-        both mean "use the builtin ReAct path" and never fail the turn.
-        """
         resolver = self.config.loop_resolver
         provider_id = self.config.provider_id
-        if resolver is None or not provider_id or not self.config.model:
-            return None
-        from src.infrastructure.plugins.agent_loop_runtime import AgentLoopResolutionError
+        if resolver is None:
+            raise RuntimeV2Error(
+                "agent_loop_resolver_missing",
+                "agent loop resolver is required for every processor turn",
+            )
+        resolve = getattr(resolver, "resolve", None)
+        if not callable(resolve):
+            raise RuntimeV2Error(
+                "agent_loop_resolver_invalid",
+                "agent loop resolver has no callable resolve method",
+            )
+        if not provider_id.strip():
+            raise RuntimeV2Error(
+                "agent_loop_provider_missing",
+                "agent loop provider_id is required for every processor turn",
+            )
+        if not self.config.model.strip():
+            raise RuntimeV2Error(
+                "agent_loop_model_missing",
+                "agent loop model is required for every processor turn",
+            )
 
         try:
-            selection = resolver.resolve(provider_id, self.config.model)
-        except AgentLoopResolutionError as exc:
-            logger.warning(
-                "agent loop resolution failed for %s/%s; using builtin ReAct loop: %s",
-                provider_id,
-                self.config.model,
-                exc,
-            )
-            return None
+            selection = cast("AgentLoopSelectionV2", resolve(provider_id, self.config.model))
+        except RuntimeV2Error:
+            raise
+        except Exception as exc:
+            raise RuntimeV2Error(
+                "agent_loop_resolution_failed",
+                f"agent loop resolution failed for {provider_id}/{self.config.model}: {exc}",
+            ) from exc
         logger.info(
             "agent loop resolved: scope=%s loop=%s plugin=%s provider=%s model=%s",
             selection.scope,

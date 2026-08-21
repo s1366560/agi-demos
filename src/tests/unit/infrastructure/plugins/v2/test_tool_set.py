@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -13,6 +14,7 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.tool_set import (
     TOOL_SET_RESOLVER_SERVICE_V2,
@@ -33,6 +35,42 @@ class _ToolAgent:
     ) -> tuple[dict[str, object], list[object]]:
         self.contexts.append(selection_context)
         return {"read": object()}, [object()]
+
+
+@pytest.mark.unit
+def test_tool_set_requires_pinned_v2_operation_without_native_fallback() -> None:
+    agent = _ToolAgent()
+    selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
+
+    with pytest.raises(RuntimeV2Error) as error:
+        _resolve_current_tools_from_runtime_v2(agent, selection)
+
+    assert error.value.code == "operation_context_not_pinned"
+    assert agent.contexts == []
+
+
+@pytest.mark.unit
+def test_tool_set_propagates_missing_v2_service_without_native_fallback() -> None:
+    agent = _ToolAgent()
+    selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
+    operation = Mock()
+    operation.require.side_effect = RuntimeV2Error(
+        "missing_service",
+        "tool-set resolver is unavailable",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        _resolve_current_tools_from_runtime_v2(agent, selection)
+
+    assert error.value.code == "missing_service"
+    operation.require.assert_called_once_with(TOOL_SET_RESOLVER_SERVICE_V2)
+    assert agent.contexts == []
 
 
 @pytest.mark.unit

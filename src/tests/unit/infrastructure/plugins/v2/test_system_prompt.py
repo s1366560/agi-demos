@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -13,6 +13,7 @@ from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
 from src.infrastructure.agent.prompts.manager import SystemPromptManager
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.system_prompt import (
     SYSTEM_PROMPT_BUILDER_SERVICE_V2,
@@ -43,6 +44,57 @@ class _PromptAgent(PromptMixin):
         selection_context: object | None = None,
     ) -> tuple[dict[str, object], list[_PromptTool]]:
         return {}, [_PromptTool()]
+
+
+@pytest.mark.unit
+async def test_prompt_mixin_requires_pinned_v2_operation_without_native_fallback() -> None:
+    agent = _PromptAgent()
+    with (
+        patch.object(
+            agent.prompt_manager,
+            "build_system_prompt",
+            new_callable=AsyncMock,
+        ) as native_build,
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        await agent._build_system_prompt(
+            user_query="hello",
+            conversation_context=[],
+        )
+
+    assert error.value.code == "operation_context_not_pinned"
+    native_build.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_prompt_mixin_propagates_missing_v2_service_without_native_fallback() -> None:
+    agent = _PromptAgent()
+    operation = Mock()
+    operation.require.side_effect = RuntimeV2Error(
+        "missing_service",
+        "system prompt builder is unavailable",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+        patch.object(
+            agent.prompt_manager,
+            "build_system_prompt",
+            new_callable=AsyncMock,
+        ) as native_build,
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        await agent._build_system_prompt(
+            user_query="hello",
+            conversation_context=[],
+        )
+
+    assert error.value.code == "missing_service"
+    operation.require.assert_called_once_with(SYSTEM_PROMPT_BUILDER_SERVICE_V2)
+    native_build.assert_not_awaited()
 
 
 @pytest.mark.unit

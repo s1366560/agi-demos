@@ -17,6 +17,7 @@ import pytest
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
 
 # ============================================================================
 # Fixtures
@@ -29,6 +30,12 @@ def minimal_config() -> ProcessorConfig:
     return ProcessorConfig(
         model="test-model",
         api_key="test-key",
+        provider_id="test-provider",
+        loop_resolver=BuiltinAgentLoopResolverV2(
+            loop_id="builtin-react",
+            plugin_id="memstack-kernel",
+            implementation=object(),
+        ),
     )
 
 

@@ -43,10 +43,7 @@ from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext
 from ..routing import ExecutionPath, RoutingDecision
-from ..sisyphus.builtin_agent import (
-    DEFAULT_GENERAL_AGENT_ID,
-    build_builtin_all_access_agent,
-)
+from ..sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 from ..skill import SkillProtocol
 from ..workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
@@ -80,28 +77,14 @@ def _resolve_current_tools_from_runtime_v2(
     agent: object,
     selection_context: ToolSelectionContext,
 ) -> tuple[dict[str, Any], list[Any]]:
-    """Resolve tools from v2, with a development fallback outside operation boundaries."""
+    """Resolve tools through the required service in the pinned v2 operation."""
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
     from src.infrastructure.plugins.v2.tool_set import (
         TOOL_SET_RESOLVER_SERVICE_V2,
         ToolSetResolverV2,
     )
 
-    try:
-        operation = current_operation_context_v2()
-    except RuntimeV2Error as exc:
-        if exc.code != "operation_context_not_pinned":
-            raise
-        operation = None
-    if operation is None:
-        get_current_tools = getattr(agent, "_get_current_tools", None)
-        if not callable(get_current_tools):
-            raise TypeError("agent has no callable _get_current_tools")
-        return cast(
-            tuple[dict[str, Any], list[Any]],
-            get_current_tools(selection_context=selection_context),
-        )
+    operation = current_operation_context_v2()
     resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
     if not isinstance(resolver, ToolSetResolverV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
@@ -1537,13 +1520,11 @@ class StreamMixin:
             project_id=project_id,
         )
         if selected_agent is None:
-            logger.warning(
-                "[ReActAgent] Falling back to built-in all-access agent for missing agent %s",
-                resolved_agent_id,
-            )
-            selected_agent = build_builtin_all_access_agent(
-                tenant_id=tenant_id,
-                project_id=project_id,
+            from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+            raise RuntimeV2Error(
+                "agent_definition_not_found",
+                f"agent definition {resolved_agent_id} is unavailable in the pinned generation",
             )
         await _register_selected_agent_session(
             conversation_id=conversation_id,

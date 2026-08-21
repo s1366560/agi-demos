@@ -16,6 +16,15 @@ from src.infrastructure.agent.processor.processor import (
     ToolDefinition,
 )
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+
+
+def _builtin_loop_resolver() -> BuiltinAgentLoopResolverV2:
+    return BuiltinAgentLoopResolverV2(
+        loop_id="builtin-react",
+        plugin_id="memstack-kernel",
+        implementation=object(),
+    )
 
 
 def _make_registry(hook_side_effect=None):
@@ -51,6 +60,8 @@ def _make_processor(*, registry=None, tools=None):
     """Build a minimal SessionProcessor with optional plugin registry."""
     config = ProcessorConfig(
         model="test-model",
+        provider_id="test-provider",
+        loop_resolver=_builtin_loop_resolver(),
         plugin_registry=registry,
         runtime_context={"tenant_id": "tenant-1", "project_id": "project-1"},
     )

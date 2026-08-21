@@ -58,7 +58,7 @@ class TestReActAgentRuntimeProfile:
             lambda: orchestrator,
         )
 
-        result = await agent._load_selected_agent(
+        result = await agent._load_selected_agent_native(
             agent_id="agent-123",
             tenant_id="tenant-1",
             project_id="project-1",
