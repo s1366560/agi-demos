@@ -22,11 +22,10 @@ import time as time_module
 import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.model.agent import (
     AgentExecution,
@@ -35,6 +34,7 @@ from src.domain.model.agent import (
     ConversationStatus,
     ToolExecutionRecord,
 )
+from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
@@ -48,6 +48,12 @@ from src.domain.ports.repositories.subagent_repository import SubAgentRepository
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log import (
+    SESSION_EVENT_LOG_SERVICE_V2,
+    TURN_ADMITTED_EVENT_V2,
+    SessionEventLogServiceV2,
+)
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
@@ -92,6 +98,19 @@ def canonical_agent_client_turn_payload_hash(payload: Mapping[str, Any]) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(_AGENT_CLIENT_TURN_PAYLOAD_VERSION + canonical_json).hexdigest()
+
+
+def _session_event_log_service_v2() -> SessionEventLogServiceV2:
+    """Resolve the sole turn-history authority from the pinned operation."""
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    provider = current_operation_context_v2().require(SESSION_EVENT_LOG_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogServiceV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "v2 session event-log service has an invalid implementation",
+        )
+    return provider
 
 
 class AgentService(AgentServicePort):
@@ -248,32 +267,17 @@ class AgentService(AgentServicePort):
         conversation: Conversation,
         exclude_event_id: str | None,
     ) -> tuple[list[dict[str, Any]], Any]:
-        """Load conversation context via context_loader or fallback.
+        """Materialize model-visible history from the pinned v2 session log.
 
         Returns:
             Tuple of (conversation_context_messages, context_summary_or_None).
         """
-        if self._context_loader:
-            load_result = await self._context_loader.load_context(
-                conversation_id=conversation.id,
-                exclude_event_id=exclude_event_id,
-            )
-            return load_result.messages, load_result.summary
-
-        # Fallback: direct message loading (no summary caching)
-        assert self._agent_execution_event_repo is not None
-        message_events = await self._agent_execution_event_repo.get_message_events(
-            conversation_id=conversation.id, limit=50
+        provider = _session_event_log_service_v2()
+        messages = await provider.materialize_model_messages(
+            conversation_id=conversation.id,
+            exclude_event_id=exclude_event_id,
         )
-        context = [
-            {
-                "role": event.event_data.get("role", "user"),
-                "content": event.event_data.get("content", ""),
-            }
-            for event in message_events
-            if event.id != exclude_event_id
-        ]
-        return context, None
+        return messages, None
 
     @override
     async def stream_chat_v2(
@@ -341,62 +345,49 @@ class AgentService(AgentServicePort):
 
             # Generate correlation ID for this request (used to track all events from this request)
             correlation_id = f"req_{uuid.uuid4().hex[:12]}"
+            created_at = datetime.now(UTC)
 
-            # Use Domain Event - include attachment_ids/file_metadata at creation time (model is frozen)
-            user_domain_event = AgentMessageEvent(
-                role="user",
-                content=user_message,
-                attachment_ids=attachment_ids if attachment_ids else None,
-                file_metadata=file_metadata if file_metadata else None,
-                forced_skill_name=forced_skill_name if forced_skill_name else None,
-                mentions=mentions if mentions else None,
+            # Rebuild only the history that predates this turn. The current user
+            # message is passed separately to the actor and must not appear twice.
+            conversation_context, context_summary = await self._load_conversation_context(
+                conversation=conversation,
+                exclude_event_id=None,
             )
 
-            # Get next event time
-            # Use EventTimeGenerator for monotonic ordering
-            from src.domain.model.agent.execution.event_time import EventTimeGenerator
-
-            if self._agent_execution_event_repo:
-                (
-                    last_time_us,
-                    last_counter,
-                ) = await self._agent_execution_event_repo.get_last_event_time(conversation_id)
-                time_gen = EventTimeGenerator(last_time_us=last_time_us, last_counter=last_counter)
-            else:
-                time_gen = EventTimeGenerator()
-            next_time_us, next_counter = time_gen.next()
-
-            # Convert to persistent entity
-            user_msg_event = AgentExecutionEvent.from_domain_event(
-                event=user_domain_event,
-                conversation_id=conversation_id,
-                message_id=user_msg_id,
-                event_time_us=next_time_us,
-                event_counter=next_counter,
-            )
-
-            # Set correlation_id on the event
-            user_msg_event.correlation_id = correlation_id  # type: ignore[attr-defined]
-
-            # Ensure ID is set (from_domain_event might not set it or might set None)
-            if not user_msg_event.id:
-                user_msg_event.id = str(uuid.uuid4())
-
-            # Additional data fixup if needed for compatibility
-            if not user_msg_event.event_data.get("message_id"):
-                user_msg_event.event_data["message_id"] = user_msg_id
-
-            assert self._agent_execution_event_repo is not None
-            await self._agent_execution_event_repo.save_and_commit(user_msg_event)
-
-            # Yield user message event
             user_event_data = self._build_user_event_data(
                 user_msg_id=user_msg_id,
                 user_message=user_message,
-                created_at_iso=user_msg_event.created_at.isoformat(),
+                created_at_iso=created_at.isoformat(),
                 attachment_ids=attachment_ids,
                 file_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,
+            )
+            admitted_event_data = dict(user_event_data)
+            admitted_event_data["model_message"] = {
+                "role": "user",
+                "content": user_message,
+            }
+            if mentions:
+                admitted_event_data["mentions"] = mentions
+
+            provider = _session_event_log_service_v2()
+            tail = await provider.last_cursor(conversation_id=conversation_id)
+            next_time_us, next_counter = EventTimeGenerator(
+                last_time_us=tail.event_time_us,
+                last_counter=tail.event_counter,
+            ).next()
+            await provider.append(
+                conversation_id=conversation_id,
+                message_id=user_msg_id,
+                events=[
+                    {
+                        "type": TURN_ADMITTED_EVENT_V2,
+                        "data": admitted_event_data,
+                        "event_time_us": next_time_us,
+                        "event_counter": next_counter,
+                    }
+                ],
+                correlation_id=correlation_id,
             )
 
             yield {
@@ -406,11 +397,6 @@ class AgentService(AgentServicePort):
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-            # Get conversation context with smart summary caching.
-            conversation_context, context_summary = await self._load_conversation_context(
-                conversation=conversation,
-                exclude_event_id=user_msg_event.id,
-            )
             await self._release_db_read_transaction()
 
             # Start Ray Actor
@@ -444,6 +430,13 @@ class AgentService(AgentServicePort):
                 event["correlation_id"] = correlation_id
                 yield event
 
+        except RuntimeV2Error as e:
+            logger.error(f"[AgentService] Error in stream_chat_v2: {e}", exc_info=True)
+            yield {
+                "type": "error",
+                "data": {"code": e.code, "message": str(e)},
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
         except Exception as e:
             logger.error(f"[AgentService] Error in stream_chat_v2: {e}", exc_info=True)
             yield {
@@ -659,6 +652,8 @@ class AgentService(AgentServicePort):
                 str(event.event_type),
                 event.event_data,
             )
+            if event_type == TURN_ADMITTED_EVENT_V2:
+                event_type = "user_message"
             execution_message_id = getattr(event, "message_id", None)
             if isinstance(event_data, Mapping) and isinstance(execution_message_id, str):
                 event_data = {
@@ -764,9 +759,14 @@ class AgentService(AgentServicePort):
             )
             for me in msg_events:
                 content = str(me.event_data.get("content", "")).strip()
+                if not content and me.event_type == TURN_ADMITTED_EVENT_V2:
+                    model_message = me.event_data.get("model_message")
+                    if isinstance(model_message, Mapping):
+                        typed_model_message = cast(Mapping[str, Any], model_message)
+                        content = str(typed_model_message.get("content", "")).strip()
                 if not content:
                     continue
-                if me.event_type == "user_message" and not first_user_msg:
+                if me.event_type in {"user_message", TURN_ADMITTED_EVENT_V2} and not first_user_msg:
                     first_user_msg = content
                 elif me.event_type == "assistant_message" and not first_assistant_msg:
                     first_assistant_msg = content

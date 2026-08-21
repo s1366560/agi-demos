@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +13,15 @@ from src.domain.model.agent.agent_execution_event import (
     USER_MESSAGE,  # Timeline-specific event type values
     AgentExecutionEvent,
 )
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.plugins.v2 import session_event_log_store as store_module
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.session_event_log import SessionEventCursorV2
+
+_ROOT = Path(__file__).resolve().parents[4]
+_ROOT_SCOPE = ScopeV2(kind=ScopeKindV2.ROOT)
 
 
 class MockAgentService(AgentService):
@@ -515,10 +525,26 @@ class TestAgentServiceStreamChatAuthorization:
         mock_repos,
         mock_dependencies,
         sample_conversation,
+        monkeypatch,
     ):
         mock_repos["conversation"].find_by_id.return_value = sample_conversation
-        mock_repos["agent_execution_event"].get_last_event_time.return_value = (0, 0)
-        mock_repos["agent_execution_event"].get_message_events.return_value = []
+        session_log_store = AsyncMock()
+        session_log_store.read_events.return_value = []
+        session_log_store.last_cursor.return_value = SessionEventCursorV2()
+        monkeypatch.setattr(
+            store_module,
+            "SqlSessionEventLogStoreV2",
+            lambda: session_log_store,
+        )
+        host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+        publication = await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=7,
+            version=7,
+            nonce="agent-service-message-id-v2",
+        )
+        assert publication.accepted
         service = RecordingStreamAgentService(
             conversation_repository=mock_repos["conversation"],
             execution_repository=mock_repos["execution"],
@@ -528,19 +554,27 @@ class TestAgentServiceStreamChatAuthorization:
             agent_execution_event_repository=mock_repos["agent_execution_event"],
         )
 
-        events = [
-            event
-            async for event in service.stream_chat_v2(
-                conversation_id="conv-1",
-                user_message="Plan the requested change",
-                project_id="proj-1",
-                user_id="user-1",
-                tenant_id="tenant-1",
-                execution_message_id="execution-message-1",
-            )
-        ]
+        try:
+            async with pin_operation_context_v2(
+                host,
+                operation_id="agent-service-message-id",
+                scope=_ROOT_SCOPE,
+            ):
+                events = [
+                    event
+                    async for event in service.stream_chat_v2(
+                        conversation_id="conv-1",
+                        user_message="Plan the requested change",
+                        project_id="proj-1",
+                        user_id="user-1",
+                        tenant_id="tenant-1",
+                        execution_message_id="execution-message-1",
+                    )
+                ]
+        finally:
+            await host.close()
 
-        saved_event = mock_repos["agent_execution_event"].save_and_commit.call_args.args[0]
-        assert saved_event.message_id == "execution-message-1"
+        appended = session_log_store.append_stream_events.call_args.kwargs
+        assert appended["message_id"] == "execution-message-1"
         assert events[0]["data"]["id"] == "execution-message-1"
         assert service.started_message_id == "execution-message-1"

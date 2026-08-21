@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
-from src.infrastructure.plugins.v2.session_event_log import SessionEventCursorV2
+from src.infrastructure.plugins.v2.session_event_log import (
+    TURN_ADMITTED_EVENT_V2,
+    SessionEventCursorV2,
+)
 from src.infrastructure.plugins.v2.session_event_log_store import SqlSessionEventLogStoreV2
 
 
@@ -88,6 +91,46 @@ async def test_append_treats_duplicate_cursor_as_idempotent() -> None:
         "conversation-a",
         inserted_message_count=0,
         latest_event_time_us=None,
+    )
+
+
+@pytest.mark.unit
+async def test_append_counts_typed_turn_admission_as_a_message() -> None:
+    session, session_context = _append_session(
+        _existing_assistant_result(),
+        _insert_result((TURN_ADMITTED_EVENT_V2, 100)),
+    )
+    projection = AsyncMock()
+
+    with (
+        patch.object(store_module, "async_session_factory", return_value=session_context),
+        patch.object(
+            store_module,
+            "apply_conversation_event_projection_delta",
+            new=projection,
+        ),
+    ):
+        await SqlSessionEventLogStoreV2().append_stream_events(
+            conversation_id="conversation-a",
+            message_id="message-a",
+            events=[
+                {
+                    "type": TURN_ADMITTED_EVENT_V2,
+                    "data": {
+                        "model_message": {"role": "user", "content": "hello"},
+                    },
+                    "event_time_us": 100,
+                    "event_counter": 0,
+                }
+            ],
+            correlation_id="correlation-a",
+        )
+
+    projection.assert_awaited_once_with(
+        session,
+        "conversation-a",
+        inserted_message_count=1,
+        latest_event_time_us=100,
     )
 
 
@@ -178,9 +221,7 @@ async def test_append_keeps_complete_metadata_after_persisted_text_end() -> None
 
     statement = session.execute.await_args_list[1].args[0]
     assert statement.compile().params["event_type"] == "complete"
-    assert statement.compile().params["event_data"]["execution_summary"] == {
-        "step_count": 2
-    }
+    assert statement.compile().params["event_data"]["execution_summary"] == {"step_count": 2}
     projection.assert_awaited_once_with(
         session,
         "conversation-a",

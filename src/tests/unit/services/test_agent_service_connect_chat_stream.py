@@ -417,6 +417,49 @@ async def test_replay_db_events_preserves_execution_identity_beside_response_id(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_replay_db_events_projects_turn_admitted_as_user_message() -> None:
+    service = _build_service()
+    created_at = datetime.now(UTC)
+    event_data = {
+        "content": "Typed V2 user turn",
+        "model_message": {"role": "user", "content": "Typed V2 user turn"},
+        "role": "user",
+    }
+    service._agent_execution_event_repo.get_events_by_message.return_value = [
+        SimpleNamespace(
+            message_id="execution-message-v2",
+            event_type="turn_admitted",
+            event_data=event_data,
+            created_at=created_at,
+            event_time_us=35,
+            event_counter=1,
+        )
+    ]
+
+    events, last_event_time_us, last_event_counter, saw_complete = await service._replay_db_events(
+        "conv-1",
+        "execution-message-v2",
+    )
+
+    assert events == [
+        {
+            "type": "user_message",
+            "data": {
+                **event_data,
+                "execution_message_id": "execution-message-v2",
+            },
+            "timestamp": created_at.isoformat(),
+            "event_time_us": 35,
+            "event_counter": 1,
+        }
+    ]
+    assert last_event_time_us == 35
+    assert last_event_counter == 1
+    assert saw_complete is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_replay_db_events_repairs_malformed_task_list_updated_payload() -> None:
     service = _build_service()
     created_at = datetime.now(UTC)
@@ -625,6 +668,33 @@ async def test_extract_title_seed_exchange_reads_user_and_assistant_message() ->
         conversation_id="conv-1",
         message_id="msg-1",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_extract_title_seed_exchange_reads_typed_v2_admission() -> None:
+    service = _build_service()
+    service._agent_execution_event_repo.get_events_by_message.return_value = [
+        SimpleNamespace(
+            event_type="turn_admitted",
+            event_data={
+                "content": "typed title seed",
+                "model_message": {"role": "user", "content": "typed title seed"},
+            },
+        ),
+        SimpleNamespace(
+            event_type="assistant_message",
+            event_data={"content": "typed title response"},
+        ),
+    ]
+
+    user_message, assistant_message = await service._extract_title_seed_exchange(
+        "conv-1",
+        "msg-typed-v2",
+    )
+
+    assert user_message == "typed title seed"
+    assert assistant_message == "typed title response"
 
 
 @pytest.mark.unit

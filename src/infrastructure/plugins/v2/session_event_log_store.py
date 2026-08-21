@@ -22,6 +22,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
 )
 from src.infrastructure.agent.events.converter import normalize_event_dict
 
+from .session_event_log import TURN_ADMITTED_EVENT_V2
 from .session_event_log_types import (
     SessionEventCursorV2,
     SessionEventRecordV2,
@@ -35,7 +36,13 @@ _SKIP_PERSIST_EVENT_TYPES = frozenset(
         "text_start",
     }
 )
-_MESSAGE_EVENT_TYPES = frozenset({"user_message", "assistant_message"})
+_MESSAGE_EVENT_TYPES = frozenset(
+    {
+        "assistant_message",
+        TURN_ADMITTED_EVENT_V2,
+        "user_message",
+    }
+)
 _TERMINAL_WORKSPACE_STATUS_MESSAGES = {
     "goal_achieved:workspace_contract_submitted": "Workspace contract submitted.",
     "goal_achieved:workspace_terminal_report": "Workspace terminal report submitted.",
