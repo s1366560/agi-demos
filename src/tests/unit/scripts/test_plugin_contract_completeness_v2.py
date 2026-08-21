@@ -358,6 +358,21 @@ def test_manifest_target_must_exist_in_generated_catalog(tmp_path: Path) -> None
 
 
 @pytest.mark.unit
+def test_target_without_static_scanner_fails_closed(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
+        targets=("rust-server",),
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["unsupported_target_completeness"]
+    assert "rust-server" in issues[0].detail
+
+
+@pytest.mark.unit
 def test_stale_generator_output_fails_completeness_gate(tmp_path: Path) -> None:
     _write_repository(
         tmp_path,

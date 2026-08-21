@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import jsonschema
 import rfc8785
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 JSON_SCHEMA_DIALECT_V2 = "https://json-schema.org/draft/2020-12/schema"
 _CONTRACT_DIGEST_PREFIX = "sha256:"
@@ -109,7 +112,8 @@ def validate_manifest_contracts_v2(
     manifest: dict[str, Any],
     protocol_schema: dict[str, Any],
 ) -> None:
-    """Validate the builtin manifest schema, contract schemas, and all digests."""
+    """Validate one manifest schema, public contract schemas, and all digests."""
+    owner = f"{manifest.get('plugin_id', '<unknown>')}@{manifest.get('version', '<unknown>')}"
     scoped_schema = {
         "$schema": protocol_schema["$schema"],
         "$defs": protocol_schema["$defs"],
@@ -122,13 +126,13 @@ def validate_manifest_contracts_v2(
     if errors:
         error = errors[0]
         location = ".".join(str(item) for item in error.absolute_path) or "$"
-        raise ValueError(f"builtin manifest {location}: {error.message}")
+        raise ValueError(f"plugin manifest {owner} {location}: {error.message}")
 
     seen_module_refs: set[str] = set()
     for module in manifest["modules"]:
         module_ref = module["module_ref"]
         if module_ref in seen_module_refs:
-            raise ValueError(f"builtin manifest declares duplicate module {module_ref}")
+            raise ValueError(f"plugin manifest {owner} declares duplicate module {module_ref}")
         seen_module_refs.add(module_ref)
         contract = _validate_contract_v2(module_ref, module["contract"])
         expected_digest = contract_digest_v2(contract)
@@ -138,7 +142,53 @@ def validate_manifest_contracts_v2(
             )
 
 
-def build_catalog_v2(manifest: dict[str, Any]) -> dict[str, Any]:
+def validate_manifest_collection_v2(
+    manifests: Sequence[dict[str, Any]],
+    protocol_schema: dict[str, Any],
+) -> None:
+    """Validate a non-empty manifest collection and its cross-manifest graphs."""
+    if not manifests:
+        raise ValueError("manifest collection must not be empty")
+    for manifest in manifests:
+        validate_manifest_contracts_v2(manifest, protocol_schema)
+    _ = _ordered_manifest_modules_v2(manifests)
+    _ = build_service_graph_v2(manifests)
+    _ = build_event_graph_v2(manifests)
+
+
+def _ordered_manifest_modules_v2(
+    manifests: Sequence[dict[str, Any]],
+) -> tuple[tuple[dict[str, Any], dict[str, Any]], ...]:
+    rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    owners: dict[str, str] = {}
+    for manifest in manifests:
+        plugin_id = manifest.get("plugin_id")
+        plugin_version = manifest.get("version")
+        modules = manifest.get("modules")
+        if not isinstance(plugin_id, str) or not isinstance(plugin_version, str):
+            raise ValueError("manifest collection requires string plugin_id and version")
+        if not isinstance(modules, list):
+            raise ValueError(f"manifest {plugin_id}@{plugin_version} modules must be an array")
+        owner = f"{plugin_id}@{plugin_version}"
+        for raw_module in modules:
+            if not isinstance(raw_module, dict) or not isinstance(
+                raw_module.get("module_ref"), str
+            ):
+                raise ValueError(f"manifest {owner} contains an invalid module_ref")
+            module = cast("dict[str, Any]", raw_module)
+            module_ref = cast("str", module["module_ref"])
+            previous = owners.get(module_ref)
+            if previous is not None:
+                raise ValueError(
+                    f"manifest collection declares duplicate module_ref {module_ref}: "
+                    f"{previous} and {owner}"
+                )
+            owners[module_ref] = owner
+            rows.append((manifest, module))
+    return tuple(sorted(rows, key=lambda item: item[1]["module_ref"]))
+
+
+def build_catalog_v2(manifests: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Build the normalized, language-neutral module catalog."""
     modules = [
         {
@@ -151,18 +201,19 @@ def build_catalog_v2(manifest: dict[str, Any]) -> dict[str, Any]:
             "contract": module["contract"],
             "contract_digest": module["contract_digest"],
         }
-        for module in sorted(manifest["modules"], key=lambda item: item["module_ref"])
+        for manifest, module in _ordered_manifest_modules_v2(manifests)
     ]
     document: dict[str, Any] = {"schema_version": 2, "modules": modules}
     document["catalog_digest"] = sha256_digest_v2(document)
     return document
 
 
-def build_service_graph_v2(manifest: dict[str, Any]) -> dict[str, Any]:
+def build_service_graph_v2(manifests: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Build exact-version provider/consumer nodes and candidate dependency edges."""
+    module_rows = _ordered_manifest_modules_v2(manifests)
     providers: dict[tuple[str, str], list[str]] = {}
     nodes: list[dict[str, Any]] = []
-    for module in manifest["modules"]:
+    for _manifest, module in module_rows:
         module_ref = module["module_ref"]
         services = module["contract"]["services"]
         for item in services["provides"]:
@@ -188,7 +239,7 @@ def build_service_graph_v2(manifest: dict[str, Any]) -> dict[str, Any]:
             )
 
     edges: list[dict[str, Any]] = []
-    for module in manifest["modules"]:
+    for _manifest, module in module_rows:
         consumer_ref = module["module_ref"]
         for item in module["contract"]["services"]["requires"]:
             matches = providers.get((item["service"], item["version"]), [])
@@ -224,19 +275,29 @@ def build_service_graph_v2(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_event_graph_v2(manifest: dict[str, Any]) -> dict[str, Any]:
+def build_event_graph_v2(manifests: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Build fixed-mode event nodes and exact-schema emitter/handler edges."""
+    module_rows = _ordered_manifest_modules_v2(manifests)
     nodes: list[dict[str, Any]] = []
     registries: dict[str, dict[tuple[str, str, str, str], list[str]]] = {
         "emitter": {},
         "handler": {},
     }
-    for module in manifest["modules"]:
+    event_contracts: dict[str, tuple[tuple[str, str, str], str]] = {}
+    for _manifest, module in module_rows:
         module_ref = module["module_ref"]
         for role, direction in (("emitter", "emits"), ("handler", "handles")):
             for item in module["contract"]["events"][direction]:
                 payload_digest = sha256_digest_v2(item["payload_schema"])
                 result_digest = sha256_digest_v2(item["result_schema"])
+                signature = (item["mode"], payload_digest, result_digest)
+                previous = event_contracts.get(item["event"])
+                if previous is not None and previous[0] != signature:
+                    raise ValueError(
+                        f"event {item['event']} contract conflict between "
+                        f"{previous[1]} and {module_ref}"
+                    )
+                event_contracts[item["event"]] = (signature, module_ref)
                 key = (item["event"], item["mode"], payload_digest, result_digest)
                 registries[role].setdefault(key, []).append(module_ref)
                 nodes.append(
@@ -398,8 +459,8 @@ def build_contract_conformance_fixture_v2(snapshot: dict[str, Any]) -> dict[str,
                 }
                 for module in modules
             ],
-            "service_graph": build_service_graph_v2(manifest),
-            "event_graph": build_event_graph_v2(manifest),
+            "service_graph": build_service_graph_v2((manifest,)),
+            "event_graph": build_event_graph_v2((manifest,)),
         },
         "negative_cases": negatives,
         "runtime_completeness_cases": [
@@ -422,5 +483,6 @@ __all__ = [
     "build_service_graph_v2",
     "contract_digest_v2",
     "sha256_digest_v2",
+    "validate_manifest_collection_v2",
     "validate_manifest_contracts_v2",
 ]

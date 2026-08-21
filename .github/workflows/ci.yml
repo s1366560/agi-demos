@@ -136,6 +136,9 @@ jobs:
       - name: Guard wrapped ORM select execute usage
         run: |
           uv run python scripts/check_refresh_select_execute.py
+
+      - name: Validate protocol-v2 plugin contracts
+        run: make plugin-v2-contract-gate
       
       - name: Run linters
         run: |

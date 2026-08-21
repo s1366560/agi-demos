@@ -25,7 +25,7 @@
 .PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
-.PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
+.PHONY: plugin-template-build plugin-feishu-validate plugin-build-all plugin-v2-contract-gate
 .PHONY: desktop desktop-bundle desktop-bundle-smoke desktop-electron-frontend run-desktop run-desktop-electron
 .PHONY: helm-build-images helm-lint helm-package helm-install-dev helm-test-dev helm-verify-dev helm-uninstall-dev
 
@@ -106,6 +106,7 @@ help: ## Show this help message
 	@echo "  guard-refresh-select - Check wrapped execute(select(...)) usage"
 	@echo "  plugin-template-build - Build standalone plugin template wheel"
 	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
+	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
 	@echo ""
 	@echo " Database:"
 	@echo "  db-init   - Initialize database"
@@ -169,6 +170,7 @@ help-full: ## Show all available commands
 	@echo "  test-coverage    - Tests with coverage"
 	@echo "  plugin-template-build - Build standalone plugin template wheel"
 	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
+	@echo "  plugin-v2-contract-gate - Verify generated V2 catalogs and contract completeness"
 	@echo ""
 	@echo " Code Quality:"
 	@echo "  format           - Format all code"
@@ -608,7 +610,7 @@ format-web: ## Format TypeScript code
 lint: lint-backend lint-web ## Lint all code
 	@echo " All code linted"
 
-lint-backend: ## Lint Python code
+lint-backend: plugin-v2-contract-gate ## Lint Python code
 	@echo " Linting Python code..."
 	uv run python scripts/check_refresh_select_execute.py
 	uv run python scripts/check-i18n-gettext.py
@@ -647,6 +649,11 @@ check: format lint test ## Run all quality checks
 # =============================================================================
 # Code Generation
 # =============================================================================
+
+plugin-v2-contract-gate: ## Verify generated V2 catalogs and contract completeness
+	@echo " Verifying protocol-v2 plugin contracts..."
+	uv run python scripts/check_plugin_contract_completeness_v2.py
+	@echo " Protocol-v2 plugin contracts verified"
 
 generate-event-types: ## Generate TypeScript event types from Python
 	@echo " Generating TypeScript event types..."

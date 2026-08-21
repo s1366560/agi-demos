@@ -8,18 +8,40 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import rfc8785
-from plugin_contract_catalog_v2 import (
-    JSON_SCHEMA_DIALECT_V2,
-    build_catalog_v2,
-    build_contract_conformance_fixture_v2,
-    build_event_graph_v2,
-    build_service_graph_v2,
-    contract_digest_v2,
-    validate_manifest_contracts_v2,
-)
+
+if TYPE_CHECKING:
+    from scripts.plugin_contract_catalog_v2 import (
+        JSON_SCHEMA_DIALECT_V2,
+        build_catalog_v2,
+        build_contract_conformance_fixture_v2,
+        build_event_graph_v2,
+        build_service_graph_v2,
+        contract_digest_v2,
+        validate_manifest_collection_v2,
+    )
+elif __package__:
+    from .plugin_contract_catalog_v2 import (
+        JSON_SCHEMA_DIALECT_V2,
+        build_catalog_v2,
+        build_contract_conformance_fixture_v2,
+        build_event_graph_v2,
+        build_service_graph_v2,
+        contract_digest_v2,
+        validate_manifest_collection_v2,
+    )
+else:
+    from plugin_contract_catalog_v2 import (
+        JSON_SCHEMA_DIALECT_V2,
+        build_catalog_v2,
+        build_contract_conformance_fixture_v2,
+        build_event_graph_v2,
+        build_service_graph_v2,
+        contract_digest_v2,
+        validate_manifest_collection_v2,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "shared/schemas/plugins/platform-plugin-protocol.v2.schema.json"
@@ -29,7 +51,7 @@ TYPESCRIPT_PATH = ROOT / "agi-stack/packages/plugin-runtime/src/generated.ts"
 SNAPSHOT_FIXTURE_PATH = ROOT / "shared/fixtures/platform-plugin-profile.v2.json"
 CONFORMANCE_FIXTURE_PATH = ROOT / "shared/fixtures/plugin-runtime-conformance.v2.json"
 CONTRACT_CONFORMANCE_FIXTURE_PATH = ROOT / "shared/fixtures/plugin-contract-conformance.v2.json"
-BUILTIN_MANIFEST_PATH = ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+BUILTIN_MANIFEST_DIRECTORY = ROOT / "config/plugin-manifests-v2"
 SHARED_CATALOG_PATH = ROOT / "shared/catalogs/plugin-module-catalog.v2.json"
 PYTHON_CATALOG_PATH = ROOT / "src/domain/model/plugins/generated_catalog_v2.py"
 RUST_CATALOG_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generated_catalog.rs"
@@ -289,13 +311,18 @@ def _canonical_document(value: object) -> str:
     return rfc8785.dumps(cast("Any", value)).decode("utf-8") + "\n"
 
 
-def _builtin_manifest(schema: dict[str, Any]) -> dict[str, Any]:
-    manifest = cast(
-        "dict[str, Any]",
-        json.loads(BUILTIN_MANIFEST_PATH.read_text(encoding="utf-8")),
-    )
-    validate_manifest_contracts_v2(manifest, schema)
-    return manifest
+def _builtin_manifest(schema: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    manifest_paths = sorted(BUILTIN_MANIFEST_DIRECTORY.glob("*.json"), key=lambda path: path.name)
+    if not manifest_paths:
+        raise ValueError(f"no protocol-v2 manifests found in {BUILTIN_MANIFEST_DIRECTORY}")
+    manifests: list[dict[str, Any]] = []
+    for path in manifest_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"protocol-v2 manifest must be an object: {path}")
+        manifests.append(cast("dict[str, Any]", payload))
+    validate_manifest_collection_v2(manifests, schema)
+    return tuple(manifests)
 
 
 def _string_chunks(value: str, *, width: int = 88) -> list[str]:
@@ -535,8 +562,8 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     canonical_input = {"z": 1.0, "中文": "值", "a": 2}
     canonical = rfc8785.dumps(cast("Any", canonical_input))
     manifest = cast("dict[str, Any]", snapshot["manifests"][0])
-    service_graph = build_service_graph_v2(manifest)
-    event_graph = build_event_graph_v2(manifest)
+    service_graph = build_service_graph_v2((manifest,))
+    event_graph = build_event_graph_v2((manifest,))
     return {
         "schema_version": 2,
         "snapshot_digest": snapshot["digest"],
@@ -614,8 +641,8 @@ def main() -> int:
     schema = _schema()
     definitions = schema["$defs"]
     schema_hash = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
-    manifest = _builtin_manifest(schema)
-    catalog = build_catalog_v2(manifest)
+    manifests = _builtin_manifest(schema)
+    catalog = build_catalog_v2(manifests)
     snapshot = _snapshot_fixture()
     outputs = {
         PYTHON_PATH: _generate_python(definitions, schema_hash),
@@ -625,8 +652,8 @@ def main() -> int:
         PYTHON_CATALOG_PATH: _generate_python_catalog(catalog, schema_hash),
         RUST_CATALOG_PATH: _generate_rust_catalog(catalog, schema_hash),
         TYPESCRIPT_CATALOG_PATH: _generate_typescript_catalog(catalog, schema_hash),
-        SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifest)),
-        EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifest)),
+        SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifests)),
+        EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifests)),
         SNAPSHOT_FIXTURE_PATH: _canonical_document(snapshot),
         CONFORMANCE_FIXTURE_PATH: _canonical_document(_conformance_fixture(snapshot)),
         CONTRACT_CONFORMANCE_FIXTURE_PATH: _canonical_document(
