@@ -19,6 +19,15 @@ CATALOG_PATH_V2 = Path("shared/catalogs/plugin-module-catalog.v2.json")
 GENERATOR_PATH_V2 = Path("scripts/generate_plugin_protocol_v2.py")
 
 _CONTEXT_METHODS = frozenset({"provide", "require", "on", "dispatch"})
+_OPERATION_CONTEXT_TYPE = "OperationContextV2"
+_OPERATION_CONTEXT_FACTORIES = frozenset(
+    {
+        "current_operation_context_v2",
+        "pin_agent_turn_operation_v2",
+        "pin_operation_context_v2",
+        "pin_persisted_generation_operation_v2",
+    }
+)
 _METHOD_DECLARATION = {
     "provide": ("services", "provides", "service"),
     "require": ("services", "requires", "alias"),
@@ -71,6 +80,7 @@ def check_repository(root: Path) -> tuple[ContractCompletenessIssueV2, ...]:
     for module in modules:
         if "python" in module.targets:
             _check_python_entrypoint(repository, module, issues)
+    _check_operation_context_dispatches(repository, modules, issues)
     _check_generated_outputs(repository, issues)
     return tuple(sorted(issues, key=_issue_key))
 
@@ -438,7 +448,135 @@ def _entrypoint_nodes(
                 detail="PluginDefinitionV2 apply target is not a local static function",
             )
         )
-    return tuple(dict.fromkeys(result))
+    reachable = list(dict.fromkeys(result))
+    seen = set(reachable)
+    for current in reachable:
+        for node in ast.walk(current):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            referenced = functions.get(node.func.id)
+            if referenced is None or referenced in seen:
+                continue
+            seen.add(referenced)
+            reachable.append(referenced)
+    return tuple(reachable)
+
+
+def _check_operation_context_dispatches(
+    root: Path,
+    modules: Sequence[_ManifestModuleV2],
+    issues: list[ContractCompletenessIssueV2],
+) -> None:
+    """Require privileged operation dispatches to reference a public emitter contract."""
+    emitted_events = _globally_emitted_events(modules)
+    source_root = root / "src"
+    if not source_root.is_dir():
+        return
+    for source_path in sorted(source_root.rglob("*.py")):
+        relative_path = source_path.relative_to(root)
+        if "tests" in relative_path.parts:
+            continue
+        relative = str(relative_path)
+        try:
+            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        except (OSError, SyntaxError, UnicodeError):
+            continue
+        module_name = _python_module_name(relative_path)
+        constants = _static_string_constants(root, module_name, tree)
+        seen_calls: set[tuple[int, int]] = set()
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            context_names = _operation_context_names(function)
+            for call in (node for node in ast.walk(function) if isinstance(node, ast.Call)):
+                location = (call.lineno, call.col_offset)
+                if location in seen_calls or not _is_operation_dispatch(call.func, context_names):
+                    continue
+                seen_calls.add(location)
+                event = _literal_call_key(call, "dispatch", constants)
+                if event is None:
+                    issues.append(
+                        ContractCompletenessIssueV2(
+                            code="unclassified_operation_event",
+                            path=relative,
+                            line=call.lineno,
+                            detail="OperationContextV2.dispatch requires a literal event declaration key",
+                        )
+                    )
+                elif event not in emitted_events:
+                    issues.append(
+                        ContractCompletenessIssueV2(
+                            code="undeclared_operation_event",
+                            path=relative,
+                            line=call.lineno,
+                            detail=f"OperationContextV2.dispatch {event} has no module emitter contract",
+                        )
+                    )
+
+
+def _globally_emitted_events(modules: Sequence[_ManifestModuleV2]) -> frozenset[str]:
+    emitted: set[str] = set()
+    for module in modules:
+        events = module.contract.get("events")
+        rows = (
+            cast("Mapping[str, object]", events).get("emits")
+            if isinstance(events, Mapping)
+            else None
+        )
+        if not isinstance(rows, list):
+            continue
+        for row in cast("list[object]", rows):
+            if not isinstance(row, Mapping):
+                continue
+            event = cast("Mapping[str, object]", row).get("event")
+            if isinstance(event, str):
+                emitted.add(event)
+    return frozenset(emitted)
+
+
+def _operation_context_names(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> frozenset[str]:
+    names = {
+        argument.arg
+        for argument in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        )
+        if _annotation_name(argument.annotation) == _OPERATION_CONTEXT_TYPE
+    }
+    for item in ast.walk(node):
+        if (
+            isinstance(item, ast.AnnAssign)
+            and isinstance(item.target, ast.Name)
+            and _annotation_name(item.annotation) == _OPERATION_CONTEXT_TYPE
+        ):
+            names.add(item.target.id)
+        elif isinstance(item, ast.Assign) and _is_operation_context_factory_call(item.value):
+            names.update(target.id for target in item.targets if isinstance(target, ast.Name))
+        elif isinstance(item, (ast.With, ast.AsyncWith)):
+            for with_item in item.items:
+                if isinstance(
+                    with_item.optional_vars, ast.Name
+                ) and _is_operation_context_factory_call(with_item.context_expr):
+                    names.add(with_item.optional_vars.id)
+    return frozenset(names)
+
+
+def _is_operation_context_factory_call(value: ast.expr) -> bool:
+    return isinstance(value, ast.Call) and _call_name(value.func) in _OPERATION_CONTEXT_FACTORIES
+
+
+def _is_operation_dispatch(function: ast.expr, context_names: frozenset[str]) -> bool:
+    if not isinstance(function, ast.Attribute) or function.attr != "dispatch":
+        return False
+    receiver = function.value
+    return (
+        isinstance(receiver, ast.Name) and receiver.id in context_names
+    ) or _is_operation_context_factory_call(receiver)
 
 
 def _contract_declarations(
@@ -680,6 +818,13 @@ def _python_module_path(root: Path, module_name: str) -> Path | None:
         return source
     package = root / relative / "__init__.py"
     return package if package.is_file() else None
+
+
+def _python_module_name(relative_path: Path) -> str:
+    parts = list(relative_path.with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        _ = parts.pop()
+    return ".".join(parts)
 
 
 def _check_generated_outputs(

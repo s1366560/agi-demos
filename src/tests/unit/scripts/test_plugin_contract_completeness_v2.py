@@ -221,6 +221,128 @@ def definition() -> PluginDefinitionV2:
 
 
 @pytest.mark.unit
+def test_apply_reachable_local_helper_is_checked(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="""
+def _register(context: ContextV2) -> None:
+    context.provide("service:undeclared", object())
+
+def apply(context: ContextV2, _config: object) -> None:
+    _register(context)
+""",
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["undeclared_context_call"]
+    assert "provide service:undeclared" in issues[0].detail
+
+
+@pytest.mark.unit
+def test_operation_context_dispatch_requires_global_emitter_contract(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
+    )
+    consumer_path = tmp_path / "src/example/consumer.py"
+    consumer_path.write_text(
+        """
+async def publish(operation: OperationContextV2) -> None:
+    await operation.dispatch("event:undeclared", {})
+""",
+        encoding="utf-8",
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["undeclared_operation_event"]
+    assert "event:undeclared" in issues[0].detail
+    assert issues[0].path == "src/example/consumer.py"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "source",
+    [
+        """
+async def publish() -> None:
+    operation = current_operation_context_v2()
+    await operation.dispatch("event:undeclared", {})
+""",
+        """
+async def publish() -> None:
+    await current_operation_context_v2().dispatch("event:undeclared", {})
+""",
+        """
+async def publish() -> None:
+    async with pin_operation_context_v2() as operation:
+        await operation.dispatch("event:undeclared", {})
+""",
+        """
+async def publish() -> None:
+    async with pin_agent_turn_operation_v2() as operation:
+        await operation.dispatch("event:undeclared", {})
+""",
+    ],
+)
+def test_operation_context_factory_dispatch_is_checked(tmp_path: Path, source: str) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
+    )
+    consumer_path = tmp_path / "src/example/consumer.py"
+    consumer_path.write_text(source, encoding="utf-8")
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["undeclared_operation_event"]
+
+
+@pytest.mark.unit
+def test_dynamic_operation_context_event_is_unclassified(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(emits=("event:declared",)),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
+    )
+    consumer_path = tmp_path / "src/example/consumer.py"
+    consumer_path.write_text(
+        """
+async def publish(operation: OperationContextV2, event: str) -> None:
+    await operation.dispatch(event, {})
+""",
+        encoding="utf-8",
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["unclassified_operation_event"]
+
+
+@pytest.mark.unit
+def test_operation_context_dispatch_accepts_declared_global_emitter(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(emits=("event:declared",)),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    pass\n",
+    )
+    consumer_path = tmp_path / "src/example/consumer.py"
+    consumer_path.write_text(
+        """
+async def publish(operation: OperationContextV2) -> None:
+    await operation.dispatch("event:declared", {})
+""",
+        encoding="utf-8",
+    )
+
+    assert check_repository(tmp_path) == ()
+
+
+@pytest.mark.unit
 def test_manifest_target_must_exist_in_generated_catalog(tmp_path: Path) -> None:
     _write_repository(
         tmp_path,
