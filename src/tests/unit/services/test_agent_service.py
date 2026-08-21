@@ -77,22 +77,10 @@ class TestAgentServiceAuthorization:
         return repo
 
     @pytest.fixture
-    def mock_graph_service(self):
-        """Create a mock graph service."""
-        service = AsyncMock()
-        return service
-
-    @pytest.fixture
     def mock_llm(self):
         """Create a mock LLM."""
         llm = AsyncMock()
         return llm
-
-    @pytest.fixture
-    def mock_neo4j_client(self):
-        """Create a mock Neo4j client."""
-        client = AsyncMock()
-        return client
 
     @pytest.fixture
     def agent_service(
@@ -100,17 +88,13 @@ class TestAgentServiceAuthorization:
         mock_conversation_repo,
         mock_agent_execution_event_repo,
         mock_execution_repo,
-        mock_graph_service,
         mock_llm,
-        mock_neo4j_client,
     ):
         """Create an AgentService with mocked dependencies."""
         return MockAgentService(
             conversation_repository=mock_conversation_repo,
             execution_repository=mock_execution_repo,
-            graph_service=mock_graph_service,
             llm=mock_llm,
-            neo4j_client=mock_neo4j_client,
             agent_execution_event_repository=mock_agent_execution_event_repo,
         )
 
@@ -468,9 +452,7 @@ class TestAgentServiceStreamChatAuthorization:
     def mock_dependencies(self):
         """Create mock dependencies."""
         return {
-            "graph_service": AsyncMock(),
             "llm": AsyncMock(),
-            "neo4j_client": AsyncMock(),
         }
 
     @pytest.fixture
@@ -479,9 +461,7 @@ class TestAgentServiceStreamChatAuthorization:
         return MockAgentService(
             conversation_repository=mock_repos["conversation"],
             execution_repository=mock_repos["execution"],
-            graph_service=mock_dependencies["graph_service"],
             llm=mock_dependencies["llm"],
-            neo4j_client=mock_dependencies["neo4j_client"],
             agent_execution_event_repository=mock_repos["agent_execution_event"],
         )
 
@@ -548,9 +528,7 @@ class TestAgentServiceStreamChatAuthorization:
         service = RecordingStreamAgentService(
             conversation_repository=mock_repos["conversation"],
             execution_repository=mock_repos["execution"],
-            graph_service=mock_dependencies["graph_service"],
             llm=mock_dependencies["llm"],
-            neo4j_client=mock_dependencies["neo4j_client"],
             agent_execution_event_repository=mock_repos["agent_execution_event"],
         )
 

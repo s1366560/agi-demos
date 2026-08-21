@@ -23,13 +23,15 @@ class TestDIContainer:
         assert use_case._task_repo is not None
 
     @pytest.mark.asyncio
-    async def test_container_with_graph_service(self, test_db):
-        """Test container with graph service."""
-        mock_graph = Mock()
-        container = DIContainer(test_db, graph_service=mock_graph)
+    async def test_scoped_container_reuses_application_infrastructure(self, test_db):
+        """Request clones reuse singleton infrastructure without graph state."""
+        container = DIContainer(redis_client=Mock())
 
-        # Graph service should be stored
-        assert container._graph_service == mock_graph
+        scoped_container = container.with_db(test_db)
+
+        assert scoped_container._db is test_db
+        assert scoped_container._infra is container._infra
+        assert not hasattr(scoped_container, "_graph_service")
 
     @pytest.mark.asyncio
     async def test_workspace_orchestrator_is_retired_when_scoped_with_db(self, test_db):

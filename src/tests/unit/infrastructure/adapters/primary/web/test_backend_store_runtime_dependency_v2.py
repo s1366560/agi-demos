@@ -123,7 +123,8 @@ async def test_project_bound_runtime_store_propagates_v2_resolution_failure(
 
 @pytest.mark.parametrize("binding_id", ("", "__env_neo4j__"))
 async def test_default_graph_store_uses_the_pinned_generation(binding_id: str) -> None:
-    graph_service = SimpleNamespace(close=AsyncMock())
+    client = object()
+    graph_service = SimpleNamespace(client=client, close=AsyncMock())
 
     async def graph_factory() -> Any:
         return graph_service
@@ -146,6 +147,7 @@ async def test_default_graph_store_uses_the_pinned_generation(binding_id: str) -
     assert publication.accepted is True
     async with pin_generation_v2(host):
         assert dependencies.get_graph_service(_request()) is graph_service
+        assert dependencies.get_neo4j_client(_request()) is client
         resolved = await dependencies.get_graph_store(_request(), backend_store=authority)
 
     assert resolved is graph_service

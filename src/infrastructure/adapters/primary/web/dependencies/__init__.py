@@ -82,13 +82,10 @@ async def _backend_store_authority_dependency_proxy_v2(
 logger = logging.getLogger(__name__)
 
 
-def get_neo4j_client(request: Request) -> None:
-    """Get Neo4j client from app state for direct graph queries."""
-    try:
-        return cast(None, request.app.state.container.neo4j_client)
-    except Exception:
-        logger.warning("Failed to get neo4j_client from container")
-        return None
+def get_neo4j_client(_request: Request) -> object | None:
+    """Resolve direct graph-driver access from the request's generation."""
+    graph_service = _graph_runtime_v2().graph_service
+    return getattr(graph_service, "client", None)
 
 
 def get_workflow_engine(request: Request) -> None:

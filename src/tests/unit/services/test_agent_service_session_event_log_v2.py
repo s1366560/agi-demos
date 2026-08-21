@@ -137,7 +137,6 @@ def _service(
         conversation_repository=conversation_repo,
         execution_repository=AsyncMock(),
         llm=AsyncMock(),
-        neo4j_client=None,
         agent_execution_event_repository=direct_event_repo,
         context_loader=context_loader,
     )

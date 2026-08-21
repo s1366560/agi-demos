@@ -11,7 +11,6 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-    from src.domain.ports.services.graph_service_port import GraphServicePort
     from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,6 @@ def get_app_container() -> DIContainer | None:
 
 
 def initialize_container(
-    graph_service: GraphServicePort | None,
     redis_client: object | None,
     workflow_engine: WorkflowEnginePort | None,
 ) -> DIContainer:
@@ -33,7 +31,6 @@ def initialize_container(
     Initialize the DI container with all services.
 
     Args:
-        graph_service: The NativeGraphAdapter instance.
         redis_client: The Redis client instance.
         workflow_engine: The workflow engine.
 
@@ -45,7 +42,6 @@ def initialize_container(
     typed_redis_client = cast("Redis | None", redis_client)
     container = DIContainer(
         session_factory=async_session_factory,
-        graph_service=graph_service,
         redis_client=typed_redis_client,
         workflow_engine=workflow_engine,
     )

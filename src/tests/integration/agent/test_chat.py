@@ -21,7 +21,6 @@ os.environ.setdefault("NEO4J_PASSWORD", "password")
 os.environ.setdefault("LLM_PROVIDER", "dashscope")
 os.environ.setdefault("RAY_ADDRESS", "ray://localhost:10001")
 
-from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 
@@ -73,7 +72,7 @@ async def _create_agent_service(db):
     import redis.asyncio as aioredis
 
     from src.application.services.agent_service import AgentService
-    from src.configuration.factories import create_llm_client, create_native_graph_adapter
+    from src.configuration.factories import create_llm_client
     from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
         SqlAgentExecutionEventRepository,
     )
@@ -84,11 +83,9 @@ async def _create_agent_service(db):
         SqlConversationRepository,
     )
 
-    graph_service = await create_native_graph_adapter()
     conversation_repo = SqlConversationRepository(db)
     execution_repo = SqlAgentExecutionRepository(db)
 
-    _settings = get_settings()
     llm = await create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
 
     event_repo = SqlAgentExecutionEventRepository(db)
@@ -99,9 +96,7 @@ async def _create_agent_service(db):
     return AgentService(
         conversation_repository=conversation_repo,
         execution_repository=execution_repo,
-        graph_service=graph_service,
         llm=llm,
-        neo4j_client=graph_service.client,
         agent_execution_event_repository=event_repo,
         redis_client=redis_client,
     )

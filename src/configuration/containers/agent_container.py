@@ -29,7 +29,6 @@ from src.application.use_cases.agent import (
 )
 from src.configuration.config import Settings
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -144,11 +143,9 @@ class AgentContainer:
     def __init__(
         self,
         db: AsyncSession | None = None,
-        graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         settings: Settings | None = None,
-        neo4j_client_factory: Callable[..., Any] | None = None,
         storage_service_factory: Callable[..., Any] | None = None,
         sandbox_orchestrator_factory: Callable[..., Any] | None = None,
         sandbox_event_publisher_factory: Callable[..., Any] | None = None,
@@ -156,11 +153,9 @@ class AgentContainer:
         agent_message_bus_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._db = db
-        self._graph_service = graph_service
         self._redis_client = redis_client
         self._session_factory = session_factory
         self._settings = settings
-        self._neo4j_client_factory = neo4j_client_factory
         self._storage_service_factory = storage_service_factory
         self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
@@ -621,7 +616,6 @@ class AgentContainer:
 
     def agent_service(self, llm: LLMClient) -> AgentService:
         """Get AgentService with dependencies injected."""
-        neo4j_client = self._neo4j_client_factory() if self._neo4j_client_factory else None
         storage_service = self._storage_service_factory() if self._storage_service_factory else None
         sequence_service = (
             self._sequence_service_factory() if self._sequence_service_factory else None
@@ -630,9 +624,7 @@ class AgentContainer:
         return AgentService(
             conversation_repository=self.conversation_repository(),
             execution_repository=self.agent_execution_repository(),
-            graph_service=self._graph_service,
             llm=llm,
-            neo4j_client=neo4j_client,
             execute_step_use_case=self.execute_step_use_case(llm),
             synthesize_results_use_case=self.synthesize_results_use_case(llm),
             workflow_learner=self.workflow_learner(),
@@ -659,9 +651,7 @@ class AgentContainer:
         return AgentService(
             conversation_repository=self.conversation_repository(),
             execution_repository=self.agent_execution_repository(),
-            graph_service=self._graph_service,
             llm=llm,
-            neo4j_client=None,
             redis_client=self._redis_client,
         )
 

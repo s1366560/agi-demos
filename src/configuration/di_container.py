@@ -111,7 +111,6 @@ from src.domain.ports.repositories.workspace.workspace_task_repository import (
 from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repository import (
     WorkspaceTaskSessionAttemptRepository,
 )
-from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
@@ -176,7 +175,6 @@ class DIContainer:
     def __init__(
         self,
         db: AsyncSession | None = None,
-        graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         workflow_engine: WorkflowEnginePort | None = None,
@@ -184,7 +182,6 @@ class DIContainer:
     ) -> None:
         # Store raw deps for with_db() and properties
         self._db = db
-        self._graph_service = graph_service
         self._redis_client = redis_client
         self._session_factory = session_factory
         self._settings = get_settings()
@@ -217,11 +214,9 @@ class DIContainer:
         )
         self._agent = AgentContainer(
             db=db,
-            graph_service=graph_service,
             redis_client=redis_client,
             session_factory=session_factory,
             settings=self._settings,
-            neo4j_client_factory=lambda: self.neo4j_client,
             storage_service_factory=self._infra.storage_service,
             sandbox_orchestrator_factory=self._sandbox.sandbox_orchestrator,
             sandbox_event_publisher_factory=self._infra.sandbox_event_publisher,
@@ -244,7 +239,6 @@ class DIContainer:
         """
         return DIContainer(
             db=db,
-            graph_service=self._graph_service,
             redis_client=self._redis_client,
             session_factory=self._session_factory,
             workflow_engine=self._infra.workflow_engine_port(),
@@ -282,18 +276,6 @@ class DIContainer:
         return get_ai_service_factory()
 
     # === Properties that stay on the main class ===
-
-    @property
-    def neo4j_client(self) -> Any:
-        """Get Neo4j client for direct driver access."""
-        if self._graph_service and hasattr(self._graph_service, "client"):
-            return self._graph_service.client  # pyright: ignore[reportAttributeAccessIssue]
-        return None
-
-    @property
-    def graph_service(self) -> Any:
-        """Get the GraphServicePort for graph operations."""
-        return self._graph_service
 
     @property
     def redis_client(self) -> "redis.Redis | None":

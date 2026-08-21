@@ -24,12 +24,12 @@ from sqlalchemy.ext.compiler import compiles
 from src.configuration.di_container import DIContainer
 from src.domain.model.auth.api_key import APIKey
 from src.domain.model.auth.user import User as DomainUser
-from src.domain.ports.services.workspace_authority_port import (
-    WorkspaceAuthorityResolvedProfile,
-)
 
 # Domain models
 from src.domain.model.task.task_log import TaskLog
+from src.domain.ports.services.workspace_authority_port import (
+    WorkspaceAuthorityResolvedProfile,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Base,
     Memory,
@@ -350,7 +350,8 @@ def test_tenant_repository(test_db):
 @pytest.fixture
 def di_container(test_db, mock_graph_service):
     """Create a DI container for testing."""
-    return DIContainer(test_db, graph_service=mock_graph_service)
+    del mock_graph_service
+    return DIContainer(test_db)
 
 
 # --- Domain Model Fixtures ---
@@ -706,7 +707,6 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     # Add container to app state for agent endpoints
     app.state.container = DIContainer(
         redis_client=None,  # Mock for tests
-        graph_service=mock_graph_service,
         workflow_engine=mock_workflow_engine,
     )
 

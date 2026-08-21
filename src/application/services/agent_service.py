@@ -46,8 +46,6 @@ from src.domain.ports.repositories.agent_repository import (
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
 from src.domain.ports.services.agent_service_port import AgentServicePort
-from src.domain.ports.services.graph_service_port import GraphServicePort
-from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import (
     SESSION_EVENT_LOG_SERVICE_V2,
@@ -131,8 +129,6 @@ class AgentService(AgentServicePort):
         conversation_repository: ConversationRepository,
         execution_repository: AgentExecutionRepository,
         llm: LLMClient,
-        neo4j_client: Neo4jClient | None,
-        graph_service: GraphServicePort | None = None,
         execute_step_use_case: "ExecuteStepUseCase | None" = None,
         synthesize_results_use_case: "SynthesizeResultsUseCase | None" = None,
         workflow_learner: "WorkflowLearner | None" = None,
@@ -154,9 +150,7 @@ class AgentService(AgentServicePort):
         Args:
             conversation_repository: Repository for conversation data
             execution_repository: Repository for agent execution tracking
-            graph_service: Graph service for knowledge graph operations
             llm: LangChain chat model for LLM calls
-            neo4j_client: Neo4j client for direct graph database access
             execute_step_use_case: Optional use case for executing steps
             synthesize_results_use_case: Optional use case for synthesizing results
             workflow_learner: Optional service for learning workflow patterns
@@ -173,9 +167,7 @@ class AgentService(AgentServicePort):
         """
         self._conversation_repo = conversation_repository
         self._execution_repo = execution_repository
-        self._graph_service = graph_service
         self._llm = llm
-        self._neo4j_client = neo4j_client
         self._execute_step_uc = execute_step_use_case
         self._synthesize_uc = synthesize_results_use_case
         self._workflow_learner = workflow_learner

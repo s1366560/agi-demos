@@ -117,7 +117,6 @@ class TestSandboxAPIRedirect:
         app.state.graph_service = mock_graph_service
         app.state.container = DIContainer(
             redis_client=None,
-            graph_service=mock_graph_service,
             workflow_engine=mock_workflow_engine,
         )
 

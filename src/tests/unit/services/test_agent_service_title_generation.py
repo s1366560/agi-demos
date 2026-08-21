@@ -95,34 +95,18 @@ class TestConversationTitleGeneration:
         return repo
 
     @pytest.fixture
-    def mock_graph_service(self):
-        """Create a mock graph service."""
-        service = AsyncMock()
-        return service
-
-    @pytest.fixture
-    def mock_neo4j_client(self):
-        """Create a mock Neo4j client."""
-        client = AsyncMock()
-        return client
-
-    @pytest.fixture
     def agent_service(
         self,
         mock_conversation_repo,
         mock_agent_execution_event_repo,
         mock_execution_repo,
-        mock_graph_service,
-        mock_neo4j_client,
     ):
         """Create an AgentService with mock LLM."""
         llm = MockLLMClient()
         return MockAgentService(
             conversation_repository=mock_conversation_repo,
             execution_repository=mock_execution_repo,
-            graph_service=mock_graph_service,
             llm=llm,
-            neo4j_client=mock_neo4j_client,
             agent_execution_event_repository=mock_agent_execution_event_repo,
         )
 
@@ -514,9 +498,7 @@ class TestTitleGenerationWithRetry:
         agent_service = MockAgentService(
             conversation_repository=AsyncMock(),
             execution_repository=AsyncMock(),
-            graph_service=AsyncMock(),
             llm=llm,
-            neo4j_client=AsyncMock(),
             agent_execution_event_repository=AsyncMock(),
         )
 
@@ -538,9 +520,7 @@ class TestTitleGenerationWithRetry:
         agent_service = MockAgentService(
             conversation_repository=AsyncMock(),
             execution_repository=AsyncMock(),
-            graph_service=AsyncMock(),
             llm=llm,
-            neo4j_client=AsyncMock(),
             agent_execution_event_repository=AsyncMock(),
         )
 
@@ -561,9 +541,7 @@ class TestTitleGenerationWithRetry:
         agent_service = MockAgentService(
             conversation_repository=AsyncMock(),
             execution_repository=AsyncMock(),
-            graph_service=AsyncMock(),
             llm=llm,
-            neo4j_client=AsyncMock(),
             agent_execution_event_repository=AsyncMock(),
         )
 
@@ -632,9 +610,7 @@ class TestTitleGenerationWithMessages:
         return MockAgentService(
             conversation_repository=AsyncMock(),
             execution_repository=AsyncMock(),
-            graph_service=AsyncMock(),
             llm=llm,
-            neo4j_client=AsyncMock(),
             agent_execution_event_repository=AsyncMock(),
         )
 

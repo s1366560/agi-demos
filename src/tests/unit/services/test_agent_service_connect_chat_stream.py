@@ -39,16 +39,12 @@ def _build_service(
 ) -> _TestAgentService:
     conversation_repo = AsyncMock()
     execution_repo = AsyncMock()
-    graph_service = AsyncMock()
     llm = AsyncMock()
-    neo4j_client = AsyncMock()
     agent_event_repo = AsyncMock()
     service = _TestAgentService(
         conversation_repository=conversation_repo,
         execution_repository=execution_repo,
-        graph_service=graph_service,
         llm=llm,
-        neo4j_client=neo4j_client,
         agent_execution_event_repository=agent_event_repo,
         tool_execution_record_repository=tool_execution_record_repo,
         redis_client=None,

@@ -59,7 +59,7 @@ class TestServiceBindingsB1:
     """Batch B1: infra singletons + auth domain."""
 
     def test_container_declares_b1_services(self) -> None:
-        container = DIContainer(db=Mock(), graph_service=Mock())
+        container = DIContainer(db=Mock())
         for binding in _B1_BINDINGS:
             assert container.services.get_or_activate(binding.key) is not None or (
                 binding.allow_none
@@ -71,7 +71,7 @@ class TestServiceBindingsB1:
         ids=[b.key for b in _B1_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+        _assert_equivalence(DIContainer(db=Mock()), binding)
 
     @pytest.mark.parametrize(
         "binding",
@@ -99,7 +99,7 @@ class TestServiceBindingsB2:
         ids=[b.key for b in _B2_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+        _assert_equivalence(DIContainer(db=Mock()), binding)
 
 
 _GROUP_B3 = ("workspace",)
@@ -117,7 +117,7 @@ class TestServiceBindingsB3:
         ids=[b.key for b in _B3_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+        _assert_equivalence(DIContainer(db=Mock()), binding)
 
 
 _GROUP_B4 = ("instance",)
@@ -135,7 +135,7 @@ class TestServiceBindingsB4:
         ids=[b.key for b in _B4_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+        _assert_equivalence(DIContainer(db=Mock()), binding)
 
 
 _GROUP_B5 = ("agent",)
@@ -153,4 +153,4 @@ class TestServiceBindingsB5:
         ids=[b.key for b in _B5_ACTIVATABLE],
     )
     def test_registry_matches_facade(self, binding: ContainerServiceBinding) -> None:
-        _assert_equivalence(DIContainer(db=Mock(), graph_service=Mock()), binding)
+        _assert_equivalence(DIContainer(db=Mock()), binding)

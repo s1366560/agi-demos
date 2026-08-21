@@ -53,7 +53,51 @@ def test_lifespan_resolves_graph_after_v2_publication_before_legacy_consumers() 
     assert publication < workflow < container
 
 
+def test_lifespan_does_not_hold_a_graph_generation_lease_until_shutdown() -> None:
+    source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
+
+    assert "graph_generation_lease" not in source
+    assert "async with pin_generation_v2(plugin_host)" in source
+    assert "graph_runtime_factory=graph_runtime_factory" in source
+    assert "graph_runtime_factory=create_native_graph_adapter" not in source
+
+
+def test_legacy_di_and_agent_services_do_not_retain_graph_runtime_objects() -> None:
+    paths = (
+        "src/configuration/di_container.py",
+        "src/configuration/containers/agent_container.py",
+        "src/application/services/agent_service.py",
+    )
+
+    for relative_path in paths:
+        source = (_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "_graph_service" not in source, relative_path
+
+    di_source = (_ROOT / paths[0]).read_text(encoding="utf-8")
+    assert "def graph_service(" not in di_source
+    assert "def neo4j_client(" not in di_source
+
+
+def test_router_scoped_container_clones_do_not_copy_graph_objects() -> None:
+    paths = (
+        "src/infrastructure/adapters/primary/web/routers/clusters.py",
+        "src/infrastructure/adapters/primary/web/routers/deploy.py",
+        "src/infrastructure/adapters/primary/web/routers/instances.py",
+        "src/infrastructure/adapters/primary/web/routers/instance_files.py",
+        "src/infrastructure/adapters/primary/web/routers/instance_templates.py",
+        "src/infrastructure/adapters/primary/web/routers/skills.py",
+        "src/infrastructure/adapters/primary/web/routers/subagents.py",
+        "src/infrastructure/adapters/primary/web/routers/tenant_skill_configs.py",
+        "src/infrastructure/adapters/primary/web/routers/agent/utils.py",
+    )
+
+    for relative_path in paths:
+        source = (_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "app_container.graph_service" not in source, relative_path
+
+
 def test_graph_dependencies_resolve_from_the_pinned_generation() -> None:
+    assert not (_ROOT / "src/infrastructure/adapters/primary/web/dependencies.py").exists()
     source = (_ROOT / "src/infrastructure/adapters/primary/web/dependencies/__init__.py").read_text(
         encoding="utf-8"
     )

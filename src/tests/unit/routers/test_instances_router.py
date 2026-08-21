@@ -15,6 +15,7 @@ from src.application.schemas.instance_schemas import (
     InstanceMemberUpdate,
     InstanceUpdate,
 )
+from src.configuration.di_container import DIContainer
 from src.domain.model.instance.enums import InstanceRole, InstanceStatus, ServiceType
 from src.domain.model.instance.instance import Instance, InstanceMember
 from src.infrastructure.adapters.primary.web.routers import instances as instances_router
@@ -67,11 +68,7 @@ async def managed_instance(
 
 
 def _request() -> SimpleNamespace:
-    return SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(graph_service=None, redis_client=None))
-        )
-    )
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=DIContainer())))
 
 
 async def _latest_deploy(test_db: AsyncSession, instance_id: str) -> DeployRecordModel:

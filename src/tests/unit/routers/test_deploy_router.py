@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.deploy_schemas import DeployCreate
+from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers import deploy as deploy_router
 from src.infrastructure.adapters.primary.web.routers.deploy import (
     _require_deploy_tenant_access,
@@ -159,11 +160,7 @@ class TestDeployRouterAuthorization:
         await test_db.commit()
 
         request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
+            app=SimpleNamespace(state=SimpleNamespace(container=DIContainer()))
         )
 
         response = await list_deploys(
@@ -189,11 +186,7 @@ class TestDeployRouterAuthorization:
         another_user: User,
     ) -> None:
         request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
+            app=SimpleNamespace(state=SimpleNamespace(container=DIContainer()))
         )
 
         response = await create_deploy(
@@ -217,11 +210,7 @@ class TestDeployRouterAuthorization:
         test_user: User,
     ) -> None:
         request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(
-                    container=SimpleNamespace(graph_service=None, redis_client=None)
-                )
-            )
+            app=SimpleNamespace(state=SimpleNamespace(container=DIContainer()))
         )
 
         with pytest.raises(HTTPException) as exc_info:

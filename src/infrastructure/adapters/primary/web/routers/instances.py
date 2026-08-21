@@ -41,11 +41,7 @@ logger = logging.getLogger(__name__)
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """Get DI container with database session for the current request."""
     app_container: DIContainer = request.app.state.container
-    return DIContainer(
-        db=db,
-        graph_service=app_container.graph_service,
-        redis_client=app_container.redis_client,
-    )
+    return app_container.with_db(db)
 
 
 router = APIRouter(prefix="/api/v1/instances", tags=["Instances"])

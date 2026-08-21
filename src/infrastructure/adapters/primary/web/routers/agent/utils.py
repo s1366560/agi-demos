@@ -14,12 +14,8 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """
     Get DI container with database session for the current request.
 
-    This creates a new container with the request's db session while preserving
-    the graph_service and redis_client from the app state container.
+    This creates a new container with the request's DB session while preserving
+    only application-owned singleton infrastructure from the app container.
     """
-    app_container = request.app.state.container
-    return DIContainer(
-        db=db,
-        graph_service=app_container.graph_service,
-        redis_client=app_container.redis_client,
-    )
+    app_container: DIContainer = request.app.state.container
+    return app_container.with_db(db)
