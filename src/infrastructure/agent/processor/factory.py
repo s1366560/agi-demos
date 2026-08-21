@@ -68,8 +68,6 @@ class ProcessorFactory:
     base_api_key: str | None = None
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
-    plugin_registry: object | None = None
-    plugin_event_dispatcher: object | None = None
     message_bus: object | None = None
     control_channel: ControlChannelPort | None = None
 

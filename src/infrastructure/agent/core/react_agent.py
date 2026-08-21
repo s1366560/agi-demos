@@ -34,7 +34,6 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
-from src.infrastructure.plugins.agent_events import create_agent_plugin_event_dispatcher
 
 from ..commands.builtins import register_builtin_commands
 from ..commands.interceptor import CommandInterceptor
@@ -46,7 +45,6 @@ from ..heartbeat.config import HeartbeatConfig
 from ..heartbeat.runner import HeartbeatRunner
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
-from ..plugins.registry import get_plugin_registry
 from ..plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
@@ -464,8 +462,6 @@ class ReActAgent(
             base_provider_id=self._provider_id,
             base_api_key=self.api_key,
             base_url=self.base_url,
-            plugin_registry=get_plugin_registry(),
-            plugin_event_dispatcher=create_agent_plugin_event_dispatcher(get_plugin_registry()),
             message_bus=message_bus,
             control_channel=control_channel,
         )
