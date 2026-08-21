@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, cast, override
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
     from src.domain.ports.services.sandbox_port import SandboxPort
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -53,6 +54,7 @@ from .agent_session_pool import (
     compute_subagents_hash,
     compute_tools_hash,
     generate_session_key,
+    generation_cache_key_v2,
     get_mcp_tools_from_cache,
     get_or_create_agent_session,
     get_or_create_subagent_router,
@@ -63,6 +65,7 @@ from .agent_session_pool import (
     invalidate_mcp_tools_cache,
     invalidate_subagent_router_cache,
     invalidate_tool_definitions_cache,
+    resolve_generation_cache_descriptor_v2,
     update_mcp_tools_cache,
 )
 
@@ -413,6 +416,7 @@ async def get_or_create_tools(
     redis_client: Any,
     llm: Any = None,
     agent_mode: str = "default",
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Get or create a cached tool set for a project, including sandbox tools and skills.
@@ -428,13 +432,20 @@ async def get_or_create_tools(
         redis_client: Redis client instance
         llm: LangChain chat model for tools that require LLM (e.g., SummaryTool)
         agent_mode: Agent mode for skill filtering (e.g., "default", "plan")
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
         **kwargs: Accepted for backward compatibility (mcp_tools_ttl_seconds, etc.)
 
     Returns:
         Dictionary of tool name -> tool instance (built-in + sandbox + skill_loader)
     """
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+
     # 1. Get or create cached built-in tools
-    tools = await _get_or_create_builtin_tools(project_id, redis_client)
+    tools = await _get_or_create_builtin_tools(
+        project_id,
+        redis_client,
+        generation_descriptor=generation_descriptor,
+    )
 
     # 2. Load Project Sandbox MCP tools (if sandbox exists for project)
     await _add_sandbox_tools(
@@ -444,10 +455,17 @@ async def get_or_create_tools(
         redis_client,
         mcp_tools_ttl_seconds=kwargs.get("mcp_tools_ttl_seconds", 300),
         force_mcp_refresh=bool(kwargs.get("force_mcp_refresh", False)),
+        generation_descriptor=generation_descriptor,
     )
 
     # 3. Add SkillLoaderTool
-    await _add_skill_loader_tool(tools, tenant_id, project_id, agent_mode)
+    await _add_skill_loader_tool(
+        tools,
+        tenant_id,
+        project_id,
+        agent_mode,
+        generation_descriptor=generation_descriptor,
+    )
 
     # 4. Configure skill_installer and plugin_manager tools
     _add_skill_installer_tools(tools, tenant_id, project_id)
@@ -519,14 +537,27 @@ async def get_or_create_tools(
 async def _get_or_create_builtin_tools(
     project_id: str,
     redis_client: Any,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
     """Get or create cached built-in tools, returning a copy."""
     from src.infrastructure.agent.tools.clarification import configure_clarification
     from src.infrastructure.agent.tools.decision import configure_decision
     from src.infrastructure.agent.tools.define import get_registered_tools
 
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+
     async with _tools_cache_lock:
-        if project_id not in _tools_cache:
+        cached = _tools_cache.get(cache_key) if cache_key is not None else None
+        if cached is None:
             from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
             from src.infrastructure.agent.tools.web_search import configure_web_search
 
@@ -536,15 +567,22 @@ async def _get_or_create_builtin_tools(
             configure_decision(hitl_handler=None)
 
             registry = get_registered_tools()
-            _tools_cache[project_id] = {
+            tools = {
                 "web_search": registry["web_search"],
                 "web_scrape": registry["web_scrape"],
                 "ask_clarification": registry["ask_clarification"],
                 "request_decision": registry["request_decision"],
             }
-            logger.info(f"Agent Worker: Tool set cached for project {project_id}")
+            if cache_key is not None:
+                _tools_cache[cache_key] = tools
+            logger.info(
+                "Agent Worker: Tool set built for project %s (cached=%s)",
+                project_id,
+                cache_key is not None,
+            )
+            return dict(tools)
 
-    return dict(_tools_cache[project_id])
+    return dict(cached)
 
 
 async def _add_sandbox_tools(
@@ -555,6 +593,7 @@ async def _add_sandbox_tools(
     *,
     mcp_tools_ttl_seconds: int = 300,
     force_mcp_refresh: bool = False,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Load and add Project Sandbox MCP tools."""
     if _mcp_sandbox_adapter is None:
@@ -566,6 +605,7 @@ async def _add_sandbox_tools(
             redis_client=redis_client,
             ttl_seconds=mcp_tools_ttl_seconds,
             force_refresh=force_mcp_refresh,
+            generation_descriptor=generation_descriptor,
         )
         if sandbox_tools:
             tools.update(sandbox_tools)
@@ -586,6 +626,7 @@ async def _get_or_load_project_sandbox_tools(
     *,
     ttl_seconds: int = 300,
     force_refresh: bool = False,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
     """Return cached project sandbox tools or load them from the sandbox.
 
@@ -593,10 +634,19 @@ async def _get_or_load_project_sandbox_tools(
     wrappers prevents repeated DB sandbox lookups and MCP tool-list calls when
     chat/session infrastructure rebuilds an agent in quick succession.
     """
-    cache_key = f"{tenant_id}:{project_id}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            tenant_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
     now = time.time()
 
-    if not force_refresh and ttl_seconds > 0:
+    if cache_key is not None and not force_refresh and ttl_seconds > 0:
         async with _project_sandbox_tools_cache_lock:
             cached = _project_sandbox_tools_cache.get(cache_key)
             if cached is not None:
@@ -615,7 +665,7 @@ async def _get_or_load_project_sandbox_tools(
         redis_client=redis_client,
     )
 
-    if ttl_seconds > 0 and sandbox_tools:
+    if cache_key is not None and ttl_seconds > 0 and sandbox_tools:
         async with _project_sandbox_tools_cache_lock:
             _project_sandbox_tools_cache[cache_key] = (dict(sandbox_tools), now)
 
@@ -627,6 +677,8 @@ async def _add_skill_loader_tool(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Add SkillLoaderTool initialized with skill list in description."""
     try:
@@ -636,6 +688,7 @@ async def _add_skill_loader_tool(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode=agent_mode,
+            generation_descriptor=generation_descriptor,
         )
         # Set sandbox_id from loaded sandbox tools for resource sync
         sandbox_id = _find_sandbox_id(tools)
@@ -2830,7 +2883,10 @@ def get_cached_tools() -> dict[str, dict[str, Any]]:
     return dict(_tools_cache)
 
 
-def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
+def get_cached_tools_for_project(
+    project_id: str,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+) -> dict[str, Any] | None:
     """Get cached tools for a specific project (synchronous, for hot-plug support).
 
     This is used by ReActAgent's tool_provider to get current tools without
@@ -2839,11 +2895,19 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
 
     Args:
         project_id: Project ID to get tools for
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Dictionary of tool name -> tool instance, or None if not cached
     """
-    cached = _tools_cache.get(project_id)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        return None
+    cache_key = generation_cache_key_v2(
+        project_id,
+        generation_descriptor=generation_descriptor,
+    )
+    cached = _tools_cache.get(cache_key)
     if cached is None:
         return None
     from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
@@ -2877,9 +2941,14 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
     """
     global _tools_cache
     if project_id:
-        _tools_cache.pop(project_id, None)
+        generation_prefix = f"{project_id}:generation="
+        tool_keys = [
+            key for key in _tools_cache if key == project_id or key.startswith(generation_prefix)
+        ]
+        for key in tool_keys:
+            _tools_cache.pop(key, None)
         for key in list(_project_sandbox_tools_cache):
-            if key.endswith(f":{project_id}"):
+            if key.startswith(f"{project_id}:") or key.endswith(f":{project_id}"):
                 _project_sandbox_tools_cache.pop(key, None)
         _custom_tool_diagnostics.pop(project_id, None)
         logger.info(
@@ -2897,6 +2966,7 @@ async def inject_discovered_mcp_tools_into_cache(
     project_id: str,
     server_name: str,
     discovered_tools: list[dict[str, Any]],
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> int:
     """Inject freshly discovered MCP tools into ``_tools_cache`` for immediate availability.
 
@@ -2912,6 +2982,7 @@ async def inject_discovered_mcp_tools_into_cache(
         server_name: MCP server name (e.g. ``"chrome-devtools"``).
         discovered_tools: Raw MCP tool metadata dicts from the
             ``toolset_changed`` event payload.
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Number of tools injected.
@@ -2920,6 +2991,14 @@ async def inject_discovered_mcp_tools_into_cache(
 
     if not discovered_tools or _mcp_sandbox_adapter is None:
         return 0
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        logger.debug("[AgentWorker] Skipping MCP cache injection outside a generation boundary")
+        return 0
+    cache_key = generation_cache_key_v2(
+        project_id,
+        generation_descriptor=generation_descriptor,
+    )
 
     sandbox_id = await _resolve_project_sandbox_id(project_id)
     if not sandbox_id:
@@ -2945,9 +3024,9 @@ async def inject_discovered_mcp_tools_into_cache(
         injected[tool_adapter.name] = tool_adapter
 
     if injected:
-        existing = _tools_cache.get(project_id, {})
+        existing = _tools_cache.get(cache_key, {})
         merged = {**existing, **injected}
-        _tools_cache[project_id] = merged
+        _tools_cache[cache_key] = merged
         logger.info(
             "[AgentWorker] Injected %d MCP tools into cache for project %s (total: %d)",
             len(injected),
@@ -2958,7 +3037,10 @@ async def inject_discovered_mcp_tools_into_cache(
     return len(injected)
 
 
-def rescan_custom_tools_for_project(project_id: str) -> int:
+def rescan_custom_tools_for_project(
+    project_id: str,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+) -> int:
     """Re-scan custom tools for a project and merge into the tools cache.
 
     This enables hot-reload of custom tools created mid-conversation.
@@ -2967,11 +3049,21 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
 
     Args:
         project_id: Project ID to rescan custom tools for.
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Number of custom tools found (including previously loaded ones).
     """
-    cached = _tools_cache.get(project_id)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cached = _tools_cache.get(cache_key) if cache_key is not None else None
     if cached is None:
         # No cached tools yet -- still load custom tools for diagnostics.
         # The tools themselves cannot be merged (no cache entry), but
@@ -3123,11 +3215,20 @@ def invalidate_all_caches_for_project(
         "mcp_tools": 0,
     }
 
-    # 1. Invalidate tools_cache for this project
-    if project_id in _tools_cache:
-        del _tools_cache[project_id]
-        invalidated["tools_cache"] = 1
-        logger.info(f"Agent Worker: tools_cache invalidated for project {project_id}")
+    # 1. Invalidate every generation namespace for this project.
+    generation_prefix = f"{project_id}:generation="
+    tool_keys = [
+        key for key in _tools_cache if key == project_id or key.startswith(generation_prefix)
+    ]
+    for key in tool_keys:
+        del _tools_cache[key]
+    if tool_keys:
+        invalidated["tools_cache"] = len(tool_keys)
+        logger.info(
+            "Agent Worker: tools_cache invalidated for project %s (%d entries)",
+            project_id,
+            len(tool_keys),
+        )
 
     # 2. Invalidate agent sessions for this project
     # Sessions are keyed by tenant_id:project_id:agent_mode
@@ -3171,6 +3272,7 @@ def invalidate_all_caches_for_project(
 async def get_or_create_skills(
     tenant_id: str,
     project_id: str | None = None,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> list[Any]:
     """Get or create a cached skills list for a tenant/project.
 
@@ -3180,6 +3282,7 @@ async def get_or_create_skills(
     Args:
         tenant_id: Tenant ID for cache key
         project_id: Optional project ID for cache key
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         List of Skill domain entities
@@ -3190,10 +3293,22 @@ async def get_or_create_skills(
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
-    cache_key = f"{tenant_id}:{project_id or 'global'}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    base_key = f"{tenant_id}:{project_id or 'global'}"
+    cache_key = (
+        generation_cache_key_v2(
+            tenant_id,
+            project_id or "global",
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cache_label = cache_key or f"{base_key}:uncached"
 
     async with _skills_cache_lock:
-        if cache_key not in _skills_cache:
+        cached = _skills_cache.get(cache_key) if cache_key is not None else None
+        if cached is None:
             # Use sandbox-aware path resolution for skill scanning
             base_path = resolve_project_base_path(project_id or "")
 
@@ -3250,7 +3365,7 @@ async def get_or_create_skills(
                 loaded_by_name,
                 tenant_id=tenant_id,
                 project_id=project_id,
-                cache_key=cache_key,
+                cache_key=cache_label,
             )
 
             skills = list(loaded_by_name.values())
@@ -3260,10 +3375,11 @@ async def get_or_create_skills(
                 skills = await _add_plugin_skills(skills, tenant_id, project_id)
             except Exception as e:
                 logger.warning("Agent Worker: Plugin skills loading failed: %s", e)
-            _skills_cache[cache_key] = skills
+            if cache_key is not None:
+                _skills_cache[cache_key] = skills
             logger.info(
-                "Agent Worker: Skills cached for %s, total=%d, errors=%d",
-                cache_key,
+                "Agent Worker: Skills loaded for %s, total=%d, errors=%d",
+                cache_label,
                 len(skills),
                 len(all_errors),
             )
@@ -3271,7 +3387,9 @@ async def get_or_create_skills(
                 for error in all_errors:
                     logger.warning("Agent Worker: Skill loading error: %s", error)
 
-        return _skills_cache[cache_key]
+            return skills
+
+        return cached
 
 
 async def _merge_database_skills_for_worker(
@@ -3408,6 +3526,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     tenant_id: str,
     project_id: str | None = None,
     agent_mode: str = "default",
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> Any:
     """Get or create a cached and initialized SkillLoaderTool.
 
@@ -3422,6 +3541,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         tenant_id: Tenant ID for skill scoping
         project_id: Optional project ID for filtering
         agent_mode: Agent mode for filtering skills (e.g., "default", "plan")
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Initialized SkillLoaderTool instance with dynamic description
@@ -3529,10 +3649,23 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                     scope=scope,
                 )
 
-    cache_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    base_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
+    cache_key = (
+        generation_cache_key_v2(
+            tenant_id,
+            project_id or "global",
+            agent_mode,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    cache_label = cache_key or f"{base_key}:uncached"
 
     async with _skill_loader_cache_lock:
-        if cache_key not in _skill_loader_cache:
+        cached = _skill_loader_cache.get(cache_key) if cache_key is not None else None
+        if cached is None:
             # Use sandbox-aware path resolution for skill scanning
             base_path = resolve_project_base_path(project_id or "")
 
@@ -3569,6 +3702,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
             cached_skills = await get_or_create_skills(
                 tenant_id=tenant_id,
                 project_id=project_id,
+                generation_descriptor=generation_descriptor,
             )
             filtered_skills = [
                 skill
@@ -3584,13 +3718,15 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
             if tool_info is None:
                 tool_info = get_registered_tools()["skill_loader"]
 
-            _skill_loader_cache[cache_key] = tool_info
+            if cache_key is not None:
+                _skill_loader_cache[cache_key] = tool_info
             logger.info(
-                f"Agent Worker: SkillLoaderTool cached for {cache_key}, "
+                f"Agent Worker: SkillLoaderTool loaded for {cache_label}, "
                 f"skills in description: {len(get_available_skills())}"
             )
+            return tool_info
 
-        return _skill_loader_cache[cache_key]
+        return cached
 
 
 def get_cached_skill_loaders() -> dict[str, Any]:

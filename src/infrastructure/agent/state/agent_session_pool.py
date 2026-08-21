@@ -13,12 +13,16 @@ Key benefits:
 Reference: MCP Worker lifecycle pattern in mcp/activities.py
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, cast
+
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 logger = logging.getLogger(__name__)
 
@@ -215,10 +219,53 @@ def compute_subagents_hash(subagents: list[Any]) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
+def resolve_generation_cache_descriptor_v2(
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+) -> PluginGenerationDescriptorV2 | None:
+    """Return the pinned generation after validating an optional caller descriptor.
+
+    A serialized descriptor is evidence about the caller's expected generation,
+    not a lease. Callers outside a v2 generation boundary receive ``None`` even
+    when they supply one and must avoid reusable cache entries. Within a boundary,
+    a mismatched descriptor fails closed instead of selecting another namespace.
+    """
+    from src.infrastructure.plugins.v2.boundary import current_generation_descriptor_v2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    try:
+        pinned_descriptor = current_generation_descriptor_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "generation_not_pinned":
+            raise
+        return None
+
+    if generation_descriptor is not None and generation_descriptor != pinned_descriptor:
+        raise RuntimeV2Error(
+            "generation_descriptor_mismatch",
+            "cache generation descriptor does not match the pinned operation",
+        )
+    return pinned_descriptor
+
+
+def generation_cache_key_v2(
+    *parts: str,
+    generation_descriptor: PluginGenerationDescriptorV2,
+) -> str:
+    """Build a cache key containing the exact v2 generation identity."""
+    namespace = (
+        f"generation={generation_descriptor.profile_id}"
+        f"@{generation_descriptor.generation}"
+        f"@{generation_descriptor.digest}"
+    )
+    return ":".join((*parts, namespace))
+
+
 def generate_session_key(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2,
 ) -> str:
     """Generate a unique session key.
 
@@ -226,11 +273,17 @@ def generate_session_key(
         tenant_id: Tenant identifier
         project_id: Project identifier
         agent_mode: Agent mode (e.g., "default", "plan")
+        generation_descriptor: Exact pinned v2 generation identity
 
     Returns:
         Session key string
     """
-    return f"{tenant_id}:{project_id}:{agent_mode}"
+    return generation_cache_key_v2(
+        tenant_id,
+        project_id,
+        agent_mode,
+        generation_descriptor=generation_descriptor,
+    )
 
 
 # ============================================================================
@@ -273,6 +326,8 @@ async def get_system_prompt_manager() -> Any:
 async def get_or_create_tool_definitions(
     tools: dict[str, Any],
     tools_hash: str | None = None,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> list[Any]:
     """Get or create cached tool definitions.
 
@@ -282,26 +337,42 @@ async def get_or_create_tool_definitions(
     Args:
         tools: Dictionary of tool name -> tool instance
         tools_hash: Pre-computed hash (optional, will compute if not provided)
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         List of ToolDefinition objects
     """
     if tools_hash is None:
         tools_hash = compute_tools_hash(tools)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            tools_hash,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
 
     async with _tool_definitions_cache_lock:
-        entry = _tool_definitions_cache.get(tools_hash)
+        entry = _tool_definitions_cache.get(cache_key) if cache_key is not None else None
         if entry is not None:
             definitions, cached_at = entry
             if time.time() - cached_at < _TOOL_DEFINITIONS_TTL_SECONDS:
-                logger.debug(f"Agent Session Pool: Tool definitions cache hit for {tools_hash}")
+                logger.debug(f"Agent Session Pool: Tool definitions cache hit for {cache_key}")
                 return cast(list[Any], definitions)
             else:
-                del _tool_definitions_cache[tools_hash]
-                logger.debug(f"Agent Session Pool: Tool definitions cache expired for {tools_hash}")
+                assert cache_key is not None
+                del _tool_definitions_cache[cache_key]
+                logger.debug(f"Agent Session Pool: Tool definitions cache expired for {cache_key}")
 
         # Cache miss - convert tools
-        logger.info(f"Agent Session Pool: Converting {len(tools)} tools (hash={tools_hash})")
+        logger.info(
+            "Agent Session Pool: Converting %d tools (hash=%s, cached=%s)",
+            len(tools),
+            tools_hash,
+            cache_key is not None,
+        )
         start_time = time.time()
 
         from src.infrastructure.agent.core.tool_converter import convert_tools
@@ -311,12 +382,15 @@ async def get_or_create_tool_definitions(
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"Agent Session Pool: Tool conversion took {elapsed_ms:.1f}ms")
 
+        if cache_key is None:
+            return definitions
+
         # Evict oldest entries if cache is full
         if len(_tool_definitions_cache) >= _TOOL_DEFINITIONS_MAX_ENTRIES:
             oldest_key = min(_tool_definitions_cache, key=lambda k: _tool_definitions_cache[k][1])
             del _tool_definitions_cache[oldest_key]
 
-        _tool_definitions_cache[tools_hash] = (definitions, time.time())
+        _tool_definitions_cache[cache_key] = (definitions, time.time())
         return definitions
 
 
@@ -332,11 +406,21 @@ def invalidate_tool_definitions_cache(tools_hash: str | None = None) -> int:
     global _tool_definitions_cache
 
     if tools_hash:
-        if tools_hash in _tool_definitions_cache:
-            del _tool_definitions_cache[tools_hash]
-            logger.info(f"Agent Session Pool: Tool definitions cache invalidated for {tools_hash}")
-            return 1
-        return 0
+        generation_prefix = f"{tools_hash}:generation="
+        keys_to_remove = [
+            key
+            for key in _tool_definitions_cache
+            if key == tools_hash or key.startswith(generation_prefix)
+        ]
+        for key in keys_to_remove:
+            del _tool_definitions_cache[key]
+        if keys_to_remove:
+            logger.info(
+                "Agent Session Pool: Tool definitions cache invalidated for %s (%d entries)",
+                tools_hash,
+                len(keys_to_remove),
+            )
+        return len(keys_to_remove)
     else:
         count = len(_tool_definitions_cache)
         _tool_definitions_cache.clear()
@@ -352,24 +436,35 @@ def invalidate_tool_definitions_cache(tools_hash: str | None = None) -> int:
 async def get_mcp_tools_from_cache(
     tenant_id: str,
     ttl_seconds: int = 300,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any] | None:
     """Get MCP tools from cache if not expired.
 
     Args:
         tenant_id: Tenant identifier
         ttl_seconds: TTL in seconds (default 5 minutes)
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         Cached tools dict or None if cache miss/expired
     """
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        return None
+    cache_key = generation_cache_key_v2(
+        tenant_id,
+        generation_descriptor=generation_descriptor,
+    )
+
     async with _mcp_tools_cache_lock:
-        entry = _mcp_tools_cache.get(tenant_id)
+        entry = _mcp_tools_cache.get(cache_key)
 
         if entry is None:
             return None
 
         if entry.is_expired(ttl_seconds):
-            del _mcp_tools_cache[tenant_id]
+            del _mcp_tools_cache[cache_key]
             logger.debug(f"Agent Session Pool: MCP tools cache expired for tenant {tenant_id}")
             return None
 
@@ -380,23 +475,35 @@ async def get_mcp_tools_from_cache(
 def get_mcp_tools_from_cache_sync(
     tenant_id: str,
     ttl_seconds: int = 300,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any] | None:
     """Get MCP tools from cache synchronously (no lock).
 
     This is a best-effort read used in synchronous contexts
     (e.g. custom tool providers) where awaiting is not possible.
     """
-    entry = _mcp_tools_cache.get(tenant_id)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        return None
+    cache_key = generation_cache_key_v2(
+        tenant_id,
+        generation_descriptor=generation_descriptor,
+    )
+    entry = _mcp_tools_cache.get(cache_key)
     if entry is None:
         return None
     if entry.is_expired(ttl_seconds):
         return None
     return entry.tools
 
+
 async def update_mcp_tools_cache(
     tenant_id: str,
     tools: dict[str, Any],
     version: int = 0,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Update MCP tools cache.
 
@@ -404,9 +511,20 @@ async def update_mcp_tools_cache(
         tenant_id: Tenant identifier
         tools: Tools dict to cache
         version: Optional version number
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
     """
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    if generation_descriptor is None:
+        logger.debug(
+            "Agent Session Pool: Skipping reusable MCP tools cache outside a generation boundary"
+        )
+        return
+    cache_key = generation_cache_key_v2(
+        tenant_id,
+        generation_descriptor=generation_descriptor,
+    )
     async with _mcp_tools_cache_lock:
-        _mcp_tools_cache[tenant_id] = MCPToolsCacheEntry(
+        _mcp_tools_cache[cache_key] = MCPToolsCacheEntry(
             tools=tools,
             fetched_at=time.time(),
             tenant_id=tenant_id,
@@ -435,9 +553,18 @@ def invalidate_mcp_tools_cache(tenant_id: str | None = None) -> int:
     global _mcp_tools_cache
 
     if tenant_id:
-        if tenant_id in _mcp_tools_cache:
-            del _mcp_tools_cache[tenant_id]
-            logger.info(f"Agent Session Pool: MCP tools cache invalidated for {tenant_id}")
+        generation_prefix = f"{tenant_id}:generation="
+        keys_to_remove = [
+            key for key in _mcp_tools_cache if key == tenant_id or key.startswith(generation_prefix)
+        ]
+        for key in keys_to_remove:
+            del _mcp_tools_cache[key]
+        if keys_to_remove:
+            logger.info(
+                "Agent Session Pool: MCP tools cache invalidated for %s (%d entries)",
+                tenant_id,
+                len(keys_to_remove),
+            )
             # Cascade: clear tool definitions cache since MCP tools changed
             td_count = invalidate_tool_definitions_cache()
             if td_count:
@@ -452,7 +579,7 @@ def invalidate_mcp_tools_cache(tenant_id: str | None = None) -> int:
                     f"Agent Session Pool: Cascaded agent session clear "
                     f"({session_count} entries) due to MCP tools change for {tenant_id}"
                 )
-            return 1
+            return len(keys_to_remove)
         return 0
     else:
         count = len(_mcp_tools_cache)
@@ -485,6 +612,8 @@ async def get_or_create_subagent_router(
     subagents: list[Any],
     subagents_hash: str | None = None,
     match_threshold: float = 0.5,
+    *,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> Any | None:
     """Get or create cached SubAgentRouter with built keyword index.
 
@@ -493,6 +622,7 @@ async def get_or_create_subagent_router(
         subagents: List of SubAgent domain entities
         subagents_hash: Pre-computed hash (optional)
         match_threshold: Default confidence threshold
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         SubAgentRouter instance or None if no subagents
@@ -503,10 +633,19 @@ async def get_or_create_subagent_router(
     if subagents_hash is None:
         subagents_hash = compute_subagents_hash(subagents)
 
-    cache_key = f"{tenant_id}:{subagents_hash}"
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    cache_key = (
+        generation_cache_key_v2(
+            tenant_id,
+            subagents_hash,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
 
     async with _subagent_router_cache_lock:
-        if cache_key in _subagent_router_cache:
+        if cache_key is not None and cache_key in _subagent_router_cache:
             logger.debug(f"Agent Session Pool: SubAgentRouter cache hit for {cache_key}")
             return _subagent_router_cache[cache_key]
 
@@ -527,7 +666,8 @@ async def get_or_create_subagent_router(
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"Agent Session Pool: SubAgentRouter creation took {elapsed_ms:.1f}ms")
 
-        _subagent_router_cache[cache_key] = router
+        if cache_key is not None:
+            _subagent_router_cache[cache_key] = router
         return router
 
 
@@ -573,6 +713,7 @@ async def get_or_create_agent_session(
     subagents: list[Any] | None = None,
     processor_config: Any | None = None,
     subagent_match_threshold: float = 0.5,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> AgentSessionContext:
     """Get or create an agent session context with cached components.
 
@@ -589,6 +730,7 @@ async def get_or_create_agent_session(
         subagents: Optional list of SubAgent domain entities
         processor_config: Optional ProcessorConfig
         subagent_match_threshold: Threshold for SubAgentRouter
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         AgentSessionContext with cached components
@@ -596,14 +738,26 @@ async def get_or_create_agent_session(
     skills = skills or []
     subagents = subagents or []
 
-    session_key = generate_session_key(tenant_id, project_id, agent_mode)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    session_key = (
+        generate_session_key(
+            tenant_id,
+            project_id,
+            agent_mode,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else f"{tenant_id}:{project_id}:{agent_mode}:uncached"
+    )
     tools_hash = compute_tools_hash(tools)
     skills_hash = compute_skills_hash(skills)
     subagents_hash = compute_subagents_hash(subagents)
 
     async with _agent_session_pool_lock:
         # Check for existing valid session
-        existing = _agent_session_pool.get(session_key)
+        existing = (
+            _agent_session_pool.get(session_key) if generation_descriptor is not None else None
+        )
 
         if existing and existing.is_valid_for(tools_hash, skills_hash, subagents_hash):
             existing.touch()
@@ -622,7 +776,11 @@ async def get_or_create_agent_session(
     # Release lock during expensive operations
 
     # Get or create tool definitions (cached separately)
-    tool_definitions = await get_or_create_tool_definitions(tools, tools_hash)
+    tool_definitions = await get_or_create_tool_definitions(
+        tools,
+        tools_hash,
+        generation_descriptor=generation_descriptor,
+    )
 
     # Get or create SubAgentRouter (cached separately)
     subagent_router = await get_or_create_subagent_router(
@@ -630,8 +788,8 @@ async def get_or_create_agent_session(
         subagents=subagents,
         subagents_hash=subagents_hash,
         match_threshold=subagent_match_threshold,
+        generation_descriptor=generation_descriptor,
     )
-
 
     from src.domain.ports.services.skill_resource_port import SkillResourcePort
     from src.infrastructure.adapters.secondary.skill import (
@@ -696,11 +854,13 @@ async def get_or_create_agent_session(
         subagents_hash=subagents_hash,
     )
 
-    # Store in pool and mark as used
-    async with _agent_session_pool_lock:
-        _agent_session_pool[session_key] = session
-        # Mark session as used (use_count starts at 0, touch() increments to 1)
-        session.touch()
+    # Store only generation-bound sessions. Bootstrap callers still receive a
+    # fully constructed context, but it cannot leak into a later generation.
+    if generation_descriptor is not None:
+        async with _agent_session_pool_lock:
+            _agent_session_pool[session_key] = session
+    # Mark session as used (use_count starts at 0, touch() increments to 1)
+    session.touch()
 
     elapsed_ms = (time.time() - start_time) * 1000
     logger.info(f"Agent Session Pool: Session created for {session_key} in {elapsed_ms:.1f}ms")
@@ -734,27 +894,29 @@ def invalidate_agent_session(
 
     # Build partial key for matching
     if project_id and agent_mode:
-        # Exact match
-        key = generate_session_key(tenant_id, project_id, agent_mode)
-        if key in _agent_session_pool:
-            del _agent_session_pool[key]
-            logger.info(f"Agent Session Pool: Session invalidated for {key}")
-            return 1
-        return 0
+        base_key = f"{tenant_id}:{project_id}:{agent_mode}"
+        match_label = base_key
+        keys_to_remove = [
+            key
+            for key in _agent_session_pool
+            if key == base_key or key.startswith(f"{base_key}:generation=")
+        ]
     elif project_id:
         # Match tenant:project:*
         prefix = f"{tenant_id}:{project_id}:"
+        match_label = prefix
+        keys_to_remove = [k for k in _agent_session_pool if k.startswith(prefix)]
     else:
         # Match tenant:*
         prefix = f"{tenant_id}:"
-
-    keys_to_remove = [k for k in _agent_session_pool if k.startswith(prefix)]
+        match_label = prefix
+        keys_to_remove = [k for k in _agent_session_pool if k.startswith(prefix)]
     for key in keys_to_remove:
         del _agent_session_pool[key]
 
     if keys_to_remove:
         logger.info(
-            f"Agent Session Pool: Sessions invalidated for prefix '{prefix}' "
+            f"Agent Session Pool: Sessions invalidated for prefix '{match_label}' "
             f"({len(keys_to_remove)} entries)"
         )
 
@@ -822,6 +984,7 @@ async def clear_session_cache(
     project_id: str,
     agent_mode: str,
     grace_period_seconds: int = 300,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> bool:
     """Clear cache for a specific session with optional grace period.
 
@@ -834,14 +997,34 @@ async def clear_session_cache(
         project_id: Project identifier
         agent_mode: Agent mode
         grace_period_seconds: Grace period in seconds before actual deletion (default 5 minutes)
+        generation_descriptor: Exact generation to clear; unpinned callers clear every namespace
 
     Returns:
         True if cache was cleared (or marked for deletion), False if not found
     """
-    session_key = generate_session_key(tenant_id, project_id, agent_mode)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    base_key = f"{tenant_id}:{project_id}:{agent_mode}"
+    if generation_descriptor is not None:
+        session_keys = [
+            generate_session_key(
+                tenant_id,
+                project_id,
+                agent_mode,
+                generation_descriptor=generation_descriptor,
+            )
+        ]
+    else:
+        session_keys = [
+            key
+            for key in _agent_session_pool
+            if key == base_key or key.startswith(f"{base_key}:generation=")
+        ]
 
     async with _agent_session_pool_lock:
-        if session_key in _agent_session_pool:
+        cleared = False
+        for session_key in session_keys:
+            if session_key not in _agent_session_pool:
+                continue
             session = _agent_session_pool[session_key]
 
             # Check if session is being actively used
@@ -853,14 +1036,14 @@ async def clear_session_cache(
                     f"Agent Session Pool: Session {session_key} marked for deletion "
                     f"in {grace_period_seconds}s (use_count={session.use_count})"
                 )
-                return True
+                cleared = True
             else:
                 # Hard delete: remove immediately
                 del _agent_session_pool[session_key]
                 logger.info(f"Agent Session Pool: Session cache cleared for {session_key}")
-                return True
+                cleared = True
 
-    return False
+    return cleared
 
 
 async def cleanup_marked_sessions() -> int:
@@ -1049,6 +1232,7 @@ async def get_or_create_project_session(
     processor_config: Any | None = None,
     subagent_match_threshold: float = 0.5,
     project_config: dict[str, Any] | None = None,
+    generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> AgentSessionContext:
     """Get or create an agent session specifically for a project.
 
@@ -1065,19 +1249,31 @@ async def get_or_create_project_session(
         processor_config: Optional processor config
         subagent_match_threshold: SubAgent match threshold
         project_config: Optional project-specific configuration
+        generation_descriptor: Explicit generation identity; defaults to the pinned boundary
 
     Returns:
         AgentSessionContext for the project
     """
     # Check if there's a grace period deletion marker to clear
-    session_key = generate_session_key(tenant_id, project_id, agent_mode)
+    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
+    session_key = (
+        generate_session_key(
+            tenant_id,
+            project_id,
+            agent_mode,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
 
-    async with _agent_session_pool_lock:
-        existing = _agent_session_pool.get(session_key)
-        if existing and hasattr(existing, "_marked_for_deletion_at"):
-            # Clear deletion marker - project is active again
-            delattr(existing, "_marked_for_deletion_at")
-            logger.info(f"Agent Session Pool: Project session {session_key} reactivated")
+    if session_key is not None:
+        async with _agent_session_pool_lock:
+            existing = _agent_session_pool.get(session_key)
+            if existing and hasattr(existing, "_marked_for_deletion_at"):
+                # Clear deletion marker - project is active again
+                delattr(existing, "_marked_for_deletion_at")
+                logger.info(f"Agent Session Pool: Project session {session_key} reactivated")
 
     # Create or get session
     return await get_or_create_agent_session(
@@ -1089,6 +1285,7 @@ async def get_or_create_project_session(
         subagents=subagents,
         processor_config=processor_config,
         subagent_match_threshold=subagent_match_threshold,
+        generation_descriptor=generation_descriptor,
     )
 
 

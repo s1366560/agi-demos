@@ -1,9 +1,13 @@
+from collections.abc import AsyncIterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 import src.infrastructure.agent.state.agent_worker_state as worker_state
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
 from src.infrastructure.agent.state.agent_worker_state import get_cached_tools_for_project
 from src.infrastructure.plugins.agent_tools import (
     AgentToolSetService,
@@ -11,6 +15,35 @@ from src.infrastructure.plugins.agent_tools import (
     legacy_tool_descriptor,
 )
 from src.infrastructure.plugins.context import PluginScopeContext
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+_ROOT = Path(__file__).resolve().parents[5]
+_ROOT_SCOPE = ScopeV2(kind=ScopeKindV2.ROOT)
+
+
+@pytest.fixture
+async def generation_host() -> AsyncIterator[PlatformPluginRuntimeHostV2]:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="agent-tool-test-generation-1",
+    )
+    try:
+        yield host
+    finally:
+        await host.close()
+
+
+@pytest.fixture(autouse=True)
+def _clear_worker_tool_cache() -> None:
+    worker_state._tools_cache.clear()
+    yield
+    worker_state._tools_cache.clear()
 
 
 @pytest.mark.unit
@@ -48,8 +81,9 @@ def test_legacy_tool_descriptor_rejects_name_drift() -> None:
 
 
 @pytest.mark.unit
-def test_tool_reads_come_from_the_scoped_generation_service(
+async def test_tool_reads_come_from_the_scoped_generation_service(
     monkeypatch: pytest.MonkeyPatch,
+    generation_host: PlatformPluginRuntimeHostV2,
 ) -> None:
     tool = SimpleNamespace(
         name="demo",
@@ -57,7 +91,6 @@ def test_tool_reads_come_from_the_scoped_generation_service(
         parameters={"type": "object"},
     )
     project_id = "project-remove-typed"
-    worker_state._tools_cache[project_id] = {"demo": tool}
     service = AgentToolSetService(profile_digest="scoped-read")
     service.publish(PluginScopeContext(project_id=project_id), {"demo": tool})
     monkeypatch.setattr(
@@ -65,17 +98,26 @@ def test_tool_reads_come_from_the_scoped_generation_service(
         lambda: service,
     )
 
-    assert get_cached_tools_for_project(project_id) == {"demo": tool}
+    async with pin_operation_context_v2(
+        generation_host,
+        operation_id="typed-tool-read",
+        scope=_ROOT_SCOPE,
+    ) as operation:
+        descriptor = operation.descriptor
+        cache_key = generation_cache_key_v2(
+            project_id,
+            generation_descriptor=descriptor,
+        )
+        worker_state._tools_cache[cache_key] = {"demo": tool}
+        assert get_cached_tools_for_project(project_id, descriptor) == {"demo": tool}
 
 
 @pytest.mark.unit
-def test_tool_read_fails_loud_without_scoped_generation(
+async def test_tool_read_fails_loud_without_scoped_generation(
     monkeypatch: pytest.MonkeyPatch,
+    generation_host: PlatformPluginRuntimeHostV2,
 ) -> None:
     project_id = "project-remove-missing"
-    worker_state._tools_cache[project_id] = {
-        "demo": SimpleNamespace(name="demo", description="Demo")
-    }
 
     class MissingGenerationService:
         def shadow_comparison(
@@ -94,5 +136,18 @@ def test_tool_read_fails_loud_without_scoped_generation(
         MissingGenerationService,
     )
 
-    with pytest.raises(RuntimeError, match="no scoped tool generation exists"):
-        get_cached_tools_for_project(project_id)
+    async with pin_operation_context_v2(
+        generation_host,
+        operation_id="missing-typed-tool-read",
+        scope=_ROOT_SCOPE,
+    ) as operation:
+        descriptor = operation.descriptor
+        cache_key = generation_cache_key_v2(
+            project_id,
+            generation_descriptor=descriptor,
+        )
+        worker_state._tools_cache[cache_key] = {
+            "demo": SimpleNamespace(name="demo", description="Demo")
+        }
+        with pytest.raises(RuntimeError, match="no scoped tool generation exists"):
+            get_cached_tools_for_project(project_id, descriptor)
