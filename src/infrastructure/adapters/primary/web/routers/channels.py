@@ -2021,9 +2021,10 @@ async def test_config(
 async def _build_channel_adapter_for_test(config: ChannelConfigModel) -> object:
     """Build a plugin channel adapter without starting the long-lived runtime loop."""
     from src.infrastructure.channels.connection_manager import ChannelConnectionManager
+    from src.infrastructure.plugins.v2.boundary import current_generation_v2
 
     manager = ChannelConnectionManager()
-    return await manager._create_adapter(config)
+    return await manager._create_adapter(config, current_generation_v2())
 
 
 async def _run_channel_adapter_health_check(adapter: object) -> bool:

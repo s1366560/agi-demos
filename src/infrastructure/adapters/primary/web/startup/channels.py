@@ -4,13 +4,11 @@ This module provides functions to initialize and shutdown the
 ChannelConnectionManager during application lifecycle.
 """
 
-import asyncio
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.channels.connection_manager import ChannelConnectionManager
 
 from .channel_reload import ChannelReloadPlan, reconcile_channel_connections
@@ -22,8 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Global channel manager instance
 _channel_manager: ChannelConnectionManager | None = None
-_channel_plugins_loaded = False
-_channel_plugins_lock = asyncio.Lock()
 
 
 def get_channel_manager() -> ChannelConnectionManager | None:
@@ -62,7 +58,6 @@ async def initialize_channel_manager(
 
     try:
         logger.info("[ChannelStartup] Initializing channel connection manager...")
-        await _ensure_channel_plugins_loaded()
 
         # Use default message router if not provided
         if message_router is None:
@@ -91,31 +86,6 @@ async def initialize_channel_manager(
         logger.error(f"[ChannelStartup] Failed to initialize channel manager: {e}")
         _channel_manager = None
         return None
-
-
-async def _ensure_channel_plugins_loaded() -> None:
-    """Load built-in channel plugins exactly once."""
-    global _channel_plugins_loaded
-
-    async with _channel_plugins_lock:
-        if _channel_plugins_loaded:
-            return
-
-        runtime_manager = get_plugin_runtime_manager()
-        diagnostics = await runtime_manager.ensure_loaded()
-        for diagnostic in diagnostics:
-            message = (
-                f"[ChannelStartup][Plugin:{diagnostic.plugin_name}] "
-                f"{diagnostic.code}: {diagnostic.message}"
-            )
-            if diagnostic.level == "error":
-                logger.error(message)
-                continue
-            if diagnostic.level == "info":
-                logger.info(message)
-                continue
-            logger.warning(message)
-        _channel_plugins_loaded = True
 
 
 async def shutdown_channel_manager() -> None:

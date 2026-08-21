@@ -8,13 +8,14 @@ automatic reconnection with exponential backoff, health checks, and message rout
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,19 +23,21 @@ from src.domain.model.channels.message import (
     ChannelConfig,
     Message,
 )
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
 )
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
 )
-
-if TYPE_CHECKING:
-    from src.infrastructure.agent.plugins.registry import PluginDiagnostic
-
-import contextlib
-
 from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
+from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
+from src.infrastructure.plugins.v2.channel_adapters import (
+    CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+    ChannelAdapterBuildContextV2,
+    ChannelAdapterResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.runtime import GenerationLeaseV2, RuntimeGenerationV2
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,7 @@ class ManagedConnection:
     last_error: str | None = None
     reconnect_attempts: int = 0
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    _generation_lease: GenerationLeaseV2 | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -241,26 +245,35 @@ class ChannelConnectionManager:
         ):
             self._main_loop = current_loop
 
-        # Create adapter based on channel type
-        adapter = await self._create_adapter(config)
+        generation_lease = await current_process_generation_host_v2().acquire()
+        generation = await generation_lease.__aenter__()
+        try:
+            adapter = await self._create_adapter(config, generation)
+            connection = ManagedConnection(
+                config_id=config.id,
+                project_id=config.project_id,
+                channel_type=config.channel_type,
+                adapter=adapter,
+                status=ConnectionStatus.CONNECTING,
+                _generation_lease=generation_lease,
+            )
+            connection_loop = self._connection_loop(connection, config)
+            try:
+                connection.task = asyncio.create_task(connection_loop)
+            except BaseException:
+                connection_loop.close()
+                raise
+            self._connections[config.id] = connection
+            return connection
+        except BaseException:
+            await generation_lease.release()
+            raise
 
-        # Create managed connection
-        connection = ManagedConnection(
-            config_id=config.id,
-            project_id=config.project_id,
-            channel_type=config.channel_type,
-            adapter=adapter,
-            status=ConnectionStatus.CONNECTING,
-        )
-
-        self._connections[config.id] = connection
-
-        # Start connection task
-        connection.task = asyncio.create_task(self._connection_loop(connection, config))
-
-        return connection
-
-    async def _create_adapter(self, config: ChannelConfigModel) -> Any:
+    async def _create_adapter(
+        self,
+        config: ChannelConfigModel,
+        generation: RuntimeGenerationV2,
+    ) -> Any:
         """Create a channel adapter based on configuration.
 
         Args:
@@ -270,17 +283,16 @@ class ChannelConnectionManager:
             The created adapter instance.
 
         Raises:
-            ValueError: If channel type is not supported.
+            RuntimeV2Error: If no active contribution provides the channel type.
+            TypeError: If the active generation exposes an invalid resolver.
         """
-        from src.infrastructure.agent.plugins.registry import (
-            ChannelAdapterBuildContext,
-            get_plugin_registry,
+        resolver = generation.resolve(
+            CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
         )
-
-        plugin_registry = get_plugin_registry()
-        metadata = plugin_registry.list_channel_type_metadata().get(
-            (config.channel_type or "").lower()
-        )
+        if not isinstance(resolver, ChannelAdapterResolverProtocolV2):
+            raise TypeError("active generation has an invalid channel adapter resolver")
+        metadata = resolver.metadata(config.channel_type)
         secret_paths = self._resolve_secret_paths(metadata)
 
         app_secret, encrypt_key, verification_token, extra_settings = self._decrypt_config_secrets(
@@ -299,25 +311,19 @@ class ChannelConnectionManager:
             domain=config.domain,
             extra=extra_settings,
         )
-        adapter, diagnostics = await plugin_registry.build_channel_adapter(
-            ChannelAdapterBuildContext(
+        return await resolver.build(
+            ChannelAdapterBuildContextV2(
                 channel_type=config.channel_type,
                 config_model=config,
                 channel_config=channel_config,
             )
         )
-        for diagnostic in diagnostics:
-            self._log_plugin_diagnostic(diagnostic)
-        if adapter is not None:
-            return adapter
-
-        raise ValueError(f"Unsupported channel type: {config.channel_type}")
 
     @staticmethod
     def _resolve_secret_paths(metadata: Any) -> list[str]:
         """Extract secret_paths list from channel type metadata."""
         secret_paths_raw = getattr(metadata, "secret_paths", None)
-        if isinstance(secret_paths_raw, list):
+        if isinstance(secret_paths_raw, (list, tuple)):
             return [path for path in secret_paths_raw if isinstance(path, str)]
         return []
 
@@ -367,53 +373,48 @@ class ChannelConnectionManager:
 
         return app_secret, encrypt_key, verification_token, extra_settings
 
-    @staticmethod
-    def _log_plugin_diagnostic(diagnostic: PluginDiagnostic) -> None:
-        """Log plugin diagnostic records emitted during adapter creation."""
-        message = (
-            f"[ChannelManager][Plugin:{diagnostic.plugin_name}] "
-            f"{diagnostic.code}: {diagnostic.message}"
-        )
-        if diagnostic.level == "error":
-            logger.error(message)
-            return
-        if diagnostic.level == "info":
-            logger.info(message)
-            return
-        logger.warning(message)
-
     async def _connection_loop(
         self,
         connection: ManagedConnection,
         config: ChannelConfigModel,
     ) -> None:
         """Run the connection loop with automatic reconnection."""
-        while not connection._stop_event.is_set():
-            try:
-                await self._attempt_connect(connection, config)
+        try:
+            while not connection._stop_event.is_set():
+                try:
+                    await self._attempt_connect(connection, config)
 
-                if connection._stop_event.is_set():
+                    if connection._stop_event.is_set():
+                        break
+
+                    logger.warning(f"[ChannelManager] Connection lost: {config.id}")
+                    connection.status = ConnectionStatus.DISCONNECTED
+
+                except Exception as e:
+                    error_summary = f"Connection error: {type(e).__name__}"
+                    logger.error(
+                        "[ChannelManager] Connection error error_type=%s has_config_id=%s",
+                        type(e).__name__,
+                        bool(config.id),
+                    )
+                    connection.status = ConnectionStatus.ERROR
+                    connection.last_error = error_summary
+                    await self._update_db_status(config.id, "error", error_summary)
+
+                should_stop = await self._handle_reconnect_backoff(connection, config)
+                if should_stop:
                     break
+        finally:
+            await self._cleanup_connection(connection, config)
+            await self._release_generation_lease(connection)
 
-                logger.warning(f"[ChannelManager] Connection lost: {config.id}")
-                connection.status = ConnectionStatus.DISCONNECTED
-
-            except Exception as e:
-                error_summary = f"Connection error: {type(e).__name__}"
-                logger.error(
-                    "[ChannelManager] Connection error error_type=%s has_config_id=%s",
-                    type(e).__name__,
-                    bool(config.id),
-                )
-                connection.status = ConnectionStatus.ERROR
-                connection.last_error = error_summary
-                await self._update_db_status(config.id, "error", error_summary)
-
-            should_stop = await self._handle_reconnect_backoff(connection, config)
-            if should_stop:
-                break
-
-        await self._cleanup_connection(connection, config)
+    @staticmethod
+    async def _release_generation_lease(connection: ManagedConnection) -> None:
+        lease = connection._generation_lease
+        if lease is None:
+            return
+        connection._generation_lease = None
+        await lease.release()
 
     async def _attempt_connect(
         self,
@@ -634,17 +635,18 @@ class ChannelConnectionManager:
 
         logger.info(f"[ChannelManager] Removing connection {config_id}")
 
-        # Signal stop
         connection._stop_event.set()
-
-        # Wait for task to complete
-        if connection.task and not connection.task.done():
-            try:
-                await asyncio.wait_for(connection.task, timeout=5.0)
-            except TimeoutError:
-                connection.task.cancel()
-
-        del self._connections[config_id]
+        try:
+            if connection.task and not connection.task.done():
+                try:
+                    await asyncio.wait_for(connection.task, timeout=5.0)
+                except TimeoutError:
+                    connection.task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await connection.task
+        finally:
+            await self._release_generation_lease(connection)
+            _ = self._connections.pop(config_id, None)
 
         await self._update_db_status(config_id, "disconnected")
 
