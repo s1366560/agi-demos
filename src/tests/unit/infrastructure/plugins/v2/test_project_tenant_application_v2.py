@@ -17,7 +17,6 @@ from src.infrastructure.plugins.v2.project_tenant_services import (
     PROJECT_TENANT_APPLICATION_MODULE_V2,
     PROJECT_TENANT_APPLICATION_SERVICE_V2,
     PROJECT_TENANT_PROVIDER_MODULE_V2,
-    PROJECT_TENANT_SHADOW_MODULE_V2,
     ProjectTenantApplicationResolverV2,
 )
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -76,7 +75,6 @@ def test_application_resolver_is_an_independent_explicit_profile_entry() -> None
 
     assert PROJECT_TENANT_PROVIDER_MODULE_V2 in enabled_modules
     assert PROJECT_TENANT_APPLICATION_MODULE_V2 in enabled_modules
-    assert PROJECT_TENANT_SHADOW_MODULE_V2 in enabled_modules
     assert enabled_modules.index(PROJECT_TENANT_PROVIDER_MODULE_V2) < enabled_modules.index(
         PROJECT_TENANT_APPLICATION_MODULE_V2
     )
@@ -89,11 +87,7 @@ async def test_application_resolver_rejects_a_missing_provider_without_fallback(
         document,
         entries=tuple(
             replace(entry, enabled=False)
-            if entry.module_ref
-            in {
-                PROJECT_TENANT_PROVIDER_MODULE_V2,
-                PROJECT_TENANT_SHADOW_MODULE_V2,
-            }
+            if entry.module_ref == PROJECT_TENANT_PROVIDER_MODULE_V2
             else entry
             for entry in document.entries
         ),

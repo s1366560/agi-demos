@@ -155,9 +155,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
     ContainerServiceBinding(
         key="api_key_repository", group="auth", target="_auth.api_key_repository", inject=()
     ),
-    ContainerServiceBinding(
-        key="tenant_repository", group="auth", target="_auth.tenant_repository", inject=()
-    ),
     # --- task ---
     ContainerServiceBinding(
         key="task_repository", group="task", target="_task.task_repository", inject=()
@@ -184,15 +181,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         key="reflection_runner", group="task", target="reflection_runner", inject=("redis",)
     ),
     # --- workspace ---
-    ContainerServiceBinding(
-        key="project_repository", group="workspace", target="_project.project_repository", inject=()
-    ),
-    ContainerServiceBinding(
-        key="project_service", group="workspace", target="_project.project_service", inject=()
-    ),
-    ContainerServiceBinding(
-        key="tenant_service", group="workspace", target="_project.tenant_service", inject=()
-    ),
     ContainerServiceBinding(
         key="workspace_repository",
         group="workspace",

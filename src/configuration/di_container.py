@@ -21,12 +21,10 @@ from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
 from src.application.services.instance_template_service import InstanceTemplateService
 from src.application.services.memory_service import MemoryService
-from src.application.services.project_service import ProjectService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.search_service import SearchService
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
-from src.application.services.tenant_service import TenantService
 from src.application.services.topology_service import TopologyService
 from src.application.services.workflow_learner import WorkflowLearner
 from src.application.services.workspace_message_service import WorkspaceMessageService
@@ -94,9 +92,7 @@ from src.domain.ports.repositories.instance_template_repository import (
     InstanceTemplateRepository,
 )
 from src.domain.ports.repositories.memory_repository import MemoryRepository
-from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
-from src.domain.ports.repositories.tenant_repository import TenantRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
     BlackboardFileRepository,
@@ -216,7 +212,6 @@ class DIContainer:
         self._project = ProjectContainer(
             db=db,
             user_repository_factory=self._auth.user_repository,
-            tenant_repository_factory=self._auth.tenant_repository,
         )
         self._instance = InstanceContainer(db=db, redis_client=redis_client)
         # Reuse InfraContainer when provided (e.g. from with_db()) to preserve
@@ -326,9 +321,6 @@ class DIContainer:
 
     def api_key_repository(self) -> APIKeyRepository:
         return cast(APIKeyRepository, self._services.get_or_activate("api_key_repository"))
-
-    def tenant_repository(self) -> TenantRepository:
-        return cast(TenantRepository, self._services.get_or_activate("tenant_repository"))
 
     # === Memory Container delegates ===
 
@@ -553,15 +545,6 @@ class DIContainer:
         return runner
 
     # === Project Container delegates ===
-
-    def project_repository(self) -> ProjectRepository:
-        return cast(ProjectRepository, self._services.get_or_activate("project_repository"))
-
-    def project_service(self) -> ProjectService:
-        return cast(ProjectService, self._services.get_or_activate("project_service"))
-
-    def tenant_service(self) -> TenantService:
-        return cast(TenantService, self._services.get_or_activate("tenant_service"))
 
     def workspace_repository(self) -> WorkspaceRepository:
         return cast(WorkspaceRepository, self._services.get_or_activate("workspace_repository"))
