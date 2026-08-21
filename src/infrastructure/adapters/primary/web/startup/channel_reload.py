@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.channel_models import ChannelConfigModel
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
 )
-from src.infrastructure.agent.plugins.registry import PluginDiagnostic, get_plugin_registry
 from src.infrastructure.channels.connection_manager import (
     ChannelConnectionManager,
     ManagedConnection,
 )
+from src.infrastructure.plugins.v2.boundary import (
+    current_process_generation_host_v2,
+    pin_operation_context_v2,
+)
+from src.infrastructure.plugins.v2.channel_adapters import CHANNEL_RUNTIME_RELOAD_EVENT_V2
 
 logger = logging.getLogger(__name__)
 
@@ -143,19 +149,20 @@ def _ensure_utc(dt: datetime) -> datetime:
 
 
 async def _notify_plugin_reload_hooks(*, plan: ChannelReloadPlan, dry_run: bool) -> None:
-    """Send reload plan summary to registered plugin hooks."""
-    registry = get_plugin_registry()
-    diagnostics = await registry.notify_channel_reload(plan_summary=plan.summary(), dry_run=dry_run)
-    for diagnostic in diagnostics:
-        _log_plugin_diagnostic(diagnostic)
-
-
-def _log_plugin_diagnostic(diagnostic: PluginDiagnostic) -> None:
-    """Log plugin diagnostics emitted during channel reload hooks."""
-    message = (
-        f"[ChannelReload][Plugin:{diagnostic.plugin_name}] {diagnostic.code}: {diagnostic.message}"
-    )
-    if diagnostic.level == "error":
-        logger.error(message)
-        return
-    logger.warning(message)
+    """Dispatch the declared reload event through an independently leased V2 operation."""
+    host = current_process_generation_host_v2()
+    operation_id = f"channel-reload:{uuid.uuid4().hex}"
+    async with pin_operation_context_v2(
+        host,
+        operation_id=operation_id,
+        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+    ) as operation:
+        _ = await operation.dispatch(
+            CHANNEL_RUNTIME_RELOAD_EVENT_V2,
+            {
+                "dry_run": dry_run,
+                "generation_digest": operation.generation.digest,
+                "operation_id": operation.operation_id,
+                "plan": plan.summary(),
+            },
+        )

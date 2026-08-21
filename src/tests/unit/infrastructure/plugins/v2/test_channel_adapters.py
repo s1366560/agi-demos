@@ -12,10 +12,12 @@ import pytest
 
 from src.domain.model.channels.message import ChannelConfig
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.channel_adapters import (
     CHANNEL_ADAPTER_CATALOG_MODULE_V2,
     CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+    CHANNEL_RUNTIME_RELOAD_EVENT_V2,
     FEISHU_CHANNEL_ADAPTER_MODULE_V2,
     ChannelAdapterBuildContextV2,
     ChannelAdapterCatalogV2,
@@ -145,6 +147,41 @@ async def test_feishu_adapter_is_resolved_from_pinned_generation() -> None:
         assert isinstance(adapter, _Adapter)
     finally:
         await host.close()
+
+
+@pytest.mark.unit
+async def test_channel_reload_event_contract_rejects_invalid_payload() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+    assert publication.accepted is True
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="channel-reload:test",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            payload = {
+                "dry_run": False,
+                "generation_digest": operation.generation.digest,
+                "operation_id": operation.operation_id,
+                "plan": {"add": 1, "remove": 0, "restart": 0, "unchanged": 2},
+            }
+            assert await operation.dispatch(CHANNEL_RUNTIME_RELOAD_EVENT_V2, payload) == ()
+
+            with pytest.raises(RuntimeV2Error) as error:
+                await operation.dispatch(
+                    CHANNEL_RUNTIME_RELOAD_EVENT_V2,
+                    {**payload, "plan": {"add": -1}},
+                )
+    finally:
+        await host.close()
+
+    assert error.value.code == "invalid_event_payload"
 
 
 @pytest.mark.unit

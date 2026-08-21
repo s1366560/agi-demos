@@ -219,7 +219,41 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [
+            {
+              "event": "channel.runtime.reload",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["dry_run", "generation_digest", "operation_id", "plan"],
+                "properties": {
+                  "dry_run": { "type": "boolean" },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "plan": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["add", "remove", "restart", "unchanged"],
+                    "properties": {
+                      "add": { "type": "integer", "minimum": 0 },
+                      "remove": { "type": "integer", "minimum": 0 },
+                      "restart": { "type": "integer", "minimum": 0 },
+                      "unchanged": { "type": "integer", "minimum": 0 }
+                    }
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -230,9 +264,9 @@
           }
         }
       },
-      "contract_digest": "sha256:aecfca5b66d87cfead065d18eeae8c3bd5fbae422af237b80303c614fe658d3b",
+      "contract_digest": "sha256:bd5d1b921471f3677edc995467879a454ddbc9b7230c10c033489b75a26dc95e",
       "artifact": {
-        "digest": "sha256:36aa77ce687a1cd349b3babf2c5acf9e875ed56661d30e412189f29e30b1f1dc",
+        "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },
@@ -265,7 +299,7 @@
       },
       "contract_digest": "sha256:b510246f29c7004d8cbf55f0af1515f1e4a506485c3ae9fa21217a12f89e582c",
       "artifact": {
-        "digest": "sha256:36aa77ce687a1cd349b3babf2c5acf9e875ed56661d30e412189f29e30b1f1dc",
+        "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },

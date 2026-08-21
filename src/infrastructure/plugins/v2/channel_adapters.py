@@ -16,6 +16,7 @@ CHANNEL_ADAPTER_CATALOG_MODULE_V2 = "builtin://memstack/channel/adapter-catalog"
 FEISHU_CHANNEL_ADAPTER_MODULE_V2 = "builtin://memstack/channel/feishu-adapter"
 CHANNEL_ADAPTER_CATALOG_SERVICE_V2 = "service:channel-adapter-catalog"
 CHANNEL_ADAPTER_RESOLVER_SERVICE_V2 = "service:channel-adapter-resolver"
+CHANNEL_RUNTIME_RELOAD_EVENT_V2 = "channel.runtime.reload"
 
 type ChannelAdapterDisposerV2 = Callable[[], None | Awaitable[None]]
 type ChannelAdapterFactoryV2 = Callable[
@@ -345,6 +346,7 @@ __all__ = [
     "CHANNEL_ADAPTER_CATALOG_MODULE_V2",
     "CHANNEL_ADAPTER_CATALOG_SERVICE_V2",
     "CHANNEL_ADAPTER_RESOLVER_SERVICE_V2",
+    "CHANNEL_RUNTIME_RELOAD_EVENT_V2",
     "FEISHU_CHANNEL_ADAPTER_MODULE_V2",
     "ChannelAdapterBuildContextV2",
     "ChannelAdapterCatalogProtocolV2",
