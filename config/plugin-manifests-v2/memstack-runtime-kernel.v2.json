@@ -16,7 +16,180 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [
+            {
+              "event": "agent.session.start",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "agent.before_request",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "tools.after_execute",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id",
+                  "tool_name",
+                  "tool_result_event_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "tool_name": { "type": "string", "minLength": 1 },
+                  "tool_result_event_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          ],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -27,7 +200,7 @@
           }
         }
       },
-      "contract_digest": "sha256:4252d589a33fc7cea6ababb8703c365ea8fc56cdfa825ed58b84ce5c6e798979",
+      "contract_digest": "sha256:68593275df0d77f819d15d2b636b66d7bfc9a73d5d0321acd7659c15763ee60a",
       "artifact": {
         "digest": "sha256:5b577e0c8be69c0807c332bdbbeddf6e6e40d92a1127c599b734aec3da67a17f",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -283,6 +456,407 @@
       "contract_digest": "sha256:7f7ceeb21dcef0999b7fd0d38d675e52eb41f0fbafb37e0165e8a66751ddbe1b",
       "artifact": {
         "digest": "sha256:26a9f8ac163ef161009d7138809ef602fda88585a9bb404677d797b105158dc6",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/sisyphus-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.sisyphus_runtime:_apply_sisyphus_runtime_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": { "provides": [], "requires": [] },
+        "events": {
+          "emits": [],
+          "handles": [
+            {
+              "event": "agent.session.start",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "agent.before_request",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "tools.after_execute",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id",
+                  "tool_name",
+                  "tool_result_event_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "tool_name": { "type": "string", "minLength": 1 },
+                  "tool_result_event_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          ]
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "require_direct_outcome",
+            "response_reminder",
+            "startup_reminder",
+            "tool_followup_reminder"
+          ],
+          "properties": {
+            "require_direct_outcome": { "type": "boolean" },
+            "response_reminder": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "startup_reminder": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "tool_followup_reminder": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3fa2f9777657d4bd46fd2b1c51373968b1169bece73857996b81da3d6b22f432",
+      "artifact": {
+        "digest": "sha256:a00f21b47f39c8cb7933a672720a501314b848d143574768c3c0b69122bc37a9",
+        "source": "package://builtin/memstack-runtime-kernel"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/workspace-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_runtime:_apply_workspace_runtime_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": { "provides": [], "requires": [] },
+        "events": {
+          "emits": [],
+          "handles": [
+            {
+              "event": "agent.session.start",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "agent.before_request",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            {
+              "event": "tools.after_execute",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "event_id",
+                  "generation_digest",
+                  "operation_id",
+                  "project_id",
+                  "session_id",
+                  "tenant_id",
+                  "tool_name",
+                  "tool_result_event_id"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "event_id": { "type": "string", "minLength": 1 },
+                  "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "operation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "session_id": { "type": "string", "minLength": 1 },
+                  "task_authority": { "const": "workspace", "type": "string" },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "tool_name": { "type": "string", "minLength": 1 },
+                  "tool_result_event_id": { "type": "string", "minLength": 1 },
+                  "workspace_id": { "type": "string", "minLength": 1 },
+                  "workspace_session_role": {
+                    "type": "string",
+                    "enum": ["leader", "worker", "contract"]
+                  }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": [
+                  "response_instructions",
+                  "session_instructions",
+                  "source_entry_id"
+                ],
+                "properties": {
+                  "response_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "session_instructions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                  },
+                  "source_entry_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          ]
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:c6576d3b822c59fb00fa918dcc67a0c5e6faaac8b5e6d6d43ebf3a0b8c888330",
+      "artifact": {
+        "digest": "sha256:cd98598499359fc6e5cbad9516c5f5f23b89180241c9e7a401d0cae4ed83b8de",
         "source": "package://builtin/memstack-runtime-kernel"
       }
     }
