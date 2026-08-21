@@ -532,8 +532,6 @@ class SessionProcessor:
     ) -> dict[str, Any]:
         """Fire a plugin hook, log diagnostics, and return the resulting payload."""
         effective_payload = dict(payload or {})
-        if self._plugin_registry is None:
-            return effective_payload
         if self._plugin_event_dispatcher is not None:
             try:
                 result = await self._plugin_event_dispatcher.dispatch(

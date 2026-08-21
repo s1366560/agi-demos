@@ -300,3 +300,20 @@ class TestRequestScopedConfigSeamForwarding:
 
         assert new_config.provider_id == "zai_coding"
         assert new_config.loop_resolver is resolver
+
+    def test_migrated_processor_hooks_use_pinned_v2_dispatcher(self):
+        """The request copy must not expose the V1 registry to the main processor."""
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            PinnedAgentRuntimeDispatcherV2,
+        )
+
+        agent = ReActAgent(model="test-model", tools={})
+
+        new_config = agent._stream_create_processor_config(
+            agent.config,
+            ToolSelectionContext(),
+        )
+
+        assert new_config.plugin_registry is None
+        assert isinstance(new_config.plugin_event_dispatcher, PinnedAgentRuntimeDispatcherV2)

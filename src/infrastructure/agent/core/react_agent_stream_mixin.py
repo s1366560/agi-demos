@@ -932,6 +932,10 @@ class StreamMixin:
         selection_context: ToolSelectionContext,
     ) -> ProcessorConfig:
         """Create request-scoped processor config, optionally with dynamic tool provider."""
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            PinnedAgentRuntimeDispatcherV2,
+        )
+
         from .processor import ProcessorConfig as _ProcessorConfig
 
         tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
@@ -967,8 +971,10 @@ class StreamMixin:
             max_cost_per_request=config.max_cost_per_request,
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
-            plugin_registry=config.plugin_registry,
-            plugin_event_dispatcher=config.plugin_event_dispatcher,
+            plugin_registry=None,
+            plugin_event_dispatcher=PinnedAgentRuntimeDispatcherV2(
+                fallback=config.plugin_event_dispatcher,
+            ),
             runtime_hook_overrides=[dict(item) for item in config.runtime_hook_overrides],
             runtime_context=dict(config.runtime_context),
             tool_provider=tool_provider,
