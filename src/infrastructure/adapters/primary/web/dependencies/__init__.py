@@ -1,8 +1,10 @@
 # FastAPI dependencies for authentication
 
+from __future__ import annotations
+
 import logging
-from inspect import isawaitable
-from typing import cast
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import Protocol, cast
 
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -34,23 +36,42 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project
-from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
-    SqlGraphStoreRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
-    SqlRetrievalStoreRepository,
-)
-from src.infrastructure.graph.backend_factory import build_default_factory
-from src.infrastructure.graph.registry import (
-    get_env_default_store,
-    get_graph_backend_registry,
-)
-from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
-from src.infrastructure.retrieval.registry import (
-    get_env_default_retrieval_store,
-    get_retrieval_backend_registry,
-)
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.graph.registry import get_env_default_store
+from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
+from src.infrastructure.retrieval.registry import get_env_default_retrieval_store
+
+
+class _BackendStoreAuthorityProtocolV2(Protocol):
+    """Cycle-free structural view of the canonical backend-store authority."""
+
+    db: AsyncSession
+    services: BackendStoreServicesV2
+
+
+async def _backend_store_authority_dependency_proxy_v2(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[_BackendStoreAuthorityProtocolV2]:
+    """Lazily enter the canonical authority without an import cycle."""
+    from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
+        backend_store_authority_dependency_v2,
+    )
+
+    dependency = cast(
+        AsyncGenerator[_BackendStoreAuthorityProtocolV2, None],
+        backend_store_authority_dependency_v2(
+            request=request,
+            current_user=current_user,
+            db=db,
+        ),
+    )
+    try:
+        yield await anext(dependency)
+    finally:
+        await dependency.aclose()
+
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +146,9 @@ def _request_project_id(request: Request) -> str | None:
 
 async def get_graph_store(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    backend_store: _BackendStoreAuthorityProtocolV2 = Depends(
+        _backend_store_authority_dependency_proxy_v2
+    ),
 ) -> GraphStorePort | None:
     """Get the ``GraphStorePort`` (pluggable graph backend) from app state.
 
@@ -133,34 +156,22 @@ async def get_graph_store(
     ``graph_store_id`` through the registry. Null bindings fall back to the env
     default singleton registered at startup.
     """
-    try:
-        project_id = _request_project_id(request)
-        if project_id:
-            result = await db.execute(
-                refresh_select_statement(
-                    select(Project.graph_store_id).where(Project.id == project_id)
-                )
+    project_id = _request_project_id(request)
+    if project_id:
+        result = await backend_store.db.execute(
+            refresh_select_statement(
+                select(Project.tenant_id, Project.graph_store_id).where(Project.id == project_id)
             )
-            store_id = result.scalar_one_or_none()
-            if store_id:
-                registry = get_graph_backend_registry()
-                registered = registry.get_by_store_id(store_id)
-                if registered is not None:
-                    return cast(GraphStorePort, registered)
-                tenant_result = await db.execute(
-                    refresh_select_statement(
-                        select(Project.tenant_id).where(Project.id == project_id)
-                    )
-                )
-                tenant_id = tenant_result.scalar_one_or_none()
-                if tenant_id:
-                    graph_store = await SqlGraphStoreRepository(db).find_by_id(tenant_id, store_id)
-                    if graph_store is not None:
-                        built = build_default_factory().build(graph_store)
-                        if isawaitable(built):
-                            built = await built
-                        registry.register_store(store_id, built)
-                        return cast(GraphStorePort, built)
+        )
+        row = result.first()
+        tenant_id = str(row[0]) if row is not None else None
+        store_id = str(row[1]) if row is not None and row[1] else None
+        if tenant_id and store_id:
+            return await backend_store.services.graph_service.resolve_backend(
+                tenant_id,
+                store_id,
+            )
+    try:
         default_store = get_env_default_store()
         if default_store is not None:
             return cast(GraphStorePort, default_store)
@@ -173,36 +184,29 @@ async def get_graph_store(
 
 async def get_retrieval_store(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    backend_store: _BackendStoreAuthorityProtocolV2 = Depends(
+        _backend_store_authority_dependency_proxy_v2
+    ),
 ) -> RetrievalStorePort | None:
     """Resolve the project-bound retrieval backend, or env default."""
-    try:
-        project_id = _request_project_id(request)
-        if project_id:
-            result = await db.execute(
-                refresh_select_statement(
-                    select(Project.tenant_id, Project.retrieval_store_id).where(
-                        Project.id == project_id
-                    )
+    project_id = _request_project_id(request)
+    if project_id:
+        result = await backend_store.db.execute(
+            refresh_select_statement(
+                select(Project.tenant_id, Project.retrieval_store_id).where(
+                    Project.id == project_id
                 )
             )
-            row = result.first()
-            row_data = row._mapping if row else {}
-            retrieval_store_id = row_data.get("retrieval_store_id")
-            tenant_id = row_data.get("tenant_id")
-            if retrieval_store_id and tenant_id:
-                registry = get_retrieval_backend_registry()
-                registered = registry.get_by_store_id(retrieval_store_id)
-                if registered is not None:
-                    return cast(RetrievalStorePort, registered)
-                retrieval_store = await SqlRetrievalStoreRepository(db).find_by_id(
-                    tenant_id,
-                    retrieval_store_id,
-                )
-                if retrieval_store is not None:
-                    built = build_default_retrieval_factory().build(retrieval_store)
-                    registry.register_store(retrieval_store_id, built)
-                    return cast(RetrievalStorePort, built)
+        )
+        row = result.first()
+        tenant_id = str(row[0]) if row is not None else None
+        retrieval_store_id = str(row[1]) if row is not None and row[1] else None
+        if retrieval_store_id and tenant_id:
+            return await backend_store.services.retrieval_service.resolve_backend(
+                tenant_id,
+                retrieval_store_id,
+            )
+    try:
         default_store = get_env_default_retrieval_store()
         return cast(RetrievalStorePort | None, default_store)
     except Exception:

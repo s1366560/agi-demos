@@ -180,3 +180,35 @@ class TestRequiredFields:
 
     def test_neo4j_ok_with_uri(self) -> None:
         _validate_required_fields("neo4j", {"uri": "bolt://x"})
+
+
+@pytest.mark.unit
+async def test_resolve_backend_returns_cached_store_without_rebuilding() -> None:
+    repo, registry, factory = _mocks()
+    backend = Mock()
+    registry.get_by_store_id.return_value = backend
+    service = GraphStoreService(repo, registry, factory)
+
+    resolved = await service.resolve_backend("tenant-1", "store-1")
+
+    assert resolved is backend
+    repo.find_by_id.assert_not_awaited()
+    factory.build.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_resolve_backend_builds_and_registers_persisted_store() -> None:
+    repo, registry, factory = _mocks()
+    store = _make_store()
+    backend = Mock()
+    repo.find_by_id.return_value = store
+    registry.get_by_store_id.return_value = None
+    factory.build.return_value = backend
+    service = GraphStoreService(repo, registry, factory)
+
+    resolved = await service.resolve_backend("tenant-1", "store-1")
+
+    assert resolved is backend
+    repo.find_by_id.assert_awaited_once_with("tenant-1", "store-1")
+    factory.build.assert_called_once_with(store)
+    registry.register_store.assert_called_once_with("store-1", backend)

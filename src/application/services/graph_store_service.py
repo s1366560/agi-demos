@@ -16,12 +16,13 @@ import logging
 import socket
 from dataclasses import dataclass
 from inspect import isawaitable
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from src.domain.model.graph_store.graph_store import GraphStore
 from src.domain.ports.repositories.graph_store_repository import GraphStoreRepository
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.shared_kernel import DomainException
 from src.infrastructure.graph.registry import (
     VALID_GRAPH_ENGINE_TYPES,
@@ -240,6 +241,18 @@ class GraphStoreService:
         """Fetch a store by id (raises GraphStoreNotFound if absent)."""
         return await self._require_store(tenant_id, store_id)
 
+    async def resolve_backend(self, tenant_id: str, store_id: str) -> GraphStorePort:
+        """Resolve a persisted store to a cached or newly built runtime backend."""
+        registered = self._registry.get_by_store_id(store_id)
+        if registered is not None:
+            return cast(GraphStorePort, registered)
+        store = await self._require_store(tenant_id, store_id)
+        built = self._factory.build(store)
+        if isawaitable(built):
+            built = await built
+        self._registry.register_store(store_id, built)
+        return cast(GraphStorePort, built)
+
     async def list_stores(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[GraphStore]:
@@ -292,9 +305,7 @@ class GraphStoreService:
     # Connection testing
     # ------------------------------------------------------------------
 
-    async def test_connection(
-        self, *, engine_type: str, connection_config: dict[str, Any]
-    ) -> str:
+    async def test_connection(self, *, engine_type: str, connection_config: dict[str, Any]) -> str:
         """Validate + probe a connection config; return detected server version.
 
         Performs an SSRF guard on the resolved host before building a backend.
@@ -386,13 +397,7 @@ def _ssrf_guard(config: dict[str, Any]) -> None:
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-        ):
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             raise GraphStoreValidationError(
                 f"Refused connection to non-public host {host!r} ({addr})"
             )

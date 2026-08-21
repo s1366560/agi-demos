@@ -7,7 +7,7 @@ import logging
 import os
 import socket
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -16,6 +16,7 @@ from src.domain.model.retrieval_store import RetrievalStore
 from src.domain.ports.repositories.retrieval_store_repository import (
     RetrievalStoreRepository,
 )
+from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.domain.shared_kernel import DomainException
 from src.infrastructure.retrieval.registry import (
     ENGINE_MEMSTACK_PGVECTOR,
@@ -108,7 +109,12 @@ RETRIEVAL_STORE_TYPES: list[dict[str, Any]] = [
             {"name": "knowledge_base_ids", "type": "array", "required": False},
         ],
         "index_fields": [
-            {"name": "search_path", "type": "string", "required": False, "default": "/knowledge-search"},
+            {
+                "name": "search_path",
+                "type": "string",
+                "required": False,
+                "default": "/knowledge-search",
+            },
             {"name": "index_path", "type": "string", "required": False},
         ],
     },
@@ -121,7 +127,12 @@ RETRIEVAL_STORE_TYPES: list[dict[str, Any]] = [
         "connection_fields": [],
         "index_fields": [],
     },
-    {"type": "opensearch", "display_name": "OpenSearch", "connection_fields": [], "index_fields": []},
+    {
+        "type": "opensearch",
+        "display_name": "OpenSearch",
+        "connection_fields": [],
+        "index_fields": [],
+    },
 ]
 
 
@@ -196,6 +207,16 @@ class RetrievalStoreService:
     async def get_store(self, tenant_id: str, store_id: str) -> RetrievalStore:
         return await self._require_store(tenant_id, store_id)
 
+    async def resolve_backend(self, tenant_id: str, store_id: str) -> RetrievalStorePort:
+        """Resolve a persisted store to a cached or newly built runtime backend."""
+        registered = self._registry.get_by_store_id(store_id)
+        if registered is not None:
+            return cast(RetrievalStorePort, registered)
+        store = await self._require_store(tenant_id, store_id)
+        built = self._factory.build(store)
+        self._registry.register_store(store_id, built)
+        return cast(RetrievalStorePort, built)
+
     async def list_stores(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[RetrievalStore]:
@@ -261,9 +282,7 @@ class RetrievalStoreService:
         await self._repo.soft_delete(tenant_id, store_id)
         self._registry.unregister_store(store_id)
 
-    async def test_connection(
-        self, *, engine_type: str, connection_config: dict[str, Any]
-    ) -> str:
+    async def test_connection(self, *, engine_type: str, connection_config: dict[str, Any]) -> str:
         engine_type = (engine_type or ENGINE_MEMSTACK_PGVECTOR).lower()
         if engine_type not in VALID_RETRIEVAL_ENGINE_TYPES:
             raise RetrievalStoreValidationError(f"Unsupported engine type: {engine_type!r}")
@@ -384,13 +403,7 @@ def _ssrf_guard(config: dict[str, Any]) -> None:
             continue
         if _is_private_target_allowed(host, addr, ip):
             continue
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-        ):
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             raise RetrievalStoreValidationError(
                 f"Refused connection to non-public host {host!r} ({addr})"
             )
