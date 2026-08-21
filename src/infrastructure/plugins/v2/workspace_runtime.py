@@ -17,7 +17,16 @@ from .agent_events import (
 )
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
-WORKSPACE_RUNTIME_MODULE_V2: Final[str] = "builtin://memstack/agent/workspace-runtime"
+WORKSPACE_SESSION_START_MODULE_V2: Final[str] = "builtin://memstack/agent/workspace/session-start"
+WORKSPACE_BEFORE_REQUEST_MODULE_V2: Final[str] = "builtin://memstack/agent/workspace/before-request"
+WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2: Final[str] = (
+    "builtin://memstack/agent/workspace/after-tool-execute"
+)
+WORKSPACE_RUNTIME_MODULES_V2: Final[tuple[str, ...]] = (
+    WORKSPACE_SESSION_START_MODULE_V2,
+    WORKSPACE_BEFORE_REQUEST_MODULE_V2,
+    WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2,
+)
 
 _SESSION_INSTRUCTION = (
     "Workspace runtime is active. Treat this turn as part of a durable task attempt: use real "
@@ -68,7 +77,7 @@ def _contribution(
     }
 
 
-def _apply_workspace_runtime_v2(
+def _apply_workspace_session_start_v2(
     context: ContextV2,
     _config: Mapping[str, Any],
 ) -> None:
@@ -82,6 +91,13 @@ def _apply_workspace_runtime_v2(
             instructions.append(_WORKER_TASK_TREE_INSTRUCTION)
         return _contribution(context.entry_id, session=tuple(instructions))
 
+    _ = context.on(AGENT_SESSION_START_EVENT_V2, on_session_start)
+
+
+def _apply_workspace_before_request_v2(
+    context: ContextV2,
+    _config: Mapping[str, Any],
+) -> None:
     def before_request(
         payload: Mapping[str, object],
     ) -> dict[str, object] | None:
@@ -89,6 +105,13 @@ def _apply_workspace_runtime_v2(
             return None
         return _contribution(context.entry_id, response=(_RESPONSE_INSTRUCTION,))
 
+    _ = context.on(AGENT_BEFORE_REQUEST_EVENT_V2, before_request)
+
+
+def _apply_workspace_after_tool_execute_v2(
+    context: ContextV2,
+    _config: Mapping[str, Any],
+) -> None:
     def after_tool_execute(
         payload: Mapping[str, object],
     ) -> dict[str, object] | None:
@@ -99,18 +122,34 @@ def _apply_workspace_runtime_v2(
             return None
         return _contribution(context.entry_id, response=(_TOOL_FOLLOWUP_INSTRUCTION,))
 
-    _ = context.on(AGENT_SESSION_START_EVENT_V2, on_session_start)
-    _ = context.on(AGENT_BEFORE_REQUEST_EVENT_V2, before_request)
     _ = context.on(TOOLS_AFTER_EXECUTE_EVENT_V2, after_tool_execute)
 
 
-def workspace_runtime_definition_v2() -> PluginDefinitionV2:
-    """Return the trusted Workspace module bound to its generated contract."""
-    return PluginDefinitionV2(
-        module_ref=WORKSPACE_RUNTIME_MODULE_V2,
-        contract_digest=generated_contract_digest_v2(WORKSPACE_RUNTIME_MODULE_V2),
-        apply=_apply_workspace_runtime_v2,
+def workspace_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+    """Return one trusted definition for each independently ordered Workspace hook."""
+    return (
+        PluginDefinitionV2(
+            module_ref=WORKSPACE_SESSION_START_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(WORKSPACE_SESSION_START_MODULE_V2),
+            apply=_apply_workspace_session_start_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=WORKSPACE_BEFORE_REQUEST_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(WORKSPACE_BEFORE_REQUEST_MODULE_V2),
+            apply=_apply_workspace_before_request_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2),
+            apply=_apply_workspace_after_tool_execute_v2,
+        ),
     )
 
 
-__all__ = ["WORKSPACE_RUNTIME_MODULE_V2", "workspace_runtime_definition_v2"]
+__all__ = [
+    "WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2",
+    "WORKSPACE_BEFORE_REQUEST_MODULE_V2",
+    "WORKSPACE_RUNTIME_MODULES_V2",
+    "WORKSPACE_SESSION_START_MODULE_V2",
+    "workspace_runtime_definitions_v2",
+]

@@ -29,8 +29,18 @@ from src.infrastructure.plugins.v2.runtime import (
     RuntimeGenerationV2,
     RuntimeV2Error,
 )
-from src.infrastructure.plugins.v2.sisyphus_runtime import SISYPHUS_RUNTIME_MODULE_V2
-from src.infrastructure.plugins.v2.workspace_runtime import WORKSPACE_RUNTIME_MODULE_V2
+from src.infrastructure.plugins.v2.sisyphus_runtime import (
+    SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2,
+    SISYPHUS_BEFORE_REQUEST_MODULE_V2,
+    SISYPHUS_RUNTIME_MODULES_V2,
+    SISYPHUS_SESSION_START_MODULE_V2,
+)
+from src.infrastructure.plugins.v2.workspace_runtime import (
+    WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2,
+    WORKSPACE_BEFORE_REQUEST_MODULE_V2,
+    WORKSPACE_RUNTIME_MODULES_V2,
+    WORKSPACE_SESSION_START_MODULE_V2,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -114,10 +124,17 @@ async def test_default_profile_orders_sisyphus_before_workspace_handlers() -> No
     runtime_modules = [
         entry.module_ref
         for entry in document.entries
-        if entry.module_ref in {SISYPHUS_RUNTIME_MODULE_V2, WORKSPACE_RUNTIME_MODULE_V2}
+        if entry.module_ref in {*SISYPHUS_RUNTIME_MODULES_V2, *WORKSPACE_RUNTIME_MODULES_V2}
     ]
 
-    assert runtime_modules == [SISYPHUS_RUNTIME_MODULE_V2, WORKSPACE_RUNTIME_MODULE_V2]
+    assert runtime_modules == [
+        SISYPHUS_SESSION_START_MODULE_V2,
+        WORKSPACE_SESSION_START_MODULE_V2,
+        SISYPHUS_BEFORE_REQUEST_MODULE_V2,
+        WORKSPACE_BEFORE_REQUEST_MODULE_V2,
+        SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2,
+        WORKSPACE_AFTER_TOOL_EXECUTE_MODULE_V2,
+    ]
 
     generation = await _stage(document, generation=1)
     operation = OperationContextV2(
@@ -132,14 +149,14 @@ async def test_default_profile_orders_sisyphus_before_workspace_handlers() -> No
         )
 
     assert [result["source_entry_id"] for result in results] == [
-        "builtin-sisyphus-runtime",
-        "builtin-workspace-runtime",
+        "builtin-sisyphus-session-start",
+        "builtin-workspace-session-start",
     ]
     assert results[0]["session_instructions"] == [
         next(
             entry.config["startup_reminder"]
             for entry in document.entries
-            if entry.module_ref == SISYPHUS_RUNTIME_MODULE_V2
+            if entry.module_ref == SISYPHUS_SESSION_START_MODULE_V2
         )
     ]
     assert len(results[1]["session_instructions"]) == 2
@@ -170,15 +187,15 @@ async def test_runtime_hook_modules_return_typed_instruction_contributions() -> 
         )
 
     assert [result["source_entry_id"] for result in before_request] == [
-        "builtin-sisyphus-runtime",
-        "builtin-workspace-runtime",
+        "builtin-sisyphus-before-request",
+        "builtin-workspace-before-request",
     ]
     assert all(result["session_instructions"] == [] for result in before_request)
     assert len(before_request[0]["response_instructions"]) == 2
     assert len(before_request[1]["response_instructions"]) == 1
     assert [result["source_entry_id"] for result in after_tool] == [
-        "builtin-sisyphus-runtime",
-        "builtin-workspace-runtime",
+        "builtin-sisyphus-after-tool-execute",
+        "builtin-workspace-after-tool-execute",
     ]
     assert all(
         set(result)
@@ -231,7 +248,7 @@ async def test_runtime_hook_events_reject_opaque_runtime_or_tool_objects(
 async def test_disabling_sisyphus_entry_removes_its_handlers_without_fallback() -> None:
     document = _replace_entry(
         _document(),
-        SISYPHUS_RUNTIME_MODULE_V2,
+        SISYPHUS_SESSION_START_MODULE_V2,
         enabled=False,
     )
     generation = await _stage(document, generation=4)
@@ -247,8 +264,13 @@ async def test_disabling_sisyphus_entry_removes_its_handlers_without_fallback() 
             _event_payload(generation, event_id="session-start-disabled"),
         )
 
-    assert [result["source_entry_id"] for result in results] == ["builtin-workspace-runtime"]
-    assert all(fiber.entry.module_ref != SISYPHUS_RUNTIME_MODULE_V2 for fiber in generation.fibers)
+    assert [result["source_entry_id"] for result in results] == ["builtin-workspace-session-start"]
+    assert all(
+        fiber.entry.module_ref != SISYPHUS_SESSION_START_MODULE_V2 for fiber in generation.fibers
+    )
+    assert any(
+        fiber.entry.module_ref == SISYPHUS_BEFORE_REQUEST_MODULE_V2 for fiber in generation.fibers
+    )
     await generation.dispose()
 
 
@@ -256,8 +278,8 @@ async def test_disabling_sisyphus_entry_removes_its_handlers_without_fallback() 
 @pytest.mark.parametrize(
     ("module_ref", "config"),
     [
-        (SISYPHUS_RUNTIME_MODULE_V2, {"require_direct_outcome": True}),
-        (WORKSPACE_RUNTIME_MODULE_V2, {"unexpected": True}),
+        (SISYPHUS_BEFORE_REQUEST_MODULE_V2, {"require_direct_outcome": True}),
+        (WORKSPACE_BEFORE_REQUEST_MODULE_V2, {"unexpected": True}),
     ],
 )
 async def test_runtime_hook_config_schema_rejects_before_activation(
@@ -277,7 +299,7 @@ async def test_retired_generation_keeps_then_disposes_its_hook_listeners() -> No
     first = await _stage(_document(), generation=6)
     second_document = _replace_entry(
         _document(),
-        SISYPHUS_RUNTIME_MODULE_V2,
+        SISYPHUS_SESSION_START_MODULE_V2,
         enabled=False,
     )
     second = await _stage(second_document, generation=7)
@@ -287,7 +309,7 @@ async def test_retired_generation_keeps_then_disposes_its_hook_listeners() -> No
 
     await manager.publish(second)
     new_lease = await manager.acquire()
-    assert _fiber(first, SISYPHUS_RUNTIME_MODULE_V2).phase is FiberPhaseV2.ACTIVE
+    assert _fiber(first, SISYPHUS_SESSION_START_MODULE_V2).phase is FiberPhaseV2.ACTIVE
 
     old_operation = OperationContextV2(
         generation=old_lease.generation,
@@ -310,16 +332,23 @@ async def test_retired_generation_keeps_then_disposes_its_hook_listeners() -> No
         )
 
     assert [result["source_entry_id"] for result in old_results] == [
-        "builtin-sisyphus-runtime",
-        "builtin-workspace-runtime",
+        "builtin-sisyphus-session-start",
+        "builtin-workspace-session-start",
     ]
-    assert [result["source_entry_id"] for result in new_results] == ["builtin-workspace-runtime"]
+    assert [result["source_entry_id"] for result in new_results] == [
+        "builtin-workspace-session-start"
+    ]
 
     await old_lease.release()
-    assert _fiber(first, SISYPHUS_RUNTIME_MODULE_V2).phase is FiberPhaseV2.DISPOSED
+    assert _fiber(first, SISYPHUS_SESSION_START_MODULE_V2).phase is FiberPhaseV2.DISPOSED
     assert all(
         diagnostic.label.startswith("event:")
-        for diagnostic in _fiber(first, SISYPHUS_RUNTIME_MODULE_V2).diagnostics().effects
+        for diagnostic in _fiber(
+            first,
+            SISYPHUS_SESSION_START_MODULE_V2,
+        )
+        .diagnostics()
+        .effects
     )
     await new_lease.release()
     await manager.close()

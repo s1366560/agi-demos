@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any, Final
 
 from .agent_events import (
@@ -13,7 +12,16 @@ from .agent_events import (
 )
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
-SISYPHUS_RUNTIME_MODULE_V2: Final[str] = "builtin://memstack/agent/sisyphus-runtime"
+SISYPHUS_SESSION_START_MODULE_V2: Final[str] = "builtin://memstack/agent/sisyphus/session-start"
+SISYPHUS_BEFORE_REQUEST_MODULE_V2: Final[str] = "builtin://memstack/agent/sisyphus/before-request"
+SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2: Final[str] = (
+    "builtin://memstack/agent/sisyphus/after-tool-execute"
+)
+SISYPHUS_RUNTIME_MODULES_V2: Final[tuple[str, ...]] = (
+    SISYPHUS_SESSION_START_MODULE_V2,
+    SISYPHUS_BEFORE_REQUEST_MODULE_V2,
+    SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2,
+)
 
 _FOLLOWUP_TOOLS = frozenset(
     {
@@ -34,33 +42,18 @@ _DELEGATION_FOLLOWUP = (
 )
 
 
-@dataclass(frozen=True, kw_only=True)
-class _SisyphusSettingsV2:
-    startup_reminder: str
-    response_reminder: str
-    tool_followup_reminder: str
-    require_direct_outcome: bool
+def _string_setting(config: Mapping[str, Any], key: str) -> str:
+    value = config.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"sisyphus {key} must be a string")
+    return value
 
 
-def _settings(config: Mapping[str, Any]) -> _SisyphusSettingsV2:
-    startup_reminder = config.get("startup_reminder")
-    response_reminder = config.get("response_reminder")
-    tool_followup_reminder = config.get("tool_followup_reminder")
-    require_direct_outcome = config.get("require_direct_outcome")
-    if not isinstance(startup_reminder, str):
-        raise ValueError("sisyphus startup_reminder must be a string")
-    if not isinstance(response_reminder, str):
-        raise ValueError("sisyphus response_reminder must be a string")
-    if not isinstance(tool_followup_reminder, str):
-        raise ValueError("sisyphus tool_followup_reminder must be a string")
-    if not isinstance(require_direct_outcome, bool):
-        raise ValueError("sisyphus require_direct_outcome must be a boolean")
-    return _SisyphusSettingsV2(
-        startup_reminder=startup_reminder,
-        response_reminder=response_reminder,
-        tool_followup_reminder=tool_followup_reminder,
-        require_direct_outcome=require_direct_outcome,
-    )
+def _boolean_setting(config: Mapping[str, Any], key: str) -> bool:
+    value = config.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"sisyphus {key} must be a boolean")
+    return value
 
 
 def _contribution(
@@ -76,20 +69,39 @@ def _contribution(
     }
 
 
-def _apply_sisyphus_runtime_v2(
+def _apply_sisyphus_session_start_v2(
     context: ContextV2,
     config: Mapping[str, Any],
 ) -> None:
-    settings = _settings(config)
+    startup_reminder = _string_setting(config, "startup_reminder")
 
     def on_session_start(_payload: Mapping[str, object]) -> dict[str, object]:
-        return _contribution(context.entry_id, session=(settings.startup_reminder,))
+        return _contribution(context.entry_id, session=(startup_reminder,))
+
+    _ = context.on(AGENT_SESSION_START_EVENT_V2, on_session_start)
+
+
+def _apply_sisyphus_before_request_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> None:
+    response_reminder = _string_setting(config, "response_reminder")
+    require_direct_outcome = _boolean_setting(config, "require_direct_outcome")
 
     def before_request(_payload: Mapping[str, object]) -> dict[str, object]:
-        reminders = [settings.response_reminder]
-        if settings.require_direct_outcome:
+        reminders = [response_reminder]
+        if require_direct_outcome:
             reminders.append(_DIRECT_OUTCOME_REMINDER)
         return _contribution(context.entry_id, response=tuple(reminders))
+
+    _ = context.on(AGENT_BEFORE_REQUEST_EVENT_V2, before_request)
+
+
+def _apply_sisyphus_after_tool_execute_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> None:
+    tool_followup_reminder = _string_setting(config, "tool_followup_reminder")
 
     def after_tool_execute(
         payload: Mapping[str, object],
@@ -97,23 +109,39 @@ def _apply_sisyphus_runtime_v2(
         tool_name = payload.get("tool_name")
         if not isinstance(tool_name, str) or tool_name.lower() not in _FOLLOWUP_TOOLS:
             return None
-        reminder = settings.tool_followup_reminder
+        reminder = tool_followup_reminder
         if tool_name.lower() == "delegate_to_subagent":
             reminder = f"{reminder} {_DELEGATION_FOLLOWUP}"
         return _contribution(context.entry_id, response=(reminder,))
 
-    _ = context.on(AGENT_SESSION_START_EVENT_V2, on_session_start)
-    _ = context.on(AGENT_BEFORE_REQUEST_EVENT_V2, before_request)
     _ = context.on(TOOLS_AFTER_EXECUTE_EVENT_V2, after_tool_execute)
 
 
-def sisyphus_runtime_definition_v2() -> PluginDefinitionV2:
-    """Return the trusted Sisyphus module bound to its generated contract."""
-    return PluginDefinitionV2(
-        module_ref=SISYPHUS_RUNTIME_MODULE_V2,
-        contract_digest=generated_contract_digest_v2(SISYPHUS_RUNTIME_MODULE_V2),
-        apply=_apply_sisyphus_runtime_v2,
+def sisyphus_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+    """Return one trusted definition for each independently ordered Sisyphus hook."""
+    return (
+        PluginDefinitionV2(
+            module_ref=SISYPHUS_SESSION_START_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(SISYPHUS_SESSION_START_MODULE_V2),
+            apply=_apply_sisyphus_session_start_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=SISYPHUS_BEFORE_REQUEST_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(SISYPHUS_BEFORE_REQUEST_MODULE_V2),
+            apply=_apply_sisyphus_before_request_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2),
+            apply=_apply_sisyphus_after_tool_execute_v2,
+        ),
     )
 
 
-__all__ = ["SISYPHUS_RUNTIME_MODULE_V2", "sisyphus_runtime_definition_v2"]
+__all__ = [
+    "SISYPHUS_AFTER_TOOL_EXECUTE_MODULE_V2",
+    "SISYPHUS_BEFORE_REQUEST_MODULE_V2",
+    "SISYPHUS_RUNTIME_MODULES_V2",
+    "SISYPHUS_SESSION_START_MODULE_V2",
+    "sisyphus_runtime_definitions_v2",
+]

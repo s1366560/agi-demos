@@ -135,23 +135,46 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-sisyphus-runtime
+    - entry_id: builtin-sisyphus-session-start
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
-      module_ref: builtin://memstack/agent/sisyphus-runtime
+      module_ref: builtin://memstack/agent/sisyphus/session-start
       enabled: true
       config:
         startup_reminder: >-
           Start doing the work immediately. Prefer concrete action over narrating intent,
           and only ask the user for input when a real decision or missing permission blocks
           progress.
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-workspace-session-start
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/workspace/session-start
+      enabled: true
+      config: {}
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-sisyphus-before-request
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/sisyphus/before-request
+      enabled: true
+      config:
         response_reminder: >-
           Before responding, check whether there is another tool call, todo update, or
           delegation step you can perform yourself. Do not stop at analysis when execution
           is possible.
-        tool_followup_reminder: >-
-          After tool results arrive, synthesize the outcome, decide the next concrete action,
-          and continue until the task reaches a stable handoff point.
         require_direct_outcome: true
       inject: {}
       isolate: {}
@@ -160,10 +183,39 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-workspace-runtime
+    - entry_id: builtin-workspace-before-request
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
-      module_ref: builtin://memstack/agent/workspace-runtime
+      module_ref: builtin://memstack/agent/workspace/before-request
+      enabled: true
+      config: {}
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-sisyphus-after-tool-execute
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/sisyphus/after-tool-execute
+      enabled: true
+      config:
+        tool_followup_reminder: >-
+          After tool results arrive, synthesize the outcome, decide the next concrete action,
+          and continue until the task reaches a stable handoff point.
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-workspace-after-tool-execute
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/workspace/after-tool-execute
       enabled: true
       config: {}
       inject: {}
