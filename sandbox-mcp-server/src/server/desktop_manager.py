@@ -1,13 +1,14 @@
-"""Desktop Manager for remote desktop (KDE Plasma + KasmVNC).
+"""Desktop manager for the Openbox/X11 sandbox GUI.
 
-Manages KasmVNC for browser-based remote desktop with KDE Plasma.
+Manages KasmVNC for browser-based remote desktop access to Openbox.
 KasmVNC is an all-in-one VNC server with built-in web client,
-WebP encoding, dynamic resize, clipboard, file transfer, and audio.
+WebP encoding, dynamic resize, and bidirectional clipboard support.
 """
 
 import asyncio
 import logging
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -40,7 +41,7 @@ class DesktopStatus:
     resolution: str
     port: int
     kasmvnc_pid: Optional[int] = None
-    audio_enabled: bool = True
+    audio_enabled: bool = False
     dynamic_resize: bool = True
     encoding: str = "webp"
 
@@ -56,8 +57,6 @@ class DesktopManager:
     - WebSocket server with built-in web client
     - Dynamic resolution resize
     - Bi-directional clipboard (text + images)
-    - File transfer (drag-drop upload/download)
-    - Audio streaming via PulseAudio
 
     Usage:
         manager = DesktopManager(workspace_dir="/workspace")
@@ -156,10 +155,14 @@ class DesktopManager:
             xstartup_path = os.path.join(vnc_dir, "xstartup")
             template_path = "/etc/kasmvnc/xstartup.template"
             if os.path.exists(template_path):
-                import shutil
-
                 shutil.copy(template_path, xstartup_path)
                 os.chmod(xstartup_path, 0o755)
+
+            # Keep the MCP-triggered path aligned with the container entrypoint.
+            kasmvnc_config_path = os.path.join(vnc_dir, "kasmvnc.yaml")
+            kasmvnc_config_template = "/etc/kasmvnc/kasmvnc.yaml"
+            if os.path.exists(kasmvnc_config_template):
+                shutil.copy(kasmvnc_config_template, kasmvnc_config_path)
 
             # Mark DE as selected to skip interactive select-de.sh
             de_marker = os.path.join(vnc_dir, ".de-was-selected")
@@ -181,6 +184,8 @@ class DesktopManager:
                 str(self.port),
                 "-interface",
                 "0.0.0.0",
+                "-KasmPasswordFile",
+                str(kasmpasswd_path),
                 "-SecurityTypes",
                 "None",
                 env=env,
@@ -303,7 +308,7 @@ class DesktopManager:
             resolution=self.resolution,
             port=self.port,
             kasmvnc_pid=self._get_kasmvnc_pid() if running else None,
-            audio_enabled=True,
+            audio_enabled=False,
             dynamic_resize=True,
             encoding="webp",
         )

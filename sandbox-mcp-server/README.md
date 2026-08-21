@@ -32,13 +32,23 @@ python -m src.server.main --workspace ./workspace --debug
 docker build -t sandbox-mcp-server .
 
 # Run container (with desktop support)
-docker run -p 8765:8765 -p 7681:7681 -p 6080:6080 \
+export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
+docker run \
+  -e SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN" \
+  -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
+  -p 127.0.0.1:8765:8765 \
+  -p 127.0.0.1:7681:7681 \
+  -p 127.0.0.1:6080:6080 \
   --shm-size=1g \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --security-opt seccomp=./docker/seccomp-profile.json \
   -v $(pwd)/workspace:/workspace \
   -v sandbox-chromium:/home/sandbox/.config/chromium \
   sandbox-mcp-server
 
 # Or use Docker Compose
+export SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN"
 docker compose up -d
 ```
 
@@ -175,8 +185,12 @@ Environment variables:
 # Start container with authenticated desktop and loopback-only publication
 export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
 docker run --rm \
+  -e SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN" \
   -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
   --shm-size=1g \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --security-opt seccomp=./docker/seccomp-profile.json \
   -v sandbox-chromium:/home/sandbox/.config/chromium \
   -p 127.0.0.1:6080:6080 \
   sandbox-mcp-server
@@ -195,8 +209,23 @@ open https://localhost:6080
 - **WebP/QOI/JPEG Encoding**: Modern encodings for efficient remote display
 - **Dynamic Resize**: Live resolution changes via xrandr (no restart needed)
 - **Bi-directional Clipboard**: Text and image clipboard sync
-- **File Transfer**: Drag-and-drop upload/download through the web client
+- **Workspace Downloads**: Browser downloads are stored in `/workspace/Downloads`
 - **Multiple Resolutions**: 1920x1080 (default), 1600x900, 1280x720, and more supported
+
+The container contract follows the useful parts of
+[LinuxServer Webtop](https://github.com/linuxserver/docker-webtop): browser-delivered GUI,
+loopback-first port publication, a persistent browser profile, explicit authentication, and
+`1g` shared memory. It keeps the smaller all-in-one KasmVNC X server instead of Webtop's
+Xvfb/Selkies service stack because sky-cua uses the XTEST, MIT-SHM, EWMH, and AT-SPI path in this
+image.
+
+Only Chromium state (cookies, sessions, and browser configuration) is persisted in the dedicated
+volume. Project files and downloads remain under `/workspace`; desktop runtime files under `$HOME`
+are ephemeral.
+
+The custom seccomp profile explicitly permits the four System V shared-memory calls required by
+X11 MIT-SHM. This keeps unattended sky-cua screenshots valid before anyone opens the GUI while the
+container still runs with all capabilities dropped and `no-new-privileges` enabled.
 
 ### VNC Server
 
@@ -207,7 +236,7 @@ validated against the KasmVNC path.
 
 Relevant runtime details:
 
-- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -SecurityTypes None`
+- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -KasmPasswordFile /home/sandbox/.kasmpasswd -SecurityTypes None`
 - Display: `:1`
 - Process name: `Xvnc` (KasmVNC package alternative)
 - Auth file: `/home/sandbox/.kasmpasswd` (read from `$HOME`, not `~/.vnc/kasmpasswd`)
@@ -216,7 +245,9 @@ Relevant runtime details:
 
 **Example: Run with desktop**
 ```bash
-docker run -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" -p 127.0.0.1:6080:6080 sandbox-mcp-server
+# Use the authenticated, hardened "Direct Access" command above, or Docker Compose.
+export SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN"
+docker compose up -d
 ```
 
 ## Protocol

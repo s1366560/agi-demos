@@ -21,7 +21,11 @@ mkdir -p \
     "${XDG_DATA_HOME}" \
     "${XDG_STATE_HOME}" \
     "${HOME}/Desktop" \
-    "${HOME}/Downloads"
+    "/workspace/Downloads"
+
+# Keep browser downloads in the project workspace. The Chromium profile volume
+# persists login/configuration state separately and must not become a file store.
+xdg-user-dirs-update --set DOWNLOAD /workspace/Downloads
 
 cp /etc/xdg/openbox/rc.xml "${XDG_CONFIG_HOME}/openbox/rc.xml"
 cp /etc/xdg/openbox/menu.xml "${XDG_CONFIG_HOME}/openbox/menu.xml"

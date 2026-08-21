@@ -278,6 +278,19 @@ install_chromium_native_host() {
     log_success "Chromium native-host manifest is installed"
 }
 
+clear_stale_chromium_profile_locks() {
+    log_info "Clearing stale Chromium profile lock artifacts"
+    local lock_name
+    local lock_path
+
+    for lock_name in SingletonCookie SingletonLock SingletonSocket; do
+        lock_path="${CHROMIUM_PROFILE_PATH}/${lock_name}"
+        if [ -e "${lock_path}" ] || [ -L "${lock_path}" ]; then
+            rm -f -- "${lock_path}"
+        fi
+    done
+}
+
 start_chromium() {
     log_info "Starting Chromium with the pinned sky-cua extension"
     chromium \
@@ -412,6 +425,7 @@ main() {
     if [ "${DESKTOP_ENABLED}" = true ]; then
         start_kasmvnc
         wait_for_x11_session
+        clear_stale_chromium_profile_locks
         install_chromium_native_host
         start_chromium
     fi

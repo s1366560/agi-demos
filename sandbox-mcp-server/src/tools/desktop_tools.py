@@ -1,19 +1,30 @@
 """Desktop management MCP tools.
 
-Provides tools for managing remote desktop sessions with KasmVNC.
-Supports dynamic resolution, audio control, and enhanced status.
+Provides tools for managing the Openbox/X11 desktop served by KasmVNC.
+Supports dynamic resolution, clipboard synchronization, and enhanced status.
 """
 
 import logging
 from pathlib import Path
 
-from src.server.desktop_manager import DesktopManager
+from src.server.desktop_manager import DesktopManager, DesktopStatus
 from src.server.websocket_server import MCPTool
 
 logger = logging.getLogger(__name__)
 
 # Global desktop manager instances by workspace
 _desktop_managers: dict[str, DesktopManager] = {}
+
+
+def _desktop_features(status: DesktopStatus) -> dict[str, object]:
+    """Return capabilities implemented by the standalone KasmVNC runtime."""
+    return {
+        "dynamic_resize": status.dynamic_resize,
+        "clipboard": True,
+        "file_transfer": False,
+        "audio": status.audio_enabled,
+        "encoding": status.encoding,
+    }
 
 
 def get_desktop_manager(workspace_dir: str = "/workspace") -> DesktopManager:
@@ -33,9 +44,9 @@ async def start_desktop(
     """
     Start the remote desktop server.
 
-    Starts a remote desktop environment with KDE Plasma + KasmVNC, accessible
-    via web browser at the returned URL. Features: dynamic resize,
-    clipboard sync, file transfer, and audio streaming.
+    Starts an Openbox/X11 desktop with KasmVNC, accessible via web browser at
+    the returned URL. The standalone runtime supports dynamic resize and
+    bidirectional clipboard synchronization.
 
     Args:
         _workspace_dir: Working directory for desktop sessions
@@ -59,13 +70,7 @@ async def start_desktop(
                 "display": status.display,
                 "resolution": status.resolution,
                 "port": status.port,
-                "features": {
-                    "dynamic_resize": True,
-                    "clipboard": True,
-                    "file_transfer": True,
-                    "audio": True,
-                    "encoding": "webp",
-                },
+                "features": _desktop_features(status),
             }
 
         manager.display = display
@@ -82,13 +87,7 @@ async def start_desktop(
             "resolution": status.resolution,
             "port": status.port,
             "kasmvnc_pid": status.kasmvnc_pid,
-            "features": {
-                "dynamic_resize": True,
-                "clipboard": True,
-                "file_transfer": True,
-                "audio": True,
-                "encoding": "webp",
-            },
+            "features": _desktop_features(status),
         }
     except Exception as e:
         logger.error(f"Failed to start desktop: {e}")
@@ -244,8 +243,8 @@ def create_start_desktop_tool() -> MCPTool:
     return MCPTool(
         name="start_desktop",
         description=(
-            "Start the remote desktop server (KDE Plasma + KasmVNC) for browser-based "
-            "GUI access with dynamic resize, clipboard, file transfer, and audio"
+            "Start the Openbox/X11 remote desktop server (KasmVNC) for browser-based "
+            "GUI access with dynamic resize and bidirectional clipboard"
         ),
         input_schema={
             "type": "object",

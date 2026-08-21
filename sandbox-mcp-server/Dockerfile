@@ -332,7 +332,7 @@ RUN chmod 0440 /etc/sudoers.d/sandbox \
 WORKDIR /workspace
 USER sandbox
 
-HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${MCP_PORT}/health" >/dev/null \
         && { [ "${DESKTOP_ENABLED}" != true ] \
              || { test -S /tmp/.X11-unix/X1 \

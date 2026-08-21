@@ -56,7 +56,7 @@ class TestDesktopManager:
             resolution="1920x1080",
             port=6080,
             kasmvnc_pid=None,
-            audio_enabled=True,
+            audio_enabled=False,
             dynamic_resize=True,
             encoding="webp",
         )
@@ -97,6 +97,7 @@ class TestDesktopManager:
         args = mock_exec.await_args.args
         assert args[0] == "vncserver"
         assert args[1] == ":1"
+        assert args[args.index("-KasmPasswordFile") + 1] == str(tmp_path / "home" / ".kasmpasswd")
         assert "-disableBasicAuth" not in args
         write_password.assert_called_once()
         assert write_password.call_args.args[1:] == ("sandbox", "sandbox-runtime-secret")

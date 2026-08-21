@@ -57,7 +57,7 @@ class TestDesktopTools:
                     resolution="1280x720",
                     port=6090,
                     kasmvnc_pid=4321,
-                    audio_enabled=True,
+                    audio_enabled=False,
                     dynamic_resize=True,
                     encoding="webp",
                 )
@@ -66,7 +66,9 @@ class TestDesktopTools:
                 return "http://localhost:6090"
 
         dummy = DummyManager()
-        monkeypatch.setattr(desktop_tools, "get_desktop_manager", lambda _workspace_dir="/workspace": dummy)
+        monkeypatch.setattr(
+            desktop_tools, "get_desktop_manager", lambda _workspace_dir="/workspace": dummy
+        )
 
         result = await desktop_tools.start_desktop(
             _workspace_dir="/workspace-two",
@@ -82,3 +84,10 @@ class TestDesktopTools:
         assert result["resolution"] == "1280x720"
         assert result["port"] == 6090
         assert result["url"] == "http://localhost:6090"
+        assert result["features"] == {
+            "dynamic_resize": True,
+            "clipboard": True,
+            "file_transfer": False,
+            "audio": False,
+            "encoding": "webp",
+        }

@@ -1,30 +1,29 @@
-version: '3.8'
-
 services:
   sandbox-mcp-server:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8765:8765"
+      - "${SANDBOX_MCP_BIND_ADDRESS:-127.0.0.1}:${SANDBOX_MCP_PORT:-8765}:8765"
+      - "${SANDBOX_TERMINAL_BIND_ADDRESS:-127.0.0.1}:${SANDBOX_TERMINAL_PORT:-7681}:7681"
+      - "${SANDBOX_DESKTOP_BIND_ADDRESS:-127.0.0.1}:${SANDBOX_DESKTOP_PORT:-6080}:6080"
     shm_size: ${SANDBOX_SHM_SIZE:-1g}
     volumes:
       - sandbox-workspace:/workspace
+      - sandbox-chromium:/home/sandbox/.config/chromium
     environment:
-      - MCP_HOST=0.0.0.0
-      - MCP_PORT=8765
-      - MCP_WORKSPACE=/workspace
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8765
+      MCP_WORKSPACE: /workspace
+      SANDBOX_SERVICE_AUTH_TOKEN: ${SANDBOX_SERVICE_AUTH_TOKEN:?Set SANDBOX_SERVICE_AUTH_TOKEN to a random secret}
+      MCP_STATIC_TOKEN: ${SANDBOX_SERVICE_AUTH_TOKEN:?Set SANDBOX_SERVICE_AUTH_TOKEN to a random secret}
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
     # Security options
     security_opt:
       - no-new-privileges:true
       - seccomp=./docker/seccomp-profile.json
+    cap_drop:
+      - ALL
     # Resource limits
     deploy:
       resources:
@@ -37,3 +36,4 @@ services:
 
 volumes:
   sandbox-workspace:
+  sandbox-chromium:

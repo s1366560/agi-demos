@@ -1,10 +1,10 @@
 # Troubleshooting Guide
 
 **Version**: 3.0
-**Last Updated**: 2026-06-22
-**Last checked against code**: 2026-06-22
+**Last Updated**: 2026-08-21
+**Last checked against code**: 2026-08-21
 
-Common issues and solutions for Sandbox MCP Server with KDE Plasma desktop served over KasmVNC.
+Common issues and solutions for the Openbox/X11 sandbox desktop served over KasmVNC.
 
 ---
 
@@ -30,8 +30,8 @@ Common issues and solutions for Sandbox MCP Server with KDE Plasma desktop serve
 
 **Diagnosis**:
 ```bash
-# Check if KDE Plasma is installed
-docker exec <container> dpkg -l | grep -i kde-plasma
+# Check the lightweight desktop and browser runtime
+docker exec <container> command -v openbox chromium
 
 # Check KasmVNC process (X server binary is Xkasmvnc)
 docker exec <container> ps aux | grep -E "Xkasmvnc|vncserver"
@@ -42,19 +42,20 @@ docker exec <container> netstat -tln | grep 6080
 
 **Solutions**:
 
-1. **Rebuild image with KDE Plasma + KasmVNC**:
+1. **Rebuild the Openbox/X11 + KasmVNC image**:
    ```bash
    docker build -t sandbox-mcp-server .
    ```
 
 2. **Verify installation**:
    ```bash
-   docker run --rm sandbox-mcp-server dpkg -l | grep -E "kde-plasma-desktop|kasmvncserver"
+   docker run --rm sandbox-mcp-server sh -lc 'command -v openbox chromium vncserver'
    ```
 
 3. **Check logs**:
    ```bash
    docker logs <container> | grep -i desktop
+   docker exec <container> cat /tmp/kasmvnc.log
    ```
 
 ### Desktop Crashes Immediately
@@ -111,8 +112,8 @@ docker exec <container> ls -la /tmp/.X11-unix/
 
 **Diagnosis**:
 ```bash
-# Check KDE Plasma session process
-docker exec <container> ps aux | grep -E "startplasma|plasmashell"
+# Check Openbox and Chromium session processes
+docker exec <container> ps aux | grep -E "openbox|chromium"
 
 # Check CPU usage
 docker exec <container> top
@@ -596,8 +597,8 @@ docker ps -a
 docker stats
 docker logs <container> --tail 100
 
-# Desktop info (KasmVNC + KDE Plasma)
-docker exec <container> ps aux | grep -E "Xkasmvnc|plasma|vncserver"
+# Desktop info (KasmVNC + Openbox/X11)
+docker exec <container> ps aux | grep -E "Xkasmvnc|openbox|chromium|vncserver"
 docker exec <container> df -h
 docker exec <container> free -h
 
@@ -619,7 +620,7 @@ netstat -tlnp | grep -E "8765|7681|6080"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Desktop components not installed" | KDE Plasma / KasmVNC missing | Rebuild image |
+| "Desktop components not installed" | Openbox / KasmVNC missing | Rebuild image |
 | "Connection refused" | Port not mapped | Add `-p 6080:6080` |
 | "KasmVNC failed to start within timeout" | Display conflict or missing deps | Check `/tmp/kasmvnc.log`, change display number |
 | "Cannot allocate memory" | OOM | Increase memory limit |
@@ -641,7 +642,7 @@ docker logs -f <container>
 
 # Restart services
 docker restart <container>
-docker exec <container> pkill -HUP plasmashell
+docker exec <container> openbox --reconfigure
 
 # Clean up
 docker exec <container> rm -rf /tmp/.X11-unix/*

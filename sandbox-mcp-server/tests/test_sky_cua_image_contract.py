@@ -111,6 +111,21 @@ def test_chromium_and_desktop_runtime_dependencies_are_explicit() -> None:
     assert "shm_size: ${SANDBOX_SHM_SIZE:-1g}" in COMPOSE
 
 
+def test_compose_exposes_authenticated_gui_and_persists_browser_state() -> None:
+    assert '"${SANDBOX_DESKTOP_BIND_ADDRESS:-127.0.0.1}:' in COMPOSE
+    assert '${SANDBOX_DESKTOP_PORT:-6080}:6080"' in COMPOSE
+    assert '"${SANDBOX_TERMINAL_BIND_ADDRESS:-127.0.0.1}:' in COMPOSE
+    assert '${SANDBOX_TERMINAL_PORT:-7681}:7681"' in COMPOSE
+    assert "SANDBOX_SERVICE_AUTH_TOKEN: ${SANDBOX_SERVICE_AUTH_TOKEN:?" in COMPOSE
+    assert "MCP_STATIC_TOKEN: ${SANDBOX_SERVICE_AUTH_TOKEN:?" in COMPOSE
+    assert "cap_drop:" in COMPOSE
+    assert "- ALL" in COMPOSE
+    assert "sandbox-chromium:/home/sandbox/.config/chromium" in COMPOSE
+    assert "sandbox-chromium:" in COMPOSE
+    assert "healthcheck:" not in COMPOSE
+    assert "--start-period=60s" in DOCKERFILE
+
+
 def test_shared_graphical_environment_is_baked_into_the_image() -> None:
     for assignment in [
         "HOME=/home/sandbox",
@@ -157,16 +172,14 @@ def test_entrypoint_orders_the_session_before_mcp_and_terminal() -> None:
 
 
 def test_entrypoint_enables_toolkit_accessibility_before_chromium() -> None:
-    accessibility_setting = (
-        "gsettings set org.gnome.desktop.interface toolkit-accessibility true"
-    )
+    accessibility_setting = "gsettings set org.gnome.desktop.interface toolkit-accessibility true"
 
     assert accessibility_setting in ENTRYPOINT
     assert ENTRYPOINT.index(accessibility_setting) < ENTRYPOINT.index("start_chromium()")
 
 
 def test_kasmvnc_keeps_basic_auth_enabled() -> None:
-    assert 'vncpasswd \\' in ENTRYPOINT
+    assert "vncpasswd \\" in ENTRYPOINT
     assert '-u "${SERVICE_AUTH_USERNAME}"' in ENTRYPOINT
     assert '-KasmPasswordFile "${HOME}/.kasmpasswd"' in ENTRYPOINT
     assert "-DisableBasicAuth" not in ENTRYPOINT
@@ -176,9 +189,7 @@ def test_kasmvnc_keeps_basic_auth_enabled() -> None:
 def test_container_runtime_allows_chromium_user_namespaces() -> None:
     assert "seccomp=./docker/seccomp-profile.json" in COMPOSE
     assert SECCOMP_PROFILE["defaultAction"] == "SCMP_ACT_ERRNO"
-    assert {"SCMP_ARCH_X86_64", "SCMP_ARCH_AARCH64"} <= set(
-        SECCOMP_PROFILE["architectures"]
-    )
+    assert {"SCMP_ARCH_X86_64", "SCMP_ARCH_AARCH64"} <= set(SECCOMP_PROFILE["architectures"])
     allowed = {
         name
         for rule in SECCOMP_PROFILE["syscalls"]
@@ -186,6 +197,17 @@ def test_container_runtime_allows_chromium_user_namespaces() -> None:
         for name in rule["names"]
     }
     assert {"clone", "setns", "unshare"} <= allowed
+
+
+def test_container_runtime_allows_x11_mit_shm_capture() -> None:
+    allowed = {
+        name
+        for rule in SECCOMP_PROFILE["syscalls"]
+        if rule["action"] == "SCMP_ACT_ALLOW"
+        for name in rule["names"]
+    }
+
+    assert {"shmget", "shmat", "shmctl", "shmdt"} <= allowed
 
 
 def test_chromium_uses_the_fixed_extension_and_native_host() -> None:
@@ -206,6 +228,16 @@ def test_chromium_uses_the_fixed_extension_and_native_host() -> None:
         assert contract in ENTRYPOINT
 
 
+def test_entrypoint_recovers_only_chromium_profile_lock_artifacts() -> None:
+    body = main_body()
+
+    assert "clear_stale_chromium_profile_locks" in body
+    assert body.index("clear_stale_chromium_profile_locks") < body.index("start_chromium")
+    for lock_name in ["SingletonCookie", "SingletonLock", "SingletonSocket"]:
+        assert lock_name in ENTRYPOINT
+    assert 'rm -f -- "${lock_path}"' in ENTRYPOINT
+
+
 def test_xstartup_and_menu_are_openbox_only() -> None:
     assert "exec openbox" in XSTARTUP
     assert "dbus-daemon" not in XSTARTUP
@@ -213,6 +245,7 @@ def test_xstartup_and_menu_are_openbox_only() -> None:
 
     assert "Chromium" in OPENBOX_MENU
     assert "xterm" in OPENBOX_MENU
+    assert "/workspace/Downloads" in XSTARTUP
     for removed in ["Dolphin", "Firefox", "Google Chrome", "Kate", "Konsole", "LibreOffice"]:
         assert removed not in OPENBOX_MENU
 
