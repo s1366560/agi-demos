@@ -440,11 +440,17 @@ class LocalHITLResumeConsumer:
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
             SqlHITLRequestRepository,
         )
-        from src.infrastructure.agent.actor.execution import continue_project_chat
+        from src.infrastructure.agent.actor.execution import (
+            continue_project_chat,
+            load_hitl_state_for_resume,
+        )
         from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot_agent_mode
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
+        )
+        from src.infrastructure.agent.hitl.generation_recovery_v2 import (
+            admit_persisted_hitl_state_v2,
         )
         from src.infrastructure.agent.hitl.utils import (
             is_permanent_hitl_resume_error,
@@ -468,7 +474,8 @@ class LocalHITLResumeConsumer:
                     return False
                 await session.commit()
 
-            if not await self._has_recoverable_hitl_state(request_id):
+            state = await load_hitl_state_for_resume(request_id)
+            if state is None:
                 from src.infrastructure.agent.hitl.coordinator import complete_hitl_request
 
                 await complete_hitl_request(request_id, lease_owner=self._worker_id)
@@ -483,8 +490,8 @@ class LocalHITLResumeConsumer:
             agent_mode = await load_hitl_snapshot_agent_mode(request_id) or "default"
 
             agent_config = ProjectAgentConfig(
-                tenant_id=tenant_id,
-                project_id=project_id,
+                tenant_id=state.tenant_id,
+                project_id=state.project_id,
                 agent_mode=agent_mode,
                 model=None,
                 api_key=None,
@@ -500,54 +507,63 @@ class LocalHITLResumeConsumer:
             )
 
             agent = ProjectReActAgent(agent_config)
-            try:
-                await agent.initialize()
+            async with admit_persisted_hitl_state_v2(
+                state,
+                request_id=request_id,
+            ):
+                try:
+                    await agent.initialize()
 
-                async with processing_lease_heartbeat(
-                    request_id,
-                    lease_owner=self._worker_id,
-                ):
-                    result = await continue_project_chat(
-                        agent,
+                    async with processing_lease_heartbeat(
                         request_id,
-                        response_data,
                         lease_owner=self._worker_id,
-                        tenant_id=tenant_id,
-                        project_id=project_id,
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                    )
-
-                if result.is_error:
-                    if is_permanent_hitl_resume_error(result.error_message):
-                        from src.infrastructure.agent.hitl.coordinator import complete_hitl_request
-
-                        await complete_hitl_request(request_id, lease_owner=self._worker_id)
-                        logger.warning(
-                            "[LocalHITL] Permanently rejected fallback resume: request_id=%s "
-                            "error=%s",
+                    ):
+                        result = await continue_project_chat(
+                            agent,
                             request_id,
-                            result.error_message,
+                            response_data,
+                            lease_owner=self._worker_id,
+                            tenant_id=state.tenant_id,
+                            project_id=state.project_id,
+                            conversation_id=state.conversation_id,
+                            message_id=state.message_id,
                         )
-                        return True
-                    logger.warning(
-                        f"[LocalHITL] Fallback resume failed: request_id={request_id} "
-                        f"error={result.error_message}"
-                    )
-                    await self._revert_processing_request(request_id)
-                    return False
 
-                logger.info(
-                    f"[LocalHITL] Fallback resume completed: request_id={request_id} "
-                    f"events={result.event_count}"
-                )
-                return True
-            finally:
-                with contextlib.suppress(Exception):
-                    await agent.stop()
+                    if result.is_error:
+                        if is_permanent_hitl_resume_error(result.error_message):
+                            from src.infrastructure.agent.hitl.coordinator import (
+                                complete_hitl_request,
+                            )
+
+                            await complete_hitl_request(request_id, lease_owner=self._worker_id)
+                            logger.warning(
+                                "[LocalHITL] Permanently rejected fallback resume: request_id=%s "
+                                "error=%s",
+                                request_id,
+                                result.error_message,
+                            )
+                            return True
+                        logger.warning(
+                            f"[LocalHITL] Fallback resume failed: request_id={request_id} "
+                            f"error={result.error_message}"
+                        )
+                        await self._revert_processing_request(request_id)
+                        return False
+
+                    logger.info(
+                        f"[LocalHITL] Fallback resume completed: request_id={request_id} "
+                        f"events={result.event_count}"
+                    )
+                    return True
+                finally:
+                    with contextlib.suppress(Exception):
+                        await agent.stop()
         except Exception as e:
             logger.error(
-                f"[LocalHITL] Fallback resume error: request_id={request_id} error={e}",
+                "[LocalHITL] Fallback resume error: request_id=%s code=%s error=%s",
+                request_id,
+                getattr(e, "code", "hitl_recovery_failed"),
+                e,
                 exc_info=True,
             )
             await self._revert_processing_request(request_id)

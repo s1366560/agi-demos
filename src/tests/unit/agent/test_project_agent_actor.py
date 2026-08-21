@@ -1,5 +1,6 @@
 """Unit tests for ProjectAgentActor HITL resume paths."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,9 +15,15 @@ from src.infrastructure.agent.hitl import (
     coordinator as coordinator_mod,
     utils as hitl_utils_mod,
 )
+from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmissionV2
+from src.infrastructure.plugins.v2.runtime_host import (
+    DataPlaneGenerationAdmissionV2,
+    PlatformPluginRuntimeHostV2,
+)
+
+_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _build_actor() -> object:
@@ -146,8 +153,14 @@ class TestProjectAgentActor:
             "generation": 7,
             "digest": "a" * 64,
         }
+        distribution = {
+            "descriptor": generation,
+            "snapshot": {"profile_id": "default-v2", "generation": 7},
+            "envelope": {"version": 7, "nonce": "publication-7"},
+        }
         state = SimpleNamespace(
             plugin_generation=generation,
+            plugin_distribution=distribution,
             tenant_id="tenant-1",
             project_id="project-1",
             conversation_id="conv-1",
@@ -207,7 +220,83 @@ class TestProjectAgentActor:
             "durably_completed": True,
         }
         assert admit.call_args.kwargs["descriptor_payload"] == generation
-        assert admit.call_args.kwargs["distribution_payload"] is None
+        assert admit.call_args.kwargs["distribution_payload"] == distribution
         assert admit.call_args.kwargs["operation_id"] == "hitl-resume:req-1"
         continue_mock.assert_awaited_once()
         assert lease_active is False
+
+    async def test_resume_continue_request_rehydrates_fresh_actor_from_persisted_distribution(
+        self,
+        monkeypatch,
+    ) -> None:
+        source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+        await source.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=11,
+            version=11,
+            nonce="hitl-generation-11",
+        )
+        distribution = source.current_distribution
+        assert distribution is not None
+        await source.close()
+
+        actor = _build_actor()
+        actor._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
+            builtin_runtime_definitions_v2()
+        )
+        repo = SimpleNamespace(claim_for_processing=AsyncMock(return_value=object()))
+        session = AsyncMock()
+        session_cm = AsyncMock()
+        session_cm.__aenter__.return_value = session
+        session_cm.__aexit__.return_value = False
+        state = SimpleNamespace(
+            plugin_generation=distribution.descriptor.to_payload(),
+            plugin_distribution=distribution.to_payload(),
+            tenant_id="tenant-state",
+            project_id="project-state",
+            conversation_id="conv-state",
+            message_id="msg-state",
+            user_id="user-state",
+        )
+        heartbeat = AsyncMock()
+        heartbeat.__aenter__.return_value = None
+        heartbeat.__aexit__.return_value = False
+
+        async def _continue(*_args: object, **kwargs: object) -> object:
+            assert current_operation_context_v2().descriptor == distribution.descriptor
+            assert kwargs["tenant_id"] == "tenant-state"
+            assert kwargs["project_id"] == "project-state"
+            assert kwargs["conversation_id"] == "conv-state"
+            assert kwargs["message_id"] == "msg-state"
+            return SimpleNamespace(hitl_pending=False, is_error=False)
+
+        monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
+        monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
+        monkeypatch.setattr(
+            hitl_utils_mod,
+            "processing_lease_heartbeat",
+            lambda *_args, **_kwargs: heartbeat,
+        )
+        monkeypatch.setattr(
+            execution_mod,
+            "load_hitl_state_for_resume",
+            AsyncMock(return_value=state),
+        )
+        monkeypatch.setattr(
+            project_agent_actor,
+            "continue_project_chat",
+            AsyncMock(side_effect=_continue),
+        )
+
+        try:
+            result = await actor._resume_continue_request(
+                request_id="req-state",
+                response_data={"answer": "yes"},
+                conversation_id="conv-caller",
+                message_id="msg-caller",
+            )
+        finally:
+            await actor._plugin_admission_v2.close()
+
+        assert result["status"] == "continued"

@@ -67,6 +67,7 @@ class HITLAgentState:
     agent_id: str | None = None
     parent_session_id: str | None = None
     plugin_generation: dict[str, str | int] | None = None
+    plugin_distribution: dict[str, Any] | None = field(default=None, repr=False)
 
     # Execution state
     step_count: int = 0

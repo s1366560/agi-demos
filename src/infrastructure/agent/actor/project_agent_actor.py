@@ -6,6 +6,7 @@ import asyncio
 import logging
 import uuid
 from contextlib import AbstractAsyncContextManager
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -306,10 +307,16 @@ class ProjectAgentActor:
                 if not self._agent:
                     return
 
-                async with self._admit_plugin_turn(request):
+                async with self._admit_plugin_turn(request) as operation:
+                    distribution = self._plugin_admission_v2.host.distribution_for_generation(
+                        operation.generation
+                    )
                     result = await execute_project_chat(
                         self._agent,
-                        request,
+                        replace(
+                            request,
+                            plugin_distribution=distribution.to_payload(),
+                        ),
                         abort_signal=abort_signal,
                     )
                 if result.hitl_pending:
@@ -450,7 +457,7 @@ class ProjectAgentActor:
 
                 async with self._plugin_admission_v2.admit(
                     descriptor_payload=state.plugin_generation,
-                    distribution_payload=None,
+                    distribution_payload=state.plugin_distribution,
                     operation_id=f"hitl-resume:{request_id}",
                     scope=ScopeV2(
                         kind=ScopeKindV2.SESSION,
@@ -475,10 +482,10 @@ class ProjectAgentActor:
                         request_id,
                         response_data,
                         lease_owner=self._lease_owner(),
-                        tenant_id=self._config.tenant_id if self._config else None,
-                        project_id=self._config.project_id if self._config else None,
-                        conversation_id=conversation_id,
-                        message_id=message_id,
+                        tenant_id=state.tenant_id,
+                        project_id=state.project_id,
+                        conversation_id=state.conversation_id,
+                        message_id=state.message_id,
                     )
         except Exception:
             await self._revert_continue_claim(request_id)

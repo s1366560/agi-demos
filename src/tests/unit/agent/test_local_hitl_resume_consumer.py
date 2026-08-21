@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,8 +16,60 @@ from src.infrastructure.adapters.secondary.persistence import (
 from src.infrastructure.agent.actor import execution as execution_mod
 from src.infrastructure.agent.actor.state import snapshot_repo as snapshot_repo_mod
 from src.infrastructure.agent.core import project_react_agent as project_agent_mod
-from src.infrastructure.agent.hitl import coordinator as coordinator_mod, utils as hitl_utils
+from src.infrastructure.agent.hitl import (
+    coordinator as coordinator_mod,
+    generation_recovery_v2 as generation_recovery_mod,
+    utils as hitl_utils,
+)
 from src.infrastructure.agent.hitl.local_resume_consumer import LocalHITLResumeConsumer
+from src.infrastructure.agent.hitl.state_store import HITLAgentState
+
+
+def _persisted_state() -> HITLAgentState:
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 7,
+        "digest": "a" * 64,
+    }
+    return HITLAgentState(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        hitl_request_id="req-1",
+        hitl_type="clarification",
+        hitl_request_data={"question": "Continue?"},
+        plugin_generation=descriptor,
+        plugin_distribution={
+            "descriptor": descriptor,
+            "snapshot": {"profile_id": "default-v2", "generation": 7},
+            "envelope": {"version": 7, "nonce": "publication-7"},
+        },
+    )
+
+
+@pytest.fixture(autouse=True)
+def _stub_persisted_generation_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    @asynccontextmanager
+    async def _admit_state(
+        _state: HITLAgentState,
+        *,
+        request_id: str,
+    ) -> AsyncIterator[object]:
+        del request_id
+        yield object()
+
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=_persisted_state()),
+    )
+    monkeypatch.setattr(
+        generation_recovery_mod,
+        "admit_persisted_hitl_state_v2",
+        _admit_state,
+    )
 
 
 @pytest.mark.unit
@@ -392,7 +446,6 @@ async def test_resume_via_continue_reverts_processing_request_on_error(monkeypat
         "load_hitl_snapshot_agent_mode",
         AsyncMock(return_value="plan"),
     )
-    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=True))
     monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", lambda _config: fake_agent)
     monkeypatch.setattr(
         execution_mod,
@@ -433,7 +486,11 @@ async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch)
 
     monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
     monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
-    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=None),
+    )
     monkeypatch.setattr(coordinator_mod, "complete_hitl_request", complete_request)
     monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", agent_factory)
 
@@ -451,6 +508,96 @@ async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch)
     complete_request.assert_awaited_once_with("req-1", lease_owner=consumer._worker_id)
     repo.revert_to_answered.assert_not_awaited()
     agent_factory.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resume_via_continue_uses_snapshot_authority_inside_admission(monkeypatch) -> None:
+    consumer = LocalHITLResumeConsumer(MagicMock())
+    state = _persisted_state()
+    state.tenant_id = "tenant-state"
+    state.project_id = "project-state"
+    state.conversation_id = "conv-state"
+    state.message_id = "msg-state"
+    state.user_id = "user-state"
+    admission_active = False
+
+    @asynccontextmanager
+    async def _admit_state(
+        admitted_state: HITLAgentState,
+        *,
+        request_id: str,
+    ) -> AsyncIterator[object]:
+        nonlocal admission_active
+        assert admitted_state is state
+        assert request_id == "req-1"
+        admission_active = True
+        try:
+            yield object()
+        finally:
+            admission_active = False
+
+    repo = MagicMock()
+    repo.claim_for_processing = AsyncMock(return_value=SimpleNamespace(id="req-1"))
+    session = AsyncMock()
+    session_cm = AsyncMock()
+    session_cm.__aenter__.return_value = session
+    session_cm.__aexit__.return_value = False
+    created_agents: list[object] = []
+
+    class _FakeAgent:
+        def __init__(self, config) -> None:
+            self.config = config
+            created_agents.append(self)
+
+        async def initialize(self) -> None:
+            assert admission_active
+
+        async def stop(self) -> None:
+            assert admission_active
+
+    async def _continue(*_args: object, **kwargs: object) -> object:
+        assert admission_active
+        assert kwargs["tenant_id"] == "tenant-state"
+        assert kwargs["project_id"] == "project-state"
+        assert kwargs["conversation_id"] == "conv-state"
+        assert kwargs["message_id"] == "msg-state"
+        return SimpleNamespace(is_error=False, error_message=None, event_count=2)
+
+    monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
+    monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        execution_mod,
+        "load_hitl_state_for_resume",
+        AsyncMock(return_value=state),
+    )
+    monkeypatch.setattr(
+        generation_recovery_mod,
+        "admit_persisted_hitl_state_v2",
+        _admit_state,
+    )
+    monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", _FakeAgent)
+    monkeypatch.setattr(execution_mod, "continue_project_chat", AsyncMock(side_effect=_continue))
+    monkeypatch.setattr(
+        snapshot_repo_mod,
+        "load_hitl_snapshot_agent_mode",
+        AsyncMock(return_value="plan"),
+    )
+
+    result = await consumer._resume_via_continue(
+        "tenant-caller",
+        "project-caller",
+        "req-1",
+        {"answer": "yes"},
+        "conv-caller",
+        "msg-caller",
+    )
+
+    assert result is True
+    assert admission_active is False
+    assert len(created_agents) == 1
+    assert created_agents[0].config.tenant_id == "tenant-state"
+    assert created_agents[0].config.project_id == "project-state"
 
 
 @pytest.mark.unit

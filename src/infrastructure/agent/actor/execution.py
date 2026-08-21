@@ -1156,6 +1156,7 @@ async def handle_hitl_pending(
         agent_id=request.agent_id,
         parent_session_id=request.parent_session_id,
         plugin_generation=request.plugin_generation,
+        plugin_distribution=request.plugin_distribution,
         step_count=getattr(agent, "_step_count", 0),
         timeout_seconds=hitl_exception.timeout_seconds,
         pending_tool_call_id=hitl_exception.tool_call_id,

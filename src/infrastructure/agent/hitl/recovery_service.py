@@ -62,24 +62,31 @@ class HITLRecoveryService:
             if reverted_request is not None:
                 await session.commit()
 
-    async def _recover_answered_request(self, request: HITLRequest) -> bool:
+    async def _recover_answered_request(self, request: HITLRequest) -> bool:  # noqa: PLR0915
         """Replay a persisted ANSWERED request when its response remains recoverable."""
         from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
             SqlHITLRequestRepository,
         )
-        from src.infrastructure.agent.actor.execution import continue_project_chat
+        from src.infrastructure.agent.actor.execution import (
+            continue_project_chat,
+            load_hitl_state_for_resume,
+        )
         from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot_agent_mode
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
             ProjectReActAgent,
+        )
+        from src.infrastructure.agent.hitl.generation_recovery_v2 import (
+            admit_persisted_hitl_state_v2,
         )
         from src.infrastructure.agent.hitl.utils import (
             is_permanent_hitl_resume_error,
             processing_lease_heartbeat,
             restore_persisted_hitl_response,
         )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
         request_id = getattr(request, "id", "")
         recovered = False
@@ -111,79 +118,94 @@ class HITLRecoveryService:
                     )
                 else:
                     await session.commit()
-
-                    settings = get_settings()
-                    agent_mode = await load_hitl_snapshot_agent_mode(request_id) or "default"
-                    agent = ProjectReActAgent(
-                        ProjectAgentConfig(
-                            tenant_id=request.tenant_id,
-                            project_id=request.project_id,
-                            agent_mode=agent_mode,
-                            model=None,
-                            api_key=None,
-                            base_url=None,
-                            temperature=0.7,
-                            max_tokens=settings.agent_max_tokens,
-                            max_steps=settings.agent_max_steps,
-                            persistent=False,
-                            max_concurrent_chats=10,
-                            mcp_tools_ttl_seconds=300,
-                            enable_skills=True,
-                            enable_subagents=True,
-                        )
-                    )
                     try:
-                        await agent.initialize()
-                        async with processing_lease_heartbeat(
-                            request_id,
-                            lease_owner=self._lease_owner,
+                        state = await load_hitl_state_for_resume(request_id)
+                        if state is None:
+                            raise RuntimeV2Error(
+                                "generation_descriptor_missing",
+                                "persisted HITL state does not identify the plugin generation "
+                                "to resume",
+                            )
+                        settings = get_settings()
+                        agent_mode = await load_hitl_snapshot_agent_mode(request_id) or "default"
+                        agent = ProjectReActAgent(
+                            ProjectAgentConfig(
+                                tenant_id=state.tenant_id,
+                                project_id=state.project_id,
+                                agent_mode=agent_mode,
+                                model=None,
+                                api_key=None,
+                                base_url=None,
+                                temperature=0.7,
+                                max_tokens=settings.agent_max_tokens,
+                                max_steps=settings.agent_max_steps,
+                                persistent=False,
+                                max_concurrent_chats=10,
+                                mcp_tools_ttl_seconds=300,
+                                enable_skills=True,
+                                enable_subagents=True,
+                            )
+                        )
+                        async with admit_persisted_hitl_state_v2(
+                            state,
+                            request_id=request_id,
                         ):
-                            result = await continue_project_chat(
-                                agent,
-                                request_id,
-                                response_data,
-                                lease_owner=self._lease_owner,
-                                tenant_id=request.tenant_id,
-                                project_id=request.project_id,
-                                conversation_id=request.conversation_id,
-                                message_id=request.message_id,
-                            )
-                        if result.is_error:
-                            if is_permanent_hitl_resume_error(result.error_message):
-                                from src.infrastructure.agent.hitl.coordinator import (
-                                    complete_hitl_request,
-                                )
+                            try:
+                                await agent.initialize()
+                                async with processing_lease_heartbeat(
+                                    request_id,
+                                    lease_owner=self._lease_owner,
+                                ):
+                                    result = await continue_project_chat(
+                                        agent,
+                                        request_id,
+                                        response_data,
+                                        lease_owner=self._lease_owner,
+                                        tenant_id=state.tenant_id,
+                                        project_id=state.project_id,
+                                        conversation_id=state.conversation_id,
+                                        message_id=state.message_id,
+                                    )
+                                if result.is_error:
+                                    if is_permanent_hitl_resume_error(result.error_message):
+                                        from src.infrastructure.agent.hitl.coordinator import (
+                                            complete_hitl_request,
+                                        )
 
-                                await complete_hitl_request(
-                                    request_id,
-                                    lease_owner=self._lease_owner,
-                                )
-                                logger.warning(
-                                    "HITL Recovery: Permanently rejected %s: %s",
-                                    request_id,
-                                    result.error_message,
-                                )
-                            else:
-                                logger.warning(
-                                    "HITL Recovery: Failed to replay %s: %s",
-                                    request_id,
-                                    result.error_message,
-                                )
-                                await self._revert_processing_request(
-                                    request_id,
-                                    lease_owner=self._lease_owner,
-                                )
-                        else:
-                            logger.info(
-                                "HITL Recovery: Replayed %s successfully (%s events)",
-                                request_id,
-                                result.event_count,
-                            )
-                            recovered = True
+                                        await complete_hitl_request(
+                                            request_id,
+                                            lease_owner=self._lease_owner,
+                                        )
+                                        logger.warning(
+                                            "HITL Recovery: Permanently rejected %s: %s",
+                                            request_id,
+                                            result.error_message,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "HITL Recovery: Failed to replay %s: %s",
+                                            request_id,
+                                            result.error_message,
+                                        )
+                                        await self._revert_processing_request(
+                                            request_id,
+                                            lease_owner=self._lease_owner,
+                                        )
+                                else:
+                                    logger.info(
+                                        "HITL Recovery: Replayed %s successfully (%s events)",
+                                        request_id,
+                                        result.event_count,
+                                    )
+                                    recovered = True
+                            finally:
+                                with contextlib.suppress(Exception):
+                                    await agent.stop()
                     except Exception as e:
                         logger.error(
-                            "HITL Recovery: Replay failed for %s: %s",
+                            "HITL Recovery: Replay failed for %s: code=%s error=%s",
                             request_id,
+                            getattr(e, "code", "hitl_recovery_failed"),
                             e,
                             exc_info=True,
                         )
@@ -191,9 +213,6 @@ class HITLRecoveryService:
                             request_id,
                             lease_owner=self._lease_owner,
                         )
-                    finally:
-                        with contextlib.suppress(Exception):
-                            await agent.stop()
 
         return recovered
 
@@ -277,9 +296,7 @@ class HITLRecoveryService:
                         return_exceptions=True,
                     )
                     self._recovered_count += sum(
-                        1
-                        for result in replay_results
-                        if isinstance(result, bool) and result
+                        1 for result in replay_results if isinstance(result, bool) and result
                     )
 
                 stale_processing_before = now - timedelta(seconds=self.STALE_PROCESSING_AGE_SECONDS)
@@ -309,9 +326,7 @@ class HITLRecoveryService:
                         return_exceptions=True,
                     )
                     self._recovered_count += sum(
-                        1
-                        for result in processing_results
-                        if isinstance(result, bool) and result
+                        1 for result in processing_results if isinstance(result, bool) and result
                     )
 
                 return self._recovered_count

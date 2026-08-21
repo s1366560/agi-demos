@@ -999,6 +999,57 @@ async def test_handle_hitl_pending_persists_canonical_run_authority() -> None:
     assert saved_state.canonical_run_id == "plan-run"
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_hitl_pending_persists_complete_plugin_distribution() -> None:
+    descriptor = {
+        "profile_id": "default-v2",
+        "generation": 9,
+        "digest": "b" * 64,
+    }
+    distribution = {
+        "descriptor": descriptor,
+        "snapshot": {"profile_id": "default-v2", "generation": 9},
+        "envelope": {"version": 15, "nonce": "publication-15"},
+    }
+    agent = SimpleNamespace(
+        config=SimpleNamespace(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+    )
+    request = ProjectChatRequest(
+        conversation_id="conv-v2",
+        message_id="message-v2",
+        user_message="Continue after permission",
+        user_id="user-v2",
+        plugin_generation=descriptor,
+        plugin_distribution=distribution,
+    )
+    pending = HITLPendingException(
+        request_id="permission-v2",
+        conversation_id="conv-v2",
+        hitl_type=HITLType.PERMISSION,
+        request_data={"action": "write"},
+    )
+    state_store = SimpleNamespace(save_state=AsyncMock(return_value="state-key"))
+    save_snapshot = AsyncMock()
+
+    with (
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "HITLStateStore", return_value=state_store),
+        patch.object(execution, "save_hitl_snapshot", new=save_snapshot),
+        patch.object(execution, "_project_automation_runtime_waiting_human", new=AsyncMock()),
+    ):
+        await execution.handle_hitl_pending(agent, request, pending)
+
+    saved_state = state_store.save_state.await_args.args[0]
+    assert saved_state.plugin_generation == descriptor
+    assert saved_state.plugin_distribution == distribution
+    assert save_snapshot.await_args.args[0].plugin_distribution == distribution
+
+
 class _DeltaStreamingAgent(_FakeAgent):
     async def execute_chat(self, **kwargs):
         self.execute_chat_kwargs = kwargs

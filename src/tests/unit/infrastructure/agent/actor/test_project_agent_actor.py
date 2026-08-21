@@ -125,6 +125,7 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
     first_started = asyncio.Event()
     release_first = asyncio.Event()
     started: list[str] = []
+    observed_distributions: list[dict[str, Any] | None] = []
 
     first = ProjectChatRequest(
         conversation_id="conv-1",
@@ -149,6 +150,7 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
     ) -> ProjectChatResult:
         assert abort_signal is not None
         started.append(request.message_id)
+        observed_distributions.append(request.plugin_distribution)
         if request.message_id == "msg-1":
             first_started.set()
             await release_first.wait()
@@ -178,4 +180,5 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
             await asyncio.sleep(0.01)
 
     assert started == ["msg-1", "msg-2"]
+    assert observed_distributions == [distribution_payload, distribution_payload]
     await actor._plugin_admission_v2.close()

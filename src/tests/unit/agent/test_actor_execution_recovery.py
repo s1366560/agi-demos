@@ -139,6 +139,14 @@ def _stub_run_authority(monkeypatch) -> tuple[AsyncMock, AsyncMock]:
     return mark, settle
 
 
+@pytest.fixture(autouse=True)
+def _stub_session_log_cursor(monkeypatch) -> AsyncMock:
+    """Direct continue tests isolate resume logic from the required outer v2 boundary."""
+    cursor = AsyncMock(return_value=(0, 0))
+    monkeypatch.setattr(execution, "_get_last_db_event_time", cursor)
+    return cursor
+
+
 @pytest.mark.unit
 class TestActorExecutionRecovery:
     """Tests HITL resume path with snapshot fallback."""
