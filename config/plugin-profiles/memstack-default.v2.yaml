@@ -16,6 +16,36 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-channel-adapter-catalog
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/channel/adapter-catalog
+      enabled: true
+      config:
+        strategy: explicit-contributions
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-feishu-channel-adapter
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/channel/feishu-adapter
+      enabled: true
+      config:
+        channel_type: feishu
+        source_id: builtin-feishu
+      inject:
+        catalog: service:channel-adapter-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-route-table-builder
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

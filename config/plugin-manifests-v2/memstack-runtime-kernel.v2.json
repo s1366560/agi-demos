@@ -203,8 +203,70 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:e483a22194bf3ef42898b809259a9e87cfdcf0526618082cf6f4a79199b09a05",
+        "digest": "sha256:fa715ac49799ee47b10a90821d1687a07fa2edf39c30d7c30903544b644fdbed",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/channel/adapter-catalog",
+      "entrypoint": "src.infrastructure.plugins.v2.channel_adapters:_apply_channel_adapter_catalog_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:channel-adapter-catalog", "version": "1.0.0" },
+            { "service": "service:channel-adapter-resolver", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "explicit-contributions", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:aecfca5b66d87cfead065d18eeae8c3bd5fbae422af237b80303c614fe658d3b",
+      "artifact": {
+        "digest": "sha256:368380bc41c17f4099f04ce347ba81be350b4aa1380885b281068a2a1fbce244",
+        "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/channel/feishu-adapter",
+      "entrypoint": "src.infrastructure.plugins.v2.channel_adapters:_apply_feishu_channel_adapter_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:channel-adapter-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["channel_type", "source_id"],
+          "properties": {
+            "channel_type": { "const": "feishu", "type": "string" },
+            "source_id": { "const": "builtin-feishu", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b510246f29c7004d8cbf55f0af1515f1e4a506485c3ae9fa21217a12f89e582c",
+      "artifact": {
+        "digest": "sha256:368380bc41c17f4099f04ce347ba81be350b4aa1380885b281068a2a1fbce244",
+        "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },
     {

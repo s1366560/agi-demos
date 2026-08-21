@@ -20,6 +20,10 @@ from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
 )
+from .channel_adapters import (
+    builtin_channel_adapter_catalog_definition_v2,
+    builtin_feishu_channel_adapter_definition_v2,
+)
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
@@ -75,6 +79,8 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
             contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
         ),
+        builtin_channel_adapter_catalog_definition_v2(),
+        builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         builtin_agent_loop_definition_v2(),
