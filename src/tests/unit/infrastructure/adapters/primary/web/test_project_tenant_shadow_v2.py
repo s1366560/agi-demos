@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -18,14 +17,9 @@ from src.infrastructure.adapters.primary.web.project_tenant_shadow_v2 import (
     PROJECT_TENANT_SHADOW_STATE_V2,
     project_tenant_shadow_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.routers.projects import list_projects
-from src.infrastructure.adapters.primary.web.routers.tenants import list_tenants
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import pin_generation_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.project_tenant_services import (
-    ProjectTenantShadowEvidenceV2,
-)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
@@ -109,17 +103,3 @@ async def test_http_shadow_records_v2_failure_without_changing_route_decision(
     assert evidence.error_code == "generation_not_pinned"
     assert evidence.differences == ("shadow_execution",)
     assert getattr(request.state, PROJECT_TENANT_SHADOW_STATE_V2) is evidence
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("endpoint", [list_projects, list_tenants])
-def test_project_and_tenant_list_routes_execute_shadow_as_fastapi_dependency(
-    endpoint: Any,
-) -> None:
-    parameter = signature(endpoint).parameters["_project_tenant_shadow"]
-
-    assert parameter.default.dependency is project_tenant_shadow_dependency_v2
-    assert parameter.annotation in {
-        "ProjectTenantShadowEvidenceV2",
-        ProjectTenantShadowEvidenceV2,
-    }

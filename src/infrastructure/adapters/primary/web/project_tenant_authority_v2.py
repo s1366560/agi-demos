@@ -32,6 +32,7 @@ class ProjectTenantAuthorityV2:
     """Request-owned V2 application services and their disposable operation boundary."""
 
     operation: OperationContextV2
+    db: AsyncSession
     services: ProjectTenantServicesV2
 
 
@@ -65,6 +66,7 @@ async def project_tenant_authority_dependency_v2(
             )
         yield ProjectTenantAuthorityV2(
             operation=operation,
+            db=db,
             services=resolver.resolve(operation),
         )
 

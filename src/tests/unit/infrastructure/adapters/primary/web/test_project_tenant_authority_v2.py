@@ -6,6 +6,7 @@ from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -14,9 +15,12 @@ from starlette.requests import Request
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2
 from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    ProjectTenantAuthorityV2,
     project_tenant_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.cron import create_cron_job
+from src.infrastructure.adapters.primary.web.routers.projects import list_projects
+from src.infrastructure.adapters.primary.web.routers.tenants import list_tenants
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -76,6 +80,7 @@ async def test_authority_uses_the_pinned_generation_and_disposes_after_the_handl
             assert authority.operation.context.scope.kind is ScopeKindV2.PROJECT
             assert authority.operation.context.scope.tenant_id == "tenant-a"
             assert authority.operation.context.scope.project_id == "project-a"
+            assert authority.db is db
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": "tenant-a",
@@ -132,3 +137,60 @@ def test_cron_create_route_requires_the_v2_authority_dependency() -> None:
     parameter = signature(create_cron_job).parameters["project_tenant"]
 
     assert parameter.default.dependency is project_tenant_authority_dependency_v2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("endpoint", [list_projects, list_tenants])
+def test_project_and_tenant_list_routes_require_v2_authority(endpoint: Any) -> None:
+    parameters = signature(endpoint).parameters
+    parameter = parameters["project_tenant"]
+
+    assert parameter.default.dependency is project_tenant_authority_dependency_v2
+    assert parameter.annotation in {"ProjectTenantAuthorityV2", ProjectTenantAuthorityV2}
+    assert "db" not in parameters
+
+
+@pytest.mark.unit
+async def test_list_projects_queries_the_v2_authority_session() -> None:
+    membership_result = MagicMock()
+    membership_result.fetchall.return_value = []
+    db = SimpleNamespace(execute=AsyncMock(return_value=membership_result))
+
+    response = await list_projects(
+        tenant_id=None,
+        page=1,
+        page_size=20,
+        search=None,
+        visibility="all",
+        owner_id=None,
+        current_user=cast(User, SimpleNamespace(id="user-a")),
+        graph_store=None,
+        project_tenant=SimpleNamespace(db=db),
+    )
+
+    assert response.projects == []
+    assert response.total == 0
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_list_tenants_queries_the_v2_authority_session() -> None:
+    count_result = MagicMock()
+    count_result.scalar.return_value = 0
+    tenants_result = MagicMock()
+    tenants_result.scalars.return_value.all.return_value = []
+    db = SimpleNamespace(
+        execute=AsyncMock(side_effect=[count_result, tenants_result]),
+    )
+
+    response = await list_tenants(
+        page=1,
+        page_size=20,
+        search=None,
+        current_user=cast(User, SimpleNamespace(id="user-a")),
+        project_tenant=SimpleNamespace(db=db),
+    )
+
+    assert response.tenants == []
+    assert response.total == 0
+    assert db.execute.await_count == 2

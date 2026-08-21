@@ -35,8 +35,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_graph_store,
 )
-from src.infrastructure.adapters.primary.web.project_tenant_shadow_v2 import (
-    project_tenant_shadow_dependency_v2,
+from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    ProjectTenantAuthorityV2,
+    project_tenant_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -58,9 +59,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repos
 )
 from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.project_tenant_services import (
-    ProjectTenantShadowEvidenceV2,
-)
 from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
@@ -456,13 +454,11 @@ async def list_projects(  # noqa: C901, PLR0915
     ),
     owner_id: str | None = Query(None, description="Filter by owner ID"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
-    _project_tenant_shadow: ProjectTenantShadowEvidenceV2 = Depends(
-        project_tenant_shadow_dependency_v2
-    ),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> ProjectListResponse:
     """List projects for the current user."""
+    db = project_tenant.db
     # Get project IDs user has access to
     user_projects_result = await db.execute(
         refresh_select_statement(
