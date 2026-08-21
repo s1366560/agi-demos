@@ -256,18 +256,27 @@ function topologicalOrder(dependencies: ReadonlyMap<string, ReadonlySet<string>>
   const ordered: string[] = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();
+  const declarationRank = new Map(
+    Array.from(dependencies.keys(), (entryId, index) => [entryId, index] as const)
+  );
   const visit = (entryId: string): void => {
     if (visited.has(entryId)) return;
     if (visiting.has(entryId)) {
       throw new RuntimeV2Error('entry_dependency_cycle', `entry cycle includes ${entryId}`);
     }
     visiting.add(entryId);
-    for (const dependency of [...(dependencies.get(entryId) ?? [])].sort()) visit(dependency);
+    for (const dependency of [...(dependencies.get(entryId) ?? [])].sort(
+      (left, right) =>
+        requiredValue(declarationRank, left, 'entry declaration rank') -
+        requiredValue(declarationRank, right, 'entry declaration rank')
+    )) {
+      visit(dependency);
+    }
     visiting.delete(entryId);
     visited.add(entryId);
     ordered.push(entryId);
   };
-  for (const entryId of [...dependencies.keys()].sort()) visit(entryId);
+  for (const entryId of dependencies.keys()) visit(entryId);
   return ordered;
 }
 

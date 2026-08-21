@@ -5,6 +5,7 @@ import {
   canonicalJsonV2,
   type ContextV2,
   digestV2,
+  type PluginContractV2,
   GenerationManagerV2,
   LoaderV2,
   parseProfileSnapshotV2,
@@ -12,6 +13,8 @@ import {
   projectSnapshotEntriesV2,
   RuntimeV2Error,
   type PluginDefinitionV2,
+  type PluginModuleV2,
+  type ProfileEntryV2,
   type ProfileSnapshotV2,
 } from '@agistack/plugin-runtime';
 import { describe, expect, it } from 'vitest';
@@ -37,22 +40,18 @@ const CONTRACT_CONFORMANCE = JSON.parse(
   readonly runtime_completeness_cases: ReadonlyArray<RuntimeCompletenessCase>;
 };
 
+type MutablePluginModule = Omit<PluginModuleV2, 'contract' | 'contract_digest'> & {
+  contract: PluginContractV2;
+  contract_digest: string;
+};
+
 interface MutableSnapshot {
   digest: string;
   generation: number;
   manifests: Array<{
-    modules: Array<{
-      module_ref: string;
-      targets: string[];
-      contract: Record<string, unknown>;
-      contract_digest: string;
-    }>;
+    modules: MutablePluginModule[];
   }>;
-  entries: Array<{
-    entry_id: string;
-    config: Record<string, unknown>;
-    inject: Record<string, string>;
-  }>;
+  entries: ProfileEntryV2[];
   [key: string]: unknown;
 }
 
@@ -379,6 +378,50 @@ describe('plugin runtime v2 conformance', () => {
     expect(disposed).toEqual(['module', 'listener']);
   });
 
+  it('keeps same-scope activation and listeners in profile declaration order', async () => {
+    const snapshot = await orderedSiblingSnapshot();
+    const applied: string[] = [];
+    const contexts: ContextV2[] = [];
+    const digests = moduleContractDigests(snapshot);
+    const moduleDefinitions = [
+      ['builtin://conformance/declared-first', 'first'],
+      ['builtin://conformance/declared-second', 'second'],
+    ].map(([moduleRef, label]): PluginDefinitionV2 => {
+      if (!moduleRef || !label) throw new Error('ordered module fixture is incomplete');
+      return {
+        moduleRef,
+        contractDigest: requiredValue(digests, moduleRef),
+        apply(context) {
+          applied.push(label);
+          contexts.push(context);
+          context.on('ordered', () => label);
+        },
+      };
+    });
+    const generation = await webLoader(snapshot, moduleDefinitions).stage(snapshot);
+
+    expect(applied).toEqual(['first', 'second']);
+    const context = contexts[0];
+    if (!context) throw new Error('ordered listener context is missing');
+    await expect(context.dispatch('ordered', {})).resolves.toEqual(['first', 'second']);
+    await generation.dispose();
+  });
+
+  it('activates dependencies before an earlier declared consumer', async () => {
+    const raw = structuredClone(SNAPSHOT);
+    raw.entries.reverse();
+    await refreshSnapshotDigest(raw);
+    const snapshot = await parseProfileSnapshotV2(raw);
+    const applied: string[] = [];
+    const generation = await webLoader(
+      snapshot,
+      definitions(snapshot, { value: 7, observed: [], disposed: [], applied })
+    ).stage(snapshot);
+
+    expect(applied).toEqual(['root-provider', 'session-consumer']);
+    await generation.dispose();
+  });
+
   it('rolls back a failed staging generation without publishing it', async () => {
     const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
     const disposed: string[] = [];
@@ -463,6 +506,67 @@ function moduleContractDigests(snapshot: ProfileSnapshotV2): Map<string, string>
       manifest.modules.map((module) => [module.module_ref, module.contract_digest] as const)
     )
   );
+}
+
+async function orderedSiblingSnapshot(): Promise<ProfileSnapshotV2> {
+  const snapshot = structuredClone(SNAPSHOT);
+  const manifest = snapshot.manifests[0];
+  const baseModule = manifest?.modules[0];
+  const baseEntry = snapshot.entries[0];
+  if (!manifest || !baseModule || !baseEntry) {
+    throw new Error('ordered sibling fixture base is missing');
+  }
+  const orderedEvent = {
+    event: 'ordered',
+    mode: 'serial',
+    payload_schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+    },
+    result_schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'string',
+    },
+  } as const;
+  const contract: PluginContractV2 = {
+    services: { provides: [], requires: [] },
+    events: { emits: [orderedEvent], handles: [orderedEvent] },
+    config_schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      additionalProperties: false,
+    },
+  };
+  const module = (moduleRef: string): MutablePluginModule => ({
+    ...baseModule,
+    module_ref: moduleRef,
+    entrypoint: `conformance:${moduleRef}`,
+    targets: ['web'],
+    contract,
+    contract_digest: '',
+  });
+  manifest.modules = [
+    module('builtin://conformance/declared-first'),
+    module('builtin://conformance/declared-second'),
+  ];
+  const entry = (entryId: string, moduleRef: string): ProfileEntryV2 => ({
+    ...baseEntry,
+    entry_id: entryId,
+    parent_entry_id: null,
+    module_ref: moduleRef,
+    config: {},
+    inject: {},
+    isolate: {},
+    scope: { kind: 'root' },
+    permissions: [],
+  });
+  snapshot.entries = [
+    entry('z-declared-first', 'builtin://conformance/declared-first'),
+    entry('a-declared-second', 'builtin://conformance/declared-second'),
+  ];
+  await refreshContractDigests(snapshot);
+  await refreshSnapshotDigest(snapshot);
+  return parseProfileSnapshotV2(snapshot);
 }
 
 function requiredValue(values: ReadonlyMap<string, string>, key: string): string {

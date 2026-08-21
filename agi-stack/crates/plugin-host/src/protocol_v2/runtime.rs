@@ -373,12 +373,18 @@ impl LoaderV2 {
                 }
             }
         }
-        let entries: BTreeMap<String, ProfileEntryV2> =
-            project_snapshot_entries_v2(&snapshot, &self.target)
-                .into_iter()
-                .filter(|entry| entry.enabled)
-                .map(|entry| (entry.entry_id.clone(), entry.clone()))
-                .collect();
+        let projected_entries: Vec<_> = project_snapshot_entries_v2(&snapshot, &self.target)
+            .into_iter()
+            .filter(|entry| entry.enabled)
+            .collect();
+        let declaration_order: Vec<_> = projected_entries
+            .iter()
+            .map(|entry| entry.entry_id.clone())
+            .collect();
+        let entries: BTreeMap<String, ProfileEntryV2> = projected_entries
+            .into_iter()
+            .map(|entry| (entry.entry_id.clone(), entry.clone()))
+            .collect();
         let mut definitions = BTreeMap::new();
         let mut modules = BTreeMap::new();
         for entry in entries.values() {
@@ -406,7 +412,7 @@ impl LoaderV2 {
             modules.insert(entry.entry_id.clone(), module.clone());
         }
         preflight_entries(&entries, &modules)?;
-        let order = entry_order(&entries, &modules)?;
+        let order = entry_order(&entries, &modules, &declaration_order)?;
         let event_contracts = Arc::new(event_contract_catalog(modules.values())?);
         let services = service_store_v2();
         let events = event_store_v2();

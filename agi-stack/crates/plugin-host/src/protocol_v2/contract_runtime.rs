@@ -262,6 +262,7 @@ pub(super) fn event_contract_catalog<'a>(
 pub(super) fn entry_order(
     entries: &BTreeMap<String, ProfileEntryV2>,
     modules: &BTreeMap<String, PluginModuleV2>,
+    declaration_order: &[String],
 ) -> Result<Vec<String>, RuntimeV2Error> {
     let mut dependencies: BTreeMap<String, BTreeSet<String>> = entries
         .keys()
@@ -335,6 +336,7 @@ pub(super) fn entry_order(
     fn visit(
         entry_id: &str,
         dependencies: &BTreeMap<String, BTreeSet<String>>,
+        declaration_order: &[String],
         visiting: &mut BTreeSet<String>,
         visited: &mut BTreeSet<String>,
         ordered: &mut Vec<String>,
@@ -345,8 +347,18 @@ pub(super) fn entry_order(
         if !visiting.insert(entry_id.to_owned()) {
             return Err(RuntimeV2Error::EntryDependencyCycle(entry_id.to_owned()));
         }
-        for dependency in &dependencies[entry_id] {
-            visit(dependency, dependencies, visiting, visited, ordered)?;
+        for dependency in declaration_order
+            .iter()
+            .filter(|candidate| dependencies[entry_id].contains(*candidate))
+        {
+            visit(
+                dependency,
+                dependencies,
+                declaration_order,
+                visiting,
+                visited,
+                ordered,
+            )?;
         }
         visiting.remove(entry_id);
         visited.insert(entry_id.to_owned());
@@ -357,10 +369,11 @@ pub(super) fn entry_order(
     let mut ordered = Vec::new();
     let mut visiting = BTreeSet::new();
     let mut visited = BTreeSet::new();
-    for entry_id in entries.keys() {
+    for entry_id in declaration_order {
         visit(
             entry_id,
             &dependencies,
+            declaration_order,
             &mut visiting,
             &mut visited,
             &mut ordered,

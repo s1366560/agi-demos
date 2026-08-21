@@ -191,6 +191,78 @@ fn snapshot_with_target(target: &str) -> Value {
     snapshot
 }
 
+fn ordered_sibling_snapshot(target: &str) -> ProfileSnapshotV2 {
+    let mut snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    let base_module = snapshot["manifests"][0]["modules"][0].clone();
+    let contract = serde_json::json!({
+        "services": {"provides": [], "requires": []},
+        "events": {
+            "emits": [{
+                "event": "ordered",
+                "mode": "serial",
+                "payload_schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object"
+                },
+                "result_schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "string"
+                }
+            }],
+            "handles": [{
+                "event": "ordered",
+                "mode": "serial",
+                "payload_schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "object"
+                },
+                "result_schema": {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "type": "string"
+                }
+            }]
+        },
+        "config_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false
+        }
+    });
+    let module = |module_ref: &str| {
+        let mut module = base_module.clone();
+        module["module_ref"] = Value::String(module_ref.to_owned());
+        module["entrypoint"] = Value::String(format!("conformance:{module_ref}"));
+        module["targets"] = serde_json::json!([target]);
+        module["contract"] = contract.clone();
+        module
+    };
+    snapshot["manifests"][0]["modules"] = serde_json::json!([
+        module("builtin://conformance/declared-first"),
+        module("builtin://conformance/declared-second")
+    ]);
+
+    let base_entry = snapshot["entries"][0].clone();
+    let entry = |entry_id: &str, module_ref: &str| {
+        let mut entry = base_entry.clone();
+        entry["entry_id"] = Value::String(entry_id.to_owned());
+        entry["parent_entry_id"] = Value::Null;
+        entry["module_ref"] = Value::String(module_ref.to_owned());
+        entry["config"] = serde_json::json!({});
+        entry["inject"] = serde_json::json!({});
+        entry["isolate"] = serde_json::json!({});
+        entry["scope"] = serde_json::json!({"kind": "root"});
+        entry["permissions"] = serde_json::json!([]);
+        entry
+    };
+    snapshot["entries"] = serde_json::json!([
+        entry("z-declared-first", "builtin://conformance/declared-first"),
+        entry("a-declared-second", "builtin://conformance/declared-second")
+    ]);
+    refresh_contract_digests(&mut snapshot);
+    refresh_snapshot_digest(&mut snapshot);
+    parse_profile_snapshot_v2(&snapshot.to_string()).expect("ordered sibling snapshot must parse")
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
@@ -358,6 +430,30 @@ impl PluginModuleRuntimeV2 for EventProvider {
 
 struct EventConsumer {
     context: Arc<Mutex<Option<ContextV2>>>,
+}
+
+struct OrderedListener {
+    label: String,
+    applied: Arc<Mutex<Vec<String>>>,
+    contexts: Arc<Mutex<Vec<ContextV2>>>,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for OrderedListener {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        _config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        lock(&self.applied).push(self.label.clone());
+        let label = self.label.clone();
+        context.on("ordered", move |_payload| {
+            let result = Value::String(label.clone());
+            async move { Ok(result) }
+        })?;
+        lock(&self.contexts).push(context.clone());
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -696,6 +792,78 @@ fn dispatch_validates_handler_results_against_the_public_contract() {
             .await
             .expect_err("invalid event result must fail");
         assert_eq!(error.code(), "invalid_event_result");
+        dispose_generation(generation).await;
+    });
+}
+
+#[test]
+fn same_scope_listeners_follow_profile_declaration_order() {
+    block_on(async {
+        let snapshot = ordered_sibling_snapshot("rust-server");
+        let applied = Arc::new(Mutex::new(Vec::new()));
+        let contexts = Arc::new(Mutex::new(Vec::new()));
+        let definitions = [
+            ("builtin://conformance/declared-first", "first"),
+            ("builtin://conformance/declared-second", "second"),
+        ]
+        .map(|(module_ref, label)| PluginDefinitionV2 {
+            module_ref: module_ref.to_owned(),
+            contract_digest: module_contract_digest(&snapshot, module_ref),
+            module: Arc::new(OrderedListener {
+                label: label.to_owned(),
+                applied: Arc::clone(&applied),
+                contexts: Arc::clone(&contexts),
+            }),
+        });
+        let generation = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            definitions,
+            target_catalog_json(&snapshot, &DataPlaneTargetV2::RustServer),
+        )
+        .stage(snapshot)
+        .await
+        .expect("ordered sibling generation must stage");
+
+        assert_eq!(*lock(&applied), vec!["first", "second"]);
+        let context = lock(&contexts)
+            .first()
+            .cloned()
+            .expect("listener context must be captured");
+        assert_eq!(
+            context
+                .dispatch("ordered", serde_json::json!({}))
+                .await
+                .expect("ordered event must dispatch"),
+            serde_json::json!(["first", "second"])
+        );
+        dispose_generation(generation).await;
+    });
+}
+
+#[test]
+fn dependencies_activate_before_an_earlier_declared_consumer() {
+    block_on(async {
+        let mut raw: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        raw["entries"]
+            .as_array_mut()
+            .expect("fixture entries")
+            .reverse();
+        refresh_snapshot_digest(&mut raw);
+        let snapshot = parse_profile_snapshot_v2(&raw.to_string())
+            .expect("reversed dependency snapshot must parse");
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let generation = loader(
+            &snapshot,
+            7,
+            false,
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::clone(&observed),
+        )
+        .stage(snapshot)
+        .await
+        .expect("dependency must activate before its consumer");
+
+        assert_eq!(*lock(&observed), vec![7]);
         dispose_generation(generation).await;
     });
 }
