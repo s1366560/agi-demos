@@ -48,7 +48,7 @@ def test_lifespan_resolves_graph_after_v2_publication_before_legacy_consumers() 
     assert "initialize_graph_service" not in source
     assert "shutdown_graph_service" not in source
     publication = source.index("await initialize_plugin_runtime_v2(")
-    workflow = source.index("await initialize_workflow_engine(graph_service)")
+    workflow = source.index("await initialize_workflow_engine()")
     container = source.index("container = initialize_container(")
     assert publication < workflow < container
 

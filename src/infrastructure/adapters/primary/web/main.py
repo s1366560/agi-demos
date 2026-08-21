@@ -154,7 +154,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         graph_service = graph_runtime.graph_service
 
         # Initialize Workflow Engine
-        workflow_engine = await initialize_workflow_engine(graph_service)
+        workflow_engine = await initialize_workflow_engine()
 
         # Wire Redis into graph service for cached embedding support
         if (
