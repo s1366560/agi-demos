@@ -6,7 +6,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
@@ -17,6 +17,12 @@ from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 from src.infrastructure.workspace_core.client import (
     WorkspaceRuntimeCorrelationRequest,
     WorkspaceRuntimeCorrelationResponse,
@@ -259,8 +265,36 @@ class MemStackAgentRuntimeProvider:
             )
             sequence = 0
             terminal_seen = False
+            turn_stack = AsyncExitStack()
 
             try:
+                _ = await turn_stack.enter_async_context(
+                    pin_agent_turn_operation_v2(
+                        operation_id=f"workspace-provider:{request.id}",
+                        tenant_id=scope.tenant_id,
+                        project_id=scope.project_id,
+                        session_id=conversation.id,
+                        services={
+                            OPERATION_DB_SESSION_SERVICE_V2: db,
+                            OPERATION_IDENTITY_SERVICE_V2: {
+                                "tenant_id": scope.tenant_id,
+                                "user_id": scope.user_id,
+                                "project_id": scope.project_id,
+                            },
+                            OPERATION_METADATA_SERVICE_V2: {
+                                "kind": "agent-turn",
+                                "channel": "workspace-core-provider",
+                                "conversation_id": conversation.id,
+                                "run_id": request.id,
+                                "message_id": message_id,
+                                "workspace_id": scope.workspace_id,
+                                "task_id": scope.task_id,
+                                "plan_id": scope.plan_id,
+                                "plan_node_id": scope.plan_node_id,
+                            },
+                        },
+                    )
+                )
                 async for raw_event in service.stream_chat_v2(
                     conversation_id=conversation.id,
                     user_message=message_text,
@@ -326,6 +360,8 @@ class MemStackAgentRuntimeProvider:
                     return
                 provider_event.persisted = True
                 yield provider_event
+            finally:
+                await turn_stack.aclose()
 
     async def inject(self, request: ProviderWebhookRequest) -> None:
         scope = ProviderWorkspaceScope.from_request(request)

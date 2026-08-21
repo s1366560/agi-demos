@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,12 @@ from src.application.services.agent_service import AgentService
 from src.configuration.config import Settings, get_settings
 from src.configuration.di_container import DIContainer
 from src.infrastructure.acp.event_mapper import ACPUpdate, memstack_event_to_acp_updates
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,22 +178,43 @@ class MemStackACPAgent:
         try:
             async with self._session_factory() as db:
                 service = await self._agent_service(db)
-                async for event in service.stream_chat_v2(
-                    conversation_id=session.conversation_id,
-                    user_message=user_message,
-                    project_id=session.project_id,
-                    user_id=self._user_id,
+                operation_message_id = message_id or str(uuid.uuid4())
+                async with pin_agent_turn_operation_v2(
+                    operation_id=f"acp-turn:{operation_message_id}",
                     tenant_id=self._tenant_id,
-                    api_auth_token=self._api_key,
+                    project_id=session.project_id,
+                    session_id=session.conversation_id,
+                    services={
+                        OPERATION_DB_SESSION_SERVICE_V2: db,
+                        OPERATION_IDENTITY_SERVICE_V2: {
+                            "tenant_id": self._tenant_id,
+                            "user_id": self._user_id,
+                            "project_id": session.project_id,
+                        },
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "agent-turn",
+                            "channel": "acp",
+                            "conversation_id": session.conversation_id,
+                            "message_id": message_id,
+                        },
+                    },
                 ):
-                    for update in memstack_event_to_acp_updates(event):
-                        await self._emit_update(session_id, update)
-                    if str(event.get("type") or "") in {"complete", "error"}:
-                        return PromptResponse(
-                            stop_reason="end_turn",
-                            user_message_id=message_id,
-                            usage=usage,
-                        )
+                    async for event in service.stream_chat_v2(
+                        conversation_id=session.conversation_id,
+                        user_message=user_message,
+                        project_id=session.project_id,
+                        user_id=self._user_id,
+                        tenant_id=self._tenant_id,
+                        api_auth_token=self._api_key,
+                    ):
+                        for update in memstack_event_to_acp_updates(event):
+                            await self._emit_update(session_id, update)
+                        if str(event.get("type") or "") in {"complete", "error"}:
+                            return PromptResponse(
+                                stop_reason="end_turn",
+                                user_message_id=message_id,
+                                usage=usage,
+                            )
             return PromptResponse(
                 stop_reason="end_turn",
                 user_message_id=message_id,
@@ -237,27 +265,18 @@ class MemStackACPAgent:
         return self._container.with_db(db).agent_service(llm)
 
     async def _cancel_underlying_execution(self, conversation_id: str) -> None:
-        from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
-            _cancel_local_chat,
-            _cancel_ray_actor_chat,
+        from src.application.services.agent.runtime_cancellation import (
+            cancel_conversation_runtime,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
-        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
         async with self._session_factory() as db:
             conversation = await SqlConversationRepository(db).find_by_id(conversation_id)
             if conversation is None or conversation.tenant_id != self._tenant_id:
                 return
-            actor = await get_actor_if_exists(
-                tenant_id=conversation.tenant_id,
-                project_id=conversation.project_id,
-                agent_mode="default",
-            )
-            if actor is not None:
-                await _cancel_ray_actor_chat(actor, conversation_id)
-            await _cancel_local_chat(conversation_id)
+            _ = await cancel_conversation_runtime(conversation)
 
     def _extract_project_id(self, kwargs: dict[str, Any]) -> str | None:
         memstack_meta = kwargs.get("memstack")

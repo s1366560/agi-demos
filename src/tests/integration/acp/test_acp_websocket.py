@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -8,6 +11,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.routers import acp
+from src.infrastructure.plugins.v2.boundary import (
+    clear_process_generation_host_v2,
+    install_process_generation_host_v2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+_ROOT = Path(__file__).resolve().parents[4]
 
 
 class DummySessionFactory:
@@ -37,7 +48,25 @@ class FakeAgentService:
 
 
 def test_acp_websocket_initialize_new_session_and_prompt(monkeypatch) -> None:
-    app = FastAPI()
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=1,
+            version=1,
+            nonce="acp-websocket-integration",
+        )
+        install_process_generation_host_v2(host)
+        try:
+            yield None
+        finally:
+            clear_process_generation_host_v2(host)
+            await host.close()
+
+    app = FastAPI(lifespan=lifespan)
     app.state.container = SimpleNamespace(with_db=lambda db: SimpleNamespace())
     app.include_router(acp.router)
 
@@ -53,10 +82,13 @@ def test_acp_websocket_initialize_new_session_and_prompt(monkeypatch) -> None:
     monkeypatch.setattr(acp, "async_session_factory", DummySessionFactory())
     monkeypatch.setattr(acp.MemStackACPAgent, "_agent_service", agent_service)
 
-    with TestClient(app).websocket_connect(
-        "/api/v1/acp/ws",
-        headers={"Authorization": "Bearer ms_sk_test"},
-    ) as websocket:
+    with (
+        TestClient(app) as client,
+        client.websocket_connect(
+            "/api/v1/acp/ws",
+            headers={"Authorization": "Bearer ms_sk_test"},
+        ) as websocket,
+    ):
         websocket.send_text(
             json.dumps(
                 {

@@ -4,17 +4,31 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import httpx
 import pytest
 
+import src.infrastructure.workspace_core.agent_runtime_provider as agent_runtime_provider_module
 from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+    clear_process_generation_host_v2,
+    current_operation_context_v2,
+    install_process_generation_host_v2,
+    pin_agent_turn_operation_v2 as real_pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.workspace_core.agent_runtime_provider import (
     MemStackAgentRuntimeProvider,
 )
@@ -33,6 +47,24 @@ from src.infrastructure.workspace_core.provider import (
 )
 
 pytestmark = pytest.mark.unit
+_ROOT = Path(__file__).resolve().parents[5]
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_legacy_provider_tests_from_generation_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+        raising=False,
+    )
 
 
 def _request(
@@ -454,6 +486,72 @@ async def test_send_uses_real_runtime_contract_and_marks_persisted_terminal() ->
     assert terminal.report["usage"] == {"total_tokens": 12}
     assert terminal.report["legacy_event"]["event_type"] == "complete"
     assert events[-1].correlation_id == correlation.correlation_id
+
+
+async def test_send_pins_workspace_provider_turn_with_complete_operation_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    observed: dict[str, object] = {}
+
+    class GenerationAwareAgentService(FakeAgentService):
+        async def stream_chat_v2(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            operation = current_operation_context_v2()
+            observed["operation_id"] = operation.operation_id
+            observed["db"] = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
+            observed["identity"] = operation.require(OPERATION_IDENTITY_SERVICE_V2)
+            observed["metadata"] = operation.require(OPERATION_METADATA_SERVICE_V2)
+            observed["distribution"] = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            async for event in super().stream_chat_v2(**kwargs):
+                yield event
+
+    scoped.service = GenerationAwareAgentService(scoped.event_repo)
+    db = FakeDb()
+    provider = _provider(scoped, db=db)
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_agent_turn_operation_v2",
+        real_pin_agent_turn_operation_v2,
+    )
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="workspace-provider-agent-turn",
+    )
+    install_process_generation_host_v2(host)
+
+    try:
+        events = [event async for event in provider.stream_send(_request())]
+
+        assert [event.state for event in events] == ["delta", "final"]
+        assert observed["operation_id"] == "workspace-provider:provider-run-1"
+        assert observed["db"] is db
+        assert observed["identity"] == {
+            "tenant_id": "tenant-1",
+            "user_id": "user-1",
+            "project_id": "project-1",
+        }
+        assert scoped.service.stream_kwargs is not None
+        assert observed["metadata"] == {
+            "kind": "agent-turn",
+            "channel": "workspace-core-provider",
+            "conversation_id": "conversation-1",
+            "run_id": "provider-run-1",
+            "message_id": scoped.service.stream_kwargs["execution_message_id"],
+            "workspace_id": "workspace-1",
+            "task_id": "task-1",
+            "plan_id": "plan-1",
+            "plan_node_id": "node-1",
+        }
+        distribution = observed["distribution"]
+        assert isinstance(distribution, dict)
+        assert distribution["descriptor"]["generation"] == 1
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
 
 
 async def test_send_suppresses_terminal_when_core_transaction_fails() -> None:
