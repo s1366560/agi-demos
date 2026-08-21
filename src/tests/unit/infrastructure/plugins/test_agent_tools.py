@@ -81,7 +81,7 @@ def test_legacy_tool_descriptor_rejects_name_drift() -> None:
 
 
 @pytest.mark.unit
-async def test_tool_reads_come_from_the_scoped_generation_service(
+async def test_worker_tool_reads_are_independent_of_legacy_scoped_service(
     monkeypatch: pytest.MonkeyPatch,
     generation_host: PlatformPluginRuntimeHostV2,
 ) -> None:
@@ -90,12 +90,20 @@ async def test_tool_reads_come_from_the_scoped_generation_service(
         description="Demo",
         parameters={"type": "object"},
     )
+    legacy_tool = SimpleNamespace(
+        name="other",
+        description="Legacy-only tool",
+        parameters={"type": "object"},
+    )
     project_id = "project-remove-typed"
-    service = AgentToolSetService(profile_digest="scoped-read")
-    service.publish(PluginScopeContext(project_id=project_id), {"demo": tool})
+    legacy_service = AgentToolSetService(profile_digest="legacy-scoped-read")
+    legacy_service.publish(
+        PluginScopeContext(project_id=project_id),
+        {"other": legacy_tool},
+    )
     monkeypatch.setattr(
         "src.infrastructure.plugins.agent_tools.get_agent_tool_set_service",
-        lambda: service,
+        lambda: legacy_service,
     )
 
     async with pin_operation_context_v2(
@@ -110,44 +118,3 @@ async def test_tool_reads_come_from_the_scoped_generation_service(
         )
         worker_state._tools_cache[cache_key] = {"demo": tool}
         assert get_cached_tools_for_project(project_id, descriptor) == {"demo": tool}
-
-
-@pytest.mark.unit
-async def test_tool_read_fails_loud_without_scoped_generation(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_host: PlatformPluginRuntimeHostV2,
-) -> None:
-    project_id = "project-remove-missing"
-
-    class MissingGenerationService:
-        def shadow_comparison(
-            self, scope: object, tools: dict[str, object]
-        ) -> tuple[None, dict[str, object], bool]:
-            return None, tools, True
-
-        def publish(self, scope: object, tools: dict[str, object]) -> None:
-            return None
-
-        def current(self, scope: object) -> None:
-            return None
-
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.agent_tools.get_agent_tool_set_service",
-        MissingGenerationService,
-    )
-
-    async with pin_operation_context_v2(
-        generation_host,
-        operation_id="missing-typed-tool-read",
-        scope=_ROOT_SCOPE,
-    ) as operation:
-        descriptor = operation.descriptor
-        cache_key = generation_cache_key_v2(
-            project_id,
-            generation_descriptor=descriptor,
-        )
-        worker_state._tools_cache[cache_key] = {
-            "demo": SimpleNamespace(name="demo", description="Demo")
-        }
-        with pytest.raises(RuntimeError, match="no scoped tool generation exists"):
-            get_cached_tools_for_project(project_id, descriptor)

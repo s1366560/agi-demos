@@ -412,8 +412,8 @@ async def test_skill_cache_isolated_by_generation(
     )
     monkeypatch.setattr(
         agent_worker_state,
-        "_add_plugin_skills",
-        AsyncMock(side_effect=lambda skills, *_args: skills),
+        "_add_workspace_runtime_skill",
+        MagicMock(side_effect=lambda skills, *_args: skills),
     )
 
     async with pin_operation_context_v2(
@@ -453,26 +453,10 @@ async def test_skill_cache_isolated_by_generation(
 
 @pytest.mark.unit
 async def test_worker_tool_cache_switches_namespace_per_generation(
-    monkeypatch,
     generation_host: PlatformPluginRuntimeHostV2,
 ) -> None:
     first_tools = {"first": object()}
     second_tools = {"second": object()}
-    published: dict[str, object] = {}
-
-    def _publish(_project_id: str, tools: dict[str, object]) -> None:
-        published["tools"] = tools
-
-    class _Service:
-        def current(self, _scope):
-            tools = published.get("tools")
-            return SimpleNamespace(tools=tools) if isinstance(tools, dict) else None
-
-    monkeypatch.setattr(agent_worker_state, "_publish_scoped_tool_generation", _publish)
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.agent_tools.get_agent_tool_set_service",
-        lambda: _Service(),
-    )
 
     async with pin_operation_context_v2(
         generation_host,

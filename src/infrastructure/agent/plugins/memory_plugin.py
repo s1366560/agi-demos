@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import Any, ClassVar, cast
 
 from src.infrastructure.agent.memory.runtime import MemoryRuntimeProtocol
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginToolBuildContext
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+from src.infrastructure.agent.tools.memory_tool_provider import build_memory_tools
 from src.infrastructure.audit.audit_log_service import get_audit_service
-
-if TYPE_CHECKING:
-    from redis.asyncio import Redis
 
 PLUGIN_NAME = "memory-runtime"
 
@@ -58,12 +56,6 @@ async def _log_memory_audit(
         )
     except Exception:
         logger.debug("Memory plugin audit logging failed", exc_info=True)
-
-
-def _memory_tool_provider_enabled() -> bool:
-    from src.configuration.config import get_settings
-
-    return get_settings().agent_memory_tool_provider_mode != "disabled"
 
 
 def _memory_runtime(payload: Mapping[str, Any]) -> MemoryRuntimeProtocol | None:
@@ -148,71 +140,13 @@ async def _after_turn_complete(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _build_memory_tools(context: PluginToolBuildContext) -> dict[str, Any]:
-    if not _memory_tool_provider_enabled():
-        return {}
-    session_factory = context.session_factory
-    graph_service = context.graph_service
-    if session_factory is None or graph_service is None:
-        return {}
-
-    from src.infrastructure.agent.tools.memory_tools import (
-        configure_memory_create,
-        configure_memory_get,
-        configure_memory_search,
-        memory_create_tool,
-        memory_delete_tool,
-        memory_get_tool,
-        memory_search_tool,
-        memory_update_tool,
-    )
-    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
-    from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
-    from src.infrastructure.memory.chunk_search import ChunkHybridSearch
-
-    embedding_service = getattr(graph_service, "embedder", None)
-    cached_embedding = (
-        CachedEmbeddingService(
-            embedding_service,
-            cast("Redis | None", context.redis_client),
-        )
-        if embedding_service
-        else None
-    )
-
-    configure_memory_get(
-        session_factory=session_factory,
-        project_id=context.project_id,
-    )
-    configure_memory_create(
-        session_factory=session_factory,
-        graph_service=graph_service,
-        project_id=context.project_id,
+    return build_memory_tools(
         tenant_id=context.tenant_id,
-        embedding_service=cached_embedding,
+        project_id=context.project_id,
+        graph_service=context.graph_service,
+        redis_client=context.redis_client,
+        session_factory=context.session_factory,
     )
-    if cached_embedding is not None:
-        configure_memory_search(
-            chunk_search=ChunkHybridSearch(
-                cast("EmbeddingService", cached_embedding),
-                session_factory,
-            ),
-            graph_service=graph_service,
-            project_id=context.project_id,
-        )
-    else:
-        configure_memory_search(
-            chunk_search=None,
-            graph_service=graph_service,
-            project_id=context.project_id,
-        )
-
-    return {
-        "memory_search": memory_search_tool,
-        "memory_get": memory_get_tool,
-        "memory_create": memory_create_tool,
-        "memory_update": memory_update_tool,
-        "memory_delete": memory_delete_tool,
-    }
 
 
 def register_builtin_memory_plugin(registry: AgentPluginRegistry) -> None:

@@ -35,15 +35,6 @@ if TYPE_CHECKING:
 
 import redis.asyncio as redis
 
-from src.domain.model.plugins import PluginScopeContext
-from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-from src.infrastructure.agent.plugins.registry import (
-    PluginDiagnostic,
-    PluginSkillBuildContext,
-    PluginToolBuildContext,
-    get_plugin_registry,
-)
-
 # Import Agent Session Pool components
 from .agent_session_pool import (
     AgentSessionContext,
@@ -439,8 +430,15 @@ async def get_or_create_tools(
         Dictionary of tool name -> tool instance (built-in + sandbox + skill_loader)
     """
     generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
-
-    # 1. Get or create cached built-in tools
+    cache_key = (
+        generation_cache_key_v2(
+            project_id,
+            generation_descriptor=generation_descriptor,
+        )
+        if generation_descriptor is not None
+        else None
+    )
+    # 1. Build the base tools. Only the complete set is published to the generation cache.
     tools = await _get_or_create_builtin_tools(
         project_id,
         redis_client,
@@ -494,20 +492,13 @@ async def get_or_create_tools(
     # 9. Configure register_mcp_server tool
     _add_register_mcp_server_tool(tools, tenant_id, project_id)
 
-    # 10. Add plugin tools
-    await _add_plugin_tools(
+    # 10. Add the builtin memory capability without consulting the V1 plugin registry.
+    _add_memory_tools(
         tools,
         tenant_id,
         project_id,
         graph_service=graph_service,
         redis_client=redis_client,
-    )
-
-    # 10b. Add sandbox plugin tools (dependency-managed)
-    sandbox_id = kwargs.get("sandbox_id")
-    sandbox_port = kwargs.get("sandbox_port")
-    await _add_sandbox_plugin_tools(
-        tools, tenant_id, project_id, sandbox_id, sandbox_port, redis_client
     )
 
     # 11. Add custom tools from .memstack/tools/
@@ -531,6 +522,10 @@ async def get_or_create_tools(
     # 16. Add Workspace Chat tools
     await _add_workspace_chat_tools(tools, tenant_id, project_id)
 
+    if cache_key is not None:
+        async with _tools_cache_lock:
+            _tools_cache[cache_key] = dict(tools)
+
     return tools
 
 
@@ -540,49 +535,33 @@ async def _get_or_create_builtin_tools(
     *,
     generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
-    """Get or create cached built-in tools, returning a copy."""
+    """Build the base tools before the complete generation tool set is cached."""
     from src.infrastructure.agent.tools.clarification import configure_clarification
     from src.infrastructure.agent.tools.decision import configure_decision
     from src.infrastructure.agent.tools.define import get_registered_tools
 
-    generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
-    cache_key = (
-        generation_cache_key_v2(
-            project_id,
-            generation_descriptor=generation_descriptor,
-        )
-        if generation_descriptor is not None
-        else None
-    )
-
+    _ = generation_descriptor
     async with _tools_cache_lock:
-        cached = _tools_cache.get(cache_key) if cache_key is not None else None
-        if cached is None:
-            from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
-            from src.infrastructure.agent.tools.web_search import configure_web_search
+        from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
+        from src.infrastructure.agent.tools.web_search import configure_web_search
 
-            configure_web_search(redis_client=redis_client)
-            configure_web_scrape()
-            configure_clarification(hitl_handler=None)
-            configure_decision(hitl_handler=None)
+        configure_web_search(redis_client=redis_client)
+        configure_web_scrape()
+        configure_clarification(hitl_handler=None)
+        configure_decision(hitl_handler=None)
 
-            registry = get_registered_tools()
-            tools = {
-                "web_search": registry["web_search"],
-                "web_scrape": registry["web_scrape"],
-                "ask_clarification": registry["ask_clarification"],
-                "request_decision": registry["request_decision"],
-            }
-            if cache_key is not None:
-                _tools_cache[cache_key] = tools
-            logger.info(
-                "Agent Worker: Tool set built for project %s (cached=%s)",
-                project_id,
-                cache_key is not None,
-            )
-            return dict(tools)
-
-    return dict(cached)
+        registry = get_registered_tools()
+        tools = {
+            "web_search": registry["web_search"],
+            "web_scrape": registry["web_scrape"],
+            "ask_clarification": registry["ask_clarification"],
+            "request_decision": registry["request_decision"],
+        }
+        logger.info(
+            "Agent Worker: Base tool set built for project %s",
+            project_id,
+        )
+        return tools
 
 
 async def _add_sandbox_tools(
@@ -1004,7 +983,7 @@ def _add_register_mcp_server_tool(
         logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")
 
 
-async def _add_plugin_tools(
+def _add_memory_tools(
     tools: dict[str, Any],
     tenant_id: str,
     project_id: str,
@@ -1012,359 +991,51 @@ async def _add_plugin_tools(
     graph_service: Any,
     redis_client: Any,
 ) -> None:
-    """Load plugin runtime and add plugin-provided tools."""
+    """Add the builtin memory tools without consulting a mutable plugin registry."""
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
-    from src.infrastructure.agent.core.plugin_tool_adapter import (
-        adapt_plugin_tool,
-    )
+    from src.infrastructure.agent.tools.memory_tool_provider import build_memory_tools
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    # Ensure plugin runtime is loaded before building plugin-provided tools.
-    runtime_manager = get_plugin_runtime_manager()
-    runtime_diagnostics = await runtime_manager.ensure_loaded()
-    for diagnostic in runtime_diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="runtime_load")
-
-    # Add plugin tools registered via plugin runtime (phase-1 foundation).
-    # Default behavior stays unchanged when no plugins are registered.
-    plugin_registry = get_plugin_registry()
-    plugin_tools, diagnostics = await plugin_registry.build_tools(
-        PluginToolBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            base_tools=tools,
-            graph_service=graph_service,
-            redis_client=redis_client,
-            session_factory=async_session_factory,
-        )
-    )
-    for diagnostic in diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="tool_build")
-    if plugin_tools:
-        adapted_count = 0
-        for tool_name, tool_impl in plugin_tools.items():
-            plugin_name = getattr(tool_impl, "_plugin_origin", "unknown")
-            adapted = adapt_plugin_tool(
-                tool_name=tool_name,
-                tool_impl=tool_impl,
-                plugin_name=plugin_name,
-            )
-            if adapted is not None:
-                tools[tool_name] = adapted
-                adapted_count += 1
-            else:
-                logger.warning(
-                    "Agent Worker: Skipped unadaptable plugin tool '%s'",
-                    tool_name,
-                )
-        logger.info(
-            "Agent Worker: Added %d plugin tools for project %s (adapted %d)",
-            len(plugin_tools),
-            project_id,
-            adapted_count,
-        )
-
-
-async def _add_sandbox_plugin_tools(
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-    sandbox_id: str | None,
-    sandbox_port: Any,
-    redis_client: Any,
-) -> None:
-    """Load sandbox plugin tool factories and wrap them with dependency management."""
-    if sandbox_id is None or sandbox_port is None:
-        logger.debug("Agent Worker: No sandbox available, skipping sandbox plugin tools")
-        return
-
-    try:
-        from src.infrastructure.agent.plugins.registry import get_plugin_registry
-
-        plugin_registry = get_plugin_registry()
-        sandbox_factories = plugin_registry.list_sandbox_tool_factories()
-
-        if not sandbox_factories:
-            return
-
-        orchestrator = _build_sandbox_orchestrator(
-            redis_client=redis_client,
-            sandbox_port=sandbox_port,
-        )
-
-        added_count = 0
-        for plugin_name, factories in sandbox_factories.items():
-            deps_service_key = f"{plugin_name}:sandbox_deps"
-            declared_deps = plugin_registry.get_service(deps_service_key)
-
-            for factory in factories:
-                count = await _process_sandbox_factory(
-                    factory=factory,
-                    plugin_name=plugin_name,
-                    declared_deps=declared_deps,
-                    tools=tools,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
-                    sandbox_id=sandbox_id,
-                    sandbox_port=sandbox_port,
-                    orchestrator=orchestrator,
-                )
-                added_count += count
-
-        if added_count > 0:
-            logger.info(
-                "Agent Worker: Added %d sandbox plugin tools for project %s",
-                added_count,
-                project_id,
-            )
-    except Exception:
-        logger.debug(
-            "Agent Worker: Sandbox plugin tools not available",
-            exc_info=True,
-        )
-
-
-def _build_sandbox_orchestrator(
-    *,
-    redis_client: Any,
-    sandbox_port: Any,
-) -> Any:
-    """Build a DependencyOrchestrator for one sandbox session."""
-    from src.infrastructure.agent.plugins.sandbox_deps.orchestrator import (
-        DependencyOrchestrator,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_installer import (
-        SandboxDependencyInstaller as SbxInstaller,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.security_gate import (
-        SecurityGate,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.state_store import (
-        DepsStateStore,
-    )
-
-    state_store = DepsStateStore(redis_client=redis_client)
-    security_gate = SecurityGate()
-    sandbox_installer = SbxInstaller(
-        sandbox_tool_caller=sandbox_port.call_tool,
-        security_gate=security_gate,
-    )
-    return DependencyOrchestrator(
-        state_store=state_store,
-        sandbox_installer=sandbox_installer,
-        security_gate=security_gate,
-    )
-
-
-def _create_tool_execution_router(  # pyright: ignore[reportUnusedFunction]  # Phase 2.5+ prep
-    *,
-    sandbox_port: Any,
-    sandbox_id: str,
-    dep_orchestrator: Any | None = None,
-) -> Any:
-    """Create a ToolExecutionRouter for routing tools to host or sandbox.
-
-    Args:
-        sandbox_port: Interface to communicate with sandbox containers.
-        sandbox_id: ID of the target sandbox container.
-        dep_orchestrator: Optional DependencyOrchestrator for sandbox dependencies.
-
-    Returns:
-        A configured ToolExecutionRouter.
-    """
-    from src.infrastructure.agent.core.host_tool_executor import HostToolExecutor
-    from src.infrastructure.agent.core.sandbox_tool_executor import (
-        SandboxToolExecutor,
-    )
-    from src.infrastructure.agent.core.tool_execution_router import (
-        ToolExecutionRouter,
-    )
-
-    host_executor = HostToolExecutor()
-    sandbox_executor = SandboxToolExecutor(
-        sandbox_port=sandbox_port,
-        sandbox_id=sandbox_id,
-        dependency_orchestrator=dep_orchestrator,
-    )
-    return ToolExecutionRouter(
-        sandbox_executor=sandbox_executor,
-        host_executor=host_executor,
-    )
-
-
-async def _process_sandbox_factory(
-    *,
-    factory: Any,
-    plugin_name: str,
-    declared_deps: Any,
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-    sandbox_id: str,
-    sandbox_port: Any,
-    orchestrator: Any,
-) -> int:
-    """Process a single sandbox plugin factory, returning the count of tools added."""
-    import inspect
-
-    from src.infrastructure.agent.plugins.registry import PluginToolBuildContext
-
-    try:
-        build_ctx = PluginToolBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            base_tools=tools,
-        )
-        factory_result = factory(build_ctx)
-
-        if inspect.isawaitable(factory_result):
-            factory_result = await factory_result
-
-        if not isinstance(factory_result, dict):
-            return 0
-
-        added = 0
-        for tool_name, tool_meta in factory_result.items():
-            tool_info = _build_tool_from_meta(
-                tool_name=tool_name,
-                tool_meta=tool_meta,
-                declared_deps=declared_deps,
-                tools=tools,
-                plugin_name=plugin_name,
-                sandbox_id=sandbox_id,
-                project_id=project_id,
-                sandbox_port=sandbox_port,
-                orchestrator=orchestrator,
-            )
-            if tool_info is not None:
-                tools[tool_name] = tool_info
-                added += 1
-        return added
-    except Exception:
-        logger.warning(
-            "Agent Worker: Failed to build sandbox plugin tool from '%s'",
-            plugin_name,
-            exc_info=True,
-        )
-        return 0
-
-
-def _build_tool_from_meta(
-    *,
-    tool_name: str,
-    tool_meta: Any,
-    declared_deps: Any,
-    tools: dict[str, Any],
-    plugin_name: str,
-    sandbox_id: str,
-    project_id: str,
-    sandbox_port: Any,
-    orchestrator: Any,
-) -> Any:
-    """Extract metadata from a factory result entry and build a ToolInfo, or return None."""
-    from src.infrastructure.agent.plugins.sandbox_deps.models import (
-        RuntimeDependencies,
-    )
-    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_plugin_tool_wrapper import (
-        create_sandbox_plugin_tool,
-    )
-
-    if tool_name in tools:
-        logger.debug(
-            "Agent Worker: Sandbox plugin tool '%s' skipped (name conflict)",
-            tool_name,
-        )
-        return None
-
-    tool_description = ""
-    tool_parameters: dict[str, Any] = {}
-    tool_permission: str | None = None
-    tool_deps = declared_deps
-
-    if isinstance(tool_meta, dict):
-        tool_description = tool_meta.get("description", "")
-        tool_parameters = tool_meta.get("parameters", {})
-        tool_permission = tool_meta.get("permission")
-        if "dependencies" in tool_meta:
-            tool_deps = tool_meta["dependencies"]
-
-    if tool_deps is None:
-        return None
-
-    if not isinstance(tool_deps, RuntimeDependencies):
-        return None
-
-    return create_sandbox_plugin_tool(
-        plugin_id=plugin_name,
-        tool_name=tool_name,
-        description=tool_description,
-        parameters=tool_parameters,
-        sandbox_id=sandbox_id,
+    memory_tools = build_memory_tools(
+        tenant_id=tenant_id,
         project_id=project_id,
-        sandbox_port=sandbox_port,
-        orchestrator=orchestrator,
-        dependencies=tool_deps,
-        permission=tool_permission,
+        graph_service=graph_service,
+        redis_client=redis_client,
+        session_factory=async_session_factory,
     )
+    conflicts = sorted(set(tools).intersection(memory_tools))
+    if conflicts:
+        raise RuntimeV2Error(
+            "tool_contribution_conflict",
+            f"builtin memory tools conflict with existing tools: {', '.join(conflicts)}",
+        )
+    tools.update(memory_tools)
 
 
-async def _add_plugin_skills(
+def _add_workspace_runtime_skill(
     skills: list[Any],
     tenant_id: str,
     project_id: str | None,
-    agent_mode: str = "default",
 ) -> list[Any]:
-    """Load plugin runtime and add plugin-provided skills.
-
-    Returns a new list with plugin skills appended (no name conflicts
-    with existing filesystem/database skills).
-    """
-    from src.infrastructure.agent.tools.plugin_skills import build_plugin_skills
-
-    # Ensure plugin runtime is loaded before building plugin-provided skills.
-    runtime_manager = get_plugin_runtime_manager()
-    runtime_diagnostics = await runtime_manager.ensure_loaded()
-    for diagnostic in runtime_diagnostics:
-        _log_plugin_diagnostic(diagnostic, context="runtime_load_skills")
-
-    plugin_registry = get_plugin_registry()
-    plugin_skills = await build_plugin_skills(
-        plugin_registry,
-        PluginSkillBuildContext(
-            tenant_id=tenant_id,
-            project_id=project_id or "",
-            agent_mode=agent_mode,
-        ),
-        discovered_plugins=runtime_manager.discovered_plugins,
+    """Add the builtin workspace harness without consulting a mutable registry."""
+    from src.infrastructure.agent.workspace.skill_provider import (
+        build_workspace_task_harness_skill,
     )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    if not plugin_skills:
-        return skills
-
-    existing_names = {getattr(s, "name", None) for s in skills}
-    added = 0
-    merged = list(skills)
-    for skill in plugin_skills:
-        if skill.name in existing_names:
-            logger.debug(
-                "Agent Worker: Plugin skill '%s' skipped (name conflict with existing skill)",
-                skill.name,
-            )
-            continue
-        merged.append(skill)
-        existing_names.add(skill.name)
-        added += 1
-
-    if added:
-        logger.info(
-            "Agent Worker: Added %d plugin skills for tenant=%s project=%s",
-            added,
-            tenant_id,
-            project_id,
+    workspace_skill = build_workspace_task_harness_skill(
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
+    existing_names = {getattr(skill, "name", None) for skill in skills}
+    if workspace_skill.name in existing_names:
+        raise RuntimeV2Error(
+            "agent_capability_conflict",
+            f"builtin workspace skill conflicts with existing skill {workspace_skill.name}",
         )
-
-    return merged
+    return [*skills, workspace_skill]
 
 
 def _find_sandbox_id(
@@ -1531,21 +1202,6 @@ def resolve_project_base_path(
     cwd = Path.cwd()
     logger.info("Resolved project base path from cwd: %s", cwd)
     return cwd
-
-
-def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
-    """Log plugin runtime diagnostics consistently."""
-    message = (
-        f"[AgentWorker][Plugin:{diagnostic.plugin_name}][{context}] "
-        f"{diagnostic.code}: {diagnostic.message}"
-    )
-    if diagnostic.level == "error":
-        logger.error(message)
-        return
-    if diagnostic.level == "info":
-        logger.info(message)
-        return
-    logger.warning(message)
 
 
 def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
@@ -2910,17 +2566,7 @@ def get_cached_tools_for_project(
     cached = _tools_cache.get(cache_key)
     if cached is None:
         return None
-    from src.infrastructure.plugins.agent_tools import get_agent_tool_set_service
-
-    _publish_scoped_tool_generation(project_id, cached)
-    service = get_agent_tool_set_service()
-    current = service.current(PluginScopeContext(project_id=project_id))
-    if current is None:
-        raise RuntimeError(
-            "no scoped tool generation exists for a cached project; "
-            "the generation publish step must have failed"
-        )
-    return dict(current.tools)
+    return dict(cached)
 
 
 def get_custom_tool_diagnostics(
@@ -3125,7 +2771,6 @@ def rescan_custom_tools_for_project(
                 len(custom_tools),
                 project_id,
             )
-        _publish_scoped_tool_generation(project_id, cached)
         return len(custom_tools)
 
     except Exception as e:
@@ -3135,40 +2780,6 @@ def rescan_custom_tools_for_project(
             e,
         )
         return 0
-
-
-def _publish_scoped_tool_generation(
-    project_id: str,
-    tools: dict[str, Any],
-) -> None:
-    """Publish the current scoped tool generation when it has changed."""
-    from src.infrastructure.plugins.agent_tools import (
-        LegacyToolBuildError,
-        get_agent_tool_set_service,
-        legacy_tool_descriptor,
-    )
-
-    # The legacy cache can hold tools whose metadata drifted from their cache
-    # key; one malformed entry must not take down the whole toolset, so those
-    # entries are skipped with a warning rather than failing the publish.
-    publishable: dict[str, Any] = {}
-    for tool_id, tool in tools.items():
-        try:
-            _ = legacy_tool_descriptor(tool_id, tool)
-        except LegacyToolBuildError as exc:
-            logger.warning(
-                "Agent Worker: skipping malformed cached tool %s for project %s: %s",
-                tool_id,
-                project_id,
-                exc,
-            )
-            continue
-        publishable[tool_id] = tool
-    service = get_agent_tool_set_service()
-    scope = PluginScopeContext(project_id=project_id)
-    current_inventory, _candidate_inventory, differs = service.shadow_comparison(scope, publishable)
-    if current_inventory is None or differs:
-        service.publish(scope, publishable)
 
 
 def invalidate_all_caches_for_project(
@@ -3370,11 +2981,7 @@ async def get_or_create_skills(
 
             skills = list(loaded_by_name.values())
 
-            # Merge plugin-provided skills
-            try:
-                skills = await _add_plugin_skills(skills, tenant_id, project_id)
-            except Exception as e:
-                logger.warning("Agent Worker: Plugin skills loading failed: %s", e)
+            skills = _add_workspace_runtime_skill(skills, tenant_id, project_id)
             if cache_key is not None:
                 _skills_cache[cache_key] = skills
             logger.info(

@@ -13,8 +13,12 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     is_workspace_conversation,
 )
 
+from .skill_provider import (
+    WORKSPACE_TASK_HARNESS_SKILL_NAME as WORKSPACE_TASK_HARNESS_SKILL_NAME,
+    workspace_task_harness_skill_payload,
+)
+
 PLUGIN_NAME = "workspace-runtime"
-WORKSPACE_TASK_HARNESS_SKILL_NAME = "workspace-task-harness"
 
 _SESSION_INSTRUCTION = (
     "Workspace runtime is active. Treat this turn as part of a durable task attempt: "
@@ -38,41 +42,6 @@ _WORKER_TASK_TREE_INSTRUCTION = (
     "delegate_to_subagent or parallel_delegate_subagents from a worker session; helper "
     "subagents do not own this attempt's durable terminal report or worktree guard."
 )
-_WORKSPACE_TASK_HARNESS_FULL_CONTENT = """# Workspace Task Harness
-
-Use this skill when a workspace task needs durable decomposition, delegated execution,
-collaboration tracking, or verification evidence.
-
-## Workflow
-
-1. Rehydrate the active workspace/task/attempt context before changing files.
-2. Decompose the request into feature-sized checklist items with explicit acceptance criteria.
-3. Execute each item with real tools, durable progress reports, and workspace chat updates when
-   coordination matters.
-4. Before editing, read the applicable AGENTS.md or project guidance, inspect existing patterns,
-   and keep the implementation plan local to the bound task.
-5. Apply a code-quality gate before reporting completion: preserve existing architecture,
-   avoid duplicate business logic or duplicate type/schema definitions, commit migrations with
-   schema changes, keep dependency lockfiles in sync, protect secrets and tokens, avoid silent
-   mock-data fallbacks in production paths, and verify frontend/backend contracts when both sides
-   change. Treat explicit AGENTS.md/project guidance as hard acceptance criteria for code, docs,
-   tests, generated artifacts, and reports; include project_guidance:checked evidence when such
-   guidance exists. In shared worktrees, isolate commits to this task's intended files: inspect
-   git status/diff, stage explicit owned paths only, and do not use broad staging such as
-   git add -A, git add ., or git commit -a when unrelated dirty files exist.
-6. Persist artifacts, changed files, test commands, verification evidence, and remaining risk.
-7. Finish by calling `workspace_report_complete`, or `workspace_report_blocked` with a concrete
-   blocker and next recovery action.
-
-## Evidence Standard
-
-- Every code change needs a diff summary and at least one targeted verification command.
-- Every handoff needs completed steps, next steps, changed files, test results, and known gaps.
-- Every collaboration blocker needs the blocked task, owner, missing input, and recommended action.
-- Quality-sensitive changes need focused evidence: migration or rollback proof for schema changes,
-  lockfile evidence for dependency changes, contract tests for API/UI boundary changes, and security
-  notes for authentication, authorization, secrets, or token handling.
-"""
 
 
 def _build_workspace_task_harness_skills(
@@ -80,41 +49,7 @@ def _build_workspace_task_harness_skills(
 ) -> list[dict[str, Any]]:
     """Expose the workspace harness as a built-in plugin skill."""
     _ = context
-    return [
-        {
-            "name": WORKSPACE_TASK_HARNESS_SKILL_NAME,
-            "description": (
-                "Run long workspace tasks through durable decomposition, collaboration tracking, "
-                "handoff, and verification evidence."
-            ),
-            "tools": [
-                "read",
-                "write",
-                "edit",
-                "bash",
-                "glob",
-                "grep",
-                "workspace_chat_read",
-                "workspace_chat_send",
-                "workspace_report_progress",
-                "workspace_report_complete",
-                "workspace_report_blocked",
-                "workspace_request_clarification",
-            ],
-            "full_content": _WORKSPACE_TASK_HARNESS_FULL_CONTENT,
-            "agent_modes": ["*"],
-            "scope": "tenant",
-            "metadata": {
-                "plugin": PLUGIN_NAME,
-                "capabilities": [
-                    "feature_checklist",
-                    "handoff_package",
-                    "collaboration_tracking",
-                    "verification_evidence",
-                ],
-            },
-        }
-    ]
+    return [workspace_task_harness_skill_payload()]
 
 
 def _workspace_session_role(payload: Mapping[str, Any]) -> str:

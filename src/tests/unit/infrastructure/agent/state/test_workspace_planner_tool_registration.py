@@ -37,8 +37,6 @@ async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
     for name in (
         "_add_sandbox_tools",
         "_add_skill_loader_tool",
-        "_add_plugin_tools",
-        "_add_sandbox_plugin_tools",
         "_add_workspace_chat_tools",
     ):
         monkeypatch.setattr(agent_worker_state, name, _async_noop)
@@ -47,11 +45,13 @@ async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
         "_add_skill_installer_tools",
         "_add_skill_sync_tool",
         "_add_env_var_tools",
+        "_add_system_api_tool",
         "_add_hitl_tools",
         "_add_todo_tools",
         "_configure_skill_evolution_capture",
         "_add_model_awareness_tools",
         "_add_register_mcp_server_tool",
+        "_add_memory_tools",
         "_add_custom_tools",
         "_add_session_comm_tools",
         "_add_session_status_tool",
