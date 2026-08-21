@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 AGENT_DEFINITION_MODULE_V2 = "builtin://memstack/agent/definition"
 AGENT_DEFINITION_RESOLVER_SERVICE_V2 = "service:agent-definition-resolver"
@@ -60,8 +60,8 @@ def _apply_agent_definition_resolver_v2(
 def builtin_agent_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=AGENT_DEFINITION_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(AGENT_DEFINITION_MODULE_V2),
         apply=_apply_agent_definition_resolver_v2,
-        provides=(AGENT_DEFINITION_RESOLVER_SERVICE_V2,),
     )
 
 

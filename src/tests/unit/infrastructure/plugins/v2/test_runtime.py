@@ -11,6 +11,10 @@ import pytest
 from src.domain.model.plugins.generated_v2 import (
     ArtifactReferenceV2,
     DataPlaneTargetV2,
+    EventContractsV2,
+    EventContractV2,
+    EventModeV2,
+    PluginContractV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -19,10 +23,16 @@ from src.domain.model.plugins.generated_v2 import (
     RuntimeKindV2,
     ScopeKindV2,
     ScopeV2,
+    ServiceContractV2,
+    ServiceProvidedV2,
+    ServiceRequiredV2,
     TrustKindV2,
 )
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
-from src.infrastructure.plugins.v2.protocol import build_profile_snapshot_v2
+from src.infrastructure.plugins.v2.protocol import (
+    build_profile_snapshot_v2,
+    plugin_contract_digest_v2,
+)
 from src.infrastructure.plugins.v2.route_effects import (
     ROUTE_TABLE_BUILDER_SERVICE_V2,
     route_contribution_definition_v2,
@@ -81,16 +91,42 @@ def _entry(
     )
 
 
-def _snapshot(generation: int, entries: tuple[ProfileEntryV2, ...]):
+def _event(event: str, mode: EventModeV2) -> EventContractV2:
+    if event == "transform":
+        payload_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "integer",
+        }
+        result_schema = payload_schema
+    else:
+        payload_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": ["object", "null"],
+        }
+        result_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": ["string", "null"],
+        }
+    return EventContractV2(
+        event=event,
+        mode=mode,
+        payload_schema=payload_schema,
+        result_schema=result_schema,
+    )
+
+
+def _snapshot(
+    generation: int,
+    entries: tuple[ProfileEntryV2, ...],
+    *,
+    provides: Mapping[str, tuple[str, ...]] | None = None,
+    events: Mapping[str, tuple[EventContractV2, ...]] | None = None,
+):
+    provided = provides or {}
+    declared_events = events or {}
     modules = tuple(
-        PluginModuleV2(
-            module_ref=entry.module_ref,
-            entrypoint="tests:apply",
-            artifact=ArtifactReferenceV2(
-                digest=_ARTIFACT_DIGEST,
-                source=f"package://builtin/{entry.entry_id}",
-            ),
-            targets=(DataPlaneTargetV2.PYTHON,),
+        _module(
+            entry, provided.get(entry.module_ref, ()), declared_events.get(entry.module_ref, ())
         )
         for entry in entries
     )
@@ -110,6 +146,72 @@ def _snapshot(generation: int, entries: tuple[ProfileEntryV2, ...]):
         manifests=(manifest,),
         entries=entries,
     )
+
+
+def _module(
+    entry: ProfileEntryV2,
+    provides: tuple[str, ...],
+    events: tuple[EventContractV2, ...],
+) -> PluginModuleV2:
+    contract = PluginContractV2(
+        services=ServiceContractV2(
+            provides=tuple(
+                ServiceProvidedV2(service=service, version="1.0.0") for service in provides
+            ),
+            requires=tuple(
+                ServiceRequiredV2(alias=alias, service=service, version="1.0.0")
+                for alias, service in entry.inject.items()
+            ),
+        ),
+        events=EventContractsV2(emits=events, handles=events),
+        config_schema={
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": False,
+        },
+    )
+    return PluginModuleV2(
+        module_ref=entry.module_ref,
+        entrypoint="tests:apply",
+        artifact=ArtifactReferenceV2(
+            digest=_ARTIFACT_DIGEST,
+            source=f"package://builtin/{entry.entry_id}",
+        ),
+        targets=(DataPlaneTargetV2.PYTHON,),
+        contract=contract,
+        contract_digest=plugin_contract_digest_v2(contract),
+    )
+
+
+def _catalog(snapshot) -> dict[str, str]:
+    return {
+        module.module_ref: module.contract_digest
+        for manifest in snapshot.manifests
+        for module in manifest.modules
+        if DataPlaneTargetV2.PYTHON in module.targets
+    }
+
+
+def _definition(snapshot, module_ref: str, apply) -> PluginDefinitionV2:
+    return PluginDefinitionV2(
+        module_ref=module_ref,
+        contract_digest=_digest(snapshot, module_ref),
+        apply=apply,
+    )
+
+
+def _digest(snapshot, module_ref: str) -> str:
+    module = next(
+        module
+        for manifest in snapshot.manifests
+        for module in manifest.modules
+        if module.module_ref == module_ref
+    )
+    return module.contract_digest
+
+
+def _loader(snapshot, definitions) -> LoaderV2:
+    return LoaderV2(definitions, target_catalog=_catalog(snapshot))
 
 
 @pytest.mark.unit
@@ -133,10 +235,13 @@ async def test_fiber_tracks_sync_async_and_iterable_effects_in_lifo_order() -> N
         return lambda: disposed.append("apply")
 
     entry = _entry("root", "builtin://runtime/root")
-    loader = LoaderV2(
-        [PluginDefinitionV2(module_ref=entry.module_ref, apply=apply, provides=("service:value",))]
+    snapshot = _snapshot(
+        1,
+        (entry,),
+        provides={entry.module_ref: ("service:value",)},
     )
-    generation = await loader.stage(_snapshot(1, (entry,)))
+    loader = _loader(snapshot, [_definition(snapshot, entry.module_ref, apply)])
+    generation = await loader.stage(snapshot)
 
     assert generation.fibers[0].phase == FiberPhaseV2.ACTIVE
     await generation.dispose()
@@ -162,19 +267,21 @@ async def test_failed_activation_rolls_back_all_contributions() -> None:
         "builtin://runtime/failing",
         inject={"value": "service:value"},
     )
-    loader = LoaderV2(
+    snapshot = _snapshot(
+        1,
+        (provider_entry, failing_entry),
+        provides={provider_entry.module_ref: ("service:value",)},
+    )
+    loader = _loader(
+        snapshot,
         [
-            PluginDefinitionV2(
-                module_ref=provider_entry.module_ref,
-                apply=provider,
-                provides=("service:value",),
-            ),
-            PluginDefinitionV2(module_ref=failing_entry.module_ref, apply=failing),
-        ]
+            _definition(snapshot, provider_entry.module_ref, provider),
+            _definition(snapshot, failing_entry.module_ref, failing),
+        ],
     )
 
     with pytest.raises(ValueError, match="boom"):
-        await loader.stage(_snapshot(1, (provider_entry, failing_entry)))
+        await loader.stage(snapshot)
 
     assert disposed == ["provider"]
 
@@ -201,13 +308,15 @@ async def test_loader_activates_only_entries_for_its_data_plane_target() -> None
     )
     activated: list[str] = []
 
-    loader = LoaderV2(
+    loader = _loader(
+        snapshot,
         [
-            PluginDefinitionV2(
-                module_ref=python_entry.module_ref,
-                apply=lambda _context, _config: activated.append("python"),
+            _definition(
+                snapshot,
+                python_entry.module_ref,
+                lambda _context, _config: activated.append("python"),
             )
-        ]
+        ],
     )
     generation = await loader.stage(snapshot)
 
@@ -223,9 +332,11 @@ async def test_inactive_fiber_rejects_new_effects() -> None:
         captured["context"] = context
 
     entry = _entry("root", "builtin://runtime/root")
-    generation = await LoaderV2(
-        [PluginDefinitionV2(module_ref=entry.module_ref, apply=apply)]
-    ).stage(_snapshot(1, (entry,)))
+    snapshot = _snapshot(1, (entry,))
+    generation = await _loader(
+        snapshot,
+        [_definition(snapshot, entry.module_ref, apply)],
+    ).stage(snapshot)
     await generation.dispose()
 
     with pytest.raises(RuntimeV2Error) as error:
@@ -250,23 +361,34 @@ async def test_route_contribution_effect_freezes_and_unloads_with_its_fiber() ->
         endpoint=lambda: {"ok": True},
         name="contributed-route",
     )
-    generation = await LoaderV2(
+    snapshot = _snapshot(
+        1,
+        (provider_entry, contributor_entry),
+        provides={provider_entry.module_ref: (ROUTE_TABLE_BUILDER_SERVICE_V2,)},
+    )
+    generation = await _loader(
+        snapshot,
         (
             route_table_builder_definition_v2(
                 module_ref=provider_entry.module_ref,
                 builder=builder,
+                contract_digest=_digest(snapshot, provider_entry.module_ref),
             ),
             route_contribution_definition_v2(
                 module_ref=contributor_entry.module_ref,
                 routes=(route,),
+                contract_digest=_digest(snapshot, contributor_entry.module_ref),
             ),
-        )
-    ).stage(_snapshot(1, (provider_entry, contributor_entry)))
+        ),
+    ).stage(snapshot)
 
-    assert generation.resolve(
-        ROUTE_TABLE_BUILDER_SERVICE_V2,
-        _scope(ScopeKindV2.ROOT),
-    ) is builder
+    assert (
+        generation.resolve(
+            ROUTE_TABLE_BUILDER_SERVICE_V2,
+            _scope(ScopeKindV2.ROOT),
+        )
+        is builder
+    )
     assert builder.definitions == (route,)
     frozen = builder.freeze()
     with pytest.raises(RuntimeV2Error) as error:
@@ -309,23 +431,32 @@ async def test_route_contribution_conflict_rolls_back_staged_effects() -> None:
         name="second-route",
     )
 
+    snapshot = _snapshot(
+        1,
+        (provider_entry, first_entry, second_entry),
+        provides={provider_entry.module_ref: (ROUTE_TABLE_BUILDER_SERVICE_V2,)},
+    )
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(
+        await _loader(
+            snapshot,
             (
                 route_table_builder_definition_v2(
                     module_ref=provider_entry.module_ref,
                     builder=builder,
+                    contract_digest=_digest(snapshot, provider_entry.module_ref),
                 ),
                 route_contribution_definition_v2(
                     module_ref=first_entry.module_ref,
                     routes=(first_route,),
+                    contract_digest=_digest(snapshot, first_entry.module_ref),
                 ),
                 route_contribution_definition_v2(
                     module_ref=second_entry.module_ref,
                     routes=(second_route,),
+                    contract_digest=_digest(snapshot, second_entry.module_ref),
                 ),
-            )
-        ).stage(_snapshot(1, (provider_entry, first_entry, second_entry)))
+            ),
+        ).stage(snapshot)
 
     assert error.value.code == "route_conflict"
     assert builder.definitions == ()
@@ -361,21 +492,21 @@ async def test_nearest_scope_provider_wins_for_explicit_inject() -> None:
             inject={"value": "service:value"},
         ),
     )
+    snapshot = _snapshot(
+        1,
+        entries,
+        provides={
+            entries[0].module_ref: ("service:value",),
+            entries[1].module_ref: ("service:value",),
+        },
+    )
     definitions = (
-        PluginDefinitionV2(
-            module_ref=entries[0].module_ref,
-            apply=root_provider,
-            provides=("service:value",),
-        ),
-        PluginDefinitionV2(
-            module_ref=entries[1].module_ref,
-            apply=tenant_provider,
-            provides=("service:value",),
-        ),
-        PluginDefinitionV2(module_ref=entries[2].module_ref, apply=consumer),
+        _definition(snapshot, entries[0].module_ref, root_provider),
+        _definition(snapshot, entries[1].module_ref, tenant_provider),
+        _definition(snapshot, entries[2].module_ref, consumer),
     )
 
-    generation = await LoaderV2(definitions).stage(_snapshot(1, entries))
+    generation = await _loader(snapshot, definitions).stage(snapshot)
 
     assert observed == ["tenant"]
     assert generation.resolve("service:value", session_scope) == "tenant"
@@ -387,13 +518,15 @@ async def test_undeclared_inject_is_rejected() -> None:
         context.require("secret")
 
     entry = _entry("root", "builtin://runtime/root")
+    snapshot = _snapshot(1, (entry,))
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2([PluginDefinitionV2(module_ref=entry.module_ref, apply=apply)]).stage(
-            _snapshot(1, (entry,))
-        )
+        await _loader(
+            snapshot,
+            [_definition(snapshot, entry.module_ref, apply)],
+        ).stage(snapshot)
 
-    assert error.value.code == "undeclared_inject"
+    assert error.value.code == "undeclared_require"
 
 
 @pytest.mark.unit
@@ -416,17 +549,19 @@ async def test_isolation_domain_must_match_provider() -> None:
         isolate={"service:value": "domain-b"},
     )
 
+    snapshot = _snapshot(
+        1,
+        (provider_entry, consumer_entry),
+        provides={provider_entry.module_ref: ("service:value",)},
+    )
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(
+        await _loader(
+            snapshot,
             [
-                PluginDefinitionV2(
-                    module_ref=provider_entry.module_ref,
-                    apply=provider,
-                    provides=("service:value",),
-                ),
-                PluginDefinitionV2(module_ref=consumer_entry.module_ref, apply=consumer),
-            ]
-        ).stage(_snapshot(1, (provider_entry, consumer_entry)))
+                _definition(snapshot, provider_entry.module_ref, provider),
+                _definition(snapshot, consumer_entry.module_ref, consumer),
+            ],
+        ).stage(snapshot)
 
     assert error.value.code == "missing_inject_provider"
 
@@ -448,16 +583,18 @@ async def test_interceptor_is_applied_without_mutating_parent_context() -> None:
         "builtin://runtime/consumer",
         inject={"value": "service:value"},
     )
-    generation = await LoaderV2(
+    snapshot = _snapshot(
+        1,
+        (provider_entry, consumer_entry),
+        provides={provider_entry.module_ref: ("service:value",)},
+    )
+    generation = await _loader(
+        snapshot,
         [
-            PluginDefinitionV2(
-                module_ref=provider_entry.module_ref,
-                apply=provider,
-                provides=("service:value",),
-            ),
-            PluginDefinitionV2(module_ref=consumer_entry.module_ref, apply=consumer),
-        ]
-    ).stage(_snapshot(1, (provider_entry, consumer_entry)))
+            _definition(snapshot, provider_entry.module_ref, provider),
+            _definition(snapshot, consumer_entry.module_ref, consumer),
+        ],
+    ).stage(snapshot)
 
     intercepted = contexts["consumer"].intercept("service:value", lambda value: value + 5)
 
@@ -485,15 +622,26 @@ async def test_events_support_bail_waterfall_and_disappear_on_dispose() -> None:
         context.on("transform", times_two)
 
     entry = _entry("root", "builtin://runtime/root")
-    generation = await LoaderV2(
-        [PluginDefinitionV2(module_ref=entry.module_ref, apply=apply)]
-    ).stage(_snapshot(1, (entry,)))
+    snapshot = _snapshot(
+        1,
+        (entry,),
+        events={
+            entry.module_ref: (
+                _event("choose", EventModeV2.BAIL),
+                _event("transform", EventModeV2.WATERFALL),
+            )
+        },
+    )
+    generation = await _loader(
+        snapshot,
+        [_definition(snapshot, entry.module_ref, apply)],
+    ).stage(snapshot)
     context = captured["context"]
 
-    assert await context.bail("choose", None) == "selected"
-    assert await context.waterfall("transform", 2) == 6
+    assert await context.dispatch("choose", None) == "selected"
+    assert await context.dispatch("transform", 2) == 6
     await generation.dispose()
-    assert await context.serial("choose", None) == ()
+    assert await context.dispatch("choose", None) is None
 
 
 @pytest.mark.unit
@@ -509,25 +657,25 @@ async def test_generation_lease_pins_old_generation_until_release() -> None:
 
     entry = _entry("root", "builtin://runtime/root")
     scope = _scope(ScopeKindV2.ROOT)
-    first = await LoaderV2(
-        [
-            PluginDefinitionV2(
-                module_ref=entry.module_ref,
-                apply=definition(1),
-                provides=("service:value",),
-            )
-        ]
-    ).stage(_snapshot(1, (entry,)))
+    first_snapshot = _snapshot(
+        1,
+        (entry,),
+        provides={entry.module_ref: ("service:value",)},
+    )
+    first = await _loader(
+        first_snapshot,
+        [_definition(first_snapshot, entry.module_ref, definition(1))],
+    ).stage(first_snapshot)
     second_entry = replace(entry, module_ref="builtin://runtime/root-v2")
-    second = await LoaderV2(
-        [
-            PluginDefinitionV2(
-                module_ref=second_entry.module_ref,
-                apply=definition(2),
-                provides=("service:value",),
-            )
-        ]
-    ).stage(_snapshot(2, (second_entry,)))
+    second_snapshot = _snapshot(
+        2,
+        (second_entry,),
+        provides={second_entry.module_ref: ("service:value",)},
+    )
+    second = await _loader(
+        second_snapshot,
+        [_definition(second_snapshot, second_entry.module_ref, definition(2))],
+    ).stage(second_snapshot)
     manager = GenerationManagerV2()
     await manager.publish(first)
     old_lease = await manager.acquire()
@@ -548,9 +696,11 @@ async def test_generation_lease_pins_old_generation_until_release() -> None:
 @pytest.mark.unit
 async def test_operation_context_derives_scope_chain_and_isolates_temporary_services() -> None:
     entry = _entry("root", "builtin://runtime/root")
-    generation = await LoaderV2(
-        [PluginDefinitionV2(module_ref=entry.module_ref, apply=lambda _context, _config: None)]
-    ).stage(_snapshot(3, (entry,)))
+    snapshot = _snapshot(3, (entry,))
+    generation = await _loader(
+        snapshot,
+        [_definition(snapshot, entry.module_ref, lambda _context, _config: None)],
+    ).stage(snapshot)
     scope = _scope(
         ScopeKindV2.SESSION,
         tenant_id="tenant-a",
@@ -581,9 +731,11 @@ async def test_operation_context_derives_scope_chain_and_isolates_temporary_serv
 @pytest.mark.unit
 async def test_operation_context_disposes_temporary_effects_in_lifo_order() -> None:
     entry = _entry("root", "builtin://runtime/root")
-    generation = await LoaderV2(
-        [PluginDefinitionV2(module_ref=entry.module_ref, apply=lambda _context, _config: None)]
-    ).stage(_snapshot(4, (entry,)))
+    snapshot = _snapshot(4, (entry,))
+    generation = await _loader(
+        snapshot,
+        [_definition(snapshot, entry.module_ref, lambda _context, _config: None)],
+    ).stage(snapshot)
     disposed: list[str] = []
     operation = OperationContextV2(
         generation=generation,

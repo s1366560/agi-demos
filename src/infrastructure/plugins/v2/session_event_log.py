@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 SESSION_EVENT_LOG_MODULE_V2 = "builtin://memstack/session/event-log"
 SESSION_EVENT_LOG_WRITER_SERVICE_V2 = "service:session-event-log-writer"
@@ -58,8 +58,8 @@ def _apply_session_event_log_writer_v2(
 def builtin_session_event_log_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=SESSION_EVENT_LOG_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(SESSION_EVENT_LOG_MODULE_V2),
         apply=_apply_session_event_log_writer_v2,
-        provides=(SESSION_EVENT_LOG_WRITER_SERVICE_V2,),
     )
 
 

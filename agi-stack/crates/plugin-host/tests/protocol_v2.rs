@@ -3,10 +3,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use agistack_plugin_host::protocol_v2::ProfileSnapshotV2;
 use agistack_plugin_host::{
     parse_control_plane_distribution_v2, parse_profile_snapshot_v2, project_snapshot_entries_v2,
     ApplyStatusV2, ContextV2, DataPlaneTargetV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
-    PluginModuleRuntimeV2, PluginProtocolV2Error, PluginSnapshotReconcilerV2, RuntimeV2Error,
+    PluginModuleRuntimeV2, PluginProtocolV2Error, PluginSnapshotReconcilerV2, RuntimeGenerationV2,
+    RuntimeV2Error,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -16,6 +18,140 @@ use sha2::{Digest, Sha256};
 const SNAPSHOT: &str = include_str!("../../../../shared/fixtures/platform-plugin-profile.v2.json");
 const CONFORMANCE: &str =
     include_str!("../../../../shared/fixtures/plugin-runtime-conformance.v2.json");
+const CONTRACT_CONFORMANCE: &str =
+    include_str!("../../../../shared/fixtures/plugin-contract-conformance.v2.json");
+
+#[path = "protocol_v2/generation_lifecycle.rs"]
+mod generation_lifecycle;
+
+fn sha256_digest(value: &Value) -> String {
+    let canonical = serde_jcs::to_vec(value).expect("value must canonicalize");
+    format!("sha256:{:x}", Sha256::digest(canonical))
+}
+
+fn refresh_snapshot_digest(snapshot: &mut Value) {
+    let mut digest_payload = snapshot.clone();
+    digest_payload
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("digest");
+    snapshot["digest"] = Value::String(
+        sha256_digest(&digest_payload)
+            .strip_prefix("sha256:")
+            .expect("digest prefix")
+            .to_owned(),
+    );
+}
+
+fn refresh_contract_digests(snapshot: &mut Value) {
+    for manifest in snapshot["manifests"]
+        .as_array_mut()
+        .expect("snapshot manifests")
+    {
+        for module in manifest["modules"]
+            .as_array_mut()
+            .expect("manifest modules")
+        {
+            module["contract_digest"] = Value::String(sha256_digest(&module["contract"]));
+        }
+    }
+}
+
+fn apply_fixture_mutation(document: &mut Value, mutation: &Value) {
+    if let Some(operations) = mutation["operations"].as_array() {
+        for operation in operations {
+            apply_fixture_mutation(document, operation);
+        }
+        return;
+    }
+    let path = mutation["path"].as_str().expect("mutation path");
+    let (parent_path, raw_key) = path.rsplit_once('/').expect("nested JSON pointer");
+    let key = raw_key.replace("~1", "/").replace("~0", "~");
+    let parent = document
+        .pointer_mut(parent_path)
+        .expect("mutation parent must exist");
+    let operation = mutation["operation"].as_str().expect("mutation operation");
+    match parent {
+        Value::Object(object) => match operation {
+            "add" | "replace" => {
+                object.insert(key, mutation["value"].clone());
+            }
+            "remove" => {
+                object.remove(&key).expect("object member must exist");
+            }
+            _ => panic!("unsupported fixture mutation {operation}"),
+        },
+        Value::Array(array) => {
+            let index = key.parse::<usize>().expect("array index");
+            match operation {
+                "add" => array.insert(index, mutation["value"].clone()),
+                "replace" => array[index] = mutation["value"].clone(),
+                "remove" => {
+                    array.remove(index);
+                }
+                _ => panic!("unsupported fixture mutation {operation}"),
+            }
+        }
+        _ => panic!("fixture mutation parent must be a container"),
+    }
+}
+
+fn target_catalog_json(snapshot: &ProfileSnapshotV2, target: &DataPlaneTargetV2) -> String {
+    let modules: Vec<Value> = snapshot
+        .manifests
+        .iter()
+        .flat_map(|manifest| {
+            manifest
+                .modules
+                .iter()
+                .filter(|module| module.targets.contains(target))
+                .map(|module| {
+                    serde_json::json!({
+                        "plugin_id": manifest.plugin_id,
+                        "plugin_version": manifest.version,
+                        "module_ref": module.module_ref,
+                        "entrypoint": module.entrypoint,
+                        "artifact_digest": module.artifact.digest,
+                        "targets": module.targets,
+                        "contract": module.contract,
+                        "contract_digest": module.contract_digest,
+                    })
+                })
+        })
+        .collect();
+    let mut catalog = serde_json::json!({
+        "schema_version": 2,
+        "modules": modules,
+    });
+    catalog["catalog_digest"] = Value::String(sha256_digest(&catalog));
+    catalog.to_string()
+}
+
+fn refresh_catalog_digest(catalog: &mut Value) {
+    let mut digest_payload = catalog.clone();
+    digest_payload
+        .as_object_mut()
+        .expect("catalog object")
+        .remove("catalog_digest");
+    catalog["catalog_digest"] = Value::String(sha256_digest(&digest_payload));
+}
+
+fn module_contract_digest(snapshot: &ProfileSnapshotV2, module_ref: &str) -> String {
+    snapshot
+        .manifests
+        .iter()
+        .flat_map(|manifest| &manifest.modules)
+        .find(|module| module.module_ref == module_ref)
+        .expect("module contract must exist")
+        .contract_digest
+        .clone()
+}
+
+async fn dispose_generation(generation: Arc<RuntimeGenerationV2>) {
+    let manager = GenerationManagerV2::new();
+    manager.publish(generation).await;
+    manager.close().await;
+}
 
 fn distribution(snapshot: Value, version: u64, nonce: &str) -> String {
     let digest = snapshot["digest"]
@@ -51,13 +187,7 @@ fn snapshot_with_target(target: &str) -> Value {
             .expect("fixture targets")
             .push(Value::String(target.to_owned()));
     }
-    let mut digest_payload = snapshot.clone();
-    digest_payload
-        .as_object_mut()
-        .expect("snapshot object")
-        .remove("digest");
-    let canonical = serde_jcs::to_vec(&digest_payload).expect("snapshot must canonicalize");
-    snapshot["digest"] = Value::String(format!("{:x}", Sha256::digest(canonical)));
+    refresh_snapshot_digest(&mut snapshot);
     snapshot
 }
 
@@ -119,15 +249,21 @@ impl PluginModuleRuntimeV2 for SessionConsumer {
 }
 
 fn loader(
+    snapshot: &ProfileSnapshotV2,
     value: u64,
     fail: bool,
     disposed: Arc<Mutex<Vec<String>>>,
     observed: Arc<Mutex<Vec<u64>>>,
 ) -> LoaderV2 {
-    LoaderV2::new(definitions(value, fail, disposed, observed))
+    LoaderV2::for_target_with_catalog_json(
+        DataPlaneTargetV2::RustServer,
+        definitions(snapshot, value, fail, disposed, observed),
+        target_catalog_json(snapshot, &DataPlaneTargetV2::RustServer),
+    )
 }
 
 fn definitions(
+    snapshot: &ProfileSnapshotV2,
     value: u64,
     fail: bool,
     disposed: Arc<Mutex<Vec<String>>>,
@@ -136,13 +272,130 @@ fn definitions(
     [
         PluginDefinitionV2 {
             module_ref: "builtin://conformance/root-provider".into(),
-            provides: vec!["service:clock".into()],
+            contract_digest: module_contract_digest(
+                snapshot,
+                "builtin://conformance/root-provider",
+            ),
             module: Arc::new(RootProvider { value, disposed }),
         },
         PluginDefinitionV2 {
             module_ref: "builtin://conformance/session-consumer".into(),
-            provides: Vec::new(),
+            contract_digest: module_contract_digest(
+                snapshot,
+                "builtin://conformance/session-consumer",
+            ),
             module: Arc::new(SessionConsumer { observed, fail }),
+        },
+    ]
+}
+
+struct CompletenessProbe {
+    operation: String,
+    name: String,
+    root: bool,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for CompletenessProbe {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        _config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        if self.root && self.operation != "provide" {
+            context.provide("service:clock", 1_u64)?;
+        }
+        match self.operation.as_str() {
+            "provide" => context.provide(&self.name, 1_u64),
+            "require" => context.require::<u64>(&self.name).map(|_| ()),
+            "on" => context.on(&self.name, |payload| async move { Ok(payload) }),
+            "dispatch" => context.dispatch(&self.name, Value::Null).await.map(|_| ()),
+            operation => panic!("unsupported runtime operation {operation}"),
+        }
+    }
+}
+
+struct EventProvider {
+    invalid_choose_result: bool,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for EventProvider {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        _config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        context.provide("service:clock", 7_u64)?;
+        context.on("choose", |_payload| async { Ok(Value::Null) })?;
+        let invalid_choose_result = self.invalid_choose_result;
+        context.on("choose", move |_payload| async move {
+            if invalid_choose_result {
+                Ok(serde_json::json!(7))
+            } else {
+                Ok(serde_json::json!("selected"))
+            }
+        })?;
+        context.on("transform", |payload| async move {
+            let value = payload
+                .as_i64()
+                .ok_or_else(|| RuntimeV2Error::Module("transform expected integer".into()))?;
+            Ok(serde_json::json!(value + 1))
+        })?;
+        context.on("transform", |payload| async move {
+            let value = payload
+                .as_i64()
+                .ok_or_else(|| RuntimeV2Error::Module("transform expected integer".into()))?;
+            Ok(serde_json::json!(value * 2))
+        })?;
+        for event in ["notify", "audit"] {
+            context.on(event, |_payload| async move { Ok(serde_json::json!([3])) })?;
+            context.on(event, |_payload| async move { Ok(serde_json::json!([4])) })?;
+        }
+        Ok(())
+    }
+}
+
+struct EventConsumer {
+    context: Arc<Mutex<Option<ContextV2>>>,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for EventConsumer {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        _config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        context.require::<u64>("clock")?;
+        *lock(&self.context) = Some(context.clone());
+        Ok(())
+    }
+}
+
+fn event_definitions(
+    snapshot: &ProfileSnapshotV2,
+    context: Arc<Mutex<Option<ContextV2>>>,
+    invalid_choose_result: bool,
+) -> [PluginDefinitionV2; 2] {
+    [
+        PluginDefinitionV2 {
+            module_ref: "builtin://conformance/root-provider".into(),
+            contract_digest: module_contract_digest(
+                snapshot,
+                "builtin://conformance/root-provider",
+            ),
+            module: Arc::new(EventProvider {
+                invalid_choose_result,
+            }),
+        },
+        PluginDefinitionV2 {
+            module_ref: "builtin://conformance/session-consumer".into(),
+            contract_digest: module_contract_digest(
+                snapshot,
+                "builtin://conformance/session-consumer",
+            ),
+            module: Arc::new(EventConsumer { context }),
         },
     ]
 }
@@ -191,6 +444,260 @@ fn shared_snapshot_digest_and_canonical_vector_match_python() {
             *expected
         );
     }
+}
+
+#[test]
+fn shared_contract_conformance_negative_cases_match_stable_error_codes() {
+    block_on(async {
+        let fixture: Value =
+            serde_json::from_str(CONTRACT_CONFORMANCE).expect("contract fixture must parse");
+        for case in fixture["negative_cases"]
+            .as_array()
+            .expect("negative cases")
+        {
+            let mut raw: Value = serde_json::from_str(SNAPSHOT).expect("snapshot fixture");
+            let mutation = &case["mutation"];
+            apply_fixture_mutation(&mut raw, mutation);
+            if mutation["refresh_contract_digest"].as_bool() == Some(true) {
+                refresh_contract_digests(&mut raw);
+            }
+            refresh_snapshot_digest(&mut raw);
+
+            let expected = case["expected_error"].as_str().expect("expected error");
+            let actual = match parse_profile_snapshot_v2(&raw.to_string()) {
+                Err(error) => error.code(),
+                Ok(snapshot) => {
+                    let disposed = Arc::new(Mutex::new(Vec::new()));
+                    let observed = Arc::new(Mutex::new(Vec::new()));
+                    let result = loader(&snapshot, 1, false, Arc::clone(&disposed), observed)
+                        .stage(snapshot)
+                        .await;
+                    let error = match result {
+                        Ok(generation) => {
+                            dispose_generation(generation).await;
+                            panic!("negative case {} must fail", case["name"])
+                        }
+                        Err(error) => error,
+                    };
+                    assert!(
+                        lock(&disposed).is_empty(),
+                        "case {} must fail before apply",
+                        case["name"]
+                    );
+                    error.code()
+                }
+            };
+            assert_eq!(actual, expected, "negative case {}", case["name"]);
+        }
+    });
+}
+
+#[test]
+fn loader_requires_manifest_catalog_and_runtime_contract_digests_to_match() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("snapshot fixture must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+
+        let mut runtime_definitions = definitions(
+            &snapshot,
+            1,
+            false,
+            Arc::clone(&disposed),
+            Arc::clone(&observed),
+        );
+        runtime_definitions[0].contract_digest = format!("sha256:{}", "0".repeat(64));
+        let result = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            runtime_definitions,
+            target_catalog_json(&snapshot, &DataPlaneTargetV2::RustServer),
+        )
+        .stage(snapshot.clone())
+        .await;
+        let error = match result {
+            Ok(_) => panic!("runtime digest mismatch must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "contract_digest_mismatch");
+
+        let mut catalog: Value = serde_json::from_str(&target_catalog_json(
+            &snapshot,
+            &DataPlaneTargetV2::RustServer,
+        ))
+        .expect("catalog fixture");
+        catalog["modules"][0]["contract_digest"] =
+            Value::String(format!("sha256:{}", "1".repeat(64)));
+        refresh_catalog_digest(&mut catalog);
+        let result = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            definitions(
+                &snapshot,
+                1,
+                false,
+                Arc::clone(&disposed),
+                Arc::clone(&observed),
+            ),
+            catalog.to_string(),
+        )
+        .stage(snapshot.clone())
+        .await;
+        let error = match result {
+            Ok(_) => panic!("catalog contract digest mismatch must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "contract_digest_mismatch");
+
+        let mut corrupt_catalog: Value = serde_json::from_str(&target_catalog_json(
+            &snapshot,
+            &DataPlaneTargetV2::RustServer,
+        ))
+        .expect("catalog fixture");
+        corrupt_catalog["catalog_digest"] = Value::String(format!("sha256:{}", "2".repeat(64)));
+        let result = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            definitions(&snapshot, 1, false, Arc::clone(&disposed), observed),
+            corrupt_catalog.to_string(),
+        )
+        .stage(snapshot)
+        .await;
+        let error = match result {
+            Ok(_) => panic!("catalog document digest mismatch must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "catalog_digest_mismatch");
+        assert!(
+            lock(&disposed).is_empty(),
+            "digest checks must precede apply"
+        );
+    });
+}
+
+#[test]
+fn shared_runtime_completeness_cases_are_enforced_by_context() {
+    block_on(async {
+        let fixture: Value =
+            serde_json::from_str(CONTRACT_CONFORMANCE).expect("contract fixture must parse");
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("snapshot fixture must parse");
+        for case in fixture["runtime_completeness_cases"]
+            .as_array()
+            .expect("runtime completeness cases")
+        {
+            let module_ref = case["module_ref"].as_str().expect("module ref");
+            let operation = case["operation"].as_str().expect("operation");
+            let mut definitions = definitions(
+                &snapshot,
+                1,
+                false,
+                Arc::new(Mutex::new(Vec::new())),
+                Arc::new(Mutex::new(Vec::new())),
+            );
+            let definition = definitions
+                .iter_mut()
+                .find(|definition| definition.module_ref == module_ref)
+                .expect("probe definition");
+            definition.module = Arc::new(CompletenessProbe {
+                operation: operation.to_owned(),
+                name: case["name"].as_str().expect("operation name").to_owned(),
+                root: module_ref.ends_with("root-provider"),
+            });
+            let result = LoaderV2::for_target_with_catalog_json(
+                DataPlaneTargetV2::RustServer,
+                definitions,
+                target_catalog_json(&snapshot, &DataPlaneTargetV2::RustServer),
+            )
+            .stage(snapshot.clone())
+            .await;
+            let error = match result {
+                Ok(generation) => {
+                    dispose_generation(generation).await;
+                    panic!("runtime completeness case {} must fail", case["name"])
+                }
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.code(),
+                case["expected_error"].as_str().expect("expected error"),
+                "runtime completeness case {}",
+                case["name"]
+            );
+        }
+    });
+}
+
+#[test]
+fn dispatch_uses_declared_emit_serial_bail_and_waterfall_modes() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("event snapshot must parse");
+        let captured = Arc::new(Mutex::new(None));
+        let generation = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            event_definitions(&snapshot, Arc::clone(&captured), false),
+            target_catalog_json(&snapshot, &DataPlaneTargetV2::RustServer),
+        )
+        .stage(snapshot)
+        .await
+        .expect("event generation must stage");
+        let context = lock(&captured).clone().expect("consumer context");
+
+        assert_eq!(
+            context
+                .dispatch("notify", serde_json::json!({}))
+                .await
+                .expect("emit dispatch"),
+            serde_json::json!([[3], [4]])
+        );
+        assert_eq!(
+            context
+                .dispatch("audit", serde_json::json!({}))
+                .await
+                .expect("serial dispatch"),
+            serde_json::json!([[3], [4]])
+        );
+        assert_eq!(
+            context
+                .dispatch("choose", Value::Null)
+                .await
+                .expect("bail dispatch"),
+            serde_json::json!("selected")
+        );
+        assert_eq!(
+            context
+                .dispatch("transform", serde_json::json!(2))
+                .await
+                .expect("waterfall dispatch"),
+            serde_json::json!(6)
+        );
+        let error = context
+            .dispatch("transform", serde_json::json!("not-an-integer"))
+            .await
+            .expect_err("invalid event payload must fail");
+        assert_eq!(error.code(), "invalid_event_payload");
+        dispose_generation(generation).await;
+    });
+}
+
+#[test]
+fn dispatch_validates_handler_results_against_the_public_contract() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("event snapshot must parse");
+        let captured = Arc::new(Mutex::new(None));
+        let generation = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            event_definitions(&snapshot, Arc::clone(&captured), true),
+            target_catalog_json(&snapshot, &DataPlaneTargetV2::RustServer),
+        )
+        .stage(snapshot)
+        .await
+        .expect("event generation must stage");
+        let context = lock(&captured).clone().expect("consumer context");
+
+        let error = context
+            .dispatch("choose", Value::Null)
+            .await
+            .expect_err("invalid event result must fail");
+        assert_eq!(error.code(), "invalid_event_result");
+        dispose_generation(generation).await;
+    });
 }
 
 #[test]
@@ -350,10 +857,18 @@ fn desktop_reconciler_activates_non_empty_catalog_and_nacks_missing_definition()
                 .expect("distribution must parse");
         let disposed = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::new(Mutex::new(Vec::new()));
-        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+        let loader = LoaderV2::for_target_with_catalog_json(
             DataPlaneTargetV2::DesktopSidecar,
-            definitions(42, false, Arc::clone(&disposed), Arc::clone(&observed)),
-        ));
+            definitions(
+                &distribution.snapshot,
+                42,
+                false,
+                Arc::clone(&disposed),
+                Arc::clone(&observed),
+            ),
+            target_catalog_json(&distribution.snapshot, &DataPlaneTargetV2::DesktopSidecar),
+        );
+        let mut reconciler = PluginSnapshotReconcilerV2::new(loader);
 
         let receipt = reconciler.apply(&distribution).await;
 
@@ -374,9 +889,10 @@ fn desktop_reconciler_activates_non_empty_catalog_and_nacks_missing_definition()
         lease.release().await.expect("lease must release");
         reconciler.close().await;
 
-        let mut missing = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+        let mut missing = PluginSnapshotReconcilerV2::new(LoaderV2::for_target_with_catalog_json(
             DataPlaneTargetV2::DesktopSidecar,
             std::iter::empty::<PluginDefinitionV2>(),
+            target_catalog_json(&distribution.snapshot, &DataPlaneTargetV2::DesktopSidecar),
         ));
         let receipt = missing.apply(&distribution).await;
         assert_eq!(receipt.status, ApplyStatusV2::Nack);
@@ -424,10 +940,16 @@ fn loader_resolves_inject_and_disposes_effects_in_lifo_order() {
         let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
         let disposed = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::new(Mutex::new(Vec::new()));
-        let generation = loader(7, false, Arc::clone(&disposed), Arc::clone(&observed))
-            .stage(snapshot)
-            .await
-            .expect("generation must stage");
+        let generation = loader(
+            &snapshot,
+            7,
+            false,
+            Arc::clone(&disposed),
+            Arc::clone(&observed),
+        )
+        .stage(snapshot)
+        .await
+        .expect("generation must stage");
 
         assert_eq!(*lock(&observed), vec![7]);
         assert_eq!(
@@ -467,7 +989,7 @@ fn failed_staging_rolls_back_and_never_publishes() {
         let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
         let disposed = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::new(Mutex::new(Vec::new()));
-        let result = loader(1, true, Arc::clone(&disposed), observed)
+        let result = loader(&snapshot, 1, true, Arc::clone(&disposed), observed)
             .stage(snapshot)
             .await;
         let error = match result {
@@ -493,6 +1015,7 @@ fn generation_lease_pins_old_services_until_release() {
         let first_disposed = Arc::new(Mutex::new(Vec::new()));
         let second_disposed = Arc::new(Mutex::new(Vec::new()));
         let first = loader(
+            &first_snapshot,
             1,
             false,
             Arc::clone(&first_disposed),
@@ -502,6 +1025,7 @@ fn generation_lease_pins_old_services_until_release() {
         .await
         .expect("first generation must stage");
         let second = loader(
+            &second_snapshot,
             2,
             false,
             Arc::clone(&second_disposed),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
@@ -19,6 +19,10 @@ from src.domain.model.plugins.generated_v2 import (
     ArtifactReferenceV2,
     ControlPlaneEnvelopeV2,
     DataPlaneTargetV2,
+    EventContractsV2,
+    EventContractV2,
+    EventModeV2,
+    PluginContractV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -28,11 +32,15 @@ from src.domain.model.plugins.generated_v2 import (
     RuntimeKindV2,
     ScopeKindV2,
     ScopeV2,
+    ServiceContractV2,
+    ServiceProvidedV2,
+    ServiceRequiredV2,
     SnapshotApplyReceiptV2,
     TrustKindV2,
 )
 
 PLUGIN_PROFILE_TYPE_URL_V2 = "types.memstack.ai/plugin.profile.v2"
+JSON_SCHEMA_DIALECT_V2 = "https://json-schema.org/draft/2020-12/schema"
 type JsonValueV2 = None | bool | int | float | str | list["JsonValueV2"] | dict[str, "JsonValueV2"]
 _REQUIRED_NULL_FIELDS = {
     "applied_digest",
@@ -61,6 +69,12 @@ def canonical_json_v2(value: object) -> bytes:
         return rfc8785.dumps(cast(Any, value))
     except (rfc8785.CanonicalizationError, TypeError, ValueError) as exc:
         raise PluginProtocolV2Error("canonical_json_invalid", str(exc)) from exc
+
+
+def plugin_contract_digest_v2(contract: PluginContractV2) -> str:
+    """Return the normative RFC 8785 digest for one public module contract."""
+    payload = _json_value(asdict(contract))
+    return f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
 
 
 def parse_profile_snapshot_v2(payload: object) -> ProfileSnapshotV2:
@@ -93,12 +107,8 @@ def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
             "plugin manifest schema_version must be 2; v1 is not accepted",
         )
     _validate_schema("PluginManifestV2", payload)
-    module_refs = [item["module_ref"] for item in payload["modules"]]
-    if len(module_refs) != len(set(module_refs)):
-        raise PluginProtocolV2Error(
-            "duplicate_module_ref",
-            f"plugin {payload['plugin_id']} declares duplicate module_ref",
-        )
+    _validate_manifest_semantics(payload)
+    _validate_event_contracts((payload,))
     return _manifest_from_payload(payload)
 
 
@@ -218,10 +228,13 @@ def _validate_snapshot_semantics(payload: Mapping[str, Any]) -> None:
 
     modules_by_plugin: dict[str, dict[str, Mapping[str, Any]]] = {}
     for plugin_id, manifest in manifest_by_id.items():
+        _validate_manifest_semantics(manifest)
         modules = {module["module_ref"]: module for module in manifest["modules"]}
         if len(modules) != len(manifest["modules"]):
             _fail("duplicate_module_ref", f"plugin {plugin_id} declares duplicate module_ref")
         modules_by_plugin[plugin_id] = modules
+
+    _validate_event_contracts(manifest_by_id.values())
 
     for entry_id, entry in entry_by_id.items():
         plugin_ref = entry["plugin_ref"]
@@ -344,6 +357,8 @@ def _manifest_from_payload(payload: Mapping[str, Any]) -> PluginManifestV2:
             entrypoint=item["entrypoint"],
             artifact=ArtifactReferenceV2(**item["artifact"]),
             targets=tuple(DataPlaneTargetV2(target) for target in item["targets"]),
+            contract=_contract_from_payload(item["contract"]),
+            contract_digest=item["contract_digest"],
         )
         for item in payload["modules"]
     )
@@ -357,6 +372,152 @@ def _manifest_from_payload(payload: Mapping[str, Any]) -> PluginManifestV2:
         permissions=tuple(payload["permissions"]),
         quotas=QuotaV2(**payload["quotas"]),
     )
+
+
+def _contract_from_payload(payload: Mapping[str, Any]) -> PluginContractV2:
+    services = payload["services"]
+    events = payload["events"]
+    return PluginContractV2(
+        services=ServiceContractV2(
+            provides=tuple(ServiceProvidedV2(**item) for item in services["provides"]),
+            requires=tuple(ServiceRequiredV2(**item) for item in services["requires"]),
+        ),
+        events=EventContractsV2(
+            emits=tuple(_event_contract_from_payload(item) for item in events["emits"]),
+            handles=tuple(_event_contract_from_payload(item) for item in events["handles"]),
+        ),
+        config_schema=dict(payload["config_schema"]),
+    )
+
+
+def _event_contract_from_payload(payload: Mapping[str, Any]) -> EventContractV2:
+    return EventContractV2(
+        event=payload["event"],
+        mode=EventModeV2(payload["mode"]),
+        payload_schema=dict(payload["payload_schema"]),
+        result_schema=dict(payload["result_schema"]),
+    )
+
+
+def _validate_manifest_semantics(payload: Mapping[str, Any]) -> None:
+    module_refs: set[str] = set()
+    for module in payload["modules"]:
+        module_ref = module["module_ref"]
+        if module_ref in module_refs:
+            _fail(
+                "duplicate_module_ref",
+                f"plugin {payload['plugin_id']} declares duplicate module_ref",
+            )
+        module_refs.add(module_ref)
+        _validate_contract(module_ref, module["contract"], module["contract_digest"])
+
+
+def _validate_contract(
+    module_ref: str,
+    contract: Mapping[str, Any],
+    declared_digest: str,
+) -> None:
+    services = contract["services"]
+    provided = [(item["service"], item["version"]) for item in services["provides"]]
+    required_aliases = [item["alias"] for item in services["requires"]]
+    if len(provided) != len(set(provided)):
+        _fail("duplicate_service_provision", f"module {module_ref} repeats a provided service")
+    if len(required_aliases) != len(set(required_aliases)):
+        _fail("duplicate_service_requirement", f"module {module_ref} repeats a required alias")
+
+    _validate_contract_schema(
+        contract["config_schema"],
+        context=f"module {module_ref} config_schema",
+        require_object=True,
+    )
+    events = contract["events"]
+    for direction in ("emits", "handles"):
+        names: set[str] = set()
+        for event in events[direction]:
+            name = event["event"]
+            if name in names:
+                _fail(
+                    "duplicate_event_contract",
+                    f"module {module_ref} repeats {direction} event {name}",
+                )
+            names.add(name)
+            _validate_contract_schema(
+                event["payload_schema"],
+                context=f"module {module_ref} {direction} {name} payload_schema",
+            )
+            _validate_contract_schema(
+                event["result_schema"],
+                context=f"module {module_ref} {direction} {name} result_schema",
+            )
+
+    expected_digest = f"sha256:{hashlib.sha256(canonical_json_v2(contract)).hexdigest()}"
+    if declared_digest != expected_digest:
+        _fail(
+            "contract_digest_mismatch",
+            f"module {module_ref} contract digest mismatch: expected {expected_digest}",
+        )
+
+
+def _validate_contract_schema(
+    schema: Mapping[str, Any],
+    *,
+    context: str,
+    require_object: bool = False,
+) -> None:
+    if schema.get("$schema") != JSON_SCHEMA_DIALECT_V2:
+        _fail("invalid_contract_schema", f"{context} must declare JSON Schema draft 2020-12")
+    if require_object and schema.get("type") != "object":
+        _fail("invalid_contract_schema", f"{context} must describe an object")
+    try:
+        jsonschema.Draft202012Validator.check_schema(cast(Any, schema))
+    except jsonschema.SchemaError as exc:
+        _fail("invalid_contract_schema", f"{context}: {exc.message}")
+
+    def visit(value: object, path: tuple[str, ...]) -> None:
+        if isinstance(value, Mapping):
+            if "default" in value:
+                _fail(
+                    "invalid_contract_schema",
+                    f"{context} forbids default at {'.'.join(path) or '$'}",
+                )
+            reference = value.get("$ref")
+            if reference is not None and (
+                not isinstance(reference, str) or not reference.startswith("#/")
+            ):
+                _fail(
+                    "invalid_contract_schema",
+                    f"{context} forbids remote $ref at {'.'.join(path) or '$'}",
+                )
+            for key, child in value.items():
+                visit(child, (*path, str(key)))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, (*path, str(index)))
+
+    visit(schema, ())
+
+
+def _validate_event_contracts(manifests: Iterable[Mapping[str, Any]]) -> None:
+    declarations: dict[str, tuple[str, bytes, bytes]] = {}
+    owners: dict[str, str] = {}
+    for manifest in manifests:
+        for module in manifest["modules"]:
+            for direction in ("emits", "handles"):
+                for event in module["contract"]["events"][direction]:
+                    signature = (
+                        event["mode"],
+                        canonical_json_v2(event["payload_schema"]),
+                        canonical_json_v2(event["result_schema"]),
+                    )
+                    previous = declarations.get(event["event"])
+                    if previous is not None and previous != signature:
+                        _fail(
+                            "event_contract_mismatch",
+                            f"event {event['event']} differs between "
+                            f"{owners[event['event']]} and {module['module_ref']}",
+                        )
+                    declarations[event["event"]] = signature
+                    owners[event["event"]] = module["module_ref"]
 
 
 def _entry_from_payload(payload: Mapping[str, Any]) -> ProfileEntryV2:

@@ -1,5 +1,6 @@
 export { canonicalJsonV2, digestV2 } from './canonical';
 export * from './generated';
+export * from './generatedCatalog';
 export {
   ContextV2,
   FiberV2,
@@ -11,6 +12,9 @@ export {
   type AsyncDisposerV2,
   type EffectResultV2,
   type PluginDefinitionV2,
+  type ProvideOptionsV2,
+  type ResolveOptionsV2,
+  type TargetCatalogV2,
 } from './runtime';
 export {
   PLUGIN_PROFILE_TYPE_URL_V2,

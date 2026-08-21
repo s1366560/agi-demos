@@ -18,7 +18,12 @@ from src.domain.ports.plugins import (
 from .composer import ProfileDocumentV2
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
-from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error
+from .runtime import (
+    ContextV2,
+    PluginDefinitionV2,
+    RuntimeV2Error,
+    generated_contract_digest_v2,
+)
 
 LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2 = "legacy-http-route-bridge"
 LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2 = "builtin://memstack/http/legacy-route-bridge"
@@ -129,6 +134,7 @@ def legacy_http_route_bridge_definition_v2(
 
     return PluginDefinitionV2(
         module_ref=LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2),
         apply=apply,
     )
 

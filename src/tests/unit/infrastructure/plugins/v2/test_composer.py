@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 
 import pytest
+import rfc8785
 
 from src.infrastructure.plugins.v2.composer import (
     ProfileCompositionV2Error,
@@ -15,6 +17,44 @@ from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 
 
 def _manifest_payload() -> dict:
+    config_schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+    }
+
+    def module(module_ref: str, *, provider: bool) -> dict:
+        contract = {
+            "services": {
+                "provides": (
+                    [{"service": "service:runtime", "version": "1.0.0"}] if provider else []
+                ),
+                "requires": (
+                    []
+                    if provider
+                    else [
+                        {
+                            "alias": "runtime",
+                            "service": "service:runtime",
+                            "version": "1.0.0",
+                        }
+                    ]
+                ),
+            },
+            "events": {"emits": [], "handles": []},
+            "config_schema": config_schema,
+        }
+        return {
+            "module_ref": module_ref,
+            "entrypoint": "runtime:provider" if provider else "runtime:consumer",
+            "targets": ["python"],
+            "contract": contract,
+            "contract_digest": "sha256:" + hashlib.sha256(rfc8785.dumps(contract)).hexdigest(),
+            "artifact": {
+                "digest": "sha256:" + "a" * 64,
+                "source": "package://builtin/runtime-spine",
+            },
+        }
+
     return {
         "schema_version": 2,
         "plugin_id": "runtime-spine",
@@ -22,24 +62,8 @@ def _manifest_payload() -> dict:
         "runtime": "python-trusted",
         "trust": "builtin",
         "modules": [
-            {
-                "module_ref": "builtin://runtime/provider",
-                "entrypoint": "runtime:provider",
-                "targets": ["python"],
-                "artifact": {
-                    "digest": "sha256:" + "a" * 64,
-                    "source": "package://builtin/runtime-spine",
-                },
-            },
-            {
-                "module_ref": "builtin://runtime/consumer",
-                "entrypoint": "runtime:consumer",
-                "targets": ["python"],
-                "artifact": {
-                    "digest": "sha256:" + "a" * 64,
-                    "source": "package://builtin/runtime-spine",
-                },
-            },
+            module("builtin://runtime/provider", provider=True),
+            module("builtin://runtime/consumer", provider=False),
         ],
         "permissions": ["runtime.read"],
         "quotas": {},

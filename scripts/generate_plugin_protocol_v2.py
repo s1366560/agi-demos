@@ -11,6 +11,15 @@ from pathlib import Path
 from typing import Any, cast
 
 import rfc8785
+from plugin_contract_catalog_v2 import (
+    JSON_SCHEMA_DIALECT_V2,
+    build_catalog_v2,
+    build_contract_conformance_fixture_v2,
+    build_event_graph_v2,
+    build_service_graph_v2,
+    contract_digest_v2,
+    validate_manifest_contracts_v2,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "shared/schemas/plugins/platform-plugin-protocol.v2.schema.json"
@@ -19,6 +28,14 @@ RUST_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generated.rs"
 TYPESCRIPT_PATH = ROOT / "agi-stack/packages/plugin-runtime/src/generated.ts"
 SNAPSHOT_FIXTURE_PATH = ROOT / "shared/fixtures/platform-plugin-profile.v2.json"
 CONFORMANCE_FIXTURE_PATH = ROOT / "shared/fixtures/plugin-runtime-conformance.v2.json"
+CONTRACT_CONFORMANCE_FIXTURE_PATH = ROOT / "shared/fixtures/plugin-contract-conformance.v2.json"
+BUILTIN_MANIFEST_PATH = ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+SHARED_CATALOG_PATH = ROOT / "shared/catalogs/plugin-module-catalog.v2.json"
+PYTHON_CATALOG_PATH = ROOT / "src/domain/model/plugins/generated_catalog_v2.py"
+RUST_CATALOG_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generated_catalog.rs"
+TYPESCRIPT_CATALOG_PATH = ROOT / "agi-stack/packages/plugin-runtime/src/generatedCatalog.ts"
+SERVICE_GRAPH_PATH = ROOT / "shared/graphs/plugin-service-dependencies.v2.json"
+EVENT_GRAPH_PATH = ROOT / "shared/graphs/plugin-events.v2.json"
 
 
 def _schema() -> dict[str, Any]:
@@ -139,6 +156,9 @@ def _generate_python(definitions: dict[str, Any], schema_hash: str) -> str:
     exported: list[str] = []
     for name, definition in definitions.items():
         exported.append(name)
+        if name == "JsonSchemaV2":
+            lines.extend(["JsonSchemaV2 = Mapping[str, Any]", "", ""])
+            continue
         if definition.get("type") == "string" and "enum" in definition:
             lines.append(f"class {name}(StrEnum):")
             for value in definition["enum"]:
@@ -180,6 +200,14 @@ def _generate_rust(definitions: dict[str, Any], schema_hash: str) -> str:
         ]
     )
     for name, definition in definitions.items():
+        if name == "JsonSchemaV2":
+            lines.extend(
+                [
+                    "pub type JsonSchemaV2 = BTreeMap<String, serde_json::Value>;",
+                    "",
+                ]
+            )
+            continue
         if definition.get("type") == "string" and "enum" in definition:
             lines.extend(
                 [
@@ -218,6 +246,14 @@ def _generate_rust(definitions: dict[str, Any], schema_hash: str) -> str:
 def _generate_typescript(definitions: dict[str, Any], schema_hash: str) -> str:
     lines = _header("//", schema_hash)
     for name, definition in definitions.items():
+        if name == "JsonSchemaV2":
+            lines.extend(
+                [
+                    "export type JsonSchemaV2 = Readonly<Record<string, unknown>>;",
+                    "",
+                ]
+            )
+            continue
         if definition.get("type") == "string" and "enum" in definition:
             values = [_typescript_string(value) for value in definition["enum"]]
             declaration = f"export type {name} = {' | '.join(values)};"
@@ -243,7 +279,9 @@ def _generate_typescript(definitions: dict[str, Any], schema_hash: str) -> str:
 
 
 def _typescript_string(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    escaped = (
+        value.replace("\\", "\\\\").replace("'", "\\'").replace("\r", "\\r").replace("\n", "\\n")
+    )
     return f"'{escaped}'"
 
 
@@ -251,10 +289,174 @@ def _canonical_document(value: object) -> str:
     return rfc8785.dumps(cast("Any", value)).decode("utf-8") + "\n"
 
 
+def _builtin_manifest(schema: dict[str, Any]) -> dict[str, Any]:
+    manifest = cast(
+        "dict[str, Any]",
+        json.loads(BUILTIN_MANIFEST_PATH.read_text(encoding="utf-8")),
+    )
+    validate_manifest_contracts_v2(manifest, schema)
+    return manifest
+
+
+def _string_chunks(value: str, *, width: int = 88) -> list[str]:
+    return [value[index : index + width] for index in range(0, len(value), width)] or [""]
+
+
+def _generate_python_catalog(catalog: dict[str, Any], schema_hash: str) -> str:
+    canonical = _canonical_document(catalog)
+    lines = _header("#", schema_hash)
+    lines.extend(["from typing import Final", ""])
+    lines.append("PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (")
+    lines.extend(f"    {chunk!r}" for chunk in _string_chunks(canonical))
+    lines.extend(
+        [
+            ")",
+            "PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (",
+            f"    {json.dumps(catalog['catalog_digest'])}",
+            ")",
+            "",
+            '__all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]',
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _generate_rust_catalog(catalog: dict[str, Any], schema_hash: str) -> str:
+    canonical = _canonical_document(catalog)
+    lines = _header("//", schema_hash)
+    lines.append("pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(")
+    lines.extend(
+        f"    {json.dumps(chunk, ensure_ascii=False)}," for chunk in _string_chunks(canonical)
+    )
+    lines.extend(
+        [
+            ");",
+            "pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =",
+            f'    "{catalog["catalog_digest"]}";',
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _generate_typescript_catalog(catalog: dict[str, Any], schema_hash: str) -> str:
+    canonical = _canonical_document(catalog)
+    lines = _header("//", schema_hash)
+    lines.extend(
+        [
+            "import type { PluginContractV2 } from './generated';",
+            "",
+            "export interface PluginModuleCatalogEntryV2 {",
+            "  readonly artifact_digest: string;",
+            "  readonly contract: PluginContractV2;",
+            "  readonly contract_digest: string;",
+            "  readonly entrypoint: string;",
+            "  readonly module_ref: string;",
+            "  readonly plugin_id: string;",
+            "  readonly plugin_version: string;",
+            "  readonly targets: ReadonlyArray<string>;",
+            "}",
+            "",
+            "export interface PluginModuleCatalogV2 {",
+            "  readonly catalog_digest: string;",
+            "  readonly modules: ReadonlyArray<PluginModuleCatalogEntryV2>;",
+            "  readonly schema_version: 2;",
+            "}",
+            "",
+            "export const PLUGIN_MODULE_CATALOG_V2_JSON = [",
+        ]
+    )
+    lines.extend(f"  {_typescript_string(chunk)}," for chunk in _string_chunks(canonical, width=84))
+    lines.extend(
+        [
+            "].join('');",
+            "",
+            "export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(",
+            "  PLUGIN_MODULE_CATALOG_V2_JSON",
+            ") as PluginModuleCatalogV2;",
+            "",
+            "export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =",
+            f"  '{catalog['catalog_digest']}' as const;",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _snapshot_fixture() -> dict[str, Any]:
     artifact = {
         "digest": f"sha256:{'c' * 64}",
         "source": "package://builtin/conformance-v2",
+    }
+    nullable_object_schema = {
+        "$schema": JSON_SCHEMA_DIALECT_V2,
+        "type": ["object", "null"],
+    }
+    nullable_string_schema = {
+        "$schema": JSON_SCHEMA_DIALECT_V2,
+        "type": ["string", "null"],
+    }
+    integer_schema = {"$schema": JSON_SCHEMA_DIALECT_V2, "type": "integer"}
+    object_schema = {"$schema": JSON_SCHEMA_DIALECT_V2, "type": "object"}
+    array_schema = {"$schema": JSON_SCHEMA_DIALECT_V2, "type": "array"}
+    emit_event = {
+        "event": "notify",
+        "mode": "emit",
+        "payload_schema": object_schema,
+        "result_schema": array_schema,
+    }
+    serial_event = {
+        "event": "audit",
+        "mode": "serial",
+        "payload_schema": object_schema,
+        "result_schema": array_schema,
+    }
+    choose_event = {
+        "event": "choose",
+        "mode": "bail",
+        "payload_schema": nullable_object_schema,
+        "result_schema": nullable_string_schema,
+    }
+    transform_event = {
+        "event": "transform",
+        "mode": "waterfall",
+        "payload_schema": integer_schema,
+        "result_schema": integer_schema,
+    }
+    root_contract = {
+        "services": {
+            "provides": [{"service": "service:clock", "version": "1.0.0"}],
+            "requires": [],
+        },
+        "events": {
+            "emits": [],
+            "handles": [emit_event, serial_event, choose_event, transform_event],
+        },
+        "config_schema": {
+            "$schema": JSON_SCHEMA_DIALECT_V2,
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["label"],
+            "properties": {"label": {"type": "string", "minLength": 1}},
+        },
+    }
+    consumer_contract = {
+        "services": {
+            "provides": [],
+            "requires": [{"alias": "clock", "service": "service:clock", "version": "1.0.0"}],
+        },
+        "events": {
+            "emits": [emit_event, serial_event, choose_event, transform_event],
+            "handles": [],
+        },
+        "config_schema": {
+            "$schema": JSON_SCHEMA_DIALECT_V2,
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["temperature"],
+            "properties": {"temperature": {"type": "number", "minimum": 0, "maximum": 2}},
+        },
     }
     payload: dict[str, Any] = {
         "schema_version": 2,
@@ -273,12 +475,16 @@ def _snapshot_fixture() -> dict[str, Any]:
                         "entrypoint": "conformance:root_provider",
                         "artifact": artifact,
                         "targets": ["python", "rust-server", "web"],
+                        "contract": root_contract,
+                        "contract_digest": contract_digest_v2(root_contract),
                     },
                     {
                         "module_ref": "builtin://conformance/session-consumer",
                         "entrypoint": "conformance:session_consumer",
                         "artifact": artifact,
                         "targets": ["python", "rust-server", "web"],
+                        "contract": consumer_contract,
+                        "contract_digest": contract_digest_v2(consumer_contract),
                     },
                 ],
                 "permissions": ["service.clock.read"],
@@ -328,6 +534,9 @@ def _snapshot_fixture() -> dict[str, Any]:
 def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     canonical_input = {"z": 1.0, "中文": "值", "a": 2}
     canonical = rfc8785.dumps(cast("Any", canonical_input))
+    manifest = cast("dict[str, Any]", snapshot["manifests"][0])
+    service_graph = build_service_graph_v2(manifest)
+    event_graph = build_event_graph_v2(manifest)
     return {
         "schema_version": 2,
         "snapshot_digest": snapshot["digest"],
@@ -342,6 +551,11 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
         "dependency_order": {
             "expected": ["root-provider", "session-consumer"],
         },
+        "contract_digests": {
+            module["module_ref"]: module["contract_digest"] for module in manifest["modules"]
+        },
+        "service_edges": service_graph["edges"],
+        "event_edges": event_graph["edges"],
         "target_projection": {
             "python": ["root-provider", "session-consumer"],
             "rust-server": ["root-provider", "session-consumer"],
@@ -400,13 +614,24 @@ def main() -> int:
     schema = _schema()
     definitions = schema["$defs"]
     schema_hash = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
+    manifest = _builtin_manifest(schema)
+    catalog = build_catalog_v2(manifest)
     snapshot = _snapshot_fixture()
     outputs = {
         PYTHON_PATH: _generate_python(definitions, schema_hash),
         RUST_PATH: _generate_rust(definitions, schema_hash),
         TYPESCRIPT_PATH: _generate_typescript(definitions, schema_hash),
+        SHARED_CATALOG_PATH: _canonical_document(catalog),
+        PYTHON_CATALOG_PATH: _generate_python_catalog(catalog, schema_hash),
+        RUST_CATALOG_PATH: _generate_rust_catalog(catalog, schema_hash),
+        TYPESCRIPT_CATALOG_PATH: _generate_typescript_catalog(catalog, schema_hash),
+        SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifest)),
+        EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifest)),
         SNAPSHOT_FIXTURE_PATH: _canonical_document(snapshot),
         CONFORMANCE_FIXTURE_PATH: _canonical_document(_conformance_fixture(snapshot)),
+        CONTRACT_CONFORMANCE_FIXTURE_PATH: _canonical_document(
+            build_contract_conformance_fixture_v2(snapshot)
+        ),
     }
     results = [
         _write_or_check(path, content, check=args.check) for path, content in outputs.items()

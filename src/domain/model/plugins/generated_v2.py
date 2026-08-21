@@ -1,5 +1,5 @@
 # Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-# Schema SHA-256: 369fbb2d64ce126a216f875034280f53cb82f7c91b09caa017ff27d1d38ab985
+# Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
 # Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 from __future__ import annotations
@@ -51,6 +51,13 @@ class DataPlaneTargetV2(StrEnum):
     DESKTOP_RENDERER = "desktop-renderer"
 
 
+class EventModeV2(StrEnum):
+    EMIT = "emit"
+    SERIAL = "serial"
+    BAIL = "bail"
+    WATERFALL = "waterfall"
+
+
 @dataclass(frozen=True, kw_only=True)
 class ScopeV2:
     kind: ScopeKindV2
@@ -80,11 +87,56 @@ class ArtifactReferenceV2:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ServiceProvidedV2:
+    service: str
+    version: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServiceRequiredV2:
+    alias: str
+    service: str
+    version: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServiceContractV2:
+    provides: tuple[ServiceProvidedV2, ...]
+    requires: tuple[ServiceRequiredV2, ...]
+
+
+JsonSchemaV2 = Mapping[str, Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventContractV2:
+    event: str
+    mode: EventModeV2
+    payload_schema: JsonSchemaV2
+    result_schema: JsonSchemaV2
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventContractsV2:
+    emits: tuple[EventContractV2, ...]
+    handles: tuple[EventContractV2, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PluginContractV2:
+    services: ServiceContractV2
+    events: EventContractsV2
+    config_schema: JsonSchemaV2
+
+
+@dataclass(frozen=True, kw_only=True)
 class PluginModuleV2:
     module_ref: str
     entrypoint: str
     artifact: ArtifactReferenceV2
     targets: tuple[DataPlaneTargetV2, ...]
+    contract: PluginContractV2
+    contract_digest: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -149,6 +201,11 @@ __all__ = [
     "ArtifactReferenceV2",
     "ControlPlaneEnvelopeV2",
     "DataPlaneTargetV2",
+    "EventContractV2",
+    "EventContractsV2",
+    "EventModeV2",
+    "JsonSchemaV2",
+    "PluginContractV2",
     "PluginManifestV2",
     "PluginModuleV2",
     "ProfileEntryV2",
@@ -158,6 +215,9 @@ __all__ = [
     "RuntimeKindV2",
     "ScopeKindV2",
     "ScopeV2",
+    "ServiceContractV2",
+    "ServiceProvidedV2",
+    "ServiceRequiredV2",
     "SnapshotApplyReceiptV2",
     "TrustKindV2",
 ]

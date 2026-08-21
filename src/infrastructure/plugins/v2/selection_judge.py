@@ -15,7 +15,12 @@ from src.domain.llm_providers.models import ProviderConfig
 from src.domain.model.plugins.generated_v2 import ScopeV2
 from src.infrastructure.llm.model_pool import ModelPoolService, PoolFilter, get_model_pool_service
 
-from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error
+from .runtime import (
+    ContextV2,
+    PluginDefinitionV2,
+    RuntimeV2Error,
+    generated_contract_digest_v2,
+)
 
 PLUGIN_SELECTION_JUDGE_MODULE_V2 = "builtin://memstack/plugins/selection-judge"
 PLUGIN_SELECTION_JUDGE_SERVICE_V2 = "service:plugin-selection-judge"
@@ -376,6 +381,6 @@ def _apply_plugin_selection_judge_v2(
 def builtin_plugin_selection_judge_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=PLUGIN_SELECTION_JUDGE_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(PLUGIN_SELECTION_JUDGE_MODULE_V2),
         apply=_apply_plugin_selection_judge_v2,
-        provides=(PLUGIN_SELECTION_JUDGE_SERVICE_V2,),
     )

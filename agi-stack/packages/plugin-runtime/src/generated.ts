@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 369fbb2d64ce126a216f875034280f53cb82f7c91b09caa017ff27d1d38ab985
+// Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 export type ScopeKindV2 = 'root' | 'tenant' | 'project' | 'session';
@@ -24,6 +24,8 @@ export type DataPlaneTargetV2 =
   | 'desktop-sidecar'
   | 'web'
   | 'desktop-renderer';
+
+export type EventModeV2 = 'emit' | 'serial' | 'bail' | 'waterfall';
 
 export interface ScopeV2 {
   readonly kind: ScopeKindV2;
@@ -50,11 +52,49 @@ export interface ArtifactReferenceV2 {
   readonly provenance?: string | null;
 }
 
+export interface ServiceProvidedV2 {
+  readonly service: string;
+  readonly version: string;
+}
+
+export interface ServiceRequiredV2 {
+  readonly alias: string;
+  readonly service: string;
+  readonly version: string;
+}
+
+export interface ServiceContractV2 {
+  readonly provides: ReadonlyArray<ServiceProvidedV2>;
+  readonly requires: ReadonlyArray<ServiceRequiredV2>;
+}
+
+export type JsonSchemaV2 = Readonly<Record<string, unknown>>;
+
+export interface EventContractV2 {
+  readonly event: string;
+  readonly mode: EventModeV2;
+  readonly payload_schema: JsonSchemaV2;
+  readonly result_schema: JsonSchemaV2;
+}
+
+export interface EventContractsV2 {
+  readonly emits: ReadonlyArray<EventContractV2>;
+  readonly handles: ReadonlyArray<EventContractV2>;
+}
+
+export interface PluginContractV2 {
+  readonly services: ServiceContractV2;
+  readonly events: EventContractsV2;
+  readonly config_schema: JsonSchemaV2;
+}
+
 export interface PluginModuleV2 {
   readonly module_ref: string;
   readonly entrypoint: string;
   readonly artifact: ArtifactReferenceV2;
   readonly targets: ReadonlyArray<DataPlaneTargetV2>;
+  readonly contract: PluginContractV2;
+  readonly contract_digest: string;
 }
 
 export interface PluginManifestV2 {

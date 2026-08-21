@@ -9,6 +9,25 @@
       "module_ref": "builtin://memstack/runtime/generation-boundary",
       "entrypoint": "src.infrastructure.plugins.v2.builtin_modules:_apply_runtime_boundary",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:runtime-generation-boundary", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol_version"],
+          "properties": {
+            "protocol_version": { "const": 2, "type": "integer" }
+          }
+        }
+      },
+      "contract_digest": "sha256:4252d589a33fc7cea6ababb8703c365ea8fc56cdfa825ed58b84ce5c6e798979",
       "artifact": {
         "digest": "sha256:5b577e0c8be69c0807c332bdbbeddf6e6e40d92a1127c599b734aec3da67a17f",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -18,6 +37,22 @@
       "module_ref": "builtin://memstack/http/route-table-builder",
       "entrypoint": "src.infrastructure.plugins.v2.route_effects:route_table_builder_definition_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:http.route-table-builder", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:d8478b3b7a7100a0984d71a56373d0d9b76bdca8d56510b077bfed1f336e8d86",
       "artifact": {
         "digest": "sha256:7de45bd69889fe515f1e1736ac44de22952363d5d926d0fabebdd8ce8995f60c",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -27,6 +62,51 @@
       "module_ref": "builtin://memstack/http/legacy-route-bridge",
       "entrypoint": "src.infrastructure.plugins.v2.legacy_http_route_bridge:legacy_http_route_bridge_definition_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routes"],
+          "properties": {
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "authorization_mode",
+                  "enabled",
+                  "method",
+                  "path",
+                  "permission",
+                  "plugin_id"
+                ],
+                "properties": {
+                  "authorization_mode": { "type": "string", "minLength": 1 },
+                  "enabled": { "type": "boolean" },
+                  "method": { "type": "string", "pattern": "^[A-Z]+$" },
+                  "path": { "type": "string", "pattern": "^/" },
+                  "permission": { "type": "string", "minLength": 1 },
+                  "plugin_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:0e16c9f6154395c3a4ce95aab8f31a53e21b41a5607e7a03d6a80696f327640d",
       "artifact": {
         "digest": "sha256:aa58e3be49786a1f2123f6f2e2eee3f9de1e676cfd490a2bfa4dc7311a90b204",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -36,6 +116,25 @@
       "module_ref": "builtin://memstack/agent/loop",
       "entrypoint": "src.infrastructure.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent-loop-resolver", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["loop_id"],
+          "properties": {
+            "loop_id": { "const": "builtin-react", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:0bee827149f227522c61182c7095c1dd4a92f30e1408c1717f48cb42162a1ae1",
       "artifact": {
         "digest": "sha256:93425e44167aea4e1cbe718606ee2115183f45126e56a7c77ba33ff6f4cd286e",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -45,6 +144,25 @@
       "module_ref": "builtin://memstack/agent/system-prompt",
       "entrypoint": "src.infrastructure.plugins.v2.system_prompt:_apply_system_prompt_builder_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:system-prompt-builder", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "system-prompt-manager", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:dfb15d8704512a2930e6603cc771779bf285a4990fa223bffd1716d763fedf5f",
       "artifact": {
         "digest": "sha256:40cce8ce0c0c4bc39f5887cb28b330ffbbb0660acc7f37c39c40807b55eecb1e",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -54,6 +172,25 @@
       "module_ref": "builtin://memstack/agent/tool-set",
       "entrypoint": "src.infrastructure.plugins.v2.tool_set:_apply_tool_set_resolver_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:tool-set-resolver", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "dynamic-agent-tools", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8e57e4aea3b75d1738529834589217af77df8dfed1e0a653b582d801b4c4ae1f",
       "artifact": {
         "digest": "sha256:e168f18efecdcad3ad499cd6bc8e4cb70a9b276263c1cd13e305b83d458ccd7b",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -63,6 +200,25 @@
       "module_ref": "builtin://memstack/agent/definition",
       "entrypoint": "src.infrastructure.plugins.v2.agent_definition:_apply_agent_definition_resolver_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent-definition-resolver", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "explicit-id", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f99de77f9e769cfcd7b94c22638ebd23d17e74decf0b6a9b9a0f995f2b510163",
       "artifact": {
         "digest": "sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee41e0d41b3da76351fc",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -72,6 +228,25 @@
       "module_ref": "builtin://memstack/session/event-log",
       "entrypoint": "src.infrastructure.plugins.v2.session_event_log:_apply_session_event_log_writer_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:session-event-log-writer", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "ordered-sql-event-log", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:237ee7bc301139410e9dfe47f6ea3d1dc6b97fb4f4c1558be240b13a1a5350bc",
       "artifact": {
         "digest": "sha256:b5d32e313b41bd898961e189cd8e36ab7704d23baad6dcc8ee84f266fae0a434",
         "source": "package://builtin/memstack-runtime-kernel"
@@ -81,6 +256,25 @@
       "module_ref": "builtin://memstack/plugins/selection-judge",
       "entrypoint": "src.infrastructure.plugins.v2.selection_judge:_apply_plugin_selection_judge_v2",
       "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:plugin-selection-judge", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "required-agent-tool-call", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:7f7ceeb21dcef0999b7fd0d38d675e52eb41f0fbafb37e0165e8a66751ddbe1b",
       "artifact": {
         "digest": "sha256:26a9f8ac163ef161009d7138809ef602fda88585a9bb404677d797b105158dc6",
         "source": "package://builtin/memstack-runtime-kernel"

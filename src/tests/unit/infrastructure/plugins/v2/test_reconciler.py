@@ -50,6 +50,11 @@ def _loader(
     activations: list[str] | None = None,
     disposals: list[str] | None = None,
 ) -> LoaderV2:
+    snapshot = _snapshot()
+    modules = {
+        module.module_ref: module for manifest in snapshot.manifests for module in manifest.modules
+    }
+    target_catalog = {module_ref: module.contract_digest for module_ref, module in modules.items()}
     seen = activations if activations is not None else []
     disposed = disposals if disposals is not None else []
 
@@ -72,14 +77,16 @@ def _loader(
         [
             PluginDefinitionV2(
                 module_ref="builtin://conformance/root-provider",
+                contract_digest=modules["builtin://conformance/root-provider"].contract_digest,
                 apply=provider,
-                provides=("service:clock",),
             ),
             PluginDefinitionV2(
                 module_ref="builtin://conformance/session-consumer",
+                contract_digest=modules["builtin://conformance/session-consumer"].contract_digest,
                 apply=consumer,
             ),
-        ]
+        ],
+        target_catalog=target_catalog,
     )
 
 

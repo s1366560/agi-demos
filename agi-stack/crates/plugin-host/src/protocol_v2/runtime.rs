@@ -2,7 +2,7 @@
 
 use std::{
     any::Any,
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -13,15 +13,21 @@ use async_trait::async_trait;
 use serde_json::Value;
 use thiserror::Error;
 
+pub use super::context::ContextV2;
+use super::context::{
+    event_store_v2, resolve_service, service_store_v2, EventStoreV2, ServiceStoreV2,
+};
+use super::contract_runtime::{
+    entry_order, event_contract_catalog, parse_target_catalog, preflight_entries, same_targets,
+    validate_runtime_contract,
+};
 use super::{
-    scope_contains, scope_rank, DataPlaneTargetV2, ProfileEntryV2, ProfileSnapshotV2, ScopeV2,
+    DataPlaneTargetV2, EventContractV2, PluginContractV2, ProfileEntryV2, ProfileSnapshotV2,
+    ScopeV2, PLUGIN_MODULE_CATALOG_DIGEST_V2, PLUGIN_MODULE_CATALOG_V2_JSON,
 };
 
 type BoxEffectFutureV2 = Pin<Box<dyn Future<Output = Result<(), RuntimeV2Error>> + Send + 'static>>;
 pub type EffectDisposerV2 = Box<dyn FnOnce() -> BoxEffectFutureV2 + Send + 'static>;
-type ServiceValueV2 = Arc<dyn Any + Send + Sync>;
-type ServiceInterceptorV2 =
-    Arc<dyn Fn(ServiceValueV2) -> Result<ServiceValueV2, RuntimeV2Error> + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FiberPhaseV2 {
@@ -43,22 +49,77 @@ pub enum RuntimeV2Error {
     MissingModuleDefinition(String),
     #[error("module {0} is already registered")]
     DuplicateModuleDefinition(String),
+    #[error("target module catalog is invalid: {0}")]
+    InvalidTargetCatalog(String),
+    #[error("target module catalog digest mismatch: expected {expected}")]
+    CatalogDigestMismatch { expected: String },
+    #[error("module {0} is absent from the target catalog")]
+    MissingTargetCatalog(String),
+    #[error("module {0} contract digest differs across manifest, catalog, and runtime")]
+    ContractDigestMismatch(String),
+    #[error("module {module_ref} contract schema is invalid: {detail}")]
+    InvalidContractSchema { module_ref: String, detail: String },
     #[error("entry {entry_id} parent is disabled: {parent_id}")]
     InactiveParentEntry { entry_id: String, parent_id: String },
+    #[error("entry {entry_id} config is invalid: {detail}")]
+    InvalidModuleConfig { entry_id: String, detail: String },
+    #[error("entry {entry_id} is missing required inject alias {alias}")]
+    MissingRequiredInject { entry_id: String, alias: String },
+    #[error("entry {entry_id} has unexpected inject alias {alias}")]
+    UnexpectedInject { entry_id: String, alias: String },
+    #[error("entry {entry_id} alias {alias} must inject {service}")]
+    InjectServiceMismatch {
+        entry_id: String,
+        alias: String,
+        service: String,
+    },
+    #[error("entry {entry_id} isolates undeclared service {service}")]
+    UnexpectedIsolation { entry_id: String, service: String },
     #[error("entry {entry_id} injects missing service {service}")]
     MissingInjectProvider { entry_id: String, service: String },
+    #[error("entry {entry_id} has no provider for exact service version {service}@{version}")]
+    ServiceVersionMismatch {
+        entry_id: String,
+        service: String,
+        version: String,
+    },
     #[error("entry {entry_id} has ambiguous service {service}")]
     AmbiguousInjectProvider { entry_id: String, service: String },
     #[error("entry dependency cycle includes {0}")]
     EntryDependencyCycle(String),
-    #[error("service {0} already has a provider in this scope and isolation")]
-    ServiceConflict(String),
+    #[error("entries {first_entry_id} and {second_entry_id} provide {service}@{version} in the same scope and isolation")]
+    ProviderConflict {
+        first_entry_id: String,
+        second_entry_id: String,
+        service: String,
+        version: String,
+    },
+    #[error("service {service}@{version} already has a provider in this scope and isolation")]
+    ServiceConflict { service: String, version: String },
     #[error("service {0} is unavailable")]
     MissingService(String),
     #[error("service {0} has multiple nearest providers")]
     AmbiguousService(String),
-    #[error("entry {entry_id} did not inject {alias}")]
-    UndeclaredInject { entry_id: String, alias: String },
+    #[error("entry {entry_id} did not declare provide {service}")]
+    UndeclaredProvide { entry_id: String, service: String },
+    #[error("entry {entry_id} declared another version of {service}")]
+    ProvideVersionMismatch { entry_id: String, service: String },
+    #[error("entry {entry_id} has multiple declared versions of {service}")]
+    AmbiguousProvidedContract { entry_id: String, service: String },
+    #[error("entry {entry_id} did not declare require {alias}")]
+    UndeclaredRequire { entry_id: String, alias: String },
+    #[error("entry {entry_id} declared another version for alias {alias}")]
+    RequireVersionMismatch { entry_id: String, alias: String },
+    #[error("entry {entry_id} did not declare handler {event}")]
+    UndeclaredEventHandler { entry_id: String, event: String },
+    #[error("entry {entry_id} did not declare dispatch {event}")]
+    UndeclaredEventDispatch { entry_id: String, event: String },
+    #[error("event {0} has inconsistent contracts")]
+    EventContractMismatch(String),
+    #[error("event {event} payload is invalid: {detail}")]
+    InvalidEventPayload { event: String, detail: String },
+    #[error("event {event} result is invalid: {detail}")]
+    InvalidEventResult { event: String, detail: String },
     #[error("service {0} has an unexpected concrete type")]
     ServiceTypeMismatch(String),
     #[error("no generation is published")]
@@ -73,199 +134,50 @@ pub enum RuntimeV2Error {
     Module(String),
 }
 
-struct EffectRecordV2 {
-    label: String,
-    disposer: Option<EffectDisposerV2>,
-    error: Option<String>,
-}
-
-#[derive(Clone)]
-struct ServiceRecordV2 {
-    service: String,
-    value: ServiceValueV2,
-    scope: ScopeV2,
-    isolation: Option<String>,
-    owner_entry_id: String,
-}
-
-#[derive(Clone)]
-pub struct ContextV2 {
-    entry_id: String,
-    scope: ScopeV2,
-    inject: BTreeMap<String, String>,
-    isolation: BTreeMap<String, String>,
-    interceptors: BTreeMap<String, Vec<ServiceInterceptorV2>>,
-    privileged: bool,
-    phase: Arc<Mutex<FiberPhaseV2>>,
-    effects: Arc<Mutex<Vec<EffectRecordV2>>>,
-    services: Arc<Mutex<Vec<ServiceRecordV2>>>,
-}
-
-impl ContextV2 {
-    fn new(entry: &ProfileEntryV2, services: Arc<Mutex<Vec<ServiceRecordV2>>>) -> Self {
-        Self {
-            entry_id: entry.entry_id.clone(),
-            scope: entry.scope.clone(),
-            inject: entry.inject.clone(),
-            isolation: entry.isolate.clone(),
-            interceptors: BTreeMap::new(),
-            privileged: false,
-            phase: Arc::new(Mutex::new(FiberPhaseV2::Pending)),
-            effects: Arc::new(Mutex::new(Vec::new())),
-            services,
-        }
-    }
-
-    pub fn entry_id(&self) -> &str {
-        &self.entry_id
-    }
-
-    pub fn scope(&self) -> &ScopeV2 {
-        &self.scope
-    }
-
-    pub fn phase(&self) -> FiberPhaseV2 {
-        *lock(&self.phase)
-    }
-
-    pub fn extend(
-        &self,
-        entry_id: impl Into<String>,
-        scope: ScopeV2,
-        inject: BTreeMap<String, String>,
-    ) -> Self {
-        Self {
-            entry_id: entry_id.into(),
-            scope,
-            inject,
-            isolation: self.isolation.clone(),
-            interceptors: self.interceptors.clone(),
-            privileged: self.privileged,
-            phase: Arc::clone(&self.phase),
-            effects: Arc::clone(&self.effects),
-            services: Arc::clone(&self.services),
-        }
-    }
-
-    pub fn isolate(&self, service: impl Into<String>, label: impl Into<String>) -> Self {
-        let mut context = self.clone();
-        context.isolation.insert(service.into(), label.into());
-        context
-    }
-
-    pub fn intercept<T, F>(&self, service: impl Into<String>, interceptor: F) -> Self
-    where
-        T: Any + Send + Sync + 'static,
-        F: Fn(Arc<T>) -> Arc<T> + Send + Sync + 'static,
-    {
-        let service = service.into();
-        let adapter: ServiceInterceptorV2 = Arc::new(move |value| {
-            let typed = Arc::downcast::<T>(value)
-                .map_err(|_| RuntimeV2Error::ServiceTypeMismatch("interceptor".into()))?;
-            Ok(interceptor(typed))
-        });
-        let mut context = self.clone();
-        context
-            .interceptors
-            .entry(service)
-            .or_default()
-            .push(adapter);
-        context
-    }
-
-    pub fn effect(
-        &self,
-        label: impl Into<String>,
-        disposer: EffectDisposerV2,
-    ) -> Result<(), RuntimeV2Error> {
-        self.ensure_active()?;
-        lock(&self.effects).push(EffectRecordV2 {
-            label: label.into(),
-            disposer: Some(disposer),
-            error: None,
-        });
-        Ok(())
-    }
-
-    pub fn provide<T>(&self, service: impl Into<String>, value: T) -> Result<(), RuntimeV2Error>
-    where
-        T: Any + Send + Sync + 'static,
-    {
-        self.ensure_active()?;
-        let service = service.into();
-        let record = ServiceRecordV2 {
-            isolation: self.isolation.get(&service).cloned(),
-            owner_entry_id: self.entry_id.clone(),
-            scope: self.scope.clone(),
-            service: service.clone(),
-            value: Arc::new(value),
-        };
-        {
-            let mut services = lock(&self.services);
-            if services.iter().any(|item| {
-                item.service == record.service
-                    && item.scope == record.scope
-                    && item.isolation == record.isolation
-            }) {
-                return Err(RuntimeV2Error::ServiceConflict(service));
-            }
-            services.push(record.clone());
-        }
-        let services = Arc::clone(&self.services);
-        let owner = record.owner_entry_id.clone();
-        let key = record.service.clone();
-        let scope = record.scope.clone();
-        let isolation = record.isolation.clone();
-        self.effect(
-            format!("provide:{service}"),
-            Box::new(move || {
-                Box::pin(async move {
-                    lock(&services).retain(|item| {
-                        !(item.owner_entry_id == owner
-                            && item.service == key
-                            && item.scope == scope
-                            && item.isolation == isolation)
-                    });
-                    Ok(())
-                })
-            }),
-        )
-    }
-
-    pub fn require<T>(&self, alias: &str) -> Result<Arc<T>, RuntimeV2Error>
-    where
-        T: Any + Send + Sync + 'static,
-    {
-        let service = if self.privileged {
-            self.inject
-                .get(alias)
-                .cloned()
-                .unwrap_or_else(|| alias.to_owned())
-        } else {
-            self.inject
-                .get(alias)
-                .cloned()
-                .ok_or_else(|| RuntimeV2Error::UndeclaredInject {
-                    entry_id: self.entry_id.clone(),
-                    alias: alias.to_owned(),
-                })?
-        };
-        let mut value = resolve_service(
-            &lock(&self.services),
-            &service,
-            &self.scope,
-            self.isolation.get(&service).map(String::as_str),
-        )?;
-        for interceptor in self.interceptors.get(&service).into_iter().flatten() {
-            value = interceptor(value)?;
-        }
-        Arc::downcast::<T>(value).map_err(|_| RuntimeV2Error::ServiceTypeMismatch(service))
-    }
-
-    fn ensure_active(&self) -> Result<(), RuntimeV2Error> {
-        match self.phase() {
-            FiberPhaseV2::Loading | FiberPhaseV2::Active => Ok(()),
-            _ => Err(RuntimeV2Error::InactiveEffect),
+impl RuntimeV2Error {
+    /// Return the stable cross-language runtime rejection code.
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::InactiveEffect => "inactive_effect",
+            Self::InvalidFiberTransition(_) => "invalid_fiber_transition",
+            Self::MissingModuleDefinition(_) => "missing_module_definition",
+            Self::DuplicateModuleDefinition(_) => "duplicate_module_definition",
+            Self::InvalidTargetCatalog(_) => "invalid_target_catalog",
+            Self::CatalogDigestMismatch { .. } => "catalog_digest_mismatch",
+            Self::MissingTargetCatalog(_) => "missing_target_catalog",
+            Self::ContractDigestMismatch(_) => "contract_digest_mismatch",
+            Self::InvalidContractSchema { .. } => "invalid_contract_schema",
+            Self::InactiveParentEntry { .. } => "inactive_parent_entry",
+            Self::InvalidModuleConfig { .. } => "invalid_module_config",
+            Self::MissingRequiredInject { .. } => "missing_required_inject",
+            Self::UnexpectedInject { .. } => "unexpected_inject",
+            Self::InjectServiceMismatch { .. } => "inject_service_mismatch",
+            Self::UnexpectedIsolation { .. } => "unexpected_isolation",
+            Self::MissingInjectProvider { .. } => "missing_inject_provider",
+            Self::ServiceVersionMismatch { .. } => "service_version_mismatch",
+            Self::AmbiguousInjectProvider { .. } => "ambiguous_inject_provider",
+            Self::EntryDependencyCycle(_) => "entry_dependency_cycle",
+            Self::ProviderConflict { .. } => "provider_conflict",
+            Self::ServiceConflict { .. } => "service_conflict",
+            Self::MissingService(_) => "missing_service",
+            Self::AmbiguousService(_) => "ambiguous_service",
+            Self::UndeclaredProvide { .. } => "undeclared_provide",
+            Self::ProvideVersionMismatch { .. } => "provide_version_mismatch",
+            Self::AmbiguousProvidedContract { .. } => "ambiguous_provided_contract",
+            Self::UndeclaredRequire { .. } => "undeclared_require",
+            Self::RequireVersionMismatch { .. } => "require_version_mismatch",
+            Self::UndeclaredEventHandler { .. } => "undeclared_event_handler",
+            Self::UndeclaredEventDispatch { .. } => "undeclared_event_dispatch",
+            Self::EventContractMismatch(_) => "event_contract_mismatch",
+            Self::InvalidEventPayload { .. } => "invalid_event_payload",
+            Self::InvalidEventResult { .. } => "invalid_event_result",
+            Self::ServiceTypeMismatch(_) => "service_type_mismatch",
+            Self::GenerationUnavailable => "generation_unavailable",
+            Self::GenerationRetired => "generation_retired",
+            Self::GenerationDisposed => "generation_disposed",
+            Self::LeaseUnderflow => "lease_underflow",
+            Self::Module(_) => "module_failed",
         }
     }
 }
@@ -282,7 +194,7 @@ pub trait PluginModuleRuntimeV2: Send + Sync {
 #[derive(Clone)]
 pub struct PluginDefinitionV2 {
     pub module_ref: String,
-    pub provides: Vec<String>,
+    pub contract_digest: String,
     pub module: Arc<dyn PluginModuleRuntimeV2>,
 }
 
@@ -296,9 +208,12 @@ impl FiberV2 {
     fn new(
         entry: ProfileEntryV2,
         definition: PluginDefinitionV2,
-        services: Arc<Mutex<Vec<ServiceRecordV2>>>,
+        contract: Arc<PluginContractV2>,
+        event_contracts: Arc<BTreeMap<String, EventContractV2>>,
+        services: ServiceStoreV2,
+        events: EventStoreV2,
     ) -> Self {
-        let context = ContextV2::new(&entry, services);
+        let context = ContextV2::new(&entry, contract, event_contracts, services, events);
         Self {
             entry,
             context,
@@ -314,7 +229,7 @@ impl FiberV2 {
         if self.phase() != FiberPhaseV2::Pending {
             return Err(RuntimeV2Error::InvalidFiberTransition(self.phase()));
         }
-        *lock(&self.context.phase) = FiberPhaseV2::Loading;
+        self.context.set_phase(FiberPhaseV2::Loading);
         let result = self
             .definition
             .module
@@ -322,12 +237,12 @@ impl FiberV2 {
             .await;
         match result {
             Ok(()) => {
-                *lock(&self.context.phase) = FiberPhaseV2::Active;
+                self.context.set_phase(FiberPhaseV2::Active);
                 Ok(())
             }
             Err(error) => {
-                *lock(&self.context.phase) = FiberPhaseV2::Failed;
-                dispose_effects(&self.context.effects).await;
+                self.context.set_phase(FiberPhaseV2::Failed);
+                self.context.dispose_registered_effects().await;
                 Err(error)
             }
         }
@@ -337,27 +252,26 @@ impl FiberV2 {
         match self.phase() {
             FiberPhaseV2::Disposed | FiberPhaseV2::Unloading => return,
             FiberPhaseV2::Pending => {
-                *lock(&self.context.phase) = FiberPhaseV2::Disposed;
+                self.context.set_phase(FiberPhaseV2::Disposed);
                 return;
             }
             _ => {}
         }
-        *lock(&self.context.phase) = FiberPhaseV2::Unloading;
-        dispose_effects(&self.context.effects).await;
-        *lock(&self.context.phase) = FiberPhaseV2::Disposed;
+        self.context.set_phase(FiberPhaseV2::Unloading);
+        self.context.dispose_registered_effects().await;
+        self.context.set_phase(FiberPhaseV2::Disposed);
     }
 
     pub fn effect_diagnostics(&self) -> Vec<(String, Option<String>)> {
-        lock(&self.context.effects)
-            .iter()
-            .map(|item| (item.label.clone(), item.error.clone()))
-            .collect()
+        self.context.effect_diagnostics()
     }
 }
 
 pub struct LoaderV2 {
     definitions: BTreeMap<String, PluginDefinitionV2>,
     target: DataPlaneTargetV2,
+    catalog_json: String,
+    expected_catalog_digest: Option<String>,
 }
 
 impl LoaderV2 {
@@ -375,6 +289,24 @@ impl LoaderV2 {
                 .map(|item| (item.module_ref.clone(), item))
                 .collect(),
             target,
+            catalog_json: PLUGIN_MODULE_CATALOG_V2_JSON.to_owned(),
+            expected_catalog_digest: Some(PLUGIN_MODULE_CATALOG_DIGEST_V2.to_owned()),
+        }
+    }
+
+    pub fn for_target_with_catalog_json(
+        target: DataPlaneTargetV2,
+        definitions: impl IntoIterator<Item = PluginDefinitionV2>,
+        catalog_json: impl Into<String>,
+    ) -> Self {
+        Self {
+            definitions: definitions
+                .into_iter()
+                .map(|item| (item.module_ref.clone(), item))
+                .collect(),
+            target,
+            catalog_json: catalog_json.into(),
+            expected_catalog_digest: None,
         }
     }
 
@@ -396,6 +328,51 @@ impl LoaderV2 {
         &self,
         snapshot: ProfileSnapshotV2,
     ) -> Result<Arc<RuntimeGenerationV2>, RuntimeV2Error> {
+        let catalog =
+            parse_target_catalog(&self.catalog_json, self.expected_catalog_digest.as_deref())?;
+        let mut modules_by_key = BTreeMap::new();
+        for manifest in &snapshot.manifests {
+            for module in &manifest.modules {
+                modules_by_key.insert(
+                    (manifest.plugin_id.clone(), module.module_ref.clone()),
+                    module.clone(),
+                );
+                if !module.targets.contains(&self.target) {
+                    continue;
+                }
+                validate_runtime_contract(
+                    &module.module_ref,
+                    &module.contract,
+                    &module.contract_digest,
+                )?;
+                let catalog_module = catalog.get(&module.module_ref).ok_or_else(|| {
+                    RuntimeV2Error::MissingTargetCatalog(module.module_ref.clone())
+                })?;
+                if !catalog_module.targets.contains(&self.target) {
+                    return Err(RuntimeV2Error::MissingTargetCatalog(
+                        module.module_ref.clone(),
+                    ));
+                }
+                if catalog_module.contract_digest != module.contract_digest
+                    || catalog_module.contract != module.contract
+                {
+                    return Err(RuntimeV2Error::ContractDigestMismatch(
+                        module.module_ref.clone(),
+                    ));
+                }
+                let metadata_matches = catalog_module.plugin_id == manifest.plugin_id
+                    && catalog_module.plugin_version == manifest.version
+                    && catalog_module.entrypoint == module.entrypoint
+                    && catalog_module.artifact_digest == module.artifact.digest
+                    && same_targets(&catalog_module.targets, &module.targets);
+                if !metadata_matches {
+                    return Err(RuntimeV2Error::InvalidTargetCatalog(format!(
+                        "module {} metadata differs from manifest",
+                        module.module_ref
+                    )));
+                }
+            }
+        }
         let entries: BTreeMap<String, ProfileEntryV2> =
             project_snapshot_entries_v2(&snapshot, &self.target)
                 .into_iter()
@@ -403,11 +380,20 @@ impl LoaderV2 {
                 .map(|entry| (entry.entry_id.clone(), entry.clone()))
                 .collect();
         let mut definitions = BTreeMap::new();
+        let mut modules = BTreeMap::new();
         for entry in entries.values() {
             let definition = self
                 .definitions
                 .get(&entry.module_ref)
                 .ok_or_else(|| RuntimeV2Error::MissingModuleDefinition(entry.module_ref.clone()))?;
+            let module = modules_by_key
+                .get(&(entry.plugin_ref.clone(), entry.module_ref.clone()))
+                .ok_or_else(|| RuntimeV2Error::MissingModuleDefinition(entry.module_ref.clone()))?;
+            if definition.contract_digest != module.contract_digest {
+                return Err(RuntimeV2Error::ContractDigestMismatch(
+                    entry.module_ref.clone(),
+                ));
+            }
             if let Some(parent_id) = &entry.parent_entry_id {
                 if !entries.contains_key(parent_id) {
                     return Err(RuntimeV2Error::InactiveParentEntry {
@@ -417,15 +403,22 @@ impl LoaderV2 {
                 }
             }
             definitions.insert(entry.entry_id.clone(), definition.clone());
+            modules.insert(entry.entry_id.clone(), module.clone());
         }
-        let order = entry_order(&entries, &definitions)?;
-        let services = Arc::new(Mutex::new(Vec::new()));
+        preflight_entries(&entries, &modules)?;
+        let order = entry_order(&entries, &modules)?;
+        let event_contracts = Arc::new(event_contract_catalog(modules.values())?);
+        let services = service_store_v2();
+        let events = event_store_v2();
         let mut fibers: Vec<FiberV2> = Vec::with_capacity(order.len());
         for entry_id in order {
             let mut fiber = FiberV2::new(
                 entries[&entry_id].clone(),
                 definitions[&entry_id].clone(),
+                Arc::new(modules[&entry_id].contract.clone()),
+                Arc::clone(&event_contracts),
                 Arc::clone(&services),
+                Arc::clone(&events),
             );
             if let Err(error) = fiber.start().await {
                 fiber.dispose().await;
@@ -472,7 +465,7 @@ struct GenerationLifecycleV2 {
 
 pub struct RuntimeGenerationV2 {
     pub snapshot: ProfileSnapshotV2,
-    services: Arc<Mutex<Vec<ServiceRecordV2>>>,
+    services: ServiceStoreV2,
     fibers: Mutex<Option<Vec<FiberV2>>>,
     lifecycle: Mutex<GenerationLifecycleV2>,
 }
@@ -490,7 +483,31 @@ impl RuntimeGenerationV2 {
         if lock(&self.lifecycle).disposed {
             return Err(RuntimeV2Error::GenerationDisposed);
         }
-        let value = resolve_service(&lock(&self.services), service, scope, isolation)?;
+        let value = resolve_service(&lock(&self.services), service, None, scope, isolation)?;
+        Arc::downcast::<T>(value)
+            .map_err(|_| RuntimeV2Error::ServiceTypeMismatch(service.to_owned()))
+    }
+
+    pub fn resolve_versioned<T>(
+        &self,
+        service: &str,
+        version: &str,
+        scope: &ScopeV2,
+        isolation: Option<&str>,
+    ) -> Result<Arc<T>, RuntimeV2Error>
+    where
+        T: Any + Send + Sync + 'static,
+    {
+        if lock(&self.lifecycle).disposed {
+            return Err(RuntimeV2Error::GenerationDisposed);
+        }
+        let value = resolve_service(
+            &lock(&self.services),
+            service,
+            Some(version),
+            scope,
+            isolation,
+        )?;
         Arc::downcast::<T>(value)
             .map_err(|_| RuntimeV2Error::ServiceTypeMismatch(service.to_owned()))
     }
@@ -604,139 +621,6 @@ impl GenerationLeaseV2 {
         }
         Ok(())
     }
-}
-
-async fn dispose_effects(effects: &Arc<Mutex<Vec<EffectRecordV2>>>) {
-    let mut records = std::mem::take(&mut *lock(effects));
-    for record in records.iter_mut().rev() {
-        if let Some(disposer) = record.disposer.take() {
-            if let Err(error) = disposer().await {
-                record.error = Some(error.to_string());
-            }
-        }
-    }
-    *lock(effects) = records;
-}
-
-fn resolve_service(
-    records: &[ServiceRecordV2],
-    service: &str,
-    scope: &ScopeV2,
-    isolation: Option<&str>,
-) -> Result<ServiceValueV2, RuntimeV2Error> {
-    let mut candidates: Vec<_> = records
-        .iter()
-        .filter(|item| {
-            item.service == service
-                && item.isolation.as_deref() == isolation
-                && scope_contains(&item.scope, scope)
-        })
-        .collect();
-    candidates.sort_by_key(|item| std::cmp::Reverse(scope_rank(&item.scope)));
-    let Some(first) = candidates.first() else {
-        return Err(RuntimeV2Error::MissingService(service.to_owned()));
-    };
-    let rank = scope_rank(&first.scope);
-    if candidates
-        .iter()
-        .filter(|item| scope_rank(&item.scope) == rank)
-        .count()
-        > 1
-    {
-        return Err(RuntimeV2Error::AmbiguousService(service.to_owned()));
-    }
-    Ok(Arc::clone(&first.value))
-}
-
-fn entry_order(
-    entries: &BTreeMap<String, ProfileEntryV2>,
-    definitions: &BTreeMap<String, PluginDefinitionV2>,
-) -> Result<Vec<String>, RuntimeV2Error> {
-    let mut dependencies: BTreeMap<String, BTreeSet<String>> = entries
-        .keys()
-        .map(|entry_id| (entry_id.clone(), BTreeSet::new()))
-        .collect();
-    for (entry_id, entry) in entries {
-        if let Some(parent_id) = &entry.parent_entry_id {
-            dependencies
-                .get_mut(entry_id)
-                .ok_or_else(|| RuntimeV2Error::EntryDependencyCycle(entry_id.clone()))?
-                .insert(parent_id.clone());
-        }
-        for service in entry.inject.values() {
-            let mut providers: Vec<_> = definitions
-                .iter()
-                .filter(|(provider_id, definition)| {
-                    definition.provides.contains(service)
-                        && scope_contains(&entries[*provider_id].scope, &entry.scope)
-                        && entries[*provider_id].isolate.get(service) == entry.isolate.get(service)
-                })
-                .map(|(provider_id, _)| provider_id.clone())
-                .collect();
-            providers.sort_by_key(|provider_id| {
-                std::cmp::Reverse(scope_rank(&entries[provider_id].scope))
-            });
-            let Some(first) = providers.first() else {
-                return Err(RuntimeV2Error::MissingInjectProvider {
-                    entry_id: entry_id.clone(),
-                    service: service.clone(),
-                });
-            };
-            let rank = scope_rank(&entries[first].scope);
-            let nearest: Vec<_> = providers
-                .iter()
-                .filter(|provider_id| scope_rank(&entries[*provider_id].scope) == rank)
-                .collect();
-            if nearest.len() != 1 {
-                return Err(RuntimeV2Error::AmbiguousInjectProvider {
-                    entry_id: entry_id.clone(),
-                    service: service.clone(),
-                });
-            }
-            if first != entry_id {
-                dependencies
-                    .get_mut(entry_id)
-                    .ok_or_else(|| RuntimeV2Error::EntryDependencyCycle(entry_id.clone()))?
-                    .insert(first.clone());
-            }
-        }
-    }
-
-    fn visit(
-        entry_id: &str,
-        dependencies: &BTreeMap<String, BTreeSet<String>>,
-        visiting: &mut BTreeSet<String>,
-        visited: &mut BTreeSet<String>,
-        ordered: &mut Vec<String>,
-    ) -> Result<(), RuntimeV2Error> {
-        if visited.contains(entry_id) {
-            return Ok(());
-        }
-        if !visiting.insert(entry_id.to_owned()) {
-            return Err(RuntimeV2Error::EntryDependencyCycle(entry_id.to_owned()));
-        }
-        for dependency in &dependencies[entry_id] {
-            visit(dependency, dependencies, visiting, visited, ordered)?;
-        }
-        visiting.remove(entry_id);
-        visited.insert(entry_id.to_owned());
-        ordered.push(entry_id.to_owned());
-        Ok(())
-    }
-
-    let mut ordered = Vec::new();
-    let mut visiting = BTreeSet::new();
-    let mut visited = BTreeSet::new();
-    for entry_id in entries.keys() {
-        visit(
-            entry_id,
-            &dependencies,
-            &mut visiting,
-            &mut visited,
-            &mut ordered,
-        )?;
-    }
-    Ok(ordered)
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

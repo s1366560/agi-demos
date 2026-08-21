@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 AGENT_LOOP_MODULE_V2 = "builtin://memstack/agent/loop"
 AGENT_LOOP_RESOLVER_SERVICE_V2 = "service:agent-loop-resolver"
@@ -65,8 +65,8 @@ def _apply_builtin_agent_loop_v2(
 def builtin_agent_loop_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=AGENT_LOOP_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(AGENT_LOOP_MODULE_V2),
         apply=_apply_builtin_agent_loop_v2,
-        provides=(AGENT_LOOP_RESOLVER_SERVICE_V2,),
     )
 
 

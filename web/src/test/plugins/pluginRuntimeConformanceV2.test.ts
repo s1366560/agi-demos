@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import {
   canonicalJsonV2,
+  type ContextV2,
+  digestV2,
   GenerationManagerV2,
   LoaderV2,
   parseProfileSnapshotV2,
@@ -17,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = path.resolve(__dirname, '../../../..');
 const SNAPSHOT = JSON.parse(
   readFileSync(path.join(ROOT, 'shared/fixtures/platform-plugin-profile.v2.json'), 'utf8')
-) as unknown;
+) as MutableSnapshot;
 const CONFORMANCE = JSON.parse(
   readFileSync(path.join(ROOT, 'shared/fixtures/plugin-runtime-conformance.v2.json'), 'utf8')
 ) as {
@@ -28,21 +30,91 @@ const CONFORMANCE = JSON.parse(
   }>;
   readonly target_projection: Readonly<Record<string, ReadonlyArray<string>>>;
 };
+const CONTRACT_CONFORMANCE = JSON.parse(
+  readFileSync(path.join(ROOT, 'shared/fixtures/plugin-contract-conformance.v2.json'), 'utf8')
+) as {
+  readonly negative_cases: ReadonlyArray<ContractNegativeCase>;
+  readonly runtime_completeness_cases: ReadonlyArray<RuntimeCompletenessCase>;
+};
 
-function definitions(options: {
+interface MutableSnapshot {
+  digest: string;
+  generation: number;
+  manifests: Array<{
+    modules: Array<{
+      module_ref: string;
+      targets: string[];
+      contract: Record<string, unknown>;
+      contract_digest: string;
+    }>;
+  }>;
+  entries: Array<{
+    entry_id: string;
+    config: Record<string, unknown>;
+    inject: Record<string, string>;
+  }>;
+  [key: string]: unknown;
+}
+
+interface MutationOperation {
+  readonly operation: 'add' | 'remove' | 'replace';
+  readonly path: string;
+  readonly value?: unknown;
+}
+
+interface ContractNegativeCase {
+  readonly name: string;
+  readonly expected_error: string;
+  readonly mutation: MutationOperation & {
+    readonly operations?: ReadonlyArray<MutationOperation>;
+    readonly refresh_contract_digest?: boolean;
+  };
+}
+
+interface RuntimeCompletenessCase {
+  readonly name: string;
+  readonly expected_error: string;
+  readonly module_ref: string;
+  readonly operation: 'dispatch' | 'on' | 'provide' | 'require';
+}
+
+interface DefinitionOptions {
   readonly value: number;
   readonly observed: number[];
   readonly disposed: string[];
+  readonly contexts?: ContextV2[];
+  readonly eventOrder?: string[];
+  readonly applied?: string[];
   readonly fail?: boolean;
-}): ReadonlyArray<PluginDefinitionV2> {
+  readonly invalidChooseResult?: boolean;
+}
+
+function definitions(
+  snapshot: ProfileSnapshotV2,
+  options: DefinitionOptions
+): ReadonlyArray<PluginDefinitionV2> {
+  const digests = moduleContractDigests(snapshot);
   return [
     {
       moduleRef: 'builtin://conformance/root-provider',
-      provides: ['service:clock'],
+      contractDigest: requiredValue(digests, 'builtin://conformance/root-provider'),
       apply(context) {
+        options.applied?.push('root-provider');
         context.provide('service:clock', options.value);
-        context.on('choose', () => undefined);
-        context.on('choose', () => 'selected');
+        context.on('notify', () => ['notify-1']);
+        context.on('notify', () => ['notify-2']);
+        context.on('audit', async () => {
+          options.eventOrder?.push('audit-1:start');
+          await Promise.resolve();
+          options.eventOrder?.push('audit-1:end');
+          return ['audit-1'];
+        });
+        context.on('audit', () => {
+          options.eventOrder?.push('audit-2');
+          return ['audit-2'];
+        });
+        context.on('choose', () => null);
+        context.on('choose', () => (options.invalidChooseResult ? 7 : 'selected'));
         context.on('transform', async (value, next) => {
           if (!next) throw new Error('waterfall next is required');
           return next((value as number) + 1);
@@ -53,14 +125,19 @@ function definitions(options: {
         });
         return [
           () => options.disposed.push('listener'),
-          async () => options.disposed.push('module'),
+          async () => {
+            options.disposed.push('module');
+          },
         ];
       },
     },
     {
       moduleRef: 'builtin://conformance/session-consumer',
+      contractDigest: requiredValue(digests, 'builtin://conformance/session-consumer'),
       apply(context) {
+        options.applied?.push('session-consumer');
         options.observed.push(context.require<number>('clock'));
+        options.contexts?.push(context);
         if (options.fail) throw new RuntimeV2Error('module_failed', 'boom');
       },
     },
@@ -89,9 +166,7 @@ describe('plugin runtime v2 conformance', () => {
   });
 
   it('rejects child module targets outside the parent targets', async () => {
-    const snapshot = structuredClone(SNAPSHOT) as {
-      manifests: Array<{ modules: Array<{ targets: string[] }> }>;
-    };
+    const snapshot = structuredClone(SNAPSHOT);
     const child = snapshot.manifests[0]?.modules[1];
     if (!child) throw new Error('child module is missing');
     child.targets.push('desktop-renderer');
@@ -104,9 +179,7 @@ describe('plugin runtime v2 conformance', () => {
   it.each([[], ['python', 'python']])(
     'rejects non-unique or empty module targets: %j',
     async (targets) => {
-      const snapshot = structuredClone(SNAPSHOT) as {
-        manifests: Array<{ modules: Array<{ targets: string[] }> }>;
-      };
+      const snapshot = structuredClone(SNAPSHOT);
       const module = snapshot.manifests[0]?.modules[0];
       if (!module) throw new Error('root module is missing');
       module.targets = targets;
@@ -131,24 +204,179 @@ describe('plugin runtime v2 conformance', () => {
     ).rejects.toMatchObject({ code: 'digest_mismatch' });
   });
 
+  it.each(CONTRACT_CONFORMANCE.negative_cases)(
+    'matches the shared contract rejection for $name',
+    async (testCase) => {
+      const raw = await mutatedSnapshot(testCase);
+      if (
+        ['contract_digest_mismatch', 'event_contract_mismatch', 'invalid_contract_schema'].includes(
+          testCase.expected_error
+        )
+      ) {
+        await expect(parseProfileSnapshotV2(raw)).rejects.toMatchObject({
+          code: testCase.expected_error,
+        });
+        return;
+      }
+
+      const snapshot = await parseProfileSnapshotV2(raw);
+      const applied: string[] = [];
+      const loader = webLoader(
+        snapshot,
+        definitions(snapshot, { value: 7, observed: [], disposed: [], applied })
+      );
+
+      await expect(loader.stage(snapshot)).rejects.toMatchObject({ code: testCase.expected_error });
+      expect(applied).toEqual([]);
+    }
+  );
+
+  it('rejects runtime and target-catalog digest drift before apply', async () => {
+    const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+    const applied: string[] = [];
+    const valid = definitions(snapshot, { value: 7, observed: [], disposed: [], applied });
+    const runtimeMismatch = valid.map((definition, index) =>
+      index === 0 ? { ...definition, contractDigest: `sha256:${'0'.repeat(64)}` } : definition
+    );
+
+    await expect(webLoader(snapshot, runtimeMismatch).stage(snapshot)).rejects.toMatchObject({
+      code: 'contract_digest_mismatch',
+    });
+    expect(applied).toEqual([]);
+
+    const catalogMismatch = { ...targetCatalog(snapshot) };
+    catalogMismatch['builtin://conformance/root-provider'] = `sha256:${'1'.repeat(64)}`;
+    await expect(new LoaderV2(valid, 'web', catalogMismatch).stage(snapshot)).rejects.toMatchObject(
+      {
+        code: 'contract_digest_mismatch',
+      }
+    );
+    expect(applied).toEqual([]);
+
+    delete catalogMismatch['builtin://conformance/root-provider'];
+    await expect(new LoaderV2(valid, 'web', catalogMismatch).stage(snapshot)).rejects.toMatchObject(
+      {
+        code: 'missing_target_catalog',
+      }
+    );
+    expect(applied).toEqual([]);
+  });
+
+  it.each(CONTRACT_CONFORMANCE.runtime_completeness_cases)(
+    'enforces runtime contract completeness for $operation $name',
+    async (testCase) => {
+      const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+      const base = definitions(snapshot, { value: 7, observed: [], disposed: [] });
+      const probe = base.map((definition) =>
+        definition.moduleRef === testCase.module_ref
+          ? { ...definition, apply: completenessProbe(testCase) }
+          : definition
+      );
+
+      await expect(webLoader(snapshot, probe).stage(snapshot)).rejects.toMatchObject({
+        code: testCase.expected_error,
+      });
+    }
+  );
+
+  it('uses declared event modes and validates event payloads and results', async () => {
+    const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+    const contexts: ContextV2[] = [];
+    const eventOrder: string[] = [];
+    const generation = await webLoader(
+      snapshot,
+      definitions(snapshot, {
+        value: 7,
+        observed: [],
+        disposed: [],
+        contexts,
+        eventOrder,
+      })
+    ).stage(snapshot);
+    const context = contexts[0];
+    if (!context) throw new Error('consumer context is missing');
+
+    expect(await context.dispatch('notify', {})).toEqual([['notify-1'], ['notify-2']]);
+    expect(await context.dispatch('audit', {})).toEqual([['audit-1'], ['audit-2']]);
+    expect(eventOrder).toEqual(['audit-1:start', 'audit-1:end', 'audit-2']);
+    expect(await context.dispatch('choose', null)).toBe('selected');
+    expect(await context.dispatch('transform', 2)).toBe(6);
+    await expect(context.dispatch('transform', 'not-an-integer')).rejects.toMatchObject({
+      code: 'invalid_event_payload',
+    });
+    await expect(context.dispatch('undeclared-event', {})).rejects.toMatchObject({
+      code: 'undeclared_event_dispatch',
+    });
+
+    await generation.dispose();
+  });
+
+  it('rejects an event handler result outside the declared result schema', async () => {
+    const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+    const contexts: ContextV2[] = [];
+    const generation = await webLoader(
+      snapshot,
+      definitions(snapshot, {
+        value: 7,
+        observed: [],
+        disposed: [],
+        contexts,
+        invalidChooseResult: true,
+      })
+    ).stage(snapshot);
+    const context = contexts[0];
+    if (!context) throw new Error('consumer context is missing');
+
+    await expect(context.dispatch('choose', null)).rejects.toMatchObject({
+      code: 'invalid_event_result',
+    });
+    await generation.dispose();
+  });
+
+  it.each([
+    ['provide', 'provide_version_mismatch'],
+    ['require', 'require_version_mismatch'],
+  ] as const)('rejects an explicit incompatible %s version', async (operation, expectedCode) => {
+    const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
+    const base = definitions(snapshot, { value: 7, observed: [], disposed: [] });
+    const mismatched = base.map((definition) => {
+      if (operation === 'provide' && definition.moduleRef.endsWith('root-provider')) {
+        return {
+          ...definition,
+          apply(context: ContextV2) {
+            context.provide('service:clock', 7, { version: '2.0.0' });
+          },
+        };
+      }
+      if (operation === 'require' && definition.moduleRef.endsWith('session-consumer')) {
+        return {
+          ...definition,
+          apply(context: ContextV2) {
+            context.require('clock', '2.0.0');
+          },
+        };
+      }
+      return definition;
+    });
+
+    await expect(webLoader(snapshot, mismatched).stage(snapshot)).rejects.toMatchObject({
+      code: expectedCode,
+    });
+  });
+
   it('stages provider before consumer and disposes effects in LIFO order', async () => {
     const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
     const observed: number[] = [];
     const disposed: string[] = [];
-    const generation = await new LoaderV2(definitions({ value: 7, observed, disposed })).stage(
-      snapshot
-    );
+    const generation = await webLoader(
+      snapshot,
+      definitions(snapshot, { value: 7, observed, disposed })
+    ).stage(snapshot);
 
     expect(observed).toEqual([7]);
     expect(generation.fibers.map((fiber) => fiber.phase)).toEqual(['active', 'active']);
-    const context = generation.fibers[0]?.context;
-    if (!context) throw new Error('root context is missing');
-    expect(await context.bail('choose', null)).toBe('selected');
-    expect(await context.waterfall('transform', 2)).toBe(6);
-
     await generation.dispose();
     expect(disposed).toEqual(['module', 'listener']);
-    expect(await context.serial('choose', null)).toEqual([]);
   });
 
   it('rolls back a failed staging generation without publishing it', async () => {
@@ -157,7 +385,10 @@ describe('plugin runtime v2 conformance', () => {
     const manager = new GenerationManagerV2();
 
     await expect(
-      new LoaderV2(definitions({ value: 1, observed: [], disposed, fail: true })).stage(snapshot)
+      webLoader(
+        snapshot,
+        definitions(snapshot, { value: 1, observed: [], disposed, fail: true })
+      ).stage(snapshot)
     ).rejects.toMatchObject({ code: 'module_failed' });
 
     expect(disposed).toEqual(['module', 'listener']);
@@ -175,14 +406,19 @@ describe('plugin runtime v2 conformance', () => {
 
   it('pins old generation services until the old lease is released', async () => {
     const snapshot = await parseProfileSnapshotV2(SNAPSHOT);
-    const secondSnapshot: ProfileSnapshotV2 = { ...snapshot, generation: snapshot.generation + 1 };
+    const rawSecond = structuredClone(SNAPSHOT);
+    rawSecond.generation += 1;
+    await refreshSnapshotDigest(rawSecond);
+    const secondSnapshot = await parseProfileSnapshotV2(rawSecond);
     const firstDisposed: string[] = [];
     const secondDisposed: string[] = [];
-    const first = await new LoaderV2(
-      definitions({ value: 1, observed: [], disposed: firstDisposed })
+    const first = await webLoader(
+      snapshot,
+      definitions(snapshot, { value: 1, observed: [], disposed: firstDisposed })
     ).stage(snapshot);
-    const second = await new LoaderV2(
-      definitions({ value: 2, observed: [], disposed: secondDisposed })
+    const second = await webLoader(
+      secondSnapshot,
+      definitions(secondSnapshot, { value: 2, observed: [], disposed: secondDisposed })
     ).stage(secondSnapshot);
     const scope = snapshot.entries[0]?.scope;
     if (!scope) throw new Error('root scope is missing');
@@ -203,3 +439,107 @@ describe('plugin runtime v2 conformance', () => {
     expect(secondDisposed).toEqual(['module', 'listener']);
   });
 });
+
+function webLoader(
+  snapshot: ProfileSnapshotV2,
+  moduleDefinitions: Iterable<PluginDefinitionV2>
+): LoaderV2 {
+  return new LoaderV2(moduleDefinitions, 'web', targetCatalog(snapshot));
+}
+
+function targetCatalog(snapshot: ProfileSnapshotV2): Record<string, string> {
+  return Object.fromEntries(
+    snapshot.manifests.flatMap((manifest) =>
+      manifest.modules
+        .filter((module) => module.targets.includes('web'))
+        .map((module) => [module.module_ref, module.contract_digest])
+    )
+  );
+}
+
+function moduleContractDigests(snapshot: ProfileSnapshotV2): Map<string, string> {
+  return new Map(
+    snapshot.manifests.flatMap((manifest) =>
+      manifest.modules.map((module) => [module.module_ref, module.contract_digest] as const)
+    )
+  );
+}
+
+function requiredValue(values: ReadonlyMap<string, string>, key: string): string {
+  const value = values.get(key);
+  if (!value) throw new Error(`missing fixture value ${key}`);
+  return value;
+}
+
+function completenessProbe(testCase: RuntimeCompletenessCase): PluginDefinitionV2['apply'] {
+  return async (context) => {
+    if (testCase.module_ref.endsWith('root-provider') && testCase.operation !== 'provide') {
+      context.provide('service:clock', 7);
+    }
+    switch (testCase.operation) {
+      case 'provide':
+        context.provide(testCase.name, 7);
+        return;
+      case 'require':
+        context.require(testCase.name);
+        return;
+      case 'on':
+        context.on(testCase.name, (payload) => payload);
+        return;
+      case 'dispatch':
+        await context.dispatch(testCase.name, null);
+    }
+  };
+}
+
+async function mutatedSnapshot(testCase: ContractNegativeCase): Promise<MutableSnapshot> {
+  const snapshot = structuredClone(SNAPSHOT);
+  const operations = testCase.mutation.operations ?? [testCase.mutation];
+  for (const operation of operations) applyPointer(snapshot, operation);
+  if (testCase.mutation.refresh_contract_digest) await refreshContractDigests(snapshot);
+  await refreshSnapshotDigest(snapshot);
+  return snapshot;
+}
+
+function applyPointer(document: unknown, operation: MutationOperation): void {
+  const parts = operation.path
+    .split('/')
+    .slice(1)
+    .map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+  const final = parts.pop();
+  if (final === undefined) throw new Error('fixture mutation must have a target');
+  let parent = document;
+  for (const part of parts) {
+    if (Array.isArray(parent)) parent = parent[Number(part)];
+    else if (isRecord(parent)) parent = parent[part];
+    else throw new Error(`fixture mutation cannot traverse ${operation.path}`);
+  }
+  if (Array.isArray(parent)) {
+    const index = Number(final);
+    if (operation.operation === 'add') parent.splice(index, 0, structuredClone(operation.value));
+    else if (operation.operation === 'remove') parent.splice(index, 1);
+    else parent[index] = structuredClone(operation.value);
+    return;
+  }
+  if (!isRecord(parent)) throw new Error(`fixture mutation cannot update ${operation.path}`);
+  if (operation.operation === 'remove') delete parent[final];
+  else parent[final] = structuredClone(operation.value);
+}
+
+async function refreshContractDigests(snapshot: MutableSnapshot): Promise<void> {
+  for (const manifest of snapshot.manifests) {
+    for (const module of manifest.modules) {
+      module.contract_digest = `sha256:${await digestV2(module.contract)}`;
+    }
+  }
+}
+
+async function refreshSnapshotDigest(snapshot: MutableSnapshot): Promise<void> {
+  const payload = { ...snapshot };
+  delete payload.digest;
+  snapshot.digest = await digestV2(payload);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

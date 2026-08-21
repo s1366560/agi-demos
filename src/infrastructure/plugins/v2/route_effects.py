@@ -6,7 +6,12 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
-from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error
+from .runtime import (
+    ContextV2,
+    PluginDefinitionV2,
+    RuntimeV2Error,
+    generated_contract_digest_v2,
+)
 
 ROUTE_TABLE_BUILDER_SERVICE_V2 = "service:http.route-table-builder"
 ROUTE_TABLE_BUILDER_INJECT_V2 = "route_table"
@@ -17,6 +22,7 @@ def route_table_builder_definition_v2(
     *,
     module_ref: str = ROUTE_TABLE_BUILDER_MODULE_V2,
     builder: RouteTableBuilderV2 | None = None,
+    contract_digest: str | None = None,
 ) -> PluginDefinitionV2:
     """Provide one builder owned by the staging generation's provider Fiber."""
 
@@ -29,8 +35,8 @@ def route_table_builder_definition_v2(
 
     return PluginDefinitionV2(
         module_ref=module_ref,
+        contract_digest=contract_digest or generated_contract_digest_v2(module_ref),
         apply=apply,
-        provides=(ROUTE_TABLE_BUILDER_SERVICE_V2,),
     )
 
 
@@ -38,6 +44,7 @@ def route_contribution_definition_v2(
     *,
     module_ref: str,
     routes: Sequence[RouteDefinitionV2],
+    contract_digest: str,
 ) -> PluginDefinitionV2:
     """Contribute static routes as reversible effects of one plugin entry Fiber."""
     definitions = tuple(routes)
@@ -69,7 +76,11 @@ def route_contribution_definition_v2(
 
         await context.effect(setup, label="http-route-contributions")
 
-    return PluginDefinitionV2(module_ref=module_ref, apply=apply)
+    return PluginDefinitionV2(
+        module_ref=module_ref,
+        contract_digest=contract_digest,
+        apply=apply,
+    )
 
 
 __all__ = [

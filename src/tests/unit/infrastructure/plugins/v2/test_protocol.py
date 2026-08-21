@@ -12,6 +12,8 @@ from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
     ArtifactReferenceV2,
     DataPlaneTargetV2,
+    EventContractsV2,
+    PluginContractV2,
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
@@ -20,6 +22,7 @@ from src.domain.model.plugins.generated_v2 import (
     RuntimeKindV2,
     ScopeKindV2,
     ScopeV2,
+    ServiceContractV2,
     TrustKindV2,
 )
 from src.infrastructure.plugins.v2.protocol import (
@@ -31,6 +34,7 @@ from src.infrastructure.plugins.v2.protocol import (
     parse_control_envelope_v2,
     parse_profile_snapshot_v2,
     parse_snapshot_apply_receipt_v2,
+    plugin_contract_digest_v2,
     profile_snapshot_v2_to_payload,
     snapshot_apply_receipt_v2_to_payload,
 )
@@ -40,6 +44,14 @@ _ROOT = Path(__file__).resolve().parents[6]
 
 
 def _manifest(*module_refs: str) -> PluginManifestV2:
+    contract = PluginContractV2(
+        services=ServiceContractV2(provides=(), requires=()),
+        events=EventContractsV2(emits=(), handles=()),
+        config_schema={
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+        },
+    )
     return PluginManifestV2(
         schema_version=2,
         plugin_id="example-plugin",
@@ -55,6 +67,8 @@ def _manifest(*module_refs: str) -> PluginManifestV2:
                     source="package://builtin/example-plugin",
                 ),
                 targets=(DataPlaneTargetV2.PYTHON,),
+                contract=contract,
+                contract_digest=plugin_contract_digest_v2(contract),
             )
             for module_ref in module_refs
         ),

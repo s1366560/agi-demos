@@ -10,7 +10,7 @@ from .agent_definition import builtin_agent_definition_v2
 from .agent_loop import builtin_agent_loop_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .route_effects import route_table_builder_definition_v2
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .system_prompt import builtin_system_prompt_definition_v2
@@ -50,8 +50,8 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
     return (
         PluginDefinitionV2(
             module_ref=RUNTIME_BOUNDARY_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
-            provides=(RUNTIME_BOUNDARY_SERVICE_V2,),
         ),
         route_table_builder_definition_v2(),
         legacy_http_route_bridge_definition_v2(),

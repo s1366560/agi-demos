@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 SYSTEM_PROMPT_MODULE_V2 = "builtin://memstack/agent/system-prompt"
 SYSTEM_PROMPT_BUILDER_SERVICE_V2 = "service:system-prompt-builder"
@@ -54,8 +54,8 @@ def _apply_system_prompt_builder_v2(
 def builtin_system_prompt_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=SYSTEM_PROMPT_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(SYSTEM_PROMPT_MODULE_V2),
         apply=_apply_system_prompt_builder_v2,
-        provides=(SYSTEM_PROMPT_BUILDER_SERVICE_V2,),
     )
 
 

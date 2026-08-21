@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2
+from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 TOOL_SET_MODULE_V2 = "builtin://memstack/agent/tool-set"
 TOOL_SET_RESOLVER_SERVICE_V2 = "service:tool-set-resolver"
@@ -53,8 +53,8 @@ def _apply_tool_set_resolver_v2(
 def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=TOOL_SET_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(TOOL_SET_MODULE_V2),
         apply=_apply_tool_set_resolver_v2,
-        provides=(TOOL_SET_RESOLVER_SERVICE_V2,),
     )
 
 

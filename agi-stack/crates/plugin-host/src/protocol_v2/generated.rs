@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 369fbb2d64ce126a216f875034280f53cb82f7c91b09caa017ff27d1d38ab985
+// Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 use std::collections::BTreeMap;
@@ -59,6 +59,15 @@ pub enum DataPlaneTargetV2 {
     DesktopRenderer,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EventModeV2 {
+    Emit,
+    Serial,
+    Bail,
+    Waterfall,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScopeV2 {
@@ -105,11 +114,61 @@ pub struct ArtifactReferenceV2 {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct ServiceProvidedV2 {
+    pub service: String,
+    pub version: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceRequiredV2 {
+    pub alias: String,
+    pub service: String,
+    pub version: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceContractV2 {
+    pub provides: Vec<ServiceProvidedV2>,
+    pub requires: Vec<ServiceRequiredV2>,
+}
+
+pub type JsonSchemaV2 = BTreeMap<String, serde_json::Value>;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractV2 {
+    pub event: String,
+    pub mode: EventModeV2,
+    pub payload_schema: JsonSchemaV2,
+    pub result_schema: JsonSchemaV2,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractsV2 {
+    pub emits: Vec<EventContractV2>,
+    pub handles: Vec<EventContractV2>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PluginContractV2 {
+    pub services: ServiceContractV2,
+    pub events: EventContractsV2,
+    pub config_schema: JsonSchemaV2,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginModuleV2 {
     pub module_ref: String,
     pub entrypoint: String,
     pub artifact: ArtifactReferenceV2,
     pub targets: Vec<DataPlaneTargetV2>,
+    pub contract: PluginContractV2,
+    pub contract_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

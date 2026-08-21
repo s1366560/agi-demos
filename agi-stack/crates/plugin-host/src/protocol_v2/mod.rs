@@ -1,7 +1,10 @@
 //! Strict v2 wire protocol and executor-neutral generation runtime.
 
+mod context;
+mod contract_runtime;
 mod distribution;
 mod generated;
+mod generated_catalog;
 mod reconciler;
 mod runtime;
 
@@ -11,6 +14,7 @@ pub use distribution::{
     parse_control_plane_distribution_v2, ControlPlaneDistributionV2, PluginGenerationDescriptorV2,
 };
 pub use generated::*;
+pub use generated_catalog::{PLUGIN_MODULE_CATALOG_DIGEST_V2, PLUGIN_MODULE_CATALOG_V2_JSON};
 pub use reconciler::PluginSnapshotReconcilerV2;
 pub use runtime::{
     project_snapshot_entries_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
@@ -22,6 +26,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub const PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL_V2: &str = "types.memstack.ai/plugin.profile.v2";
+pub const JSON_SCHEMA_DIALECT_V2: &str = "https://json-schema.org/draft/2020-12/schema";
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PluginProtocolV2Error {
@@ -33,8 +38,36 @@ pub enum PluginProtocolV2Error {
     InvalidShape(String),
     #[error("snapshot digest mismatch: expected {expected}")]
     DigestMismatch { expected: String },
+    #[error("module {module_ref} contract digest mismatch: expected {expected}")]
+    ContractDigestMismatch {
+        module_ref: String,
+        expected: String,
+    },
+    #[error("module {module_ref} contract schema is invalid: {detail}")]
+    InvalidContractSchema { module_ref: String, detail: String },
     #[error("duplicate plugin_id: {0}")]
     DuplicatePluginId(String),
+    #[error("plugin {plugin_id} declares duplicate module_ref: {module_ref}")]
+    DuplicateModuleRef {
+        plugin_id: String,
+        module_ref: String,
+    },
+    #[error("module {0} repeats a provided service")]
+    DuplicateServiceProvision(String),
+    #[error("module {0} repeats a required service alias")]
+    DuplicateServiceRequirement(String),
+    #[error("module {module_ref} repeats {direction} event {event}")]
+    DuplicateEventContract {
+        module_ref: String,
+        direction: &'static str,
+        event: String,
+    },
+    #[error("event {event} differs between {first_module_ref} and {second_module_ref}")]
+    EventContractMismatch {
+        event: String,
+        first_module_ref: String,
+        second_module_ref: String,
+    },
     #[error("duplicate entry_id: {0}")]
     DuplicateEntryId(String),
     #[error("entry {entry_id} references missing plugin {plugin_id}")]
@@ -53,6 +86,36 @@ pub enum PluginProtocolV2Error {
     InvalidParentTargets { entry_id: String, parent_id: String },
     #[error("plugin distribution is inconsistent: {0}")]
     DistributionMismatch(String),
+}
+
+impl PluginProtocolV2Error {
+    /// Return the stable cross-language protocol rejection code.
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::IncompatibleSchemaVersion => "incompatible_schema_version",
+            Self::InvalidJson(_) => "invalid_json",
+            Self::InvalidShape(_) => "invalid_shape",
+            Self::DigestMismatch { .. } => "digest_mismatch",
+            Self::ContractDigestMismatch { .. } => "contract_digest_mismatch",
+            Self::InvalidContractSchema { .. } => "invalid_contract_schema",
+            Self::DuplicatePluginId(_) => "duplicate_plugin_id",
+            Self::DuplicateModuleRef { .. } => "duplicate_module_ref",
+            Self::DuplicateServiceProvision(_) => "duplicate_service_provision",
+            Self::DuplicateServiceRequirement(_) => "duplicate_service_requirement",
+            Self::DuplicateEventContract { .. } => "duplicate_event_contract",
+            Self::EventContractMismatch { .. } => "event_contract_mismatch",
+            Self::DuplicateEntryId(_) => "duplicate_entry_id",
+            Self::MissingManifest { .. } => "missing_manifest",
+            Self::MissingModule { .. } => "missing_module",
+            Self::MissingParent { .. } => "missing_parent",
+            Self::EntryCycle(_) => "entry_cycle",
+            Self::InvalidScope(_) => "invalid_scope",
+            Self::InvalidParentScope { .. } => "invalid_parent_scope",
+            Self::InvalidParentTargets { .. } => "invalid_parent_targets",
+            Self::DistributionMismatch(_) => "distribution_mismatch",
+        }
+    }
 }
 
 /// Parse a strict v2 snapshot and independently verify its RFC 8785 digest.
@@ -91,7 +154,14 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
         if manifest.schema_version != 2 {
             return Err(PluginProtocolV2Error::IncompatibleSchemaVersion);
         }
+        let mut module_refs = BTreeSet::new();
         for module in &manifest.modules {
+            if !module_refs.insert(module.module_ref.as_str()) {
+                return Err(PluginProtocolV2Error::DuplicateModuleRef {
+                    plugin_id: manifest.plugin_id.clone(),
+                    module_ref: module.module_ref.clone(),
+                });
+            }
             let has_duplicate_target = module
                 .targets
                 .iter()
@@ -103,6 +173,7 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
                     module.module_ref
                 )));
             }
+            validate_module_contract(module)?;
         }
         if manifest_by_id
             .insert(manifest.plugin_id.clone(), manifest)
@@ -113,6 +184,7 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
             ));
         }
     }
+    validate_event_contracts(snapshot)?;
     let mut entry_by_id = BTreeMap::new();
     for entry in &snapshot.entries {
         if entry_by_id.insert(entry.entry_id.clone(), entry).is_some() {
@@ -188,6 +260,196 @@ fn validate_snapshot_semantics(snapshot: &ProfileSnapshotV2) -> Result<(), Plugi
         }
     }
     validate_parent_tree(&entry_by_id)
+}
+
+/// Return the normative RFC 8785 digest for one public plugin contract.
+pub fn plugin_contract_digest_v2(
+    contract: &PluginContractV2,
+) -> Result<String, PluginProtocolV2Error> {
+    let value = serde_json::to_value(contract)
+        .map_err(|error| PluginProtocolV2Error::InvalidShape(error.to_string()))?;
+    let canonical = serde_jcs::to_vec(&value)
+        .map_err(|error| PluginProtocolV2Error::InvalidShape(error.to_string()))?;
+    Ok(format!("sha256:{:x}", Sha256::digest(canonical)))
+}
+
+fn validate_module_contract(module: &PluginModuleV2) -> Result<(), PluginProtocolV2Error> {
+    validate_plugin_contract_v2(
+        &module.module_ref,
+        &module.contract,
+        &module.contract_digest,
+    )
+}
+
+pub(crate) fn validate_plugin_contract_v2(
+    module_ref: &str,
+    contract: &PluginContractV2,
+    declared_digest: &str,
+) -> Result<(), PluginProtocolV2Error> {
+    validate_contract_schema(module_ref, "config_schema", &contract.config_schema, true)?;
+    for (direction, events) in [
+        ("emits", &contract.events.emits),
+        ("handles", &contract.events.handles),
+    ] {
+        let mut names = BTreeSet::new();
+        for event in events {
+            if !names.insert(event.event.as_str()) {
+                return Err(PluginProtocolV2Error::DuplicateEventContract {
+                    module_ref: module_ref.to_owned(),
+                    direction,
+                    event: event.event.clone(),
+                });
+            }
+            validate_contract_schema(
+                module_ref,
+                &format!("{direction} {} payload_schema", event.event),
+                &event.payload_schema,
+                false,
+            )?;
+            validate_contract_schema(
+                module_ref,
+                &format!("{direction} {} result_schema", event.event),
+                &event.result_schema,
+                false,
+            )?;
+        }
+    }
+
+    let mut provided = BTreeSet::new();
+    for service in &contract.services.provides {
+        if !provided.insert((service.service.as_str(), service.version.as_str())) {
+            return Err(PluginProtocolV2Error::DuplicateServiceProvision(
+                module_ref.to_owned(),
+            ));
+        }
+    }
+    let mut required_aliases = BTreeSet::new();
+    for service in &contract.services.requires {
+        if !required_aliases.insert(service.alias.as_str()) {
+            return Err(PluginProtocolV2Error::DuplicateServiceRequirement(
+                module_ref.to_owned(),
+            ));
+        }
+    }
+
+    let expected = plugin_contract_digest_v2(contract)?;
+    if declared_digest != expected {
+        return Err(PluginProtocolV2Error::ContractDigestMismatch {
+            module_ref: module_ref.to_owned(),
+            expected,
+        });
+    }
+    Ok(())
+}
+
+fn validate_contract_schema(
+    module_ref: &str,
+    label: &str,
+    schema: &JsonSchemaV2,
+    require_object: bool,
+) -> Result<(), PluginProtocolV2Error> {
+    let value = serde_json::to_value(schema).map_err(|error| {
+        PluginProtocolV2Error::InvalidContractSchema {
+            module_ref: module_ref.to_owned(),
+            detail: format!("{label}: {error}"),
+        }
+    })?;
+    if value.get("$schema").and_then(Value::as_str) != Some(JSON_SCHEMA_DIALECT_V2) {
+        return Err(PluginProtocolV2Error::InvalidContractSchema {
+            module_ref: module_ref.to_owned(),
+            detail: format!("{label} must declare JSON Schema draft 2020-12"),
+        });
+    }
+    if require_object && value.get("type").and_then(Value::as_str) != Some("object") {
+        return Err(PluginProtocolV2Error::InvalidContractSchema {
+            module_ref: module_ref.to_owned(),
+            detail: format!("{label} must describe an object"),
+        });
+    }
+    validate_schema_restrictions(&value, "$", module_ref, label)?;
+    jsonschema::draft202012::meta::validate(&value).map_err(|error| {
+        PluginProtocolV2Error::InvalidContractSchema {
+            module_ref: module_ref.to_owned(),
+            detail: format!("{label}: {error}"),
+        }
+    })
+}
+
+fn validate_schema_restrictions(
+    value: &Value,
+    path: &str,
+    module_ref: &str,
+    label: &str,
+) -> Result<(), PluginProtocolV2Error> {
+    match value {
+        Value::Object(object) => {
+            if object.contains_key("default") {
+                return Err(PluginProtocolV2Error::InvalidContractSchema {
+                    module_ref: module_ref.to_owned(),
+                    detail: format!("{label} forbids default at {path}"),
+                });
+            }
+            if let Some(reference) = object.get("$ref") {
+                if !reference
+                    .as_str()
+                    .is_some_and(|reference| reference.starts_with("#/"))
+                {
+                    return Err(PluginProtocolV2Error::InvalidContractSchema {
+                        module_ref: module_ref.to_owned(),
+                        detail: format!("{label} forbids remote $ref at {path}"),
+                    });
+                }
+            }
+            if let Some(dialect) = object.get("$schema") {
+                if dialect.as_str() != Some(JSON_SCHEMA_DIALECT_V2) {
+                    return Err(PluginProtocolV2Error::InvalidContractSchema {
+                        module_ref: module_ref.to_owned(),
+                        detail: format!("{label} uses a non-2020-12 dialect at {path}"),
+                    });
+                }
+            }
+            for (key, child) in object {
+                validate_schema_restrictions(child, &format!("{path}.{key}"), module_ref, label)?;
+            }
+        }
+        Value::Array(values) => {
+            for (index, child) in values.iter().enumerate() {
+                validate_schema_restrictions(child, &format!("{path}.{index}"), module_ref, label)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_event_contracts(snapshot: &ProfileSnapshotV2) -> Result<(), PluginProtocolV2Error> {
+    let mut declarations: BTreeMap<&str, (&str, &EventContractV2)> = BTreeMap::new();
+    for module in snapshot
+        .manifests
+        .iter()
+        .flat_map(|manifest| &manifest.modules)
+    {
+        for event in module
+            .contract
+            .events
+            .emits
+            .iter()
+            .chain(&module.contract.events.handles)
+        {
+            if let Some((first_module_ref, previous)) = declarations.get(event.event.as_str()) {
+                if *previous != event {
+                    return Err(PluginProtocolV2Error::EventContractMismatch {
+                        event: event.event.clone(),
+                        first_module_ref: (*first_module_ref).to_owned(),
+                        second_module_ref: module.module_ref.clone(),
+                    });
+                }
+            } else {
+                declarations.insert(&event.event, (&module.module_ref, event));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_scope(entry_id: &str, scope: &ScopeV2) -> Result<(), PluginProtocolV2Error> {

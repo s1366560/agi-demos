@@ -33,6 +33,10 @@
       "type": "string",
       "enum": ["python", "rust-server", "desktop-sidecar", "web", "desktop-renderer"]
     },
+    "EventModeV2": {
+      "type": "string",
+      "enum": ["emit", "serial", "bail", "waterfall"]
+    },
     "ScopeV2": {
       "type": "object",
       "additionalProperties": false,
@@ -69,10 +73,106 @@
         "provenance": { "type": ["string", "null"] }
       }
     },
+    "ServiceProvidedV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "version"],
+      "properties": {
+        "service": {
+          "type": "string",
+          "pattern": "^service:[a-z0-9][a-z0-9._:-]{0,255}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        }
+      }
+    },
+    "ServiceRequiredV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alias", "service", "version"],
+      "properties": {
+        "alias": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$" },
+        "service": {
+          "type": "string",
+          "pattern": "^service:[a-z0-9][a-z0-9._:-]{0,255}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        }
+      }
+    },
+    "ServiceContractV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provides", "requires"],
+      "properties": {
+        "provides": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ServiceProvidedV2" }
+        },
+        "requires": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ServiceRequiredV2" }
+        }
+      }
+    },
+    "JsonSchemaV2": {
+      "type": "object"
+    },
+    "EventContractV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "mode", "payload_schema", "result_schema"],
+      "properties": {
+        "event": { "type": "string", "pattern": "^[a-z][a-z0-9._:-]{0,255}$" },
+        "mode": { "$ref": "#/$defs/EventModeV2" },
+        "payload_schema": { "$ref": "#/$defs/JsonSchemaV2" },
+        "result_schema": { "$ref": "#/$defs/JsonSchemaV2" }
+      }
+    },
+    "EventContractsV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["emits", "handles"],
+      "properties": {
+        "emits": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/EventContractV2" }
+        },
+        "handles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/EventContractV2" }
+        }
+      }
+    },
+    "PluginContractV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["services", "events", "config_schema"],
+      "properties": {
+        "services": { "$ref": "#/$defs/ServiceContractV2" },
+        "events": { "$ref": "#/$defs/EventContractsV2" },
+        "config_schema": { "$ref": "#/$defs/JsonSchemaV2" }
+      }
+    },
     "PluginModuleV2": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["module_ref", "entrypoint", "artifact", "targets"],
+      "required": [
+        "module_ref",
+        "entrypoint",
+        "artifact",
+        "targets",
+        "contract",
+        "contract_digest"
+      ],
       "properties": {
         "module_ref": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://.+$" },
         "entrypoint": { "type": "string", "minLength": 1 },
@@ -82,7 +182,9 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/DataPlaneTargetV2" }
-        }
+        },
+        "contract": { "$ref": "#/$defs/PluginContractV2" },
+        "contract_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "PluginManifestV2": {
@@ -143,7 +245,11 @@
         "config": { "type": "object" },
         "inject": {
           "type": "object",
-          "additionalProperties": { "type": "string", "minLength": 1 }
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,127}$" },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^service:[a-z0-9][a-z0-9._:-]{0,255}$"
+          }
         },
         "isolate": {
           "type": "object",
