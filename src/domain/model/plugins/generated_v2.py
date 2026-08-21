@@ -1,5 +1,5 @@
 # Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-# Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
+# Schema SHA-256: 1682003a0f803e1dd6a1daac01313676938c17a961c581b4c462502ddb42ef1f
 # Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 from __future__ import annotations
@@ -56,6 +56,14 @@ class EventModeV2(StrEnum):
     SERIAL = "serial"
     BAIL = "bail"
     WATERFALL = "waterfall"
+
+
+class ProfileLayerKindV2(StrEnum):
+    BUNDLE = "bundle"
+    PROFILE = "profile"
+    TENANT = "tenant"
+    PROJECT = "project"
+    SESSION = "session"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -168,6 +176,75 @@ class ProfileEntryV2:
 
 
 @dataclass(frozen=True, kw_only=True)
+class BundleReferenceV2:
+    bundle_id: str
+    version: str
+    digest: str
+    source: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class BundleArtifactV2:
+    artifact_id: str
+    target: DataPlaneTargetV2
+    path: str
+    digest: str
+    size_bytes: int
+    media_type: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProfileLayerV2:
+    layer_id: str
+    kind: ProfileLayerKindV2
+    scope: ScopeV2
+    entries: tuple[ProfileEntryV2, ...]
+    replacements: tuple[ProfileEntryV2, ...]
+    disabled_entry_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProfileSourceV2:
+    schema_version: int
+    source_id: str
+    profile_id: str
+    revision: int
+    digest: str
+    provenance: str | None
+    layers: tuple[ProfileLayerV2, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProfileSourceReferenceV2:
+    source_id: str
+    revision: int
+    digest: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class BundleManifestV2:
+    schema_version: int
+    bundle_id: str
+    version: str
+    manifests: tuple[PluginManifestV2, ...]
+    layers: tuple[ProfileLayerV2, ...]
+    artifacts: tuple[BundleArtifactV2, ...]
+    digest: str
+    signature: str | None
+    provenance: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class DesiredBundleSetV2:
+    schema_version: int
+    desired_set_id: str
+    revision: int
+    bundles: tuple[BundleReferenceV2, ...]
+    profile_source: ProfileSourceReferenceV2
+    digest: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProfileSnapshotV2:
     schema_version: int
     profile_id: str
@@ -199,8 +276,12 @@ class SnapshotApplyReceiptV2:
 __all__ = [
     "ApplyStatusV2",
     "ArtifactReferenceV2",
+    "BundleArtifactV2",
+    "BundleManifestV2",
+    "BundleReferenceV2",
     "ControlPlaneEnvelopeV2",
     "DataPlaneTargetV2",
+    "DesiredBundleSetV2",
     "EventContractV2",
     "EventContractsV2",
     "EventModeV2",
@@ -209,7 +290,11 @@ __all__ = [
     "PluginManifestV2",
     "PluginModuleV2",
     "ProfileEntryV2",
+    "ProfileLayerKindV2",
+    "ProfileLayerV2",
     "ProfileSnapshotV2",
+    "ProfileSourceReferenceV2",
+    "ProfileSourceV2",
     "QuotaV2",
     "RestartPolicyV2",
     "RuntimeKindV2",

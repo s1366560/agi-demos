@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
+// Schema SHA-256: 1682003a0f803e1dd6a1daac01313676938c17a961c581b4c462502ddb42ef1f
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 use std::collections::BTreeMap;
@@ -66,6 +66,16 @@ pub enum EventModeV2 {
     Serial,
     Bail,
     Waterfall,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfileLayerKindV2 {
+    Bundle,
+    Profile,
+    Tenant,
+    Project,
+    Session,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -199,6 +209,82 @@ pub struct ProfileEntryV2 {
     pub permissions: Vec<String>,
     pub quotas: QuotaV2,
     pub restart_policy: RestartPolicyV2,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BundleReferenceV2 {
+    pub bundle_id: String,
+    pub version: String,
+    pub digest: String,
+    pub source: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BundleArtifactV2 {
+    pub artifact_id: String,
+    pub target: DataPlaneTargetV2,
+    pub path: String,
+    pub digest: String,
+    pub size_bytes: u64,
+    pub media_type: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileLayerV2 {
+    pub layer_id: String,
+    pub kind: ProfileLayerKindV2,
+    pub scope: ScopeV2,
+    pub entries: Vec<ProfileEntryV2>,
+    pub replacements: Vec<ProfileEntryV2>,
+    pub disabled_entry_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileSourceV2 {
+    pub schema_version: u64,
+    pub source_id: String,
+    pub profile_id: String,
+    pub revision: u64,
+    pub digest: String,
+    pub provenance: Option<String>,
+    pub layers: Vec<ProfileLayerV2>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileSourceReferenceV2 {
+    pub source_id: String,
+    pub revision: u64,
+    pub digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BundleManifestV2 {
+    pub schema_version: u64,
+    pub bundle_id: String,
+    pub version: String,
+    pub manifests: Vec<PluginManifestV2>,
+    pub layers: Vec<ProfileLayerV2>,
+    pub artifacts: Vec<BundleArtifactV2>,
+    pub digest: String,
+    pub signature: Option<String>,
+    pub provenance: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesiredBundleSetV2 {
+    pub schema_version: u64,
+    pub desired_set_id: String,
+    pub revision: u64,
+    pub bundles: Vec<BundleReferenceV2>,
+    pub profile_source: ProfileSourceReferenceV2,
+    pub digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

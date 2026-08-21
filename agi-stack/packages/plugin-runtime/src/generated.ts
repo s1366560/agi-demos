@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
+// Schema SHA-256: 1682003a0f803e1dd6a1daac01313676938c17a961c581b4c462502ddb42ef1f
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 export type ScopeKindV2 = 'root' | 'tenant' | 'project' | 'session';
@@ -26,6 +26,8 @@ export type DataPlaneTargetV2 =
   | 'desktop-renderer';
 
 export type EventModeV2 = 'emit' | 'serial' | 'bail' | 'waterfall';
+
+export type ProfileLayerKindV2 = 'bundle' | 'profile' | 'tenant' | 'project' | 'session';
 
 export interface ScopeV2 {
   readonly kind: ScopeKindV2;
@@ -121,6 +123,68 @@ export interface ProfileEntryV2 {
   readonly permissions: ReadonlyArray<string>;
   readonly quotas: QuotaV2;
   readonly restart_policy: RestartPolicyV2;
+}
+
+export interface BundleReferenceV2 {
+  readonly bundle_id: string;
+  readonly version: string;
+  readonly digest: string;
+  readonly source: string;
+}
+
+export interface BundleArtifactV2 {
+  readonly artifact_id: string;
+  readonly target: DataPlaneTargetV2;
+  readonly path: string;
+  readonly digest: string;
+  readonly size_bytes: number;
+  readonly media_type: string;
+}
+
+export interface ProfileLayerV2 {
+  readonly layer_id: string;
+  readonly kind: ProfileLayerKindV2;
+  readonly scope: ScopeV2;
+  readonly entries: ReadonlyArray<ProfileEntryV2>;
+  readonly replacements: ReadonlyArray<ProfileEntryV2>;
+  readonly disabled_entry_ids: ReadonlyArray<string>;
+}
+
+export interface ProfileSourceV2 {
+  readonly schema_version: number;
+  readonly source_id: string;
+  readonly profile_id: string;
+  readonly revision: number;
+  readonly digest: string;
+  readonly provenance: string | null;
+  readonly layers: ReadonlyArray<ProfileLayerV2>;
+}
+
+export interface ProfileSourceReferenceV2 {
+  readonly source_id: string;
+  readonly revision: number;
+  readonly digest: string;
+}
+
+export interface BundleManifestV2 {
+  readonly schema_version: number;
+  readonly bundle_id: string;
+  readonly version: string;
+  readonly manifests: ReadonlyArray<PluginManifestV2>;
+  readonly layers: ReadonlyArray<ProfileLayerV2>;
+  readonly artifacts: ReadonlyArray<BundleArtifactV2>;
+  readonly digest: string;
+  readonly signature: string | null;
+  readonly provenance: string | null;
+}
+
+export interface DesiredBundleSetV2 {
+  readonly schema_version: number;
+  readonly desired_set_id: string;
+  readonly revision: number;
+  readonly bundles: ReadonlyArray<BundleReferenceV2>;
+  readonly profile_source: ProfileSourceReferenceV2;
+  readonly digest: string;
 }
 
 export interface ProfileSnapshotV2 {

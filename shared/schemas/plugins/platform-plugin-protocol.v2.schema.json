@@ -4,6 +4,9 @@
   "title": "MemStack Platform Plugin Protocol V2",
   "oneOf": [
     { "$ref": "#/$defs/PluginManifestV2" },
+    { "$ref": "#/$defs/BundleManifestV2" },
+    { "$ref": "#/$defs/ProfileSourceV2" },
+    { "$ref": "#/$defs/DesiredBundleSetV2" },
     { "$ref": "#/$defs/ProfileSnapshotV2" },
     { "$ref": "#/$defs/ControlPlaneEnvelopeV2" },
     { "$ref": "#/$defs/SnapshotApplyReceiptV2" }
@@ -36,6 +39,10 @@
     "EventModeV2": {
       "type": "string",
       "enum": ["emit", "serial", "bail", "waterfall"]
+    },
+    "ProfileLayerKindV2": {
+      "type": "string",
+      "enum": ["bundle", "profile", "tenant", "project", "session"]
     },
     "ScopeV2": {
       "type": "object",
@@ -263,6 +270,195 @@
         },
         "quotas": { "$ref": "#/$defs/QuotaV2" },
         "restart_policy": { "$ref": "#/$defs/RestartPolicyV2" }
+      }
+    },
+    "BundleReferenceV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle_id", "version", "digest", "source"],
+      "properties": {
+        "bundle_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "BundleArtifactV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "target", "path", "digest", "size_bytes", "media_type"],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "target": { "$ref": "#/$defs/DataPlaneTargetV2" },
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "media_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ProfileLayerV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "kind",
+        "scope",
+        "entries",
+        "replacements",
+        "disabled_entry_ids"
+      ],
+      "anyOf": [
+        { "properties": { "entries": { "minItems": 1 } } },
+        { "properties": { "replacements": { "minItems": 1 } } },
+        { "properties": { "disabled_entry_ids": { "minItems": 1 } } }
+      ],
+      "properties": {
+        "layer_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "kind": { "$ref": "#/$defs/ProfileLayerKindV2" },
+        "scope": { "$ref": "#/$defs/ScopeV2" },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProfileEntryV2" }
+        },
+        "replacements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProfileEntryV2" }
+        },
+        "disabled_entry_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+          }
+        }
+      }
+    },
+    "ProfileSourceV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source_id",
+        "profile_id",
+        "revision",
+        "digest",
+        "provenance",
+        "layers"
+      ],
+      "properties": {
+        "schema_version": { "const": 2, "type": "integer" },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "revision": { "type": "integer", "minimum": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "provenance": { "type": ["string", "null"], "minLength": 1 },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ProfileLayerV2" }
+        }
+      }
+    },
+    "ProfileSourceReferenceV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "revision", "digest"],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "revision": { "type": "integer", "minimum": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "BundleManifestV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "bundle_id",
+        "version",
+        "manifests",
+        "layers",
+        "artifacts",
+        "digest",
+        "signature",
+        "provenance"
+      ],
+      "properties": {
+        "schema_version": { "const": 2, "type": "integer" },
+        "bundle_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "manifests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/PluginManifestV2" }
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ProfileLayerV2" }
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/BundleArtifactV2" }
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "signature": { "type": ["string", "null"], "minLength": 1 },
+        "provenance": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "DesiredBundleSetV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "desired_set_id",
+        "revision",
+        "bundles",
+        "profile_source",
+        "digest"
+      ],
+      "properties": {
+        "schema_version": { "const": 2, "type": "integer" },
+        "desired_set_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "revision": { "type": "integer", "minimum": 1 },
+        "bundles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BundleReferenceV2" }
+        },
+        "profile_source": { "$ref": "#/$defs/ProfileSourceReferenceV2" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "ProfileSnapshotV2": {

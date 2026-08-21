@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 04c5cbd66568e7eb5ea3929409589c2f53fcb91079ec9a9ad077448c2839aadf
+// Schema SHA-256: 1682003a0f803e1dd6a1daac01313676938c17a961c581b4c462502ddb42ef1f
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 import type { PluginContractV2 } from './generated';
