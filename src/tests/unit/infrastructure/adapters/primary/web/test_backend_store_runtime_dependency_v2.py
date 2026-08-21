@@ -158,6 +158,47 @@ async def test_default_graph_store_uses_the_pinned_generation(binding_id: str) -
     graph_service.close.assert_awaited_once()
 
 
+async def test_default_retrieval_store_uses_the_pinned_generation() -> None:
+    graph_service = SimpleNamespace(close=AsyncMock())
+    retrieval_store = SimpleNamespace(close=AsyncMock())
+
+    async def graph_factory() -> Any:
+        return graph_service
+
+    async def retrieval_factory(_graph_runtime: Any) -> Any:
+        return retrieval_store
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            graph_runtime_factory=graph_factory,
+            retrieval_runtime_factory=retrieval_factory,
+        )
+    )
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+    authority, service = _authority(
+        binding_name="retrieval_store_id",
+        binding_id="",
+        service_name="retrieval_service",
+    )
+
+    assert publication.accepted is True
+    async with pin_generation_v2(host):
+        resolved = await dependencies.get_retrieval_store(_request(), backend_store=authority)
+
+    assert resolved is retrieval_store
+    service.resolve_backend.assert_not_awaited()
+
+    await host.close()
+
+    retrieval_store.close.assert_awaited_once()
+    graph_service.close.assert_awaited_once()
+
+
 @pytest.mark.parametrize(
     "dependency",
     (dependencies.get_graph_store, dependencies.get_retrieval_store),

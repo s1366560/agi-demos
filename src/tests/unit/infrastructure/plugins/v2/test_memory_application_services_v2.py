@@ -24,6 +24,7 @@ from src.infrastructure.plugins.v2.memory_services import (
     SqlMemoryRepositoryProviderV2,
 )
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
+from src.infrastructure.plugins.v2.retrieval_runtime import RETRIEVAL_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
@@ -142,10 +143,13 @@ async def test_memory_application_rejects_missing_required_inject_without_fallba
     missing_service: str,
 ) -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
+    disabled_modules = {disabled_module}
+    if disabled_module == "builtin://memstack/graph/runtime":
+        disabled_modules.add(RETRIEVAL_RUNTIME_MODULE_V2)
     disabled = replace(
         document,
         entries=tuple(
-            replace(entry, enabled=False) if entry.module_ref == disabled_module else entry
+            replace(entry, enabled=False) if entry.module_ref in disabled_modules else entry
             for entry in document.entries
         ),
     )

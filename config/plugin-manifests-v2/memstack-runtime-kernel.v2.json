@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:0f387949d858e87a8cb601d871e432b4cdbecd67880138436650835f4b8b8731",
+        "digest": "sha256:4f5ded43a2ca76840f8ca473c2b5ea6c2491d226b2c0868106f27df8ec12c333",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -237,6 +237,44 @@
       "artifact": {
         "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/retrieval/env-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.retrieval_runtime:retrieval_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:retrieval.env-runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "graph_runtime",
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "strategy"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "strategy": { "const": "memstack-pgvector", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:64e7df4afc90687e0cc4853e80a522f2778cae83eef7c05457513c2438916477",
+      "artifact": {
+        "digest": "sha256:38f44c01030912c7af670a37c3d6ef3feedac8cd7c4e964b2e10dfa9efac609f",
+        "source": "repo+python://src/infrastructure/plugins/v2/retrieval_runtime.py"
       }
     },
     {

@@ -57,8 +57,9 @@ def test_lifespan_does_not_hold_a_graph_generation_lease_until_shutdown() -> Non
     source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
 
     assert "graph_generation_lease" not in source
-    assert "async with pin_generation_v2(plugin_host)" in source
+    assert "pin_generation_v2" not in source
     assert "graph_runtime_factory=graph_runtime_factory" in source
+    assert "retrieval_runtime_factory=retrieval_runtime_factory" in source
     assert "graph_runtime_factory=create_native_graph_adapter" not in source
 
 

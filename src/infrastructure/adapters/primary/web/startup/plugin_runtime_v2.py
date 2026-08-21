@@ -22,6 +22,7 @@ from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
 from src.infrastructure.plugins.v2.legacy_http_route_bridge import project_legacy_http_routes_v2
 from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
+from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeFactoryV2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
@@ -43,10 +44,14 @@ async def initialize_plugin_runtime_v2(
     desired_http_route_rows: Sequence[Any] = (),
     session_factory: Callable[[], Any] | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
+    retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
 ) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
     host = PlatformPluginRuntimeHostV2(
-        builtin_runtime_definitions_v2(graph_runtime_factory=graph_runtime_factory)
+        builtin_runtime_definitions_v2(
+            graph_runtime_factory=graph_runtime_factory,
+            retrieval_runtime_factory=retrieval_runtime_factory,
+        )
     )
     route_registry = RouteTableRegistryV2()
     route_graph = None

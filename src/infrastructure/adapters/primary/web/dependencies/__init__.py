@@ -44,8 +44,11 @@ from src.infrastructure.plugins.v2.graph_runtime import (
     GRAPH_RUNTIME_SERVICE_V2,
     GraphRuntimeServiceV2,
 )
+from src.infrastructure.plugins.v2.retrieval_runtime import (
+    RETRIEVAL_RUNTIME_SERVICE_V2,
+    RetrievalRuntimeServiceV2,
+)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-from src.infrastructure.retrieval.registry import get_env_default_retrieval_store
 
 
 class _BackendStoreAuthorityProtocolV2(Protocol):
@@ -129,6 +132,19 @@ def _graph_runtime_v2() -> GraphRuntimeServiceV2:
     return runtime
 
 
+def _retrieval_runtime_v2() -> RetrievalRuntimeServiceV2:
+    runtime = current_generation_v2().resolve(
+        RETRIEVAL_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(runtime, RetrievalRuntimeServiceV2):
+        raise RuntimeV2Error(
+            "invalid_retrieval_runtime",
+            "pinned generation has an invalid env retrieval runtime service",
+        )
+    return runtime
+
+
 def get_graph_service(_request: Request) -> GraphStorePort | None:
     """Resolve the optional graph resource from the pinned V2 generation."""
     return _graph_runtime_v2().graph_service
@@ -208,12 +224,7 @@ async def get_retrieval_store(
                 tenant_id,
                 retrieval_store_id,
             )
-    try:
-        default_store = get_env_default_retrieval_store()
-        return cast(RetrievalStorePort | None, default_store)
-    except Exception:
-        logger.warning("Failed to get retrieval_store from registry")
-        return None
+    return _retrieval_runtime_v2().retrieval_store
 
 
 __all__ = [

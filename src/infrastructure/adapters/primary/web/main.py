@@ -30,8 +30,8 @@ from slowapi.errors import RateLimitExceeded
 from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
+from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -75,11 +75,9 @@ from src.infrastructure.llm.resilience.health_checker import (
 )
 from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
-from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2, pin_generation_v2
-from src.infrastructure.plugins.v2.graph_runtime import (
-    GRAPH_RUNTIME_SERVICE_V2,
-    GraphRuntimeServiceV2,
-)
+from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
+from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -145,41 +143,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     async def graph_runtime_factory() -> GraphStorePort:
         return await _create_generation_graph_runtime(cast("Redis | None", redis_client))
 
-    # Publish V2 before constructing workflow/DI consumers. The graph module
-    # owns the resource and its disposer; startup configuration uses a bounded
-    # lease and no legacy container retains the graph object afterward.
-    plugin_host = await initialize_plugin_runtime_v2(
+    def retrieval_runtime_factory(graph_runtime: GraphRuntimeServiceV2) -> RetrievalStorePort:
+        return MemstackPgvectorRetrievalStore(
+            session_factory=async_session_factory,
+            embedding_service=getattr(graph_runtime.graph_service, "embedder", None),
+        )
+
+    # Publish V2 before constructing workflow/DI consumers. Graph and env
+    # retrieval resources are created by candidate effects and are not retained
+    # by the legacy application container.
+    _ = await initialize_plugin_runtime_v2(
         app,
         desired_http_route_rows=desired_http_route_rows,
         session_factory=async_session_factory,
         graph_runtime_factory=graph_runtime_factory,
+        retrieval_runtime_factory=retrieval_runtime_factory,
     )
     try:
-        async with pin_generation_v2(plugin_host) as graph_generation:
-            graph_runtime = graph_generation.resolve(
-                GRAPH_RUNTIME_SERVICE_V2,
-                ScopeV2(kind=ScopeKindV2.ROOT),
-            )
-            if not isinstance(graph_runtime, GraphRuntimeServiceV2):
-                raise TypeError("plugin runtime v2 published an invalid graph runtime service")
-            graph_service = graph_runtime.graph_service
-
-            try:
-                from src.infrastructure.retrieval.registry import (
-                    register_env_default_retrieval_store,
-                )
-                from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
-
-                retrieval_store = MemstackPgvectorRetrievalStore(
-                    session_factory=async_session_factory,
-                    embedding_service=getattr(graph_service, "embedder", None),
-                )
-                register_env_default_retrieval_store(retrieval_store)
-                app.state.retrieval_store = retrieval_store
-                logger.info("Registered env-default retrieval backend in registry")
-            except Exception:
-                logger.exception("Failed to register env-default retrieval backend")
-
         # Background workflow handlers acquire their own generation per run.
         workflow_engine = await initialize_workflow_engine()
 

@@ -29,6 +29,7 @@ from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .memory_services import memory_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
+from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
@@ -79,6 +80,7 @@ def _apply_runtime_boundary(
 def builtin_runtime_definitions_v2(
     *,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
+    retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     return (
@@ -88,6 +90,7 @@ def builtin_runtime_definitions_v2(
             apply=_apply_runtime_boundary,
         ),
         graph_runtime_definition_v2(graph_runtime_factory),
+        retrieval_runtime_definition_v2(retrieval_runtime_factory),
         *memory_service_definitions_v2(),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
