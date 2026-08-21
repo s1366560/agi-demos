@@ -174,15 +174,22 @@ async def test_streaming_request_keeps_old_route_generation_until_final_body() -
 
 
 @pytest.mark.unit
-async def test_websocket_handshake_routes_without_connection_generation_pin() -> None:
+async def test_websocket_connection_keeps_its_pinned_route_generation() -> None:
     outer = FastAPI()
     mount_generation_http_dispatcher_v2(outer)
-    private = FastAPI()
+    first_routes = FastAPI()
 
-    @private.websocket("/api/v1/agent/ws")
-    async def websocket_endpoint(websocket: WebSocket) -> None:
+    @first_routes.websocket("/api/v1/agent/ws")
+    async def first_websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.accept()
-        await websocket.send_json({"route_generation": 7})
+        await websocket.send_json(
+            {
+                "route_generation": 7,
+                "pinned_generation": current_generation_v2().generation,
+            }
+        )
+        _ = await websocket.receive_text()
+        await websocket.send_json({"pinned_after_reload": current_generation_v2().generation})
         await websocket.close()
 
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -195,10 +202,53 @@ async def test_websocket_handshake_routes_without_connection_generation_pin() ->
     distribution = host.current_distribution
     assert distribution is not None
     registry = RouteTableRegistryV2()
-    await registry.publish(distribution.descriptor, RouteTableV2.from_fastapi_graph(private))
+    await registry.publish(
+        distribution.descriptor,
+        RouteTableV2.from_fastapi_graph(first_routes),
+    )
     outer.state.platform_plugin_route_registry_v2 = registry
+    application = PluginGenerationMiddlewareV2(outer, host_provider=lambda _scope: host)
 
-    with TestClient(outer) as client, client.websocket_connect("/api/v1/agent/ws") as websocket:
-        assert websocket.receive_json() == {"route_generation": 7}
+    with TestClient(application) as client:
+        with client.websocket_connect("/api/v1/agent/ws") as websocket:
+            assert websocket.receive_json() == {
+                "route_generation": 7,
+                "pinned_generation": 7,
+            }
+
+            await host.bootstrap(
+                profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+                generation=8,
+                version=8,
+                nonce="websocket-generation-8",
+            )
+            second_distribution = host.current_distribution
+            assert second_distribution is not None
+            second_routes = FastAPI()
+
+            @second_routes.websocket("/api/v1/agent/ws")
+            async def second_websocket_endpoint(second_websocket: WebSocket) -> None:
+                await second_websocket.accept()
+                await second_websocket.send_json(
+                    {
+                        "route_generation": 8,
+                        "pinned_generation": current_generation_v2().generation,
+                    }
+                )
+                await second_websocket.close()
+
+            await registry.publish(
+                second_distribution.descriptor,
+                RouteTableV2.from_fastapi_graph(second_routes),
+            )
+            websocket.send_text("continue")
+            assert websocket.receive_json() == {"pinned_after_reload": 7}
+
+        with client.websocket_connect("/api/v1/agent/ws") as websocket:
+            assert websocket.receive_json() == {
+                "route_generation": 8,
+                "pinned_generation": 8,
+            }
 
     await host.close()

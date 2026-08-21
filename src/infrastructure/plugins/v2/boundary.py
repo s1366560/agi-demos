@@ -317,14 +317,14 @@ def _distribution_payload_for_generation_v2(
 
 
 class PluginGenerationMiddlewareV2:
-    """Pure ASGI middleware that retains a lease through streaming completion."""
+    """Retain one generation through an HTTP response or WebSocket connection."""
 
     def __init__(self, app: ASGIApp, *, host_provider: HostProviderV2) -> None:
         self._app = app
         self._host_provider = host_provider
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] not in {"http", "websocket"}:
             await self._app(scope, receive, send)
             return
         async with pin_generation_v2(self._host_provider(scope)) as generation:

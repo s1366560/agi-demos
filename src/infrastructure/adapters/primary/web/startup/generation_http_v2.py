@@ -38,15 +38,10 @@ class ApplicationGenerationRouteDispatcherV2(BaseRoute):
     def matches(self, scope: Scope) -> tuple[Match, Scope]:
         if scope["type"] not in {"http", "websocket"}:
             return Match.NONE, {}
-        registry = self._registry()
-        if scope["type"] == "websocket":
-            publication = registry.current
-            if publication is None:
-                raise RuntimeError("plugin route generation v2 is not published")
-        else:
-            from src.infrastructure.plugins.v2.boundary import current_generation_v2
+        from src.infrastructure.plugins.v2.boundary import current_generation_v2
 
-            publication = registry.resolve(current_generation_v2().descriptor)
+        registry = self._registry()
+        publication = registry.resolve(current_generation_v2().descriptor)
         match = publication.table.match(scope)
         return match, {"endpoint": self} if match is not Match.NONE else {}
 
@@ -59,12 +54,6 @@ class ApplicationGenerationRouteDispatcherV2(BaseRoute):
     @override
     async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
         registry = self._registry()
-        if scope["type"] == "websocket":
-            publication = registry.current
-            if publication is None:
-                raise RuntimeError("plugin route generation v2 is not published")
-            await publication.table(scope, receive, send)
-            return
         await GenerationRouteDispatcherV2(registry)(scope, receive, send)
 
 
