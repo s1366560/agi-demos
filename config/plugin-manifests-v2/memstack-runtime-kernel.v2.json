@@ -234,7 +234,7 @@
       },
       "contract_digest": "sha256:c44e322b72725b716d5a93ee30f65da6ee9ddfc52284f84e64275c871f8972f0",
       "artifact": {
-        "digest": "sha256:1177bec7b6a02089ed3a8085b8df4ab1dd2d47318bad64b314d411f1fc1251c0",
+        "digest": "sha256:199b6aca807a30dae0fbb5078560f6e98cdd1ccf03bad4c1bb401550877172ab",
         "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
       }
     },
@@ -271,7 +271,44 @@
       },
       "contract_digest": "sha256:82a495fac290cd5246d34f29c2fca7d093fb2a13f0cd7dce352e9fca67d4cc40",
       "artifact": {
-        "digest": "sha256:1177bec7b6a02089ed3a8085b8df4ab1dd2d47318bad64b314d411f1fc1251c0",
+        "digest": "sha256:199b6aca807a30dae0fbb5078560f6e98cdd1ccf03bad4c1bb401550877172ab",
+        "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/project-tenant-services",
+      "entrypoint": "src.infrastructure.plugins.v2.project_tenant_services:_apply_project_tenant_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.project-tenant-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.project-tenant-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6d947e7210e8473fd429d204081d7023bdde216c20fcd5af713ad81362479687",
+      "artifact": {
+        "digest": "sha256:199b6aca807a30dae0fbb5078560f6e98cdd1ccf03bad4c1bb401550877172ab",
         "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
       }
     },

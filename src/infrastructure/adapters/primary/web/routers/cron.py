@@ -46,6 +46,10 @@ from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    ProjectTenantAuthorityV2,
+    project_tenant_authority_dependency_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import (
     get_db,
@@ -166,15 +170,14 @@ async def create_cron_job(
     body: CronJobCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> CronJobResponse:
     """Create a new cron job."""
     await _require_project_access(project_id, current_user, db)
-    container = _container(db)
-    svc = container.cron_job_service()
+    svc = _container(db).cron_job_service()
 
     # Resolve tenant_id from the project (User entity has no tenant_id)
-    project_svc = container.project_service()
-    project = await project_svc.get_project(project_id)
+    project = await project_tenant.services.project_service.get_project(project_id)
     if project is None:
         raise HTTPException(status_code=404, detail=_("Project not found"))
 

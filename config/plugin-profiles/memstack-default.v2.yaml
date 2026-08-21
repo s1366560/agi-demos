@@ -30,6 +30,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-project-tenant-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/project-tenant-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:persistence.project-tenant-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-project-tenant-shadow
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

@@ -33,6 +33,8 @@ from .runtime import (
 
 PROJECT_TENANT_PROVIDER_MODULE_V2 = "builtin://memstack/persistence/project-tenant-provider"
 PROJECT_TENANT_PROVIDER_SERVICE_V2 = "service:persistence.project-tenant-provider"
+PROJECT_TENANT_APPLICATION_MODULE_V2 = "builtin://memstack/application/project-tenant-services"
+PROJECT_TENANT_APPLICATION_SERVICE_V2 = "service:application.project-tenant-services"
 PROJECT_TENANT_SHADOW_MODULE_V2 = "builtin://memstack/persistence/project-tenant-shadow"
 PROJECT_TENANT_SHADOW_SERVICE_V2 = "service:persistence.project-tenant-shadow"
 PROJECT_TENANT_PROVIDER_INJECT_V2 = "provider"
@@ -87,6 +89,13 @@ class ProjectTenantServiceFactoryProtocolV2(Protocol):
 
 
 @runtime_checkable
+class ProjectTenantApplicationResolverProtocolV2(Protocol):
+    """Application-facing resolver injected through a declared service alias."""
+
+    def resolve(self, operation: OperationContextV2) -> ProjectTenantServicesV2: ...
+
+
+@runtime_checkable
 class ProjectTenantShadowProtocolV2(Protocol):
     """Boundary-visible Consumer contract with no concrete implementation dependency."""
 
@@ -124,6 +133,16 @@ class SqlProjectTenantServiceFactoryV2:
                 user_repo=SqlUserRepository(db),
             ),
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectTenantApplicationResolverV2:
+    """Resolve one request-owned service set without exposing a Provider implementation."""
+
+    provider: ProjectTenantServiceFactoryProtocolV2
+
+    def resolve(self, operation: OperationContextV2) -> ProjectTenantServicesV2:
+        return self.provider.build(operation)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -224,6 +243,28 @@ def _apply_project_tenant_provider_v2(
     )
 
 
+def _apply_project_tenant_application_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> None:
+    strategy = config.get("strategy")
+    if strategy != "operation-scoped-provider":
+        raise ValueError(
+            "project/tenant application resolver requires strategy operation-scoped-provider"
+        )
+    provider = context.require(PROJECT_TENANT_PROVIDER_INJECT_V2)
+    if not isinstance(provider, ProjectTenantServiceFactoryProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_project_tenant_provider",
+            "project/tenant provider inject does not implement the factory contract",
+        )
+    _ = context.provide(
+        PROJECT_TENANT_APPLICATION_SERVICE_V2,
+        ProjectTenantApplicationResolverV2(provider=provider),
+        label="project-tenant-application",
+    )
+
+
 def _apply_project_tenant_shadow_v2(
     context: ContextV2,
     config: Mapping[str, Any],
@@ -252,6 +293,11 @@ def project_tenant_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
             apply=_apply_project_tenant_provider_v2,
         ),
         PluginDefinitionV2(
+            module_ref=PROJECT_TENANT_APPLICATION_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(PROJECT_TENANT_APPLICATION_MODULE_V2),
+            apply=_apply_project_tenant_application_v2,
+        ),
+        PluginDefinitionV2(
             module_ref=PROJECT_TENANT_SHADOW_MODULE_V2,
             contract_digest=generated_contract_digest_v2(PROJECT_TENANT_SHADOW_MODULE_V2),
             apply=_apply_project_tenant_shadow_v2,
@@ -260,11 +306,15 @@ def project_tenant_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
 
 
 __all__ = [
+    "PROJECT_TENANT_APPLICATION_MODULE_V2",
+    "PROJECT_TENANT_APPLICATION_SERVICE_V2",
     "PROJECT_TENANT_PROVIDER_INJECT_V2",
     "PROJECT_TENANT_PROVIDER_MODULE_V2",
     "PROJECT_TENANT_PROVIDER_SERVICE_V2",
     "PROJECT_TENANT_SHADOW_MODULE_V2",
     "PROJECT_TENANT_SHADOW_SERVICE_V2",
+    "ProjectTenantApplicationResolverProtocolV2",
+    "ProjectTenantApplicationResolverV2",
     "ProjectTenantServiceFactoryProtocolV2",
     "ProjectTenantServicesV2",
     "ProjectTenantShadowComparatorV2",
