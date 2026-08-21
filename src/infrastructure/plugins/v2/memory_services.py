@@ -16,6 +16,7 @@ from src.application.use_cases.memory.get_memory import GetMemoryUseCase
 from src.application.use_cases.memory.list_memories import ListMemoriesUseCase
 from src.application.use_cases.memory.search_memory import SearchMemoryUseCase
 from src.domain.ports.repositories.memory_repository import MemoryRepository
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
     SqlMemoryRepository,
 )
@@ -42,6 +43,7 @@ _OPERATION_DB_SESSION_SERVICE_V2 = "service:operation.db-session"
 class MemoryApplicationServicesV2:
     """Complete request-session-owned memory application service set."""
 
+    graph_service: GraphStorePort
     memory_repository: MemoryRepository
     memory_service: MemoryService
     search_service: SearchService
@@ -93,6 +95,7 @@ class MemoryApplicationResolverV2:
         graph_service = self.graph_runtime.require()
         memory_repository = self.repository_provider.build(operation)
         return MemoryApplicationServicesV2(
+            graph_service=graph_service,
             memory_repository=memory_repository,
             memory_service=MemoryService(
                 memory_repo=memory_repository,

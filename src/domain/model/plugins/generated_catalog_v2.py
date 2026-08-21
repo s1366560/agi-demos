@@ -5,8 +5,8 @@
 from typing import Final
 
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:36e3c6ae4d331001c195df0fb26fc174cecdccf55d4a3962b8ff8f88600b93'
-    '2d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:1c9ee8d98bb6ecaf4ccd588cc7c71f2308f31b5e11bcf9cc319b6f9c56df1e'
+    '37","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -263,8 +263,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '7fcefb","entrypoint":"src.infrastructure.plugins.v2.backend_store_services:_apply_backen'
     'd_store_application_v2","module_ref":"builtin://memstack/application/backend-store-servi'
     'ces","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]'
-    '},{"artifact_digest":"sha256:8f8146843b5d3c97e829d570cb156721bdd5f336a3822ac65e64204b601'
-    '74d4b","artifact_source":"repo+python://src/infrastructure/plugins/v2/memory_services.py'
+    '},{"artifact_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036e564b30881251e44c1'
+    '1a001","artifact_source":"repo+python://src/infrastructure/plugins/v2/memory_services.py'
     '","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema",'
     '"additionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-provide'
     'r","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"hand'
@@ -361,8 +361,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'c276775f3e902201b6eb35de9f9","entrypoint":"src.infrastructure.plugins.v2.backend_store_s'
     'ervices:_apply_backend_store_provider_v2","module_ref":"builtin://memstack/persistence/b'
     'ackend-store-provider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","t'
-    'argets":["python"]},{"artifact_digest":"sha256:8f8146843b5d3c97e829d570cb156721bdd5f336a'
-    '3822ac65e64204b60174d4b","artifact_source":"repo+python://src/infrastructure/plugins/v2/'
+    'argets":["python"]},{"artifact_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036'
+    'e564b30881251e44c11a001","artifact_source":"repo+python://src/infrastructure/plugins/v2/'
     'memory_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draf'
     't/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"reques'
     't-async-session","type":"string"}},"required":["strategy"],"type":"object"},"events":{"e'
@@ -482,7 +482,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'time-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:36e3c6ae4d331001c195df0fb26fc174cecdccf55d4a3962b8ff8f88600b932d"
+    "sha256:1c9ee8d98bb6ecaf4ccd588cc7c71f2308f31b5e11bcf9cc319b6f9c56df1e37"
 )
 
 __all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]

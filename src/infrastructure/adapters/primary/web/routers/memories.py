@@ -17,11 +17,13 @@ from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graph_store as get_graph_service,
     get_workflow_engine,
 )
+from src.infrastructure.adapters.primary.web.memory_application_authority_v2 import (
+    MemoryApplicationAuthorityV2,
+    memory_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
@@ -490,12 +492,15 @@ class MemoryUpdate(BaseModel):
 async def extract_entities(
     payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     content, project_id, tenant_id = await _resolve_extraction_input(payload, current_user, db)
     extractor = getattr(graph_service, "extract_entities", None)
-    if graph_service is None or not callable(extractor):
+    if not callable(extractor):
         raise HTTPException(status_code=503, detail=_("Graph extraction service not available"))
 
     try:
@@ -516,12 +521,15 @@ async def extract_entities(
 async def extract_relationships(
     payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     content, project_id, tenant_id = await _resolve_extraction_input(payload, current_user, db)
     extractor = getattr(graph_service, "extract_relationships", None)
-    if graph_service is None or not callable(extractor):
+    if not callable(extractor):
         raise HTTPException(status_code=503, detail=_("Graph extraction service not available"))
 
     entities = payload.get("entities")
@@ -545,8 +553,9 @@ async def create_memory(
     memory_data: MemoryCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> Any:
     """Create a new memory.
@@ -555,6 +564,8 @@ async def create_memory(
     1. Immediate storage in DB
     2. Asynchronous graph building via Graphiti for relationship extraction
     """
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     try:
         project_id = memory_data.project_id
         task_session_factory = _build_request_session_factory(db)
@@ -588,20 +599,19 @@ async def create_memory(
         # 2. Add to Graphiti for graph building (async)
         try:
             # Pre-create EpisodicNode in Neo4j to avoid race conditions
-            if graph_service is not None:
-                await graph_service.ensure_episodic_node(
-                    uuid=memory.id,
-                    name=memory.title or str(memory.id),
-                    content=memory.content,
-                    source_description="User input",
-                    source="text",
-                    created_at_iso=memory.created_at.isoformat(),
-                    group_id=project_id,
-                    tenant_id=project.tenant_id,
-                    project_id=project_id,
-                    user_id=current_user.id,
-                    memory_id=memory.id,
-                )
+            await graph_service.ensure_episodic_node(
+                uuid=memory.id,
+                name=memory.title or str(memory.id),
+                content=memory.content,
+                source_description="User input",
+                source="text",
+                created_at_iso=memory.created_at.isoformat(),
+                group_id=project_id,
+                tenant_id=project.tenant_id,
+                project_id=project_id,
+                user_id=current_user.id,
+                memory_id=memory.id,
+            )
 
             task_id = str(uuid4())
             task_payload = {
@@ -697,9 +707,12 @@ async def list_memories(
         description="Memory content type filter",
     ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> MemoryListResponse:
     """List memories for a project."""
+    db = memory_application.db
     # Verify access
     user_project_result = await db.execute(
         refresh_select_statement(
@@ -762,10 +775,13 @@ async def list_memories(
 async def get_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> Any:
     """Get a specific memory."""
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))
     )
@@ -793,10 +809,13 @@ async def get_memory(
 async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     # 1. Get memory to check permissions and project_id
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))
@@ -815,8 +834,6 @@ async def delete_memory(
     # This ensures proper cleanup of orphaned entities and edges
     graph_cleanup_failed = False
     try:
-        if graph_service is None:
-            raise HTTPException(status_code=503, detail=_("Graph service not available"))
         await graph_service.delete_episode_by_memory_id(memory_id)
         logger.info(f"Deleted graph state for memory {memory_id} with proper cleanup")
     except Exception as e:
@@ -872,11 +889,14 @@ async def delete_memory(
 async def reprocess_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> Any:
     """Manually trigger re-processing of a memory."""
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     # 1. Get memory
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))
@@ -912,8 +932,7 @@ async def reprocess_memory(
     # 3. Clean up old episode data before reprocessing
     try:
         logger.info(f"Cleaning up old episode data for memory {memory_id} before reprocessing")
-        if graph_service is not None:
-            await graph_service.delete_episode_by_memory_id(memory_id)
+        await graph_service.delete_episode_by_memory_id(memory_id)
     except Exception as e:
         logger.warning(f"Failed to clean up old episode data for memory {memory_id}: {e}")
         # Continue with reprocessing even if cleanup fails
@@ -1052,11 +1071,14 @@ async def update_memory(
     memory_data: MemoryUpdate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    memory_application: MemoryApplicationAuthorityV2 = Depends(
+        memory_application_authority_dependency_v2
+    ),
 ) -> Any:
     """Update an existing memory with optimistic locking."""
+    db = memory_application.db
+    graph_service = memory_application.services.graph_service
     # 1. Get memory
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))

@@ -1,6 +1,7 @@
 """Unit tests for memory extraction endpoint input compatibility and access checks."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -11,6 +12,13 @@ from src.infrastructure.adapters.primary.web.routers.memories import (
     extract_relationships,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, User
+
+
+def _memory_application(db: AsyncSession, graph_service: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(graph_service=graph_service),
+    )
 
 
 @pytest.mark.unit
@@ -25,8 +33,7 @@ class TestMemoryExtractionRouter:
         response = await extract_entities(
             {"text": "Alice met Bob in Paris"},
             current_user=test_user,
-            db=test_db,
-            graph_service=mock_graph_service,
+            memory_application=_memory_application(test_db, mock_graph_service),
         )
 
         assert [entity["name"] for entity in response["entities"]] == ["Alice", "Bob", "Paris"]
@@ -43,8 +50,7 @@ class TestMemoryExtractionRouter:
         response = await extract_relationships(
             {"text": "Alice met Bob in Paris"},
             current_user=test_user,
-            db=test_db,
-            graph_service=mock_graph_service,
+            memory_application=_memory_application(test_db, mock_graph_service),
         )
 
         assert response["relationships"] == [
@@ -92,8 +98,7 @@ class TestMemoryExtractionRouter:
             await extract_entities(
                 {"memory_id": memory.id},
                 current_user=another_user,
-                db=test_db,
-                graph_service=mock_graph_service,
+                memory_application=_memory_application(test_db, mock_graph_service),
             )
 
         assert exc_info.value.status_code == 403

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:36e3c6ae4d331001c195df0fb26fc174cecdccf55d4a3962b8ff8f8860',
-  '0b932d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:1c9ee8d98bb6ecaf4ccd588cc7c71f2308f31b5e11bcf9cc319b6f9c56',
+  'df1e37","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -293,8 +293,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '5b74f914b9f97fcefb","entrypoint":"src.infrastructure.plugins.v2.backend_store_servic',
   'es:_apply_backend_store_application_v2","module_ref":"builtin://memstack/application',
   '/backend-store-services","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0',
-  '.0","targets":["python"]},{"artifact_digest":"sha256:8f8146843b5d3c97e829d570cb15672',
-  '1bdd5f336a3822ac65e64204b60174d4b","artifact_source":"repo+python://src/infrastructu',
+  '.0","targets":["python"]},{"artifact_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15',
+  'a544c5b036e564b30881251e44c11a001","artifact_source":"repo+python://src/infrastructu',
   're/plugins/v2/memory_services.py","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"stra',
   'tegy":{"const":"operation-scoped-provider","type":"string"}},"required":["strategy"]',
@@ -396,8 +396,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'b6eb35de9f9","entrypoint":"src.infrastructure.plugins.v2.backend_store_services:_app',
   'ly_backend_store_provider_v2","module_ref":"builtin://memstack/persistence/backend-s',
   'tore-provider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targe',
-  'ts":["python"]},{"artifact_digest":"sha256:8f8146843b5d3c97e829d570cb156721bdd5f336a',
-  '3822ac65e64204b60174d4b","artifact_source":"repo+python://src/infrastructure/plugins',
+  'ts":["python"]},{"artifact_digest":"sha256:a18bcceb77d4f55d9c6ae636aba2a15a544c5b036',
+  'e564b30881251e44c11a001","artifact_source":"repo+python://src/infrastructure/plugins',
   '/v2/memory_services.py","contract":{"config_schema":{"$schema":"https://json-schema.',
   'org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"co',
   'nst":"request-async-session","type":"string"}},"required":["strategy"],"type":"objec',
@@ -528,4 +528,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:36e3c6ae4d331001c195df0fb26fc174cecdccf55d4a3962b8ff8f88600b932d' as const;
+  'sha256:1c9ee8d98bb6ecaf4ccd588cc7c71f2308f31b5e11bcf9cc319b6f9c56df1e37' as const;
