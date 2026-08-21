@@ -230,16 +230,18 @@ class DataPlaneGenerationAdmissionV2:
         operation_id: str,
         scope: ScopeV2,
         services: Mapping[str, object] | None = None,
-    ) -> AsyncIterator[OperationContextV2 | None]:
-        context_manager = None
-        operation: OperationContextV2 | None = None
+    ) -> AsyncIterator[OperationContextV2]:
+        if descriptor_payload is None:
+            raise RuntimeV2Error(
+                "generation_descriptor_missing",
+                "plugin generation descriptor is required for operation admission",
+            )
+        descriptor = PluginGenerationDescriptorV2.from_payload(
+            cast(dict[str, Any], descriptor_payload)
+        )
+
         async with self._lock:
             if distribution_payload is not None:
-                if descriptor_payload is None:
-                    raise RuntimeV2Error(
-                        "generation_descriptor_missing",
-                        "plugin distribution requires a generation descriptor",
-                    )
                 if distribution_payload.get("descriptor") != descriptor_payload:
                     raise RuntimeV2Error(
                         "generation_descriptor_mismatch",
@@ -254,45 +256,36 @@ class DataPlaneGenerationAdmissionV2:
 
             current = self.host.manager.current
             if current is None:
-                if descriptor_payload is not None:
-                    raise RuntimeV2Error(
-                        "generation_payload_required",
-                        "plugin generation is unavailable without a complete distribution",
-                    )
-            else:
-                if descriptor_payload is not None:
-                    descriptor = PluginGenerationDescriptorV2.from_payload(
-                        cast(dict[str, Any], descriptor_payload)
-                    )
-                    if descriptor != current.descriptor:
-                        raise RuntimeV2Error(
-                            "generation_unavailable",
-                            "requested plugin generation is no longer active on this data plane",
-                        )
-
-                from .boundary import pin_operation_context_v2
-
-                context_manager = pin_operation_context_v2(
-                    self.host,
-                    operation_id=operation_id,
-                    scope=scope,
-                    services=services,
+                raise RuntimeV2Error(
+                    "generation_payload_required",
+                    "plugin generation is unavailable without a complete distribution",
                 )
-                operation = await context_manager.__aenter__()
-                if descriptor_payload is not None and (
-                    operation.descriptor.to_payload() != descriptor_payload
-                ):
-                    await context_manager.__aexit__(None, None, None)
-                    raise RuntimeV2Error(
-                        "generation_admission_race",
-                        "plugin generation changed before the operation lease was acquired",
-                    )
+            if descriptor != current.descriptor:
+                raise RuntimeV2Error(
+                    "generation_unavailable",
+                    "requested plugin generation is no longer active on this data plane",
+                )
+
+            from .boundary import pin_operation_context_v2
+
+            context_manager = pin_operation_context_v2(
+                self.host,
+                operation_id=operation_id,
+                scope=scope,
+                services=services,
+            )
+            operation = await context_manager.__aenter__()
+            if operation.descriptor != descriptor:
+                await context_manager.__aexit__(None, None, None)
+                raise RuntimeV2Error(
+                    "generation_admission_race",
+                    "plugin generation changed before the operation lease was acquired",
+                )
 
         try:
             yield operation
         finally:
-            if context_manager is not None:
-                await context_manager.__aexit__(None, None, None)
+            await context_manager.__aexit__(None, None, None)
 
     async def close(self) -> None:
         await self.host.close()

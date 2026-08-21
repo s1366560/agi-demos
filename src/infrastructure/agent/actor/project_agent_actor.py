@@ -58,9 +58,7 @@ class ProjectAgentActor:
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
-        self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
-            builtin_runtime_definitions_v2()
-        )
+        self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
@@ -260,37 +258,32 @@ class ProjectAgentActor:
     def _admit_plugin_turn(
         self,
         request: ProjectChatRequest,
-    ) -> AbstractAsyncContextManager[OperationContextV2 | None]:
+    ) -> AbstractAsyncContextManager[OperationContextV2]:
         """Build the exact generation admission context for one actor turn."""
         from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 
-        current = self._plugin_admission_v2.host.manager.current
-        if self._config is None and (current is not None or request.plugin_distribution is not None):
+        if self._config is None:
             raise RuntimeV2Error(
                 "operation_scope_unavailable",
                 "actor configuration is required to scope a plugin turn",
             )
-        if self._config is None:
-            scope = ScopeV2(kind=ScopeKindV2.ROOT)
-            services = None
-        else:
-            scope = ScopeV2(
-                kind=ScopeKindV2.SESSION,
-                tenant_id=self._config.tenant_id,
-                project_id=self._config.project_id,
-                session_id=request.conversation_id,
-            )
-            services = {
-                OPERATION_IDENTITY_SERVICE_V2: {
-                    "tenant_id": self._config.tenant_id,
-                    "user_id": request.user_id,
-                },
-                OPERATION_METADATA_SERVICE_V2: {
-                    "kind": "ray-agent-turn",
-                    "conversation_id": request.conversation_id,
-                    "message_id": request.message_id,
-                },
-            }
+        scope = ScopeV2(
+            kind=ScopeKindV2.SESSION,
+            tenant_id=self._config.tenant_id,
+            project_id=self._config.project_id,
+            session_id=request.conversation_id,
+        )
+        services = {
+            OPERATION_IDENTITY_SERVICE_V2: {
+                "tenant_id": self._config.tenant_id,
+                "user_id": request.user_id,
+            },
+            OPERATION_METADATA_SERVICE_V2: {
+                "kind": "ray-agent-turn",
+                "conversation_id": request.conversation_id,
+                "message_id": request.message_id,
+            },
+        }
         return self._plugin_admission_v2.admit(
             descriptor_payload=request.plugin_generation,
             distribution_payload=request.plugin_distribution,
@@ -448,6 +441,35 @@ class ProjectAgentActor:
 
                 state = await load_hitl_state_for_resume(request_id)
                 if state is None:
+                    raise RuntimeV2Error(
+                        "generation_descriptor_missing",
+                        "persisted HITL state does not identify the plugin generation to resume",
+                    )
+
+                from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+
+                async with self._plugin_admission_v2.admit(
+                    descriptor_payload=state.plugin_generation,
+                    distribution_payload=None,
+                    operation_id=f"hitl-resume:{request_id}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=state.tenant_id,
+                        project_id=state.project_id,
+                        session_id=state.conversation_id,
+                    ),
+                    services={
+                        OPERATION_IDENTITY_SERVICE_V2: {
+                            "tenant_id": state.tenant_id,
+                            "user_id": state.user_id,
+                        },
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "hitl-resume",
+                            "request_id": request_id,
+                            "message_id": state.message_id,
+                        },
+                    },
+                ):
                     result = await continue_project_chat(
                         resume_agent,
                         request_id,
@@ -458,41 +480,6 @@ class ProjectAgentActor:
                         conversation_id=conversation_id,
                         message_id=message_id,
                     )
-                else:
-                    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-
-                    async with self._plugin_admission_v2.admit(
-                        descriptor_payload=state.plugin_generation,
-                        distribution_payload=None,
-                        operation_id=f"hitl-resume:{request_id}",
-                        scope=ScopeV2(
-                            kind=ScopeKindV2.SESSION,
-                            tenant_id=state.tenant_id,
-                            project_id=state.project_id,
-                            session_id=state.conversation_id,
-                        ),
-                        services={
-                            OPERATION_IDENTITY_SERVICE_V2: {
-                                "tenant_id": state.tenant_id,
-                                "user_id": state.user_id,
-                            },
-                            OPERATION_METADATA_SERVICE_V2: {
-                                "kind": "hitl-resume",
-                                "request_id": request_id,
-                                "message_id": state.message_id,
-                            },
-                        },
-                    ):
-                        result = await continue_project_chat(
-                            resume_agent,
-                            request_id,
-                            response_data,
-                            lease_owner=self._lease_owner(),
-                            tenant_id=self._config.tenant_id if self._config else None,
-                            project_id=self._config.project_id if self._config else None,
-                            conversation_id=conversation_id,
-                            message_id=message_id,
-                        )
         except Exception:
             await self._revert_continue_claim(request_id)
             raise

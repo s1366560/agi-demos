@@ -202,6 +202,47 @@ async def test_remote_admission_rejects_retired_descriptor_without_distribution(
 
 
 @pytest.mark.unit
+async def test_remote_admission_rejects_missing_generation_descriptor() -> None:
+    admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+
+    with pytest.raises(RuntimeV2Error) as error:
+        async with admission.admit(
+            descriptor_payload=None,
+            distribution_payload=None,
+            operation_id="ray-turn:message-a",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            pass
+
+    assert error.value.code == "generation_descriptor_missing"
+    await admission.close()
+
+
+@pytest.mark.unit
+async def test_remote_admission_requires_descriptor_for_an_active_generation() -> None:
+    admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+    await admission.host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="active-generation",
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        async with admission.admit(
+            descriptor_payload=None,
+            distribution_payload=None,
+            operation_id="ray-turn:message-a",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            pass
+
+    assert error.value.code == "generation_descriptor_missing"
+    await admission.close()
+
+
+@pytest.mark.unit
 async def test_host_rejects_v1_manifest_without_publishing(tmp_path: Path) -> None:
     manifest = json.loads(
         (_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json").read_text()

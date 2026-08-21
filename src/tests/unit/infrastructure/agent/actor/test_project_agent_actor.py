@@ -62,9 +62,7 @@ async def test_actor_admits_complete_distribution_and_pins_turn_generation() -> 
     async with actor._admit_plugin_turn(request):
         operation = current_operation_context_v2()
         assert operation.descriptor == first.descriptor
-        publication = await actor._plugin_admission_v2.host.apply_distribution(
-            second.to_payload()
-        )
+        publication = await actor._plugin_admission_v2.host.apply_distribution(second.to_payload())
         assert publication.accepted
         assert operation.descriptor == first.descriptor
         assert actor._plugin_admission_v2.host.manager.current is not None
@@ -82,10 +80,47 @@ async def test_actor_admits_complete_distribution_and_pins_turn_generation() -> 
 
 
 @pytest.mark.unit
+async def test_actor_rejects_turn_without_generation_before_execution() -> None:
+    actor = _actor_instance()
+    actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    actor._agent = object()
+    request = ProjectChatRequest(
+        conversation_id="conversation-a",
+        message_id="message-a",
+        user_message="hello",
+        user_id="user-a",
+    )
+
+    with (
+        patch("src.infrastructure.agent.actor.project_agent_actor.execute_project_chat") as execute,
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        await actor._run_chat(request)
+
+    assert error.value.code == "generation_descriptor_missing"
+    execute.assert_not_called()
+    await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_chat_serializes_same_conversation_turns_fifo() -> None:
     """The Ray actor must not run multiple turns for one conversation concurrently."""
+    source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="fifo-generation",
+    )
+    distribution = source.current_distribution
+    assert distribution is not None
+    distribution_payload = distribution.to_payload()
+    await source.close()
+
     actor = _actor_instance()
+    actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
     actor._agent = object()
     first_started = asyncio.Event()
     release_first = asyncio.Event()
@@ -96,12 +131,15 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
         message_id="msg-1",
         user_message="first",
         user_id="user-1",
+        plugin_generation=distribution.descriptor.to_payload(),
+        plugin_distribution=distribution_payload,
     )
     second = ProjectChatRequest(
         conversation_id="conv-1",
         message_id="msg-2",
         user_message="second",
         user_id="user-1",
+        plugin_generation=distribution.descriptor.to_payload(),
     )
 
     async def _execute_chat(
@@ -140,3 +178,4 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
             await asyncio.sleep(0.01)
 
     assert started == ["msg-1", "msg-2"]
+    await actor._plugin_admission_v2.close()
