@@ -99,14 +99,37 @@ fn snapshot_generation(generation: u64, entries_enabled: bool) -> ProfileSnapsho
     parse_profile_snapshot_v2(&raw.to_string()).expect("generation snapshot must parse")
 }
 
+fn lifecycle_fixture() -> Value {
+    let conformance: Value =
+        serde_json::from_str(CONFORMANCE).expect("shared conformance fixture must parse");
+    conformance["provider_generation_lifecycle"].clone()
+}
+
+fn fixture_generation(fixture: &Value, key: &str) -> u64 {
+    fixture[key].as_u64().expect("lifecycle generation")
+}
+
+fn fixture_events(fixture: &Value, key: &str) -> Vec<String> {
+    fixture[key]
+        .as_array()
+        .expect("lifecycle event sequence")
+        .iter()
+        .map(|event| event.as_str().expect("lifecycle event").to_owned())
+        .collect()
+}
+
 #[test]
 fn provider_removal_disposes_consumers_first_and_later_generation_reassembles() {
     block_on(async {
+        let fixture = lifecycle_fixture();
+        let initial_generation = fixture_generation(&fixture, "initial_generation");
+        let removed_generation = fixture_generation(&fixture, "removed_generation");
+        let restored_generation = fixture_generation(&fixture, "restored_generation");
         let events = Arc::new(Mutex::new(Vec::new()));
-        let first_snapshot = snapshot_generation(10, true);
+        let first_snapshot = snapshot_generation(initial_generation, true);
         let first = LoaderV2::for_target_with_catalog_json(
             DataPlaneTargetV2::RustServer,
-            lifecycle_definitions(&first_snapshot, 10, Arc::clone(&events)),
+            lifecycle_definitions(&first_snapshot, initial_generation, Arc::clone(&events)),
             target_catalog_json(&first_snapshot, &DataPlaneTargetV2::RustServer),
         )
         .stage(first_snapshot)
@@ -114,12 +137,9 @@ fn provider_removal_disposes_consumers_first_and_later_generation_reassembles() 
         .expect("first generation must stage");
         let manager = GenerationManagerV2::new();
         manager.publish(first).await;
-        assert_eq!(
-            *lock(&events),
-            vec!["provider-apply:10", "consumer-apply:10->10"]
-        );
+        assert_eq!(*lock(&events), fixture_events(&fixture, "after_initial"));
 
-        let empty_snapshot = snapshot_generation(11, false);
+        let empty_snapshot = snapshot_generation(removed_generation, false);
         let empty = LoaderV2::for_target_with_catalog_json(
             DataPlaneTargetV2::RustServer,
             std::iter::empty::<PluginDefinitionV2>(),
@@ -129,51 +149,21 @@ fn provider_removal_disposes_consumers_first_and_later_generation_reassembles() 
         .await
         .expect("empty generation must stage");
         manager.publish(empty).await;
-        assert_eq!(
-            *lock(&events),
-            vec![
-                "provider-apply:10",
-                "consumer-apply:10->10",
-                "consumer-dispose:10",
-                "provider-dispose:10",
-            ]
-        );
+        assert_eq!(*lock(&events), fixture_events(&fixture, "after_removal"));
 
-        let restored_snapshot = snapshot_generation(12, true);
+        let restored_snapshot = snapshot_generation(restored_generation, true);
         let restored = LoaderV2::for_target_with_catalog_json(
             DataPlaneTargetV2::RustServer,
-            lifecycle_definitions(&restored_snapshot, 12, Arc::clone(&events)),
+            lifecycle_definitions(&restored_snapshot, restored_generation, Arc::clone(&events)),
             target_catalog_json(&restored_snapshot, &DataPlaneTargetV2::RustServer),
         )
         .stage(restored_snapshot)
         .await
         .expect("restored generation must stage");
         manager.publish(restored).await;
-        assert_eq!(
-            *lock(&events),
-            vec![
-                "provider-apply:10",
-                "consumer-apply:10->10",
-                "consumer-dispose:10",
-                "provider-dispose:10",
-                "provider-apply:12",
-                "consumer-apply:12->12",
-            ]
-        );
+        assert_eq!(*lock(&events), fixture_events(&fixture, "after_restore"));
 
         manager.close().await;
-        assert_eq!(
-            *lock(&events),
-            vec![
-                "provider-apply:10",
-                "consumer-apply:10->10",
-                "consumer-dispose:10",
-                "provider-dispose:10",
-                "provider-apply:12",
-                "consumer-apply:12->12",
-                "consumer-dispose:12",
-                "provider-dispose:12",
-            ]
-        );
+        assert_eq!(*lock(&events), fixture_events(&fixture, "after_close"));
     });
 }

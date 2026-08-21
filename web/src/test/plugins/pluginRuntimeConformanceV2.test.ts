@@ -33,6 +33,15 @@ const CONFORMANCE = JSON.parse(
     readonly expected: string;
   }>;
   readonly target_projection: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly provider_generation_lifecycle: {
+    readonly initial_generation: number;
+    readonly removed_generation: number;
+    readonly restored_generation: number;
+    readonly after_initial: ReadonlyArray<string>;
+    readonly after_removal: ReadonlyArray<string>;
+    readonly after_restore: ReadonlyArray<string>;
+    readonly after_close: ReadonlyArray<string>;
+  };
 };
 const CONTRACT_CONFORMANCE = JSON.parse(
   readFileSync(path.join(ROOT, 'shared/fixtures/plugin-contract-conformance.v2.json'), 'utf8')
@@ -87,6 +96,8 @@ interface DefinitionOptions {
   readonly applied?: string[];
   readonly fail?: boolean;
   readonly invalidChooseResult?: boolean;
+  readonly lifecycleEvents?: string[];
+  readonly generation?: number;
 }
 
 function definitions(
@@ -99,6 +110,11 @@ function definitions(
       moduleRef: 'builtin://conformance/root-provider',
       contractDigest: requiredValue(digests, 'builtin://conformance/root-provider'),
       apply(context) {
+        if (options.lifecycleEvents && options.generation !== undefined) {
+          options.lifecycleEvents.push(`provider-apply:${options.generation}`);
+          context.provide('service:clock', options.generation);
+          return () => options.lifecycleEvents?.push(`provider-dispose:${options.generation}`);
+        }
         options.applied?.push('root-provider');
         context.provide('service:clock', options.value);
         context.on('notify', () => ['notify-1']);
@@ -135,6 +151,13 @@ function definitions(
       moduleRef: 'builtin://conformance/session-consumer',
       contractDigest: requiredValue(digests, 'builtin://conformance/session-consumer'),
       apply(context) {
+        if (options.lifecycleEvents && options.generation !== undefined) {
+          const providerGeneration = context.require<number>('clock');
+          options.lifecycleEvents.push(
+            `consumer-apply:${options.generation}->${providerGeneration}`
+          );
+          return () => options.lifecycleEvents?.push(`consumer-dispose:${options.generation}`);
+        }
         options.applied?.push('session-consumer');
         options.observed.push(context.require<number>('clock'));
         options.contexts?.push(context);
@@ -499,6 +522,48 @@ describe('plugin runtime v2 conformance', () => {
     await manager.close();
     expect(secondDisposed).toEqual(['module', 'listener']);
   });
+
+  it('disposes consumers before a removed provider and reassembles on restore', async () => {
+    const lifecycle = CONFORMANCE.provider_generation_lifecycle;
+    const events: string[] = [];
+    const manager = new GenerationManagerV2();
+
+    const initialSnapshot = await lifecycleSnapshot(lifecycle.initial_generation, true);
+    const initial = await webLoader(
+      initialSnapshot,
+      definitions(initialSnapshot, {
+        value: lifecycle.initial_generation,
+        observed: [],
+        disposed: [],
+        lifecycleEvents: events,
+        generation: lifecycle.initial_generation,
+      })
+    ).stage(initialSnapshot);
+    await manager.publish(initial);
+    expect(events).toEqual(lifecycle.after_initial);
+
+    const removedSnapshot = await lifecycleSnapshot(lifecycle.removed_generation, false);
+    const removed = await webLoader(removedSnapshot, []).stage(removedSnapshot);
+    await manager.publish(removed);
+    expect(events).toEqual(lifecycle.after_removal);
+
+    const restoredSnapshot = await lifecycleSnapshot(lifecycle.restored_generation, true);
+    const restored = await webLoader(
+      restoredSnapshot,
+      definitions(restoredSnapshot, {
+        value: lifecycle.restored_generation,
+        observed: [],
+        disposed: [],
+        lifecycleEvents: events,
+        generation: lifecycle.restored_generation,
+      })
+    ).stage(restoredSnapshot);
+    await manager.publish(restored);
+    expect(events).toEqual(lifecycle.after_restore);
+
+    await manager.close();
+    expect(events).toEqual(lifecycle.after_close);
+  });
 });
 
 function webLoader(
@@ -537,6 +602,17 @@ function moduleContractDigests(snapshot: ProfileSnapshotV2): Map<string, string>
       manifest.modules.map((module) => [module.module_ref, module.contract_digest] as const)
     )
   );
+}
+
+async function lifecycleSnapshot(
+  generation: number,
+  entriesEnabled: boolean
+): Promise<ProfileSnapshotV2> {
+  const snapshot = structuredClone(SNAPSHOT);
+  snapshot.generation = generation;
+  if (!entriesEnabled) snapshot.entries = [];
+  await refreshSnapshotDigest(snapshot);
+  return parseProfileSnapshotV2(snapshot);
 }
 
 async function orderedSiblingSnapshot(): Promise<ProfileSnapshotV2> {

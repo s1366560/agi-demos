@@ -573,6 +573,17 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     manifest = cast("dict[str, Any]", snapshot["manifests"][0])
     service_graph = build_service_graph_v2((manifest,))
     event_graph = build_event_graph_v2((manifest,))
+    lifecycle_initial = ["provider-apply:10", "consumer-apply:10->10"]
+    lifecycle_removed = [
+        *lifecycle_initial,
+        "consumer-dispose:10",
+        "provider-dispose:10",
+    ]
+    lifecycle_restored = [
+        *lifecycle_removed,
+        "provider-apply:12",
+        "consumer-apply:12->12",
+    ]
     return {
         "schema_version": 2,
         "snapshot_digest": snapshot["digest"],
@@ -613,6 +624,19 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
         "effect_disposal": {
             "registration": ["provider", "listener", "module"],
             "expected": ["module", "listener", "provider"],
+        },
+        "provider_generation_lifecycle": {
+            "initial_generation": 10,
+            "removed_generation": 11,
+            "restored_generation": 12,
+            "after_initial": lifecycle_initial,
+            "after_removal": lifecycle_removed,
+            "after_restore": lifecycle_restored,
+            "after_close": [
+                *lifecycle_restored,
+                "consumer-dispose:12",
+                "provider-dispose:12",
+            ],
         },
         "waterfall": {
             "input": 2,
