@@ -2,7 +2,7 @@
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,6 +25,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_TOOL_MODE_KEY,
     WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
 )
+from src.infrastructure.plugins.v2.system_prompt import SystemPromptSectionsV2
 
 _RE = SessionProcessor._DELEGATE_ESCALATE_RE
 
@@ -160,6 +161,18 @@ class TestDetectDelegateOrEscalate:
 
 @pytest.mark.unit
 class TestEvaluateNoToolResultDelegation:
+    @pytest.fixture(autouse=True)
+    def _pin_runtime_prompt_sections(self):
+        operation = MagicMock()
+        operation.require.return_value = SystemPromptSectionsV2(
+            sections=("Use the generation-owned native tool protocol.",)
+        )
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            yield
+
     @staticmethod
     def _build_processor_for_eval(
         full_text: str,

@@ -5,12 +5,13 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 
 SYSTEM_PROMPT_MODULE_V2 = "builtin://memstack/agent/system-prompt"
 SYSTEM_PROMPT_BUILDER_SERVICE_V2 = "service:system-prompt-builder"
+SYSTEM_PROMPT_SECTIONS_SERVICE_V2 = "service:system-prompt-sections"
 
 
 @runtime_checkable
@@ -24,6 +25,13 @@ class SystemPromptBuilderProtocolV2(Protocol):
         context: object,
         subagent: object | None,
     ) -> str: ...
+
+
+@runtime_checkable
+class SystemPromptSectionsProtocolV2(Protocol):
+    """Structural contract for immutable generation-owned guidance sections."""
+
+    sections: tuple[str, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,6 +58,13 @@ class SystemPromptBuilderV2:
         return result
 
 
+@dataclass(frozen=True, kw_only=True)
+class SystemPromptSectionsV2:
+    """Immutable runtime-guidance sections owned by one published generation."""
+
+    sections: tuple[str, ...]
+
+
 def _apply_system_prompt_builder_v2(
     context: ContextV2,
     config: Mapping[str, Any],
@@ -57,10 +72,25 @@ def _apply_system_prompt_builder_v2(
     strategy = config.get("strategy")
     if strategy != "system-prompt-manager":
         raise ValueError("system prompt provider requires strategy system-prompt-manager")
-    context.provide(
+    raw_sections = config.get("runtime_sections")
+    if not isinstance(raw_sections, list):
+        raise ValueError("system prompt provider requires non-empty runtime_sections")
+    sections: list[str] = []
+    for section in cast("list[object]", raw_sections):
+        if not isinstance(section, str) or not section.strip():
+            raise ValueError("system prompt provider requires non-empty runtime_sections")
+        sections.append(section.strip())
+    _ = context.provide(
         SYSTEM_PROMPT_BUILDER_SERVICE_V2,
         SystemPromptBuilderV2(strategy=strategy),
         label="system-prompt-builder",
+    )
+    _ = context.provide(
+        SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+        SystemPromptSectionsV2(
+            sections=tuple(sections),
+        ),
+        label="system-prompt-sections",
     )
 
 
@@ -75,7 +105,10 @@ def builtin_system_prompt_definition_v2() -> PluginDefinitionV2:
 __all__ = [
     "SYSTEM_PROMPT_BUILDER_SERVICE_V2",
     "SYSTEM_PROMPT_MODULE_V2",
+    "SYSTEM_PROMPT_SECTIONS_SERVICE_V2",
     "SystemPromptBuilderProtocolV2",
     "SystemPromptBuilderV2",
+    "SystemPromptSectionsProtocolV2",
+    "SystemPromptSectionsV2",
     "builtin_system_prompt_definition_v2",
 ]

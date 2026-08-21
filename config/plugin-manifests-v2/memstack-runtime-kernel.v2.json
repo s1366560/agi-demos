@@ -147,7 +147,8 @@
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:system-prompt-builder", "version": "1.0.0" }
+            { "service": "service:system-prompt-builder", "version": "1.0.0" },
+            { "service": "service:system-prompt-sections", "version": "1.0.0" }
           ],
           "requires": []
         },
@@ -156,13 +157,18 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["strategy"],
+          "required": ["runtime_sections", "strategy"],
           "properties": {
+            "runtime_sections": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
             "strategy": { "const": "system-prompt-manager", "type": "string" }
           }
         }
       },
-      "contract_digest": "sha256:dfb15d8704512a2930e6603cc771779bf285a4990fa223bffd1716d763fedf5f",
+      "contract_digest": "sha256:450b3df4414ec93cd9e5803545c8382a6fe10fc644f008f1ae770febc7d5c0f8",
       "artifact": {
         "digest": "sha256:40cce8ce0c0c4bc39f5887cb28b330ffbbb0660acc7f37c39c40807b55eecb1e",
         "source": "package://builtin/memstack-runtime-kernel"

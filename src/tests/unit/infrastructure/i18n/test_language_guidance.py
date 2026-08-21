@@ -16,9 +16,12 @@ here too.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
+from src.infrastructure.plugins.v2.system_prompt import SystemPromptSectionsV2
 
 LANGUAGE_GUIDANCE_TEXT_ZH = (
     "Respond to the user in Chinese (Simplified) (zh-CN) "
@@ -55,7 +58,15 @@ async def test_language_guidance_is_added_once() -> None:
 async def test_language_guidance_renders_into_runtime_guidance_message() -> None:
     processor = _make_processor()
     await processor.add_runtime_guidance(LANGUAGE_GUIDANCE_TEXT_EN)
-    message = processor._build_runtime_guidance_message()
+    operation = MagicMock()
+    operation.require.return_value = SystemPromptSectionsV2(
+        sections=("Use the generation-owned native tool protocol.",)
+    )
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        message = processor._build_runtime_guidance_message()
     assert message is not None
     assert message["role"] == "system"
     assert "[Runtime Guidance]" in message["content"]

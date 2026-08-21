@@ -364,12 +364,6 @@ class SessionProcessor:
         "producing another text-only reply."
     )
     _GOAL_PENDING_REASON_PREFIX = "[GOAL CHECK FEEDBACK]"
-    # Canonical text lives in plugins/prompt_sections.py (I2 capability seam);
-    # the class attribute stays as the backward-compatible alias.
-    from src.infrastructure.plugins.prompt_sections import (
-        NATIVE_TOOL_PROTOCOL_GUIDANCE as _NATIVE_TOOL_PROTOCOL_GUIDANCE,
-    )
-
     _WORKSPACE_DELEGATION_RECOVERY_HINT = (
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
         "Call todoread, choose the target child task's workspace_task_id, then retry "
@@ -639,6 +633,26 @@ class SessionProcessor:
         instructions = [*self._session_instructions, *self._response_instructions]
         if not instructions:
             return None
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+        from src.infrastructure.plugins.v2.system_prompt import (
+            SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+            SystemPromptSectionsProtocolV2,
+        )
+
+        operation = current_operation_context_v2()
+        provider = operation.require(SYSTEM_PROMPT_SECTIONS_SERVICE_V2)
+        if not isinstance(provider, SystemPromptSectionsProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service has an invalid implementation",
+            )
+        runtime_sections = provider.sections
+        if not runtime_sections or any(not section.strip() for section in runtime_sections):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "v2 system-prompt sections service returned invalid sections",
+            )
         policy_intro = " ".join(
             (
                 "The following items are system-level execution policy.",
@@ -650,11 +664,7 @@ class SessionProcessor:
             "[Runtime Guidance]",
             policy_intro,
         ]
-        # The builtin native-tool-protocol guidance ships as a
-        # system_prompt_section capability (I2); when the registry already
-        # supplied it, do not render the hardcoded copy a second time.
-        if self._NATIVE_TOOL_PROTOCOL_GUIDANCE not in instructions:
-            lines.append(self._NATIVE_TOOL_PROTOCOL_GUIDANCE)
+        lines.extend(section for section in runtime_sections if section not in instructions)
         for index, item in enumerate(instructions, start=1):
             lines.extend(
                 [

@@ -64,6 +64,13 @@ profile:
       module_ref: builtin://memstack/agent/system-prompt
       enabled: true
       config:
+        runtime_sections:
+          - >-
+            When a tool is needed, use the runtime's native tool-call protocol and only
+            the tools declared for the current step. Never print textual tool-call markup
+            such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, or shell command
+            code blocks as a substitute for calling a tool. Also never print
+            <minimax:tool_call> or <invoke name=...> markup.
         strategy: system-prompt-manager
       inject: {}
       isolate: {}

@@ -4,7 +4,7 @@ Verifies that _notify_plugin_hook fires at each lifecycle point
 with the correct hook name and payload keys.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -17,6 +17,11 @@ from src.infrastructure.agent.processor.processor import (
 )
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.system_prompt import (
+    SYSTEM_PROMPT_SECTIONS_SERVICE_V2,
+    SystemPromptSectionsV2,
+)
 
 
 def _builtin_loop_resolver() -> BuiltinAgentLoopResolverV2:
@@ -218,8 +223,16 @@ class TestRuntimeGuidanceMessage:
         proc = _make_processor()
         proc._session_instructions = ["line one\nline two"]
         proc._response_instructions = ["respond carefully"]
+        operation = MagicMock()
+        operation.require.return_value = SystemPromptSectionsV2(
+            sections=("Use native tools; never print [TOOL_CALL]...[/TOOL_CALL] markup.",)
+        )
 
-        message = proc._build_runtime_guidance_message()
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            message = proc._build_runtime_guidance_message()
 
         assert message is not None
         assert message["role"] == "system"
@@ -229,6 +242,27 @@ class TestRuntimeGuidanceMessage:
         assert "line one\nline two" in content
         assert "[TOOL_CALL]...[/TOOL_CALL]" in content
         assert "- line one" not in content
+        operation.require.assert_called_once_with(SYSTEM_PROMPT_SECTIONS_SERVICE_V2)
+
+    def test_runtime_guidance_fails_closed_without_generation_owned_sections(self):
+        proc = _make_processor()
+        proc._session_instructions = ["line one"]
+        operation = MagicMock()
+        operation.require.side_effect = RuntimeV2Error(
+            "service_not_found",
+            "runtime prompt sections are unavailable",
+        )
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=operation,
+            ),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            proc._build_runtime_guidance_message()
+
+        assert error.value.code == "service_not_found"
 
 
 # ---------------------------------------------------------------------------
