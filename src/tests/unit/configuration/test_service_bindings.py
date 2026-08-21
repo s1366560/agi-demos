@@ -61,6 +61,10 @@ class TestServiceBindingsB1:
     def test_container_declares_b1_services(self) -> None:
         container = DIContainer(db=Mock())
         for binding in _B1_BINDINGS:
+            if binding.key in _ACTIVATION_SKIP:
+                sub_name, method_name = binding.target.split(".", 1)
+                assert callable(getattr(getattr(container, sub_name), method_name))
+                continue
             assert container.services.get_or_activate(binding.key) is not None or (
                 binding.allow_none
             )

@@ -32,6 +32,7 @@ from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
+from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -44,7 +45,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_docker_services,
     initialize_llm_providers,
     initialize_redis_client,
-    initialize_sandbox_idle_reaper,
     initialize_telemetry,
     initialize_websocket_manager,
     load_desired_http_route_capabilities,
@@ -52,7 +52,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
     shutdown_docker_services,
-    shutdown_sandbox_idle_reaper,
     shutdown_telemetry_services,
     sync_health_checker_providers,
 )
@@ -68,6 +67,7 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
 )
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.llm.resilience.health_checker import (
     start_health_checker,
     stop_health_checker,
@@ -148,15 +148,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             embedding_service=getattr(graph_runtime.graph_service, "embedder", None),
         )
 
+    def sandbox_runtime_factory() -> MCPSandboxAdapter | None:
+        try:
+            return MCPSandboxAdapter(
+                mcp_image=settings.sandbox_default_image,
+                default_timeout=settings.sandbox_timeout_seconds,
+                default_memory_limit=settings.sandbox_memory_limit,
+                default_cpu_limit=settings.sandbox_cpu_limit,
+                workspace_base=settings.sandbox_workspace_base,
+                redis_client=redis_client,
+            )
+        except SandboxConnectionError:
+            logger.warning("Sandbox runtime unavailable because Docker is not reachable")
+            return None
+
     # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
-    # workflow resources are created by candidate effects and are not retained
-    # by the legacy application container.
+    # sandbox/workflow resources are created by candidate effects and are not
+    # retained by the legacy application container.
     _ = await initialize_plugin_runtime_v2(
         app,
         desired_http_route_rows=desired_http_route_rows,
         session_factory=async_session_factory,
         graph_runtime_factory=graph_runtime_factory,
         retrieval_runtime_factory=retrieval_runtime_factory,
+        sandbox_runtime_factory=sandbox_runtime_factory,
+        sandbox_redis_client=redis_client,
     )
     try:
         # Initialize DI Container
@@ -170,11 +186,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Register WebSocket manager for lifecycle state notifications
     initialize_websocket_manager()
 
-    # Initialize Docker services (sandbox sync and event monitor)
+    # Initialize Docker event monitoring. Sandbox discovery belongs to the
+    # generation-owned sandbox Provider effect.
     await initialize_docker_services(container)
-
-    # Initialize sandbox idle reaper (opt-in; disabled by default)
-    await initialize_sandbox_idle_reaper(container)
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
@@ -372,22 +386,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     await stop_health_checker()
 
-    # Stop sandbox idle reaper
-    await shutdown_sandbox_idle_reaper()
-
     # Stop Artifact content orphan GC after current bounded work.
     await shutdown_artifact_content_orphan_gc_worker()
-
-    # Close MCP websocket clients owned by sandbox adapters without
-    # terminating containers; they are recovered from Docker on startup.
-    try:
-        from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
-            shutdown_sandbox_adapter_singleton,
-        )
-
-        await shutdown_sandbox_adapter_singleton()
-    except Exception:
-        logger.exception("Error closing API sandbox adapter")
 
     try:
         from src.infrastructure.agent.state.agent_worker_state import (
@@ -397,16 +397,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         await shutdown_mcp_sandbox_adapter()
     except Exception:
         logger.exception("Error closing agent MCP sandbox adapter")
-
-    try:
-        infra_container = getattr(app.state.container, "_infra", None)
-        sandbox_adapter = getattr(infra_container, "_sandbox_adapter_instance", None)
-        if infra_container is not None and sandbox_adapter is not None:
-            await sandbox_adapter.close()
-            infra_container._sandbox_adapter_instance = None
-            logger.info("Container sandbox adapter closed")
-    except Exception:
-        logger.exception("Error closing container sandbox adapter")
 
     # Shutdown
     logger.info("Shutting down...")

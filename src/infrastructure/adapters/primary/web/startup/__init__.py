@@ -32,7 +32,6 @@ from .http_route_capabilities import (
 )
 from .llm import initialize_llm_providers, sync_health_checker_providers
 from .redis import initialize_redis_client
-from .sandbox_reaper import initialize_sandbox_idle_reaper, shutdown_sandbox_idle_reaper
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
 from .websocket import initialize_websocket_manager
 
@@ -47,7 +46,6 @@ __all__ = [
     "initialize_docker_services",
     "initialize_llm_providers",
     "initialize_redis_client",
-    "initialize_sandbox_idle_reaper",
     "initialize_telemetry",
     "initialize_websocket_manager",
     "install_http_route_capabilities",
@@ -60,7 +58,6 @@ __all__ = [
     "shutdown_blackboard_outbox_dispatcher",
     "shutdown_channel_manager",
     "shutdown_docker_services",
-    "shutdown_sandbox_idle_reaper",
     "shutdown_telemetry_services",
     "sync_health_checker_providers",
 ]

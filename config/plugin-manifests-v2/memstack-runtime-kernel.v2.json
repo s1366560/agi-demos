@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:e8f5ede577f8e808dfee1095a6d2e8a1184fdc2594e9c6dbf10ea1bdb6f428a4",
+        "digest": "sha256:d572510719ad5ab3170cbd6360bd42103ee55a9b9cb251bb2f7579523be76130",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -237,6 +237,75 @@
       "artifact": {
         "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/sandbox/mcp-docker-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.sandbox_runtime:sandbox_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:sandbox.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "strategy"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "strategy": { "const": "mcp-docker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:744d4dfe3936dc34aab51e9448d9c7af2992f91a0f31187bbcfb88db35725612",
+      "artifact": {
+        "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
+        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/sandbox-services",
+      "entrypoint": "src.infrastructure.plugins.v2.sandbox_runtime:sandbox_application_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.sandbox-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "runtime",
+              "service": "service:sandbox.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-runtime", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f29bd4c6f75433ffdeff09ff681c255009eae20b4db5778f979ac76be3631e95",
+      "artifact": {
+        "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
+        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
       }
     },
     {

@@ -29,6 +29,7 @@ from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginPublicationV2,
     PlatformPluginRuntimeHostV2,
 )
+from src.infrastructure.plugins.v2.sandbox_runtime import SandboxRuntimeFactoryV2
 
 from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
 
@@ -45,12 +46,16 @@ async def initialize_plugin_runtime_v2(
     session_factory: Callable[[], Any] | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
+    sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
+    sandbox_redis_client: object | None = None,
 ) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
             graph_runtime_factory=graph_runtime_factory,
             retrieval_runtime_factory=retrieval_runtime_factory,
+            sandbox_runtime_factory=sandbox_runtime_factory,
+            sandbox_redis_client=sandbox_redis_client,
         )
     )
     route_registry = RouteTableRegistryV2()

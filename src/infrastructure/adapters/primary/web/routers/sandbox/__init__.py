@@ -34,7 +34,6 @@ from .schemas import (
     ValidateTokenResponse,
 )
 from .utils import (  # type: ignore[attr-defined]
-    ensure_sandbox_sync,
     extract_project_id,
     get_current_user,
     get_event_publisher,
@@ -93,7 +92,6 @@ __all__ = [
     "ValidateTokenRequest",
     "ValidateTokenResponse",
     # Utilities
-    "ensure_sandbox_sync",
     "extract_project_id",
     "get_event_publisher",
     "get_sandbox_adapter",

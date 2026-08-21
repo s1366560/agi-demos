@@ -41,6 +41,11 @@ async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
     yield None
 
 
+@asynccontextmanager
+async def _noop_operation(*_args: object, **_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
 @pytest.fixture(autouse=True)
 def _isolate_legacy_router_tests_from_generation_host(
     monkeypatch: pytest.MonkeyPatch,
@@ -819,9 +824,8 @@ async def test_do_media_import_start_log_omits_message_identifier(
     session_ctx = AsyncMock()
     session_ctx.__aenter__.return_value = session
     session_ctx.__aexit__.return_value = None
-    mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
+    mcp_adapter = SimpleNamespace()
     app_container = SimpleNamespace(
-        sandbox_adapter=MagicMock(return_value=mcp_adapter),
         artifact_service=MagicMock(return_value=object()),
     )
     caplog.set_level(
@@ -837,6 +841,21 @@ async def test_do_media_import_start_log_omits_message_identifier(
         patch(
             "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
             return_value=app_container,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "current_process_generation_host_v2",
+            return_value=object(),
+        ),
+        patch.object(
+            channel_message_router_module,
+            "pin_operation_context_v2",
+            _noop_operation,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "current_sandbox_application_services_v2",
+            return_value=SimpleNamespace(adapter=mcp_adapter),
         ),
     ):
         await router._do_media_import(message, "conv-1")
@@ -878,9 +897,8 @@ async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
     session_ctx = AsyncMock()
     session_ctx.__aenter__.return_value = session
     session_ctx.__aexit__.return_value = None
-    mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
+    mcp_adapter = SimpleNamespace()
     app_container = SimpleNamespace(
-        sandbox_adapter=MagicMock(return_value=mcp_adapter),
         artifact_service=MagicMock(return_value=object()),
     )
     caplog.set_level(
@@ -896,6 +914,21 @@ async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
         patch(
             "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
             return_value=app_container,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "current_process_generation_host_v2",
+            return_value=object(),
+        ),
+        patch.object(
+            channel_message_router_module,
+            "pin_operation_context_v2",
+            _noop_operation,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "current_sandbox_application_services_v2",
+            return_value=SimpleNamespace(adapter=mcp_adapter),
         ),
     ):
         await router._do_media_import(message, "conv-1")

@@ -16,13 +16,19 @@ from typing import TYPE_CHECKING, Any, cast
 
 from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    current_process_generation_host_v2,
     pin_agent_turn_operation_v2,
+    pin_operation_context_v2,
+)
+from src.infrastructure.plugins.v2.sandbox_projection import (
+    current_sandbox_application_services_v2,
 )
 
 if TYPE_CHECKING:
@@ -218,28 +224,46 @@ class ChannelMessageRouter:
                 if not app_container:
                     raise RuntimeError("Application container not initialized")
 
-                mcp_adapter = app_container.sandbox_adapter()
-                await mcp_adapter.sync_from_docker()
-
                 artifact_service = app_container.artifact_service()
+                tenant_id = message.raw_data.get("tenant_id", "") if message.raw_data else ""
+                project_id = message.project_id or ""
+                async with pin_operation_context_v2(
+                    current_process_generation_host_v2(),
+                    operation_id=f"channel-media-import:{uuid.uuid4()}",
+                    scope=ScopeV2(
+                        kind=ScopeKindV2.SESSION,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        session_id=conversation_id,
+                    ),
+                    services={
+                        OPERATION_DB_SESSION_SERVICE_V2: db_session,
+                        OPERATION_IDENTITY_SERVICE_V2: {"tenant_id": tenant_id},
+                        OPERATION_METADATA_SERVICE_V2: {
+                            "kind": "channel-media-import",
+                            "conversation_id": conversation_id,
+                        },
+                    },
+                ):
+                    mcp_adapter = current_sandbox_application_services_v2().adapter
 
-                logger.info(
-                    "[MessageRouter] Importing media message to workspace: "
-                    "type=%s has_domain_message_id=%s",
-                    message.content.type.value,
-                    bool(message.id),
-                )
+                    logger.info(
+                        "[MessageRouter] Importing media message to workspace: "
+                        "type=%s has_domain_message_id=%s",
+                        message.content.type.value,
+                        bool(message.id),
+                    )
 
-                assert self._media_import_service is not None
-                sandbox_path = await self._media_import_service.import_media_to_workspace(
-                    message=message,
-                    project_id=message.project_id or "",
-                    tenant_id=message.raw_data.get("tenant_id", "") if message.raw_data else "",
-                    conversation_id=conversation_id,
-                    mcp_adapter=mcp_adapter,
-                    artifact_service=artifact_service,
-                    db_session=db_session,
-                )
+                    assert self._media_import_service is not None
+                    sandbox_path = await self._media_import_service.import_media_to_workspace(
+                        message=message,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        conversation_id=conversation_id,
+                        mcp_adapter=mcp_adapter,
+                        artifact_service=artifact_service,
+                        db_session=db_session,
+                    )
 
                 if sandbox_path:
                     self._apply_sandbox_path(message, sandbox_path)

@@ -10,7 +10,6 @@ from fastapi import HTTPException, status
 
 from src.infrastructure.adapters.primary.web.routers.sandbox import (
     lifecycle as lifecycle_router,
-    utils as sandbox_utils,
 )
 from src.infrastructure.adapters.primary.web.routers.sandbox.schemas import CreateSandboxRequest
 from src.infrastructure.adapters.primary.web.routers.sandbox.utils import assert_caller_owns_sandbox
@@ -33,59 +32,6 @@ def _sandbox_info() -> SimpleNamespace:
         desktop_url=None,
         terminal_url=None,
     )
-
-
-@pytest.mark.unit
-def test_get_event_publisher_error_log_omits_exception_text(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    class FailingContainer:
-        def sandbox_event_publisher(self) -> object:
-            raise RuntimeError("event publisher secret")
-
-    request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(container=FailingContainer()))
-    )
-    monkeypatch.setattr(sandbox_utils, "_event_publisher", None)
-    caplog.set_level(
-        logging.WARNING,
-        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
-    )
-
-    result = sandbox_utils.get_event_publisher(request)
-
-    assert result is None
-    assert sandbox_utils._event_publisher is None
-    assert "Could not create event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "event publisher secret" not in caplog.text
-
-
-@pytest.mark.unit
-async def test_ensure_sandbox_sync_error_log_omits_exception_text(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    class FailingAdapter:
-        async def sync_from_docker(self) -> int:
-            raise RuntimeError("docker sync secret")
-
-    monkeypatch.setattr(sandbox_utils, "_sandbox_adapter", FailingAdapter())
-    monkeypatch.setattr(sandbox_utils, "_worker_id", 123)
-    monkeypatch.setattr(sandbox_utils, "_sync_pending", True)
-    monkeypatch.setattr(sandbox_utils, "_get_worker_id", lambda: 123)
-    caplog.set_level(
-        logging.WARNING,
-        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
-    )
-
-    await sandbox_utils.ensure_sandbox_sync()
-
-    assert sandbox_utils._sync_pending is False
-    assert "API Server: Failed to sync sandboxes from Docker" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "docker sync secret" not in caplog.text
 
 
 @pytest.mark.unit

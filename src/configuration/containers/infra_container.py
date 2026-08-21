@@ -24,7 +24,6 @@ class InfraContainer:
     ) -> None:
         self._redis_client = redis_client
         self._settings = settings
-        self._sandbox_adapter_instance: Any = None
 
     def redis(self) -> redis.Redis | None:
         """Get the Redis client for cache operations."""
@@ -101,29 +100,12 @@ class InfraContainer:
         )
 
     def sandbox_adapter(self) -> Any:
-        """Get the MCP Sandbox adapter for desktop and terminal management.
-
-        Returns a cached singleton instance per InfraContainer to avoid
-        re-creating the adapter (and triggering Docker recovery) on every call.
-        """
-        if self._sandbox_adapter_instance is not None:
-            return self._sandbox_adapter_instance
-
-        from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-            MCPSandboxAdapter,
+        """Project the sandbox adapter from the current pinned V2 generation."""
+        from src.infrastructure.plugins.v2.sandbox_projection import (
+            current_sandbox_application_services_v2,
         )
 
-        settings = get_settings()
-        self._sandbox_adapter_instance = MCPSandboxAdapter(
-            mcp_image=settings.sandbox_default_image,
-            default_timeout=settings.sandbox_timeout_seconds,
-            default_memory_limit=settings.sandbox_memory_limit,
-            default_cpu_limit=settings.sandbox_cpu_limit,
-            workspace_base=settings.sandbox_workspace_base,
-            redis_client=self._redis_client,
-        )
-        return self._sandbox_adapter_instance
+        return current_sandbox_application_services_v2().adapter
 
     def sandbox_event_publisher(self) -> Any:
         """Get SandboxEventPublisher for SSE event emission."""

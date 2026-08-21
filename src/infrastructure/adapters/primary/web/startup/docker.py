@@ -23,7 +23,7 @@ _docker_event_monitor: DockerEventMonitor | None = None
 
 async def initialize_docker_services(container: DIContainer) -> DockerEventMonitor | None:
     """
-    Initialize Docker-related services including sandbox sync and event monitor.
+    Initialize the Docker event monitor.
 
     Args:
         container: The DI container for getting services.
@@ -33,24 +33,12 @@ async def initialize_docker_services(container: DIContainer) -> DockerEventMonit
     """
     global _docker_event_monitor
 
-    docker_services_enabled = (
-        os.getenv("SANDBOX_DOCKER_SERVICES_ENABLED", "true").strip().lower()
-        in {"1", "true", "yes", "on"}
-    )
+    docker_services_enabled = os.getenv(
+        "SANDBOX_DOCKER_SERVICES_ENABLED", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     if not docker_services_enabled:
         logger.info("Docker sandbox services disabled by SANDBOX_DOCKER_SERVICES_ENABLED")
         return None
-
-    # Sync existing sandbox containers from Docker
-    logger.info("Syncing existing sandbox containers from Docker...")
-    try:
-        from src.infrastructure.adapters.primary.web.routers.sandbox import (
-            ensure_sandbox_sync,
-        )
-
-        await ensure_sandbox_sync()
-    except Exception as e:
-        logger.warning(f"Failed to sync sandbox containers from Docker: {e}")
 
     # Start Docker event monitor for real-time container status updates
     try:
