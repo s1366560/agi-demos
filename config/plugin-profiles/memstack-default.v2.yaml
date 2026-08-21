@@ -61,6 +61,36 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-sandbox-operation-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/sandbox/operation-service-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject:
+        runtime: service:sandbox.runtime
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-sandbox-operation-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/sandbox-operation-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:sandbox.operation-service-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-workflow-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

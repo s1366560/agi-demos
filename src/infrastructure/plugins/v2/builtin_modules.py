@@ -32,6 +32,7 @@ from .project_tenant_services import project_tenant_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
+from .sandbox_operation_services import sandbox_operation_service_definitions_v2
 from .sandbox_runtime import SandboxRuntimeFactoryV2, sandbox_service_definitions_v2
 from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
@@ -98,6 +99,9 @@ def builtin_runtime_definitions_v2(
         graph_runtime_definition_v2(graph_runtime_factory),
         *sandbox_service_definitions_v2(
             sandbox_runtime_factory,
+            redis_client=sandbox_redis_client,
+        ),
+        *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
         *workflow_service_definitions_v2(workflow_runtime_factory),

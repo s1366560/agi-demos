@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:d572510719ad5ab3170cbd6360bd42103ee55a9b9cb251bb2f7579523be76130",
+        "digest": "sha256:21e03af3bef4a3b8dc4d229fa89aafbf9987a7ab875d538c85080502f2ccb623",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -306,6 +306,80 @@
       "artifact": {
         "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/sandbox/operation-service-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:sandbox.operation-service-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "runtime",
+              "service": "service:sandbox.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f12298ec43cfbe059cb0a23c30a00519171af18a10385b9c7930246c3b264af6",
+      "artifact": {
+        "digest": "sha256:9f4afc24a65613e9db34c38ca1d8728e14ebdc7e88d82fcfd2f4c3c89538c947",
+        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/sandbox-operation-services",
+      "entrypoint": "src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_application_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.sandbox-operation-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:sandbox.operation-service-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b5de20c732299c8b212b78d631a2ed70828ab4929f0576a390cbe6f3a6967124",
+      "artifact": {
+        "digest": "sha256:9f4afc24a65613e9db34c38ca1d8728e14ebdc7e88d82fcfd2f4c3c89538c947",
+        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
       }
     },
     {
