@@ -151,6 +151,7 @@ def entry_order_v2(
     entries: Mapping[str, ProfileEntryV2],
     modules: Mapping[str, PluginModuleV2],
 ) -> tuple[str, ...]:
+    declaration_rank = {entry_id: index for index, entry_id in enumerate(entries)}
     dependencies: dict[str, set[str]] = {entry_id: set() for entry_id in entries}
     for entry_id, entry in entries.items():
         if entry.parent_entry_id is not None:
@@ -200,13 +201,13 @@ def entry_order_v2(
         if entry_id in visiting:
             raise RuntimeV2Error("entry_dependency_cycle", f"entry cycle includes {entry_id}")
         visiting.add(entry_id)
-        for dependency in sorted(dependencies[entry_id]):
+        for dependency in sorted(dependencies[entry_id], key=declaration_rank.__getitem__):
             visit(dependency)
         visiting.remove(entry_id)
         visited.add(entry_id)
         ordered.append(entry_id)
 
-    for entry_id in sorted(entries):
+    for entry_id in entries:
         visit(entry_id)
     return tuple(ordered)
 

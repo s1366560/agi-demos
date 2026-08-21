@@ -645,6 +645,39 @@ async def test_events_support_bail_waterfall_and_disappear_on_dispose() -> None:
 
 
 @pytest.mark.unit
+async def test_same_scope_event_handlers_follow_profile_declaration_order() -> None:
+    contexts: list[Any] = []
+
+    def definition(label: str):
+        def apply(context, _config):
+            contexts.append(context)
+            context.on("ordered", lambda _payload: label)
+
+        return apply
+
+    entries = (
+        _entry("z-declared-first", "builtin://runtime/declared-first"),
+        _entry("a-declared-second", "builtin://runtime/declared-second"),
+    )
+    ordered_event = _event("ordered", EventModeV2.SERIAL)
+    snapshot = _snapshot(
+        1,
+        entries,
+        events={entry.module_ref: (ordered_event,) for entry in entries},
+    )
+    generation = await _loader(
+        snapshot,
+        [
+            _definition(snapshot, entries[0].module_ref, definition("first")),
+            _definition(snapshot, entries[1].module_ref, definition("second")),
+        ],
+    ).stage(snapshot)
+
+    assert await contexts[0].dispatch("ordered", {}) == ("first", "second")
+    await generation.dispose()
+
+
+@pytest.mark.unit
 async def test_generation_lease_pins_old_generation_until_release() -> None:
     disposed: list[int] = []
 
