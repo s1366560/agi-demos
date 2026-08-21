@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.routers import project_sandbox as router_mod
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 
 @pytest.fixture(autouse=True)
@@ -201,11 +202,11 @@ def test_get_event_publisher_error_log_omits_exception_text(
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
     )
 
-    result = router_mod.get_event_publisher(request)
+    with pytest.raises(RuntimeV2Error) as error:
+        router_mod.get_event_publisher(request)
 
-    assert result is None
-    assert "Could not create event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert error.value.code == "generation_not_pinned"
+    assert "Could not create event publisher" not in caplog.text
     assert "event publisher secret" not in caplog.text
 
 
@@ -221,11 +222,11 @@ def test_get_event_publisher_for_websocket_error_log_omits_exception_text(
         logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
     )
 
-    result = router_mod.get_event_publisher_for_websocket(websocket)
+    with pytest.raises(RuntimeV2Error) as error:
+        router_mod.get_event_publisher_for_websocket(websocket)
 
-    assert result is None
-    assert "Could not create websocket event publisher" in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert error.value.code == "generation_not_pinned"
+    assert "Could not create websocket event publisher" not in caplog.text
     assert "event publisher secret" not in caplog.text
 
 

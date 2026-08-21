@@ -507,31 +507,23 @@ def get_lifecycle_service_for_websocket(
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
-    """Get the sandbox event publisher from app container.
+    """Project the event publisher from this request's pinned generation."""
+    _ = request
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
 
-    Uses the properly initialized container from app.state which has
-    redis_client configured for the event bus.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        container = request.app.state.container
-        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
-    except Exception as e:
-        logger.warning("Could not create event publisher: error_type=%s", type(e).__name__)
-        return None
+    return current_sandbox_application_services_v2().event_publisher
 
 
 def get_event_publisher_for_websocket(websocket: WebSocket) -> SandboxEventPublisher | None:
-    """Get the sandbox event publisher for WebSocket endpoints."""
-    try:
-        container = websocket.app.state.container
-        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
-    except Exception as e:
-        logger.warning(
-            "Could not create websocket event publisher: error_type=%s",
-            type(e).__name__,
-        )
-        return None
+    """Project the event publisher from this connection's pinned generation."""
+    _ = websocket
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
+
+    return current_sandbox_application_services_v2().event_publisher
 
 
 def get_http_service_redis_client(request: Request) -> redis.Redis | None:

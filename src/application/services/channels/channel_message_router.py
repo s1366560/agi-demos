@@ -224,7 +224,6 @@ class ChannelMessageRouter:
                 if not app_container:
                     raise RuntimeError("Application container not initialized")
 
-                artifact_service = app_container.artifact_service()
                 tenant_id = message.raw_data.get("tenant_id", "") if message.raw_data else ""
                 project_id = message.project_id or ""
                 async with pin_operation_context_v2(
@@ -245,6 +244,7 @@ class ChannelMessageRouter:
                         },
                     },
                 ):
+                    artifact_service = app_container.artifact_service()
                     mcp_adapter = current_sandbox_application_services_v2().adapter
 
                     logger.info(

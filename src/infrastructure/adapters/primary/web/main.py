@@ -188,7 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Docker event monitoring. Sandbox discovery belongs to the
     # generation-owned sandbox Provider effect.
-    await initialize_docker_services(container)
+    await initialize_docker_services()
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None

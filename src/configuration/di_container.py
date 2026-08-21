@@ -205,8 +205,6 @@ class DIContainer:
             db=db,
             redis_client=redis_client,
             settings=self._settings,
-            sandbox_adapter_factory=self._infra.sandbox_adapter,
-            sandbox_event_publisher_factory=self._infra.sandbox_event_publisher,
             distributed_lock_factory=self._infra.distributed_lock_adapter,
         )
         self._agent = AgentContainer(
@@ -215,8 +213,6 @@ class DIContainer:
             session_factory=session_factory,
             settings=self._settings,
             storage_service_factory=self._infra.storage_service,
-            sandbox_orchestrator_factory=self._sandbox.sandbox_orchestrator,
-            sandbox_event_publisher_factory=self._infra.sandbox_event_publisher,
             sequence_service_factory=self._infra.sequence_service,
             agent_message_bus_factory=self._infra.agent_message_bus,
         )
@@ -644,12 +640,6 @@ class DIContainer:
 
     def distributed_lock_adapter(self) -> Any:
         return cast(Any, self._services.get_or_activate("distributed_lock_adapter"))
-
-    def sandbox_adapter(self) -> Any:
-        return cast(Any, self._services.get_or_activate("sandbox_adapter"))
-
-    def sandbox_event_publisher(self) -> Any:
-        return cast(Any, self._services.get_or_activate("sandbox_event_publisher"))
 
     # === Sandbox Container delegates ===
 

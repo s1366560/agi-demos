@@ -54,9 +54,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/terminal", tags=["terminal"])
 
-# Global adapter instance (reuse from sandbox module)
-_sandbox_adapter: MCPSandboxAdapter | None = None
-_event_publisher: SandboxEventPublisher | None = None
 _TERMINAL_ACCESS_ROLES = ["owner", "admin", "member"]
 
 
@@ -70,24 +67,13 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
-    """Get the sandbox event publisher from app container.
+    """Project the event publisher from this request's pinned generation."""
+    _ = request
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
 
-    Uses the properly initialized container from app.state which has
-    redis_client configured for the event bus.
-    """
-    global _event_publisher
-    if _event_publisher is None:
-        try:
-            # Get container from app.state which has redis_client properly configured
-            container = request.app.state.container
-            _event_publisher = container.sandbox_event_publisher()
-        except Exception as e:
-            logger.warning(
-                "Could not create event publisher: error_type=%s",
-                type(e).__name__,
-            )
-            _event_publisher = None
-    return _event_publisher
+    return current_sandbox_application_services_v2().event_publisher
 
 
 async def get_project_id_from_sandbox(sandbox_id: str) -> str | None:

@@ -147,8 +147,6 @@ class AgentContainer:
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         settings: Settings | None = None,
         storage_service_factory: Callable[..., Any] | None = None,
-        sandbox_orchestrator_factory: Callable[..., Any] | None = None,
-        sandbox_event_publisher_factory: Callable[..., Any] | None = None,
         sequence_service_factory: Callable[..., Any] | None = None,
         agent_message_bus_factory: Callable[..., Any] | None = None,
     ) -> None:
@@ -157,8 +155,6 @@ class AgentContainer:
         self._session_factory = session_factory
         self._settings = settings
         self._storage_service_factory = storage_service_factory
-        self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
-        self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._sequence_service_factory = sequence_service_factory
         self._agent_message_bus_factory = agent_message_bus_factory
         self._skill_service_instance: SkillService | None = None
@@ -333,32 +329,32 @@ class AgentContainer:
         if self._session_factory is None:
             raise RuntimeError("ArtifactService requires a durable SQL session factory")
 
+        from src.infrastructure.plugins.v2.sandbox_projection import (
+            current_sandbox_application_services_v2,
+        )
+
+        sandbox_event_pub = current_sandbox_application_services_v2().event_publisher
         event_publisher = None
-        try:
-            if self._sandbox_event_publisher_factory:
-                sandbox_event_pub = self._sandbox_event_publisher_factory()
-                if sandbox_event_pub and sandbox_event_pub._event_bus:
+        if sandbox_event_pub._event_bus:
 
-                    async def publish_event(
-                        project_id: str,
-                        event: Any,
-                        *,
-                        conversation_id: str | None = None,
-                    ) -> None:
-                        # Always publish to sandbox stream
-                        await sandbox_event_pub._publish(project_id, event)
-                        # Also publish to agent chat stream so the
-                        # frontend SSE receives artifact_ready/error.
-                        if conversation_id:
-                            await _publish_to_agent_stream(
-                                sandbox_event_pub._event_bus,
-                                conversation_id,
-                                event,
-                            )
+            async def publish_event(
+                project_id: str,
+                event: Any,
+                *,
+                conversation_id: str | None = None,
+            ) -> None:
+                # Always publish to sandbox stream
+                await sandbox_event_pub._publish(project_id, event)
+                # Also publish to agent chat stream so the
+                # frontend SSE receives artifact_ready/error.
+                if conversation_id:
+                    await _publish_to_agent_stream(
+                        sandbox_event_pub._event_bus,
+                        conversation_id,
+                        event,
+                    )
 
-                    event_publisher = publish_event
-        except Exception:
-            pass
+            event_publisher = publish_event
 
         assert storage_service is not None
         return ArtifactService(
@@ -850,10 +846,11 @@ class AgentContainer:
         from src.infrastructure.agent.tools.web_search import (
             configure_web_search,
         )
-
-        sandbox_orchestrator = (
-            self._sandbox_orchestrator_factory() if self._sandbox_orchestrator_factory else None
+        from src.infrastructure.plugins.v2.sandbox_projection import (
+            current_sandbox_application_services_v2,
         )
+
+        sandbox_orchestrator = current_sandbox_application_services_v2().orchestrator
 
         # Configure decorator-based tool globals (used by the main agent system)
         configure_web_search(redis_client=self._redis_client)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,9 @@ from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
     SqlProjectSandboxRepository,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.sandbox_runtime import SandboxApplicationServicesV2
 
 
 class SandboxContainer:
@@ -31,15 +34,11 @@ class SandboxContainer:
         db: AsyncSession | None = None,
         redis_client: Any = None,
         settings: Settings | None = None,
-        sandbox_adapter_factory: Callable[..., Any] | None = None,
-        sandbox_event_publisher_factory: Callable[..., Any] | None = None,
         distributed_lock_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._db = db
         self._redis_client = redis_client
         self._settings = settings
-        self._sandbox_adapter_factory = sandbox_adapter_factory
-        self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._distributed_lock_factory = distributed_lock_factory
 
     def project_sandbox_repository(self) -> SqlProjectSandboxRepository:
@@ -48,42 +47,28 @@ class SandboxContainer:
         return SqlProjectSandboxRepository(self._db)
 
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
-        """Get SandboxOrchestrator for unified sandbox service management."""
-        sandbox_adapter = self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
-        event_publisher = (
-            self._sandbox_event_publisher_factory()
-            if self._sandbox_event_publisher_factory
-            else None
-        )
-        assert sandbox_adapter is not None
-        return SandboxOrchestrator(
-            sandbox_adapter=sandbox_adapter,
-            event_publisher=event_publisher,
-            default_timeout=self._settings.sandbox_timeout_seconds if self._settings else 300,
-        )
+        """Project the generation-owned sandbox orchestrator."""
+        return self._sandbox_application_services().orchestrator
 
     def sandbox_tool_registry(self) -> Any:
         """Get SandboxToolRegistry for dynamic MCP tool registration to Agent."""
         from src.application.services.sandbox_tool_registry import SandboxToolRegistry
 
-        sandbox_adapter = self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
         return SandboxToolRegistry(
             redis_client=self._redis_client,
-            mcp_adapter=sandbox_adapter,
+            mcp_adapter=self._sandbox_application_services().adapter,
         )
 
     def sandbox_resource(self) -> SandboxResourcePort:
         """Get SandboxResourcePort for agent workflow sandbox access."""
         from src.application.services.unified_sandbox_service import UnifiedSandboxService
 
-        sandbox_adapter = self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
         distributed_lock = (
             self._distributed_lock_factory() if self._distributed_lock_factory else None
         )
-        assert sandbox_adapter is not None
         return UnifiedSandboxService(
             repository=self.project_sandbox_repository(),
-            sandbox_adapter=sandbox_adapter,
+            sandbox_adapter=self._sandbox_application_services().adapter,
             distributed_lock=distributed_lock,
             default_profile=SandboxProfileType(self._settings.sandbox_profile_type)
             if self._settings
@@ -119,14 +104,12 @@ class SandboxContainer:
             ProjectSandboxLifecycleService,
         )
 
-        sandbox_adapter = self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
         distributed_lock = (
             self._distributed_lock_factory() if self._distributed_lock_factory else None
         )
-        assert sandbox_adapter is not None
         return ProjectSandboxLifecycleService(
             repository=self.project_sandbox_repository(),
-            sandbox_adapter=sandbox_adapter,
+            sandbox_adapter=self._sandbox_application_services().adapter,
             distributed_lock=distributed_lock,
             default_profile=SandboxProfileType(self._settings.sandbox_profile_type)
             if self._settings
@@ -215,6 +198,14 @@ class SandboxContainer:
 
     _logger = logging.getLogger(__name__)
 
+    @staticmethod
+    def _sandbox_application_services() -> SandboxApplicationServicesV2:
+        from src.infrastructure.plugins.v2.sandbox_projection import (
+            current_sandbox_application_services_v2,
+        )
+
+        return current_sandbox_application_services_v2()
+
     def _resolve_memstack_volume(self) -> dict[str, str] | None:
         """Resolve host_memstack_volume, auto-deriving the path when possible.
 
@@ -269,7 +260,7 @@ class SandboxContainer:
         """Get DependencyOrchestrator for sandbox dependency management.
 
         Coordinates dependency installation across host and sandbox runtimes.
-        Requires redis_client and sandbox_adapter_factory to be set.
+        Requires redis_client and a pinned sandbox generation.
         """
         from src.infrastructure.agent.plugins.sandbox_deps.orchestrator import (
             DependencyOrchestrator,
@@ -283,15 +274,10 @@ class SandboxContainer:
         security_gate = SecurityGate()
         state_store = DepsStateStore(redis_client=self._redis_client)
 
-        sandbox_adapter = (
-            self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
-        )
-        assert sandbox_adapter is not None, (
-            "sandbox_adapter_factory is required for DependencyOrchestrator"
-        )
+        sandbox_adapter = self._sandbox_application_services().adapter
 
         sandbox_installer = SandboxDependencyInstaller(
-            sandbox_tool_caller=sandbox_adapter.execute_tool,
+            sandbox_tool_caller=cast(Any, sandbox_adapter).execute_tool,
             security_gate=security_gate,
         )
 

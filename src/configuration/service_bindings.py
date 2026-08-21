@@ -94,15 +94,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         inject=(),
         allow_none=True,
     ),
-    ContainerServiceBinding(
-        key="sandbox_adapter", group="infra", target="_infra.sandbox_adapter", inject=()
-    ),
-    ContainerServiceBinding(
-        key="sandbox_event_publisher",
-        group="infra",
-        target="_infra.sandbox_event_publisher",
-        inject=(),
-    ),
     # --- auth ---
     ContainerServiceBinding(
         key="user_repository", group="auth", target="_auth.user_repository", inject=()

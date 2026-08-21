@@ -98,30 +98,3 @@ class InfraContainer:
             retry_interval=0.1,
             max_retries=300,
         )
-
-    def sandbox_adapter(self) -> Any:
-        """Project the sandbox adapter from the current pinned V2 generation."""
-        from src.infrastructure.plugins.v2.sandbox_projection import (
-            current_sandbox_application_services_v2,
-        )
-
-        return current_sandbox_application_services_v2().adapter
-
-    def sandbox_event_publisher(self) -> Any:
-        """Get SandboxEventPublisher for SSE event emission."""
-        from src.application.services.sandbox_event_service import SandboxEventPublisher
-
-        event_bus = None
-        if self._redis_client:
-            try:
-                from src.infrastructure.adapters.secondary.event.redis_event_bus import (
-                    RedisEventBusAdapter,
-                )
-
-                event_bus = RedisEventBusAdapter(self._redis_client)
-            except Exception as e:
-                import logging
-
-                logging.getLogger(__name__).warning(f"Could not create event bus: {e}")
-
-        return SandboxEventPublisher(event_bus=event_bus)

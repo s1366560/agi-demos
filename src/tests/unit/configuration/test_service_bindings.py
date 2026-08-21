@@ -22,7 +22,7 @@ _B1_GROUPS = ("infra", "auth")
 # Accessors whose first call performs environment-dependent work (Docker
 # recovery, credential chains). Their bindings are validated structurally
 # instead of being activated in unit tests.
-_ACTIVATION_SKIP = frozenset({"sandbox_adapter", "storage_service"})
+_ACTIVATION_SKIP = frozenset({"storage_service"})
 
 
 def _bindings(groups: tuple[str, ...]) -> list[ContainerServiceBinding]:
