@@ -2,9 +2,10 @@
 
 **Version**: 2.0
 **Environment**: Production
-**Last Updated**: 2026-06-22
+**Last Updated**: 2026-08-21
 
-This guide covers production deployment of the Sandbox MCP Server with the supported Ubuntu 24.04 LTS and KDE Plasma 5.27 desktop stack.
+This guide covers production deployment of the Ubuntu 24.04 Openbox/X11 sandbox with
+KasmVNC, Chromium, AT-SPI, and sky-cua.
 
 ---
 
@@ -62,6 +63,7 @@ docker build -t sandbox-mcp-server:latest .
 # Run container
 docker run -d \
   --name sandbox-mcp \
+  --shm-size=1g \
   -p 8765:8765 \
   -p 7681:7681 \
   -p 6080:6080 \
@@ -114,10 +116,12 @@ docker run -d \
   --cpus=2 \
   --memory=4g \
   --memory-swap=4g \
+  --shm-size=1g \
   -p 8765:8765 \
   -p 7681:7681 \
   -p 6080:6080 \
   -v /opt/sandbox/workspace:/workspace \
+  -v memstack-sky-cua-chromium-example:/home/sandbox/.config/chromium \
   -v /opt/sandbox/sessions:/sessions \
   --env-file .env \
   --health-cmd "curl -f http://localhost:8765/health || exit 1" \
@@ -146,6 +150,7 @@ services:
     image: sandbox-mcp-server:latest
     container_name: sandbox-mcp-prod
     restart: unless-stopped
+    shm_size: 1g
 
     # Resource limits
     deploy:
@@ -166,6 +171,7 @@ services:
     # Volumes
     volumes:
       - ./workspace:/workspace
+      - chromium-config:/home/sandbox/.config/chromium
       - ./sessions:/sessions
       - ./logs:/logs
 
@@ -191,9 +197,12 @@ services:
     # Security
     security_opt:
       - no-new-privileges:true
-    read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:uid=10001,gid=10001,mode=1777
+      - /run/user/10001:uid=10001,gid=10001,mode=0700
+
+volumes:
+  chromium-config:
 ```
 
 **Deploy**:
@@ -387,7 +396,7 @@ docker inspect sandbox-mcp-prod | grep -A 10 Health
 # Service health
 curl http://localhost:8765/health
 
-# Desktop status (self-signed TLS; use the injected runtime capability)
+# Desktop status (use the injected runtime capability)
 curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 ```
 
@@ -543,7 +552,11 @@ docker inspect sandbox-mcp-prod
 
 ```bash
 # Check processes
-docker exec sandbox-mcp-prod ps aux | grep -E "Xkasmvnc|kde|plasma"
+docker exec sandbox-mcp-prod ps aux | grep -E "Xkasmvnc|openbox|chromium"
+
+# Check X11 and the extension/native-host bridge
+docker exec sandbox-mcp-prod xdpyinfo -display :1 -queryExtensions
+docker exec sandbox-mcp-prod find /run/user/10001/sky-cua/browser -name 'extension-*.sock'
 
 # Check KasmVNC log
 docker exec sandbox-mcp-prod cat /tmp/kasmvnc.log

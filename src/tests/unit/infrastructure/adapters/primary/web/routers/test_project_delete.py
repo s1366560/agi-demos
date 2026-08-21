@@ -1,8 +1,11 @@
 """Project deletion concurrency and receipt-preservation tests."""
 
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
 from src.infrastructure.adapters.primary.web.routers import projects
@@ -98,3 +101,39 @@ async def test_project_dependent_delete_preserves_receipts_until_root_cleanup(
     assert projects.TASK_SESSION_RECEIPT_TABLE in calls[0]["skip_tables"]
     assert projects.TASK_SESSION_RECEIPT_TABLE in calls[1]["skip_tables"]
     assert projects.TASK_SESSION_RECEIPT_TABLE not in calls[2]["skip_tables"]
+
+
+@pytest.mark.unit
+async def test_project_delete_purges_external_sandbox_resources() -> None:
+    adapter = MagicMock()
+    adapter.purge_project_resources = AsyncMock()
+    container = MagicMock()
+    container.sandbox_adapter.return_value = adapter
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=container)))
+
+    await projects._purge_project_sandbox_resources(
+        request,  # type: ignore[arg-type]
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+
+    adapter.purge_project_resources.assert_awaited_once_with("tenant-1", "project-1")
+
+
+@pytest.mark.unit
+async def test_project_delete_returns_503_when_external_resource_purge_fails() -> None:
+    adapter = MagicMock()
+    adapter.purge_project_resources = AsyncMock(side_effect=RuntimeError("docker unavailable"))
+    container = MagicMock()
+    container.sandbox_adapter.return_value = adapter
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=container)))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await projects._purge_project_sandbox_resources(
+            request,  # type: ignore[arg-type]
+            tenant_id="tenant-1",
+            project_id="project-1",
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "docker unavailable" not in str(exc_info.value.detail)

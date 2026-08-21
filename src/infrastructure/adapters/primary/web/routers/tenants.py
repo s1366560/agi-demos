@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.projects import (
     _delete_project_dependents,
     _lock_project_delete_scopes,
+    _purge_project_sandbox_resources,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -327,6 +328,7 @@ async def update_tenant(
 @router.delete("/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tenant(
     tenant_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
@@ -339,6 +341,13 @@ async def delete_tenant(
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can delete tenant")
+        )
+
+    for project_id in project_ids:
+        await _purge_project_sandbox_resources(
+            request,
+            tenant_id=tenant_id,
+            project_id=project_id,
         )
 
     for project_id in project_ids:

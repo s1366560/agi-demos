@@ -107,6 +107,21 @@ class TestBashTool:
             assert "test content" in content
 
     @pytest.mark.asyncio
+    async def test_keeps_session_home_while_defaulting_cwd_to_workspace(self, monkeypatch):
+        """Graphical-session state must remain rooted in the sandbox user's home."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monkeypatch.setenv("HOME", "/home/sandbox")
+
+            result = await execute_bash(
+                command="printf '%s\\n%s\\n' \"$HOME\" \"$PWD\"",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            content = result.get("content", [{}])[0].get("text", "")
+            assert content.splitlines() == ["/home/sandbox", tmpdir]
+
+    @pytest.mark.asyncio
     async def test_timeout(self):
         """Test command timeout."""
         with tempfile.TemporaryDirectory() as tmpdir:

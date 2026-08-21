@@ -27,12 +27,12 @@ use super::{
     normalize_backend_store_id, project_graph_config_for_write, project_memory_rules_for_write,
     sandbox_config, unprocessable, validate_workspace_context_input, workspace_context_error,
     BackendStoreSummary, CurrentUserView, DeviceApproveView, DeviceCancelView, DeviceCodeView,
-    DeviceTokenView, IdentityError, IdentityService, InvitationListView, InvitationVerifyView,
-    InvitationView, LoginOutcome, ProjectCreateInput, ProjectListInput, ProjectMemberMutationView,
-    ProjectMemberView, ProjectMembersView, ProjectPage, ProjectStatsView, ProjectView,
-    SharedDeviceGrantStore, TenantMemberMutationView, TenantPage, TenantView,
-    WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
-    WorkspaceContextView,
+    DeviceTokenView, IdentityDeletionScope, IdentityError, IdentityService, InvitationListView,
+    InvitationVerifyView, InvitationView, LoginOutcome, ProjectCreateInput, ProjectListInput,
+    ProjectMemberMutationView, ProjectMemberView, ProjectMembersView, ProjectPage,
+    ProjectStatsView, ProjectView, SharedDeviceGrantStore, TenantMemberMutationView, TenantPage,
+    TenantView, WorkspaceContextResponseView, WorkspaceContextSwitchInput,
+    WorkspaceContextSwitchOutcomeView, WorkspaceContextView,
 };
 
 mod invitations;
@@ -405,8 +405,21 @@ impl IdentityService for DevIdentityService {
         self.dev_update_tenant(user_id, tenant_id, patch)
     }
 
-    async fn delete_tenant(&self, user_id: &str, tenant_id: &str) -> Result<(), IdentityError> {
-        self.dev_delete_tenant(user_id, tenant_id)
+    async fn prepare_tenant_deletion(
+        &self,
+        user_id: &str,
+        tenant_id_or_slug: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError> {
+        let tenant = self.dev_get_tenant(tenant_id_or_slug)?;
+        if tenant.owner_id != user_id {
+            return Err(IdentityError::forbidden(
+                "Only tenant owner can delete tenant",
+            ));
+        }
+        Ok(IdentityDeletionScope::in_memory(
+            tenant.id,
+            vec![self.dev_project().id],
+        ))
     }
 
     async fn add_tenant_member(
@@ -592,13 +605,21 @@ impl IdentityService for DevIdentityService {
         Ok(project)
     }
 
-    async fn delete_project(&self, user_id: &str, project_id: &str) -> Result<(), IdentityError> {
-        if user_id != self.dev_user_id || project_id != "dev-project" {
+    async fn prepare_project_deletion(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError> {
+        let project = self.dev_project();
+        if user_id != project.owner_id || project_id != project.id {
             return Err(IdentityError::forbidden(
                 "Only project owner can delete project",
             ));
         }
-        Ok(())
+        Ok(IdentityDeletionScope::in_memory(
+            project.tenant_id,
+            vec![project.id],
+        ))
     }
 
     async fn get_project_stats(

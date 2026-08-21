@@ -12,6 +12,7 @@
 
 use serde_json::Value;
 use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::{Postgres, Transaction};
 
 use agistack_core::ports::{CoreError, CoreResult};
 
@@ -121,6 +122,56 @@ pub enum TenantLookup {
     Forbidden,
 }
 
+/// Authorization result for a tenant deletion transaction.
+pub enum TenantDeletionLookup {
+    Ready(PgTenantDeletion),
+    NotFound,
+    Forbidden,
+}
+
+/// A locked tenant deletion scope containing every project in that tenant,
+/// independent of the requesting user's project memberships.
+pub struct PgTenantDeletion {
+    transaction: Transaction<'static, Postgres>,
+    tenant_id: String,
+    project_ids: Vec<String>,
+}
+
+impl PgTenantDeletion {
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub fn project_ids(&self) -> &[String] {
+        &self.project_ids
+    }
+
+    pub async fn commit(mut self) -> CoreResult<()> {
+        delete_tenant_dependents(&mut self.transaction, &self.tenant_id).await?;
+        let result = sqlx::query("DELETE FROM tenants WHERE id = $1")
+            .bind(&self.tenant_id)
+            .execute(&mut *self.transaction)
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))?;
+        if result.rows_affected() != 1 {
+            return Err(CoreError::Storage(
+                "locked tenant deletion scope no longer identifies one tenant".to_string(),
+            ));
+        }
+        self.transaction
+            .commit()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))
+    }
+
+    pub async fn rollback(self) -> CoreResult<()> {
+        self.transaction
+            .rollback()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))
+    }
+}
+
 /// Read-only, membership-scoped repository over `tenants`.
 pub struct PgTenantRepository {
     pool: PgPool,
@@ -213,6 +264,56 @@ impl PgTenantRepository {
         } else {
             Ok(TenantLookup::Forbidden)
         }
+    }
+
+    /// Lock and authorize a tenant deletion and capture the complete project
+    /// scope before any external sandbox resources are removed.
+    pub async fn begin_owned_tenant_deletion(
+        &self,
+        user_id: &str,
+        tenant_id_or_slug: &str,
+    ) -> CoreResult<TenantDeletionLookup> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))?;
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT id, owner_id FROM tenants WHERE id = $1 OR slug = $1 FOR UPDATE",
+        )
+        .bind(tenant_id_or_slug)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|error| CoreError::Storage(error.to_string()))?;
+        let Some((tenant_id, owner_id)) = row else {
+            transaction
+                .rollback()
+                .await
+                .map_err(|error| CoreError::Storage(error.to_string()))?;
+            return Ok(TenantDeletionLookup::NotFound);
+        };
+        if owner_id != user_id {
+            transaction
+                .rollback()
+                .await
+                .map_err(|error| CoreError::Storage(error.to_string()))?;
+            return Ok(TenantDeletionLookup::Forbidden);
+        }
+        let project_rows = sqlx::query_as::<_, (String,)>(
+            "SELECT id FROM projects WHERE tenant_id = $1 ORDER BY id FOR UPDATE",
+        )
+        .bind(&tenant_id)
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|error| CoreError::Storage(error.to_string()))?;
+        Ok(TenantDeletionLookup::Ready(PgTenantDeletion {
+            transaction,
+            tenant_id,
+            project_ids: project_rows
+                .into_iter()
+                .map(|(project_id,)| project_id)
+                .collect(),
+        }))
     }
 
     pub async fn create_tenant(

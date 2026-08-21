@@ -36,11 +36,12 @@ use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
 use agistack_adapters_postgres::{
-    normalize_email, InvitationRecord, PgInvitationRepository, PgProjectReadRepository,
-    PgTenantRepository, PgUserStore, PgWorkspaceContextRepository, ProjectActivityRecord,
-    ProjectCreateRecord, ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup,
-    ProjectStatsLookup, ProjectUpdatePatch, TenantAdminStatus, TenantLookup, TenantUpdatePatch,
-    WorkspaceContextRepositoryError,
+    normalize_email, InvitationRecord, PgInvitationRepository, PgProjectDeletion,
+    PgProjectReadRepository, PgTenantDeletion, PgTenantRepository, PgUserStore,
+    PgWorkspaceContextRepository, ProjectActivityRecord, ProjectCreateRecord,
+    ProjectDeletionLookup, ProjectListForUserQuery, ProjectLookup, ProjectMembersLookup,
+    ProjectStatsLookup, ProjectUpdatePatch, TenantAdminStatus, TenantDeletionLookup, TenantLookup,
+    TenantUpdatePatch, WorkspaceContextRepositoryError,
 };
 use agistack_adapters_redis::DeviceGrant;
 use agistack_adapters_secrets::{
@@ -113,7 +114,7 @@ impl IdentityError {
             www_authenticate: false,
         }
     }
-    fn forbidden(detail: impl Into<String>) -> Self {
+    pub(crate) fn forbidden(detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
             detail: detail.into(),
@@ -145,7 +146,7 @@ impl IdentityError {
             www_authenticate: false,
         }
     }
-    fn service_unavailable(detail: impl Into<String>) -> Self {
+    pub(crate) fn service_unavailable(detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
             detail: detail.into(),
@@ -168,6 +169,102 @@ impl IdentityError {
             detail_value: None,
             www_authenticate: false,
         }
+    }
+}
+
+#[async_trait]
+trait IdentityDeletionTransaction: Send {
+    async fn commit(self: Box<Self>) -> Result<(), IdentityError>;
+    async fn rollback(self: Box<Self>) -> Result<(), IdentityError>;
+}
+
+/// A database-authorized deletion scope held open while external sandbox
+/// resources are removed. The project list is complete for tenant deletion and
+/// is not filtered by the caller's individual project memberships.
+pub struct IdentityDeletionScope {
+    tenant_id: String,
+    project_ids: Vec<String>,
+    transaction: Box<dyn IdentityDeletionTransaction>,
+}
+
+impl IdentityDeletionScope {
+    fn new(
+        tenant_id: String,
+        project_ids: Vec<String>,
+        transaction: Box<dyn IdentityDeletionTransaction>,
+    ) -> Self {
+        Self {
+            tenant_id,
+            project_ids,
+            transaction,
+        }
+    }
+
+    fn in_memory(tenant_id: String, project_ids: Vec<String>) -> Self {
+        Self::new(
+            tenant_id,
+            project_ids,
+            Box::new(InMemoryDeletionTransaction),
+        )
+    }
+
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub(crate) fn project_ids(&self) -> &[String] {
+        &self.project_ids
+    }
+
+    pub(crate) async fn commit(self) -> Result<(), IdentityError> {
+        self.transaction.commit().await
+    }
+
+    pub(crate) async fn rollback(self) -> Result<(), IdentityError> {
+        self.transaction.rollback().await
+    }
+}
+
+struct InMemoryDeletionTransaction;
+
+#[async_trait]
+impl IdentityDeletionTransaction for InMemoryDeletionTransaction {
+    async fn commit(self: Box<Self>) -> Result<(), IdentityError> {
+        Ok(())
+    }
+
+    async fn rollback(self: Box<Self>) -> Result<(), IdentityError> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl IdentityDeletionTransaction for PgProjectDeletion {
+    async fn commit(self: Box<Self>) -> Result<(), IdentityError> {
+        PgProjectDeletion::commit(*self)
+            .await
+            .map_err(IdentityError::internal)
+    }
+
+    async fn rollback(self: Box<Self>) -> Result<(), IdentityError> {
+        PgProjectDeletion::rollback(*self)
+            .await
+            .map_err(IdentityError::internal)
+    }
+}
+
+#[async_trait]
+impl IdentityDeletionTransaction for PgTenantDeletion {
+    async fn commit(self: Box<Self>) -> Result<(), IdentityError> {
+        PgTenantDeletion::commit(*self)
+            .await
+            .map_err(IdentityError::internal)
+    }
+
+    async fn rollback(self: Box<Self>) -> Result<(), IdentityError> {
+        PgTenantDeletion::rollback(*self)
+            .await
+            .map_err(IdentityError::internal)
     }
 }
 
@@ -251,7 +348,11 @@ pub trait IdentityService: Send + Sync {
         patch: TenantUpdatePatch,
     ) -> Result<TenantView, IdentityError>;
 
-    async fn delete_tenant(&self, user_id: &str, tenant_id: &str) -> Result<(), IdentityError>;
+    async fn prepare_tenant_deletion(
+        &self,
+        user_id: &str,
+        tenant_id_or_slug: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError>;
 
     async fn add_tenant_member(
         &self,
@@ -302,7 +403,11 @@ pub trait IdentityService: Send + Sync {
         patch: ProjectUpdatePatch,
     ) -> Result<ProjectView, IdentityError>;
 
-    async fn delete_project(&self, user_id: &str, project_id: &str) -> Result<(), IdentityError>;
+    async fn prepare_project_deletion(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError>;
 
     async fn get_project_stats(
         &self,

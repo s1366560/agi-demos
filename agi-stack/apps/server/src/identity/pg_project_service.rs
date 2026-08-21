@@ -172,36 +172,6 @@ impl PgIdentityService {
             .ok_or_else(|| IdentityError::not_found("Project not found"))
     }
 
-    pub(super) async fn pg_delete_project(
-        &self,
-        user_id: &str,
-        project_id: &str,
-    ) -> Result<(), IdentityError> {
-        if !self
-            .projects
-            .user_is_project_owner(user_id, project_id)
-            .await
-            .map_err(IdentityError::internal)?
-        {
-            return Err(IdentityError::forbidden(
-                "Only project owner can delete project",
-            ));
-        }
-        if !self
-            .projects
-            .project_exists(project_id)
-            .await
-            .map_err(IdentityError::internal)?
-        {
-            return Err(IdentityError::not_found("Project not found"));
-        }
-        self.projects
-            .delete_project(project_id)
-            .await
-            .map_err(IdentityError::internal)?;
-        Ok(())
-    }
-
     pub(super) async fn pg_get_project_stats(
         &self,
         user_id: &str,

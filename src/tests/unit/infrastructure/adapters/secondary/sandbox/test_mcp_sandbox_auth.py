@@ -251,7 +251,7 @@ async def test_container_removal_also_removes_owned_isolated_network(
     removed = await adapter._safe_stop_and_remove_container(container, sandbox_id)
 
     assert removed is True
-    container.remove.assert_called_once_with(force=True)
+    container.remove.assert_called_once_with(force=True, v=False)
     docker_client.networks.get.assert_called_once_with(adapter._isolated_network_name(sandbox_id))
     network.remove.assert_called_once_with()
 

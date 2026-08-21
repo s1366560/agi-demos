@@ -24,13 +24,17 @@ use bollard::container::{
     RemoveContainerOptions, StartContainerOptions, StopContainerOptions,
 };
 use bollard::image::CreateImageOptions;
-use bollard::models::{ContainerStateStatusEnum, HostConfig, PortBinding as DockerPortBinding};
+use bollard::models::{
+    ContainerStateStatusEnum, HostConfig, Mount, MountTypeEnum, PortBinding as DockerPortBinding,
+    Volume,
+};
+use bollard::volume::{CreateVolumeOptions, RemoveVolumeOptions};
 use bollard::Docker;
 use futures::StreamExt;
 
 use agistack_core::ports::{
     ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus, CoreError, CoreResult,
-    PortBinding,
+    NamedVolumeMount, PortBinding,
 };
 
 /// Label stamped on every managed container so `list` scopes to this layer's
@@ -153,12 +157,49 @@ impl DockerContainerRuntime {
         }
         Ok(())
     }
+
+    fn validate_volume_labels(volume: &Volume, mount: &NamedVolumeMount) -> CoreResult<()> {
+        if mount
+            .labels
+            .iter()
+            .all(|(key, value)| volume.labels.get(key) == Some(value))
+        {
+            return Ok(());
+        }
+        Err(CoreError::Container(format!(
+            "named volume {} has mismatched ownership labels",
+            mount.name
+        )))
+    }
+
+    async fn ensure_named_volume(&self, mount: &NamedVolumeMount) -> CoreResult<()> {
+        let volume = match self.docker.inspect_volume(&mount.name).await {
+            Ok(volume) => volume,
+            Err(error) if is_status(&error, 404) => {
+                let labels = mount.labels.iter().cloned().collect();
+                self.docker
+                    .create_volume(CreateVolumeOptions {
+                        name: mount.name.clone(),
+                        driver: "local".to_string(),
+                        driver_opts: HashMap::new(),
+                        labels,
+                    })
+                    .await
+                    .map_err(gerr)?
+            }
+            Err(error) => return Err(gerr(error)),
+        };
+        Self::validate_volume_labels(&volume, mount)
+    }
 }
 
 #[async_trait]
 impl ContainerRuntime for DockerContainerRuntime {
     async fn create(&self, spec: &ContainerSpec) -> CoreResult<String> {
         self.ensure_image(&spec.image).await?;
+        for mount in &spec.named_volumes {
+            self.ensure_named_volume(mount).await?;
+        }
 
         let mut labels: HashMap<String, String> = spec
             .labels
@@ -187,6 +228,44 @@ impl ContainerRuntime for DockerContainerRuntime {
                 }]),
             );
         }
+        let mounts: Vec<Mount> = spec
+            .named_volumes
+            .iter()
+            .map(|mount| Mount {
+                target: Some(mount.container_path.clone()),
+                source: Some(mount.name.clone()),
+                typ: Some(MountTypeEnum::VOLUME),
+                read_only: Some(mount.read_only),
+                ..Default::default()
+            })
+            .collect();
+
+        let host_config = if port_bindings.is_empty()
+            && mounts.is_empty()
+            && spec.shm_size_bytes.is_none()
+            && spec.seccomp_profile.is_none()
+        {
+            None
+        } else {
+            Some(HostConfig {
+                port_bindings: if port_bindings.is_empty() {
+                    None
+                } else {
+                    Some(port_bindings)
+                },
+                mounts: if mounts.is_empty() {
+                    None
+                } else {
+                    Some(mounts)
+                },
+                shm_size: spec.shm_size_bytes,
+                security_opt: spec
+                    .seccomp_profile
+                    .as_ref()
+                    .map(|profile| vec![format!("seccomp={profile}")]),
+                ..Default::default()
+            })
+        };
 
         let config = Config {
             image: Some(spec.image.clone()),
@@ -198,14 +277,7 @@ impl ContainerRuntime for DockerContainerRuntime {
             } else {
                 Some(exposed_ports)
             },
-            host_config: if port_bindings.is_empty() {
-                None
-            } else {
-                Some(HostConfig {
-                    port_bindings: Some(port_bindings),
-                    ..Default::default()
-                })
-            },
+            host_config,
             ..Default::default()
         };
 
@@ -330,6 +402,34 @@ impl ContainerRuntime for DockerContainerRuntime {
         let mut ids: Vec<String> = summaries.into_iter().filter_map(|c| c.id).collect();
         ids.sort();
         Ok(ids)
+    }
+
+    async fn remove_volume(
+        &self,
+        name: &str,
+        required_labels: &[(String, String)],
+    ) -> CoreResult<()> {
+        let volume = match self.docker.inspect_volume(name).await {
+            Ok(volume) => volume,
+            Err(error) if is_status(&error, 404) => return Ok(()),
+            Err(error) => return Err(gerr(error)),
+        };
+        let mount = NamedVolumeMount {
+            name: name.to_string(),
+            container_path: String::new(),
+            read_only: false,
+            labels: required_labels.to_vec(),
+        };
+        Self::validate_volume_labels(&volume, &mount)?;
+        match self
+            .docker
+            .remove_volume(name, Some(RemoveVolumeOptions { force: false }))
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(error) if is_status(&error, 404) => Ok(()),
+            Err(error) => Err(gerr(error)),
+        }
     }
 }
 

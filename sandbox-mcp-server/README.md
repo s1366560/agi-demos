@@ -8,9 +8,10 @@ A WebSocket-based MCP (Model Context Protocol) server for sandbox file system op
 - **File Operations**: read, write, edit, glob, grep
 - **Bash Execution**: Secure command execution
 - **Web Terminal**: Browser-based terminal access via ttyd
-- **Remote Desktop**: KDE Plasma 5.27 desktop environment with KasmVNC (built-in web client)
+- **Computer Use Desktop**: Openbox/X11 with KasmVNC, AT-SPI, and sky-cua
+- **Browser Automation**: Pinned Chromium with the sky-cua extension and native host
 - **Docker Ready**: Isolated sandbox environment
-- **Multi-Language**: Python 3.12, Node.js 22, Java 21 pre-installed
+- **Web Development Runtime**: Python 3.12, Node.js 22, and pnpm 11.15.1
 
 ## Quick Start
 
@@ -32,7 +33,9 @@ docker build -t sandbox-mcp-server .
 
 # Run container (with desktop support)
 docker run -p 8765:8765 -p 7681:7681 -p 6080:6080 \
+  --shm-size=1g \
   -v $(pwd)/workspace:/workspace \
+  -v sandbox-chromium:/home/sandbox/.config/chromium \
   sandbox-mcp-server
 
 # Or use Docker Compose
@@ -118,7 +121,7 @@ After starting the container:
 
 | Tool | Description |
 |------|-------------|
-| `start_desktop` | Start KDE Plasma remote desktop (KasmVNC) |
+| `start_desktop` | Start the Openbox/X11 remote desktop (KasmVNC) |
 | `stop_desktop` | Stop remote desktop |
 | `get_desktop_status` | Get desktop status and connection URL |
 | `restart_desktop` | Restart desktop with new config |
@@ -173,6 +176,8 @@ Environment variables:
 export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
 docker run --rm \
   -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
+  --shm-size=1g \
+  -v sandbox-chromium:/home/sandbox/.config/chromium \
   -p 127.0.0.1:6080:6080 \
   sandbox-mcp-server
 
@@ -182,14 +187,15 @@ open https://localhost:6080
 
 ### Desktop Features
 
-- **KDE Plasma 5.27 Desktop Environment**: Ubuntu 24.04 LTS desktop stack (Dolphin, Konsole, Kate, etc.)
+- **Openbox/X11 Desktop**: Lightweight EWMH window management on KasmVNC's real X11 display
+- **sky-cua Desktop and Browser Surfaces**: Screenshot, XTEST input, AT-SPI semantics, and Chromium tab control
+- **Pinned Chromium**: Playwright 1.57.0 Chromium with the pinned sky-cua extension and native host
 - **KasmVNC** (all-in-one): A single process provides X server + VNC server + WebSocket server + built-in web client
 - **Built-in Web Client**: No browser plugin or separate noVNC/websockify stack required
 - **WebP/QOI/JPEG Encoding**: Modern encodings for efficient remote display
 - **Dynamic Resize**: Live resolution changes via xrandr (no restart needed)
 - **Bi-directional Clipboard**: Text and image clipboard sync
 - **File Transfer**: Drag-and-drop upload/download through the web client
-- **Audio Streaming**: PulseAudio-based audio to the browser
 - **Multiple Resolutions**: 1920x1080 (default), 1600x900, 1280x720, and more supported
 
 ### VNC Server
@@ -268,7 +274,7 @@ asyncio.run(main())
 ├──────────────────────┬──────────────────────────────────┤
 │   ttyd               │   KasmVNC :1 (all-in-one)        │
 │   (shell access)     │   ├─ X server (built-in)         │
-│                      │   ├─ KDE Plasma 5.27             │
+│                      │   ├─ Openbox + Chromium          │
 │                      │   └─ VNC + WebSocket + web       │
 │                      │      client on port 6080         │
 ├──────────────────────┴──────────────────────────────────┤
@@ -289,17 +295,17 @@ asyncio.run(main())
 
 Pre-installed in the sandbox:
 
-- **Python 3.12**: pip, uv, virtualenv, pytest
-- **Node.js 22**: npm, pnpm, yarn
-- **Java 21**: OpenJDK, Maven, Gradle
+- **Python 3.12**: Isolated MCP runtime and pip
+- **Node.js 22**: npm and pnpm 11.15.1
 - **Git**: Version control
-- **Editors**: vim, nano
+- **Shell tools**: bash, curl, jq, nano, and standard X11 diagnostics
 
 ## Security
 
 - Commands executed within workspace directory
 - Dangerous commands blocked
-- Non-root user in Docker (UID 1001)
+- Non-root user in Docker (UID 10001)
+- Project-specific Chromium configuration is stored only in its managed Docker volume
 - Resource limits enforced
 - Per-sandbox KasmVNC and ttyd authentication enabled
 - Session timeout management (optional)
@@ -309,8 +315,10 @@ Pre-installed in the sandbox:
 ### Desktop Won't Start
 
 ```bash
-# Check if KDE Plasma is installed
-docker exec <container> dpkg -l | grep kde-plasma-desktop
+# Check Openbox, X11, and the browser bridge
+docker exec <container> wmctrl -m
+docker exec <container> xdpyinfo -display :1 -queryExtensions
+docker exec <container> find /run/user/10001/sky-cua/browser -name 'extension-*.sock'
 
 # Check KasmVNC server logs
 docker exec <container> ps aux | grep -i kasmvnc
@@ -329,7 +337,7 @@ docker ps
 # Check port mapping
 docker port <container>
 
-# Test KasmVNC web client (self-signed TLS)
+# Test KasmVNC web client
 curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 ```
 
@@ -339,15 +347,18 @@ curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 - **Adjust compression**: Modify `-compression` value (0-9)
 - **Check bandwidth`: Ensure >2 Mbps available
 
-## Migration from LXDE
+## Default CUA Image
 
-**Note**: This project has been migrated from LXDE to KDE Plasma 5.27 on Ubuntu 24.04 LTS with KasmVNC for a richer desktop and a single all-in-one remote display server.
+The default image is an Openbox/X11 Computer Use and web-development runtime. It intentionally
+does not include the former KDE applications, Firefox, Java, Go, Rust, Bun, LibreOffice, Pandoc,
+or duplicate Chrome/Puppeteer browser payloads.
 
 Key changes:
-- LXDE → KDE Plasma 5.27 desktop environment
+- Openbox replaces the heavier desktop stack
 - Earlier TigerVNC/x11vnc + noVNC + websockify stack → KasmVNC (single process)
-- Improved performance and session persistence
-- Better encoding options (WebP, QOI, JPEG) plus dynamic resize, clipboard, and audio
+- Chromium state persists in a project-scoped named volume across sandbox replacement
+- sky-cua receives the same X11, D-Bus, and AT-SPI session environment as the main MCP server
+- Better encoding options (WebP, QOI, JPEG) plus dynamic resize and clipboard
 
 See `MIGRATION.md` for detailed migration guide.
 
@@ -401,10 +412,11 @@ MIT License - See LICENSE file for details
 
 ## Version History
 
-- **v2.0** (2026-01-28): KDE Plasma + KasmVNC desktop migration
+- **v3.0** (2026-08-21): Openbox/X11 + Chromium sky-cua runtime
+- **v2.0** (2026-01-28): KDE Plasma + KasmVNC desktop migration (superseded)
 - **v1.0** (2025-01-15): Initial release with LXDE desktop
 
 ---
 
-**Generated**: 2026-06-22
-**Status**: Production Ready ✅
+**Generated**: 2026-08-21
+**Status**: Production Ready

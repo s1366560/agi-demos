@@ -1,8 +1,84 @@
+use async_trait::async_trait;
 use axum::http::StatusCode;
 use serde_json::json;
+use std::sync::Arc;
 
 use super::*;
 use crate::auth::DevAuthenticator;
+use crate::identity::{DevIdentityService, IdentityService};
+use crate::sandbox_api::ProjectSandboxService;
+use agistack_adapters_mem::InMemoryContainerRuntime;
+use agistack_core::ports::{
+    ContainerRuntime, ContainerSpec, ContainerStatus, CoreError, CoreResult,
+};
+
+struct FailingCleanupRuntime;
+
+#[async_trait]
+impl ContainerRuntime for FailingCleanupRuntime {
+    async fn create(&self, _spec: &ContainerSpec) -> CoreResult<String> {
+        Err(CoreError::Container("not used".to_string()))
+    }
+
+    async fn start(&self, _id: &str) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn status(&self, _id: &str) -> CoreResult<Option<ContainerStatus>> {
+        Ok(None)
+    }
+
+    async fn stop(&self, _id: &str) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn remove(&self, _id: &str) -> CoreResult<()> {
+        Ok(())
+    }
+
+    async fn list(&self, _label: Option<(&str, &str)>) -> CoreResult<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    async fn remove_volume(
+        &self,
+        _name: &str,
+        _required_labels: &[(String, String)],
+    ) -> CoreResult<()> {
+        Err(CoreError::Container("volume cleanup failed".to_string()))
+    }
+}
+
+#[tokio::test]
+async fn deletion_cleanup_commits_only_after_all_resources_are_removed() {
+    let identity = DevIdentityService::new("dev-user");
+    let scope = identity
+        .prepare_project_deletion("dev-user", "dev-project")
+        .await
+        .expect("project deletion scope should be prepared");
+    let sandboxes = ProjectSandboxService::new(
+        Arc::new(InMemoryContainerRuntime::new()),
+        "sandbox-mcp-server:latest",
+    );
+    purge_and_commit_deletion(&sandboxes, scope)
+        .await
+        .expect("idempotent missing resources should still commit deletion");
+
+    let scope = identity
+        .prepare_tenant_deletion("dev-user", "dev-tenant")
+        .await
+        .expect("tenant deletion scope should be prepared");
+    let failing =
+        ProjectSandboxService::new(Arc::new(FailingCleanupRuntime), "sandbox-mcp-server:latest");
+    let error = purge_and_commit_deletion(&failing, scope)
+        .await
+        .expect_err("external cleanup failure must prevent deletion commit");
+    assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        error.detail,
+        "Sandbox resources could not be removed; deletion was not committed"
+    );
+}
 
 #[test]
 fn query_defaults_match_python() {

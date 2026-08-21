@@ -82,24 +82,6 @@ impl PgIdentityService {
             .ok_or_else(|| IdentityError::forbidden("Only tenant owner can update tenant"))
     }
 
-    pub(super) async fn pg_delete_tenant(
-        &self,
-        user_id: &str,
-        tenant_id: &str,
-    ) -> Result<(), IdentityError> {
-        if !self
-            .tenants
-            .delete_owned_tenant(user_id, tenant_id)
-            .await
-            .map_err(IdentityError::internal)?
-        {
-            return Err(IdentityError::forbidden(
-                "Only tenant owner can delete tenant",
-            ));
-        }
-        Ok(())
-    }
-
     pub(super) async fn pg_add_tenant_member(
         &self,
         user_id: &str,

@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import and_, case, delete, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -349,6 +349,24 @@ async def _lock_project_delete_scopes(
 async def _lock_project_delete_scope(db: AsyncSession, project_id: str) -> bool:
     """Lock one project deletion scope."""
     return project_id in await _lock_project_delete_scopes(db, [project_id])
+
+
+async def _purge_project_sandbox_resources(
+    request: Request,
+    *,
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Purge external sandbox resources before committing permanent deletion."""
+    try:
+        adapter = request.app.state.container.sandbox_adapter()
+        await adapter.purge_project_resources(tenant_id, project_id)
+    except Exception as exc:
+        logger.error("Failed to purge project sandbox resources before deletion", exc_info=exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Sandbox resources could not be removed; deletion was not committed"),
+        ) from exc
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -733,15 +751,18 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete project."""
     # Use project_id directly
     # Check if user is owner
-    user_project_result = await db.execute(
+    project_tenant_result = await db.execute(
         refresh_select_statement(
-            select(UserProject).where(
+            select(Project.tenant_id)
+            .join(UserProject, UserProject.project_id == Project.id)
+            .where(
                 and_(
                     UserProject.user_id == current_user.id,
                     UserProject.project_id == project_id,
@@ -750,7 +771,8 @@ async def delete_project(
             )
         )
     )
-    if not user_project_result.scalar_one_or_none():
+    tenant_id = project_tenant_result.scalar_one_or_none()
+    if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Only project owner can delete project")
         )
@@ -758,6 +780,11 @@ async def delete_project(
     if not await _lock_project_delete_scope(db, project_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
+    await _purge_project_sandbox_resources(
+        request,
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
     await _delete_project_dependents(db, project_id)
     _result = await db.execute(delete(Project).where(Project.id == project_id))
     await db.commit()

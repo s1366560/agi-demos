@@ -157,6 +157,18 @@ impl ContainerRuntime for RecordingRuntime {
         self.calls.lock().unwrap().push("list".to_string());
         Ok(Vec::new())
     }
+
+    async fn remove_volume(
+        &self,
+        name: &str,
+        _required_labels: &[(String, String)],
+    ) -> CoreResult<()> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("remove_volume:{name}"));
+        Ok(())
+    }
 }
 
 struct RecordingConnector {

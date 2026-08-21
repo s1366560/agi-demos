@@ -1,5 +1,14 @@
 use super::*;
 use agistack_core::ports::ContainerSpec;
+use sha2::{Digest, Sha256};
+
+const DEFAULT_SANDBOX_SHM_SIZE_BYTES: i64 = 1_073_741_824;
+const CHROMIUM_SECCOMP_PROFILE: &str = include_str!(
+    "../../../../../src/infrastructure/adapters/secondary/sandbox/chromium_seccomp_profile.json"
+);
+const CHROMIUM_PROFILE_TARGET: &str = "/home/sandbox/.config/chromium";
+const CHROMIUM_VOLUME_PREFIX: &str = "memstack-sky-cua-chromium-";
+const CHROMIUM_RESOURCE_TYPE: &str = "sky-cua-chromium-profile";
 
 pub(super) fn datetime_from_ms(ms: i64) -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
@@ -276,6 +285,7 @@ pub(super) fn sandbox_container_spec(
     runtime_auth_token: &SandboxRuntimeToken,
 ) -> ContainerSpec {
     let interactive_enabled = !matches!(profile, SandboxProfile::Lite);
+    let volume_name = sky_cua_chromium_volume_name(tenant_id, project_id);
     ContainerSpec {
         image: image.to_string(),
         cmd: None,
@@ -305,9 +315,66 @@ pub(super) fn sandbox_container_spec(
             (PROJECT_LABEL.to_string(), project_id.to_string()),
             (TENANT_LABEL.to_string(), tenant_id.to_string()),
             (KIND_LABEL.to_string(), KIND_PROJECT.to_string()),
+            (MEMSTACK_SANDBOX_LABEL.to_string(), "true".to_string()),
+            (MEMSTACK_PROJECT_LABEL.to_string(), project_id.to_string()),
+            (MEMSTACK_TENANT_LABEL.to_string(), tenant_id.to_string()),
         ],
         ports: sandbox_port_bindings(profile),
+        shm_size_bytes: Some(sandbox_shm_size_bytes()),
+        seccomp_profile: Some(CHROMIUM_SECCOMP_PROFILE.to_string()),
+        named_volumes: vec![NamedVolumeMount {
+            name: volume_name,
+            container_path: CHROMIUM_PROFILE_TARGET.to_string(),
+            read_only: false,
+            labels: sky_cua_chromium_volume_labels(tenant_id, project_id),
+        }],
     }
+}
+
+pub(super) fn sky_cua_chromium_volume_name(tenant_id: &str, project_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(tenant_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(project_id.as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    format!("{CHROMIUM_VOLUME_PREFIX}{}", &digest[..32])
+}
+
+pub(super) fn sky_cua_chromium_volume_labels(
+    tenant_id: &str,
+    project_id: &str,
+) -> Vec<(String, String)> {
+    vec![
+        ("memstack.managed".to_string(), "true".to_string()),
+        (
+            "memstack.resource.type".to_string(),
+            CHROMIUM_RESOURCE_TYPE.to_string(),
+        ),
+        (MEMSTACK_TENANT_LABEL.to_string(), tenant_id.to_string()),
+        (MEMSTACK_PROJECT_LABEL.to_string(), project_id.to_string()),
+    ]
+}
+
+fn sandbox_shm_size_bytes() -> i64 {
+    std::env::var("SANDBOX_SHM_SIZE")
+        .ok()
+        .and_then(|raw| parse_shm_size_bytes(&raw))
+        .unwrap_or(DEFAULT_SANDBOX_SHM_SIZE_BYTES)
+}
+
+pub(super) fn parse_shm_size_bytes(raw: &str) -> Option<i64> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    let (number, multiplier) = match normalized.as_bytes().last().copied() {
+        Some(b'k') => (&normalized[..normalized.len() - 1], 1_024_i64),
+        Some(b'm') => (&normalized[..normalized.len() - 1], 1_048_576_i64),
+        Some(b'g') => (&normalized[..normalized.len() - 1], 1_073_741_824_i64),
+        _ => (normalized.as_str(), 1_i64),
+    };
+    number
+        .parse::<i64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .and_then(|value| value.checked_mul(multiplier))
 }
 
 pub(super) fn python_utc_offset_string(ms: i64) -> String {

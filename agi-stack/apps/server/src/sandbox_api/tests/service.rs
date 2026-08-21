@@ -31,6 +31,91 @@ async fn service_ensure_get_restart_and_terminate_lifecycle() {
     assert!(!service.terminate("p1").await.unwrap());
     assert!(service.get("p1").await.unwrap().is_none());
 }
+
+#[test]
+fn sky_cua_spec_uses_project_volume_and_one_gibibyte_shm_by_default() {
+    let auth = SandboxRuntimeAuth::try_new(TEST_RUNTIME_AUTH_SECRET).unwrap();
+    let token = auth.token_for("p1", "t1");
+    let spec = sandbox_container_spec(
+        "sandbox-mcp-server:latest",
+        "p1",
+        "t1",
+        SandboxProfile::Standard,
+        &token,
+    );
+
+    assert_eq!(spec.shm_size_bytes, Some(1_073_741_824));
+    assert_eq!(spec.named_volumes.len(), 1);
+    let volume = &spec.named_volumes[0];
+    assert_eq!(volume.name, sky_cua_chromium_volume_name("t1", "p1"));
+    assert_eq!(volume.container_path, "/home/sandbox/.config/chromium");
+    assert!(volume
+        .labels
+        .contains(&("memstack.project_id".to_string(), "p1".to_string())));
+}
+
+#[test]
+fn sky_cua_spec_applies_default_deny_multi_arch_chromium_seccomp() {
+    let auth = SandboxRuntimeAuth::try_new(TEST_RUNTIME_AUTH_SECRET).unwrap();
+    let token = auth.token_for("p1", "t1");
+    let spec = sandbox_container_spec(
+        "sandbox-mcp-server:latest",
+        "p1",
+        "t1",
+        SandboxProfile::Standard,
+        &token,
+    );
+
+    let profile: Value = serde_json::from_str(
+        spec.seccomp_profile
+            .as_deref()
+            .expect("sky-cua seccomp profile"),
+    )
+    .expect("valid seccomp JSON");
+    assert_eq!(profile["defaultAction"], "SCMP_ACT_ERRNO");
+    let architectures = profile["architectures"].as_array().unwrap();
+    assert!(architectures.contains(&json!("SCMP_ARCH_X86_64")));
+    assert!(architectures.contains(&json!("SCMP_ARCH_AARCH64")));
+    let allowed = profile["syscalls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rule| rule["action"] == "SCMP_ACT_ALLOW")
+        .and_then(|rule| rule["names"].as_array())
+        .unwrap();
+    for syscall in ["clone", "setns", "unshare"] {
+        assert!(allowed.contains(&json!(syscall)));
+    }
+}
+
+#[test]
+fn sandbox_shm_size_parser_accepts_binary_units_and_rejects_invalid_values() {
+    assert_eq!(parse_shm_size_bytes("1g"), Some(1_073_741_824));
+    assert_eq!(parse_shm_size_bytes("1536m"), Some(1_610_612_736));
+    assert_eq!(parse_shm_size_bytes("0"), None);
+    assert_eq!(parse_shm_size_bytes("invalid"), None);
+}
+
+#[tokio::test]
+async fn ordinary_terminate_retains_profile_but_permanent_purge_removes_it() {
+    let runtime = Arc::new(InMemoryContainerRuntime::new());
+    let service = with_test_runtime_auth(ProjectSandboxService::new(
+        runtime.clone(),
+        "redis:7-alpine",
+    ));
+    service
+        .ensure("p1", "t1", Some(SandboxProfile::Standard))
+        .await
+        .unwrap();
+    service.terminate("p1").await.unwrap();
+
+    let name = sky_cua_chromium_volume_name("t1", "p1");
+    let forged = vec![("memstack.project_id".to_string(), "forged".to_string())];
+    assert!(runtime.remove_volume(&name, &forged).await.is_err());
+
+    service.purge_project_resources("t1", "p1").await.unwrap();
+    assert!(runtime.remove_volume(&name, &forged).await.is_ok());
+}
 #[tokio::test]
 async fn service_cloud_ensure_fails_closed_without_runtime_auth() {
     let service =

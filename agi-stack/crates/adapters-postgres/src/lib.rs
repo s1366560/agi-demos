@@ -166,10 +166,11 @@ pub use notification_repo::{
     CreateNotification, NotificationListQuery, NotificationRecord, PgNotificationRepository,
 };
 pub use project_repo::{
-    PgProjectReadRepository, ProjectActivityRecord, ProjectCreateRecord,
-    ProjectDashboardStatsRecord, ProjectListForUserQuery, ProjectListRecords, ProjectLookup,
-    ProjectMemberMutationRecord, ProjectMemberRecord, ProjectMembersLookup, ProjectMembersRecord,
-    ProjectReadRecord, ProjectStatsLookup, ProjectStatsRecord, ProjectUpdatePatch,
+    PgProjectDeletion, PgProjectReadRepository, ProjectActivityRecord, ProjectCreateRecord,
+    ProjectDashboardStatsRecord, ProjectDeletionLookup, ProjectListForUserQuery,
+    ProjectListRecords, ProjectLookup, ProjectMemberMutationRecord, ProjectMemberRecord,
+    ProjectMembersLookup, ProjectMembersRecord, ProjectReadRecord, ProjectStatsLookup,
+    ProjectStatsRecord, ProjectUpdatePatch,
 };
 pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
 pub use schema_repo::{
@@ -193,7 +194,10 @@ pub use support_repo::{
     ClosedSupportTicketRecord, CreateSupportTicket, PgSupportRepository, SupportTicketListQuery,
     SupportTicketRecord, UpdateSupportTicket,
 };
-pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
+pub use tenant_repo::{
+    PgTenantDeletion, PgTenantRepository, TenantDeletionLookup, TenantLookup, TenantRecord,
+    TenantUpdatePatch,
+};
 pub use tenant_skill_config_repo::{PgTenantSkillConfigRepository, TenantSkillConfigRecord};
 pub use tenant_webhook_repo::{
     CreateTenantWebhook, PgTenantWebhookRepository, TenantWebhookRecord,

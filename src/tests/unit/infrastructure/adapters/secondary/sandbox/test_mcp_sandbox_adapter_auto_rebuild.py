@@ -574,7 +574,7 @@ class TestSandboxRestartPolicy:
                 project_id="proj-1",
             )
 
-        partial_container.remove.assert_called_once_with(force=True)
+        partial_container.remove.assert_called_once_with(force=True, v=False)
         assert 18765 not in adapter._used_ports
         assert 16080 not in adapter._used_ports
         assert 17681 not in adapter._used_ports
@@ -619,7 +619,7 @@ class TestSandboxRestartPolicy:
 
         assert result is None
         mock_docker.containers.run.assert_not_called()
-        stale_container.remove.assert_called_once_with(force=True)
+        stale_container.remove.assert_called_once_with(force=True, v=False)
         assert "mcp-sandbox-stale" not in adapter._active_sandboxes
 
     @pytest.mark.asyncio

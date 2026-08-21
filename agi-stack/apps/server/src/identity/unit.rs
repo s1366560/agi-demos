@@ -7,6 +7,40 @@ use agistack_adapters_postgres::{
 
 use crate::auth::{Authenticator, DevApiKeyRevocations, DevAuthenticator};
 
+#[tokio::test]
+async fn dev_deletion_scopes_are_canonical_and_complete() {
+    let service = DevIdentityService::new("dev-user");
+
+    let tenant_scope = service
+        .prepare_tenant_deletion("dev-user", "dev")
+        .await
+        .expect("tenant owner should receive a locked deletion scope");
+    assert_eq!(tenant_scope.tenant_id(), "dev-tenant");
+    assert_eq!(tenant_scope.project_ids(), &["dev-project".to_string()]);
+    tenant_scope
+        .rollback()
+        .await
+        .expect("in-memory deletion rollback should succeed");
+
+    let project_scope = service
+        .prepare_project_deletion("dev-user", "dev-project")
+        .await
+        .expect("project owner should receive a locked deletion scope");
+    assert_eq!(project_scope.tenant_id(), "dev-tenant");
+    assert_eq!(project_scope.project_ids(), &["dev-project".to_string()]);
+    project_scope
+        .commit()
+        .await
+        .expect("in-memory deletion commit should succeed");
+
+    let error = service
+        .prepare_project_deletion("other-user", "dev-project")
+        .await
+        .err()
+        .expect("non-owner deletion must be rejected before cleanup");
+    assert_eq!(error.status, StatusCode::FORBIDDEN);
+}
+
 #[test]
 fn html_escape_covers_text_and_attribute_metacharacters() {
     assert_eq!(

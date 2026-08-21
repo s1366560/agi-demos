@@ -25,6 +25,7 @@ use agistack_core::ports::{
 #[derive(Default)]
 pub struct InMemoryContainerRuntime {
     inner: Mutex<BTreeMap<String, Record>>,
+    volumes: Mutex<BTreeMap<String, Vec<(String, String)>>>,
     seq: AtomicU64,
 }
 
@@ -34,6 +35,7 @@ struct Record {
     exit_code: Option<i64>,
     labels: Vec<(String, String)>,
     ports: Vec<PortBinding>,
+    named_volumes: Vec<String>,
 }
 
 impl InMemoryContainerRuntime {
@@ -49,6 +51,27 @@ fn poisoned() -> CoreError {
 #[async_trait]
 impl ContainerRuntime for InMemoryContainerRuntime {
     async fn create(&self, spec: &ContainerSpec) -> CoreResult<String> {
+        {
+            let mut volumes = self.volumes.lock().map_err(|_| poisoned())?;
+            for mount in &spec.named_volumes {
+                match volumes.get(&mount.name) {
+                    Some(labels)
+                        if mount
+                            .labels
+                            .iter()
+                            .all(|required| labels.contains(required)) => {}
+                    Some(_) => {
+                        return Err(CoreError::Container(format!(
+                            "named volume {} has mismatched ownership labels",
+                            mount.name
+                        )));
+                    }
+                    None => {
+                        volumes.insert(mount.name.clone(), mount.labels.clone());
+                    }
+                }
+            }
+        }
         let n = self.seq.fetch_add(1, Ordering::SeqCst);
         let id = format!("mem-{n:06}");
         let mut inner = self.inner.lock().map_err(|_| poisoned())?;
@@ -59,6 +82,11 @@ impl ContainerRuntime for InMemoryContainerRuntime {
                 exit_code: None,
                 labels: spec.labels.clone(),
                 ports: spec.ports.clone(),
+                named_volumes: spec
+                    .named_volumes
+                    .iter()
+                    .map(|mount| mount.name.clone())
+                    .collect(),
             },
         );
         Ok(id)
@@ -114,11 +142,44 @@ impl ContainerRuntime for InMemoryContainerRuntime {
             .map(|(id, _)| id.clone())
             .collect())
     }
+
+    async fn remove_volume(
+        &self,
+        name: &str,
+        required_labels: &[(String, String)],
+    ) -> CoreResult<()> {
+        let inner = self.inner.lock().map_err(|_| poisoned())?;
+        if inner
+            .values()
+            .any(|record| record.named_volumes.iter().any(|volume| volume == name))
+        {
+            return Err(CoreError::Container(format!(
+                "named volume {name} is still attached"
+            )));
+        }
+        drop(inner);
+
+        let mut volumes = self.volumes.lock().map_err(|_| poisoned())?;
+        let Some(labels) = volumes.get(name) else {
+            return Ok(());
+        };
+        if !required_labels
+            .iter()
+            .all(|required| labels.contains(required))
+        {
+            return Err(CoreError::Container(format!(
+                "named volume {name} has mismatched ownership labels"
+            )));
+        }
+        volumes.remove(name);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agistack_core::ports::NamedVolumeMount;
     use futures::executor::block_on;
 
     static PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
@@ -133,6 +194,9 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             ports: vec![],
+            shm_size_bytes: None,
+            seccomp_profile: None,
+            named_volumes: vec![],
         }
     }
 
@@ -209,6 +273,49 @@ mod tests {
         block_on(rt.stop(&id)).unwrap();
         let st = block_on(rt.status(&id)).unwrap().unwrap();
         assert_eq!(st.state, ContainerState::Exited);
+    }
+
+    #[test]
+    fn named_volume_survives_container_removal_and_requires_matching_labels() {
+        let rt = InMemoryContainerRuntime::new();
+        let labels = vec![("memstack.project_id".to_string(), "p1".to_string())];
+        let mut container_spec = spec(&[]);
+        container_spec.shm_size_bytes = Some(1_073_741_824);
+        container_spec.named_volumes = vec![NamedVolumeMount {
+            name: "profile-p1".to_string(),
+            container_path: "/home/sandbox/.config/chromium".to_string(),
+            read_only: false,
+            labels: labels.clone(),
+        }];
+
+        let id = block_on(rt.create(&container_spec)).unwrap();
+        assert!(block_on(rt.remove_volume("profile-p1", &labels)).is_err());
+        block_on(rt.remove(&id)).unwrap();
+        assert!(block_on(rt.remove_volume(
+            "profile-p1",
+            &[("memstack.project_id".to_string(), "forged".to_string())]
+        ))
+        .is_err());
+        block_on(rt.remove_volume("profile-p1", &labels)).unwrap();
+        block_on(rt.remove_volume("profile-p1", &labels)).unwrap();
+    }
+
+    #[test]
+    fn create_rejects_existing_named_volume_with_mismatched_labels() {
+        let rt = InMemoryContainerRuntime::new();
+        let mut first = spec(&[]);
+        first.named_volumes = vec![NamedVolumeMount {
+            name: "shared-name".to_string(),
+            container_path: "/profile".to_string(),
+            read_only: false,
+            labels: vec![("owner".to_string(), "p1".to_string())],
+        }];
+        let first_id = block_on(rt.create(&first)).unwrap();
+        block_on(rt.remove(&first_id)).unwrap();
+
+        let mut forged = first;
+        forged.named_volumes[0].labels = vec![("owner".to_string(), "p2".to_string())];
+        assert!(block_on(rt.create(&forged)).is_err());
     }
 
     #[test]

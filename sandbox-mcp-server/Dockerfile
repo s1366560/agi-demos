@@ -1,427 +1,346 @@
-# Sandbox MCP Server Dockerfile
-# Multi-language development environment with Python, Java, Node.js
-# Optimized for fast builds using layer caching and BuildKit
-#
-# Build: docker build -t sandbox-mcp-server .
-# Run:   docker run -p 8765:8765 -v $(pwd)/workspace:/workspace sandbox-mcp-server
+# syntax=docker/dockerfile:1.7
 
-ARG DOCKER_CLI_IMAGE=docker:cli@sha256:862099ada15c669000bef53aa4cb9d821262829f45b0dda2159ccb276443043b
-FROM ${DOCKER_CLI_IMAGE} AS docker-cli
+ARG RUST_VERSION=1.97.1
+ARG NODE_VERSION=22
+ARG PYTHON_VERSION=3.12
+ARG PLAYWRIGHT_VERSION=1.57.0
+
+FROM rust:${RUST_VERSION}-bookworm AS sky-cua-builder
+
+ARG RUST_VERSION
+ARG SKY_CUA_COMMIT=9e4d9f0baa04b001631f9c8dd73dab439988524a
+ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
+
+RUN rustc --version | grep -F "rustc ${RUST_VERSION} "
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        cmake \
+        git \
+        libegl1-mesa-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgstreamer1.0-dev \
+        libwayland-dev \
+        libxkbcommon-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build/sky-cua
+
+RUN git init \
+    && git remote add origin https://github.com/becksclair/sky-cua.git \
+    && git fetch --depth 1 origin "${SKY_CUA_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${SKY_CUA_COMMIT}"
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/build/sky-cua/target,sharing=locked \
+    cargo build --locked --release \
+        -p sky-cua-client \
+        -p sky-cua-service \
+        -p sky-cua-chrome-host \
+    && install -D -m 0755 target/release/sky-cua-client /out/bin/sky-cua-client \
+    && install -D -m 0755 target/release/sky-cua-service /out/bin/sky-cua-service \
+    && install -D -m 0755 \
+        target/release/sky-cua-chrome-host \
+        /out/browser/native-host/sky-cua-chrome-host \
+    && strip --strip-unneeded \
+        /out/bin/sky-cua-client \
+        /out/bin/sky-cua-service \
+        /out/browser/native-host/sky-cua-chrome-host \
+    && mkdir -p /out/resources /out/browser \
+    && cp -a resources/app-instructions /out/resources/app-instructions \
+    && cp -a \
+        resources/chrome-extension/codex/1.2.27221.15725_0 \
+        /out/browser/extension
+
+FROM node:${NODE_VERSION}-bookworm-slim AS node-runtime
+
+ARG PNPM_VERSION=11.15.1
+
+RUN npm install --global "pnpm@${PNPM_VERSION}" \
+    && npm cache clean --force
+
+FROM node:${NODE_VERSION}-bookworm-slim AS playwright-browser
+
+ARG PLAYWRIGHT_VERSION
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+RUN npx --yes "playwright@${PLAYWRIGHT_VERSION}" install chromium --no-shell \
+    && find "${PLAYWRIGHT_BROWSERS_PATH}" -mindepth 1 -maxdepth 1 \
+        ! -name 'chromium-*' -exec rm -rf '{}' + \
+    && rm -rf /root/.npm
+
+FROM python:${PYTHON_VERSION}-slim-bookworm AS python-wheel-builder
+
+WORKDIR /src
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN python -m pip wheel --no-cache-dir --wheel-dir /wheelhouse .
+
+FROM ubuntu:24.04 AS python-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python-wheel-builder /wheelhouse /wheelhouse
+
+RUN python3 -m venv /opt/sandbox-mcp-venv \
+    && /opt/sandbox-mcp-venv/bin/pip install \
+        --no-cache-dir \
+        --no-index \
+        --find-links=/wheelhouse \
+        sandbox-mcp-server==0.1.0 \
+    && rm -rf /wheelhouse
 
 FROM ubuntu:24.04
 
-LABEL maintainer="MemStack Team"
-LABEL description="Sandbox MCP Server with KDE Plasma, Python, Java, Node.js"
+ARG KASMVNC_VERSION=1.4.0
+ARG TTYD_VERSION=1.7.7
+ARG TARGETARCH
 
-# ====================
-# Environment Variables
-# ====================
+LABEL org.opencontainers.image.title="MemStack Sandbox MCP Server" \
+      org.opencontainers.image.description="Openbox/X11 sandbox with sky-cua and Chromium" \
+      org.opencontainers.image.vendor="MemStack" \
+      org.opencontainers.image.version="sky-cua-0.3.1"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LC_ALL=zh_CN.UTF-8 \
-    LANGUAGE=zh_CN:en
-
-# Development versions
-ENV PYTHON_VERSION=3.12 \
-    NODE_VERSION=22 \
-    JAVA_VERSION=21
-
-# MCP Server configuration
-ENV MCP_HOST=0.0.0.0 \
+    LANGUAGE=zh_CN:en \
+    MCP_HOST=0.0.0.0 \
     MCP_PORT=8765 \
-    MCP_WORKSPACE=/workspace
-
-# Desktop configuration
-ENV DESKTOP_ENABLED=true \
+    MCP_WORKSPACE=/workspace \
+    DESKTOP_ENABLED=true \
     DESKTOP_RESOLUTION=1920x1080 \
-    DESKTOP_PORT=6080
+    DESKTOP_PORT=6080 \
+    TERMINAL_ENABLED=true \
+    TERMINAL_PORT=7681 \
+    HOME=/home/sandbox \
+    USER=sandbox \
+    LOGNAME=sandbox \
+    DISPLAY=:1 \
+    XAUTHORITY=/home/sandbox/.Xauthority \
+    XDG_SESSION_TYPE=x11 \
+    XDG_CURRENT_DESKTOP=Openbox \
+    DESKTOP_SESSION=openbox \
+    XDG_RUNTIME_DIR=/run/user/10001 \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/10001/bus \
+    NO_AT_BRIDGE=0 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    CHROME_BIN=/usr/local/bin/chromium \
+    CHROME_PATH=/usr/local/bin/chromium \
+    SKY_CUA_REPO_ROOT=/opt/sky-cua \
+    SKY_CUA_SERVICE_PATH=/opt/sky-cua/bin/sky-cua-service \
+    SKY_CUA_SERVICE_SOCKET_PATH=/run/user/10001/sky-cua/service.sock \
+    SKY_CUA_CODEX_BROWSER_SOCKET_PATH=/run/user/10001/sky-cua/codex-browser.sock \
+    SKY_CUA_BROWSER_USE_SOCKET_DIR=/run/user/10001/sky-cua/browser \
+    CODEX_BROWSER_USE_SOCKET_DIR=/run/user/10001/sky-cua/browser \
+    SKY_CUA_BROWSER_USE_SESSIONS_DIR=/run/user/10001/sky-cua/sessions \
+    CODEX_BROWSER_USE_SESSIONS_DIR=/run/user/10001/sky-cua/sessions \
+    SKY_CUA_SURFACES=desktop,browser \
+    SKY_CUA_BROWSER=chromium \
+    SKY_CUA_INPUT_BACKEND=x11 \
+    SKY_CUA_ISOLATED_DESKTOP=0 \
+    SKY_CUA_PHONE=0 \
+    SKY_CUA_AGENT_CURSOR=0 \
+    SKY_CUA_SCREENSHOT_CURSOR=0 \
+    PATH=/opt/sandbox-mcp-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# ====================
-# Base System Setup
-# ====================
-# First install ca-certificates for HTTPS support, then configure mirrors
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y ca-certificates; \
-    ARCH=$(dpkg --print-architecture); \
-    if [ "$ARCH" = "amd64" ]; then MIRROR="http://archive.ubuntu.com/ubuntu"; \
-    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="http://ports.ubuntu.com/ubuntu-ports"; \
-    else MIRROR="http://ports.ubuntu.com/ubuntu-ports"; \
-    fi; \
-    echo "Using mirror: $MIRROR for $ARCH"; \
-    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \
-    apt-get update; \
-    apt-get upgrade -y
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        at-spi2-core \
+        bash \
+        ca-certificates \
+        curl \
+        dbus \
+        dbus-x11 \
+        desktop-file-utils \
+        dnsutils \
+        file \
+        fonts-dejavu-core \
+        fonts-liberation \
+        fonts-noto-cjk \
+        fonts-noto-color-emoji \
+        git \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-tools \
+        gstreamer1.0-x \
+        iputils-ping \
+        jq \
+        less \
+        libasound2t64 \
+        libatk-bridge2.0-0t64 \
+        libatk1.0-0t64 \
+        libatspi2.0-0t64 \
+        libcairo2 \
+        libcups2t64 \
+        libdbus-1-3 \
+        libdrm2 \
+        libegl1 \
+        libgbm1 \
+        libglib2.0-0t64 \
+        libglib2.0-bin \
+        libgtk-3-0t64 \
+        libnspr4 \
+        libnss3 \
+        libpango-1.0-0 \
+        libstdc++6 \
+        libvulkan1 \
+        libwayland-client0 \
+        libwayland-cursor0 \
+        libwayland-egl1 \
+        libx11-6 \
+        libx11-xcb1 \
+        libxcb1 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxext6 \
+        libxfixes3 \
+        libxkbcommon0 \
+        libxrandr2 \
+        locales \
+        mesa-vulkan-drivers \
+        nano \
+        net-tools \
+        openbox \
+        procps \
+        python3 \
+        shared-mime-info \
+        ssl-cert \
+        sudo \
+        x11-utils \
+        x11-xserver-utils \
+        xauth \
+        xclip \
+        xdg-user-dirs \
+        xdg-utils \
+        xdotool \
+        xsel \
+        xterm \
+        wmctrl \
+    && case "${TARGETARCH}" in \
+        amd64) \
+            KASM_ARCH=amd64; \
+            KASM_SHA256=12bac6014149c5fdee75f0d403785aaa3e5dd4ea222de73253a5d4181bc9567e \
+            ;; \
+        arm64) \
+            KASM_ARCH=arm64; \
+            KASM_SHA256=120d9462cb5e917cad91a23f6cb0b780c06f701def40e900b29f996979200638 \
+            ;; \
+        *) echo "unsupported KasmVNC architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL \
+        "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/kasmvncserver_noble_${KASMVNC_VERSION}_${KASM_ARCH}.deb" \
+        -o /tmp/kasmvnc.deb \
+    && echo "${KASM_SHA256}  /tmp/kasmvnc.deb" | sha256sum -c - \
+    && apt-get install -y --no-install-recommends /tmp/kasmvnc.deb \
+    && rm -f /tmp/kasmvnc.deb \
+    && rm -rf /var/lib/apt/lists/*
 
-# ====================
-# Install System Dependencies (cached layer)
-# ====================
-RUN set -eux; \
-    apt-get install -y --no-install-recommends \
-    # Basic utilities
-    curl wget ca-certificates gnupg lsb-release git vim nano unzip zip tar gzip bzip2 xz-utils \
-    # Build essentials
-    build-essential gcc g++ make cmake pkg-config \
-    # Python
-    python${PYTHON_VERSION} python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev python3-pip \
-    # Java
-    openjdk-${JAVA_VERSION}-jdk maven gradle \
-    # Network tools
-    iputils-ping net-tools dnsutils \
-    # Process management
-    procps htop \
-    # Text processing
-    jq \
-    # File management
-    tree rsync sudo \
-    # Locale support for Chinese
-    locales \
-    # Document Processing (docx, pptx, xlsx, pdf skills)
-    pandoc libreoffice-writer libreoffice-calc libreoffice-impress poppler-utils \
-    # Video/Media Processing (remotion, slack-gif-creator skills)
-    ffmpeg \
-    # Chinese fonts for document/image generation
-    fonts-noto-cjk fonts-noto-cjk-extra \
-    fonts-wqy-microhei fonts-wqy-zenhei \
-    fonts-arphic-ukai fonts-arphic-uming \
-    ; \
-    # Generate Chinese locale
-    sed -i '/zh_CN.UTF-8/s/^# //g' /etc/locale.gen && \
-    locale-gen zh_CN.UTF-8 && \
-    update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8; \
-    # Refresh font cache
-    fc-cache -fv; \
-    rm -rf /var/lib/apt/lists/*
+RUN sed -i '/zh_CN.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen zh_CN.UTF-8
 
-# Run untrusted tools and interactive services as an unprivileged user.
-RUN set -eux; \
-    groupadd --gid 10001 sandbox; \
-    useradd --uid 10001 --gid 10001 --create-home --shell /bin/bash sandbox
+RUN case "${TARGETARCH}" in \
+        amd64) \
+            TTYD_ARCH=x86_64; \
+            TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55 \
+            ;; \
+        arm64) \
+            TTYD_ARCH=aarch64; \
+            TTYD_SHA256=b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165 \
+            ;; \
+        *) echo "unsupported ttyd architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL \
+        "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
+        -o /usr/local/bin/ttyd \
+    && echo "${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/ttyd
 
-# ====================
-# Install Node.js via NodeSource (cached layer)
-# ====================
-RUN set -eux; \
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -; \
-    apt-get install -y nodejs; \
-    rm -rf /var/lib/apt/lists/*
+RUN groupadd --gid 10001 sandbox \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /bin/bash sandbox \
+    && usermod --append --groups ssl-cert sandbox \
+    && install -d -m 0755 -o sandbox -g sandbox /workspace \
+    && install -d -m 0700 -o sandbox -g sandbox \
+        /run/user/10001 \
+        /run/user/10001/sky-cua \
+        /run/user/10001/sky-cua/browser \
+        /run/user/10001/sky-cua/sessions \
+        /home/sandbox/.config \
+        /home/sandbox/.config/chromium \
+        /home/sandbox/.config/openbox \
+        /home/sandbox/.vnc \
+    && touch /home/sandbox/.vnc/.de-was-selected \
+    && chown sandbox:sandbox /home/sandbox/.vnc/.de-was-selected
 
-# ====================
-# Install Global Node Packages (with cache mount)
-# ====================
-RUN --mount=type=cache,target=/root/.npm npm install -g pnpm yarn
+COPY --from=node-runtime /usr/local/ /usr/local/
+COPY --from=python-runtime /opt/sandbox-mcp-venv /opt/sandbox-mcp-venv
+COPY --from=playwright-browser /opt/ms-playwright /opt/ms-playwright
+COPY --from=sky-cua-builder /out/ /opt/sky-cua/
 
-# ====================
-# Install Bun Runtime (varg-video-generation skill)
-# ====================
-RUN set -eux; \
-    curl -fsSL https://bun.sh/install | bash; \
-    install -m 0755 /root/.bun/bin/bun /usr/local/bin/bun; \
-    ln -sf /usr/local/bin/bun /usr/local/bin/bunx
-
-# ====================
-# Install Skills Dependencies - Global Node Packages
-# ====================
-# PPT/DOCX Processing (pptx, docx skills)
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    pptxgenjs docx
-
-# Web Development (web-artifacts-builder, frontend-design skills)
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    typescript vite parcel
-
-# Remotion Video Generation (remotion, create-remotion-geist skills)
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    remotion @remotion/cli
-
-# HTML Rendering Dependencies (pptx html2pptx workflow)
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    puppeteer sharp react react-dom react-icons
-
-# TailwindCSS for frontend development
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    tailwindcss postcss autoprefixer
-
-# MCP Development (mcp-builder skill)
-RUN --mount=type=cache,target=/root/.npm npm install -g \
-    zod @types/node
-
-# ====================
-# Configure Python Alternatives (cached layer)
-# ====================
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1
-
-# ====================
-# Setup Python Virtual Environment for MCP and Skills
-# ====================
-# Keep one Python dependency environment. Installing the same scientific and
-# browser stacks globally and in a venv nearly doubled the complete image.
-ENV SKILLS_VENV=/opt/skills-venv
-ENV PATH="${SKILLS_VENV}/bin:${PATH}"
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m venv ${SKILLS_VENV} && \
-    python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir \
-    pipx uv \
-    "aiohttp>=3.9.0" "aiofiles>=24.1.0" "pydantic>=2.5.0" "watchfiles>=0.21.0" \
-    virtualenv pipenv poetry ipython black ruff mypy pytest pytest-asyncio
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir \
-    pypdf pdfplumber reportlab pdf2image \
-    "pillow>=10.0.0" "imageio>=2.31.0" "imageio-ffmpeg>=0.4.9" "numpy>=1.24.0" \
-    openpyxl pandas xlrd xlwt \
-    python-docx defusedxml lxml \
-    playwright markitdown \
-    matplotlib seaborn scipy \
-    requests httpx \
-    typing-extensions jinja2 pyyaml toml
-
-# ====================
-# Install Playwright Browsers (webapp-testing skill)
-# ====================
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN playwright install --with-deps chromium firefox && \
-    chmod -R a+rX /opt/ms-playwright
-
-# ====================
-# Install Google Chrome / Chromium (chrome-devtools-mcp and puppeteer)
-# ====================
-RUN set -eux; \
-    ARCH=$(dpkg --print-architecture); \
-    mkdir -p /opt/google/chrome; \
-    if [ "$ARCH" = "amd64" ]; then \
-        curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-            -o /tmp/chrome.deb; \
-        apt-get update; \
-        apt-get install -y --no-install-recommends /tmp/chrome.deb; \
-        rm -f /tmp/chrome.deb; \
-        rm -rf /var/lib/apt/lists/*; \
-    else \
-        PW_CHROME=$(find /opt/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1); \
-        if [ -n "$PW_CHROME" ]; then \
-            ln -sf "$PW_CHROME" /opt/google/chrome/chrome; \
-        else \
-            echo "WARNING: No Chromium binary found for $ARCH"; \
+RUN chromium_path="$(find /opt/ms-playwright -type f -path '*/chrome-linux*/chrome' -print -quit)" \
+    && test -n "${chromium_path}" \
+    && ln -s "${chromium_path}" /usr/local/bin/chromium \
+    && sandbox_path="$(dirname "${chromium_path}")/chrome_sandbox" \
+    && test -f "${sandbox_path}" \
+    && case "${TARGETARCH}" in \
+        amd64) binary_arch='x86-64' ;; \
+        arm64) binary_arch='ARM aarch64' ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && for binary in \
+        /opt/sky-cua/bin/sky-cua-client \
+        /opt/sky-cua/bin/sky-cua-service \
+        /opt/sky-cua/browser/native-host/sky-cua-chrome-host; do \
+        file "${binary}" | grep -F "${binary_arch}"; \
+        if ldd "${binary}" | grep -q 'not found'; then \
+            ldd "${binary}"; \
+            exit 1; \
         fi; \
-    fi
-ENV CHROME_BIN=/opt/google/chrome/chrome
-ENV CHROME_PATH=/opt/google/chrome/chrome
-ENV PUPPETEER_EXECUTABLE_PATH=/opt/google/chrome/chrome
-ENV CHROME_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
-ENV PUPPETEER_ARGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
+    done \
+    && test "$(jq -r .version /opt/sky-cua/browser/extension/manifest.json)" = \
+        '1.2.27221.15725' \
+    && test -f /opt/sky-cua/resources/app-instructions/index.json \
+    && chown -R root:root /opt/sky-cua /opt/ms-playwright /opt/sandbox-mcp-venv \
+    && chmod -R a+rX /opt/sky-cua /opt/ms-playwright /opt/sandbox-mcp-venv \
+    && chown root:root "${sandbox_path}" \
+    && chmod 4755 "${sandbox_path}"
 
-# ====================
-# Install Firefox (use Playwright's Firefox — Ubuntu apt ships snap stubs)
-# ====================
-# Playwright already installed Firefox with deps; just symlink and create .desktop entry
-RUN set -eux; \
-    FF_BIN=$(find /opt/ms-playwright -path '*/firefox/firefox' -type f | head -1); \
-    FF_DIR=$(dirname "$FF_BIN"); \
-    ln -sf "$FF_BIN" /usr/local/bin/firefox; \
-    printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Firefox\nGenericName=Web Browser\nComment=Mozilla Firefox Web Browser\nExec=%s %%U\nIcon=firefox\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\nStartupNotify=true\n' \
-      "$FF_BIN" > /usr/share/applications/firefox.desktop
-
-# ====================
-# Full-profile compiled language toolchains
-# ====================
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends golang-go rustc cargo; \
-    rm -rf /var/lib/apt/lists/*
-
-# ====================
-# Install ttyd for Web Terminal
-# ====================
-ENV TTYD_VERSION=1.7.7
-RUN set -eux; \
-    ARCH=$(dpkg --print-architecture); \
-    case "$ARCH" in \
-        amd64) TTYD_ARCH=x86_64; TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55 ;; \
-        arm64) TTYD_ARCH=aarch64; TTYD_SHA256=b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165 ;; \
-        *) echo "Unsupported ttyd architecture: $ARCH"; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
-    -o /usr/local/bin/ttyd; \
-    echo "${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c -; \
-    chmod +x /usr/local/bin/ttyd
-
-# ====================
-# Install KDE Plasma Desktop Environment
-# ====================
-# Ubuntu 24.04 LTS supplies a supported KDE Plasma desktop stack.
-# KDE Plasma provides a modern, feature-rich desktop closest to
-# real desktop experience with Dolphin file manager, Konsole terminal,
-# and extensive customization options.
-# The desktop package set is intentionally split into two cached layers. A
-# transient mirror failure must not discard every already-downloaded package.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -eux; \
-    rm -f /etc/apt/apt.conf.d/docker-clean; \
-    sed -i \
-        -e 's#http://ports.ubuntu.com#https://ports.ubuntu.com#g' \
-        -e 's#http://archive.ubuntu.com#https://archive.ubuntu.com#g' \
-        -e 's#Types: deb deb-src#Types: deb#g' \
-        /etc/apt/sources.list.d/ubuntu.sources; \
-    apt-get -o Acquire::Retries=10 -o Acquire::https::Timeout=30 update; \
-    DEBIAN_FRONTEND=noninteractive apt-get \
-        -o Acquire::Retries=10 -o Acquire::https::Timeout=30 \
-        install -y --no-install-recommends \
-        xorg \
-        kde-plasma-desktop \
-        breeze breeze-icon-theme breeze-cursor-theme \
-        plasma-workspace-wallpapers \
-        pulseaudio pulseaudio-utils pavucontrol-qt \
-        openbox obconf \
-        xdg-utils xdg-user-dirs desktop-file-utils shared-mime-info \
-        dbus-x11 ssl-cert \
-        fonts-freefont-ttf fonts-noto-color-emoji fonts-liberation fonts-dejavu-core \
-        fonts-firacode \
-        ibus ibus-libpinyin \
-        htop xclip xsel
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -eux; \
-    rm -f /etc/apt/apt.conf.d/docker-clean; \
-    apt-get -o Acquire::Retries=10 -o Acquire::https::Timeout=30 update; \
-    DEBIAN_FRONTEND=noninteractive apt-get \
-        -o Acquire::Retries=10 -o Acquire::https::Timeout=30 \
-        install -y --no-install-recommends \
-        dolphin konsole \
-        kate gwenview \
-        okular okular-extra-backends \
-        ark kcalc kolourpaint filelight plasma-systemmonitor \
-        kcolorchooser kcharselect systemsettings \
-        kde-spectacle ksystemlog \
-        vlc \
-        p7zip-full unrar-free lhasa \
-        baobab gnome-disk-utility
-
-RUN set -eux; \
-    xdg-user-dirs-update --force 2>/dev/null || true; \
-    fc-cache -fv; \
-    update-mime-database /usr/share/mime 2>/dev/null || true; \
-    update-desktop-database /usr/share/applications 2>/dev/null || true; \
-    systemctl disable sddm 2>/dev/null || true
-
-# ====================
-# Install KasmVNC (replaces TigerVNC + noVNC + websockify)
-# ====================
-# KasmVNC is an all-in-one VNC server with built-in web client,
-# WebP/QOI encoding, dynamic resize, clipboard, file transfer, and audio.
-# KasmVNC v1.4.0 publishes a native Ubuntu 24.04 (noble) package.
-ENV KASMVNC_VERSION=1.4.0
-RUN set -eux; \
-    ARCH=$(dpkg --print-architecture); \
-    if [ "$ARCH" = "amd64" ]; then \
-        KASM_PKG="kasmvncserver_noble_${KASMVNC_VERSION}_amd64.deb"; \
-    elif [ "$ARCH" = "arm64" ]; then \
-        KASM_PKG="kasmvncserver_noble_${KASMVNC_VERSION}_arm64.deb"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi; \
-    curl -fsSL "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/${KASM_PKG}" \
-        -o /tmp/kasmvnc.deb; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends /tmp/kasmvnc.deb; \
-    rm -f /tmp/kasmvnc.deb; \
-    rm -rf /var/lib/apt/lists/*; \
-    # Add the runtime user to ssl-cert group (required by KasmVNC)
-    adduser sandbox ssl-cert 2>/dev/null || true; \
-    # Pre-create the KasmVNC runtime directory. The entrypoint writes a unique
-    # per-sandbox credential to $HOME/.kasmpasswd when the container starts.
-    mkdir -p /home/sandbox/.vnc; \
-    # Mark DE as already selected to skip interactive select-de.sh prompt
-    # KasmVNC's select-de.sh relies on legacy entrypoints, so bypass detection
-    # and rely on our own xstartup.
-    touch /home/sandbox/.vnc/.de-was-selected; \
-    chown -R sandbox:sandbox /home/sandbox
-
-# ====================
-# Workspace Setup (runs as root)
-# ====================
-RUN mkdir -p /workspace /run/user/10001 && \
-    chown -R sandbox:sandbox /workspace /run/user/10001 && \
-    chmod 700 /run/user/10001
-
-# ====================
-# Java Environment Setup
-# ====================
-RUN set -eux; \
-    ARCH=$(dpkg --print-architecture); \
-    JAVA_HOME_PATH="/usr/lib/jvm/java-21-openjdk-${ARCH}"; \
-    echo "export JAVA_HOME=${JAVA_HOME_PATH}" >> /etc/profile.d/java.sh; \
-    echo "export PATH=\${JAVA_HOME}/bin:\${PATH}" >> /etc/profile.d/java.sh; \
-    echo "JAVA_HOME=${JAVA_HOME_PATH}" >> /etc/environment
-
-ARG TARGETARCH
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-${TARGETARCH:-arm64}
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
-
-# ====================
-# Application Setup
-# ====================
-WORKDIR /app
-COPY . /app/
-
-# Install MCP server (with cache mount)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --no-cache-dir -e .
-
-# ====================
-# Configuration Files
-# ====================
-# KDE Plasma configs (Breeze theme defaults)
-COPY docker/kde-configs/kdeglobals /etc/xdg/kdeglobals
-COPY docker/kde-configs/kwinrc /etc/xdg/kwinrc
-COPY docker/kde-configs/katerc /etc/xdg/katerc
-COPY docker/kde-configs/dolphinrc /etc/xdg/dolphinrc
-COPY docker/kde-configs/konsolerc /etc/xdg/konsolerc
-
-# Konsole profile
-RUN mkdir -p /usr/share/konsole
-COPY docker/kde-configs/Sandbox.profile /usr/share/konsole/Sandbox.profile
-
-# Openbox window manager config (Breeze-ob theme, used as X11 WM since kwin-x11 is removed)
 COPY docker/openbox-configs/rc.xml /etc/xdg/openbox/rc.xml
 COPY docker/openbox-configs/menu.xml /etc/xdg/openbox/menu.xml
-
-# KasmVNC configs
 COPY docker/kasmvnc-configs/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
 COPY docker/kasmvnc-configs/xstartup /etc/kasmvnc/xstartup.template
-RUN chmod +x /etc/kasmvnc/xstartup.template
-
-# Entrypoint
+COPY docker/seccomp-profile.json /opt/seccomp/default.json
+COPY docker/sudoers /etc/sudoers.d/sandbox
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
-RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 
-# Docker CLI only. The daemon is supplied by an explicitly mounted Docker socket or
-# remote Docker context when a sandbox is allowed to inspect host/container state.
-COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
-
-# ====================
-# Final Setup
-# ====================
-# NOTE: Hostname is configured at runtime via --hostname and --add-host parameters
-# in mcp_sandbox_adapter.py to support proper VNC hostname resolution
+RUN chmod 0440 /etc/sudoers.d/sandbox \
+    && chmod 0755 /etc/kasmvnc/xstartup.template /usr/local/bin/sandbox-entrypoint.sh \
+    && cp /etc/xdg/openbox/rc.xml /home/sandbox/.config/openbox/rc.xml \
+    && cp /etc/xdg/openbox/menu.xml /home/sandbox/.config/openbox/menu.xml \
+    && chown -R sandbox:sandbox /home/sandbox/.config/openbox \
+    && fc-cache -f
 
 WORKDIR /workspace
-
-ENV HOME=/home/sandbox \
-    USER=sandbox \
-    XDG_RUNTIME_DIR=/run/user/10001
-
 USER sandbox
 
-HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:${MCP_PORT}/health && \
-        { [ "$DESKTOP_ENABLED" != "true" ] || timeout 2 bash -c "</dev/tcp/127.0.0.1/${DESKTOP_PORT}"; } && \
-        { [ "${TERMINAL_ENABLED:-true}" != "true" ] || timeout 2 bash -c "</dev/tcp/127.0.0.1/${TERMINAL_PORT:-7681}"; } || exit 1
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${MCP_PORT}/health" >/dev/null \
+        && { [ "${DESKTOP_ENABLED}" != true ] \
+             || { test -S /tmp/.X11-unix/X1 \
+                  && find "${SKY_CUA_BROWSER_USE_SOCKET_DIR}" -maxdepth 1 \
+                      -type s -name 'extension-*.sock' -print -quit | grep -q .; }; } \
+        && { [ "${TERMINAL_ENABLED}" != true ] \
+             || timeout 2 bash -c "</dev/tcp/127.0.0.1/${TERMINAL_PORT}"; }
 
 EXPOSE 8765 7681 6080
+
 CMD ["/usr/local/bin/sandbox-entrypoint.sh"]

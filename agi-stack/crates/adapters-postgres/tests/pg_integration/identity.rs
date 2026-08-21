@@ -387,6 +387,237 @@ async fn login_and_tenant_reads_roundtrip_against_shared_schema() {
 }
 
 #[tokio::test]
+async fn project_deletion_scope_rolls_back_then_commits() {
+    let Some(pool) = pool_or_skip("project_deletion_scope_rolls_back_then_commits").await else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+    ensure_tenant_delete_tables(&pool).await;
+
+    for cleanup in [
+        "DELETE FROM user_projects WHERE project_id = 'p_scope_project'",
+        "DELETE FROM projects WHERE id = 'p_scope_project'",
+        "DELETE FROM user_tenants WHERE tenant_id = 't_scope_project'",
+        "DELETE FROM tenants WHERE id = 't_scope_project'",
+        "DELETE FROM users WHERE id = 'u_scope_project'",
+    ] {
+        sqlx::query(cleanup).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO users (id, email, is_active, is_superuser) VALUES \
+         ('u_scope_project', 'scope-project@example.test', true, false)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_id) VALUES \
+         ('t_scope_project', 'Project Scope Tenant', 'project-scope-tenant', 'u_scope_project')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) VALUES \
+         ('ut_scope_project', 'u_scope_project', 't_scope_project', 'owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, tenant_id, name, owner_id) VALUES \
+         ('p_scope_project', 't_scope_project', 'Project Scope', 'u_scope_project')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_projects (id, user_id, project_id, role) VALUES \
+         ('up_scope_project', 'u_scope_project', 'p_scope_project', 'owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let projects = PgProjectReadRepository::new(pool.clone());
+    let deletion = match projects
+        .begin_owned_project_deletion("u_scope_project", "p_scope_project")
+        .await
+        .unwrap()
+    {
+        ProjectDeletionLookup::Ready(deletion) => deletion,
+        ProjectDeletionLookup::Forbidden => panic!("project owner should receive deletion scope"),
+    };
+    assert_eq!(deletion.tenant_id(), "t_scope_project");
+    assert_eq!(deletion.project_id(), "p_scope_project");
+    deletion.rollback().await.unwrap();
+
+    let (project_count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM projects WHERE id = 'p_scope_project'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(project_count, 1);
+
+    let deletion = match projects
+        .begin_owned_project_deletion("u_scope_project", "p_scope_project")
+        .await
+        .unwrap()
+    {
+        ProjectDeletionLookup::Ready(deletion) => deletion,
+        ProjectDeletionLookup::Forbidden => panic!("project owner should receive deletion scope"),
+    };
+    deletion.commit().await.unwrap();
+
+    let (project_count, membership_count, tenant_count): (i64, i64, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT count(*) FROM projects WHERE id = 'p_scope_project'), \
+         (SELECT count(*) FROM user_projects WHERE project_id = 'p_scope_project'), \
+         (SELECT count(*) FROM tenants WHERE id = 't_scope_project')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(project_count, 0);
+    assert_eq!(membership_count, 0);
+    assert_eq!(tenant_count, 1);
+
+    sqlx::query("DELETE FROM user_tenants WHERE tenant_id = 't_scope_project'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tenants WHERE id = 't_scope_project'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = 'u_scope_project'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn tenant_deletion_scope_covers_all_projects_and_is_transactional() {
+    let Some(pool) =
+        pool_or_skip("tenant_deletion_scope_covers_all_projects_and_is_transactional").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+    ensure_tenant_delete_tables(&pool).await;
+
+    for cleanup in [
+        "DELETE FROM user_projects WHERE project_id IN ('p_scope_visible', 'p_scope_hidden')",
+        "DELETE FROM projects WHERE tenant_id = 't_scope_tenant'",
+        "DELETE FROM user_tenants WHERE tenant_id = 't_scope_tenant'",
+        "DELETE FROM tenants WHERE id = 't_scope_tenant'",
+        "DELETE FROM users WHERE id IN ('u_scope_owner', 'u_scope_other')",
+    ] {
+        sqlx::query(cleanup).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO users (id, email, is_active, is_superuser) VALUES \
+         ('u_scope_owner', 'scope-owner@example.test', true, false), \
+         ('u_scope_other', 'scope-other@example.test', true, false)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_id) VALUES \
+         ('t_scope_tenant', 'Tenant Scope', 'tenant-scope', 'u_scope_owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) VALUES \
+         ('ut_scope_owner', 'u_scope_owner', 't_scope_tenant', 'owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, tenant_id, name, owner_id) VALUES \
+         ('p_scope_visible', 't_scope_tenant', 'Visible Project', 'u_scope_owner'), \
+         ('p_scope_hidden', 't_scope_tenant', 'Hidden Project', 'u_scope_other')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_projects (id, user_id, project_id, role) VALUES \
+         ('up_scope_visible', 'u_scope_owner', 'p_scope_visible', 'owner'), \
+         ('up_scope_hidden', 'u_scope_other', 'p_scope_hidden', 'owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let tenants = PgTenantRepository::new(pool.clone());
+    let deletion = match tenants
+        .begin_owned_tenant_deletion("u_scope_owner", "tenant-scope")
+        .await
+        .unwrap()
+    {
+        TenantDeletionLookup::Ready(deletion) => deletion,
+        TenantDeletionLookup::NotFound => panic!("tenant should exist"),
+        TenantDeletionLookup::Forbidden => panic!("tenant owner should receive deletion scope"),
+    };
+    assert_eq!(deletion.tenant_id(), "t_scope_tenant");
+    assert_eq!(
+        deletion.project_ids(),
+        &["p_scope_hidden".to_string(), "p_scope_visible".to_string()]
+    );
+    deletion.rollback().await.unwrap();
+
+    let (tenant_count, project_count): (i64, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT count(*) FROM tenants WHERE id = 't_scope_tenant'), \
+         (SELECT count(*) FROM projects WHERE tenant_id = 't_scope_tenant')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tenant_count, 1);
+    assert_eq!(project_count, 2);
+
+    let deletion = match tenants
+        .begin_owned_tenant_deletion("u_scope_owner", "t_scope_tenant")
+        .await
+        .unwrap()
+    {
+        TenantDeletionLookup::Ready(deletion) => deletion,
+        TenantDeletionLookup::NotFound => panic!("tenant should exist"),
+        TenantDeletionLookup::Forbidden => panic!("tenant owner should receive deletion scope"),
+    };
+    deletion.commit().await.unwrap();
+
+    let (tenant_count, project_count, membership_count): (i64, i64, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT count(*) FROM tenants WHERE id = 't_scope_tenant'), \
+         (SELECT count(*) FROM projects WHERE tenant_id = 't_scope_tenant'), \
+         (SELECT count(*) FROM user_projects \
+          WHERE project_id IN ('p_scope_visible', 'p_scope_hidden'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tenant_count, 0);
+    assert_eq!(project_count, 0);
+    assert_eq!(membership_count, 0);
+
+    sqlx::query("DELETE FROM users WHERE id IN ('u_scope_owner', 'u_scope_other')")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn device_grant_transition_rolls_back_and_revokes_only_the_grant_key() {
     let Some(pool) =
         pool_or_skip("device_grant_transition_rolls_back_and_revokes_only_the_grant_key").await

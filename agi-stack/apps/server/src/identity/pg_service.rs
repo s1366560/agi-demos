@@ -301,8 +301,27 @@ impl IdentityService for PgIdentityService {
         self.pg_update_tenant(user_id, tenant_id, patch).await
     }
 
-    async fn delete_tenant(&self, user_id: &str, tenant_id: &str) -> Result<(), IdentityError> {
-        self.pg_delete_tenant(user_id, tenant_id).await
+    async fn prepare_tenant_deletion(
+        &self,
+        user_id: &str,
+        tenant_id_or_slug: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError> {
+        match self
+            .tenants
+            .begin_owned_tenant_deletion(user_id, tenant_id_or_slug)
+            .await
+            .map_err(IdentityError::internal)?
+        {
+            TenantDeletionLookup::Ready(deletion) => Ok(IdentityDeletionScope::new(
+                deletion.tenant_id().to_string(),
+                deletion.project_ids().to_vec(),
+                Box::new(deletion),
+            )),
+            TenantDeletionLookup::NotFound => Err(IdentityError::not_found("Tenant not found")),
+            TenantDeletionLookup::Forbidden => Err(IdentityError::forbidden(
+                "Only tenant owner can delete tenant",
+            )),
+        }
     }
 
     async fn add_tenant_member(
@@ -371,8 +390,26 @@ impl IdentityService for PgIdentityService {
         self.pg_update_project(user_id, project_id, patch).await
     }
 
-    async fn delete_project(&self, user_id: &str, project_id: &str) -> Result<(), IdentityError> {
-        self.pg_delete_project(user_id, project_id).await
+    async fn prepare_project_deletion(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> Result<IdentityDeletionScope, IdentityError> {
+        match self
+            .projects
+            .begin_owned_project_deletion(user_id, project_id)
+            .await
+            .map_err(IdentityError::internal)?
+        {
+            ProjectDeletionLookup::Ready(deletion) => Ok(IdentityDeletionScope::new(
+                deletion.tenant_id().to_string(),
+                vec![deletion.project_id().to_string()],
+                Box::new(deletion),
+            )),
+            ProjectDeletionLookup::Forbidden => Err(IdentityError::forbidden(
+                "Only project owner can delete project",
+            )),
+        }
     }
 
     async fn get_project_stats(

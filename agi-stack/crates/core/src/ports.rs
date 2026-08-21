@@ -343,6 +343,24 @@ pub struct ContainerSpec {
     pub env: Vec<(String, String)>,
     pub labels: Vec<(String, String)>,
     pub ports: Vec<PortBinding>,
+    /// Size of the container's `/dev/shm` tmpfs in bytes.
+    pub shm_size_bytes: Option<i64>,
+    /// Inline OCI seccomp profile JSON. Docker applies it before the entrypoint
+    /// starts; non-Linux test runtimes may retain it as inert configuration.
+    pub seccomp_profile: Option<String>,
+    /// Persistent named volumes whose ownership labels are runtime-validated.
+    pub named_volumes: Vec<NamedVolumeMount>,
+}
+
+/// Runtime-neutral persistent Docker-style named volume mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedVolumeMount {
+    pub name: String,
+    pub container_path: String,
+    pub read_only: bool,
+    /// Required ownership labels. Existing resources with a different label
+    /// set must be rejected rather than mounted or removed.
+    pub labels: Vec<(String, String)>,
 }
 
 /// Runtime-neutral TCP port binding for a sandbox container. `container_port` is
@@ -416,6 +434,14 @@ pub trait ContainerRuntime: Send + Sync {
     /// List ids of containers matching an optional `(label_key, label_value)`
     /// selector (`None` = all managed containers), sorted ascending.
     async fn list(&self, label: Option<(&str, &str)>) -> CoreResult<Vec<String>>;
+
+    /// Remove a persistent named volume only when all `required_labels` match.
+    /// A missing volume is an idempotent success.
+    async fn remove_volume(
+        &self,
+        name: &str,
+        required_labels: &[(String, String)],
+    ) -> CoreResult<()>;
 }
 
 /// A transactional email to send, mirroring the fields the Python invitation /

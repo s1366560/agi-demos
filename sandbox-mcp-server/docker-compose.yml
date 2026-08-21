@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8765:8765"
+    shm_size: ${SANDBOX_SHM_SIZE:-1g}
     volumes:
       - sandbox-workspace:/workspace
     environment:
@@ -23,6 +24,7 @@ services:
     # Security options
     security_opt:
       - no-new-privileges:true
+      - seccomp=./docker/seccomp-profile.json
     # Resource limits
     deploy:
       resources:

@@ -115,19 +115,6 @@ impl DevIdentityService {
         Ok(tenant)
     }
 
-    pub(super) fn dev_delete_tenant(
-        &self,
-        user_id: &str,
-        tenant_id: &str,
-    ) -> Result<(), IdentityError> {
-        if tenant_id != "dev-tenant" || user_id != self.dev_user_id {
-            return Err(IdentityError::forbidden(
-                "Only tenant owner can delete tenant",
-            ));
-        }
-        Ok(())
-    }
-
     pub(super) fn dev_add_tenant_member(
         &self,
         user_id: &str,

@@ -23,10 +23,10 @@ use agistack_adapters_postgres::{ProjectUpdatePatch, TenantUpdatePatch};
 use crate::auth::{extract_raw_key, AuthRejection, Authenticator, Identity};
 use crate::identity::{
     CurrentUserView, DeviceApproveView, DeviceCancelView, DeviceCodeView, DeviceTokenView,
-    IdentityError, InvitationListView, InvitationVerifyView, InvitationView, ProjectCreateInput,
-    ProjectListInput, ProjectMemberMutationView, ProjectMembersView, ProjectPage, ProjectStatsView,
-    ProjectView, TenantMemberMutationView, TenantPage, TenantView, WorkspaceContextResponseView,
-    WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
+    IdentityDeletionScope, IdentityError, InvitationListView, InvitationVerifyView, InvitationView,
+    ProjectCreateInput, ProjectListInput, ProjectMemberMutationView, ProjectMembersView,
+    ProjectPage, ProjectStatsView, ProjectView, TenantMemberMutationView, TenantPage, TenantView,
+    WorkspaceContextResponseView, WorkspaceContextSwitchInput, WorkspaceContextSwitchOutcomeView,
 };
 use crate::AppState;
 
@@ -289,9 +289,11 @@ async fn delete_tenant(
     Extension(identity): Extension<Identity>,
     Path(tenant_id): Path<String>,
 ) -> Result<impl IntoResponse, IdentityError> {
-    app.identity
-        .delete_tenant(&identity.user_id, &tenant_id)
+    let scope = app
+        .identity
+        .prepare_tenant_deletion(&identity.user_id, &tenant_id)
         .await?;
+    purge_and_commit_deletion(&app.sandboxes, scope).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -496,10 +498,35 @@ async fn delete_project(
     Extension(identity): Extension<Identity>,
     Path(project_id): Path<String>,
 ) -> Result<StatusCode, IdentityError> {
-    app.identity
-        .delete_project(&identity.user_id, &project_id)
+    let scope = app
+        .identity
+        .prepare_project_deletion(&identity.user_id, &project_id)
         .await?;
+    purge_and_commit_deletion(&app.sandboxes, scope).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn purge_and_commit_deletion(
+    sandboxes: &crate::sandbox_api::ProjectSandboxService,
+    scope: IdentityDeletionScope,
+) -> Result<(), IdentityError> {
+    let tenant_id = scope.tenant_id().to_string();
+    let project_ids = scope.project_ids().to_vec();
+    for project_id in project_ids {
+        if sandboxes
+            .purge_project_resources(&tenant_id, &project_id)
+            .await
+            .is_err()
+        {
+            let rollback = scope.rollback().await;
+            return Err(IdentityError::service_unavailable(if rollback.is_ok() {
+                "Sandbox resources could not be removed; deletion was not committed"
+            } else {
+                "Sandbox resources could not be removed and deletion rollback failed"
+            }));
+        }
+    }
+    scope.commit().await
 }
 
 async fn get_project_stats(

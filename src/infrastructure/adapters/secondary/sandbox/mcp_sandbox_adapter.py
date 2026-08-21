@@ -46,6 +46,9 @@ from src.domain.ports.services.sandbox_port import (
     SandboxResourceError,
     SandboxStatus,
 )
+from src.infrastructure.adapters.secondary.sandbox.chromium_seccomp import (
+    chromium_seccomp_security_opt,
+)
 from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
@@ -121,6 +124,9 @@ _COMMAND_PATH_SUFFIXES = (
     ".yaml",
     ".yml",
 )
+_CHROMIUM_PROFILE_TARGET = "/home/sandbox/.config/chromium"
+_CHROMIUM_VOLUME_PREFIX = "memstack-sky-cua-chromium-"
+_CHROMIUM_RESOURCE_TYPE = "sky-cua-chromium-profile"
 
 
 @dataclass
@@ -590,6 +596,62 @@ class MCPSandboxAdapter(SandboxPort):
             }
         )
 
+    @staticmethod
+    def _chromium_volume_name(tenant_id: str, project_id: str) -> str:
+        """Return the deterministic project-scoped Chromium volume name."""
+        identity = f"{tenant_id}\0{project_id}".encode()
+        digest = hashlib.sha256(identity).hexdigest()[:32]
+        return f"{_CHROMIUM_VOLUME_PREFIX}{digest}"
+
+    @staticmethod
+    def _chromium_volume_labels(tenant_id: str, project_id: str) -> dict[str, str]:
+        """Return ownership labels required on a managed Chromium volume."""
+        return {
+            "memstack.managed": "true",
+            "memstack.resource.type": _CHROMIUM_RESOURCE_TYPE,
+            "memstack.tenant_id": tenant_id,
+            "memstack.project_id": project_id,
+        }
+
+    @classmethod
+    def _validate_chromium_volume_labels(
+        cls,
+        volume: Any,
+        tenant_id: str,
+        project_id: str,
+    ) -> None:
+        """Reject a deterministic volume name whose ownership labels do not match."""
+        expected = cls._chromium_volume_labels(tenant_id, project_id)
+        actual = volume.attrs.get("Labels") or {}
+        if any(actual.get(key) != value for key, value in expected.items()):
+            raise SandboxResourceError(
+                "Refusing to use Chromium profile volume with mismatched ownership labels",
+                project_id=project_id,
+                operation="validate_volume",
+            )
+
+    async def _ensure_chromium_volume(self, tenant_id: str, project_id: str) -> str:
+        """Create or validate the project-owned Chromium profile volume."""
+        name = self._chromium_volume_name(tenant_id, project_id)
+        labels = self._chromium_volume_labels(tenant_id, project_id)
+        loop = asyncio.get_event_loop()
+
+        try:
+            volume = await loop.run_in_executor(None, lambda: self._docker.volumes.get(name))
+        except NotFound:
+            try:
+                volume = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.volumes.create(name=name, labels=labels),
+                )
+            except Exception:
+                # A concurrent creator may have won the name race. Re-read and
+                # validate the resource rather than trusting the conflict.
+                volume = await loop.run_in_executor(None, lambda: self._docker.volumes.get(name))
+
+        self._validate_chromium_volume_labels(volume, tenant_id, project_id)
+        return name
+
     def _extract_config_from_mounts(self, container: Any) -> SandboxConfig:
         """Reconstruct sandbox mount metadata from a Docker container."""
         container_config = container.attrs.get("Config", {})
@@ -613,7 +675,11 @@ class MCPSandboxAdapter(SandboxPort):
         for mount in container.attrs.get("Mounts", []):
             source = mount.get("Source", "")
             destination = mount.get("Destination", "")
-            if not source or not destination or destination == "/workspace":
+            if (
+                not source
+                or not destination
+                or destination in {"/workspace", _CHROMIUM_PROFILE_TARGET}
+            ):
                 continue
 
             if mount.get("RW", False):
@@ -1073,7 +1139,8 @@ class MCPSandboxAdapter(SandboxPort):
                     logger.warning(f"Stop timed out for container {container_name}, forcing kill")
                     await loop.run_in_executor(None, container.kill)
             await loop.run_in_executor(
-                None, cast(Callable[[], None], lambda c=container: c.remove(force=True))
+                None,
+                cast(Callable[[], None], lambda c=container: c.remove(force=True, v=False)),
             )
             return await self._remove_isolated_network(container_name)
         except Exception as e:
@@ -1270,6 +1337,10 @@ class MCPSandboxAdapter(SandboxPort):
                 **({"memstack.tenant_id": tenant_id} if tenant_id else {}),
             }
 
+            chromium_volume_name = None
+            if tenant_id and project_id:
+                chromium_volume_name = await self._ensure_chromium_volume(tenant_id, project_id)
+
             # Container configuration with enabled service ports
             container_config = {
                 "image": config.image,
@@ -1285,6 +1356,8 @@ class MCPSandboxAdapter(SandboxPort):
                 "environment": sandbox_env,
                 "mem_limit": config.memory_limit or self._default_memory_limit,
                 "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
+                "shm_size": settings.sandbox_shm_size,
+                "security_opt": chromium_seccomp_security_opt(),
                 # Labels for identification
                 "labels": container_labels,
             }
@@ -1301,8 +1374,12 @@ class MCPSandboxAdapter(SandboxPort):
             for host_path, container_path in config.rw_volumes.items():
                 if host_path and container_path:
                     volumes[host_path] = {"bind": container_path, "mode": "rw"}
+            if chromium_volume_name:
+                volumes[chromium_volume_name] = {
+                    "bind": _CHROMIUM_PROFILE_TARGET,
+                    "mode": "rw",
+                }
             # Pip cache volume (shared across containers)
-            settings = get_settings()
             if settings.sandbox_pip_cache_enabled:
                 os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
                 volumes[settings.sandbox_pip_cache_path] = {
@@ -2177,6 +2254,84 @@ class MCPSandboxAdapter(SandboxPort):
         except Exception as e:
             logger.error(f"Error cleaning up project containers for {project_id}: {e}")
             return terminated_count
+
+    async def purge_project_resources(self, tenant_id: str, project_id: str) -> None:
+        """Permanently remove project containers and its verified Chromium profile.
+
+        Ordinary sandbox lifecycle operations intentionally leave the named
+        profile volume untouched. This method is reserved for an authorized
+        project or tenant deletion path.
+        """
+        if not tenant_id or not project_id:
+            raise SandboxResourceError(
+                "Tenant and project identity are required to purge sandbox resources",
+                project_id=project_id or None,
+                operation="purge_project_resources",
+            )
+
+        filters = {
+            "label": [
+                "memstack.sandbox=true",
+                f"memstack.project_id={project_id}",
+                f"memstack.tenant_id={tenant_id}",
+            ]
+        }
+        loop = asyncio.get_event_loop()
+
+        try:
+            containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(all=True, filters=filters),
+            )
+            for container in containers:
+                container_id = container.id
+                if not container_id:
+                    raise SandboxConnectionError(
+                        "Project sandbox is missing a verifiable container identifier",
+                        project_id=project_id,
+                        operation="purge_project_resources",
+                    )
+                if not await self._terminate_and_cleanup_container(container_id, loop, project_id):
+                    raise SandboxConnectionError(
+                        "Failed to stop a project sandbox before resource purge",
+                        sandbox_id=container_id,
+                        project_id=project_id,
+                        operation="purge_project_resources",
+                    )
+
+            remaining = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(all=True, filters=filters),
+            )
+            if remaining:
+                raise SandboxConnectionError(
+                    "Project sandboxes remain after resource purge",
+                    project_id=project_id,
+                    operation="purge_project_resources",
+                )
+
+            volume_name = self._chromium_volume_name(tenant_id, project_id)
+            try:
+                volume = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.volumes.get(volume_name),
+                )
+            except NotFound:
+                return
+
+            self._validate_chromium_volume_labels(volume, tenant_id, project_id)
+            try:
+                await loop.run_in_executor(None, volume.remove)
+            except NotFound:
+                return
+        except (SandboxConnectionError, SandboxResourceError):
+            raise
+        except Exception as exc:
+            raise SandboxConnectionError(
+                "Failed to purge project sandbox resources",
+                project_id=project_id,
+                operation="purge_project_resources",
+            ) from exc
 
     @override
     async def execute_code(
@@ -3128,6 +3283,37 @@ class MCPSandboxAdapter(SandboxPort):
                 return cast(str, sandbox_id)
         return None
 
+    def _build_volume_bindings(
+        self,
+        project_path: str,
+        config: SandboxConfig,
+        labels: dict[str, str],
+    ) -> dict[str, dict[str, str]]:
+        """Build caller-owned mounts plus the adapter-owned Chromium mount."""
+        volumes: dict[str, dict[str, str]] = {}
+        if project_path:
+            volumes[project_path] = {"bind": "/workspace", "mode": "rw"}
+        volumes.update(
+            {
+                host_path: {"bind": container_path, "mode": "ro"}
+                for host_path, container_path in config.volumes.items()
+                if host_path and container_path
+            }
+        )
+        volumes.update(
+            {
+                host_path: {"bind": container_path, "mode": "rw"}
+                for host_path, container_path in config.rw_volumes.items()
+                if host_path and container_path
+            }
+        )
+        tenant_id = labels.get("memstack.tenant_id")
+        project_id = labels.get("memstack.project_id")
+        if tenant_id and project_id:
+            volume_name = self._chromium_volume_name(tenant_id, project_id)
+            volumes[volume_name] = {"bind": _CHROMIUM_PROFILE_TARGET, "mode": "rw"}
+        return volumes
+
     def _build_rebuild_container_config(
         self,
         sandbox_id: str,
@@ -3172,6 +3358,7 @@ class MCPSandboxAdapter(SandboxPort):
             },
             "mem_limit": config.memory_limit or self._default_memory_limit,
             "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
+            "security_opt": chromium_seccomp_security_opt(),
             "labels": labels,
         }
         self._enforce_mcp_auth_environment(
@@ -3188,19 +3375,16 @@ class MCPSandboxAdapter(SandboxPort):
             environment.setdefault(
                 "MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token
             )
-        if project_path:
-            container_config["volumes"] = {project_path: {"bind": "/workspace", "mode": "rw"}}
+        container_config["shm_size"] = settings.sandbox_shm_size
+        volumes = self._build_volume_bindings(project_path, config, labels)
         # Pip cache volume (shared across containers)
         if settings.sandbox_pip_cache_enabled:
             os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
-            volumes = cast(
-                "dict[str, dict[str, str]]",
-                container_config.get("volumes", {}),
-            )
             volumes[settings.sandbox_pip_cache_path] = {
                 "bind": "/home/sandbox/.cache/pip",
                 "mode": "rw",
             }
+        if volumes:
             container_config["volumes"] = cast("dict[str, Any]", volumes)
         if config.network_isolated:
             container_config["network"] = self._isolated_network_name(sandbox_id)
@@ -3316,6 +3500,18 @@ class MCPSandboxAdapter(SandboxPort):
                 self._release_ports_unsafe([port for port in old_ports if port is not None])
             await self._last_healthy_at.delete(original_sandbox_id)
             return None
+
+        original_tenant_id = original_labels.get("memstack.tenant_id")
+        if original_tenant_id and original_project_id:
+            try:
+                await self._ensure_chromium_volume(original_tenant_id, original_project_id)
+            except Exception as exc:
+                logger.error(
+                    "Refusing to rebuild sandbox %s without a validated Chromium volume: %s",
+                    original_sandbox_id,
+                    exc,
+                )
+                return None
 
         # Release old ports before rebuild
         async with self._port_allocation_lock:

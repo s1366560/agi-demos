@@ -101,8 +101,9 @@ async def execute_bash(
         # Start from os.environ but override path-related variables to prevent host path leakage
         sanitized_env = {
             **os.environ,
-            # Override path-related variables to sandbox workspace
-            "HOME": _workspace_dir,
+            # Keep HOME tied to the shared graphical session while commands
+            # continue to execute from the project workspace.
+            "HOME": os.environ.get("HOME", "/home/sandbox"),
             "PWD": cwd,
             "OLDPWD": cwd,
             "TERM": "xterm-256color",

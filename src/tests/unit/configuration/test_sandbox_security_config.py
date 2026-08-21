@@ -23,3 +23,21 @@ def test_shared_pip_cache_can_be_enabled_explicitly() -> None:
     )
 
     assert settings.sandbox_pip_cache_enabled is True
+
+
+@pytest.mark.unit
+def test_sandbox_shm_size_defaults_to_one_gibibyte() -> None:
+    settings = Settings(_env_file=None, DATABASE_URL=_TEST_DATABASE_URL)
+
+    assert settings.sandbox_shm_size == "1g"
+
+
+@pytest.mark.unit
+def test_sandbox_shm_size_can_be_overridden() -> None:
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL=_TEST_DATABASE_URL,
+        SANDBOX_SHM_SIZE="1536m",
+    )
+
+    assert settings.sandbox_shm_size == "1536m"

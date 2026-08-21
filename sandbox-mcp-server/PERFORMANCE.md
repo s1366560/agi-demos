@@ -1,10 +1,10 @@
 # Performance Tuning Guide
 
 **Version**: 3.0
-**Last Updated**: 2026-06-22
-**Last checked against code**: 2026-06-22
+**Last Updated**: 2026-08-21
+**Last checked against code**: 2026-08-21
 
-Optimization guide for Sandbox MCP Server with KDE Plasma desktop served over KasmVNC.
+Optimization guide for the Openbox/X11 sky-cua sandbox served over KasmVNC.
 
 ---
 
@@ -192,8 +192,8 @@ docker exec <container> ps aux --sort=-%mem | head -10
 ```
 
 **Reduce memory usage**:
-- The desktop ships KDE Plasma 5.27 from Ubuntu 24.04 LTS; prefer the minimal package set
-- Disable KDE Plasma effects or widgets you do not need
+- Keep the default Openbox session and avoid adding a compositor or full desktop suite
+- Keep Chromium tabs and extensions to the minimum needed by the task
 - Lower resolution (1280x720 via `change_resolution`)
 - Limit concurrent sessions:
   ```bash
@@ -284,25 +284,18 @@ websockify to tune.
 
 ## Desktop Optimization
 
-### KDE Plasma Configuration
+### Openbox and Chromium Configuration
 
-The desktop environment is KDE Plasma 5.27 from Ubuntu 24.04 LTS (the image no longer ships XFCE).
-Plasma configs are baked into the image under `/etc/xdg/` (`kdeglobals`,
-`kwinrc`, `katerc`, `dolphinrc`, `konsolerc`) and per-user under `~/.config/`.
+The image runs Openbox without a compositor. The canonical menu and keyboard configuration is
+baked into `/etc/xdg/openbox/` and copied into `~/.config/openbox/` when the container starts.
+Chromium is launched once per sandbox against the project-scoped profile mounted at
+`/home/sandbox/.config/chromium`.
 
-**Disable startup applications**: remove or override the corresponding
-`.desktop` autostart entries under `/etc/xdg/autostart/` or
-`~/.config/autostart/`.
+Do not add desktop autostart entries that race the entrypoint. The required order is session D-Bus,
+AT-SPI, KasmVNC/Openbox, X11 readiness, native-host manifest, Chromium bridge, then MCP and ttyd.
 
-**Reduce desktop effects** (compositor):
-```ini
-# ~/.config/kwinrc
-[Compositing]
-CompositingEnabled=false
-```
-
-**Optimize panel / widgets**: trim widgets and effects you don't need through
-*System Settings* (or by editing `~/.config/plasma-org.kde.plasma.desktop-appletsrc`).
+Keep `/dev/shm` at 1 GiB (the `SANDBOX_SHM_SIZE` default). Chromium deliberately does not use
+`--disable-dev-shm-usage`; reducing shared memory can cause renderer or capture instability.
 
 ### Session Management
 
@@ -466,10 +459,10 @@ tcpdump -i any -n 'tcp port 6080' -w kasmvnc.pcap
 # Analyze with Wireshark
 ```
 
-**Profile KDE Plasma performance**:
+**Profile Openbox and Chromium performance**:
 ```bash
-# Check Plasma processes
-docker exec <container> ps aux | grep -E "startplasma|plasmashell|kwin"
+# Check desktop and browser processes
+docker exec <container> ps aux | grep -E "openbox|chromium"
 
 # Monitor X11 traffic
 docker exec <container> xrestop -display :1
@@ -505,7 +498,7 @@ docker exec <container> xrestop -display :1
 
 - [ ] Reduce resolution to 1280x720 (`change_resolution` tool)
 - [ ] Lower `encoding.video_encoding_mode.{jpeg,webp}_quality` to 5 in `kasmvnc.yaml`
-- [ ] Disable KDE Plasma compositing (`~/.config/kwinrc`)
+- [ ] Close Chromium tabs that are not needed
 - [ ] Clean workspace cache
 
 ### Medium Optimization (15 minutes)
@@ -552,7 +545,7 @@ docker exec <container> xrestop -display :1
 
 **Solutions**:
 1. Increase memory limit
-2. Trim KDE Plasma widgets/effects
+2. Close unnecessary Chromium tabs or helper processes
 3. Limit concurrent sessions
 4. Restart container regularly
 

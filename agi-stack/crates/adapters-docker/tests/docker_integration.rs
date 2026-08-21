@@ -15,7 +15,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
 use agistack_adapters_mem::InMemoryContainerRuntime;
-use agistack_core::ports::{ContainerRuntime, ContainerSpec, ContainerState, PortBinding};
+use agistack_core::ports::{
+    ContainerRuntime, ContainerSpec, ContainerState, NamedVolumeMount, PortBinding,
+};
+use bollard::container::InspectContainerOptions;
+use bollard::Docker;
 
 const TEST_IMAGE: &str = "redis:7-alpine";
 static LABEL_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -42,6 +46,9 @@ async fn walk_lifecycle(
         env: vec![],
         labels: vec![("agistack.test".to_string(), label_val.to_string())],
         ports: vec![],
+        shm_size_bytes: None,
+        seccomp_profile: None,
+        named_volumes: vec![],
     };
 
     let id = rt.create(&spec).await.expect("create");
@@ -207,6 +214,9 @@ async fn docker_can_pull_configured_image_when_enabled() {
         env: vec![],
         labels: vec![("agistack.test".to_string(), unique_label())],
         ports: vec![],
+        shm_size_bytes: None,
+        seccomp_profile: None,
+        named_volumes: vec![],
     };
     let id = docker.create(&spec).await.expect("create after image pull");
     docker.remove(&id).await.expect("cleanup");
@@ -242,6 +252,9 @@ async fn docker_accepts_runtime_neutral_port_bindings() {
             host_port: 0,
             host_ip: Some("127.0.0.1".to_string()),
         }],
+        shm_size_bytes: None,
+        seccomp_profile: None,
+        named_volumes: vec![],
     };
 
     let id = docker
@@ -255,4 +268,102 @@ async fn docker_accepts_runtime_neutral_port_bindings() {
     docker.remove(&id).await.expect("cleanup");
 
     assert_eq!(listed.len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn docker_applies_shm_and_preserves_labeled_named_volume() {
+    let runtime = match DockerContainerRuntime::connect_with_image_pull_policy(
+        ImagePullPolicy::Never,
+    )
+    .await
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            println!("[skip] Docker daemon unreachable ({error}); skipping mount/shm test");
+            return;
+        }
+    };
+
+    if !runtime.has_image(TEST_IMAGE).await.unwrap_or(false) {
+        println!("[skip] {TEST_IMAGE} is not present; skipping live mount/shm test");
+        return;
+    }
+
+    let docker = Docker::connect_with_local_defaults().expect("connect inspect client");
+    let label = unique_label();
+    let volume_name = format!("agistack-sky-cua-{label}");
+    let volume_labels = vec![
+        ("memstack.managed".to_string(), "true".to_string()),
+        (
+            "memstack.resource.type".to_string(),
+            "sky-cua-chromium-profile".to_string(),
+        ),
+        ("agistack.test".to_string(), label.clone()),
+    ];
+    let spec = ContainerSpec {
+        image: TEST_IMAGE.to_string(),
+        cmd: None,
+        env: vec![],
+        labels: vec![("agistack.test".to_string(), label)],
+        ports: vec![],
+        shm_size_bytes: Some(1_073_741_824),
+        seccomp_profile: Some(r#"{"defaultAction":"SCMP_ACT_ALLOW"}"#.to_string()),
+        named_volumes: vec![NamedVolumeMount {
+            name: volume_name.clone(),
+            container_path: "/tmp/chromium-profile".to_string(),
+            read_only: false,
+            labels: volume_labels.clone(),
+        }],
+    };
+
+    let id = runtime
+        .create(&spec)
+        .await
+        .expect("create with mount and shm");
+    let inspected = docker
+        .inspect_container(&id, None::<InspectContainerOptions>)
+        .await
+        .expect("inspect created container");
+    let host_config = inspected.host_config.expect("host config");
+    assert_eq!(host_config.shm_size, Some(1_073_741_824));
+    assert_eq!(
+        host_config.security_opt,
+        Some(vec![
+            "seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\"}".to_string()
+        ])
+    );
+    assert!(inspected.mounts.unwrap_or_default().iter().any(|mount| {
+        mount.name.as_deref() == Some(volume_name.as_str())
+            && mount.destination.as_deref() == Some("/tmp/chromium-profile")
+    }));
+
+    let volume = docker
+        .inspect_volume(&volume_name)
+        .await
+        .expect("inspect managed volume");
+    assert!(volume_labels
+        .iter()
+        .all(|(key, value)| volume.labels.get(key) == Some(value)));
+
+    runtime.remove(&id).await.expect("remove container only");
+    docker
+        .inspect_volume(&volume_name)
+        .await
+        .expect("volume must survive container removal");
+
+    let wrong_labels = vec![("agistack.test".to_string(), "forged".to_string())];
+    assert!(runtime
+        .remove_volume(&volume_name, &wrong_labels)
+        .await
+        .is_err());
+    docker
+        .inspect_volume(&volume_name)
+        .await
+        .expect("mismatched labels must not delete volume");
+
+    runtime
+        .remove_volume(&volume_name, &volume_labels)
+        .await
+        .expect("remove volume with matching labels");
+    assert!(docker.inspect_volume(&volume_name).await.is_err());
 }

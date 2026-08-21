@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_config xmlns="http://openbox.org/3.4/rc">
   <theme>
-    <name>Breeze-ob</name>
+    <name>Clearlooks</name>
     <titleLayout>NLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
     <animateIconify>no</animateIconify>
@@ -168,22 +168,16 @@
 
     <!-- Application Launchers -->
     <keybind key="C-A-t">
-      <action name="Execute"><command>konsole</command></action>
+      <action name="Execute"><command>xterm -title Sandbox -e bash -lc 'cd /workspace &amp;&amp; exec bash'</command></action>
     </keybind>
     <keybind key="W-e">
-      <action name="Execute"><command>dolphin</command></action>
+      <action name="Execute"><command>xterm -title Workspace -e bash -lc 'cd /workspace &amp;&amp; exec bash'</command></action>
     </keybind>
     <keybind key="W-t">
-      <action name="Execute"><command>kate</command></action>
+      <action name="Execute"><command>xterm -title Nano -e nano</command></action>
     </keybind>
     <keybind key="W-b">
-      <action name="Execute"><command>firefox</command></action>
-    </keybind>
-    <keybind key="Print">
-      <action name="Execute"><command>spectacle</command></action>
-    </keybind>
-    <keybind key="W-l">
-      <action name="Execute"><command>plasma-systemmonitor</command></action>
+      <action name="Execute"><command>chromium</command></action>
     </keybind>
 
     <!-- Move/Resize with keyboard -->
@@ -340,48 +334,8 @@
     <application class="*">
       <decor>yes</decor>
     </application>
-    <!-- Maximize Chrome/Chromium by default -->
-    <application class="Google-chrome">
+    <application class="Chromium*">
       <maximized>true</maximized>
-    </application>
-    <application class="Chromium-browser">
-      <maximized>true</maximized>
-    </application>
-    <!-- Kate opens centered -->
-    <application class="kate">
-      <position force="no">
-        <x>center</x>
-        <y>center</y>
-      </position>
-      <size>
-        <width>70%</width>
-        <height>80%</height>
-      </size>
-    </application>
-    <!-- KCalc stays small -->
-    <application class="kcalc">
-      <position force="no">
-        <x>center</x>
-        <y>center</y>
-      </position>
-    </application>
-    <!-- VLC media player -->
-    <application class="vlc">
-      <position force="no">
-        <x>center</x>
-        <y>center</y>
-      </position>
-    </application>
-    <!-- System Settings -->
-    <application class="systemsettings">
-      <position force="no">
-        <x>center</x>
-        <y>center</y>
-      </position>
-      <size>
-        <width>70%</width>
-        <height>80%</height>
-      </size>
     </application>
   </applications>
 </openbox_config>

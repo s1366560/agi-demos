@@ -103,6 +103,9 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"infrastructure.adapters.secondary.sandbox" = ["chromium_seccomp_profile.json"]
+
 [tool.black]
 line-length = 100
 target-version = ['py312']

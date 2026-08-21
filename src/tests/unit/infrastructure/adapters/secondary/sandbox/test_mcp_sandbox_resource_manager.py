@@ -121,6 +121,7 @@ class TestSandboxConcurrencyLimit:
             lambda: SimpleNamespace(
                 sandbox_platform_url="http://platform",
                 sandbox_service_token="service-secret",
+                sandbox_shm_size="1g",
                 sandbox_pip_cache_enabled=False,
             ),
         )

@@ -395,6 +395,54 @@ impl ProjectSandboxService {
         Ok(true)
     }
 
+    pub(crate) async fn purge_project_resources(
+        &self,
+        tenant_id: &str,
+        project_id: &str,
+    ) -> SandboxApiResult<()> {
+        let record = self.registry.get(project_id).await?;
+        if record
+            .as_ref()
+            .is_some_and(|record| record.tenant_id != tenant_id)
+        {
+            return Err(SandboxApiError::service_unavailable(
+                "Sandbox resource ownership could not be verified",
+            ));
+        }
+
+        let mut container_ids = self
+            .runtime
+            .list(Some((PROJECT_LABEL, project_id)))
+            .await
+            .map_err(|_| {
+                SandboxApiError::service_unavailable("Sandbox resources could not be removed")
+            })?;
+        if let Some(record) = record.as_ref().filter(|record| !record.is_local()) {
+            container_ids.push(record.sandbox_id.clone());
+        }
+        container_ids.sort();
+        container_ids.dedup();
+
+        for container_id in container_ids {
+            self.runtime.stop(&container_id).await.map_err(|_| {
+                SandboxApiError::service_unavailable("Sandbox resources could not be removed")
+            })?;
+            self.runtime.remove(&container_id).await.map_err(|_| {
+                SandboxApiError::service_unavailable("Sandbox resources could not be removed")
+            })?;
+        }
+
+        self.registry.delete(project_id).await?;
+        let volume_name = sky_cua_chromium_volume_name(tenant_id, project_id);
+        let volume_labels = sky_cua_chromium_volume_labels(tenant_id, project_id);
+        self.runtime
+            .remove_volume(&volume_name, &volume_labels)
+            .await
+            .map_err(|_| {
+                SandboxApiError::service_unavailable("Sandbox resources could not be removed")
+            })
+    }
+
     async fn execute_tool_with_max_timeout(
         &self,
         project_id: &str,

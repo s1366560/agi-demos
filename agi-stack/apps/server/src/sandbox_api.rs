@@ -42,7 +42,7 @@ use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 
 use agistack_adapters_postgres::{PgProjectSandboxRepository, ProjectReadRecord};
 use agistack_core::ports::{
-    ContainerRuntime, ContainerState, ContainerStatus, PortBinding, ToolHost,
+    ContainerRuntime, ContainerState, ContainerStatus, NamedVolumeMount, PortBinding, ToolHost,
 };
 
 use crate::auth::{Identity, RawApiKey};
@@ -154,6 +154,9 @@ const PROJECT_LABEL: &str = "agistack.project_id";
 const TENANT_LABEL: &str = "agistack.tenant_id";
 const KIND_LABEL: &str = "agistack.sandbox_kind";
 const KIND_PROJECT: &str = "project";
+const MEMSTACK_SANDBOX_LABEL: &str = "memstack.sandbox";
+const MEMSTACK_PROJECT_LABEL: &str = "memstack.project_id";
+const MEMSTACK_TENANT_LABEL: &str = "memstack.tenant_id";
 
 #[derive(Debug)]
 pub(crate) struct SandboxApiError {

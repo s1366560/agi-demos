@@ -7,7 +7,7 @@ mod read;
 
 use serde_json::Value;
 use sqlx::types::chrono::{DateTime, Utc};
-use sqlx::{Postgres, QueryBuilder};
+use sqlx::{Postgres, QueryBuilder, Transaction};
 
 use agistack_core::ports::{CoreError, CoreResult};
 
@@ -173,6 +173,57 @@ pub enum ProjectMembersLookup {
     NotFound,
 }
 
+/// Authorization result for a project deletion transaction. The ready variant
+/// owns a row lock on the project until it is committed or rolled back.
+pub enum ProjectDeletionLookup {
+    Ready(PgProjectDeletion),
+    Forbidden,
+}
+
+/// A locked project deletion scope. Callers may perform external cleanup while
+/// this value is alive, then either commit the database deletion or roll it back.
+pub struct PgProjectDeletion {
+    transaction: Transaction<'static, Postgres>,
+    project_id: String,
+    tenant_id: String,
+}
+
+impl PgProjectDeletion {
+    pub fn project_id(&self) -> &str {
+        &self.project_id
+    }
+
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub async fn commit(mut self) -> CoreResult<()> {
+        delete_project_dependents(&mut self.transaction, &self.project_id).await?;
+        let result = sqlx::query("DELETE FROM projects WHERE id = $1 AND tenant_id = $2")
+            .bind(&self.project_id)
+            .bind(&self.tenant_id)
+            .execute(&mut *self.transaction)
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))?;
+        if result.rows_affected() != 1 {
+            return Err(CoreError::Storage(
+                "locked project deletion scope no longer identifies one project".to_string(),
+            ));
+        }
+        self.transaction
+            .commit()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))
+    }
+
+    pub async fn rollback(self) -> CoreResult<()> {
+        self.transaction
+            .rollback()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))
+    }
+}
+
 pub struct PgProjectReadRepository {
     pool: PgPool,
 }
@@ -287,6 +338,47 @@ impl PgProjectReadRepository {
         row.map(row_to_record)
             .transpose()
             .map_err(|e| CoreError::Storage(e.to_string()))
+    }
+
+    /// Lock and authorize one project before external resource cleanup. A
+    /// `FOR UPDATE` lock also prevents new foreign-key dependents from being
+    /// inserted until the returned scope is committed or rolled back.
+    pub async fn begin_owned_project_deletion(
+        &self,
+        user_id: &str,
+        project_id: &str,
+    ) -> CoreResult<ProjectDeletionLookup> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|error| CoreError::Storage(error.to_string()))?;
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT tenant_id, owner_id FROM projects WHERE id = $1 FOR UPDATE",
+        )
+        .bind(project_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|error| CoreError::Storage(error.to_string()))?;
+        let Some((tenant_id, owner_id)) = row else {
+            transaction
+                .rollback()
+                .await
+                .map_err(|error| CoreError::Storage(error.to_string()))?;
+            return Ok(ProjectDeletionLookup::Forbidden);
+        };
+        if owner_id != user_id {
+            transaction
+                .rollback()
+                .await
+                .map_err(|error| CoreError::Storage(error.to_string()))?;
+            return Ok(ProjectDeletionLookup::Forbidden);
+        }
+        Ok(ProjectDeletionLookup::Ready(PgProjectDeletion {
+            transaction,
+            project_id: project_id.to_string(),
+            tenant_id,
+        }))
     }
 
     pub async fn create_project(
