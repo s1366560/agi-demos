@@ -61,6 +61,157 @@ async def test_get_events_by_message_filters_by_conversation_and_message_id() ->
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_save_projects_turn_admitted_as_conversation_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typed V2 user admission must advance the durable message projection."""
+    session = MagicMock(spec=AsyncSession)
+    insert_result = MagicMock()
+    insert_result.one_or_none.return_value = ("turn_admitted", 1_000_000)
+    session.execute = AsyncMock(return_value=insert_result)
+    projection = AsyncMock()
+    workspace_projection = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.apply_conversation_event_projection_delta",
+        projection,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.apply_workspace_event_progress_projection",
+        workspace_projection,
+    )
+    repo = SqlAgentExecutionEventRepository(session)
+
+    await repo.save(
+        AgentExecutionEvent(
+            conversation_id="conv-a",
+            message_id="msg-a",
+            event_type="turn_admitted",
+            event_data={"content": "hello", "role": "user"},
+            event_time_us=1_000_000,
+            event_counter=1,
+        )
+    )
+
+    projection.assert_awaited_once_with(
+        session,
+        "conv-a",
+        inserted_message_count=1,
+        latest_event_time_us=1_000_000,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_save_batch_projects_turn_admitted_as_conversation_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Batch persistence must classify typed V2 admissions exactly like user messages."""
+    session = MagicMock(spec=AsyncSession)
+    insert_result = MagicMock()
+    insert_result.all.return_value = [
+        ("event-a", "conv-a", "turn_admitted", 1_000_000, MagicMock())
+    ]
+    session.execute = AsyncMock(return_value=insert_result)
+    projection = AsyncMock()
+    workspace_projection = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.apply_conversation_event_projection_delta",
+        projection,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.apply_workspace_event_progress_projection",
+        workspace_projection,
+    )
+    repo = SqlAgentExecutionEventRepository(session)
+
+    await repo.save_batch(
+        [
+            AgentExecutionEvent(
+                id="event-a",
+                conversation_id="conv-a",
+                message_id="msg-a",
+                event_type="turn_admitted",
+                event_data={"content": "hello", "role": "user"},
+                event_time_us=1_000_000,
+                event_counter=1,
+            )
+        ]
+    )
+
+    projection.assert_awaited_once_with(
+        session,
+        "conv-a",
+        inserted_message_count=1,
+        latest_event_time_us=1_000_000,
+    )
+
+
+def _event_type_filter_values(statement: object) -> set[str]:
+    compiled = statement.compile()  # type: ignore[attr-defined]
+    values = next(value for key, value in compiled.params.items() if key.startswith("event_type"))
+    return {str(value) for value in values}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_message_events_includes_turn_admitted() -> None:
+    session = MagicMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    repo = SqlAgentExecutionEventRepository(session)
+
+    await repo.get_message_events("conv-a")
+
+    assert _event_type_filter_values(session.execute.await_args.args[0]) == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_message_events_after_includes_turn_admitted() -> None:
+    session = MagicMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    repo = SqlAgentExecutionEventRepository(session)
+
+    await repo.get_message_events_after("conv-a", 42)
+
+    assert _event_type_filter_values(session.execute.await_args.args[0]) == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_count_messages_includes_turn_admitted() -> None:
+    session = MagicMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar.return_value = 0
+    session.execute = AsyncMock(return_value=result)
+    repo = SqlAgentExecutionEventRepository(session)
+
+    await repo.count_messages("conv-a")
+
+    assert _event_type_filter_values(session.execute.await_args.args[0]) == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+
+
+@pytest.mark.unit
 def test_to_db_sanitizes_nested_nul_bytes() -> None:
     """PostgreSQL JSON path extraction cannot convert JSON strings containing NUL bytes."""
     session = MagicMock(spec=AsyncSession)

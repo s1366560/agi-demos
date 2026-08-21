@@ -438,6 +438,27 @@ async def test_started_duplicate_without_user_event_fails_closed(
     _assert_error_message_id(context, "desktop-turn-unconfirmed")
 
 
+async def test_client_turn_materialization_accepts_typed_v2_admission() -> None:
+    class _TypedAdmissionDb:
+        async def execute(self, statement: Any) -> _ScalarResult:
+            compiled = statement.compile()
+            event_types = next(
+                value for key, value in compiled.params.items() if key.startswith("event_type")
+            )
+            assert set(event_types) == {"turn_admitted", "user_message"}
+            return _ScalarResult("typed-admission-event")
+
+    context = _MessageContext(db=_TypedAdmissionDb())
+
+    materialized = await chat_handler._client_turn_execution_is_materialized(
+        context,  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        execution_message_id="desktop-turn-typed-admission",
+    )
+
+    assert materialized is True
+
+
 async def test_accepted_replay_still_respects_pending_hitl(
     successful_chat_dependencies: None,
     monkeypatch: pytest.MonkeyPatch,

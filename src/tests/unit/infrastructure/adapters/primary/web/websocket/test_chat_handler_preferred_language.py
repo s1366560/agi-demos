@@ -12,6 +12,7 @@ import pytest
 from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
     StopSessionHandler,
     _append_external_acp_update_event,
+    _build_external_acp_prompt_text,
     _ExternalACPExecutionState,
     _format_external_acp_prompt_with_history,
     _persist_external_acp_completion,
@@ -38,10 +39,51 @@ def test_format_external_acp_prompt_with_history_includes_recent_turns() -> None
 
 
 def test_format_external_acp_prompt_without_history_returns_user_message() -> None:
-    assert (
-        _format_external_acp_prompt_with_history(user_message="hello", history=[])
-        == "hello"
+    assert _format_external_acp_prompt_with_history(user_message="hello", history=[]) == "hello"
+
+
+async def test_external_acp_history_includes_typed_v2_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_event_types: set[str] | None = None
+
+    class _TypedHistoryRepository:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        async def get_events(self, **kwargs: Any) -> list[Any]:
+            nonlocal captured_event_types
+            captured_event_types = kwargs["event_types"]
+            return [
+                SimpleNamespace(
+                    event_type="turn_admitted",
+                    event_data={"role": "user", "content": "remember V2-HISTORY-42"},
+                ),
+                SimpleNamespace(
+                    event_type="assistant_message",
+                    event_data={"role": "assistant", "content": "stored V2-HISTORY-42"},
+                ),
+            ]
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence."
+        "sql_agent_execution_event_repository.SqlAgentExecutionEventRepository",
+        _TypedHistoryRepository,
     )
+
+    prompt = await _build_external_acp_prompt_text(
+        SimpleNamespace(db=object()),  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        user_message="what was the marker?",
+    )
+
+    assert captured_event_types == {
+        "assistant_message",
+        "turn_admitted",
+        "user_message",
+    }
+    assert "User: remember V2-HISTORY-42" in prompt
+    assert "Assistant: stored V2-HISTORY-42" in prompt
 
 
 def test_text_from_external_acp_content_extracts_nested_list_blocks() -> None:
@@ -187,7 +229,9 @@ async def test_external_acp_completion_does_not_emit_empty_execution_summary() -
 
     saved_events = event_repo.saved_batches[0]
     complete_event = next(event for event in saved_events if event.event_type == "complete")
-    assistant_event = next(event for event in saved_events if event.event_type == "assistant_message")
+    assistant_event = next(
+        event for event in saved_events if event.event_type == "assistant_message"
+    )
     assert "execution_summary" not in complete_event.event_data
     assert assistant_event.event_data["metadata"] == {
         "source": "acp_external",

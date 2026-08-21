@@ -38,6 +38,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_chat_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.session_event_log import TURN_ADMITTED_EVENT_V2
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
@@ -507,7 +508,7 @@ async def _client_turn_execution_is_materialized(
             .where(
                 DBAgentExecutionEvent.conversation_id == conversation_id,
                 DBAgentExecutionEvent.message_id == execution_message_id,
-                DBAgentExecutionEvent.event_type == "user_message",
+                DBAgentExecutionEvent.event_type.in_(("user_message", TURN_ADMITTED_EVENT_V2)),
             )
             .limit(1)
         )
@@ -918,7 +919,7 @@ async def _build_external_acp_prompt_text(
     events = await event_repo.get_events(
         conversation_id=conversation_id,
         limit=24,
-        event_types={"user_message", "assistant_message"},
+        event_types={"user_message", "assistant_message", TURN_ADMITTED_EVENT_V2},
     )
     history: list[tuple[str, str]] = []
     for event in events:
