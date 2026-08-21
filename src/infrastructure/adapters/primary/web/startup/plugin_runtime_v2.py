@@ -12,6 +12,10 @@ from fastapi import FastAPI
 from starlette.types import Scope
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.plugins.v2.boundary import (
+    clear_process_generation_host_v2,
+    install_process_generation_host_v2,
+)
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
@@ -127,6 +131,7 @@ async def initialize_plugin_runtime_v2(
         registry=route_registry,
         workspace_core_settings=workspace_core_settings,
     )
+    install_process_generation_host_v2(host)
     logger.info(
         "Published plugin runtime v2 generation=%d digest=%s",
         publication.snapshot.generation,
@@ -196,6 +201,7 @@ async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     host = getattr(app.state, "platform_plugin_runtime_v2", None)
     if not isinstance(host, PlatformPluginRuntimeHostV2):
         return
+    clear_process_generation_host_v2(host)
     await host.close()
     app.state.platform_plugin_runtime_v2 = None
     app.state.platform_plugin_route_registry_v2 = None

@@ -27,7 +27,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
 )
-from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.boundary import (
+    PluginGenerationMiddlewareV2,
+    current_process_generation_host_v2,
+)
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
     configured_legacy_http_routes_v2,
@@ -43,6 +46,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     host = await initialize_plugin_runtime_v2(app)
 
     assert plugin_runtime_host_v2_from_scope({"app": app}) is host
+    assert current_process_generation_host_v2() is host
     assert host.manager.current is not None
     route_registry = app.state.platform_plugin_route_registry_v2
     route_graph = app.state.platform_plugin_route_graph_v2
@@ -74,6 +78,9 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert app.state.platform_plugin_route_registry_v2 is None
     assert app.state.platform_plugin_route_graph_v2 is None
     assert app.state.platform_plugin_http_route_publication_v2 is None
+    with pytest.raises(RuntimeV2Error) as error:
+        current_process_generation_host_v2()
+    assert error.value.code == "process_generation_host_not_configured"
 
 
 @pytest.mark.unit

@@ -14,10 +14,17 @@ from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
     PluginGenerationMiddlewareV2,
     attach_current_generation_v2,
+    clear_process_generation_host_v2,
     current_generation_v2,
     current_operation_context_v2,
+    install_process_generation_host_v2,
+    pin_agent_turn_operation_v2,
+    pin_generation_v2,
     pin_operation_context_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import (
@@ -356,6 +363,102 @@ async def test_operation_boundary_pins_old_generation_until_cleanup_finishes() -
             ScopeV2(kind=ScopeKindV2.ROOT),
         )
     await host.close()
+
+
+@pytest.mark.unit
+async def test_agent_turn_boundary_acquires_process_host_and_publishes_operation_services() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="agent-turn-boundary",
+    )
+    install_process_generation_host_v2(host)
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id="agent-turn:message-a",
+            tenant_id="tenant-a",
+            project_id="project-a",
+            session_id="conversation-a",
+            services={OPERATION_DB_SESSION_SERVICE_V2: "db-a"},
+        ) as operation:
+            assert operation.context.scope == ScopeV2(
+                kind=ScopeKindV2.SESSION,
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_id="conversation-a",
+            )
+            assert current_operation_context_v2() is operation
+            assert operation.require(OPERATION_DB_SESSION_SERVICE_V2) == "db-a"
+            assert operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
+                "tenant_id": "tenant-a",
+            }
+            assert operation.require(OPERATION_METADATA_SERVICE_V2) == {
+                "kind": "agent-turn",
+                "conversation_id": "conversation-a",
+            }
+            distribution = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            assert distribution["descriptor"] == operation.descriptor.to_payload()
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
+async def test_agent_turn_boundary_fails_closed_without_process_host() -> None:
+    with pytest.raises(RuntimeV2Error) as error:
+        async with pin_agent_turn_operation_v2(
+            operation_id="agent-turn:message-a",
+            tenant_id="tenant-a",
+            project_id="project-a",
+            session_id="conversation-a",
+        ):
+            pass
+
+    assert error.value.code == "process_generation_host_not_configured"
+
+
+@pytest.mark.unit
+async def test_agent_turn_boundary_keeps_outer_generation_when_host_advances() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="outer-generation-1",
+    )
+    install_process_generation_host_v2(host)
+
+    try:
+        async with pin_generation_v2(host) as outer_generation:
+            await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=2,
+                version=2,
+                nonce="outer-generation-2",
+            )
+            async with pin_agent_turn_operation_v2(
+                operation_id="agent-turn:message-a",
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_id="conversation-a",
+            ) as operation:
+                distribution = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+                assert operation.generation is outer_generation
+                assert operation.descriptor.generation == 1
+                assert distribution["descriptor"] == operation.descriptor.to_payload()
+                assert host.manager.current is not None
+                assert host.manager.current.generation == 2
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
 
 
 @pytest.mark.unit
