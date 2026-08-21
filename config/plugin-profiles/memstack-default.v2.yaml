@@ -74,21 +74,6 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-backend-store-shadow
-      parent_entry_id: runtime-generation-boundary
-      plugin_ref: memstack-runtime-kernel
-      module_ref: builtin://memstack/application/backend-store-shadow
-      enabled: true
-      config:
-        strategy: structural-parity
-      inject:
-        provider: service:persistence.backend-store-provider
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
     - entry_id: builtin-channel-adapter-catalog
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

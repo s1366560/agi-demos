@@ -37,9 +37,6 @@ from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
     BackendStoreAuthorityV2,
     backend_store_authority_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.backend_store_shadow_v2 import (
-    backend_store_shadow_dependency_v2,
-)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_graph_store,
@@ -64,7 +61,6 @@ from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.backend_store_services import (
     BackendStoreServicesV2,
-    BackendStoreShadowEvidenceV2,
 )
 from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 
@@ -446,9 +442,6 @@ async def list_projects(  # noqa: C901, PLR0915
     graph_store: GraphStorePort | None = Depends(get_graph_store),
     project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
     backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-    _backend_store_shadow: BackendStoreShadowEvidenceV2 = Depends(
-        backend_store_shadow_dependency_v2
-    ),
 ) -> ProjectListResponse:
     """List projects for the current user."""
     db = project_tenant.db
