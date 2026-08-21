@@ -18,6 +18,9 @@ from src.application.schemas.tenant import (
     TenantUpdate,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.project_tenant_shadow_v2 import (
+    project_tenant_shadow_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.projects import (
     _delete_project_dependents,
     _lock_project_delete_scopes,
@@ -35,6 +38,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.project_tenant_services import (
+    ProjectTenantShadowEvidenceV2,
+)
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT = 10
@@ -218,12 +224,17 @@ async def list_tenants(
     search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _project_tenant_shadow: ProjectTenantShadowEvidenceV2 = Depends(
+        project_tenant_shadow_dependency_v2
+    ),
 ) -> TenantListResponse:
     """List tenants for the current user."""
     # Build query from the membership table so the first item matches the backend
     # default-tenant dependency used by auth and project initialization.
     membership_scope = UserTenant.user_id == current_user.id
-    query = select(Tenant).join(UserTenant, UserTenant.tenant_id == Tenant.id).where(membership_scope)
+    query = (
+        select(Tenant).join(UserTenant, UserTenant.tenant_id == Tenant.id).where(membership_scope)
+    )
 
     if search:
         query = query.where(

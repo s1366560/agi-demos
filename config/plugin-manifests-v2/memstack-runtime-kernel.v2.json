@@ -203,8 +203,76 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:bfe04cf781a919e5431b061b844135e677f18c356bed2c989ea3833789d0e2eb",
+        "digest": "sha256:97486798000ffc3a832a00b03614ca66870a2060ab9369a82d99cd7b9a6c7652",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/project-tenant-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.project_tenant_services:_apply_project_tenant_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.project-tenant-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c44e322b72725b716d5a93ee30f65da6ee9ddfc52284f84e64275c871f8972f0",
+      "artifact": {
+        "digest": "sha256:1177bec7b6a02089ed3a8085b8df4ab1dd2d47318bad64b314d411f1fc1251c0",
+        "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/project-tenant-shadow",
+      "entrypoint": "src.infrastructure.plugins.v2.project_tenant_services:_apply_project_tenant_shadow_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.project-tenant-shadow",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.project-tenant-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "structural-parity", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:82a495fac290cd5246d34f29c2fca7d093fb2a13f0cd7dce352e9fca67d4cc40",
+      "artifact": {
+        "digest": "sha256:1177bec7b6a02089ed3a8085b8df4ab1dd2d47318bad64b314d411f1fc1251c0",
+        "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
       }
     },
     {

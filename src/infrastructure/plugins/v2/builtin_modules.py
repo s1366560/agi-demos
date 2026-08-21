@@ -25,6 +25,7 @@ from .channel_adapters import (
     builtin_feishu_channel_adapter_definition_v2,
 )
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
+from .project_tenant_services import project_tenant_service_definitions_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
@@ -84,6 +85,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
+        *project_tenant_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
