@@ -165,7 +165,11 @@ class TestSessionizedRuntime:
             return original_attach(*args, **kwargs)
 
         with (
-            patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent),
+            patch.object(
+                agent._session_runner,
+                "execute_subagent",
+                side_effect=_mock_execute_subagent,
+            ),
             patch.object(
                 agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach
             ),
@@ -173,6 +177,7 @@ class TestSessionizedRuntime:
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_id="c1",
                 conversation_context=[],
@@ -227,10 +232,15 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+        with patch.object(
+            agent._session_runner,
+            "execute_subagent",
+            side_effect=_mock_execute_subagent,
+        ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Hooked task",
                 conversation_id="c1",
                 conversation_context=[],
@@ -284,10 +294,15 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+        with patch.object(
+            agent._session_runner,
+            "execute_subagent",
+            side_effect=_mock_execute_subagent,
+        ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Task",
                 conversation_id="c1",
                 conversation_context=[],
@@ -332,6 +347,7 @@ class TestNestedSessionToolInjection:
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=[researcher, coder],
                 user_message="delegate and monitor",
                 conversation_context=[],
                 project_id="p1",
@@ -381,6 +397,7 @@ class TestNestedSessionToolInjection:
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=[researcher, coder],
                 user_message="depth limited",
                 conversation_context=[],
                 project_id="p1",
@@ -394,6 +411,44 @@ class TestNestedSessionToolInjection:
         assert "subagents" not in captured_tool_names
         assert "sessions_list" not in captured_tool_names
         assert events[-1]["type"] == "complete"
+
+    async def test_nested_tools_do_not_fallback_to_static_subagents(self):
+        researcher = _make_subagent("researcher")
+        static_coder = _make_subagent("static-coder")
+        agent = _make_react_agent(
+            subagents=[researcher, static_coder],
+            enable_subagent_as_tool=True,
+            max_subagent_delegation_depth=2,
+        )
+        captured_tool_names: list[str] = []
+
+        class FakeSubAgentProcess:
+            def __init__(self, *args, **kwargs) -> None:
+                nonlocal captured_tool_names
+                captured_tool_names = [tool.name for tool in kwargs["tools"]]
+                self.result = _make_result(kwargs["subagent"].name)
+
+            async def execute(self):
+                if False:
+                    yield {}
+
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess
+        ):
+            async for _event in agent._execute_subagent(
+                subagent=researcher,
+                available_subagents=[researcher],
+                user_message="no nested capability",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+                conversation_id="c1",
+                delegation_depth=1,
+            ):
+                pass
+
+        assert "delegate_to_subagent" not in captured_tool_names
+        assert "subagents" not in captured_tool_names
 
 
 # === _execute_parallel Tests ===
@@ -434,6 +489,7 @@ class TestExecuteParallel:
             events = []
             async for event in agent._execute_parallel(
                 subtasks=subtasks,
+                available_subagents=agents,
                 user_message="Do both",
                 conversation_context=[],
                 project_id="p1",
@@ -492,6 +548,7 @@ class TestExecuteChain:
             events = []
             async for event in agent._execute_chain(
                 subtasks=subtasks,
+                available_subagents=agents,
                 user_message="Research then write",
                 conversation_context=[],
                 project_id="p1",

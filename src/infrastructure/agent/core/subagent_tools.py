@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, field
+from collections.abc import Callable, Coroutine, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.agent_role import (
@@ -41,7 +41,6 @@ class SubAgentToolBuilderDeps:
     subagent_run_registry: Any
 
     # -- SubAgent config --
-    subagents: list[SubAgent] = field(default_factory=list)
     enable_subagent_as_tool: bool = True
     max_subagent_delegation_depth: int = 2
     max_subagent_active_runs: int = 16
@@ -143,6 +142,7 @@ class SubAgentToolBuilder:
         self,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
@@ -158,7 +158,7 @@ class SubAgentToolBuilder:
         """
         max_delegation_depth = self.deps.max_subagent_delegation_depth
         if not (
-            self.deps.subagents
+            available_subagents
             and self.deps.enable_subagent_as_tool
             and delegation_depth < max_delegation_depth
             and self._role_can_spawn()
@@ -166,7 +166,7 @@ class SubAgentToolBuilder:
             return
 
         nested_candidates = [
-            sa for sa in self.deps.subagents if sa.enabled and sa.id != subagent.id
+            sa for sa in available_subagents if sa.enabled and sa.id != subagent.id
         ]
         if not nested_candidates:
             return
@@ -186,6 +186,7 @@ class SubAgentToolBuilder:
 
         delegate_cb, spawn_cb, cancel_cb = self.build_nested_subagent_callbacks(
             nested_map=nested_map,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -223,6 +224,7 @@ class SubAgentToolBuilder:
         self,
         *,
         nested_map: dict[str, SubAgent],
+        available_subagents: Sequence[SubAgent],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
@@ -255,6 +257,7 @@ class SubAgentToolBuilder:
             events: list[dict[str, Any]] = []
             async for evt in execute_subagent_fn(
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=task,
                 conversation_context=conversation_context,
                 project_id=project_id,
@@ -303,6 +306,7 @@ class SubAgentToolBuilder:
             await launch_session_fn(
                 run_id=run_id,
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=task,
                 conversation_id=conversation_id,
                 conversation_context=conversation_context,

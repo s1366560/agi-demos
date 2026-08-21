@@ -17,7 +17,7 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -40,6 +40,7 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.skill import Skill
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.agent_capabilities import AgentCapabilitySetV2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from ..i18n import directive_for, resolve_response_language
@@ -202,6 +203,33 @@ def _resolve_current_tools_from_runtime_v2(
     if not isinstance(resolver, ToolSetResolverProtocolV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
     return resolver.resolve(agent=agent, selection_context=selection_context)
+
+
+async def _resolve_agent_capabilities_from_runtime_v2(
+    agent: object,
+    *,
+    tenant_id: str,
+    project_id: str,
+) -> AgentCapabilitySetV2:
+    """Resolve Skills and SubAgents through the required pinned v2 service."""
+    from src.infrastructure.plugins.v2.agent_capabilities import (
+        AGENT_CAPABILITY_RESOLVER_SERVICE_V2,
+        AgentCapabilityResolverProtocolV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, AgentCapabilityResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_capability_resolver",
+            "service:agent-capability-resolver has an invalid implementation",
+        )
+    return await resolver.resolve(
+        agent=agent,
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
 
 
 def _normalize_preferred_language(value: object) -> str | None:
@@ -459,6 +487,7 @@ class _StreamAgent(Protocol):
         selected_agent: Any,
         selected_agent_model_route: ModelRouteRef | None,
         is_workspace_worker_runtime: bool,
+        available_skills: Sequence[Skill],
     ) -> Any: ...
 
     def _with_workspace_leader_replan_tool_allowlist(self, runtime_profile: Any) -> Any: ...
@@ -481,7 +510,11 @@ class _StreamAgent(Protocol):
     ) -> tuple[Any, list[dict[str, Any]]]: ...
 
     def _build_primary_agent_prompt(
-        self, *, runtime_profile: Any, selection_context: ToolSelectionContext
+        self,
+        *,
+        runtime_profile: Any,
+        selection_context: ToolSelectionContext,
+        available_subagents: Sequence[Any],
     ) -> str: ...
 
     async def _build_system_prompt(self, *args: Any, **kwargs: Any) -> str: ...
@@ -622,18 +655,11 @@ class StreamMixin:
 
         return None, user_message
 
-    def _resolve_subagent_by_name(self: _StreamAgent, name: str) -> Any | None:
-        """Find a SubAgent by name or display_name."""
-        for sa in self.subagents or []:
-            if sa.enabled and (sa.name == name or sa.display_name == name):
-                return sa
-        return None
-
     def _stream_match_skill(
         self: _StreamAgent,
         processed_user_message: str,
         forced_skill_name: str | None,
-        available_skills: list[SkillProtocol] | None = None,
+        available_skills: Sequence[SkillProtocol],
     ) -> Iterator[dict[str, Any]]:
         """Match skill by forced slash command, else no match.
 
@@ -652,7 +678,7 @@ class StreamMixin:
 
         if forced_skill_name:
             name_lower = forced_skill_name.strip().lower()
-            for skill in available_skills or cast("list[SkillProtocol]", self.skills or []):
+            for skill in available_skills:
                 if skill.name.lower() == name_lower and skill.status.value == "active":
                     matched_skill = skill
                     skill_score = 1.0
@@ -1233,6 +1259,7 @@ class StreamMixin:
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self: _StreamAgent,
         tools_to_use: list[ToolDefinition],
+        available_subagents: Sequence[Any],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
@@ -1247,7 +1274,7 @@ class StreamMixin:
 
         Returns updated tools list with SubAgent tools appended.
         """
-        if not self.subagents or not self._enable_subagent_as_tool:
+        if not available_subagents or not self._enable_subagent_as_tool:
             return tools_to_use
         if not _selected_agent_can_spawn(selected_agent):
             logger.info(
@@ -1258,7 +1285,7 @@ class StreamMixin:
             return tools_to_use
 
         enabled_subagents = _filter_subagents_for_selected_agent_policy(
-            [sa for sa in self.subagents if sa.enabled],
+            [sa for sa in available_subagents if sa.enabled],
             selected_agent,
         )
         if not enabled_subagents:
@@ -1395,6 +1422,7 @@ class StreamMixin:
             events = []
             async for evt in self._execute_subagent(
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=delegated_task,
                 conversation_context=conversation_context,
                 project_id=project_id,
@@ -1478,6 +1506,7 @@ class StreamMixin:
             await self._launch_subagent_session(
                 run_id=run_id,
                 subagent=target,
+                available_subagents=available_subagents,
                 user_message=delegated_task,
                 conversation_id=conversation_id,
                 conversation_context=conversation_context,
@@ -1645,6 +1674,13 @@ class StreamMixin:
 
         # Phase 4b: Filesystem skill loading (lazy, once per agent instance)
         await self._load_filesystem_skills(tenant_id, project_id)
+        runtime_capabilities = await _resolve_agent_capabilities_from_runtime_v2(
+            self,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        available_skills = list(runtime_capabilities.skills)
+        available_subagents = list(runtime_capabilities.subagents)
 
         resolved_agent_id = agent_id or DEFAULT_GENERAL_AGENT_ID
         selected_agent = await self._load_selected_agent(
@@ -1713,6 +1749,7 @@ class StreamMixin:
             selected_agent=selected_agent,
             selected_agent_model_route=selected_agent_model_route,
             is_workspace_worker_runtime=has_workspace_binding,
+            available_skills=available_skills,
         )
         effective_model_route = (
             resolved_model_route_override or runtime_profile.effective_model_route
@@ -1751,7 +1788,10 @@ class StreamMixin:
             for event in self._stream_match_skill(
                 processed_user_message,
                 forced_skill_name,
-                available_skills=cast("list[SkillProtocol]", runtime_profile.available_skills),
+                available_skills=cast(
+                    "list[SkillProtocol]",
+                    runtime_profile.available_skills,
+                ),
             ):
                 yield event
         skill_state = self._stream_skill_state
@@ -1883,6 +1923,7 @@ class StreamMixin:
         primary_agent_prompt = self._build_primary_agent_prompt(
             runtime_profile=runtime_profile,
             selection_context=selection_context,
+            available_subagents=available_subagents,
         )
 
         # Phase 8: System prompt building
@@ -1907,6 +1948,7 @@ class StreamMixin:
             agent_definition_prompt=runtime_profile.agent_definition_prompt,
             primary_agent_prompt=primary_agent_prompt,
             available_skills=runtime_profile.available_skills,
+            available_subagents=available_subagents,
             model_name=effective_model_route.model_id,
             max_steps_override=runtime_profile.effective_max_steps,
             workspace_manager=runtime_workspace_manager,
@@ -1959,6 +2001,7 @@ class StreamMixin:
         # Phase 11: SubAgent-as-Tool injection
         tools_to_use = self._stream_inject_subagent_tools(
             tools_to_use=tools_to_use,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,

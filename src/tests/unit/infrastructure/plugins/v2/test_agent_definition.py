@@ -199,6 +199,11 @@ async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(mo
         Mock(return_value=(object(), "route", "trace", {}, None, route_event)),
     )
     monkeypatch.setattr(agent, "_load_filesystem_skills", AsyncMock())
+    monkeypatch.setattr(
+        "src.infrastructure.agent.core.react_agent_stream_mixin."
+        "_resolve_agent_capabilities_from_runtime_v2",
+        AsyncMock(return_value=SimpleNamespace(skills=(), subagents=())),
+    )
     monkeypatch.setattr(agent, "_load_selected_agent", AsyncMock(return_value=None))
 
     with patch(

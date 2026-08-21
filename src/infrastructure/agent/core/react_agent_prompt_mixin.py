@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -62,8 +62,6 @@ class _PromptAgent(Protocol):
     """Subset of ``ReActAgent`` state used by :class:`PromptMixin`."""
 
     model: str
-    skills: list[Skill]
-    subagents: list[SubAgent]
     project_root: Path
     max_steps: int
     max_tokens: int
@@ -90,7 +88,12 @@ class _PromptAgent(Protocol):
         tenant_agent_config_data: dict[str, Any] | None,
     ) -> TenantAgentConfig: ...
 
-    def _filter_skills_for_agent(self, selected_agent: Agent | None) -> list[Skill]: ...
+    def _filter_skills_for_agent(
+        self,
+        selected_agent: Agent | None,
+        *,
+        available_skills: Sequence[Skill],
+    ) -> list[Skill]: ...
 
     def _resolve_tool_policy(
         self,
@@ -193,6 +196,7 @@ class PromptMixin:
         agent_definition_prompt: str | None = None,
         primary_agent_prompt: str | None = None,
         available_skills: list[Skill] | None = None,
+        available_subagents: list[SubAgent] | None = None,
         model_name: str | None = None,
         max_steps_override: int | None = None,
         workspace_manager: Any | None = None,
@@ -221,7 +225,7 @@ class PromptMixin:
 
         # Convert skills to dict format for PromptContext
         skills_data = None
-        effective_skills = available_skills if available_skills is not None else self.skills
+        effective_skills = list(available_skills or [])
         # Strip workspace-scoped skills from non-workspace conversations.
         if effective_skills and not is_workspace_conversation:
             effective_skills = [s for s in effective_skills if not s.name.startswith("workspace-")]
@@ -272,7 +276,8 @@ class PromptMixin:
 
         # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
         subagents_data = None
-        if self.subagents and self._enable_subagent_as_tool:
+        effective_subagents = list(available_subagents or [])
+        if effective_subagents and self._enable_subagent_as_tool:
             subagents_data = [
                 {
                     "name": sa.name,
@@ -282,7 +287,7 @@ class PromptMixin:
                         sa.trigger.description if sa.trigger else "general tasks"
                     ),
                 }
-                for sa in self.subagents
+                for sa in effective_subagents
                 if sa.enabled
             ]
 
@@ -429,10 +434,14 @@ class PromptMixin:
         selected_agent: Agent | None,
         selected_agent_model_route: ModelRouteRef | None = None,
         is_workspace_worker_runtime: bool = False,
+        available_skills: Sequence[Skill] = (),
     ) -> AgentRuntimeProfile:
         """Build the request-scoped runtime profile."""
         tenant_agent_config = self._load_tenant_agent_config(tenant_id, tenant_agent_config_data)
-        available_skills = self._filter_skills_for_agent(selected_agent)
+        filtered_skills = self._filter_skills_for_agent(
+            selected_agent,
+            available_skills=available_skills,
+        )
         allow_tools, deny_tools = self._resolve_tool_policy(
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
@@ -502,7 +511,7 @@ class PromptMixin:
         return AgentRuntimeProfile(
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
-            available_skills=available_skills,
+            available_skills=filtered_skills,
             allow_tools=allow_tools,
             deny_tools=deny_tools,
             effective_model_route=effective_model_route,
@@ -518,6 +527,7 @@ class PromptMixin:
         *,
         runtime_profile: AgentRuntimeProfile,
         selection_context: ToolSelectionContext,
+        available_subagents: Sequence[SubAgent] = (),
     ) -> str | None:
         """Build a dynamic primary prompt when the selected agent is built-in Sisyphus."""
         selected_agent = runtime_profile.selected_agent
@@ -530,7 +540,7 @@ class PromptMixin:
                 max_steps=runtime_profile.effective_max_steps,
                 tools=current_tool_definitions,
                 skills=runtime_profile.available_skills,
-                subagents=list(self.subagents or []),
+                subagents=list(available_subagents),
             )
         )
 

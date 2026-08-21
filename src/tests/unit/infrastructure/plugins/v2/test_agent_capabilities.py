@@ -6,12 +6,16 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import AgentTrigger, SubAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.agent.core.react_agent_stream_mixin import (
+    _resolve_agent_capabilities_from_runtime_v2,
+)
 from src.infrastructure.plugins.v2.agent_capabilities import (
     AGENT_CAPABILITY_RESOLVER_SERVICE_V2,
     SKILL_CONTRIBUTION_MODULE_V2,
@@ -52,6 +56,46 @@ def _subagent(name: str = "subagent-a") -> SubAgent:
         system_prompt=f"Handle work for {name}",
         trigger=AgentTrigger(description=f"Use {name}"),
     )
+
+
+@pytest.mark.unit
+async def test_agent_capability_consumer_requires_pinned_operation() -> None:
+    agent = SimpleNamespace(skills=[_skill()], subagents=[_subagent()])
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await _resolve_agent_capabilities_from_runtime_v2(
+            agent,
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert error.value.code == "operation_context_not_pinned"
+
+
+@pytest.mark.unit
+async def test_agent_capability_consumer_does_not_fallback_when_service_is_missing() -> None:
+    agent = SimpleNamespace(skills=[_skill()], subagents=[_subagent()])
+    operation = Mock()
+    operation.require.side_effect = RuntimeV2Error(
+        "missing_service",
+        "agent capability resolver is unavailable",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        await _resolve_agent_capabilities_from_runtime_v2(
+            agent,
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert error.value.code == "missing_service"
+    operation.require.assert_called_once_with(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
 
 
 @pytest.mark.unit

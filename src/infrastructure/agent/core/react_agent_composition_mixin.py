@@ -169,6 +169,7 @@ class CompositionMixin:
         self: _CompositionAgent,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
@@ -181,6 +182,7 @@ class CompositionMixin:
         """Inject SubAgent delegation tools for nested orchestration (bounded depth)."""
         self._tool_builder.inject_nested_tools(
             subagent=subagent,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,

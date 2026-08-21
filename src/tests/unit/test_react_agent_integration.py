@@ -14,6 +14,7 @@ from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.plugins.registry import HookDispatchResult
 from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
+from src.infrastructure.plugins.v2.agent_runtime_dispatcher import PinnedAgentRuntimeDispatcherV2
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -126,6 +127,7 @@ class TestReActAgentMemoryIntegration:
             events = []
             async for event in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Research AI trends",
                 conversation_context=[],
                 project_id="proj-1",
@@ -170,6 +172,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -210,6 +213,7 @@ class TestReActAgentMemoryIntegration:
             events = []
             async for event in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -248,6 +252,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=sa,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="",
@@ -283,6 +288,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -318,6 +324,7 @@ class TestReActAgentMemoryIntegration:
 
             async for _ in agent._execute_subagent(
                 subagent=researcher,
+                available_subagents=agent.subagents,
                 user_message="Do work",
                 conversation_context=[],
                 project_id="proj-1",
@@ -349,6 +356,29 @@ class TestReActAgentBackgroundExecutor:
 
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
+    @pytest.fixture(autouse=True)
+    def _project_agent_capabilities(self):
+        async def _resolve(agent, **_kwargs):
+            return SimpleNamespace(
+                skills=tuple(agent.skills),
+                subagents=tuple(agent.subagents),
+            )
+
+        with (
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_agent_capabilities_from_runtime_v2",
+                new=AsyncMock(side_effect=_resolve),
+            ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=SimpleNamespace(
+                    require=lambda _service: PinnedAgentRuntimeDispatcherV2(),
+                ),
+            ),
+        ):
+            yield
+
     def test_workspace_binding_from_runtime_context_parses_json_header(self):
         agent = _make_react_agent()
         context = [
@@ -511,6 +541,7 @@ class TestReActAgentWorkspaceDelegation:
         ):
             agent._stream_inject_subagent_tools(
                 tools_to_use=[],
+                available_subagents=agent.subagents,
                 conversation_context=[],
                 project_id="proj-1",
                 tenant_id="tenant-1",
@@ -746,6 +777,7 @@ class TestReActAgentWorkspaceDelegation:
     async def test_worker_runtime_code_context_survives_activation_miss(self):
         agent = _make_react_agent()
         captured: dict[str, object] = {}
+        profile_skill = MagicMock()
         runtime_context = {
             "context_type": "workspace_worker_runtime",
             "workspace_binding": {
@@ -772,7 +804,8 @@ class TestReActAgentWorkspaceDelegation:
             yield {"type": "complete", "data": {"content": "done"}}
 
         def _match_skill(*args, **kwargs):
-            del args, kwargs
+            del args
+            captured["matched_skills"] = kwargs["available_skills"]
             agent._stream_skill_state = {
                 "matched_skill": None,
                 "skill_score": 0.0,
@@ -808,7 +841,7 @@ class TestReActAgentWorkspaceDelegation:
                 agent,
                 "_build_runtime_profile",
                 return_value=_make_runtime_profile(
-                    available_skills=[MagicMock()],
+                    available_skills=[profile_skill],
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -861,6 +894,7 @@ class TestReActAgentWorkspaceDelegation:
 
         config = captured["config"]
         assert events[-1]["type"] == "complete"
+        assert captured["matched_skills"] == [profile_skill]
         assert config.runtime_context["workspace_id"] == "ws-bound"
         assert config.runtime_context["root_goal_task_id"] == "root-bound"
         assert config.runtime_context["workspace_task_id"] == "task-bound"

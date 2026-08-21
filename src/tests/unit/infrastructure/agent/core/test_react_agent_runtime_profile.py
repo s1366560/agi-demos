@@ -369,6 +369,7 @@ class TestReActAgentRuntimeProfile:
             conversation_id="conversation-1",
             abort_signal=None,
             selected_agent=selected_agent,
+            available_subagents=agent.subagents,
         )
 
         assert result == tools
@@ -403,6 +404,7 @@ class TestReActAgentRuntimeProfile:
             conversation_id="conversation-1",
             abort_signal=None,
             selected_agent=selected_agent,
+            available_subagents=agent.subagents,
         )
 
         assert "delegate_to_subagent" in {tool.name for tool in result}
@@ -411,6 +413,28 @@ class TestReActAgentRuntimeProfile:
         assert subagent_sessions._sess_max_active_runs == 3
         assert subagent_sessions._sess_max_active_runs_per_lineage == 3
         assert subagent_sessions._sess_max_children_per_requester == 1
+
+    def test_subagent_injection_uses_runtime_set_without_static_fallback(self) -> None:
+        from src.infrastructure.agent.tools import subagent_sessions
+
+        agent = _make_react_agent(
+            subagents=[_make_subagent("static-agent")],
+        )
+        selected_agent = _make_agent(can_spawn=True)
+
+        result = agent._stream_inject_subagent_tools(
+            tools_to_use=[ToolDefinition("read", "", {}, lambda **_: None)],
+            conversation_context=[],
+            project_id="project-1",
+            tenant_id="tenant-1",
+            conversation_id="conversation-1",
+            abort_signal=None,
+            selected_agent=selected_agent,
+            available_subagents=[_make_subagent("runtime-agent")],
+        )
+
+        assert "delegate_to_subagent" in {tool.name for tool in result}
+        assert subagent_sessions._sess_subagent_names == ["runtime-agent"]
 
     def test_workspace_worker_preserves_tenant_enabled_tool_policy_for_code_tools(self) -> None:
         agent = _make_react_agent()

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -488,7 +488,6 @@ class ReActAgent(
                 api_key=self.api_key,
                 base_url=self.base_url,
                 config=self.config,
-                subagents=self.subagents,
                 max_subagent_delegation_depth=self._max_subagent_delegation_depth,
                 max_subagent_active_runs=self._max_subagent_active_runs,
                 max_subagent_active_runs_per_lineage=(self._max_subagent_active_runs_per_lineage),
@@ -503,7 +502,6 @@ class ReActAgent(
         self._tool_builder = SubAgentToolBuilder(
             SubAgentToolBuilderDeps(
                 subagent_run_registry=self._subagent_run_registry,
-                subagents=self.subagents,
                 enable_subagent_as_tool=self._enable_subagent_as_tool,
                 max_subagent_delegation_depth=(self._max_subagent_delegation_depth),
                 max_subagent_active_runs=self._max_subagent_active_runs,
@@ -617,11 +615,15 @@ class ReActAgent(
             return self._workspace_manager.for_agent(scoped_agent_id)
         return self._workspace_manager
 
-    def _filter_skills_for_agent(self, selected_agent: Agent | None) -> list[Skill]:
+    def _filter_skills_for_agent(
+        self,
+        selected_agent: Agent | None,
+        *,
+        available_skills: Sequence[Skill],
+    ) -> list[Skill]:
         """Filter skills using the selected agent's allowlist."""
-        available_skills = list(self.skills or [])
         if selected_agent is None or not selected_agent.allowed_skills:
-            return available_skills
+            return list(available_skills)
         allowed_skill_names = {
             skill_name.strip().lower() for skill_name in selected_agent.allowed_skills
         }

@@ -11,7 +11,7 @@ import asyncio
 import inspect
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -81,7 +81,6 @@ class SubAgentRunnerDeps:
     factory: ProcessorFactory | None = None
 
     # -- SubAgent limits --
-    subagents: list[SubAgent] = field(default_factory=list)
     max_subagent_delegation_depth: int = 2
     max_subagent_active_runs: int = 16
     max_subagent_active_runs_per_lineage: int = 8
@@ -171,6 +170,7 @@ class SubAgentSessionRunner:
     async def execute_subagent(
         self,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -218,6 +218,7 @@ class SubAgentSessionRunner:
         assert self.deps.inject_nested_tools_fn is not None
         self.deps.inject_nested_tools_fn(
             subagent=subagent,
+            available_subagents=available_subagents,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -259,6 +260,7 @@ class SubAgentSessionRunner:
     async def execute_parallel(
         self,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -288,7 +290,7 @@ class SubAgentSessionRunner:
             ).to_event_dict(),
         )
 
-        subagent_map = {sa.name: sa for sa in self.deps.subagents}
+        subagent_map = {sa.name: sa for sa in available_subagents}
 
         assert self.deps.get_current_tools_fn is not None
         _, current_tool_definitions = self.deps.get_current_tools_fn()
@@ -367,6 +369,7 @@ class SubAgentSessionRunner:
     async def execute_chain(
         self,
         subtasks: list[Any],
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -378,14 +381,14 @@ class SubAgentSessionRunner:
         """Execute SubAgents as a sequential chain (pipeline)."""
         from ..subagent.chain import ChainStep, SubAgentChain
 
-        subagent_map = {sa.name: sa for sa in self.deps.subagents}
+        subagent_map = {sa.name: sa for sa in available_subagents}
 
         ordered = self.topological_sort_subtasks(subtasks)
         chain_steps = []
         for i, st in enumerate(ordered):
             agent = subagent_map.get(st.target_subagent)
             if not agent:
-                agent = self.deps.subagents[0] if self.deps.subagents else None
+                agent = available_subagents[0] if available_subagents else None
             if agent:
                 template = "{input}" if i == 0 else "{input}\n\nPrevious result:\n{prev}"
                 chain_steps.append(
@@ -879,7 +882,10 @@ class SubAgentSessionRunner:
         attempt_id = metadata.get("attempt_id")
         actor_user_id = metadata.get("actor_user_id")
         leader_agent_id = metadata.get("leader_agent_id")
-        if not all(isinstance(value, str) and value for value in (workspace_id, root_goal_task_id, workspace_task_id, actor_user_id)):
+        if not all(
+            isinstance(value, str) and value
+            for value in (workspace_id, root_goal_task_id, workspace_task_id, actor_user_id)
+        ):
             return
         workspace_id_str = cast("str", workspace_id)
         root_goal_task_id_str = cast("str", root_goal_task_id)
@@ -1007,6 +1013,7 @@ class SubAgentSessionRunner:
         self,
         *,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_context: list[dict[str, str]],
         project_id: str,
@@ -1029,6 +1036,7 @@ class SubAgentSessionRunner:
 
         async for evt in self.execute_subagent(
             subagent=subagent,
+            available_subagents=available_subagents,
             user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -1101,6 +1109,7 @@ class SubAgentSessionRunner:
         self,
         run_id: str,
         subagent: SubAgent,
+        available_subagents: Sequence[SubAgent],
         user_message: str,
         conversation_id: str,
         conversation_context: list[dict[str, str]],
@@ -1204,6 +1213,7 @@ class SubAgentSessionRunner:
                         )
                     consume_coro = self.runner_consume_and_extract(
                         subagent=subagent,
+                        available_subagents=available_subagents,
                         user_message=user_message,
                         conversation_context=conversation_context,
                         project_id=project_id,
