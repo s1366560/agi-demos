@@ -324,21 +324,6 @@ def _consume_tool_pending_events(tool_def: "ToolDefinition") -> list[Any]:
 ProcessorEvent = AgentDomainEvent | dict[str, Any]
 
 
-def _create_event_dispatcher(
-    plugin_registry: Any | None,
-    runtime_hook_overrides: list[dict[str, Any]],
-) -> Any:
-    """Create the always-on typed event dispatcher for agent hooks."""
-    from src.infrastructure.plugins.agent_events import (
-        create_agent_plugin_event_dispatcher,
-    )
-
-    return create_agent_plugin_event_dispatcher(
-        plugin_registry,
-        runtime_hook_overrides,
-    )
-
-
 class SessionProcessor:
     """
     Core ReAct agent processing loop.
@@ -444,12 +429,9 @@ class SessionProcessor:
         self._tool_pipeline = tool_pipeline
         # LLM client for streaming (with circuit breaker + rate limiter)
         self._llm_client = config.llm_client
-        # Plugin registry for hook notifications (optional)
-        self._plugin_registry = config.plugin_registry
-        self._plugin_event_dispatcher = config.plugin_event_dispatcher or _create_event_dispatcher(
-            config.plugin_registry,
-            config.runtime_hook_overrides,
-        )
+        # Generation-owned lifecycle dispatcher. Production factories resolve
+        # this from the operation's pinned V2 service set.
+        self._plugin_event_dispatcher = config.plugin_event_dispatcher
 
         # Session state
         self._state = ProcessorState.IDLE

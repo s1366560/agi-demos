@@ -14,6 +14,9 @@ from src.infrastructure.plugins.v2.agent_loop import (
     AGENT_LOOP_RESOLVER_SERVICE_V2,
     BuiltinAgentLoopResolverV2,
 )
+from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+    AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -99,6 +102,11 @@ async def test_subagent_factory_consumes_generation_scoped_agent_loop_provider()
         ).create_for_subagent(subagent, [])
 
         assert processor.config.loop_resolver is operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+        assert processor.config.plugin_event_dispatcher is operation.require(
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2
+        )
+        assert processor.config.plugin_registry is None
+        assert processor.config.runtime_hook_overrides == []
         assert processor.config.provider_id == "deepseek"
 
     await host.close()

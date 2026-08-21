@@ -174,8 +174,9 @@ class ProcessorFactory:
             max_tokens=subagent.max_tokens,
             max_steps=subagent.max_iterations,
             llm_client=self.llm_client,
-            plugin_registry=self.plugin_registry,
-            plugin_event_dispatcher=self.plugin_event_dispatcher,
+            plugin_registry=None,
+            plugin_event_dispatcher=_default_runtime_dispatcher(),
+            runtime_hook_overrides=[],
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
             message_bus=self.message_bus,
@@ -231,3 +232,20 @@ def _default_loop_resolver() -> AgentLoopResolverLike:
     if not callable(getattr(resolver, "resolve", None)):
         raise RuntimeError("v2 agent loop resolver has no callable resolve method")
     return cast(AgentLoopResolverLike, resolver)
+
+
+def _default_runtime_dispatcher() -> object:
+    """Resolve the required Agent dispatcher from the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+        AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+        AgentRuntimeDispatcherProtocolV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+    if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_runtime_dispatcher",
+            "service:agent-runtime-dispatcher has an invalid implementation",
+        )
+    return dispatcher

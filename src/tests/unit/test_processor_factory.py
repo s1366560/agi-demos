@@ -150,19 +150,26 @@ class TestCreateForSubagent:
     """Tests for ProcessorFactory.create_for_subagent()."""
 
     @pytest.fixture(autouse=True)
-    def _pin_v2_loop_resolver(self):
-        with patch(
-            "src.infrastructure.agent.processor.factory._default_loop_resolver",
-            return_value=MagicMock(),
-        ) as resolver:
-            yield resolver
+    def _pin_v2_runtime_services(self):
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=MagicMock(),
+            ) as loop_resolver,
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=MagicMock(),
+            ) as runtime_dispatcher,
+        ):
+            yield loop_resolver, runtime_dispatcher
 
     def test_pinned_v2_loop_resolver_and_provider_are_propagated(
         self,
         inherit_subagent: SubAgent,
         sample_tools: list[ToolDefinition],
-        _pin_v2_loop_resolver: MagicMock,
+        _pin_v2_runtime_services: tuple[MagicMock, MagicMock],
     ) -> None:
+        loop_resolver, runtime_dispatcher = _pin_v2_runtime_services
         factory = ProcessorFactory(
             base_model="gemini-2.0-flash",
             base_provider_id="gemini",
@@ -170,9 +177,13 @@ class TestCreateForSubagent:
 
         processor = factory.create_for_subagent(inherit_subagent, sample_tools)
 
-        assert processor.config.loop_resolver is _pin_v2_loop_resolver.return_value
+        assert processor.config.loop_resolver is loop_resolver.return_value
+        assert processor.config.plugin_registry is None
+        assert processor.config.plugin_event_dispatcher is runtime_dispatcher.return_value
+        assert processor.config.runtime_hook_overrides == []
         assert processor.config.provider_id == "gemini"
-        _pin_v2_loop_resolver.assert_called_once_with()
+        loop_resolver.assert_called_once_with()
+        runtime_dispatcher.assert_called_once_with()
 
     def test_inherit_model_uses_base_model(
         self,

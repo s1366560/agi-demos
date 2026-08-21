@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.agent.processor.factory import _default_runtime_dispatcher
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -182,3 +185,27 @@ async def test_runtime_boundary_provides_generation_owned_dispatcher_service() -
 
     assert isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2)
     assert isinstance(dispatcher, PinnedAgentRuntimeDispatcherV2)
+
+
+@pytest.mark.unit
+def test_subagent_factory_propagates_missing_v2_dispatcher_service() -> None:
+    operation = SimpleNamespace(
+        require=Mock(
+            side_effect=RuntimeV2Error(
+                "missing_service",
+                "agent runtime dispatcher is unavailable",
+            )
+        )
+    )
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        _default_runtime_dispatcher()
+
+    assert error.value.code == "missing_service"
+    operation.require.assert_called_once_with(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)

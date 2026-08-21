@@ -393,9 +393,15 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        with patch(
-            "src.infrastructure.agent.processor.factory._default_loop_resolver",
-            return_value=object(),
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=object(),
+            ),
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=object(),
+            ),
         ):
             processor = factory.create_for_subagent(subagent, [dummy_tool], run_id="run-42")
 
@@ -430,9 +436,15 @@ class TestProcessorFactoryControlChannel:
             execute=AsyncMock(),
         )
 
-        with patch(
-            "src.infrastructure.agent.processor.factory._default_loop_resolver",
-            return_value=object(),
+        with (
+            patch(
+                "src.infrastructure.agent.processor.factory._default_loop_resolver",
+                return_value=object(),
+            ),
+            patch(
+                "src.infrastructure.agent.processor.factory._default_runtime_dispatcher",
+                return_value=object(),
+            ),
         ):
             processor = factory.create_for_subagent(subagent, [dummy_tool])
 
