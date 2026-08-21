@@ -94,7 +94,6 @@ class TestSandboxAPIRedirect:
         test_engine,
         mock_neo4j_client,
         mock_graph_service,
-        mock_workflow_engine,
     ):
         """Test that unauthenticated requests still return 401."""
         from httpx import ASGITransport, AsyncClient
@@ -113,11 +112,9 @@ class TestSandboxAPIRedirect:
         app = create_app()
 
         # Add necessary app state
-        app.state.workflow_engine = mock_workflow_engine
         app.state.graph_service = mock_graph_service
         app.state.container = DIContainer(
             redis_client=None,
-            workflow_engine=mock_workflow_engine,
         )
 
         # Override only DB dependencies (keep auth intact)

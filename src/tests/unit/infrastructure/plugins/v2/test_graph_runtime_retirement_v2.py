@@ -42,15 +42,14 @@ def test_static_graph_startup_owner_is_removed() -> None:
     assert "shutdown_graph_service" not in startup_exports
 
 
-def test_lifespan_resolves_graph_after_v2_publication_before_legacy_consumers() -> None:
+def test_lifespan_publishes_graph_before_legacy_di_consumers() -> None:
     source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
 
     assert "initialize_graph_service" not in source
     assert "shutdown_graph_service" not in source
     publication = source.index("await initialize_plugin_runtime_v2(")
-    workflow = source.index("await initialize_workflow_engine()")
     container = source.index("container = initialize_container(")
-    assert publication < workflow < container
+    assert publication < container
 
 
 def test_lifespan_does_not_hold_a_graph_generation_lease_until_shutdown() -> None:

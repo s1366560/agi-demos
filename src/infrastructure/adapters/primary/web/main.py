@@ -47,7 +47,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_sandbox_idle_reaper,
     initialize_telemetry,
     initialize_websocket_manager,
-    initialize_workflow_engine,
     load_desired_http_route_capabilities,
     mount_generation_http_dispatcher_v2,
     shutdown_artifact_content_orphan_gc_worker,
@@ -149,8 +148,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             embedding_service=getattr(graph_runtime.graph_service, "embedder", None),
         )
 
-    # Publish V2 before constructing workflow/DI consumers. Graph and env
-    # retrieval resources are created by candidate effects and are not retained
+    # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
+    # workflow resources are created by candidate effects and are not retained
     # by the legacy application container.
     _ = await initialize_plugin_runtime_v2(
         app,
@@ -160,17 +159,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         retrieval_runtime_factory=retrieval_runtime_factory,
     )
     try:
-        # Background workflow handlers acquire their own generation per run.
-        workflow_engine = await initialize_workflow_engine()
-
         # Initialize DI Container
-        container = initialize_container(
-            redis_client=redis_client,
-            workflow_engine=workflow_engine,
-        )
+        container = initialize_container(redis_client=redis_client)
 
         app.state.container = container
-        app.state.workflow_engine = workflow_engine
     except Exception:
         await shutdown_plugin_runtime_v2(app)
         raise

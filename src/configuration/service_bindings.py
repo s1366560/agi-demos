@@ -95,13 +95,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         allow_none=True,
     ),
     ContainerServiceBinding(
-        key="workflow_engine_port",
-        group="infra",
-        target="_infra.workflow_engine_port",
-        inject=(),
-        allow_none=True,
-    ),
-    ContainerServiceBinding(
         key="sandbox_adapter", group="infra", target="_infra.sandbox_adapter", inject=()
     ),
     ContainerServiceBinding(

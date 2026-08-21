@@ -41,6 +41,7 @@ from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
 )
+from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
 from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
 
@@ -82,6 +83,7 @@ def builtin_runtime_definitions_v2(
     *,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
+    workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     return (
@@ -91,6 +93,7 @@ def builtin_runtime_definitions_v2(
             apply=_apply_runtime_boundary,
         ),
         graph_runtime_definition_v2(graph_runtime_factory),
+        *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),
         *memory_service_definitions_v2(),

@@ -35,7 +35,6 @@ from .redis import initialize_redis_client
 from .sandbox_reaper import initialize_sandbox_idle_reaper, shutdown_sandbox_idle_reaper
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
 from .websocket import initialize_websocket_manager
-from .workflow import initialize_workflow_engine
 
 __all__ = [
     "get_channel_manager",
@@ -51,7 +50,6 @@ __all__ = [
     "initialize_sandbox_idle_reaper",
     "initialize_telemetry",
     "initialize_websocket_manager",
-    "initialize_workflow_engine",
     "install_http_route_capabilities",
     "load_desired_http_route_capabilities",
     "mount_generation_http_dispatcher_v2",

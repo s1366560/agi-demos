@@ -475,61 +475,6 @@ class TestBackendFactorySeams:
 
 
 @pytest.mark.unit
-class TestWorkflowEngineSeam:
-    def test_plugin_row_wins(self, isolated_runtime_host: Any) -> None:
-        from src.configuration.containers.infra_container import InfraContainer
-
-        class _Engine:
-            async def start_workflow(self, *args: Any, **kwargs: Any) -> None:
-                return None
-
-        engine = _Engine()
-        isolated_runtime_host.register(
-            _signed_manifest("workflow_engine"),
-            CapabilityKind.WORKFLOW_ENGINE,
-            "default",
-            engine,
-        )
-
-        container = InfraContainer()
-
-        assert container.workflow_engine_port() is engine
-
-    def test_builtin_absent_preserved(self, isolated_runtime_host: Any) -> None:
-        from src.configuration.containers.infra_container import InfraContainer
-
-        container = InfraContainer()
-
-        assert container.workflow_engine_port() is None
-
-    def test_injected_engine_wins_over_absent_plugin(self, isolated_runtime_host: Any) -> None:
-        from src.configuration.containers.infra_container import InfraContainer
-
-        class _Engine:
-            async def start_workflow(self, *args: Any, **kwargs: Any) -> None:
-                return None
-
-        engine = _Engine()
-        container = InfraContainer(workflow_engine=engine)  # type: ignore[arg-type]
-
-        assert container.workflow_engine_port() is engine
-
-    def test_malformed_plugin_row_raises(self, isolated_runtime_host: Any) -> None:
-        from src.configuration.containers.infra_container import InfraContainer
-
-        isolated_runtime_host.register(
-            _signed_manifest("workflow_engine"),
-            CapabilityKind.WORKFLOW_ENGINE,
-            "default",
-            object(),
-        )
-
-        container = InfraContainer()
-        with pytest.raises(TypeError, match="WorkflowEnginePort"):
-            container.workflow_engine_port()
-
-
-@pytest.mark.unit
 class TestTelemetrySeam:
     def test_noop_builtin_when_no_plugin_row(self) -> None:
         from src.infrastructure.plugins.backend_adapters import NoopTelemetryExporter

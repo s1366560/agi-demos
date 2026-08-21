@@ -17,11 +17,13 @@ from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_workflow_engine,
 )
 from src.infrastructure.adapters.primary.web.memory_application_authority_v2 import (
     MemoryApplicationAuthorityV2,
     memory_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -556,7 +558,7 @@ async def create_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> Any:
     """Create a new memory.
 
@@ -889,7 +891,7 @@ async def delete_memory(
 async def reprocess_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
@@ -1071,7 +1073,7 @@ async def update_memory(
     memory_data: MemoryUpdate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),

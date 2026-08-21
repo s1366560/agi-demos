@@ -11,8 +11,6 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-    from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
-
 logger = logging.getLogger(__name__)
 
 _app_container: DIContainer | None = None
@@ -25,14 +23,12 @@ def get_app_container() -> DIContainer | None:
 
 def initialize_container(
     redis_client: object | None,
-    workflow_engine: WorkflowEnginePort | None,
 ) -> DIContainer:
     """
     Initialize the DI container with all services.
 
     Args:
         redis_client: The Redis client instance.
-        workflow_engine: The workflow engine.
 
     Returns:
         Configured DIContainer instance.
@@ -43,7 +39,6 @@ def initialize_container(
     container = DIContainer(
         session_factory=async_session_factory,
         redis_client=typed_redis_client,
-        workflow_engine=workflow_engine,
     )
     _app_container = container
     logger.info("DI container initialized")

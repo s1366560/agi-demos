@@ -113,7 +113,6 @@ from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repo
 )
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -177,7 +176,6 @@ class DIContainer:
         db: AsyncSession | None = None,
         redis_client: redis.Redis | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
-        workflow_engine: WorkflowEnginePort | None = None,
         _infra: InfraContainer | None = None,
     ) -> None:
         # Store raw deps for with_db() and properties
@@ -201,7 +199,6 @@ class DIContainer:
         # cached singletons like MCPSandboxAdapter across per-request clones.
         self._infra = _infra or InfraContainer(
             redis_client=redis_client,
-            workflow_engine=workflow_engine,
             settings=self._settings,
         )
         self._sandbox = SandboxContainer(
@@ -241,7 +238,6 @@ class DIContainer:
             db=db,
             redis_client=self._redis_client,
             session_factory=self._session_factory,
-            workflow_engine=self._infra.workflow_engine_port(),
             _infra=self._infra,
         )
 
@@ -648,11 +644,6 @@ class DIContainer:
 
     def distributed_lock_adapter(self) -> Any:
         return cast(Any, self._services.get_or_activate("distributed_lock_adapter"))
-
-    def workflow_engine_port(self) -> WorkflowEnginePort | None:
-        return cast(
-            WorkflowEnginePort | None, self._services.get_or_activate("workflow_engine_port")
-        )
 
     def sandbox_adapter(self) -> Any:
         return cast(Any, self._services.get_or_activate("sandbox_adapter"))

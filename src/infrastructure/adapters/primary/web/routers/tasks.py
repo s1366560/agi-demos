@@ -25,10 +25,12 @@ from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_workflow_engine,
 )
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_api_key_from_header_or_query,
+)
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
@@ -689,7 +691,7 @@ async def retry_pending_tasks_endpoint(
     stale_after_minutes: int = Query(15, ge=1, le=1440),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> RetryPendingResponse:
     """Resume a bounded batch of stale pending tasks from the dashboard."""
     include_failed = include_failed is True
@@ -795,7 +797,7 @@ async def retry_task_endpoint(
     task_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Retry or resume a restartable background task."""
     result = await db.execute(

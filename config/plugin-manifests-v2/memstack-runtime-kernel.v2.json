@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:6fb5004709d6fdc86cdbf457c10e516e6816300e2c6fe9380657fff2358f1cd7",
+        "digest": "sha256:e8f5ede577f8e808dfee1095a6d2e8a1184fdc2594e9c6dbf10ea1bdb6f428a4",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -237,6 +237,74 @@
       "artifact": {
         "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/workflow/asyncio-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:workflow.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "asyncio-local", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:aa3fe0dc87bfc35bb90eb6f83171327439452f547af1d5c3d8e00ebbf042655b",
+      "artifact": {
+        "digest": "sha256:30354f75b8cc6415d176d28ea1a77c6166ff18c1b845ac8808b3599c67f2733e",
+        "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/workflow-services",
+      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_application_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.workflow-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "runtime",
+              "service": "service:workflow.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-runtime", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8076ab08930cfb438e125fbd1be720ff920d3975d1d0b90b29af78c1fe7c0ce2",
+      "artifact": {
+        "digest": "sha256:30354f75b8cc6415d176d28ea1a77c6166ff18c1b845ac8808b3599c67f2733e",
+        "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
       }
     },
     {

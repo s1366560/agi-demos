@@ -9,7 +9,6 @@ from typing import Any, cast
 from sqlalchemy import select
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog
@@ -413,14 +412,10 @@ async def _run_with_graph_runtime_v2(
         return await handler(payload, runtime.require())
 
 
-async def initialize_workflow_engine() -> WorkflowEnginePort | None:
-    """Initialize the asyncio-based workflow engine.
-
-    Returns:
-        WorkflowEnginePort instance.
-    """
-    logger.info("Initializing Asyncio Workflow Engine...")
-    workflow_engine = AsyncioWorkflowEngine()
+def register_workflow_handlers_v2(
+    workflow_engine: AsyncioWorkflowEngine,
+) -> AsyncioWorkflowEngine:
+    """Register the builtin handlers selected by the explicit V2 workflow module."""
     workflow_engine.register_handler(
         "episode_processing",
         partial(_run_with_graph_runtime_v2, _run_episode_processing_workflow),
@@ -437,5 +432,12 @@ async def initialize_workflow_engine() -> WorkflowEnginePort | None:
         "Registered generation-leased workflow handlers: episode_processing, "
         "incremental_refresh, rebuild_communities"
     )
+    return workflow_engine
+
+
+def build_asyncio_workflow_engine_v2() -> AsyncioWorkflowEngine:
+    """Build the local workflow engine activated by the V2 Provider effect."""
+    logger.info("Initializing Asyncio Workflow Engine...")
+    workflow_engine = register_workflow_handlers_v2(AsyncioWorkflowEngine())
     logger.info("Asyncio Workflow Engine initialized")
     return workflow_engine

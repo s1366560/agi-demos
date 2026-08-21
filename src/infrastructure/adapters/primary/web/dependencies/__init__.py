@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Protocol, cast
 
@@ -82,41 +81,10 @@ async def _backend_store_authority_dependency_proxy_v2(
         await dependency.aclose()
 
 
-logger = logging.getLogger(__name__)
-
-
 def get_neo4j_client(_request: Request) -> object | None:
     """Resolve direct graph-driver access from the request's generation."""
     graph_service = _graph_runtime_v2().graph_service
     return getattr(graph_service, "client", None)
-
-
-def get_workflow_engine(request: Request) -> None:
-    """Get WorkflowEngine from app state.
-
-    Returns the Temporal WorkflowEngine for submitting workflow tasks.
-    """
-    try:
-        app = request.app
-        state = app.state
-    except AttributeError as e:
-        logger.critical(
-            "Application state is not properly configured for workflow engine. "
-            "Ensure app.state and workflow_engine are initialized during app startup.",
-            exc_info=True,
-        )
-        raise RuntimeError(
-            "Workflow engine not initialized. Cannot process workflow requests."
-        ) from e
-
-    if not hasattr(state, "workflow_engine"):
-        logger.critical(
-            "Workflow engine not available in app state. "
-            "Ensure workflow_engine is initialized during app startup."
-        )
-        raise RuntimeError("Workflow engine not initialized. Cannot process workflow requests.")
-
-    return cast(None, state.workflow_engine)
 
 
 def _graph_runtime_v2() -> GraphRuntimeServiceV2:
@@ -244,7 +212,6 @@ __all__ = [
     "get_neo4j_client",
     "get_password_hash",
     "get_retrieval_store",
-    "get_workflow_engine",
     "hash_api_key",
     "initialize_default_credentials",
     "security",

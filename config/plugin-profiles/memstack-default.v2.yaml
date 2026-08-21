@@ -31,6 +31,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workflow-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workflow/asyncio-runtime
+      enabled: true
+      config:
+        strategy: asyncio-local
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-workflow-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/workflow-services
+      enabled: true
+      config:
+        strategy: generation-runtime
+      inject:
+        runtime: service:workflow.runtime
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-env-retrieval-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

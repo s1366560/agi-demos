@@ -666,6 +666,9 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
         get_neo4j_client,
     )
     from src.infrastructure.adapters.primary.web.main import create_app
+    from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+        workflow_engine_authority_dependency_v2,
+    )
     from src.infrastructure.adapters.secondary.persistence.database import get_db
     from src.infrastructure.adapters.secondary.persistence.models import User
 
@@ -698,16 +701,12 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
 
     app.state.workspace_authority = TestWorkspaceAuthority()
 
-    # Add workflow_engine to app state
-    app.state.workflow_engine = mock_workflow_engine
-
     # Add graph_service to app state
     app.state.graph_service = mock_graph_service
 
     # Add container to app state for agent endpoints
     app.state.container = DIContainer(
         redis_client=None,  # Mock for tests
-        workflow_engine=mock_workflow_engine,
     )
 
     # Override database dependency to use test SQLite database
@@ -750,6 +749,7 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     app.dependency_overrides[get_graph_service] = override_get_graph_service
     app.dependency_overrides[get_graph_store] = override_get_graph_service
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[workflow_engine_authority_dependency_v2] = lambda: mock_workflow_engine
 
     return app
 

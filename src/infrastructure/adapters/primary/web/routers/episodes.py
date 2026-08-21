@@ -18,7 +18,9 @@ from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_graph_store,
-    get_workflow_engine,
+)
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -185,7 +187,7 @@ async def create_episode(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
-    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> EpisodeResponse:
     """
     Create a new episode and ingest it into the knowledge graph.
