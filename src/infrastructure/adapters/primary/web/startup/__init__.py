@@ -26,7 +26,6 @@ from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
-from .graph import initialize_graph_service
 from .http_route_capabilities import (
     install_http_route_capabilities,
     load_desired_http_route_capabilities,
@@ -47,7 +46,6 @@ __all__ = [
     "initialize_container",
     "initialize_database_schema",
     "initialize_docker_services",
-    "initialize_graph_service",
     "initialize_llm_providers",
     "initialize_redis_client",
     "initialize_sandbox_idle_reaper",

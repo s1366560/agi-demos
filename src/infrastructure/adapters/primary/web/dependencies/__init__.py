@@ -10,7 +10,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
@@ -37,8 +37,14 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
-from src.infrastructure.graph.registry import get_env_default_store
+from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
 from src.infrastructure.plugins.v2.backend_store_services import BackendStoreServicesV2
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.graph_runtime import (
+    GRAPH_RUNTIME_SERVICE_V2,
+    GraphRuntimeServiceV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.retrieval.registry import get_env_default_retrieval_store
 
 
@@ -113,27 +119,32 @@ def get_workflow_engine(request: Request) -> None:
     return cast(None, state.workflow_engine)
 
 
-def get_graph_service(request: Request) -> None:
-    """Get GraphServicePort (NativeGraphAdapter) from app state.
+def _graph_runtime_v2() -> GraphRuntimeServiceV2:
+    runtime = current_generation_v2().resolve(
+        GRAPH_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(runtime, GraphRuntimeServiceV2):
+        raise RuntimeV2Error(
+            "invalid_graph_runtime",
+            "pinned generation has an invalid graph runtime service",
+        )
+    return runtime
 
-    This provides the adapter layer that handles knowledge graph operations
-    including entity extraction, search, and community detection.
-    """
-    try:
-        return cast(None, request.app.state.container.graph_service)
-    except Exception:
-        logger.warning("Failed to get graph_service from container")
-        return None
+
+def get_graph_service(_request: Request) -> GraphStorePort | None:
+    """Resolve the optional graph resource from the pinned V2 generation."""
+    return _graph_runtime_v2().graph_service
 
 
-def get_graphiti_client(request: Request) -> GraphServicePort | None:
+def get_graphiti_client(request: Request) -> GraphStorePort | None:
     """Legacy dependency returning the native graph service.
 
     Older routes still refer to this as a Graphiti client, but the runtime graph
     implementation is NativeGraphAdapter. It exposes the direct driver for
     compatibility with legacy read/query routes.
     """
-    return cast(GraphServicePort | None, get_graph_service(request))
+    return get_graph_service(request)
 
 
 def _request_project_id(request: Request) -> str | None:
@@ -150,11 +161,11 @@ async def get_graph_store(
         _backend_store_authority_dependency_proxy_v2
     ),
 ) -> GraphStorePort | None:
-    """Get the ``GraphStorePort`` (pluggable graph backend) from app state.
+    """Get the ``GraphStorePort`` from the request's pinned generation.
 
     If a project_id is present in the path/query, resolve that project's
-    ``graph_store_id`` through the registry. Null bindings fall back to the env
-    default singleton registered at startup.
+    persisted ``graph_store_id`` through the V2 application service. Null and
+    environment bindings resolve to the generation-owned graph resource.
     """
     project_id = _request_project_id(request)
     if project_id:
@@ -167,19 +178,13 @@ async def get_graph_store(
         tenant_id = str(row[0]) if row is not None else None
         store_id = str(row[1]) if row is not None and row[1] else None
         if tenant_id and store_id:
+            if store_id.startswith(ENV_STORE_ID_PREFIX):
+                return get_graph_service(request)
             return await backend_store.services.graph_service.resolve_backend(
                 tenant_id,
                 store_id,
             )
-    try:
-        default_store = get_env_default_store()
-        if default_store is not None:
-            return cast(GraphStorePort, default_store)
-        store = request.app.state.container.graph_service
-        return cast(GraphStorePort | None, store)
-    except Exception:
-        logger.warning("Failed to get graph_store from container")
-        return None
+    return get_graph_service(request)
 
 
 async def get_retrieval_store(

@@ -25,6 +25,7 @@ from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
 )
+from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .route_effects import route_table_builder_definition_v2
@@ -74,7 +75,10 @@ def _apply_runtime_boundary(
     )
 
 
-def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+def builtin_runtime_definitions_v2(
+    *,
+    graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
+) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     return (
         PluginDefinitionV2(
@@ -82,6 +86,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
             contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
         ),
+        graph_runtime_definition_v2(graph_runtime_factory),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),

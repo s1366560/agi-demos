@@ -16,6 +16,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-graph-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/graph/runtime
+      enabled: true
+      config:
+        required: false
+        strategy: native-adapter
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-project-tenant-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

@@ -203,8 +203,40 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:4e40761c775eeedc4576be04726f517b0e4995b1f28ce04ac62317a772d233dd",
+        "digest": "sha256:93fe7f1a7b3db7d27455d231ef8e4cc685c315aaa58ff6627ea4e0d5ccac3c96",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/graph/runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.graph_runtime:graph_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "strategy"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "strategy": { "const": "native-adapter", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e5912b479000b04123d4cda8d863251fecf07be458cc1eeef9deae903340a3a3",
+      "artifact": {
+        "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
+        "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
       }
     },
     {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
@@ -30,6 +31,11 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 from src.infrastructure.plugins.v2.boundary import (
     PluginGenerationMiddlewareV2,
     current_process_generation_host_v2,
+)
+from src.infrastructure.plugins.v2.graph_runtime import (
+    GRAPH_RUNTIME_SERVICE_V2,
+    GraphRuntimeFactoryV2,
+    GraphRuntimeServiceV2,
 )
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
@@ -81,6 +87,40 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     with pytest.raises(RuntimeV2Error) as error:
         current_process_generation_host_v2()
     assert error.value.code == "process_generation_host_not_configured"
+
+
+@pytest.mark.unit
+async def test_initialize_plugin_runtime_v2_activates_graph_factory() -> None:
+    app = FastAPI()
+    closed = False
+
+    class GraphService:
+        async def close(self) -> None:
+            nonlocal closed
+            closed = True
+
+    graph_service = GraphService()
+
+    async def graph_factory() -> object:
+        return graph_service
+
+    host = await initialize_plugin_runtime_v2(
+        app,
+        graph_runtime_factory=cast("GraphRuntimeFactoryV2", graph_factory),
+    )
+    generation = host.manager.current
+    assert generation is not None
+    runtime = generation.resolve(
+        GRAPH_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+
+    assert isinstance(runtime, GraphRuntimeServiceV2)
+    assert runtime.graph_service is graph_service
+
+    await shutdown_plugin_runtime_v2(app)
+
+    assert closed is True
 
 
 @pytest.mark.unit

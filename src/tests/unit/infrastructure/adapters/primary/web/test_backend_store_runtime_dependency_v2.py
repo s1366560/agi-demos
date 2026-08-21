@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from inspect import signature
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -14,8 +15,15 @@ from src.infrastructure.adapters.primary.web import (
     backend_store_authority_v2,
     dependencies,
 )
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 pytestmark = pytest.mark.unit
+
+_ROOT = Path(__file__).resolve().parents[7]
+_PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
+_MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
 def _request() -> Request:
@@ -111,6 +119,41 @@ async def test_project_bound_runtime_store_propagates_v2_resolution_failure(
 
     with pytest.raises(RuntimeError, match="v2 backend unavailable"):
         await dependency(_request(), backend_store=authority)
+
+
+@pytest.mark.parametrize("binding_id", ("", "__env_neo4j__"))
+async def test_default_graph_store_uses_the_pinned_generation(binding_id: str) -> None:
+    graph_service = SimpleNamespace(close=AsyncMock())
+
+    async def graph_factory() -> Any:
+        return graph_service
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(graph_runtime_factory=graph_factory)
+    )
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+    authority, service = _authority(
+        binding_name="graph_store_id",
+        binding_id=binding_id,
+        service_name="graph_service",
+    )
+
+    assert publication.accepted is True
+    async with pin_generation_v2(host):
+        assert dependencies.get_graph_service(_request()) is graph_service
+        resolved = await dependencies.get_graph_store(_request(), backend_store=authority)
+
+    assert resolved is graph_service
+    service.resolve_backend.assert_not_awaited()
+
+    await host.close()
+
+    graph_service.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize(

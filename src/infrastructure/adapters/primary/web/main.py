@@ -3,7 +3,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from src.infrastructure.logging_redaction import install_sensitive_log_redaction
 
@@ -28,7 +28,9 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
+from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -39,7 +41,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_container,
     initialize_database_schema,
     initialize_docker_services,
-    initialize_graph_service,
     initialize_llm_providers,
     initialize_redis_client,
     initialize_sandbox_idle_reaper,
@@ -54,9 +55,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     shutdown_sandbox_idle_reaper,
     shutdown_telemetry_services,
     sync_health_checker_providers,
-)
-from src.infrastructure.adapters.primary.web.startup.graph import (
-    shutdown_graph_service,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
@@ -77,9 +75,18 @@ from src.infrastructure.llm.resilience.health_checker import (
 from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.graph_runtime import (
+    GRAPH_RUNTIME_SERVICE_V2,
+    GraphRuntimeServiceV2,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+class _RedisConfigurableGraph(Protocol):
+    def set_redis_client(self, redis_client: Redis) -> None: ...
+
 
 # Fix LiteLLM duplicate logging - prevent log propagation to root logger
 # LiteLLM adds its own handler AND allows propagation by default, causing duplicate logs
@@ -116,12 +123,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await start_health_checker()
     logger.info("LLM health checker started with %d active providers", health_provider_count)
 
-    # Initialize NativeGraphAdapter (self-developed knowledge graph engine)
-    graph_service = await initialize_graph_service()
-
-    # Initialize Workflow Engine
-    workflow_engine = await initialize_workflow_engine(graph_service)
-
     # Initialize Background Task Manager
     from src.infrastructure.adapters.secondary.background_tasks import task_manager
 
@@ -130,38 +131,66 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
-    # Wire Redis into graph service for cached embedding support
-    if redis_client and graph_service and hasattr(graph_service, "set_redis_client"):
-        graph_service.set_redis_client(redis_client)  # type: ignore[arg-type]  # runtime type is Redis
-    try:
-        from src.infrastructure.retrieval.registry import register_env_default_retrieval_store
-        from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
 
-        retrieval_store = MemstackPgvectorRetrievalStore(
-            session_factory=async_session_factory,
-            embedding_service=getattr(graph_service, "embedder", None),
-        )
-        register_env_default_retrieval_store(retrieval_store)
-        app.state.retrieval_store = retrieval_store
-        logger.info("Registered env-default retrieval backend in registry")
-    except Exception:
-        logger.exception("Failed to register env-default retrieval backend")
-
-    # Initialize DI Container
-    container = initialize_container(
-        graph_service=graph_service,
-        redis_client=redis_client,
-        workflow_engine=workflow_engine,
-    )
-
-    app.state.container = container
-    app.state.workflow_engine = workflow_engine
-    app.state.graph_service = graph_service
-    await initialize_plugin_runtime_v2(
+    # Publish V2 before constructing graph/workflow/DI consumers. The graph
+    # module owns the resource and its disposer; this app-lifespan lease keeps
+    # the current legacy DI consumers on one immutable generation until their
+    # separate V2 migration completes.
+    plugin_host = await initialize_plugin_runtime_v2(
         app,
         desired_http_route_rows=desired_http_route_rows,
         session_factory=async_session_factory,
+        graph_runtime_factory=create_native_graph_adapter,
     )
+    graph_generation_lease = await plugin_host.acquire()
+    try:
+        graph_generation = graph_generation_lease.generation
+        graph_runtime = graph_generation.resolve(
+            GRAPH_RUNTIME_SERVICE_V2,
+            ScopeV2(kind=ScopeKindV2.ROOT),
+        )
+        if not isinstance(graph_runtime, GraphRuntimeServiceV2):
+            raise TypeError("plugin runtime v2 published an invalid graph runtime service")
+        graph_service = graph_runtime.graph_service
+
+        # Initialize Workflow Engine
+        workflow_engine = await initialize_workflow_engine(graph_service)
+
+        # Wire Redis into graph service for cached embedding support
+        if (
+            redis_client is not None
+            and graph_service is not None
+            and hasattr(graph_service, "set_redis_client")
+        ):
+            configurable_graph = cast("_RedisConfigurableGraph", graph_service)
+            configurable_graph.set_redis_client(cast("Redis", redis_client))
+        try:
+            from src.infrastructure.retrieval.registry import register_env_default_retrieval_store
+            from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
+
+            retrieval_store = MemstackPgvectorRetrievalStore(
+                session_factory=async_session_factory,
+                embedding_service=getattr(graph_service, "embedder", None),
+            )
+            register_env_default_retrieval_store(retrieval_store)
+            app.state.retrieval_store = retrieval_store
+            logger.info("Registered env-default retrieval backend in registry")
+        except Exception:
+            logger.exception("Failed to register env-default retrieval backend")
+
+        # Initialize DI Container
+        container = initialize_container(
+            graph_service=graph_service,
+            redis_client=redis_client,
+            workflow_engine=workflow_engine,
+        )
+
+        app.state.container = container
+        app.state.workflow_engine = workflow_engine
+    except Exception:
+        await graph_generation_lease.release()
+        await shutdown_plugin_runtime_v2(app)
+        raise
 
     # Register WebSocket manager for lifecycle state notifications
     initialize_websocket_manager()
@@ -315,10 +344,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     yield
 
-    # Stop v2 Fibers while their process services are still available. Starlette
-    # has already drained request tasks, so no new HTTP generation lease can start.
-    await shutdown_plugin_runtime_v2(app)
-
     # Remove plugin-owned routes before application state services unwind.
     http_routes = getattr(app.state, "platform_plugin_http_routes", None)
     if http_routes is not None:
@@ -417,12 +442,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Stop Docker event monitor
     await shutdown_docker_services()
 
+    # Release the temporary app-lifespan graph consumer, then retire all V2
+    # Fibers. Graph cleanup remains an effect and runs before telemetry stops.
+    await graph_generation_lease.release()
+    await shutdown_plugin_runtime_v2(app)
+
     # Shutdown OpenTelemetry
     shutdown_telemetry_services()
-
-    # Close Neo4j connection
-    if graph_service is not None:
-        await shutdown_graph_service(graph_service)
 
 
 def create_app(
