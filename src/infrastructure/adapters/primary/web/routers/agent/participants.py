@@ -54,6 +54,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    ProjectTenantAuthorityV2,
+    project_tenant_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     get_workspace_authority,
     workspace_core_unavailable_error,
@@ -147,17 +151,17 @@ async def _load_conversation_and_project(
     request: Request,
     db: AsyncSession,
     conversation_id: str,
+    project_tenant: ProjectTenantAuthorityV2,
 ) -> tuple[SqlConversationRepository, Conversation, Project]:
     """Load the conversation + its project, or raise 404."""
     container = get_container_with_db(request, db)
     conv_repo = container.conversation_repository()
-    project_repo = container.project_repository()
 
     conversation = await conv_repo.find_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-    project = await project_repo.find_by_id(conversation.project_id)
+    project = await project_tenant.services.project_repository.find_by_id(conversation.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail=_("Project not found"))
     return conv_repo, conversation, project
@@ -388,10 +392,11 @@ async def list_participants(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RosterResponse:
     """Return the current roster + coordination state."""
     _conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     await _assert_read_permission(conversation, project, current_user, request)
@@ -415,10 +420,11 @@ async def add_participant(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RosterResponse:
     """Add an agent to the roster."""
     conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -466,10 +472,11 @@ async def remove_participant(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RosterResponse:
     """Remove an agent from the roster."""
     conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -505,6 +512,7 @@ async def set_coordinator(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RosterResponse:
     """Assign or clear the coordinator agent for a conversation.
 
@@ -513,7 +521,7 @@ async def set_coordinator(
     ``CoordinatorRequiredError`` when it is missing).
     """
     conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -546,10 +554,11 @@ async def set_focused_agent(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RosterResponse:
     """Assign or clear the focused agent for a conversation."""
     conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
@@ -606,6 +615,7 @@ async def list_mention_candidates(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> MentionCandidatesResponse:
     """Return mention candidates for the ``MentionPicker``.
 
@@ -616,7 +626,7 @@ async def list_mention_candidates(
     *over this set* and never parses free-form text to guess an agent.
     """
     _conv_repo, conversation, project = await _load_conversation_and_project(
-        request, db, conversation_id
+        request, db, conversation_id, project_tenant
     )
     _assert_tenant_scope(conversation, project, tenant_id)
     await _assert_read_permission(conversation, project, current_user, request)
