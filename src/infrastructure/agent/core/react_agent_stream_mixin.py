@@ -39,6 +39,8 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext
@@ -62,8 +64,6 @@ from ..workspace.workspace_metadata_keys import (
 # Runtime imports (not TYPE_CHECKING) — used to construct values inside ``stream``.
 from .processor import ToolDefinition
 from .react_agent_profile import (
-    _infer_provider_from_model_name,
-    _normalize_model_provider,
     _register_selected_agent_session,
 )
 
@@ -71,6 +71,119 @@ if TYPE_CHECKING:
     from .processor import ProcessorConfig, SessionProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_model_route_override(
+    *,
+    model_override: str | None,
+    model_route_override: ModelRouteRef | None,
+) -> ModelRouteRef | None:
+    """Validate that a model override carries explicit provider identity."""
+    normalized_model_override = (model_override or "").strip() or None
+    if model_route_override is None:
+        if normalized_model_override is not None:
+            raise RuntimeV2Error(
+                "model_override_route_missing",
+                f"model override {normalized_model_override} has no provider route",
+            )
+        return None
+    if (
+        normalized_model_override is not None
+        and model_route_override.model_id != normalized_model_override
+    ):
+        raise RuntimeV2Error(
+            "model_override_route_mismatch",
+            f"model override {normalized_model_override} does not match route model "
+            f"{model_route_override.model_id}",
+        )
+    return model_route_override
+
+
+def _provider_config_matches_exact_route(provider: object, route: ModelRouteRef) -> bool:
+    """Return whether one active LLM config exactly owns a route identity."""
+    if not bool(getattr(provider, "is_active", False)) or not bool(
+        getattr(provider, "is_enabled", False)
+    ):
+        return False
+    provider_type = getattr(provider, "provider_type", "")
+    provider_id = str(getattr(provider_type, "value", provider_type)).strip()
+    if provider_id != route.provider_id:
+        return False
+    operation_type = getattr(provider, "operation_type", "llm")
+    operation_id = str(getattr(operation_type, "value", operation_type)).strip()
+    if operation_id != "llm":
+        return False
+    is_model_allowed = getattr(provider, "is_model_allowed", None)
+    return callable(is_model_allowed) and bool(is_model_allowed(route.model_id))
+
+
+async def _resolve_exact_provider_config_for_route(
+    *,
+    tenant_id: str,
+    route: ModelRouteRef,
+) -> Any:
+    """Resolve one provider config by exact explicit identity, without model inference."""
+    from src.application.services.provider_resolution_service import (
+        get_provider_resolution_service,
+    )
+    from src.domain.llm_providers.models import OperationType
+
+    repository = get_provider_resolution_service().repository
+    if tenant_id:
+        tenant_provider = await repository.find_tenant_provider(tenant_id, OperationType.LLM)
+        if tenant_provider is not None and _provider_config_matches_exact_route(
+            tenant_provider,
+            route,
+        ):
+            return tenant_provider
+
+    default_provider = await repository.find_default_provider(OperationType.LLM)
+    if default_provider is not None and _provider_config_matches_exact_route(
+        default_provider,
+        route,
+    ):
+        return default_provider
+
+    active_providers = await repository.list_active()
+    candidates: dict[str, Any] = {}
+    for provider in active_providers:
+        if not _provider_config_matches_exact_route(provider, route):
+            continue
+        provider_identity = str(getattr(provider, "id", id(provider)))
+        candidates[provider_identity] = provider
+    if len(candidates) == 1:
+        return next(iter(candidates.values()))
+    if not candidates:
+        raise RuntimeV2Error(
+            "model_route_provider_unavailable",
+            f"no active provider config matches route {route.provider_id}/{route.model_id}",
+        )
+    raise RuntimeV2Error(
+        "model_route_provider_ambiguous",
+        f"multiple active provider configs match route {route.provider_id}/{route.model_id}",
+    )
+
+
+async def _bind_processor_model_route(
+    *,
+    config: ProcessorConfig,
+    route: ModelRouteRef,
+    tenant_id: str,
+) -> None:
+    """Bind exact route identity and, when needed, its unambiguous LLM client."""
+    if config.provider_id.strip() != route.provider_id:
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+        provider_config = await _resolve_exact_provider_config_for_route(
+            tenant_id=tenant_id,
+            route=route,
+        )
+        service_factory = get_ai_service_factory()
+        config.llm_client = service_factory.create_llm_client(provider_config)
+        config.api_key = ""
+        config.base_url = provider_config.base_url
+    config.provider_id = route.provider_id
+    config.model = route.model_id
 
 
 def _resolve_current_tools_from_runtime_v2(
@@ -344,6 +457,7 @@ class _StreamAgent(Protocol):
         tenant_id: str,
         tenant_agent_config_data: dict[str, Any] | None,
         selected_agent: Any,
+        selected_agent_model_route: ModelRouteRef | None,
         is_workspace_worker_runtime: bool,
     ) -> Any: ...
 
@@ -1443,6 +1557,8 @@ class StreamMixin:
         plan_mode: bool = False,
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
+        selected_agent_model_route: ModelRouteRef | None = None,
+        model_route_override: ModelRouteRef | None = None,
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
         preferred_language: str | None = None,
@@ -1481,6 +1597,10 @@ class StreamMixin:
             - {"type": "error", "data": {...}}
         """
         conversation_context = conversation_context or []
+        resolved_model_route_override = _resolve_model_route_override(
+            model_override=model_override,
+            model_route_override=model_route_override,
+        )
         self._reset_stream_state()
         start_time = time.time()
 
@@ -1578,7 +1698,11 @@ class StreamMixin:
             tenant_id=tenant_id,
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
+            selected_agent_model_route=selected_agent_model_route,
             is_workspace_worker_runtime=has_workspace_binding,
+        )
+        effective_model_route = (
+            resolved_model_route_override or runtime_profile.effective_model_route
         )
         runtime_limits = _workspace_runtime_limit_overrides(workspace_runtime_payload)
         if runtime_limits:
@@ -1770,7 +1894,7 @@ class StreamMixin:
             agent_definition_prompt=runtime_profile.agent_definition_prompt,
             primary_agent_prompt=primary_agent_prompt,
             available_skills=runtime_profile.available_skills,
-            model_name=(model_override or runtime_profile.effective_model),
+            model_name=effective_model_route.model_id,
             max_steps_override=runtime_profile.effective_max_steps,
             workspace_manager=runtime_workspace_manager,
             selected_agent_name=selected_agent.name,
@@ -1842,7 +1966,15 @@ class StreamMixin:
         config = self._stream_create_processor_config(self.config, selection_context)
         config.run_id = canonical_run_id or message_id
         config.api_auth_token = api_auth_token
-        config.model = runtime_profile.effective_model
+        previous_model_route = ModelRouteRef(
+            provider_id=config.provider_id,
+            model_id=config.model,
+        )
+        await _bind_processor_model_route(
+            config=config,
+            route=effective_model_route,
+            tenant_id=tenant_id,
+        )
         config.temperature = runtime_profile.effective_temperature
         config.max_tokens = runtime_profile.effective_max_tokens
         config.max_steps = runtime_profile.effective_max_steps
@@ -1925,146 +2057,31 @@ class StreamMixin:
             config.forced_skill_name = matched_skill.name
             config.forced_skill_tools = list(matched_skill.tools) if matched_skill.tools else None
 
-        # Apply per-request model override before LLM parameter overrides.
-        normalized_model_override = (model_override or "").strip() or None
-        if normalized_model_override:
-            from src.infrastructure.llm.model_catalog import get_model_catalog_service
-            from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        # Rebuild model-specific reasoning options after an explicit route change.
+        route_changed = previous_model_route != effective_model_route
+        if route_changed:
             from src.infrastructure.llm.reasoning_config import build_reasoning_config
 
-            catalog = get_model_catalog_service()
-            override_meta = catalog.get_model_fuzzy(normalized_model_override)
-            current_meta = catalog.get_model_fuzzy(config.model)
-            current_provider = _normalize_model_provider(
-                current_meta.provider if current_meta is not None else None
-            )
-            override_provider = _normalize_model_provider(
-                override_meta.provider if override_meta is not None else None
-            )
+            provider_options = dict(config.provider_options)
+            for key in (
+                "reasoning_effort",
+                "thinking",
+                "reasoning_split",
+                "__omit_temperature",
+                "__use_max_completion_tokens",
+                "__override_max_tokens",
+            ):
+                provider_options.pop(key, None)
 
-            if current_provider is None:
-                current_provider = _infer_provider_from_model_name(config.model)
-            if override_provider is None:
-                override_provider = _infer_provider_from_model_name(normalized_model_override)
-
-            resolved_provider_config: Any | None = None
-            resolved_provider: str | None = None
-            if tenant_id:
-                from src.domain.llm_providers.models import NoActiveProviderError, OperationType
-
-                factory = get_ai_service_factory()
-                try:
-                    resolved_provider_config = await factory.resolve_provider(
-                        tenant_id=tenant_id,
-                        operation_type=OperationType.LLM,
-                        model_id=normalized_model_override,
-                    )
-                except NoActiveProviderError:
-                    logger.warning(
-                        "[ReActAgent] Unable to resolve provider for model override '%s' (tenant=%s)",
-                        normalized_model_override,
-                        tenant_id,
-                    )
-
-                if resolved_provider_config is not None:
-                    provider_type_raw = getattr(
-                        resolved_provider_config.provider_type,
-                        "value",
-                        resolved_provider_config.provider_type,
-                    )
-                    resolved_provider = _normalize_model_provider(str(provider_type_raw))
-
-            if tenant_id:
-                # With tenant-scoped providers, fail closed unless resolution succeeds.
-                should_apply_override = (
-                    resolved_provider_config is not None
-                    and resolved_provider_config.is_model_allowed(normalized_model_override)
+            reasoning_cfg = build_reasoning_config(effective_model_route.model_id)
+            if reasoning_cfg:
+                provider_options.update(reasoning_cfg.provider_options)
+                provider_options["__omit_temperature"] = reasoning_cfg.omit_temperature
+                provider_options["__use_max_completion_tokens"] = (
+                    reasoning_cfg.use_max_completion_tokens
                 )
-            elif resolved_provider_config is not None:
-                should_apply_override = resolved_provider_config.is_model_allowed(
-                    normalized_model_override
-                )
-            else:
-                should_apply_override = override_meta is not None
-                if should_apply_override:
-                    if current_provider is None or override_provider is None:
-                        should_apply_override = False
-                    else:
-                        should_apply_override = current_provider == override_provider
-
-            if not should_apply_override:
-                logger.warning(
-                    "[ReActAgent] Ignoring invalid or cross-provider model override '%s' "
-                    "(current model: '%s', current provider: '%s', override provider: '%s')",
-                    normalized_model_override,
-                    config.model,
-                    current_provider,
-                    override_provider,
-                )
-                yield {
-                    "type": "model_override_rejected",
-                    "data": {
-                        "model": normalized_model_override,
-                        "reason": (
-                            f"Cross-provider switch not allowed: override provider "
-                            f"'{override_provider}' != current '{current_provider}'"
-                        ),
-                        "current_model": config.model,
-                        "current_provider": current_provider,
-                    },
-                }
-            else:
-                if resolved_provider_config is not None:
-                    current_client_provider = getattr(config.llm_client, "provider_config", None)
-                    current_provider_config_id = getattr(current_client_provider, "id", None)
-                    resolved_provider_config_id = getattr(resolved_provider_config, "id", None)
-                    should_refresh_llm_client = (
-                        current_provider_config_id is None
-                        or resolved_provider_config_id is None
-                        or current_provider_config_id != resolved_provider_config_id
-                    )
-                    if should_refresh_llm_client:
-                        resolved_provider_label = resolved_provider or _normalize_model_provider(
-                            str(
-                                getattr(
-                                    resolved_provider_config.provider_type,
-                                    "value",
-                                    resolved_provider_config.provider_type,
-                                )
-                            )
-                        )
-                        config.base_url = resolved_provider_config.base_url
-                        config.llm_client = get_ai_service_factory().create_llm_client(
-                            resolved_provider_config
-                        )
-                        logger.info(
-                            "[ReActAgent] Switched runtime provider for model override '%s': %s -> %s",
-                            normalized_model_override,
-                            current_provider,
-                            resolved_provider_label,
-                        )
-
-                config.model = normalized_model_override
-                provider_options = dict(config.provider_options)
-                for key in (
-                    "reasoning_effort",
-                    "thinking",
-                    "reasoning_split",
-                    "__omit_temperature",
-                    "__use_max_completion_tokens",
-                    "__override_max_tokens",
-                ):
-                    provider_options.pop(key, None)
-
-                reasoning_cfg = build_reasoning_config(normalized_model_override)
-                if reasoning_cfg:
-                    provider_options.update(reasoning_cfg.provider_options)
-                    provider_options["__omit_temperature"] = reasoning_cfg.omit_temperature
-                    provider_options["__use_max_completion_tokens"] = (
-                        reasoning_cfg.use_max_completion_tokens
-                    )
-                    provider_options["__override_max_tokens"] = reasoning_cfg.override_max_tokens
-                config.provider_options = provider_options
+                provider_options["__override_max_tokens"] = reasoning_cfg.override_max_tokens
+            config.provider_options = provider_options
 
         # Apply per-request LLM overrides (F1.4)
         if llm_overrides:
@@ -2179,7 +2196,9 @@ class StreamMixin:
             success=self._stream_success,
             execution_time_ms=execution_time_ms,
             tool_call_count=tool_call_count,
-            llm_client_override=config.llm_client if normalized_model_override else None,
+            llm_client_override=(
+                config.llm_client if resolved_model_route_override is not None else None
+            ),
         ):
             yield event
 

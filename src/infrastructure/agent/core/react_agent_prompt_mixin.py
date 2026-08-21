@@ -18,6 +18,8 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from ..plugins.policy_context import PolicyContext
 from ..plugins.selection_pipeline import ToolSelectionContext
@@ -75,6 +77,7 @@ class _PromptAgent(Protocol):
     _tool_selection_max_tools: int
     _tool_selection_semantic_backend: str
     _stream_memory_context: Any
+    _provider_id: str
 
     def _get_current_tools(
         self,
@@ -432,6 +435,7 @@ class PromptMixin:
         tenant_id: str,
         tenant_agent_config_data: dict[str, Any] | None,
         selected_agent: Agent | None,
+        selected_agent_model_route: ModelRouteRef | None = None,
         is_workspace_worker_runtime: bool = False,
     ) -> AgentRuntimeProfile:
         """Build the request-scoped runtime profile."""
@@ -445,6 +449,30 @@ class PromptMixin:
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
         )
+        selected_agent_has_explicit_model = (
+            selected_agent is not None and selected_agent.model.value != "inherit"
+        )
+        if selected_agent_model_route is None:
+            if selected_agent_has_explicit_model:
+                assert selected_agent is not None
+                raise RuntimeV2Error(
+                    "agent_model_route_missing",
+                    f"agent {selected_agent.id} declares model {effective_model} "
+                    "without an explicit provider route",
+                )
+            effective_model_route = ModelRouteRef(
+                provider_id=self._provider_id,
+                model_id=effective_model,
+            )
+        else:
+            if selected_agent_model_route.model_id != effective_model:
+                selected_agent_id = selected_agent.id if selected_agent is not None else "default"
+                raise RuntimeV2Error(
+                    "agent_model_route_mismatch",
+                    f"agent {selected_agent_id} declares model {effective_model}, but its route "
+                    f"declares {selected_agent_model_route.model_id}",
+                )
+            effective_model_route = selected_agent_model_route
         effective_temperature = (
             selected_agent.temperature
             if selected_agent is not None and selected_agent.has_explicit_temperature()
@@ -485,7 +513,7 @@ class PromptMixin:
             available_skills=available_skills,
             allow_tools=allow_tools,
             deny_tools=deny_tools,
-            effective_model=effective_model,
+            effective_model_route=effective_model_route,
             effective_temperature=effective_temperature,
             effective_max_tokens=effective_max_tokens,
             effective_max_steps=effective_max_steps,

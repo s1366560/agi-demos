@@ -14,9 +14,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig, ToolDefinition
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 # ============================================================================
 # Fixtures
@@ -106,6 +108,7 @@ def factory(
         permission_manager=mock_permission_manager,
         artifact_service=mock_artifact_service,
         base_model="gemini-2.0-flash",
+        base_provider_id="gemini",
         base_api_key="test-key",
         base_url="https://api.example.com",
     )
@@ -182,31 +185,86 @@ class TestCreateForSubagent:
 
         assert processor.config.model == "gemini-2.0-flash"
 
-    def test_inherit_model_with_override(
+    def test_inherit_model_with_bare_override_fails_closed(
         self,
         factory: ProcessorFactory,
         inherit_subagent: SubAgent,
         sample_tools: list[ToolDefinition],
     ) -> None:
-        """model_override takes precedence over base_model for INHERIT."""
+        """A retry/spawn override cannot inherit the base provider implicitly."""
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(
+                inherit_subagent,
+                sample_tools,
+                model_override="gpt-4o-mini",
+            )
+
+        assert exc_info.value.code == "subagent_model_override_route_missing"
+
+    def test_inherit_model_with_structured_override_uses_exact_route(
+        self,
+        factory: ProcessorFactory,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        route = ModelRouteRef(provider_id="openai", model_id="gpt-4o-mini")
+
         processor = factory.create_for_subagent(
-            inherit_subagent, sample_tools, model_override="gpt-4o-mini"
+            inherit_subagent,
+            sample_tools,
+            model_override="gpt-4o-mini",
+            model_route_override=route,
         )
 
         assert processor.config.model == "gpt-4o-mini"
+        assert processor.config.provider_id == "openai"
 
-    def test_explicit_model_ignores_base_and_override(
+    def test_explicit_model_without_configured_route_fails_closed(
         self,
         factory: ProcessorFactory,
         explicit_subagent: SubAgent,
         sample_tools: list[ToolDefinition],
     ) -> None:
-        """SubAgent with explicit model should use its own model."""
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(explicit_subagent, sample_tools)
+
+        assert exc_info.value.code == "subagent_model_route_missing"
+
+    def test_explicit_model_uses_configured_route(
+        self,
+        factory: ProcessorFactory,
+        explicit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        route = ModelRouteRef(provider_id="openai", model_id=AgentModel.GPT4O.value)
+
         processor = factory.create_for_subagent(
-            explicit_subagent, sample_tools, model_override="ignored-model"
+            explicit_subagent,
+            sample_tools,
+            configured_model_route=route,
         )
 
         assert processor.config.model == AgentModel.GPT4O.value
+        assert processor.config.provider_id == "openai"
+
+    def test_structured_override_model_mismatch_fails_closed(
+        self,
+        factory: ProcessorFactory,
+        inherit_subagent: SubAgent,
+        sample_tools: list[ToolDefinition],
+    ) -> None:
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            factory.create_for_subagent(
+                inherit_subagent,
+                sample_tools,
+                model_override="gpt-4o-mini",
+                model_route_override=ModelRouteRef(
+                    provider_id="openai",
+                    model_id="gpt-4.1-mini",
+                ),
+            )
+
+        assert exc_info.value.code == "subagent_model_override_route_mismatch"
 
     def test_subagent_settings_propagated(
         self,
@@ -215,7 +273,14 @@ class TestCreateForSubagent:
         sample_tools: list[ToolDefinition],
     ) -> None:
         """SubAgent temperature, max_tokens, max_steps should be propagated."""
-        processor = factory.create_for_subagent(explicit_subagent, sample_tools)
+        processor = factory.create_for_subagent(
+            explicit_subagent,
+            sample_tools,
+            configured_model_route=ModelRouteRef(
+                provider_id="openai",
+                model_id=AgentModel.GPT4O.value,
+            ),
+        )
 
         assert processor.config.temperature == explicit_subagent.temperature
         assert processor.config.max_tokens == explicit_subagent.max_tokens

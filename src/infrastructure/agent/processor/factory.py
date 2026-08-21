@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 
@@ -77,6 +79,8 @@ class ProcessorFactory:
         tools: list[ToolDefinition],
         *,
         model_override: str | None = None,
+        configured_model_route: ModelRouteRef | None = None,
+        model_route_override: ModelRouteRef | None = None,
         abort_signal: asyncio.Event | None = None,
         doom_loop_threshold: int | None = None,
         thinking_override: bool | None = None,
@@ -84,13 +88,16 @@ class ProcessorFactory:
     ) -> SessionProcessor:
         """Create a SessionProcessor configured for a SubAgent.
 
-        Resolves model inheritance: if SubAgent uses INHERIT, falls back to
-        base_model or model_override.
+        Resolves an explicit provider/model pair. Inherited models use the
+        factory's pinned base pair; configured and retry models require their
+        own ``ModelRouteRef``.
 
         Args:
             subagent: The SubAgent definition.
             tools: Filtered tool definitions for this SubAgent.
-            model_override: Optional model override (takes precedence over base_model).
+            model_override: Optional legacy model value, valid only with a matching route.
+            configured_model_route: Explicit route for a SubAgent-declared model.
+            model_route_override: Explicit route for a spawn or retry override.
             abort_signal: Not used by processor directly; caller manages abort.
             doom_loop_threshold: Optional doom-loop detection threshold.
                 Defaults to 3 (ProcessorConfig default). Subagents typically
@@ -100,11 +107,52 @@ class ProcessorFactory:
         Returns:
             Configured SessionProcessor instance.
         """
-        # Resolve model
-        if subagent.model == AgentModel.INHERIT:
-            model = model_override or self.base_model
+        normalized_model_override = (model_override or "").strip() or None
+        if model_route_override is not None:
+            if (
+                normalized_model_override is not None
+                and model_route_override.model_id != normalized_model_override
+            ):
+                raise RuntimeV2Error(
+                    "subagent_model_override_route_mismatch",
+                    f"subagent model override {normalized_model_override} does not match route "
+                    f"model {model_route_override.model_id}",
+                )
+            model_route = model_route_override
+        elif normalized_model_override is not None:
+            raise RuntimeV2Error(
+                "subagent_model_override_route_missing",
+                f"subagent model override {normalized_model_override} has no provider route",
+            )
+        elif subagent.model != AgentModel.INHERIT:
+            declared_model = subagent.model.value
+            if configured_model_route is None:
+                raise RuntimeV2Error(
+                    "subagent_model_route_missing",
+                    f"subagent {subagent.id} declares model {declared_model} "
+                    "without an explicit provider route",
+                )
+            if configured_model_route.model_id != declared_model:
+                raise RuntimeV2Error(
+                    "subagent_model_route_mismatch",
+                    f"subagent {subagent.id} declares model {declared_model}, but its route "
+                    f"declares {configured_model_route.model_id}",
+                )
+            model_route = configured_model_route
+        elif configured_model_route is not None:
+            if configured_model_route.model_id != self.base_model:
+                raise RuntimeV2Error(
+                    "subagent_model_route_mismatch",
+                    f"inherited model {self.base_model} does not match route model "
+                    f"{configured_model_route.model_id}",
+                )
+            model_route = configured_model_route
         else:
-            model = subagent.model.value
+            model_route = ModelRouteRef(
+                provider_id=self.base_provider_id,
+                model_id=self.base_model,
+            )
+        model = model_route.model_id
 
         from src.infrastructure.llm.reasoning_config import build_reasoning_config
 
@@ -133,7 +181,7 @@ class ProcessorFactory:
             message_bus=self.message_bus,
             control_channel=self.control_channel,
             run_id=run_id,
-            provider_id=self.base_provider_id,
+            provider_id=model_route.provider_id,
             loop_resolver=_default_loop_resolver(),
         )
 

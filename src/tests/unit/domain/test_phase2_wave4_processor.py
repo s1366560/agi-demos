@@ -369,6 +369,7 @@ class TestProcessorFactoryControlChannel:
         channel = _make_control_channel()
         factory = ProcessorFactory(
             base_model="test-model",
+            base_provider_id="test-provider",
             control_channel=channel,
         )
 
@@ -405,7 +406,10 @@ class TestProcessorFactoryControlChannel:
         from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
         from src.infrastructure.agent.processor.factory import ProcessorFactory
 
-        factory = ProcessorFactory(base_model="test-model")
+        factory = ProcessorFactory(
+            base_model="test-model",
+            base_provider_id="test-provider",
+        )
         subagent = SubAgent(
             id="sa-2",
             tenant_id="t-1",

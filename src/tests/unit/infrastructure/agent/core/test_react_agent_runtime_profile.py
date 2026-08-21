@@ -7,11 +7,12 @@ import pytest
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.spawn_policy import SpawnPolicy
-from src.domain.model.agent.subagent import AgentTrigger, SubAgent
+from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
 from src.infrastructure.agent.core.processor import ToolDefinition
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_all_access_agent,
     build_builtin_workspace_iteration_reviewer_agent,
@@ -19,6 +20,17 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_workspace_verifier_agent,
     list_builtin_agents,
 )
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+
+
+def _make_react_agent(**overrides) -> ReActAgent:
+    defaults = {
+        "model": "test-model",
+        "tools": {},
+        "provider_id": "test-provider",
+    }
+    defaults.update(overrides)
+    return ReActAgent(**defaults)
 
 
 def _make_agent(**overrides) -> Agent:
@@ -45,11 +57,38 @@ def _make_subagent(name: str, **overrides) -> SubAgent:
 
 
 @pytest.mark.unit
+class TestModelRouteRef:
+    def test_strips_but_does_not_infer_route_identity(self) -> None:
+        route = ModelRouteRef(provider_id="  zhipuai_coding  ", model_id="  glm-4.5  ")
+
+        assert route.provider_id == "zhipuai_coding"
+        assert route.model_id == "glm-4.5"
+
+    @pytest.mark.parametrize(
+        ("provider_id", "model_id", "expected_code"),
+        [
+            (" ", "glm-4.5", "model_route_provider_missing"),
+            ("zhipuai_coding", " ", "model_route_model_missing"),
+        ],
+    )
+    def test_rejects_empty_route_identity(
+        self,
+        provider_id: str,
+        model_id: str,
+        expected_code: str,
+    ) -> None:
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            ModelRouteRef(provider_id=provider_id, model_id=model_id)
+
+        assert exc_info.value.code == expected_code
+
+
+@pytest.mark.unit
 class TestReActAgentRuntimeProfile:
     async def test_load_selected_agent_scopes_orchestrator_lookup(self, monkeypatch) -> None:
         from src.infrastructure.agent.state import agent_worker_state
 
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         selected_agent = SimpleNamespace(id="agent-123", name="Scoped Agent")
         orchestrator = SimpleNamespace(get_agent=AsyncMock(return_value=selected_agent))
         monkeypatch.setattr(
@@ -72,7 +111,7 @@ class TestReActAgentRuntimeProfile:
         )
 
     def test_uses_tenant_max_steps_for_legacy_default_agent_iterations(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
         selected_agent = _make_agent(max_iterations=10)
@@ -84,9 +123,62 @@ class TestReActAgentRuntimeProfile:
         )
 
         assert profile.effective_max_steps == 4999
+        assert profile.effective_model_route == ModelRouteRef(
+            provider_id="test-provider",
+            model_id="auto",
+        )
+
+    def test_explicit_selected_agent_model_requires_structured_route(self) -> None:
+        agent = _make_react_agent()
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        selected_agent = _make_agent(model=AgentModel.GPT4O)
+
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            agent._build_runtime_profile(
+                tenant_id="tenant-1",
+                tenant_agent_config_data=tenant_config.to_dict(),
+                selected_agent=selected_agent,
+            )
+
+        assert exc_info.value.code == "agent_model_route_missing"
+
+    def test_explicit_selected_agent_model_uses_structured_route(self) -> None:
+        agent = _make_react_agent()
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        selected_agent = _make_agent(model=AgentModel.GPT4O)
+        route = ModelRouteRef(provider_id="openai", model_id=AgentModel.GPT4O.value)
+
+        profile = agent._build_runtime_profile(
+            tenant_id="tenant-1",
+            tenant_agent_config_data=tenant_config.to_dict(),
+            selected_agent=selected_agent,
+            selected_agent_model_route=route,
+        )
+
+        assert profile.effective_model_route is route
+        assert profile.effective_model == AgentModel.GPT4O.value
+        assert profile.effective_provider_id == "openai"
+
+    def test_explicit_selected_agent_route_model_must_match_definition(self) -> None:
+        agent = _make_react_agent()
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        selected_agent = _make_agent(model=AgentModel.GPT4O)
+
+        with pytest.raises(RuntimeV2Error) as exc_info:
+            agent._build_runtime_profile(
+                tenant_id="tenant-1",
+                tenant_agent_config_data=tenant_config.to_dict(),
+                selected_agent=selected_agent,
+                selected_agent_model_route=ModelRouteRef(
+                    provider_id="openai",
+                    model_id="gpt-4.1-mini",
+                ),
+            )
+
+        assert exc_info.value.code == "agent_model_route_mismatch"
 
     def test_uses_agent_max_steps_when_explicitly_marked(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
         selected_agent = _make_agent(
@@ -103,7 +195,7 @@ class TestReActAgentRuntimeProfile:
         assert profile.effective_max_steps == 10
 
     def test_database_agent_runtime_parameters_remain_explicit_by_default(self) -> None:
-        agent = ReActAgent(model="test-model", tools={}, max_tokens=1234)
+        agent = _make_react_agent(max_tokens=1234)
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {
             "llm_temperature": 1.1,
@@ -126,7 +218,7 @@ class TestReActAgentRuntimeProfile:
         assert profile.effective_max_steps == 42
 
     def test_agi_stack_inherits_tenant_runtime_parameters(self) -> None:
-        agent = ReActAgent(model="test-model", tools={}, max_tokens=1234)
+        agent = _make_react_agent(max_tokens=1234)
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {
             "llm_temperature": 1.1,
@@ -145,7 +237,7 @@ class TestReActAgentRuntimeProfile:
         assert profile.effective_max_steps == 4999
 
     def test_workspace_plan_team_worker_inherits_tenant_max_steps(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
         selected_agent = _make_agent(
@@ -166,7 +258,7 @@ class TestReActAgentRuntimeProfile:
         assert profile.effective_max_steps == 4999
 
     def test_builtin_workspace_contract_agents_inherit_tenant_max_steps(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
 
@@ -191,7 +283,7 @@ class TestReActAgentRuntimeProfile:
             assert selected_agent.has_explicit_max_iterations() is False
 
     def test_workspace_worker_extends_restricted_agent_tool_allowlist(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         selected_agent = _make_agent(
             allowed_tools=["Read", "Grep", "WebSearch", "plugin_tool_exec"]
@@ -229,7 +321,7 @@ class TestReActAgentRuntimeProfile:
         assert [tool.name for tool in filtered] == ["read", "bash"]
 
     def test_agent_tool_policy_contributes_to_runtime_allow_and_deny_lists(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config.disabled_tools = ["Grep"]
         selected_agent = _make_agent(
@@ -263,9 +355,7 @@ class TestReActAgentRuntimeProfile:
         assert [tool.name for tool in filtered] == ["read", "bash"]
 
     def test_selected_agent_without_spawn_permission_gets_no_subagent_tools(self) -> None:
-        agent = ReActAgent(
-            model="test-model",
-            tools={},
+        agent = _make_react_agent(
             subagents=[_make_subagent("planner")],
         )
         selected_agent = _make_agent(can_spawn=False)
@@ -287,9 +377,7 @@ class TestReActAgentRuntimeProfile:
     def test_selected_agent_spawn_policy_filters_subagents_and_limits_sessions(self) -> None:
         from src.infrastructure.agent.tools import subagent_sessions
 
-        agent = ReActAgent(
-            model="test-model",
-            tools={},
+        agent = _make_react_agent(
             subagents=[_make_subagent("planner"), _make_subagent("reviewer")],
             max_subagent_delegation_depth=5,
             max_subagent_active_runs=10,
@@ -325,7 +413,7 @@ class TestReActAgentRuntimeProfile:
         assert subagent_sessions._sess_max_children_per_requester == 1
 
     def test_workspace_worker_preserves_tenant_enabled_tool_policy_for_code_tools(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config.enabled_tools = ["Read"]
         selected_agent = _make_agent(allowed_tools=["Read", "Grep"])
@@ -343,7 +431,7 @@ class TestReActAgentRuntimeProfile:
         assert "bash" not in workspace_profile.allow_tools
 
     def test_workspace_leader_replan_restricts_tools_to_task_ledger(self) -> None:
-        agent = ReActAgent(model="test-model", tools={})
+        agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config.disabled_tools = ["TodoRead", "Bash"]
         selected_agent = _make_agent(allowed_tools=["Read", "Bash", "TodoRead", "TodoWrite"])

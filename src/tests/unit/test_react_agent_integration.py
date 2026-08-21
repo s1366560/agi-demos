@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.plugins.registry import HookDispatchResult
 from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
 
@@ -33,6 +34,7 @@ def _make_react_agent(**kwargs):
     defaults = {
         "model": "test-model",
         "tools": {"test_tool": MagicMock()},
+        "provider_id": "test-provider",
     }
     defaults.update(kwargs)
     return ReActAgent(**defaults)
@@ -55,7 +57,10 @@ def _make_runtime_profile(**overrides):
         "deny_tools": [],
         "tenant_agent_config": TenantAgentConfig.create_default("tenant-1"),
         "agent_definition_prompt": "",
-        "effective_model": "test-model",
+        "effective_model_route": ModelRouteRef(
+            provider_id="test-provider",
+            model_id="test-model",
+        ),
         "effective_temperature": 0.2,
         "effective_max_tokens": 1024,
         "effective_max_steps": 4,
@@ -943,7 +948,10 @@ class TestReActAgentWorkspaceDelegation:
                     available_skills=[],
                     allow_tools=["bash", "read", "sessions_list", "todoread", "todowrite"],
                     deny_tools=[],
-                    effective_model="test-model",
+                    effective_model_route=ModelRouteRef(
+                        provider_id="test-provider",
+                        model_id="test-model",
+                    ),
                     effective_temperature=0.2,
                     effective_max_tokens=1024,
                     effective_max_steps=4,
