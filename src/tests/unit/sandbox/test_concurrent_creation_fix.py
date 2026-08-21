@@ -396,6 +396,7 @@ class TestAgentWorkerSandboxConsistency:
         self, mock_sandbox_adapter, monkeypatch
     ):
         """Avoid repeated DB sandbox resolution when agent sessions rebuild quickly."""
+        from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
         from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 
         existing_sandbox = ProjectSandbox(
@@ -438,17 +439,29 @@ class TestAgentWorkerSandboxConsistency:
                     _get_or_load_project_sandbox_tools,
                 )
 
+                descriptor = PluginGenerationDescriptorV2(
+                    profile_id="memstack-default-v2",
+                    generation=82,
+                    digest="a" * 64,
+                )
+                m.setattr(
+                    worker_state,
+                    "resolve_generation_cache_descriptor_v2",
+                    lambda _descriptor=None: descriptor,
+                )
                 first = await _get_or_load_project_sandbox_tools(
                     project_id="test-proj",
                     tenant_id="test-tenant",
                     redis_client=None,
                     ttl_seconds=300,
+                    generation_descriptor=descriptor,
                 )
                 second = await _get_or_load_project_sandbox_tools(
                     project_id="test-proj",
                     tenant_id="test-tenant",
                     redis_client=None,
                     ttl_seconds=300,
+                    generation_descriptor=descriptor,
                 )
 
                 assert set(first) == {"bash"}
@@ -732,8 +745,8 @@ class TestWebSocketSandboxIntegration:
             "Sandbox integration should have error handling"
         )
 
-    def test_websocket_lifecycle_uses_context_container(self):
-        """WebSocket lifecycle helpers should not instantiate a new sandbox adapter."""
+    def test_websocket_lifecycle_uses_v2_operation_authority(self):
+        """WebSocket lifecycle helpers resolve from a generation-owned operation."""
         import inspect
 
         from src.infrastructure.adapters.primary.web.websocket.handlers.lifecycle_handler import (
@@ -744,7 +757,9 @@ class TestWebSocketSandboxIntegration:
         ensure_source = inspect.getsource(_ensure_sandbox_exists)
         repair_source = inspect.getsource(_sync_and_repair_sandbox)
 
-        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in ensure_source
-        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in repair_source
+        assert "sandbox_operation_authority_v2" in ensure_source
+        assert "sandbox_operation_authority_v2" in repair_source
+        assert "project_sandbox_lifecycle_service" not in ensure_source
+        assert "project_sandbox_lifecycle_service" not in repair_source
         assert "MCPSandboxAdapter()" not in ensure_source
         assert "MCPSandboxAdapter()" not in repair_source

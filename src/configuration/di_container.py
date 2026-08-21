@@ -658,9 +658,6 @@ class DIContainer:
     def sandbox_resource(self) -> SandboxResourcePort:
         return cast(SandboxResourcePort, self._services.get_or_activate("sandbox_resource"))
 
-    def project_sandbox_lifecycle_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("project_sandbox_lifecycle_service"))
-
     def sandbox_mcp_server_manager(self) -> Any:
         return cast(Any, self._services.get_or_activate("sandbox_mcp_server_manager"))
 

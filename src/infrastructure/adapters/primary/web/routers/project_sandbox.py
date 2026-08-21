@@ -59,6 +59,12 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_api_key_from_header,
     get_current_user_from_desktop_proxy,
 )
+from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 import (
+    SandboxApplicationAuthorityV2,
+    sandbox_application_authority_dependency_v2,
+    sandbox_application_proxy_authority_dependency_v2,
+    sandbox_application_websocket_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.auth import select_websocket_auth_subprotocol
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -465,45 +471,28 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
 
 
 def get_lifecycle_service(
-    request: Request, db: AsyncSession = Depends(get_db)
+    authority: SandboxApplicationAuthorityV2 = Depends(sandbox_application_authority_dependency_v2),
 ) -> ProjectSandboxLifecycleService:
-    """Get the project sandbox lifecycle service.
-
-    Uses the properly initialized container from app.state which has
-    redis_client configured for distributed locking. Falls back to a new
-    container if app.state.container is not available.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        # This enables Redis distributed locks instead of PostgreSQL advisory locks
-        container = request.app.state.container.with_db(db)
-    except (AttributeError, KeyError):
-        # Fallback for tests or when app.state.container is not set
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer().with_db(db)
-
-    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
+    """Project the lifecycle service from the request-owned V2 operation."""
+    return authority.services.lifecycle_service
 
 
 def get_lifecycle_service_for_websocket(
-    websocket: WebSocket, db: AsyncSession = Depends(get_db)
+    authority: SandboxApplicationAuthorityV2 = Depends(
+        sandbox_application_websocket_authority_dependency_v2
+    ),
 ) -> ProjectSandboxLifecycleService:
-    """Get the project sandbox lifecycle service for WebSocket endpoints.
+    """Project the lifecycle service from the connection-owned V2 operation."""
+    return authority.services.lifecycle_service
 
-    WebSocket handlers receive WebSocket instead of Request, so we need
-    a separate dependency that extracts app.state from the WebSocket.
-    """
-    try:
-        # Get container from app.state which has redis_client properly configured
-        container = websocket.app.state.container.with_db(db)
-    except (AttributeError, KeyError):
-        # Fallback for tests or when app.state.container is not set
-        from src.configuration.di_container import DIContainer
 
-        container = DIContainer().with_db(db)
-
-    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
+def get_lifecycle_service_for_proxy(
+    authority: SandboxApplicationAuthorityV2 = Depends(
+        sandbox_application_proxy_authority_dependency_v2
+    ),
+) -> ProjectSandboxLifecycleService:
+    """Project lifecycle service for cookie/query-authenticated HTTP proxy requests."""
+    return authority.services.lifecycle_service
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
@@ -3544,7 +3533,7 @@ async def proxy_project_desktop(
     request: Request,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
-    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_proxy),
 ) -> Any:
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
 

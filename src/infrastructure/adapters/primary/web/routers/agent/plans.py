@@ -19,12 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_llm_client
 from src.domain.model.auth.user import User
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_db,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_agent_policy import (
     WorkspaceAgentPolicyResponse,
+)
+from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 import (
+    sandbox_operation_authority_v2,
 )
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_error,
@@ -439,16 +443,27 @@ async def get_tasks(
 
 async def _resolve_cloud_run_environment(
     *,
-    base_container: DIContainer,
     project_id: str,
     tenant_id: str,
     kind: Literal["local", "worktree"],
     bound_at: datetime,
 ) -> dict[str, Any]:
     try:
-        async with async_session_factory() as sandbox_db:
-            lifecycle = base_container.with_db(sandbox_db).project_sandbox_lifecycle_service()
-            info = await lifecycle.ensure_sandbox_running(
+        async with (
+            async_session_factory() as sandbox_db,
+            sandbox_operation_authority_v2(
+                db=sandbox_db,
+                operation_id=f"approved-plan-environment:{project_id}",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.PROJECT,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                ),
+                identity={"tenant_id": tenant_id, "project_id": project_id},
+                metadata={"kind": "approved-plan-environment"},
+            ) as authority,
+        ):
+            info = await authority.services.lifecycle_service.ensure_sandbox_running(
                 project_id=project_id,
                 tenant_id=tenant_id,
             )
@@ -564,7 +579,6 @@ async def approve_plan_and_start(
     now = datetime.now(UTC)
     base_container = cast(DIContainer, request.app.state.container)
     environment = await _resolve_cloud_run_environment(
-        base_container=base_container,
         project_id=conversation.project_id,
         tenant_id=conversation.tenant_id,
         kind=body.environment.kind,

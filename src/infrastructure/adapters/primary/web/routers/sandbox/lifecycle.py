@@ -19,11 +19,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_health_service import HealthCheckLevel, SandboxHealthService
 from src.application.services.sandbox_profile import list_profiles
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
     get_db,
+)
+from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 import (
+    sandbox_operation_authority_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -148,22 +152,30 @@ async def create_sandbox(
         # Authorize: caller must be a member of the project they're targeting.
         await assert_caller_owns_project(project_id=project_id, user=current_user, db=db)
 
-        # CRITICAL: Use ProjectSandboxLifecycleService for proper locking
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        lifecycle_service = container.project_sandbox_lifecycle_service()
-
         logger.info(
             f"[SandboxAPI] /create delegating to ProjectSandboxLifecycleService "
             f"for project={project_id}, tenant={tenant_id}"
         )
 
-        # Use the unified lifecycle service
-        sandbox_info = await lifecycle_service.get_or_create_sandbox(
-            project_id=project_id,
-            tenant_id=tenant_id,
-        )
+        async with sandbox_operation_authority_v2(
+            db=db,
+            operation_id=f"legacy-http-sandbox-create:{project_id}",
+            scope=ScopeV2(
+                kind=ScopeKindV2.PROJECT,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            ),
+            identity={
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "user_id": current_user.id,
+            },
+            metadata={"kind": "http-authority", "path": "/api/v1/sandbox/create"},
+        ) as authority:
+            sandbox_info = await authority.services.lifecycle_service.get_or_create_sandbox(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
 
         # Auto-connect and get tools
         tools = []
@@ -176,6 +188,9 @@ async def create_sandbox(
                 # Register tools to Agent context via SandboxToolRegistry
                 if tools:
                     try:
+                        from src.configuration.di_container import DIContainer
+
+                        container = DIContainer()
                         tool_registry = container.sandbox_tool_registry()
                         registered_tools = await tool_registry.register_sandbox_tools(
                             sandbox_id=sandbox_info.sandbox_id,

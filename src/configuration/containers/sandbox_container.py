@@ -90,48 +90,6 @@ class SandboxContainer:
             host_docker_socket_volume=self._resolve_docker_socket_volume(),
         )
 
-    def workspace_sync_service(self) -> Any:
-        """Get WorkspaceSyncService for workspace state persistence across sandbox lifecycles."""
-        from src.application.services.workspace_sync_service import WorkspaceSyncService
-
-        return WorkspaceSyncService(
-            workspace_base=self._settings.sandbox_workspace_base if self._settings else "/tmp",
-        )
-
-    def project_sandbox_lifecycle_service(self) -> Any:
-        """Get ProjectSandboxLifecycleService for project-dedicated sandbox management."""
-        from src.application.services.project_sandbox_lifecycle_service import (
-            ProjectSandboxLifecycleService,
-        )
-
-        distributed_lock = (
-            self._distributed_lock_factory() if self._distributed_lock_factory else None
-        )
-        return ProjectSandboxLifecycleService(
-            repository=self.project_sandbox_repository(),
-            sandbox_adapter=self._sandbox_application_services().adapter,
-            distributed_lock=distributed_lock,
-            default_profile=SandboxProfileType(self._settings.sandbox_profile_type)
-            if self._settings
-            else SandboxProfileType.STANDARD,
-            health_check_interval_seconds=60,
-            auto_recover=True,
-            memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
-            cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
-            host_source_volume=(
-                {
-                    self._settings.sandbox_host_source_path: (
-                        self._settings.sandbox_host_source_mount_point
-                    )
-                }
-                if self._settings and self._settings.sandbox_host_source_path
-                else None
-            ),
-            host_memstack_volume=self._resolve_memstack_volume(),
-            host_docker_socket_volume=self._resolve_docker_socket_volume(),
-            workspace_sync=self.workspace_sync_service(),
-        )
-
     def sandbox_mcp_server_manager(self) -> Any:
         """Get SandboxMCPServerManager for managing user MCP servers in sandbox."""
         from src.application.services.sandbox_mcp_server_manager import (

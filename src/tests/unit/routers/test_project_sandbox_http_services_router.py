@@ -57,6 +57,7 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[router_mod.get_current_user_tenant] = _tenant_id
     app.dependency_overrides[router_mod.get_db] = _db
     app.dependency_overrides[router_mod.get_lifecycle_service] = lambda: lifecycle_service
+    app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = lambda: lifecycle_service
     app.dependency_overrides[router_mod.get_sandbox_adapter] = lambda: SimpleNamespace(_docker=None)
     app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     app.dependency_overrides[router_mod.get_event_publisher] = lambda: None
@@ -1268,7 +1269,7 @@ def test_desktop_http_proxy_requires_project_access(
 ) -> None:
     lifecycle_service = AsyncMock()
     lifecycle_service.get_project_sandbox = AsyncMock()
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 
@@ -1296,7 +1297,7 @@ def test_desktop_http_proxy_authenticates_to_kasmvnc(
             runtime_auth_token="sandbox-runtime-secret",
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
     captured: dict[str, object] = {}
@@ -1341,7 +1342,7 @@ def test_desktop_http_proxy_fails_closed_without_runtime_auth_token(
             runtime_auth_token=None,
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 
@@ -1365,7 +1366,7 @@ def test_desktop_http_proxy_sanitizes_upstream_connection_errors(
             runtime_auth_token="sandbox-runtime-secret",
         )
     )
-    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service_for_proxy] = (
         lambda: lifecycle_service
     )
 

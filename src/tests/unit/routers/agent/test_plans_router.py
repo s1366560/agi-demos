@@ -225,7 +225,7 @@ async def test_workspace_policy_snapshot_fails_closed_without_core() -> None:
 
 
 @pytest.mark.unit
-async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_root(
+async def test_resolve_cloud_run_environment_uses_exact_project_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
@@ -248,14 +248,26 @@ async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_ro
             )
         )
     )
-    scoped_container = SimpleNamespace(
-        project_sandbox_lifecycle_service=lambda: lifecycle,
-    )
-    base_container = SimpleNamespace(with_db=lambda _db: scoped_container)
+
+    class SandboxAuthorityContext:
+        async def __aenter__(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                services=SimpleNamespace(lifecycle_service=lifecycle),
+            )
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
     monkeypatch.setattr(plans_router, "async_session_factory", SandboxSessionContext)
+    captured: dict[str, object] = {}
+
+    def sandbox_authority(**kwargs: object) -> SandboxAuthorityContext:
+        captured.update(kwargs)
+        return SandboxAuthorityContext()
+
+    monkeypatch.setattr(plans_router, "sandbox_operation_authority_v2", sandbox_authority)
 
     environment = await plans_router._resolve_cloud_run_environment(
-        base_container=base_container,
         project_id="project-1",
         tenant_id="tenant-1",
         kind="worktree",
@@ -277,6 +289,15 @@ async def test_resolve_cloud_run_environment_uses_server_sandbox_identity_and_ro
         project_id="project-1",
         tenant_id="tenant-1",
     )
+    assert captured["scope"] == ScopeV2(
+        kind=ScopeKindV2.PROJECT,
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    assert captured["identity"] == {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+    }
 
 
 @pytest.mark.unit
