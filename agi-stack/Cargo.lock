@@ -324,6 +324,7 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "serde",
+ "serde_jcs",
  "serde_json",
  "serde_yaml_ng",
  "sha2 0.10.9",

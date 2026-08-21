@@ -8,6 +8,7 @@ use agistack_plugin_host::{
 };
 use futures_util::StreamExt;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use url::Url;
 
@@ -26,6 +27,12 @@ const INITIAL_ERROR_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_ERROR_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DISTRIBUTION_BYTES: usize = 4 * 1024 * 1024;
+
+struct CloudAuthorityV2 {
+    base_url: Url,
+    credential: String,
+    fingerprint: String,
+}
 
 /// Owns the protocol-v2 desktop-sidecar polling task and its shutdown signal.
 #[derive(Debug)]
@@ -77,21 +84,18 @@ async fn reconcile_loop(
     success_interval: Duration,
     mut error_interval: Duration,
 ) {
-    let loader = LoaderV2::for_target(
-        DataPlaneTargetV2::DesktopSidecar,
-        std::iter::empty::<PluginDefinitionV2>(),
-    );
-    let mut reconciler = PluginSnapshotReconcilerV2::new(loader);
-    if let Err(error) = restore_last_good(&state, &mut reconciler).await {
-        tracing::error!(
-            error_code = %error,
-            "protocol-v2 platform plugin state could not be restored"
-        );
-        return;
-    }
+    let mut reconciler = desktop_reconciler();
+    let mut active_authority = None;
 
     loop {
-        match reconcile_once(&state, &trusted_sessions, &mut reconciler).await {
+        match reconcile_iteration(
+            &state,
+            &trusted_sessions,
+            &mut reconciler,
+            &mut active_authority,
+        )
+        .await
+        {
             Ok(()) => {
                 error_interval = INITIAL_ERROR_INTERVAL;
                 tokio::select! {
@@ -117,14 +121,110 @@ async fn reconcile_loop(
     reconciler.close().await;
 }
 
+fn desktop_reconciler() -> PluginSnapshotReconcilerV2 {
+    let loader = LoaderV2::for_target(
+        DataPlaneTargetV2::DesktopSidecar,
+        std::iter::empty::<PluginDefinitionV2>(),
+    );
+    PluginSnapshotReconcilerV2::new(loader)
+}
+
+async fn reconcile_iteration(
+    state: &LocalRuntimeState,
+    trusted_sessions: &TrustedSessionBroker,
+    reconciler: &mut PluginSnapshotReconcilerV2,
+    active_authority: &mut Option<String>,
+) -> Result<(), String> {
+    let authority = match load_cloud_authority(trusted_sessions) {
+        Ok(authority) => authority,
+        Err(error) => {
+            if active_authority.take().is_some() {
+                replace_reconciler(reconciler).await;
+            }
+            return Err(error);
+        }
+    };
+    let next_fingerprint = authority
+        .as_ref()
+        .map(|authority| authority.fingerprint.as_str());
+    if active_authority.as_deref() != next_fingerprint {
+        replace_reconciler(reconciler).await;
+        active_authority.take();
+        if let Some(authority) = authority.as_ref() {
+            restore_last_good(state, &authority.fingerprint, reconciler).await?;
+            *active_authority = Some(authority.fingerprint.clone());
+        }
+    }
+    match authority {
+        Some(authority) => reconcile_once(state, &authority, reconciler).await,
+        None => Ok(()),
+    }
+}
+
+async fn replace_reconciler(reconciler: &mut PluginSnapshotReconcilerV2) {
+    let previous = std::mem::replace(reconciler, desktop_reconciler());
+    previous.close().await;
+}
+
+fn load_cloud_authority(
+    trusted_sessions: &TrustedSessionBroker,
+) -> Result<Option<CloudAuthorityV2>, String> {
+    let Some(record) = trusted_sessions.load().map_err(|error| error.to_string())? else {
+        return Ok(None);
+    };
+    if !matches!(
+        (record.runtime_mode, record.credential_kind),
+        (
+            TrustedSessionRuntimeMode::Cloud,
+            TrustedSessionCredentialKind::CloudBearer
+        )
+    ) {
+        return Ok(None);
+    }
+    let base_url = platform_plugin_sync::validate_cloud_base_url(&record)?;
+    let fingerprint = authority_fingerprint(&base_url, &record.credential)?;
+    Ok(Some(CloudAuthorityV2 {
+        base_url,
+        credential: record.credential,
+        fingerprint,
+    }))
+}
+
+fn authority_fingerprint(base_url: &Url, credential: &str) -> Result<String, String> {
+    let normalized_base_url = normalized_cloud_base_url(base_url);
+    let identity = serde_json::to_vec(&(
+        "memstack-platform-plugin-authority-v2",
+        normalized_base_url,
+        credential,
+    ))
+    .map_err(|_| "plugin v2 authority identity could not be encoded".to_string())?;
+    Ok(format!("sha256:{:x}", Sha256::digest(identity)))
+}
+
+fn normalized_cloud_base_url(base_url: &Url) -> String {
+    let base_path = base_url.path().trim_end_matches('/');
+    let control_plane_root = if base_path.ends_with("/api/v1") {
+        base_path.to_owned()
+    } else {
+        format!("{base_path}/api/v1")
+    };
+    let mut normalized = base_url.clone();
+    normalized.set_path(&control_plane_root);
+    normalized.set_query(None);
+    normalized.set_fragment(None);
+    normalized.to_string()
+}
+
 async fn restore_last_good(
     state: &LocalRuntimeState,
+    authority_fingerprint: &str,
     reconciler: &mut PluginSnapshotReconcilerV2,
 ) -> Result<(), String> {
     let last_good = {
         let connection = state.session_store.connection()?;
         plugin_snapshots_v2::initialize_schema(&connection).map_err(|error| error.to_string())?;
-        plugin_snapshots_v2::read_last_good(&connection).map_err(|error| error.to_string())?
+        plugin_snapshots_v2::read_last_good(&connection, authority_fingerprint)
+            .map_err(|error| error.to_string())?
     };
     let Some(distribution) = last_good else {
         return Ok(());
@@ -140,35 +240,22 @@ async fn restore_last_good(
 
 async fn reconcile_once(
     state: &LocalRuntimeState,
-    trusted_sessions: &TrustedSessionBroker,
+    authority: &CloudAuthorityV2,
     reconciler: &mut PluginSnapshotReconcilerV2,
 ) -> Result<(), String> {
-    let Some(record) = trusted_sessions.load().map_err(|error| error.to_string())? else {
-        return Ok(());
-    };
-    if !matches!(
-        (record.runtime_mode, record.credential_kind),
-        (
-            TrustedSessionRuntimeMode::Cloud,
-            TrustedSessionCredentialKind::CloudBearer
-        )
-    ) {
-        return Ok(());
-    }
-    let base_url = platform_plugin_sync::validate_cloud_base_url(&record)?;
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|error| format!("plugin v2 control-plane client unavailable: {error}"))?;
     let Some(distribution) =
-        fetch_distribution(&client, &base_url, record.credential.as_str()).await?
+        fetch_distribution(&client, &authority.base_url, authority.credential.as_str()).await?
     else {
         return Ok(());
     };
     {
         let connection = state.session_store.connection()?;
         plugin_snapshots_v2::initialize_schema(&connection).map_err(|error| error.to_string())?;
-        plugin_snapshots_v2::record_requested(&connection, &distribution)
+        plugin_snapshots_v2::record_requested(&connection, &authority.fingerprint, &distribution)
             .map_err(|error| error.to_string())?;
     }
     let receipt = reconciler.apply(&distribution).await;
@@ -176,6 +263,7 @@ async fn reconcile_once(
         let mut connection = state.session_store.connection()?;
         plugin_snapshots_v2::record_receipt(
             &mut connection,
+            &authority.fingerprint,
             &distribution.envelope.nonce,
             &receipt,
         )
@@ -183,8 +271,8 @@ async fn reconcile_once(
     }
     post_receipt(
         &client,
-        &base_url,
-        record.credential.as_str(),
+        &authority.base_url,
+        authority.credential.as_str(),
         &distribution,
         &receipt,
     )
@@ -290,9 +378,33 @@ struct DataPlaneReceiptRequestV2<'a> {
 #[cfg(test)]
 mod tests {
     use agistack_plugin_host::ApplyStatusV2;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     use super::*;
+
+    const SNAPSHOT: &str =
+        include_str!("../../../../../../shared/fixtures/platform-plugin-profile.v2.json");
+
+    fn distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
+        let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        let digest = snapshot["digest"].as_str().expect("snapshot digest");
+        let raw = json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": version,
+                "nonce": nonce,
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        });
+        parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    }
 
     #[test]
     fn receipt_request_uses_the_exact_v2_transport_shape() {
@@ -330,5 +442,41 @@ mod tests {
                 },
             })
         );
+    }
+
+    #[test]
+    fn authority_fingerprint_normalizes_base_url_and_hides_the_credential() {
+        let base = Url::parse("https://EXAMPLE.com:443/control").expect("base URL");
+        let equivalent = Url::parse("https://example.com/control/api/v1/").expect("equivalent URL");
+        let credential = "cloud-bearer-that-must-never-be-persisted";
+
+        let first = authority_fingerprint(&base, credential).expect("fingerprint");
+        let second = authority_fingerprint(&equivalent, credential).expect("fingerprint");
+        let other = authority_fingerprint(&base, "different-bearer").expect("fingerprint");
+
+        assert_eq!(first, second);
+        assert_ne!(first, other);
+        assert!(first.starts_with("sha256:"));
+        assert!(!first.contains(credential));
+    }
+
+    #[tokio::test]
+    async fn replacing_reconciler_clears_the_active_generation() {
+        let mut reconciler = desktop_reconciler();
+        let requested = distribution(17, "nonce-17");
+        assert_eq!(
+            reconciler.apply(&requested).await.status,
+            ApplyStatusV2::Ack
+        );
+        let lease = reconciler
+            .manager()
+            .acquire()
+            .expect("generation must be active before replacement");
+        lease.release().await.expect("lease must release");
+
+        replace_reconciler(&mut reconciler).await;
+
+        assert!(reconciler.manager().acquire().is_err());
+        reconciler.close().await;
     }
 }

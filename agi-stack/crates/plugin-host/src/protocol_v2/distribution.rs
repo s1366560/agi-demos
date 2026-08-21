@@ -1,6 +1,9 @@
 //! Strict control-plane distribution parsing for protocol v2 data planes.
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Deserialize, Serialize,
+};
 use serde_json::Value;
 
 use super::{
@@ -18,12 +21,27 @@ pub struct PluginGenerationDescriptorV2 {
 }
 
 /// A complete, validated v2 control-plane distribution.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ControlPlaneDistributionV2 {
     pub schema_version: u64,
     pub descriptor: PluginGenerationDescriptorV2,
     pub snapshot: ProfileSnapshotV2,
     pub envelope: ControlPlaneEnvelopeV2,
+    snapshot_wire: Value,
+}
+
+impl Serialize for ControlPlaneDistributionV2 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("ControlPlaneDistributionV2", 4)?;
+        state.serialize_field("schema_version", &self.schema_version)?;
+        state.serialize_field("descriptor", &self.descriptor)?;
+        state.serialize_field("snapshot", &self.snapshot_wire)?;
+        state.serialize_field("envelope", &self.envelope)?;
+        state.end()
+    }
 }
 
 #[derive(Deserialize)]
@@ -91,5 +109,6 @@ pub fn parse_control_plane_distribution_v2(
         descriptor: wire.descriptor,
         snapshot,
         envelope: wire.envelope,
+        snapshot_wire: wire.snapshot,
     })
 }

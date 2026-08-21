@@ -10,10 +10,12 @@ use serde_json::Value;
 use thiserror::Error;
 
 const SCHEMA_VERSION: u64 = 2;
+const AUTHORITY_FINGERPRINT_PREFIX: &str = "sha256:";
 
 /// One strict v2 requested/applied/last-good state record.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PluginSnapshotStateV2 {
+    pub(crate) authority_fingerprint: Option<String>,
     pub(crate) requested: Option<ControlPlaneDistributionV2>,
     pub(crate) receipt: Option<SnapshotApplyReceiptV2>,
     pub(crate) last_good: Option<ControlPlaneDistributionV2>,
@@ -31,6 +33,10 @@ pub(crate) enum PluginSnapshotStoreV2Error {
     NonceConflict,
     #[error("plugin v2 receipt does not match the requested distribution")]
     ReceiptMismatch,
+    #[error("plugin v2 authority fingerprint is invalid")]
+    InvalidAuthorityFingerprint,
+    #[error("plugin v2 state belongs to another authority")]
+    AuthorityMismatch,
     #[error("plugin v2 state storage failed: {0}")]
     Storage(String),
 }
@@ -39,6 +45,8 @@ pub(crate) enum PluginSnapshotStoreV2Error {
 #[serde(deny_unknown_fields)]
 struct PersistedStateV2 {
     schema_version: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    authority_fingerprint: Option<String>,
     requested: Option<Value>,
     receipt: Option<SnapshotApplyReceiptV2>,
     last_good: Option<Value>,
@@ -74,34 +82,57 @@ pub(crate) fn read_state(
 
 pub(crate) fn read_last_good(
     connection: &Connection,
+    authority_fingerprint: &str,
 ) -> Result<Option<ControlPlaneDistributionV2>, PluginSnapshotStoreV2Error> {
-    Ok(read_state(connection)?.and_then(|state| state.last_good))
+    validate_authority_fingerprint(authority_fingerprint)?;
+    Ok(read_state(connection)?.and_then(|state| {
+        (state.authority_fingerprint.as_deref() == Some(authority_fingerprint))
+            .then_some(state.last_good)
+            .flatten()
+    }))
 }
 
 pub(crate) fn record_requested(
     connection: &Connection,
+    authority_fingerprint: &str,
     distribution: &ControlPlaneDistributionV2,
 ) -> Result<(), PluginSnapshotStoreV2Error> {
+    validate_authority_fingerprint(authority_fingerprint)?;
     let existing = read_state(connection)?;
-    if let Some(requested) = existing.as_ref().and_then(|state| state.requested.as_ref()) {
+    let same_authority = existing
+        .as_ref()
+        .is_some_and(|state| state.authority_fingerprint.as_deref() == Some(authority_fingerprint));
+    if let Some(requested) = existing
+        .as_ref()
+        .filter(|_| same_authority)
+        .and_then(|state| state.requested.as_ref())
+    {
         if requested.envelope.nonce == distribution.envelope.nonce && requested != distribution {
             return Err(PluginSnapshotStoreV2Error::NonceConflict);
         }
     }
     let state = PluginSnapshotStateV2 {
+        authority_fingerprint: Some(authority_fingerprint.to_owned()),
         requested: Some(distribution.clone()),
         receipt: None,
-        last_good: existing.and_then(|item| item.last_good),
+        last_good: existing
+            .filter(|_| same_authority)
+            .and_then(|item| item.last_good),
     };
     write_state(connection, &state)
 }
 
 pub(crate) fn record_receipt(
     connection: &mut Connection,
+    authority_fingerprint: &str,
     nonce: &str,
     receipt: &SnapshotApplyReceiptV2,
 ) -> Result<(), PluginSnapshotStoreV2Error> {
+    validate_authority_fingerprint(authority_fingerprint)?;
     let mut state = read_state(connection)?.ok_or(PluginSnapshotStoreV2Error::StaleReceipt)?;
+    if state.authority_fingerprint.as_deref() != Some(authority_fingerprint) {
+        return Err(PluginSnapshotStoreV2Error::AuthorityMismatch);
+    }
     let requested = state
         .requested
         .as_ref()
@@ -171,7 +202,19 @@ fn parse_state(raw: &str) -> Result<PluginSnapshotStateV2, PluginSnapshotStoreV2
     }
     let persisted: PersistedStateV2 = serde_json::from_value(value)
         .map_err(|error| PluginSnapshotStoreV2Error::InvalidState(error.to_string()))?;
+    let Some(authority_fingerprint) = persisted.authority_fingerprint.as_deref() else {
+        return Ok(PluginSnapshotStateV2 {
+            authority_fingerprint: None,
+            requested: None,
+            receipt: None,
+            last_good: None,
+        });
+    };
+    validate_authority_fingerprint(authority_fingerprint).map_err(|_| {
+        PluginSnapshotStoreV2Error::InvalidState("authority fingerprint is invalid".to_string())
+    })?;
     Ok(PluginSnapshotStateV2 {
+        authority_fingerprint: persisted.authority_fingerprint,
         requested: persisted.requested.map(parse_distribution).transpose()?,
         receipt: persisted.receipt,
         last_good: persisted.last_good.map(parse_distribution).transpose()?,
@@ -189,8 +232,13 @@ fn write_state(
     connection: &Connection,
     state: &PluginSnapshotStateV2,
 ) -> Result<(), PluginSnapshotStoreV2Error> {
+    let authority_fingerprint = state.authority_fingerprint.as_deref().ok_or_else(|| {
+        PluginSnapshotStoreV2Error::InvalidState("authority fingerprint is required".to_string())
+    })?;
+    validate_authority_fingerprint(authority_fingerprint)?;
     let raw = serde_json::to_string(&PersistedStateV2 {
         schema_version: SCHEMA_VERSION,
+        authority_fingerprint: Some(authority_fingerprint.to_owned()),
         requested: state
             .requested
             .as_ref()
@@ -221,6 +269,22 @@ fn write_state(
         .map_err(storage_error)
 }
 
+fn validate_authority_fingerprint(
+    authority_fingerprint: &str,
+) -> Result<(), PluginSnapshotStoreV2Error> {
+    let Some(digest) = authority_fingerprint.strip_prefix(AUTHORITY_FINGERPRINT_PREFIX) else {
+        return Err(PluginSnapshotStoreV2Error::InvalidAuthorityFingerprint);
+    };
+    let valid = digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if !valid {
+        return Err(PluginSnapshotStoreV2Error::InvalidAuthorityFingerprint);
+    }
+    Ok(())
+}
+
 fn storage_error(error: rusqlite::Error) -> PluginSnapshotStoreV2Error {
     PluginSnapshotStoreV2Error::Storage(error.to_string())
 }
@@ -230,14 +294,51 @@ mod tests {
     use agistack_plugin_host::parse_control_plane_distribution_v2;
     use rusqlite::{params, Connection};
     use serde_json::Value;
+    use sha2::{Digest, Sha256};
 
     use super::*;
 
     const SNAPSHOT: &str =
         include_str!("../../../../../shared/fixtures/platform-plugin-profile.v2.json");
+    const AUTHORITY_A: &str =
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const AUTHORITY_B: &str =
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     fn distribution(version: u64, nonce: &str) -> agistack_plugin_host::ControlPlaneDistributionV2 {
         let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        let digest = snapshot["digest"].as_str().expect("digest");
+        let raw = serde_json::json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": version,
+                "nonce": nonce,
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        });
+        parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    }
+
+    fn distribution_with_explicit_null(
+        version: u64,
+        nonce: &str,
+    ) -> agistack_plugin_host::ControlPlaneDistributionV2 {
+        let mut snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        snapshot["manifests"][0]["modules"][0]["artifact"]["signature"] = Value::Null;
+        let mut digest_payload = snapshot.clone();
+        digest_payload
+            .as_object_mut()
+            .expect("snapshot object")
+            .remove("digest");
+        let canonical = serde_jcs::to_vec(&digest_payload).expect("snapshot must canonicalize");
+        snapshot["digest"] = Value::String(format!("{:x}", Sha256::digest(canonical)));
         let digest = snapshot["digest"].as_str().expect("digest");
         let raw = serde_json::json!({
             "schema_version": 2,
@@ -279,15 +380,16 @@ mod tests {
         initialize_schema(&connection).expect("schema");
         let requested = distribution(11, "nonce-11");
 
-        record_requested(&connection, &requested).expect("requested");
+        record_requested(&connection, AUTHORITY_A, &requested).expect("requested");
         record_receipt(
             &mut connection,
+            AUTHORITY_A,
             "nonce-11",
             &receipt(&requested, ApplyStatusV2::Ack),
         )
         .expect("ack");
 
-        let restored = read_last_good(&connection)
+        let restored = read_last_good(&connection, AUTHORITY_A)
             .expect("read last-good")
             .expect("last-good must exist");
         assert_eq!(restored, requested);
@@ -300,16 +402,17 @@ mod tests {
         let mut connection = Connection::open_in_memory().expect("database");
         initialize_schema(&connection).expect("schema");
         let first = distribution(11, "nonce-11");
-        record_requested(&connection, &first).expect("first requested");
+        record_requested(&connection, AUTHORITY_A, &first).expect("first requested");
         record_receipt(
             &mut connection,
+            AUTHORITY_A,
             "nonce-11",
             &receipt(&first, ApplyStatusV2::Ack),
         )
         .expect("first ack");
 
         let second = distribution(12, "nonce-12");
-        record_requested(&connection, &second).expect("second requested");
+        record_requested(&connection, AUTHORITY_A, &second).expect("second requested");
         let nack = SnapshotApplyReceiptV2 {
             status: ApplyStatusV2::Nack,
             requested_version: second.envelope.version,
@@ -319,11 +422,15 @@ mod tests {
             error_code: Some("generation_apply_failed".into()),
             error_message: Some("test failure".into()),
         };
-        record_receipt(&mut connection, "nonce-12", &nack).expect("second nack");
-        assert_eq!(read_last_good(&connection).expect("last-good"), Some(first));
+        record_receipt(&mut connection, AUTHORITY_A, "nonce-12", &nack).expect("second nack");
+        assert_eq!(
+            read_last_good(&connection, AUTHORITY_A).expect("last-good"),
+            Some(first)
+        );
 
         let stale = record_receipt(
             &mut connection,
+            AUTHORITY_A,
             "nonce-11",
             &receipt(&second, ApplyStatusV2::Ack),
         )
@@ -346,5 +453,95 @@ mod tests {
             read_state(&connection),
             Err(PluginSnapshotStoreV2Error::IncompatibleSchemaVersion)
         );
+    }
+
+    #[test]
+    fn authority_switch_never_restores_or_accepts_receipts_for_foreign_state() {
+        let mut connection = Connection::open_in_memory().expect("database");
+        initialize_schema(&connection).expect("schema");
+        let first = distribution(11, "nonce-11");
+        record_requested(&connection, AUTHORITY_A, &first).expect("first requested");
+        record_receipt(
+            &mut connection,
+            AUTHORITY_A,
+            "nonce-11",
+            &receipt(&first, ApplyStatusV2::Ack),
+        )
+        .expect("first ack");
+
+        assert_eq!(
+            read_last_good(&connection, AUTHORITY_B).expect("foreign read"),
+            None
+        );
+        assert_eq!(
+            record_receipt(
+                &mut connection,
+                AUTHORITY_B,
+                "nonce-11",
+                &receipt(&first, ApplyStatusV2::Ack),
+            ),
+            Err(PluginSnapshotStoreV2Error::AuthorityMismatch)
+        );
+
+        let second = distribution(12, "nonce-12");
+        record_requested(&connection, AUTHORITY_B, &second).expect("second requested");
+        let state = read_state(&connection).expect("state read").expect("state");
+        assert_eq!(state.authority_fingerprint.as_deref(), Some(AUTHORITY_B));
+        assert_eq!(state.last_good, None);
+    }
+
+    #[test]
+    fn unscoped_legacy_v2_state_is_not_restored() {
+        let connection = Connection::open_in_memory().expect("database");
+        initialize_schema(&connection).expect("schema");
+        let persisted = serde_json::json!({
+            "schema_version": 2,
+            "requested": {"legacy": "unscoped"},
+            "receipt": null,
+            "last_good": {"legacy": "unscoped"},
+        });
+        connection
+            .execute(
+                "INSERT INTO desktop_platform_plugin_state_v2 (id, state_json) VALUES (1, ?1)",
+                params![persisted.to_string()],
+            )
+            .expect("seed unscoped state");
+
+        assert_eq!(
+            read_last_good(&connection, AUTHORITY_A).expect("read last-good"),
+            None
+        );
+    }
+
+    #[test]
+    fn explicit_null_snapshot_survives_sqlite_round_trip() {
+        let mut connection = Connection::open_in_memory().expect("database");
+        initialize_schema(&connection).expect("schema");
+        let requested = distribution_with_explicit_null(13, "nonce-explicit-null");
+        record_requested(&connection, AUTHORITY_A, &requested).expect("requested");
+        record_receipt(
+            &mut connection,
+            AUTHORITY_A,
+            "nonce-explicit-null",
+            &receipt(&requested, ApplyStatusV2::Ack),
+        )
+        .expect("ack");
+
+        let restored = read_last_good(&connection, AUTHORITY_A)
+            .expect("read last-good")
+            .expect("last-good");
+        assert_eq!(restored, requested);
+        let persisted: String = connection
+            .query_row(
+                "SELECT state_json FROM desktop_platform_plugin_state_v2 WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("persisted state");
+        let value: Value = serde_json::from_str(&persisted).expect("state JSON");
+        let artifact = value["last_good"]["snapshot"]["manifests"][0]["modules"][0]["artifact"]
+            .as_object()
+            .expect("artifact object");
+        assert_eq!(artifact.get("signature"), Some(&Value::Null));
     }
 }

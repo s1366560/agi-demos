@@ -283,6 +283,31 @@ fn distribution_rejects_v1_and_mismatched_descriptor_or_envelope() {
 }
 
 #[test]
+fn distribution_serialization_preserves_explicit_null_snapshot_fields() {
+    let mut snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+    snapshot["manifests"][0]["modules"][0]["artifact"]["signature"] = Value::Null;
+    let mut digest_payload = snapshot.clone();
+    digest_payload
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("digest");
+    let canonical = serde_jcs::to_vec(&digest_payload).expect("snapshot must canonicalize");
+    snapshot["digest"] = Value::String(format!("{:x}", Sha256::digest(canonical)));
+    let parsed =
+        parse_control_plane_distribution_v2(&distribution(snapshot, 12, "nonce-explicit-null"))
+            .expect("distribution must parse");
+
+    let persisted = serde_json::to_value(&parsed).expect("distribution must serialize");
+    let artifact = persisted["snapshot"]["manifests"][0]["modules"][0]["artifact"]
+        .as_object()
+        .expect("artifact must remain an object");
+    assert_eq!(artifact.get("signature"), Some(&Value::Null));
+    let reparsed = parse_control_plane_distribution_v2(&persisted.to_string())
+        .expect("serialized distribution must reparse");
+    assert_eq!(reparsed, parsed);
+}
+
+#[test]
 fn desktop_reconciler_acks_only_its_empty_target_projection() {
     block_on(async {
         let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
