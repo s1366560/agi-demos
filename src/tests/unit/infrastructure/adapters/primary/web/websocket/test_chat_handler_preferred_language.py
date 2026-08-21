@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+import src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler as chat_handler_module
 from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
     StopSessionHandler,
     _append_external_acp_update_event,
@@ -21,6 +23,22 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
 )
 
 pytestmark = pytest.mark.unit
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_language_tests_from_generation_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        chat_handler_module,
+        "pin_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+    )
 
 
 def test_format_external_acp_prompt_with_history_includes_recent_turns() -> None:
@@ -197,6 +215,7 @@ class FakeMessageContext:
     user_id = "user-1"
     tenant_id = "tenant-1"
     api_key = "ms_sk_" + ("a" * 64)
+    db = object()
 
     def __init__(self) -> None:
         self.connection_manager = FakeConnectionManager()

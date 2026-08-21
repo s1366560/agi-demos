@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import uuid
+from contextlib import AsyncExitStack
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -24,6 +26,12 @@ from src.infrastructure.adapters.primary.web.websocket.auth import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 logger = logging.getLogger(__name__)
@@ -476,7 +484,29 @@ async def _agent_bridge(
             # Create a FRESH DB session for each agent invocation
             # to avoid stale session issues in long-lived WebSocket.
             async with async_session_factory() as fresh_db:
+                turn_stack = AsyncExitStack()
                 try:
+                    _ = await turn_stack.enter_async_context(
+                        pin_agent_turn_operation_v2(
+                            operation_id=f"voice-turn:{uuid.uuid4()}",
+                            tenant_id=tenant_id,
+                            project_id=project_id,
+                            session_id=conversation_id,
+                            services={
+                                OPERATION_DB_SESSION_SERVICE_V2: fresh_db,
+                                OPERATION_IDENTITY_SERVICE_V2: {
+                                    "tenant_id": tenant_id,
+                                    "user_id": user_id,
+                                    "project_id": project_id,
+                                },
+                                OPERATION_METADATA_SERVICE_V2: {
+                                    "kind": "agent-turn",
+                                    "channel": "voice",
+                                    "conversation_id": conversation_id,
+                                },
+                            },
+                        )
+                    )
                     container = base_container.with_db(fresh_db)
                     agent_service = container.agent_service(llm)
                     logger.info(
@@ -566,6 +596,8 @@ async def _agent_bridge(
                     )
                     await _send_error(websocket, f"Agent error: {inner_err}")
                     await tts_text_queue.put(None)
+                finally:
+                    await turn_stack.aclose()
 
     except asyncio.CancelledError:
         pass

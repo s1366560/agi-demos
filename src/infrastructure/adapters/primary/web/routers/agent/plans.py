@@ -47,6 +47,12 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_plan_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
@@ -776,16 +782,38 @@ async def _execute_approved_plan(
             container = base_container.with_db(session)
             llm = await create_llm_client(tenant_id)
             service = container.agent_service(llm)
-            async for _event in service.stream_chat_v2(
-                conversation_id=conversation_id,
-                user_message=message,
-                project_id=project_id,
-                user_id=user_id,
+            async with pin_agent_turn_operation_v2(
+                operation_id=f"approved-plan:{run_id}",
                 tenant_id=tenant_id,
-                execution_message_id=message_id,
-                canonical_run_id=run_id,
+                project_id=project_id,
+                session_id=conversation_id,
+                services={
+                    OPERATION_DB_SESSION_SERVICE_V2: session,
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "project_id": project_id,
+                    },
+                    OPERATION_METADATA_SERVICE_V2: {
+                        "kind": "agent-turn",
+                        "channel": "approved-plan",
+                        "conversation_id": conversation_id,
+                        "run_id": run_id,
+                        "message_id": message_id,
+                    },
+                },
+                force_process_host_lease=True,
             ):
-                pass
+                async for _event in service.stream_chat_v2(
+                    conversation_id=conversation_id,
+                    user_message=message,
+                    project_id=project_id,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    execution_message_id=message_id,
+                    canonical_run_id=run_id,
+                ):
+                    pass
             await session.refresh(run)
             run.status = "ready_review"
             run.revision += 1

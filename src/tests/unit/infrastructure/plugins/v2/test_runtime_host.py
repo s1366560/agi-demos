@@ -462,6 +462,45 @@ async def test_agent_turn_boundary_keeps_outer_generation_when_host_advances() -
 
 
 @pytest.mark.unit
+async def test_agent_turn_boundary_can_force_an_independent_process_host_lease() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="copied-http-generation-1",
+    )
+    install_process_generation_host_v2(host)
+
+    try:
+        async with pin_generation_v2(host) as copied_http_generation:
+            await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=2,
+                version=2,
+                nonce="background-generation-2",
+            )
+            async with pin_agent_turn_operation_v2(
+                operation_id="approved-plan:run-a",
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_id="conversation-a",
+                force_process_host_lease=True,
+            ) as operation:
+                distribution = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+                assert operation.generation is not copied_http_generation
+                assert operation.descriptor.generation == 2
+                assert distribution["descriptor"] == operation.descriptor.to_payload()
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
 async def test_non_http_scope_bypasses_generation_lease() -> None:
     called = False
 

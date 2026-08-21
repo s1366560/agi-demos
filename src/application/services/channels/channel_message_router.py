@@ -18,6 +18,12 @@ from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,8 +113,7 @@ class ChannelMessageRouter:
                 return
 
             logger.info(
-                "[MessageRouter] Routing message from %s: "
-                "has_chat_id=%s has_sender_id=%s",
+                "[MessageRouter] Routing message from %s: has_chat_id=%s has_sender_id=%s",
                 message.channel,
                 bool(message.chat_id),
                 bool(message.sender.id),
@@ -283,12 +288,10 @@ class ChannelMessageRouter:
     async def _handle_media_import_failure(self, message: Message) -> None:
         """Handle failed media import by notifying the user."""
         filename = message.content.file_name or _("unknown")
-        error_msg = (
-            _(
-                "Sorry, file import failed. The file may be too large (over 50MB) "
-                "or its format is not supported. Filename: {filename}"
-            ).format(filename=filename)
-        )
+        error_msg = _(
+            "Sorry, file import failed. The file may be too large (over 50MB) "
+            "or its format is not supported. Filename: {filename}"
+        ).format(filename=filename)
         logger.warning(
             f"[MessageRouter] Media import failed - "
             f"type={message.content.type.value}, "
@@ -552,8 +555,7 @@ class ChannelMessageRouter:
             return binding.conversation_id
 
         logger.info(
-            "[MessageRouter] Created new conversation: has_conversation_id=%s "
-            "has_chat_id=%s",
+            "[MessageRouter] Created new conversation: has_conversation_id=%s has_chat_id=%s",
             bool(new_conversation.id),
             bool(message.chat_id),
         )
@@ -759,13 +761,18 @@ class ChannelMessageRouter:
             if session_ctx is None:
                 return
 
-            _session, agent_service, conversation, resolved_agent_id = session_ctx
+            db_session, agent_service, conversation, resolved_agent_id = session_ctx
+            channel_message_id = self._extract_channel_message_id(message)
+            operation_message_id = channel_message_id or message.id or str(uuid.uuid4())
 
             await self._run_agent_stream(
                 message=message,
                 conversation_id=conversation_id,
                 conversation=conversation,
                 agent_service=agent_service,
+                db_session=db_session,
+                operation_id=f"channel-turn:{operation_message_id}",
+                channel_message_id=channel_message_id,
                 file_metadata=file_metadata,
                 agent_id=resolved_agent_id,
             )
@@ -853,10 +860,53 @@ class ChannelMessageRouter:
         conversation_id: str,
         conversation: Any,
         agent_service: Any,
+        db_session: Any,
+        operation_id: str,
+        channel_message_id: str | None,
         file_metadata: list[dict[str, Any]] | None = None,
         agent_id: str | None = None,
     ) -> None:
-        """Consume agent stream, manage card updates, and send final response."""
+        """Pin and consume one complete channel agent stream."""
+        async with pin_agent_turn_operation_v2(
+            operation_id=operation_id,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db_session,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": conversation.tenant_id,
+                    "user_id": conversation.user_id,
+                    "project_id": conversation.project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-turn",
+                    "channel": str(message.channel),
+                    "conversation_id": conversation_id,
+                    "message_id": message.id,
+                    "channel_message_id": channel_message_id,
+                },
+            },
+        ):
+            await self._run_agent_stream_pinned(
+                message=message,
+                conversation_id=conversation_id,
+                conversation=conversation,
+                agent_service=agent_service,
+                file_metadata=file_metadata,
+                agent_id=agent_id,
+            )
+
+    async def _run_agent_stream_pinned(
+        self,
+        message: Message,
+        conversation_id: str,
+        conversation: Any,
+        agent_service: Any,
+        file_metadata: list[dict[str, Any]] | None = None,
+        agent_id: str | None = None,
+    ) -> None:
+        """Consume a channel stream inside its already-pinned operation."""
 
         text = message.content.generate_display_text()
 
@@ -1172,8 +1222,7 @@ class ChannelMessageRouter:
             binding = await bridge._lookup_binding(conversation_id)
             if not binding:
                 logger.debug(
-                    "[MessageRouter] No channel binding for push message: "
-                    "has_conversation_id=%s",
+                    "[MessageRouter] No channel binding for push message: has_conversation_id=%s",
                     bool(conversation_id),
                 )
                 return False
@@ -1377,8 +1426,7 @@ class ChannelMessageRouter:
             if outbox_id:
                 await self._mark_outbox_sent(outbox_id, sent_message_id)
             logger.info(
-                "[MessageRouter] Sent response to channel: "
-                "has_chat_id=%s has_message_id=%s",
+                "[MessageRouter] Sent response to channel: has_chat_id=%s has_message_id=%s",
                 bool(message.chat_id),
                 bool(sent_message_id),
             )
@@ -1543,8 +1591,7 @@ class ChannelMessageRouter:
                     outbound_message_id=streaming_msg_id,
                 )
                 logger.info(
-                    "[MessageRouter] Streaming response recorded: "
-                    "has_chat_id=%s has_message_id=%s",
+                    "[MessageRouter] Streaming response recorded: has_chat_id=%s has_message_id=%s",
                     bool(message.chat_id),
                     bool(streaming_msg_id),
                 )

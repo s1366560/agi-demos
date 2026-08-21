@@ -175,14 +175,36 @@ async def pin_agent_turn_operation_v2(
     project_id: str,
     session_id: str,
     services: Mapping[str, object] | None = None,
+    force_process_host_lease: bool = False,
 ) -> AsyncIterator[OperationContextV2]:
-    """Pin one complete session-scoped V2 operation for an agent turn."""
+    """Pin one complete session-scoped V2 operation for an agent turn.
+
+    Background tasks can inherit an HTTP generation through ``ContextVar`` even
+    though the request lease ends before the task consumes it.  Such callers
+    must force an independent process-host lease instead of reusing that copied
+    generation or operation context.
+    """
     scope = ScopeV2(
         kind=ScopeKindV2.SESSION,
         tenant_id=tenant_id,
         project_id=project_id,
         session_id=session_id,
     )
+    if force_process_host_lease:
+        host = current_process_generation_host_v2()
+        async with (
+            pin_generation_v2(host) as leased_generation,
+            _pin_agent_turn_on_generation_v2(
+                leased_generation,
+                operation_id=operation_id,
+                scope=scope,
+                services=services,
+                parent=None,
+            ) as operation,
+        ):
+            yield operation
+        return
+
     existing = _operation_context.get()
     if (
         existing is not None

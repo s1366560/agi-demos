@@ -38,6 +38,12 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_chat_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 from src.infrastructure.plugins.v2.session_event_log import TURN_ADMITTED_EVENT_V2
 
 if TYPE_CHECKING:
@@ -1391,63 +1397,6 @@ async def stream_agent_to_websocket_with_fresh_session(  # noqa: PLR0913
 ) -> None:
     """Create a fresh DB-scoped agent service for the long-running stream."""
     async with context.fresh_db_context() as stream_context:
-        host = getattr(stream_context, "plugin_runtime_host_v2", None)
-        if host is not None:
-            from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-            from src.infrastructure.plugins.v2.boundary import (
-                OPERATION_DB_SESSION_SERVICE_V2,
-                OPERATION_IDENTITY_SERVICE_V2,
-                OPERATION_METADATA_SERVICE_V2,
-                OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
-                pin_operation_context_v2,
-            )
-
-            async with pin_operation_context_v2(
-                host,
-                operation_id=f"agent-turn:{execution_message_id or conversation_id}",
-                scope=ScopeV2(
-                    kind=ScopeKindV2.SESSION,
-                    tenant_id=stream_context.tenant_id,
-                    project_id=project_id,
-                    session_id=conversation_id,
-                ),
-                services={
-                    OPERATION_DB_SESSION_SERVICE_V2: stream_context.db,
-                    OPERATION_IDENTITY_SERVICE_V2: {
-                        "tenant_id": stream_context.tenant_id,
-                        "user_id": stream_context.user_id,
-                    },
-                    OPERATION_METADATA_SERVICE_V2: {
-                        "kind": "agent-turn",
-                        "conversation_id": conversation_id,
-                        "execution_message_id": execution_message_id,
-                    },
-                },
-            ) as operation:
-                distribution = host.distribution_for_generation(operation.generation)
-                operation.provide(
-                    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
-                    distribution.to_payload(),
-                )
-                await _stream_agent_with_scoped_session(
-                    stream_context=stream_context,
-                    conversation_id=conversation_id,
-                    user_message=user_message,
-                    project_id=project_id,
-                    preferred_language=preferred_language,
-                    attachment_ids=attachment_ids,
-                    file_metadata=file_metadata,
-                    forced_skill_name=forced_skill_name,
-                    app_model_context=app_model_context,
-                    image_attachments=image_attachments,
-                    agent_id=agent_id,
-                    mentions=mentions,
-                    client_message_id=client_message_id,
-                    client_payload_hash=client_payload_hash,
-                    execution_message_id=execution_message_id,
-                )
-            return
-
         await _stream_agent_with_scoped_session(
             stream_context=stream_context,
             conversation_id=conversation_id,
@@ -1547,8 +1496,78 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
     mentions: list[str] | None = None,
     execution_message_id: str | None = None,
 ) -> None:
+    """Pin one WebSocket agent turn before consuming its complete async stream."""
+    turn_id = execution_message_id or str(uuid.uuid4())
+    manager = context.connection_manager
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"agent-turn:{turn_id}",
+            tenant_id=context.tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: context.db,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": context.tenant_id,
+                    "user_id": context.user_id,
+                    "project_id": project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-turn",
+                    "channel": "websocket",
+                    "conversation_id": conversation_id,
+                    "execution_message_id": execution_message_id,
+                },
+            },
+        ):
+            await _stream_agent_to_websocket_pinned(
+                agent_service=agent_service,
+                context=context,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                project_id=project_id,
+                preferred_language=preferred_language,
+                attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
+                app_model_context=app_model_context,
+                image_attachments=image_attachments,
+                agent_id=agent_id,
+                mentions=mentions,
+                execution_message_id=execution_message_id,
+            )
+    except asyncio.CancelledError:
+        logger.info("[WS] Stream cancelled for conversation %s", conversation_id)
+    except Exception as exc:
+        logger.error("[WS] Error admitting websocket stream: %s", exc, exc_info=True)
+        await manager.send_to_session(
+            context.session_id,
+            {
+                "type": "error",
+                "conversation_id": conversation_id,
+                "data": {"message": str(exc)},
+            },
+        )
+
+
+async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
+    agent_service: AgentService,
+    context: MessageContext,
+    conversation_id: str,
+    user_message: str,
+    project_id: str,
+    preferred_language: str | None = None,
+    attachment_ids: list[str] | None = None,
+    file_metadata: list[dict[str, Any]] | None = None,
+    forced_skill_name: str | None = None,
+    app_model_context: dict[str, Any] | None = None,
+    image_attachments: list[str] | None = None,
+    agent_id: str | None = None,
+    mentions: list[str] | None = None,
+    execution_message_id: str | None = None,
+) -> None:
     """
-    Stream agent events to WebSocket.
+    Stream agent events to WebSocket inside an already-pinned operation.
 
     Events are broadcast to ALL sessions subscribed to this conversation,
     allowing multiple browser tabs to receive the same messages in real-time.
