@@ -21,6 +21,7 @@ import type {
   ProfileSnapshotV2,
   ScopeV2,
 } from './generated';
+import type { PluginModuleCatalogEntryV2 } from './generatedCatalog';
 import {
   entryOrderV2,
   eventContractCatalogV2,
@@ -40,7 +41,7 @@ export {
 } from './context';
 export { RuntimeV2Error } from './errors';
 
-export type TargetCatalogV2 = Readonly<Record<string, string>>;
+export type TargetCatalogV2 = Readonly<Record<string, PluginModuleCatalogEntryV2>>;
 
 export interface PluginDefinitionV2 {
   readonly moduleRef: string;
@@ -143,7 +144,7 @@ export class RuntimeGenerationV2 {
 
 export class LoaderV2 {
   private readonly definitions = new Map<string, PluginDefinitionV2>();
-  private readonly targetCatalog: ReadonlyMap<string, string>;
+  private readonly targetCatalog: ReadonlyMap<string, PluginModuleCatalogEntryV2>;
   private readonly usesGeneratedCatalog: boolean;
 
   constructor(

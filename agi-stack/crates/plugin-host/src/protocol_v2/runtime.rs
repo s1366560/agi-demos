@@ -364,6 +364,7 @@ impl LoaderV2 {
                     && catalog_module.plugin_version == manifest.version
                     && catalog_module.entrypoint == module.entrypoint
                     && catalog_module.artifact_digest == module.artifact.digest
+                    && catalog_module.artifact_source == module.artifact.source
                     && same_targets(&catalog_module.targets, &module.targets);
                 if !metadata_matches {
                     return Err(RuntimeV2Error::InvalidTargetCatalog(format!(

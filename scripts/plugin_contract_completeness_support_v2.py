@@ -48,6 +48,7 @@ class _ManifestModuleV2:
     plugin_version: str
     module_ref: str
     entrypoint: str
+    artifact_source: str
     artifact_digest: str
     targets: tuple[str, ...]
     contract: Mapping[str, Any]

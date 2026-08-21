@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from src.domain.model.plugins.generated_v2 import DataPlaneTargetV2
 from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
     canonical_json_v2,
@@ -21,6 +21,10 @@ from src.infrastructure.plugins.v2.runtime import (
     LoaderV2,
     PluginDefinitionV2,
     RuntimeV2Error,
+)
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    RuntimeTestArtifactResolverV2,
+    target_catalog_from_snapshot_v2,
 )
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -36,13 +40,17 @@ def _snapshot():
     return parse_profile_snapshot_v2(payload)
 
 
-def _catalog(snapshot) -> dict[str, str]:
-    return {
-        module.module_ref: module.contract_digest
-        for manifest in snapshot.manifests
-        for module in manifest.modules
-        if DataPlaneTargetV2.PYTHON in module.targets
-    }
+def _catalog(snapshot):
+    return target_catalog_from_snapshot_v2(snapshot)
+
+
+def _loader(snapshot, definitions, *, target_catalog=None) -> LoaderV2:
+    catalog = _catalog(snapshot) if target_catalog is None else target_catalog
+    return LoaderV2(
+        definitions,
+        target_catalog=catalog,
+        artifact_resolver=RuntimeTestArtifactResolverV2(),
+    )
 
 
 def _definitions(
@@ -145,10 +153,7 @@ async def test_shared_contract_negative_cases_have_stable_error_codes(
 
     snapshot = parse_profile_snapshot_v2(payload)
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(
-            _conformance_definitions(snapshot),
-            target_catalog=_catalog(snapshot),
-        ).stage(snapshot)
+        await _loader(snapshot, _conformance_definitions(snapshot)).stage(snapshot)
     assert error.value.code == expected
 
 
@@ -180,7 +185,7 @@ async def test_loader_rejects_invalid_config_before_any_apply() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=_catalog(snapshot)).stage(snapshot)
+        await _loader(snapshot, definitions).stage(snapshot)
 
     assert error.value.code == "invalid_module_config"
     assert calls == []
@@ -212,7 +217,7 @@ async def test_loader_requires_exact_declared_injects(
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=_catalog(snapshot)).stage(snapshot)
+        await _loader(snapshot, definitions).stage(snapshot)
 
     assert error.value.code == expected_code
     assert calls == []
@@ -236,7 +241,7 @@ async def test_loader_rejects_runtime_and_target_catalog_digest_mismatch_before_
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=_catalog(snapshot)).stage(snapshot)
+        await _loader(snapshot, definitions).stage(snapshot)
 
     assert error.value.code == "contract_digest_mismatch"
     assert calls == []
@@ -249,10 +254,13 @@ async def test_loader_rejects_runtime_and_target_catalog_digest_mismatch_before_
         )
     )
     catalog = _catalog(snapshot)
-    catalog[definitions[0].module_ref] = f"sha256:{'1' * 64}"
+    catalog[definitions[0].module_ref] = replace(
+        catalog[definitions[0].module_ref],
+        contract_digest=f"sha256:{'1' * 64}",
+    )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=catalog).stage(snapshot)
+        await _loader(snapshot, definitions, target_catalog=catalog).stage(snapshot)
 
     assert error.value.code == "contract_digest_mismatch"
     assert calls == []
@@ -269,7 +277,7 @@ async def test_loader_preserves_explicit_empty_target_catalog() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog={}).stage(snapshot)
+        await _loader(snapshot, definitions, target_catalog={}).stage(snapshot)
 
     assert error.value.code == "missing_target_catalog"
     assert calls == []
@@ -289,7 +297,7 @@ async def test_context_enforces_declared_service_operations() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=_catalog(snapshot)).stage(snapshot)
+        await _loader(snapshot, definitions).stage(snapshot)
 
     assert error.value.code == "undeclared_provide"
 
@@ -325,10 +333,7 @@ async def test_dispatch_uses_contract_mode_and_validates_payload_and_result() ->
         root_apply=root_apply,
         consumer_apply=consumer_apply,
     )
-    generation = await LoaderV2(
-        definitions,
-        target_catalog=_catalog(snapshot),
-    ).stage(snapshot)
+    generation = await _loader(snapshot, definitions).stage(snapshot)
     context = contexts["consumer"]
 
     assert await context.dispatch("notify", {}) == ([3], [4])
@@ -360,6 +365,6 @@ async def test_context_rejects_undeclared_handler_before_activation() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await LoaderV2(definitions, target_catalog=_catalog(snapshot)).stage(snapshot)
+        await _loader(snapshot, definitions).stage(snapshot)
 
     assert error.value.code == "undeclared_event_handler"

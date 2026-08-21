@@ -22,6 +22,10 @@ from src.infrastructure.plugins.v2.reconciler import (
     PreparedGenerationPublicationV2,
 )
 from src.infrastructure.plugins.v2.runtime import LoaderV2, PluginDefinitionV2
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    RuntimeTestArtifactResolverV2,
+    target_catalog_from_snapshot_v2,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 
@@ -54,7 +58,7 @@ def _loader(
     modules = {
         module.module_ref: module for manifest in snapshot.manifests for module in manifest.modules
     }
-    target_catalog = {module_ref: module.contract_digest for module_ref, module in modules.items()}
+    target_catalog = target_catalog_from_snapshot_v2(snapshot)
     seen = activations if activations is not None else []
     disposed = disposals if disposals is not None else []
 
@@ -87,6 +91,7 @@ def _loader(
             ),
         ],
         target_catalog=target_catalog,
+        artifact_resolver=RuntimeTestArtifactResolverV2(),
     )
 
 

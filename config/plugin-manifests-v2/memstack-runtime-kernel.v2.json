@@ -202,8 +202,8 @@
       },
       "contract_digest": "sha256:68593275df0d77f819d15d2b636b66d7bfc9a73d5d0321acd7659c15763ee60a",
       "artifact": {
-        "digest": "sha256:5b577e0c8be69c0807c332bdbbeddf6e6e40d92a1127c599b734aec3da67a17f",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:47d73ea09688536536439d945134dab7f5ab67b91981162df75248ff9e6ca6de",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
     {
@@ -227,8 +227,8 @@
       },
       "contract_digest": "sha256:d8478b3b7a7100a0984d71a56373d0d9b76bdca8d56510b077bfed1f336e8d86",
       "artifact": {
-        "digest": "sha256:7de45bd69889fe515f1e1736ac44de22952363d5d926d0fabebdd8ce8995f60c",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:80f7fb2f9c7187a4f819876f58bae22fe0a876941465b648e622c77abf46bfea",
+        "source": "repo+python://src/infrastructure/plugins/v2/route_effects.py"
       }
     },
     {
@@ -281,8 +281,8 @@
       },
       "contract_digest": "sha256:0e16c9f6154395c3a4ce95aab8f31a53e21b41a5607e7a03d6a80696f327640d",
       "artifact": {
-        "digest": "sha256:aa58e3be49786a1f2123f6f2e2eee3f9de1e676cfd490a2bfa4dc7311a90b204",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:a977740b14661953e7fbb980fba030c468418db09a52a45ee9e81ed4278cdc57",
+        "source": "repo+python://src/infrastructure/plugins/v2/legacy_http_route_bridge.py"
       }
     },
     {
@@ -309,8 +309,8 @@
       },
       "contract_digest": "sha256:0bee827149f227522c61182c7095c1dd4a92f30e1408c1717f48cb42162a1ae1",
       "artifact": {
-        "digest": "sha256:93425e44167aea4e1cbe718606ee2115183f45126e56a7c77ba33ff6f4cd286e",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:14c85c54aada1f06ac6211e592f878755bd99e3c8b96d4fb1178bccf6129551c",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_loop.py"
       }
     },
     {
@@ -343,8 +343,8 @@
       },
       "contract_digest": "sha256:450b3df4414ec93cd9e5803545c8382a6fe10fc644f008f1ae770febc7d5c0f8",
       "artifact": {
-        "digest": "sha256:40cce8ce0c0c4bc39f5887cb28b330ffbbb0660acc7f37c39c40807b55eecb1e",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:af504de9768be51b31ec341431ce1b13e6f2db801c52f160b1c32c84e0306cc3",
+        "source": "repo+python://src/infrastructure/plugins/v2/system_prompt.py"
       }
     },
     {
@@ -371,8 +371,8 @@
       },
       "contract_digest": "sha256:8e57e4aea3b75d1738529834589217af77df8dfed1e0a653b582d801b4c4ae1f",
       "artifact": {
-        "digest": "sha256:e168f18efecdcad3ad499cd6bc8e4cb70a9b276263c1cd13e305b83d458ccd7b",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:98005a928be109d03a2e1e93a8817f1c1b6f9794d9cd559ebe1789d1b911ec4e",
+        "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
     {
@@ -399,8 +399,8 @@
       },
       "contract_digest": "sha256:f99de77f9e769cfcd7b94c22638ebd23d17e74decf0b6a9b9a0f995f2b510163",
       "artifact": {
-        "digest": "sha256:e273d03e1b5a1ac9af8b21a4b43e750043a49aff05abee41e0d41b3da76351fc",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:4aa0eca5c0164c60a4cbf553158515dacddad06be6da505c98ab41ab5f8a1f5d",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
       }
     },
     {
@@ -427,8 +427,8 @@
       },
       "contract_digest": "sha256:081387f06d341da12450daedda2583999da04ae134406a5f5c7804dcc64f0b9c",
       "artifact": {
-        "digest": "sha256:b5d32e313b41bd898961e189cd8e36ab7704d23baad6dcc8ee84f266fae0a434",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f84560563f0e979b48",
+        "source": "repo+python://src/infrastructure/plugins/v2/session_event_log.py"
       }
     },
     {
@@ -455,8 +455,8 @@
       },
       "contract_digest": "sha256:7f7ceeb21dcef0999b7fd0d38d675e52eb41f0fbafb37e0165e8a66751ddbe1b",
       "artifact": {
-        "digest": "sha256:26a9f8ac163ef161009d7138809ef602fda88585a9bb404677d797b105158dc6",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:7a21460c84303f8e66bf0e72bf54a373d4f8d8be095539e8208837d0153d81a2",
+        "source": "repo+python://src/infrastructure/plugins/v2/selection_judge.py"
       }
     },
     {
@@ -593,8 +593,8 @@
       },
       "contract_digest": "sha256:2d9dbaf0d5d2509af0b403021965b7a29d653a592fb2105d81f726c94cd44347",
       "artifact": {
-        "digest": "sha256:4c161e64f61ccdcb501b998149e64e7e52aefcab582b09c72478c33ae5948e9b",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },
     {
@@ -722,8 +722,8 @@
       },
       "contract_digest": "sha256:069de18a8048398707cc5f562e431082ade282d718cacbf62d4bb32bf961261e",
       "artifact": {
-        "digest": "sha256:c87f506f24f939dffbcbf53d83241dc70b83c4ae04ef9c6887405827e351cbfe",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:f129bead081802c7558531782f58ac020b7e6eb95cd18a0b5c6cfe8c70b0fa81",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_runtime.py"
       }
     },
     {
@@ -864,8 +864,8 @@
       },
       "contract_digest": "sha256:29e2c0b8432306acaf86adf0c811a5d04b6663e253a0458e91f4450796baeb3f",
       "artifact": {
-        "digest": "sha256:4c161e64f61ccdcb501b998149e64e7e52aefcab582b09c72478c33ae5948e9b",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },
     {
@@ -993,8 +993,8 @@
       },
       "contract_digest": "sha256:f663001c43941b4594df0dd76665114df89e366bec59ca1f1dcba0746f665a1d",
       "artifact": {
-        "digest": "sha256:c87f506f24f939dffbcbf53d83241dc70b83c4ae04ef9c6887405827e351cbfe",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:f129bead081802c7558531782f58ac020b7e6eb95cd18a0b5c6cfe8c70b0fa81",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_runtime.py"
       }
     },
     {
@@ -1141,8 +1141,8 @@
       },
       "contract_digest": "sha256:7ac8e6c22ec3840534f3ee71a2e8662ed8a6227bfc197cacc6404ccd36e0bb76",
       "artifact": {
-        "digest": "sha256:4c161e64f61ccdcb501b998149e64e7e52aefcab582b09c72478c33ae5948e9b",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },
     {
@@ -1280,8 +1280,8 @@
       },
       "contract_digest": "sha256:a374fdfeb1dc91e853c13ce008b66dcd90e307f107d421f08c87fe47e9da7cc8",
       "artifact": {
-        "digest": "sha256:c87f506f24f939dffbcbf53d83241dc70b83c4ae04ef9c6887405827e351cbfe",
-        "source": "package://builtin/memstack-runtime-kernel"
+        "digest": "sha256:f129bead081802c7558531782f58ac020b7e6eb95cd18a0b5c6cfe8c70b0fa81",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_runtime.py"
       }
     }
   ],

@@ -16,6 +16,7 @@ import {
   type PluginModuleV2,
   type ProfileEntryV2,
   type ProfileSnapshotV2,
+  type TargetCatalogV2,
 } from '@agistack/plugin-runtime';
 import { describe, expect, it } from 'vitest';
 
@@ -244,12 +245,29 @@ describe('plugin runtime v2 conformance', () => {
     expect(applied).toEqual([]);
 
     const catalogMismatch = { ...targetCatalog(snapshot) };
-    catalogMismatch['builtin://conformance/root-provider'] = `sha256:${'1'.repeat(64)}`;
+    const rootCatalog = catalogMismatch['builtin://conformance/root-provider'];
+    if (!rootCatalog) throw new Error('root catalog fixture is missing');
+    catalogMismatch['builtin://conformance/root-provider'] = {
+      ...rootCatalog,
+      contract_digest: `sha256:${'1'.repeat(64)}`,
+    };
     await expect(new LoaderV2(valid, 'web', catalogMismatch).stage(snapshot)).rejects.toMatchObject(
       {
         code: 'contract_digest_mismatch',
       }
     );
+    expect(applied).toEqual([]);
+
+    const artifactMismatch = { ...targetCatalog(snapshot) };
+    const artifactRoot = artifactMismatch['builtin://conformance/root-provider'];
+    if (!artifactRoot) throw new Error('root artifact catalog fixture is missing');
+    artifactMismatch['builtin://conformance/root-provider'] = {
+      ...artifactRoot,
+      artifact_digest: `sha256:${'2'.repeat(64)}`,
+    };
+    await expect(
+      new LoaderV2(valid, 'web', artifactMismatch).stage(snapshot)
+    ).rejects.toMatchObject({ code: 'artifact_digest_mismatch' });
     expect(applied).toEqual([]);
 
     delete catalogMismatch['builtin://conformance/root-provider'];
@@ -490,12 +508,25 @@ function webLoader(
   return new LoaderV2(moduleDefinitions, 'web', targetCatalog(snapshot));
 }
 
-function targetCatalog(snapshot: ProfileSnapshotV2): Record<string, string> {
+function targetCatalog(snapshot: ProfileSnapshotV2): TargetCatalogV2 {
   return Object.fromEntries(
     snapshot.manifests.flatMap((manifest) =>
       manifest.modules
         .filter((module) => module.targets.includes('web'))
-        .map((module) => [module.module_ref, module.contract_digest])
+        .map((module) => [
+          module.module_ref,
+          {
+            plugin_id: manifest.plugin_id,
+            plugin_version: manifest.version,
+            module_ref: module.module_ref,
+            entrypoint: module.entrypoint,
+            artifact_source: module.artifact.source,
+            artifact_digest: module.artifact.digest,
+            targets: module.targets,
+            contract: module.contract,
+            contract_digest: module.contract_digest,
+          },
+        ])
     )
   );
 }

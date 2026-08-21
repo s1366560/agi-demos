@@ -12,6 +12,16 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.domain.model.plugins.artifact_attestation_v2 import (  # noqa: E402
+    artifact_digest_v2,
+    python_artifact_path_v2,
+    python_artifact_source_v2,
+)
+
 if TYPE_CHECKING:
     from scripts.plugin_contract_completeness_support_v2 import (
         ContractCompletenessIssueV2,
@@ -49,7 +59,6 @@ else:
         _static_string_constants,
     )
 
-ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_GLOB_V2 = "config/plugin-manifests-v2/*.json"
 CATALOG_PATH_V2 = Path("shared/catalogs/plugin-module-catalog.v2.json")
 GENERATOR_PATH_V2 = Path("scripts/generate_plugin_protocol_v2.py")
@@ -186,7 +195,12 @@ def _manifest_module(
         "contract_digest": raw.get("contract_digest"),
     }
     invalid = [name for name, value in required_strings.items() if not isinstance(value, str)]
-    if invalid or not isinstance(artifact, dict) or not isinstance(artifact.get("digest"), str):
+    if (
+        invalid
+        or not isinstance(artifact, dict)
+        or not isinstance(artifact.get("digest"), str)
+        or not isinstance(artifact.get("source"), str)
+    ):
         issues.append(
             ContractCompletenessIssueV2(
                 code="invalid_manifest",
@@ -221,6 +235,7 @@ def _manifest_module(
         plugin_version=plugin_version,
         module_ref=cast("str", required_strings["module_ref"]),
         entrypoint=cast("str", required_strings["entrypoint"]),
+        artifact_source=cast("str", artifact["source"]),
         artifact_digest=cast("str", artifact["digest"]),
         targets=tuple(cast("list[str]", targets)),
         contract=cast("dict[str, Any]", contract),
@@ -326,6 +341,7 @@ def _check_catalog_module(
         "plugin_id": module.plugin_id,
         "plugin_version": module.plugin_version,
         "entrypoint": module.entrypoint,
+        "artifact_source": module.artifact_source,
         "artifact_digest": module.artifact_digest,
         "contract": module.contract,
         "contract_digest": module.contract_digest,
@@ -347,28 +363,10 @@ def _check_python_entrypoint(
     module: _ManifestModuleV2,
     issues: list[ContractCompletenessIssueV2],
 ) -> None:
-    module_name, separator, symbol_name = module.entrypoint.partition(":")
-    if not separator or not module_name or not symbol_name:
-        issues.append(
-            ContractCompletenessIssueV2(
-                code="invalid_python_entrypoint",
-                path=_relative(module.path, root),
-                module_ref=module.module_ref,
-                detail=f"entrypoint is not module:symbol: {module.entrypoint}",
-            )
-        )
+    attested = _attested_python_entrypoint_source(root, module, issues)
+    if attested is None:
         return
-    source_path = _python_module_path(root, module_name)
-    if source_path is None:
-        issues.append(
-            ContractCompletenessIssueV2(
-                code="python_entrypoint_missing",
-                path=_relative(module.path, root),
-                module_ref=module.module_ref,
-                detail=f"source module does not exist: {module_name}",
-            )
-        )
-        return
+    module_name, symbol_name, source_path = attested
     relative_source = _relative(source_path, root)
     try:
         tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
@@ -404,6 +402,80 @@ def _check_python_entrypoint(
     constants = _static_string_constants(root, module_name, tree)
     for node in nodes:
         _check_context_calls(node, declarations, constants, module, relative_source, issues)
+
+
+def _attested_python_entrypoint_source(
+    root: Path,
+    module: _ManifestModuleV2,
+    issues: list[ContractCompletenessIssueV2],
+) -> tuple[str, str, Path] | None:
+    try:
+        expected_path = python_artifact_path_v2(module.entrypoint)
+        expected_source = python_artifact_source_v2(module.entrypoint)
+    except ValueError as exc:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="invalid_python_entrypoint",
+                path=_relative(module.path, root),
+                module_ref=module.module_ref,
+                detail=str(exc),
+            )
+        )
+        return None
+    if module.artifact_source != expected_source:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="artifact_source_mismatch",
+                path=_relative(module.path, root),
+                module_ref=module.module_ref,
+                detail=f"artifact source must be {expected_source}",
+            )
+        )
+    module_name, symbol_name = module.entrypoint.split(":", maxsplit=1)
+    source_path = _python_module_path(root, module_name)
+    if source_path is None:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="python_entrypoint_missing",
+                path=_relative(module.path, root),
+                module_ref=module.module_ref,
+                detail=f"source module does not exist: {module_name}",
+            )
+        )
+        return None
+    expected_source_path = (root / expected_path).resolve()
+    if source_path.resolve() != expected_source_path:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="artifact_source_mismatch",
+                path=_relative(module.path, root),
+                module_ref=module.module_ref,
+                detail="entrypoint module does not resolve to its canonical artifact path",
+            )
+        )
+        return None
+    try:
+        actual_digest = artifact_digest_v2(source_path.read_bytes())
+    except OSError as exc:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="artifact_resolution_failed",
+                path=_relative(source_path, root),
+                module_ref=module.module_ref,
+                detail=str(exc),
+            )
+        )
+        return None
+    if actual_digest != module.artifact_digest:
+        issues.append(
+            ContractCompletenessIssueV2(
+                code="artifact_digest_mismatch",
+                path=_relative(source_path, root),
+                module_ref=module.module_ref,
+                detail=f"manifest has {module.artifact_digest}; actual bytes are {actual_digest}",
+            )
+        )
+    return module_name, symbol_name, source_path
 
 
 def _entrypoint_nodes(

@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 import rfc8785
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 if TYPE_CHECKING:
     from scripts.plugin_contract_catalog_v2 import (
         JSON_SCHEMA_DIALECT_V2,
@@ -43,7 +47,6 @@ else:
         validate_manifest_collection_v2,
     )
 
-ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "shared/schemas/plugins/platform-plugin-protocol.v2.schema.json"
 PYTHON_PATH = ROOT / "src/domain/model/plugins/generated_v2.py"
 RUST_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generated.rs"
@@ -58,6 +61,7 @@ RUST_CATALOG_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generat
 TYPESCRIPT_CATALOG_PATH = ROOT / "agi-stack/packages/plugin-runtime/src/generatedCatalog.ts"
 SERVICE_GRAPH_PATH = ROOT / "shared/graphs/plugin-service-dependencies.v2.json"
 EVENT_GRAPH_PATH = ROOT / "shared/graphs/plugin-events.v2.json"
+_CONFORMANCE_ARTIFACT_BYTES_V2 = b"memstack-plugin-runtime-v2-test-artifact\n"
 
 
 def _schema() -> dict[str, Any]:
@@ -311,7 +315,11 @@ def _canonical_document(value: object) -> str:
     return rfc8785.dumps(cast("Any", value)).decode("utf-8") + "\n"
 
 
-def _builtin_manifest(schema: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+def _builtin_manifest(
+    schema: dict[str, Any],
+    *,
+    artifact_root: Path | None = ROOT,
+) -> tuple[dict[str, Any], ...]:
     manifest_paths = sorted(BUILTIN_MANIFEST_DIRECTORY.glob("*.json"), key=lambda path: path.name)
     if not manifest_paths:
         raise ValueError(f"no protocol-v2 manifests found in {BUILTIN_MANIFEST_DIRECTORY}")
@@ -321,7 +329,7 @@ def _builtin_manifest(schema: dict[str, Any]) -> tuple[dict[str, Any], ...]:
         if not isinstance(payload, dict):
             raise ValueError(f"protocol-v2 manifest must be an object: {path}")
         manifests.append(cast("dict[str, Any]", payload))
-    validate_manifest_collection_v2(manifests, schema)
+    validate_manifest_collection_v2(manifests, schema, artifact_root=artifact_root)
     return tuple(manifests)
 
 
@@ -372,17 +380,18 @@ def _generate_typescript_catalog(catalog: dict[str, Any], schema_hash: str) -> s
     lines = _header("//", schema_hash)
     lines.extend(
         [
-            "import type { PluginContractV2 } from './generated';",
+            "import type { DataPlaneTargetV2, PluginContractV2 } from './generated';",
             "",
             "export interface PluginModuleCatalogEntryV2 {",
             "  readonly artifact_digest: string;",
+            "  readonly artifact_source: string;",
             "  readonly contract: PluginContractV2;",
             "  readonly contract_digest: string;",
             "  readonly entrypoint: string;",
             "  readonly module_ref: string;",
             "  readonly plugin_id: string;",
             "  readonly plugin_version: string;",
-            "  readonly targets: ReadonlyArray<string>;",
+            "  readonly targets: ReadonlyArray<DataPlaneTargetV2>;",
             "}",
             "",
             "export interface PluginModuleCatalogV2 {",
@@ -413,8 +422,8 @@ def _generate_typescript_catalog(catalog: dict[str, Any], schema_hash: str) -> s
 
 def _snapshot_fixture() -> dict[str, Any]:
     artifact = {
-        "digest": f"sha256:{'c' * 64}",
-        "source": "package://builtin/conformance-v2",
+        "digest": f"sha256:{hashlib.sha256(_CONFORMANCE_ARTIFACT_BYTES_V2).hexdigest()}",
+        "source": "fixture://plugin-runtime-conformance-v2",
     }
     nullable_object_schema = {
         "$schema": JSON_SCHEMA_DIALECT_V2,

@@ -7,8 +7,9 @@ import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
+from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
     EventContractV2,
@@ -21,6 +22,11 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
+from .artifacts import (
+    PluginArtifactResolverV2,
+    RepositoryPythonArtifactResolverV2,
+    ResolvedPluginArtifactV2,
+)
 from .runtime_context import (
     AsyncDisposerV2,
     ContextV2,
@@ -34,6 +40,7 @@ from .runtime_context import (
     _ProviderStore,
 )
 from .runtime_contracts import (
+    ModuleCatalogEntryV2,
     entry_order_v2,
     event_contract_catalog_v2,
     generated_contract_digest_v2,
@@ -46,6 +53,7 @@ type PluginApplyV2 = Callable[
     [ContextV2, Mapping[str, Any]],
     EffectResultV2 | Awaitable[EffectResultV2],
 ]
+type _PluginModuleRowV2 = tuple[str, str, PluginModuleV2]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -273,12 +281,14 @@ class LoaderV2:
         definitions: Sequence[PluginDefinitionV2] = (),
         *,
         target: DataPlaneTargetV2 = DataPlaneTargetV2.PYTHON,
-        target_catalog: Mapping[str, str] | None = None,
+        target_catalog: Mapping[str, ModuleCatalogEntryV2] | None = None,
+        artifact_resolver: PluginArtifactResolverV2 | None = None,
     ) -> None:
         self._definitions: dict[str, PluginDefinitionV2] = {}
         self._target = target
         catalog = generated_target_catalog_v2(target) if target_catalog is None else target_catalog
         self._target_catalog = MappingProxyType(dict(catalog))
+        self._artifact_resolver = artifact_resolver or RepositoryPythonArtifactResolverV2()
         for definition in definitions:
             self.register_module(definition)
 
@@ -291,53 +301,22 @@ class LoaderV2:
         self._definitions[definition.module_ref] = definition
 
     async def stage(self, snapshot: ProfileSnapshotV2) -> RuntimeGenerationV2:
+        module_rows = _module_rows_v2(snapshot)
         modules_by_key = {
-            (manifest.plugin_id, module.module_ref): module
-            for manifest in snapshot.manifests
-            for module in manifest.modules
+            (plugin_id, module.module_ref): module for plugin_id, _version, module in module_rows
         }
-        for module in modules_by_key.values():
-            if self._target not in module.targets:
-                continue
-            catalog_digest = self._target_catalog.get(module.module_ref)
-            if catalog_digest is None:
-                raise RuntimeV2Error(
-                    "missing_target_catalog",
-                    f"module {module.module_ref} is absent from {self._target.value} catalog",
-                )
-            validate_contract_digests_v2(module, catalog_digest=catalog_digest)
-
+        target_rows = tuple(row for row in module_rows if self._target in row[2].targets)
+        resolved_artifacts = self._attest_artifacts(target_rows)
         enabled = {
             entry.entry_id: entry
             for entry in project_snapshot_entries_v2(snapshot, self._target)
             if entry.enabled
         }
-        definitions: dict[str, PluginDefinitionV2] = {}
-        modules: dict[str, PluginModuleV2] = {}
-        for entry in enabled.values():
-            definition = self._definitions.get(entry.module_ref)
-            if definition is None:
-                raise RuntimeV2Error(
-                    "missing_module_definition",
-                    f"entry {entry.entry_id} module {entry.module_ref} is unavailable",
-                )
-            module = modules_by_key[(entry.plugin_ref, entry.module_ref)]
-            if definition.contract_digest != module.contract_digest:
-                raise RuntimeV2Error(
-                    "contract_digest_mismatch",
-                    f"runtime module {entry.module_ref} contract digest differs from manifest",
-                )
-            definitions[entry.entry_id] = definition
-            modules[entry.entry_id] = module
-            if entry.parent_entry_id is not None and entry.parent_entry_id not in enabled:
-                raise RuntimeV2Error(
-                    "inactive_parent_entry",
-                    f"entry {entry.entry_id} parent is disabled",
-                )
-
+        modules = self._entry_modules(enabled, modules_by_key)
         preflight_entries_v2(enabled, modules)
         order = entry_order_v2(enabled, modules)
         event_contracts = event_contract_catalog_v2(modules.values())
+        definitions = self._load_definitions(order, modules, resolved_artifacts)
         providers = _ProviderStore()
         events = _EventBusV2()
         fibers: list[FiberV2] = []
@@ -364,6 +343,164 @@ class LoaderV2:
             events=events,
             event_contracts=event_contracts,
         )
+
+    def _attest_artifacts(
+        self,
+        target_rows: Sequence[_PluginModuleRowV2],
+    ) -> dict[str, ResolvedPluginArtifactV2]:
+        for plugin_id, plugin_version, module in target_rows:
+            catalog_entry = self._target_catalog.get(module.module_ref)
+            if catalog_entry is None:
+                raise RuntimeV2Error(
+                    "missing_target_catalog",
+                    f"module {module.module_ref} is absent from {self._target.value} catalog",
+                )
+            validate_contract_digests_v2(
+                module,
+                catalog_entry=catalog_entry,
+                plugin_id=plugin_id,
+                plugin_version=plugin_version,
+            )
+
+        resolved_artifacts: dict[str, ResolvedPluginArtifactV2] = {}
+        for _plugin_id, _plugin_version, module in target_rows:
+            resolved = self._artifact_resolver.resolve(module)
+            if (
+                resolved.module_ref != module.module_ref
+                or resolved.entrypoint != module.entrypoint
+                or resolved.source != module.artifact.source
+            ):
+                raise RuntimeV2Error(
+                    "artifact_resolution_mismatch",
+                    f"module {module.module_ref} resolver returned different artifact metadata",
+                )
+            actual_digest = artifact_digest_v2(resolved.canonical_bytes)
+            if actual_digest != module.artifact.digest:
+                raise RuntimeV2Error(
+                    "artifact_digest_mismatch",
+                    f"module {module.module_ref} resolved bytes differ from manifest",
+                )
+            resolved_artifacts[module.module_ref] = resolved
+        return resolved_artifacts
+
+    def _entry_modules(
+        self,
+        enabled: Mapping[str, ProfileEntryV2],
+        modules_by_key: Mapping[tuple[str, str], PluginModuleV2],
+    ) -> dict[str, PluginModuleV2]:
+        modules: dict[str, PluginModuleV2] = {}
+        for entry in enabled.values():
+            module = modules_by_key[(entry.plugin_ref, entry.module_ref)]
+            definition = self._definitions.get(entry.module_ref)
+            if definition is not None and definition.contract_digest != module.contract_digest:
+                raise RuntimeV2Error(
+                    "contract_digest_mismatch",
+                    f"runtime module {entry.module_ref} contract digest differs from manifest",
+                )
+            modules[entry.entry_id] = module
+            if entry.parent_entry_id is not None and entry.parent_entry_id not in enabled:
+                raise RuntimeV2Error(
+                    "inactive_parent_entry",
+                    f"entry {entry.entry_id} parent is disabled",
+                )
+        return modules
+
+    def _load_definitions(
+        self,
+        order: Sequence[str],
+        modules: Mapping[str, PluginModuleV2],
+        resolved_artifacts: Mapping[str, ResolvedPluginArtifactV2],
+    ) -> dict[str, PluginDefinitionV2]:
+        loaded_definitions: dict[str, PluginDefinitionV2] = {}
+        definitions: dict[str, PluginDefinitionV2] = {}
+        for entry_id in order:
+            module = modules[entry_id]
+            definition = self._definitions.get(module.module_ref)
+            if definition is None:
+                definition = loaded_definitions.get(module.module_ref)
+            if definition is None:
+                resolved = resolved_artifacts.get(module.module_ref)
+                if resolved is None:
+                    raise RuntimeV2Error(
+                        "missing_module_artifact",
+                        f"entry {entry_id} module {module.module_ref} has no resolved artifact",
+                    )
+                definition = _definition_from_artifact_v2(module, resolved)
+                loaded_definitions[module.module_ref] = definition
+            definitions[entry_id] = definition
+        return definitions
+
+
+def _module_rows_v2(snapshot: ProfileSnapshotV2) -> tuple[_PluginModuleRowV2, ...]:
+    rows = tuple(
+        (manifest.plugin_id, manifest.version, module)
+        for manifest in snapshot.manifests
+        for module in manifest.modules
+    )
+    module_refs = [module.module_ref for _plugin_id, _version, module in rows]
+    if len(module_refs) != len(set(module_refs)):
+        raise RuntimeV2Error(
+            "duplicate_module_ref",
+            "snapshot declares a module_ref more than once",
+        )
+    return rows
+
+
+def _definition_from_artifact_v2(
+    module: PluginModuleV2,
+    artifact: ResolvedPluginArtifactV2,
+) -> PluginDefinitionV2:
+    entrypoint = artifact.load()
+    if isinstance(entrypoint, PluginDefinitionV2):
+        definition = entrypoint
+    elif callable(entrypoint):
+        callable_entrypoint = entrypoint
+        accepts_zero = _signature_accepts_v2(callable_entrypoint, ())
+        accepts_apply = _signature_accepts_v2(callable_entrypoint, (object(), {}))
+        if accepts_zero == accepts_apply:
+            raise RuntimeV2Error(
+                "ambiguous_plugin_entrypoint",
+                f"module {module.module_ref} entrypoint must be an apply function or factory",
+            )
+        if accepts_zero:
+            candidate = callable_entrypoint()
+            if not isinstance(candidate, PluginDefinitionV2):
+                raise RuntimeV2Error(
+                    "invalid_plugin_definition",
+                    f"module {module.module_ref} factory did not return PluginDefinitionV2",
+                )
+            definition = candidate
+        else:
+            definition = PluginDefinitionV2(
+                module_ref=module.module_ref,
+                contract_digest=module.contract_digest,
+                apply=cast(PluginApplyV2, callable_entrypoint),
+            )
+    else:
+        raise RuntimeV2Error(
+            "invalid_plugin_entrypoint",
+            f"module {module.module_ref} entrypoint is not callable",
+        )
+    if (
+        definition.module_ref != module.module_ref
+        or definition.contract_digest != module.contract_digest
+    ):
+        raise RuntimeV2Error(
+            "plugin_definition_mismatch",
+            f"module {module.module_ref} runtime definition differs from manifest",
+        )
+    return definition
+
+
+def _signature_accepts_v2(
+    value: Callable[..., object],
+    arguments: tuple[object, ...],
+) -> bool:
+    try:
+        _ = inspect.signature(value).bind(*arguments)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def project_snapshot_entries_v2(

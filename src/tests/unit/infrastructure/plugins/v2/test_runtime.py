@@ -46,8 +46,13 @@ from src.infrastructure.plugins.v2.runtime import (
     PluginDefinitionV2,
     RuntimeV2Error,
 )
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    RUNTIME_TEST_ARTIFACT_DIGEST_V2,
+    RuntimeTestArtifactResolverV2,
+    target_catalog_from_snapshot_v2,
+)
 
-_ARTIFACT_DIGEST = "sha256:" + "b" * 64
+_ARTIFACT_DIGEST = RUNTIME_TEST_ARTIFACT_DIGEST_V2
 
 
 def _scope(
@@ -183,13 +188,8 @@ def _module(
     )
 
 
-def _catalog(snapshot) -> dict[str, str]:
-    return {
-        module.module_ref: module.contract_digest
-        for manifest in snapshot.manifests
-        for module in manifest.modules
-        if DataPlaneTargetV2.PYTHON in module.targets
-    }
+def _catalog(snapshot):
+    return target_catalog_from_snapshot_v2(snapshot)
 
 
 def _definition(snapshot, module_ref: str, apply) -> PluginDefinitionV2:
@@ -211,7 +211,11 @@ def _digest(snapshot, module_ref: str) -> str:
 
 
 def _loader(snapshot, definitions) -> LoaderV2:
-    return LoaderV2(definitions, target_catalog=_catalog(snapshot))
+    return LoaderV2(
+        definitions,
+        target_catalog=_catalog(snapshot),
+        artifact_resolver=RuntimeTestArtifactResolverV2(),
+    )
 
 
 @pytest.mark.unit

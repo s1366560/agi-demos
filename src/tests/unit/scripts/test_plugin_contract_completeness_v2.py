@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 
 from scripts.check_plugin_contract_completeness_v2 import check_repository
+from src.domain.model.plugins.artifact_attestation_v2 import (
+    artifact_digest_v2,
+    python_artifact_source_v2,
+)
 
 
 def _contract(
@@ -53,12 +57,13 @@ def _write_repository(
     entrypoint: str = "src.example.plugin:apply",
     generator_exit_code: int = 0,
 ) -> None:
+    source_bytes = source.encode("utf-8")
     module = {
         "module_ref": "builtin://example/module",
         "entrypoint": entrypoint,
         "artifact": {
-            "digest": f"sha256:{'a' * 64}",
-            "source": "package://builtin/example",
+            "digest": artifact_digest_v2(source_bytes),
+            "source": python_artifact_source_v2(entrypoint),
         },
         "targets": list(targets),
         "contract": contract,
@@ -79,6 +84,7 @@ def _write_repository(
         "plugin_version": manifest["version"],
         "module_ref": module["module_ref"],
         "entrypoint": module["entrypoint"],
+        "artifact_source": module["artifact"]["source"],
         "artifact_digest": module["artifact"]["digest"],
         "targets": list(catalog_targets if catalog_targets is not None else targets),
         "contract": contract,
@@ -98,7 +104,7 @@ def _write_repository(
     catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
     source_path = root / "src/example/plugin.py"
     source_path.parent.mkdir(parents=True)
-    source_path.write_text(source, encoding="utf-8")
+    source_path.write_bytes(source_bytes)
     generator_path = root / "scripts/generate_plugin_protocol_v2.py"
     generator_path.parent.mkdir(parents=True)
     generator_path.write_text(
@@ -133,6 +139,23 @@ def apply(context: ContextV2, _config: object) -> None:
     )
 
     assert check_repository(tmp_path) == ()
+
+
+@pytest.mark.unit
+def test_entrypoint_byte_drift_fails_artifact_attestation(tmp_path: Path) -> None:
+    _write_repository(
+        tmp_path,
+        contract=_contract(),
+        source="def apply(context: ContextV2, _config: object) -> None:\n    return None\n",
+    )
+    (tmp_path / "src/example/plugin.py").write_text(
+        "def apply(context: ContextV2, _config: object) -> None:\n    raise RuntimeError\n",
+        encoding="utf-8",
+    )
+
+    issues = check_repository(tmp_path)
+
+    assert [issue.code for issue in issues] == ["artifact_digest_mismatch"]
 
 
 @pytest.mark.unit

@@ -112,6 +112,7 @@ fn target_catalog_json(snapshot: &ProfileSnapshotV2, target: &DataPlaneTargetV2)
                         "module_ref": module.module_ref,
                         "entrypoint": module.entrypoint,
                         "artifact_digest": module.artifact.digest,
+                        "artifact_source": module.artifact.source,
                         "targets": module.targets,
                         "contract": module.contract,
                         "contract_digest": module.contract_digest,
@@ -642,6 +643,33 @@ fn loader_requires_manifest_catalog_and_runtime_contract_digests_to_match() {
             Err(error) => error,
         };
         assert_eq!(error.code(), "contract_digest_mismatch");
+
+        let mut source_mismatch: Value = serde_json::from_str(&target_catalog_json(
+            &snapshot,
+            &DataPlaneTargetV2::RustServer,
+        ))
+        .expect("catalog fixture");
+        source_mismatch["modules"][0]["artifact_source"] =
+            Value::String("package://unexpected/artifact".into());
+        refresh_catalog_digest(&mut source_mismatch);
+        let result = LoaderV2::for_target_with_catalog_json(
+            DataPlaneTargetV2::RustServer,
+            definitions(
+                &snapshot,
+                1,
+                false,
+                Arc::clone(&disposed),
+                Arc::clone(&observed),
+            ),
+            source_mismatch.to_string(),
+        )
+        .stage(snapshot.clone())
+        .await;
+        let error = match result {
+            Ok(_) => panic!("catalog artifact source mismatch must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "invalid_target_catalog");
 
         let mut corrupt_catalog: Value = serde_json::from_str(&target_catalog_json(
             &snapshot,

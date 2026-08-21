@@ -10,7 +10,11 @@ import type {
   ScopeV2,
   ServiceProvidedV2,
 } from './generated';
-import { PLUGIN_MODULE_CATALOG_DIGEST_V2, PLUGIN_MODULE_CATALOG_V2 } from './generatedCatalog';
+import {
+  PLUGIN_MODULE_CATALOG_DIGEST_V2,
+  PLUGIN_MODULE_CATALOG_V2,
+  type PluginModuleCatalogEntryV2,
+} from './generatedCatalog';
 import { jsonSchemaValidationIssueV2 } from './schema';
 
 export async function validateGeneratedCatalogDigestV2(): Promise<void> {
@@ -27,44 +31,82 @@ export async function validateGeneratedCatalogDigestV2(): Promise<void> {
   }
 }
 
-export function generatedTargetCatalogV2(target: DataPlaneTargetV2): ReadonlyMap<string, string> {
+export function generatedTargetCatalogV2(
+  target: DataPlaneTargetV2
+): ReadonlyMap<string, PluginModuleCatalogEntryV2> {
   return new Map(
     PLUGIN_MODULE_CATALOG_V2.modules
       .filter((module) => module.targets.includes(target))
-      .map((module) => [module.module_ref, module.contract_digest])
+      .map((module) => [module.module_ref, module])
   );
 }
 
 export async function validateTargetModulesV2(
   snapshot: ProfileSnapshotV2,
   target: DataPlaneTargetV2,
-  targetCatalog: ReadonlyMap<string, string>
+  targetCatalog: ReadonlyMap<string, PluginModuleCatalogEntryV2>
 ): Promise<ReadonlyMap<string, PluginModuleV2>> {
-  const modules = new Map(
-    snapshot.manifests.flatMap((manifest) =>
-      manifest.modules.map(
-        (module) => [`${manifest.plugin_id}\0${module.module_ref}`, module] as const
-      )
-    )
-  );
-  for (const module of modules.values()) {
-    if (!module.targets.includes(target)) continue;
-    const catalogDigest = targetCatalog.get(module.module_ref);
-    if (catalogDigest === undefined) {
-      throw new RuntimeV2Error(
-        'missing_target_catalog',
-        `module ${module.module_ref} is absent from ${target} catalog`
-      );
-    }
-    const expected = `sha256:${await digestV2(module.contract)}`;
-    if (module.contract_digest !== expected || catalogDigest !== expected) {
-      throw new RuntimeV2Error(
-        'contract_digest_mismatch',
-        `module ${module.module_ref} contract digest differs across manifest and catalog`
-      );
+  const modules = new Map<string, PluginModuleV2>();
+  const moduleRefs = new Set<string>();
+  for (const manifest of snapshot.manifests) {
+    for (const module of manifest.modules) {
+      if (moduleRefs.has(module.module_ref)) {
+        throw new RuntimeV2Error(
+          'duplicate_module_ref',
+          `snapshot declares module ${module.module_ref} more than once`
+        );
+      }
+      moduleRefs.add(module.module_ref);
+      modules.set(`${manifest.plugin_id}\0${module.module_ref}`, module);
+      if (!module.targets.includes(target)) continue;
+      const catalogModule = targetCatalog.get(module.module_ref);
+      if (catalogModule === undefined || !catalogModule.targets.includes(target)) {
+        throw new RuntimeV2Error(
+          'missing_target_catalog',
+          `module ${module.module_ref} is absent from ${target} catalog`
+        );
+      }
+      const expected = `sha256:${await digestV2(module.contract)}`;
+      const catalogContractDigest = `sha256:${await digestV2(catalogModule.contract)}`;
+      if (
+        module.contract_digest !== expected ||
+        catalogModule.contract_digest !== expected ||
+        catalogContractDigest !== expected
+      ) {
+        throw new RuntimeV2Error(
+          'contract_digest_mismatch',
+          `module ${module.module_ref} contract digest differs across manifest and catalog`
+        );
+      }
+      if (catalogModule.artifact_digest !== module.artifact.digest) {
+        throw new RuntimeV2Error(
+          'artifact_digest_mismatch',
+          `module ${module.module_ref} artifact digest differs from target catalog`
+        );
+      }
+      if (
+        catalogModule.plugin_id !== manifest.plugin_id ||
+        catalogModule.plugin_version !== manifest.version ||
+        catalogModule.module_ref !== module.module_ref ||
+        catalogModule.entrypoint !== module.entrypoint ||
+        catalogModule.artifact_source !== module.artifact.source ||
+        !sameTargetsV2(catalogModule.targets, module.targets)
+      ) {
+        throw new RuntimeV2Error(
+          'catalog_module_mismatch',
+          `module ${module.module_ref} metadata differs from target catalog`
+        );
+      }
     }
   }
   return modules;
+}
+
+function sameTargetsV2(
+  left: ReadonlyArray<DataPlaneTargetV2>,
+  right: ReadonlyArray<DataPlaneTargetV2>
+): boolean {
+  return left.length === right.length && left.every((target) => right.includes(target));
 }
 
 export function preflightEntriesV2(

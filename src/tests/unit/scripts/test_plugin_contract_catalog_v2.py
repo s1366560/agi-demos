@@ -16,6 +16,11 @@ from scripts.plugin_contract_catalog_v2 import (
     build_service_graph_v2,
     contract_digest_v2,
     validate_manifest_collection_v2,
+    validate_python_artifacts_v2,
+)
+from src.domain.model.plugins.artifact_attestation_v2 import (
+    artifact_digest_v2,
+    python_artifact_source_v2,
 )
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -181,9 +186,31 @@ def test_generator_loads_manifest_files_in_filename_order(
     schema = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
     monkeypatch.setattr(generator, "BUILTIN_MANIFEST_DIRECTORY", tmp_path)
 
-    manifests = generator._builtin_manifest(schema)
+    manifests = generator._builtin_manifest(schema, artifact_root=None)
 
     assert [manifest["plugin_id"] for manifest in manifests] == [
         "alpha-provider",
         "beta-consumer",
     ]
+
+
+@pytest.mark.unit
+def test_python_artifact_validation_binds_manifest_to_raw_entrypoint_bytes(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "src/example/plugin.py"
+    source_path.parent.mkdir(parents=True)
+    source_bytes = b"def apply(context, config):\n    return None\n"
+    source_path.write_bytes(source_bytes)
+    manifest = _manifest("artifact-owner", _module("builtin://artifact/owner", _contract()))
+    module = manifest["modules"][0]
+    module["artifact"] = {
+        "digest": artifact_digest_v2(source_bytes),
+        "source": python_artifact_source_v2(module["entrypoint"]),
+    }
+
+    validate_python_artifacts_v2((manifest,), tmp_path)
+
+    module["artifact"]["digest"] = f"sha256:{'0' * 64}"
+    with pytest.raises(ValueError, match="artifact digest mismatch"):
+        validate_python_artifacts_v2((manifest,), tmp_path)

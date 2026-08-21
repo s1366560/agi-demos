@@ -27,6 +27,7 @@ pub(super) struct PluginModuleCatalogEntryV2 {
     pub(super) module_ref: String,
     pub(super) entrypoint: String,
     pub(super) artifact_digest: String,
+    pub(super) artifact_source: String,
     pub(super) targets: Vec<DataPlaneTargetV2>,
     pub(super) contract: PluginContractV2,
     pub(super) contract_digest: String,

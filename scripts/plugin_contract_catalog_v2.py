@@ -8,8 +8,15 @@ from typing import TYPE_CHECKING, Any, cast
 import jsonschema
 import rfc8785
 
+from src.domain.model.plugins.artifact_attestation_v2 import (
+    artifact_digest_v2,
+    python_artifact_path_v2,
+    python_artifact_source_v2,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
 JSON_SCHEMA_DIALECT_V2 = "https://json-schema.org/draft/2020-12/schema"
 _CONTRACT_DIGEST_PREFIX = "sha256:"
@@ -145,6 +152,8 @@ def validate_manifest_contracts_v2(
 def validate_manifest_collection_v2(
     manifests: Sequence[dict[str, Any]],
     protocol_schema: dict[str, Any],
+    *,
+    artifact_root: Path | None = None,
 ) -> None:
     """Validate a non-empty manifest collection and its cross-manifest graphs."""
     if not manifests:
@@ -154,6 +163,42 @@ def validate_manifest_collection_v2(
     _ = _ordered_manifest_modules_v2(manifests)
     _ = build_service_graph_v2(manifests)
     _ = build_event_graph_v2(manifests)
+    if artifact_root is not None:
+        validate_python_artifacts_v2(manifests, artifact_root)
+
+
+def validate_python_artifacts_v2(
+    manifests: Sequence[dict[str, Any]],
+    repository_root: Path,
+) -> None:
+    """Bind every Python catalog row to exact, repository-owned source bytes."""
+    root = repository_root.resolve()
+    for _manifest, module in _ordered_manifest_modules_v2(manifests):
+        if "python" not in module["targets"]:
+            continue
+        module_ref = module["module_ref"]
+        entrypoint = module["entrypoint"]
+        try:
+            relative_path = python_artifact_path_v2(entrypoint)
+            expected_source = python_artifact_source_v2(entrypoint)
+        except ValueError as exc:
+            raise ValueError(f"module {module_ref} has invalid Python entrypoint: {exc}") from exc
+        artifact = module["artifact"]
+        if artifact["source"] != expected_source:
+            raise ValueError(
+                f"module {module_ref} artifact source mismatch: expected {expected_source}"
+            )
+        source_path = (root / relative_path).resolve()
+        if not source_path.is_relative_to(root) or not source_path.is_file():
+            raise ValueError(f"module {module_ref} artifact source is unavailable")
+        try:
+            actual_digest = artifact_digest_v2(source_path.read_bytes())
+        except OSError as exc:
+            raise ValueError(f"module {module_ref} artifact source could not be read") from exc
+        if artifact["digest"] != actual_digest:
+            raise ValueError(
+                f"module {module_ref} artifact digest mismatch: expected {actual_digest}"
+            )
 
 
 def _ordered_manifest_modules_v2(
@@ -196,6 +241,7 @@ def build_catalog_v2(manifests: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "plugin_version": manifest["version"],
             "module_ref": module["module_ref"],
             "entrypoint": module["entrypoint"],
+            "artifact_source": module["artifact"]["source"],
             "artifact_digest": module["artifact"]["digest"],
             "targets": sorted(module["targets"]),
             "contract": module["contract"],
@@ -485,4 +531,5 @@ __all__ = [
     "sha256_digest_v2",
     "validate_manifest_collection_v2",
     "validate_manifest_contracts_v2",
+    "validate_python_artifacts_v2",
 ]

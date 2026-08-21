@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any, cast
 
 import jsonschema
 
-from src.domain.model.plugins.generated_catalog_v2 import PLUGIN_MODULE_CATALOG_V2_JSON
+from src.domain.model.plugins.generated_catalog_v2 import (
+    PLUGIN_MODULE_CATALOG_DIGEST_V2,
+    PLUGIN_MODULE_CATALOG_V2_JSON,
+)
 from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
     EventContractV2,
@@ -17,8 +22,22 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeV2,
 )
 
-from .protocol import plugin_contract_digest_v2
+from .protocol import canonical_json_v2, plugin_contract_digest_v2
 from .runtime_context import RuntimeV2Error, scope_contains_v2, scope_rank_v2
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModuleCatalogEntryV2:
+    """One immutable target-catalog attestation row used before code loading."""
+
+    plugin_id: str
+    plugin_version: str
+    module_ref: str
+    entrypoint: str
+    artifact_source: str
+    artifact_digest: str
+    targets: tuple[DataPlaneTargetV2, ...]
+    contract_digest: str
 
 
 def generated_contract_digest_v2(
@@ -27,28 +46,56 @@ def generated_contract_digest_v2(
     target: DataPlaneTargetV2 = DataPlaneTargetV2.PYTHON,
 ) -> str:
     """Return one exact digest from the generated target catalog."""
-    digest = generated_target_catalog_v2(target).get(module_ref)
-    if digest is None:
+    entry = generated_target_catalog_v2(target).get(module_ref)
+    if entry is None:
         raise RuntimeV2Error(
             "missing_target_catalog",
             f"module {module_ref} is absent from {target.value} catalog",
         )
-    return digest
+    return entry.contract_digest
 
 
-def generated_target_catalog_v2(target: DataPlaneTargetV2) -> dict[str, str]:
-    payload = json.loads(PLUGIN_MODULE_CATALOG_V2_JSON)
-    return {
-        item["module_ref"]: item["contract_digest"]
-        for item in payload["modules"]
-        if target.value in item["targets"]
-    }
+def generated_target_catalog_v2(
+    target: DataPlaneTargetV2,
+) -> dict[str, ModuleCatalogEntryV2]:
+    payload = cast(dict[str, Any], json.loads(PLUGIN_MODULE_CATALOG_V2_JSON))
+    embedded_digest = payload.pop("catalog_digest", None)
+    expected_digest = f"sha256:{hashlib.sha256(canonical_json_v2(payload)).hexdigest()}"
+    if embedded_digest != expected_digest or expected_digest != PLUGIN_MODULE_CATALOG_DIGEST_V2:
+        raise RuntimeV2Error(
+            "catalog_digest_mismatch",
+            "generated plugin module catalog digest is invalid",
+        )
+    entries: dict[str, ModuleCatalogEntryV2] = {}
+    for raw in cast(list[dict[str, Any]], payload["modules"]):
+        targets = tuple(DataPlaneTargetV2(value) for value in raw["targets"])
+        if target not in targets:
+            continue
+        entry = ModuleCatalogEntryV2(
+            plugin_id=raw["plugin_id"],
+            plugin_version=raw["plugin_version"],
+            module_ref=raw["module_ref"],
+            entrypoint=raw["entrypoint"],
+            artifact_source=raw["artifact_source"],
+            artifact_digest=raw["artifact_digest"],
+            targets=targets,
+            contract_digest=raw["contract_digest"],
+        )
+        if entry.module_ref in entries:
+            raise RuntimeV2Error(
+                "duplicate_target_catalog_module",
+                f"module {entry.module_ref} appears more than once in target catalog",
+            )
+        entries[entry.module_ref] = entry
+    return entries
 
 
 def validate_contract_digests_v2(
     module: PluginModuleV2,
     *,
-    catalog_digest: str,
+    catalog_entry: ModuleCatalogEntryV2,
+    plugin_id: str,
+    plugin_version: str,
 ) -> None:
     expected = plugin_contract_digest_v2(module.contract)
     if module.contract_digest != expected:
@@ -56,10 +103,36 @@ def validate_contract_digests_v2(
             "contract_digest_mismatch",
             f"module {module.module_ref} contract digest differs from its contract",
         )
-    if catalog_digest != expected:
+    if catalog_entry.contract_digest != expected:
         raise RuntimeV2Error(
             "contract_digest_mismatch",
             f"module {module.module_ref} target catalog digest differs from manifest",
+        )
+    if module.artifact.digest != catalog_entry.artifact_digest:
+        raise RuntimeV2Error(
+            "artifact_digest_mismatch",
+            f"module {module.module_ref} artifact digest differs from target catalog",
+        )
+    if module.artifact.source != catalog_entry.artifact_source:
+        raise RuntimeV2Error(
+            "artifact_source_mismatch",
+            f"module {module.module_ref} artifact source differs from target catalog",
+        )
+    if module.entrypoint != catalog_entry.entrypoint:
+        raise RuntimeV2Error(
+            "artifact_entrypoint_mismatch",
+            f"module {module.module_ref} entrypoint differs from target catalog",
+        )
+    if (
+        module.module_ref != catalog_entry.module_ref
+        or plugin_id != catalog_entry.plugin_id
+        or plugin_version != catalog_entry.plugin_version
+        or len(module.targets) != len(catalog_entry.targets)
+        or set(module.targets) != set(catalog_entry.targets)
+    ):
+        raise RuntimeV2Error(
+            "catalog_module_mismatch",
+            f"module {module.module_ref} metadata differs from target catalog",
         )
 
 
@@ -212,4 +285,4 @@ def entry_order_v2(
     return tuple(ordered)
 
 
-__all__ = ["generated_contract_digest_v2"]
+__all__ = ["ModuleCatalogEntryV2", "generated_contract_digest_v2"]
