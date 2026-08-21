@@ -56,6 +56,7 @@ from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelSessionBindingModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.plugins.v2.channel_adapters import ChannelAdapterMetadataV2
 
 
 @pytest.fixture
@@ -88,6 +89,38 @@ def mock_db_session():
 def mock_current_user():
     """Create a mock current user."""
     return {"id": "user-123", "email": "test@example.com"}
+
+
+def _v2_channel_metadata(
+    *,
+    source_id: str = "builtin-feishu",
+    defaults: dict | None = None,
+    config_schema: dict | None = None,
+) -> ChannelAdapterMetadataV2:
+    return ChannelAdapterMetadataV2(
+        channel_type="feishu",
+        config_schema=config_schema or {"type": "object"},
+        config_ui_hints={"app_secret": {"sensitive": True}},
+        defaults=defaults or {"domain": "feishu"},
+        secret_paths=("app_secret",),
+        source_id=source_id,
+    )
+
+
+def _v2_channel_resolver(
+    *,
+    source_id: str = "builtin-feishu",
+    metadata: ChannelAdapterMetadataV2 | None = None,
+) -> SimpleNamespace:
+    resolved_metadata = metadata or _v2_channel_metadata(
+        source_id=source_id,
+    )
+    return SimpleNamespace(
+        list_metadata=lambda: {"feishu": resolved_metadata},
+        metadata=lambda channel_type: (
+            resolved_metadata if channel_type.casefold() == "feishu" else None
+        ),
+    )
 
 
 @pytest.fixture
@@ -187,9 +220,16 @@ class TestEndpointAccessibility:
         app.dependency_overrides[get_current_user] = override_get_current_user
 
         # Mock the repository
-        with patch(
-            "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
-        ) as mock_repo_class:
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=_v2_channel_metadata(),
+            ),
+        ):
             mock_repo = MagicMock()
             mock_config = ChannelConfigModel(
                 id="config-123",
@@ -243,9 +283,7 @@ class TestProjectTenantResolution:
 class TestChannelSecretDecryption:
     """Test channel secret handling helpers."""
 
-    def test_decrypt_app_secret_failure_log_omits_secret_error_text(
-        self, caplog, monkeypatch
-    ):
+    def test_decrypt_app_secret_failure_log_omits_secret_error_text(self, caplog, monkeypatch):
         """Decrypt failures should preserve the encrypted value without logging secrets."""
         caplog.set_level(
             logging.WARNING,
@@ -257,8 +295,7 @@ class TestChannelSecretDecryption:
                 raise RuntimeError("secret-decrypt-token")
 
         monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.channels."
-            "get_encryption_service",
+            "src.infrastructure.adapters.primary.web.routers.channels.get_encryption_service",
             lambda: _EncryptionService(),
         )
 
@@ -276,7 +313,11 @@ class TestToResponse:
 
     def test_to_response_excludes_app_secret(self, sample_channel_config):
         """to_response should exclude app_secret from response."""
-        response = to_response(sample_channel_config)
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels._resolve_channel_metadata",
+            return_value=_v2_channel_metadata(),
+        ):
+            response = to_response(sample_channel_config)
 
         assert isinstance(response, ChannelConfigResponse)
         assert hasattr(response, "app_id")
@@ -285,7 +326,11 @@ class TestToResponse:
 
     def test_to_response_includes_required_fields(self, sample_channel_config):
         """to_response should include all required fields."""
-        response = to_response(sample_channel_config)
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels._resolve_channel_metadata",
+            return_value=_v2_channel_metadata(),
+        ):
+            response = to_response(sample_channel_config)
 
         assert response.id == sample_channel_config.id
         assert response.project_id == sample_channel_config.project_id
@@ -318,6 +363,11 @@ class TestConfigListing:
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository",
                 return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=_v2_channel_metadata(),
             ),
         ):
             response = await route_list_configs(
@@ -663,7 +713,7 @@ class TestPluginChannelCatalog:
 
     @pytest.mark.asyncio
     async def test_catalog_marks_schema_supported(self, mock_db_session):
-        """Catalog should expose schema availability per channel type."""
+        """Catalog should expose only active V2 generation contributions."""
         mock_user = User(id="u-1", email="user@example.com", hashed_password="hash")
 
         with (
@@ -673,40 +723,14 @@ class TestPluginChannelCatalog:
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
-                new=AsyncMock(
-                    return_value=(
-                        [
-                            {
-                                "name": "feishu-channel-plugin",
-                                "source": "local",
-                                "package": None,
-                                "version": None,
-                                "kind": "channel",
-                                "manifest_id": "feishu-channel-plugin",
-                                "providers": ["feishu"],
-                                "skills": ["channel-send"],
-                                "enabled": True,
-                                "discovered": True,
-                            }
-                        ],
-                        [],
-                        {},
-                    )
-                ),
-            ),
+                new=AsyncMock(),
+            ) as legacy_runtime,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_channel_adapter_resolver_v2",
+                return_value=_v2_channel_resolver(),
+            ),
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_adapter_factories.return_value = {
-                "feishu": ("feishu-channel-plugin", object())
-            }
-            mock_registry.list_channel_type_metadata.return_value = {
-                "feishu": SimpleNamespace(config_schema={"type": "object"})
-            }
-            mock_get_registry.return_value = mock_registry
-
             response = await list_project_channel_plugin_catalog(
                 project_id="project-1",
                 db=mock_db_session,
@@ -717,15 +741,19 @@ class TestPluginChannelCatalog:
         assert response.items[0].channel_type == "feishu"
         assert response.items[0].schema_supported is True
         assert response.items[0].kind == "channel"
-        assert response.items[0].manifest_id == "feishu-channel-plugin"
+        assert response.items[0].source == "v2-generation"
+        assert response.items[0].plugin_name == "builtin-feishu"
+        assert response.items[0].manifest_id == "builtin-feishu"
         assert response.items[0].providers == ["feishu"]
-        assert response.items[0].skills == ["channel-send"]
+        assert response.items[0].skills == []
+        legacy_runtime.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_schema_endpoint_returns_metadata(self, mock_db_session):
         """Schema endpoint should return metadata registered by plugin runtime."""
         mock_user = User(id="u-1", email="user@example.com", hashed_password="hash")
 
+        resolver = _v2_channel_resolver()
         with (
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
@@ -733,43 +761,14 @@ class TestPluginChannelCatalog:
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
-                new=AsyncMock(
-                    return_value=(
-                        [
-                            {
-                                "name": "feishu-channel-plugin",
-                                "source": "local",
-                                "package": None,
-                                "version": "0.1.0",
-                                "kind": "channel",
-                                "manifest_id": "feishu-channel-plugin",
-                                "providers": ["feishu"],
-                                "skills": ["channel-send"],
-                                "enabled": True,
-                                "discovered": True,
-                            }
-                        ],
-                        [],
-                        {},
-                    )
-                ),
-            ),
+                new=AsyncMock(),
+            ) as legacy_runtime,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_channel_adapter_resolver_v2",
+                return_value=resolver,
+            ),
         ):
-            metadata = SimpleNamespace(
-                channel_type="feishu",
-                plugin_name="feishu-channel-plugin",
-                config_schema={"type": "object"},
-                config_ui_hints={"app_secret": {"sensitive": True}},
-                defaults={"domain": "feishu"},
-                secret_paths=["app_secret"],
-            )
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {"feishu": metadata}
-            mock_get_registry.return_value = mock_registry
-
             response = await get_project_channel_plugin_schema(
                 project_id="project-1",
                 channel_type="feishu",
@@ -782,9 +781,12 @@ class TestPluginChannelCatalog:
         assert response.config_schema == {"type": "object"}
         assert response.secret_paths == ["app_secret"]
         assert response.kind == "channel"
-        assert response.manifest_id == "feishu-channel-plugin"
+        assert response.source == "v2-generation"
+        assert response.plugin_name == "builtin-feishu"
+        assert response.manifest_id == "builtin-feishu"
         assert response.providers == ["feishu"]
-        assert response.skills == ["channel-send"]
+        assert response.skills == []
+        legacy_runtime.assert_not_awaited()
 
 
 class TestPluginSchemaExecution:
@@ -838,8 +840,12 @@ class TestPluginSchemaExecution:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=self._feishu_metadata(
+                    defaults={"domain": "feishu-default", "webhook_path": "/plugin/hook"}
+                ),
+            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
@@ -848,14 +854,6 @@ class TestPluginSchemaExecution:
                 return_value=None,
             ),
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {
-                "feishu": self._feishu_metadata(
-                    defaults={"domain": "feishu-default", "webhook_path": "/plugin/hook"}
-                )
-            }
-            mock_get_registry.return_value = mock_registry
-
             mock_repo = MagicMock()
             mock_repo.create = AsyncMock(side_effect=_create_side_effect)
             mock_repo_class.return_value = mock_repo
@@ -872,9 +870,7 @@ class TestPluginSchemaExecution:
         assert response.domain == "feishu-default"
 
     @pytest.mark.asyncio
-    async def test_create_config_auto_connect_log_omits_config_id(
-        self, mock_db_session, caplog
-    ):
+    async def test_create_config_auto_connect_log_omits_config_id(self, mock_db_session, caplog):
         """Auto-connect success logs should not expose persisted channel config IDs."""
         caplog.set_level(
             logging.INFO,
@@ -1024,18 +1020,14 @@ class TestPluginSchemaExecution:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=self._feishu_metadata(),
+            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {
-                "feishu": self._feishu_metadata()
-            }
-            mock_get_registry.return_value = mock_registry
-
             mock_repo = MagicMock()
             mock_repo.create = AsyncMock()
             mock_repo_class.return_value = mock_repo
@@ -1080,18 +1072,14 @@ class TestPluginSchemaExecution:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=self._feishu_metadata(),
+            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {
-                "feishu": self._feishu_metadata()
-            }
-            mock_get_registry.return_value = mock_registry
-
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=existing)
             mock_repo.update = AsyncMock(return_value=existing)
@@ -1137,8 +1125,10 @@ class TestPluginSchemaExecution:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=self._feishu_metadata(),
+            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
@@ -1147,12 +1137,6 @@ class TestPluginSchemaExecution:
                 return_value=None,
             ),
         ):
-            metadata = self._feishu_metadata()
-            metadata.secret_paths = ["app_secret"]
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {"feishu": metadata}
-            mock_get_registry.return_value = mock_registry
-
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=existing)
             mock_repo.update = AsyncMock(return_value=existing)
@@ -1305,9 +1289,7 @@ class TestPluginSchemaExecution:
         assert "secret-restart-token" not in caplog.text
 
     @pytest.mark.asyncio
-    async def test_delete_config_disconnect_log_omits_config_id(
-        self, mock_db_session, caplog
-    ):
+    async def test_delete_config_disconnect_log_omits_config_id(self, mock_db_session, caplog):
         """Disconnect success logs should not expose channel config IDs."""
         caplog.set_level(
             logging.INFO,
@@ -1419,7 +1401,7 @@ class TestPluginSchemaExecution:
 
     @pytest.mark.asyncio
     async def test_create_config_rejects_when_plugin_disabled_for_tenant(self, mock_db_session):
-        """Create should fail when channel plugin is disabled for project tenant."""
+        """Create should fail when V2 generation has no active channel contribution."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
         payload = ChannelConfigCreate(
             channel_type="feishu",
@@ -1427,41 +1409,14 @@ class TestPluginSchemaExecution:
             app_id="cli_test",
             app_secret="secret",
         )
-        runtime_manager = MagicMock()
-        runtime_manager.list_plugins.return_value = (
-            [
-                {
-                    "name": "feishu-channel-plugin",
-                    "source": "local",
-                    "package": None,
-                    "version": None,
-                    "enabled": False,
-                    "discovered": True,
-                }
-            ],
-            [],
-        )
-
         with (
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels._resolve_project_tenant_id",
-                new=AsyncMock(return_value="tenant-1"),
-            ),
-            patch(
                 "src.infrastructure.adapters.primary.web.routers.channels._resolve_channel_metadata",
-                return_value=SimpleNamespace(
-                    channel_type="feishu",
-                    plugin_name="feishu-channel-plugin",
-                    config_schema=None,
-                ),
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_runtime_manager",
-                return_value=runtime_manager,
+                return_value=None,
             ),
         ):
             from fastapi import HTTPException
@@ -1711,16 +1666,8 @@ class TestTenantPluginEndpoints:
 
     @pytest.mark.asyncio
     async def test_tenant_schema_endpoint_returns_metadata(self, mock_db_session):
-        """Tenant schema endpoint should return plugin channel metadata."""
+        """Tenant schema endpoint should return active V2 channel metadata."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
-        metadata = SimpleNamespace(
-            channel_type="feishu",
-            plugin_name="feishu-channel-plugin",
-            config_schema={"type": "object"},
-            config_ui_hints={"app_secret": {"sensitive": True}},
-            defaults={"domain": "feishu"},
-            secret_paths=["app_secret"],
-        )
 
         with (
             patch(
@@ -1729,35 +1676,14 @@ class TestTenantPluginEndpoints:
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
-                new=AsyncMock(
-                    return_value=(
-                        [
-                            {
-                                "name": "feishu-channel-plugin",
-                                "source": "local",
-                                "package": None,
-                                "version": "0.1.0",
-                                "kind": "channel",
-                                "manifest_id": "feishu-channel-plugin",
-                                "providers": ["feishu"],
-                                "skills": ["channel-send"],
-                                "enabled": True,
-                                "discovered": True,
-                            }
-                        ],
-                        [],
-                        {},
-                    )
-                ),
-            ),
+                new=AsyncMock(),
+            ) as legacy_runtime,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_channel_adapter_resolver_v2",
+                return_value=_v2_channel_resolver(),
+            ),
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_type_metadata.return_value = {"feishu": metadata}
-            mock_get_registry.return_value = mock_registry
-
             response = await get_tenant_channel_plugin_schema(
                 tenant_id="tenant-1",
                 channel_type="feishu",
@@ -1768,9 +1694,12 @@ class TestTenantPluginEndpoints:
         assert response.channel_type == "feishu"
         assert response.schema_supported is True
         assert response.kind == "channel"
-        assert response.manifest_id == "feishu-channel-plugin"
+        assert response.source == "v2-generation"
+        assert response.plugin_name == "builtin-feishu"
+        assert response.manifest_id == "builtin-feishu"
         assert response.providers == ["feishu"]
-        assert response.skills == ["channel-send"]
+        assert response.skills == []
+        legacy_runtime.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_tenant_plugin_config_schema_endpoint_returns_generic_schema(
@@ -2217,7 +2146,7 @@ class TestTenantPluginEndpoints:
 
     @pytest.mark.asyncio
     async def test_list_tenant_channel_catalog(self, mock_db_session):
-        """Tenant catalog endpoint should list discovered channel types."""
+        """Tenant catalog endpoint should list active V2 channel types."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
 
         with (
@@ -2227,36 +2156,14 @@ class TestTenantPluginEndpoints:
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
-                new=AsyncMock(
-                    return_value=(
-                        [
-                            {
-                                "name": "feishu-channel-plugin",
-                                "source": "local",
-                                "package": None,
-                                "version": None,
-                                "enabled": True,
-                                "discovered": True,
-                            }
-                        ],
-                        [],
-                        {},
-                    )
-                ),
-            ),
+                new=AsyncMock(),
+            ) as legacy_runtime,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
-            ) as mock_get_registry,
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_channel_adapter_resolver_v2",
+                return_value=_v2_channel_resolver(),
+            ),
         ):
-            mock_registry = MagicMock()
-            mock_registry.list_channel_adapter_factories.return_value = {
-                "feishu": ("feishu-channel-plugin", object())
-            }
-            mock_registry.list_channel_type_metadata.return_value = {
-                "feishu": SimpleNamespace(config_schema={"type": "object"})
-            }
-            mock_get_registry.return_value = mock_registry
-
             response = await list_tenant_channel_plugin_catalog(
                 tenant_id="tenant-1",
                 db=mock_db_session,
@@ -2265,6 +2172,7 @@ class TestTenantPluginEndpoints:
 
         assert len(response.items) == 1
         assert response.items[0].channel_type == "feishu"
+        legacy_runtime.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_enable_tenant_plugin_uses_tenant_scope(self, mock_db_session):

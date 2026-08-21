@@ -74,7 +74,9 @@ async def test_channel_adapter_catalog_builds_registered_contribution() -> None:
 
     assert isinstance(adapter, _Adapter)
     assert adapter.config.app_id == "app"
-    assert resolver.metadata("TEST") is not None
+    metadata = resolver.metadata("TEST")
+    assert metadata is not None
+    assert metadata.source_id == "test-adapter"
     assert tuple(resolver.list_metadata()) == ("test",)
 
 

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Mapping
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from jsonschema import Draft7Validator
+from jsonschema import Draft7Validator, Draft202012Validator
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, desc, func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.roles import RoleDefinition
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.startup import (
     get_channel_manager,
@@ -48,10 +50,13 @@ from src.infrastructure.agent.plugins.registry import (
     get_plugin_registry,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.channel_adapters import (
+    CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+    ChannelAdapterMetadataV2,
+    ChannelAdapterResolverProtocolV2,
+)
 from src.infrastructure.security.encryption_service import get_encryption_service
-
-if TYPE_CHECKING:
-    from src.infrastructure.agent.plugins.registry import ChannelTypeConfigMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -406,16 +411,27 @@ _CHANNEL_SETTING_FIELDS = {
 _SECRET_UNCHANGED_SENTINEL = "__MEMSTACK_SECRET_UNCHANGED__"
 
 
-def _resolve_channel_metadata(channel_type: str) -> ChannelTypeConfigMetadata | None:
-    normalized = (channel_type or "").strip().lower()
+def _channel_adapter_resolver_v2() -> ChannelAdapterResolverProtocolV2:
+    generation = current_generation_v2()
+    resolver = generation.resolve(
+        CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    if not isinstance(resolver, ChannelAdapterResolverProtocolV2):
+        raise TypeError("active generation has an invalid channel adapter resolver")
+    return resolver
+
+
+def _resolve_channel_metadata(channel_type: str) -> ChannelAdapterMetadataV2 | None:
+    normalized = (channel_type or "").strip().casefold()
     if not normalized:
         return None
-    return get_plugin_registry().list_channel_type_metadata().get(normalized)
+    return _channel_adapter_resolver_v2().metadata(normalized)
 
 
-def _resolve_secret_paths(metadata: ChannelTypeConfigMetadata | None) -> list[str]:
+def _resolve_secret_paths(metadata: ChannelAdapterMetadataV2 | None) -> list[str]:
     secret_paths = getattr(metadata, "secret_paths", None) if metadata is not None else None
-    if not isinstance(secret_paths, list):
+    if not isinstance(secret_paths, (list, tuple)):
         return []
     normalized: list[str] = []
     for path in secret_paths:
@@ -505,7 +521,7 @@ def _collect_settings_from_config(
 def _build_plugin_settings_payload(
     *,
     payload: dict[str, Any],
-    metadata: ChannelTypeConfigMetadata | None,
+    metadata: ChannelAdapterMetadataV2 | None,
     existing_config: ChannelConfigModel | None = None,
     secret_paths: list[str] | None = None,
     apply_defaults: bool = False,
@@ -514,7 +530,7 @@ def _build_plugin_settings_payload(
     if existing_config is not None:
         settings.update(_collect_settings_from_config(existing_config, secret_paths=secret_paths))
     defaults = metadata.defaults if metadata else None
-    if isinstance(defaults, dict):
+    if isinstance(defaults, Mapping):
         settings.update(defaults)
 
     incoming_extra = payload.get("extra_settings")
@@ -609,14 +625,14 @@ def _mask_secret_values_for_response(
 def _validate_plugin_settings_schema(
     *,
     channel_type: str,
-    metadata: ChannelTypeConfigMetadata | None,
+    metadata: ChannelAdapterMetadataV2 | None,
     settings: dict[str, Any],
 ) -> None:
     schema = getattr(metadata, "config_schema", None) if metadata is not None else None
-    if not isinstance(schema, dict):
+    if not isinstance(schema, Mapping):
         return
 
-    validator = Draft7Validator(schema)
+    validator = Draft202012Validator(dict(schema))
     errors = sorted(validator.iter_errors(settings), key=lambda item: list(item.path))
     if not errors:
         return
@@ -1044,26 +1060,15 @@ async def _ensure_channel_plugin_enabled_for_project(
     channel_type: str,
     db: AsyncSession,
 ) -> None:
-    """Ensure plugin backing channel_type is enabled for the project's tenant."""
+    """Admit configs only for contributions active in the pinned V2 generation."""
     metadata = _resolve_channel_metadata(channel_type)
     if metadata is None:
-        return
-
-    tenant_id = await _resolve_project_tenant_id(project_id, db)
-    if not tenant_id:
-        return
-
-    plugin_name = str(getattr(metadata, "plugin_name", "")).strip()
-    if not plugin_name:
-        return
-
-    runtime_manager = get_plugin_runtime_manager()
-    plugin_records, _plugin_diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
-    plugin_record = next((item for item in plugin_records if item.get("name") == plugin_name), None)
-    if plugin_record and not bool(plugin_record.get("enabled", True)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_("Plugin is disabled for this tenant"),
+            detail={
+                "code": "channel_adapter_not_found",
+                "message": _("Channel type is unavailable in the active plugin generation"),
+            },
         )
 
 
@@ -1082,36 +1087,53 @@ async def _reconcile_channel_runtime_after_plugin_change() -> dict[str, int] | N
     return reload_plan.summary() if reload_plan else None
 
 
-def _build_channel_catalog_items(
-    *,
-    plugin_records: list[dict[str, Any]],
-) -> list[ChannelPluginCatalogItemResponse]:
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    plugin_registry = get_plugin_registry()
-    channel_factories = plugin_registry.list_channel_adapter_factories()
-    channel_metadata = plugin_registry.list_channel_type_metadata()
-
+def _build_channel_catalog_items() -> list[ChannelPluginCatalogItemResponse]:
+    """Serialize channel contributions from the current pinned V2 generation."""
+    metadata_by_channel = _channel_adapter_resolver_v2().list_metadata()
     items: list[ChannelPluginCatalogItemResponse] = []
-    for channel_type, (plugin_name, _factory) in sorted(channel_factories.items()):
-        plugin_record = plugin_by_name.get(plugin_name, {})
-        metadata = channel_metadata.get(channel_type)
+    for channel_type, metadata in sorted(metadata_by_channel.items()):
+        source_id = metadata.source_id
+        if not source_id:
+            raise TypeError("active generation returned channel metadata without source identity")
         items.append(
             ChannelPluginCatalogItemResponse(
                 channel_type=channel_type,
-                plugin_name=plugin_name,
-                source=str(plugin_record.get("source", "entrypoint")),
-                package=plugin_record.get("package"),
-                version=plugin_record.get("version"),
-                kind=plugin_record.get("kind"),
-                manifest_id=plugin_record.get("manifest_id"),
-                providers=_as_string_list(plugin_record.get("providers")),
-                skills=_as_string_list(plugin_record.get("skills")),
-                enabled=bool(plugin_record.get("enabled", True)),
-                discovered=bool(plugin_record.get("discovered", True)),
-                schema_supported=bool(metadata and metadata.config_schema),
+                plugin_name=source_id,
+                source="v2-generation",
+                kind="channel",
+                manifest_id=source_id,
+                providers=[channel_type],
+                enabled=True,
+                discovered=True,
+                schema_supported=bool(metadata.config_schema),
             )
         )
     return items
+
+
+def _build_channel_schema_response(channel_type: str) -> ChannelPluginConfigSchemaResponse:
+    metadata = _channel_adapter_resolver_v2().metadata(channel_type)
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Channel type not found in plugin catalog"),
+        )
+    source_id = metadata.source_id
+    if not source_id:
+        raise TypeError("active generation returned channel metadata without source identity")
+    return ChannelPluginConfigSchemaResponse(
+        channel_type=metadata.channel_type,
+        plugin_name=source_id,
+        source="v2-generation",
+        kind="channel",
+        manifest_id=source_id,
+        providers=[metadata.channel_type],
+        schema_supported=bool(metadata.config_schema),
+        config_schema=dict(metadata.config_schema),
+        config_ui_hints=dict(metadata.config_ui_hints),
+        defaults=dict(metadata.defaults),
+        secret_paths=list(metadata.secret_paths),
+    )
 
 
 # API Endpoints
@@ -1318,12 +1340,7 @@ async def list_tenant_channel_plugin_catalog(
 ) -> ChannelPluginCatalogResponse:
     """List channel plugin catalog for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    return ChannelPluginCatalogResponse(
-        items=_build_channel_catalog_items(plugin_records=plugin_records)
-    )
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items())
 
 
 @router.get(
@@ -1338,34 +1355,7 @@ async def get_tenant_channel_plugin_schema(
 ) -> ChannelPluginConfigSchemaResponse:
     """Return plugin channel schema metadata for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=tenant_id
-    )
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
-    if metadata is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog"),
-        )
-
-    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
-    return ChannelPluginConfigSchemaResponse(
-        channel_type=metadata.channel_type,
-        plugin_name=metadata.plugin_name,
-        source=str(plugin_record.get("source", "entrypoint")),
-        package=plugin_record.get("package"),
-        version=plugin_record.get("version"),
-        kind=plugin_record.get("kind"),
-        manifest_id=plugin_record.get("manifest_id"),
-        providers=_as_string_list(plugin_record.get("providers")),
-        skills=_as_string_list(plugin_record.get("skills")),
-        schema_supported=bool(metadata.config_schema),
-        config_schema=metadata.config_schema,
-        config_ui_hints=metadata.config_ui_hints,
-        defaults=metadata.defaults,
-        secret_paths=list(metadata.secret_paths),
-    )
+    return _build_channel_schema_response(channel_type)
 
 
 @router.post(
@@ -1500,13 +1490,7 @@ async def list_project_channel_plugin_catalog(
 ) -> ChannelPluginCatalogResponse:
     """List channel types currently provided by loaded plugins."""
     await verify_project_access(project_id, current_user, db)
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=project_tenant_id
-    )
-    return ChannelPluginCatalogResponse(
-        items=_build_channel_catalog_items(plugin_records=plugin_records)
-    )
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items())
 
 
 @router.get(
@@ -1521,36 +1505,7 @@ async def get_project_channel_plugin_schema(
 ) -> ChannelPluginConfigSchemaResponse:
     """Return config schema metadata for a plugin-provided channel type."""
     await verify_project_access(project_id, current_user, db)
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
-        tenant_id=project_tenant_id
-    )
-    plugin_by_name = {record["name"]: record for record in plugin_records}
-    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
-
-    if metadata is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog"),
-        )
-
-    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
-    return ChannelPluginConfigSchemaResponse(
-        channel_type=metadata.channel_type,
-        plugin_name=metadata.plugin_name,
-        source=str(plugin_record.get("source", "entrypoint")),
-        package=plugin_record.get("package"),
-        version=plugin_record.get("version"),
-        kind=plugin_record.get("kind"),
-        manifest_id=plugin_record.get("manifest_id"),
-        providers=_as_string_list(plugin_record.get("providers")),
-        skills=_as_string_list(plugin_record.get("skills")),
-        schema_supported=bool(metadata.config_schema),
-        config_schema=metadata.config_schema,
-        config_ui_hints=metadata.config_ui_hints,
-        defaults=metadata.defaults,
-        secret_paths=list(metadata.secret_paths),
-    )
+    return _build_channel_schema_response(channel_type)
 
 
 @router.post(
@@ -1702,7 +1657,7 @@ async def create_config(
     model_settings: dict[str, Any] = {}
     normalized_extra_settings = data.extra_settings
 
-    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+    if metadata and isinstance(getattr(metadata, "config_schema", None), Mapping):
         secret_paths = _resolve_secret_paths(metadata)
         settings_payload = _build_plugin_settings_payload(
             payload=payload,
@@ -1855,7 +1810,7 @@ async def update_config(
 
     update_data = data.model_dump(exclude_unset=True)
     metadata = _resolve_channel_metadata(config.channel_type)
-    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+    if metadata and isinstance(getattr(metadata, "config_schema", None), Mapping):
         secret_paths = _resolve_secret_paths(metadata)
         existing_settings = _collect_settings_from_config(config, secret_paths=secret_paths)
         settings_payload = _build_plugin_settings_payload(
@@ -1917,8 +1872,7 @@ async def update_config(
             )
         except Exception as e:
             logger.warning(
-                "[Channels] Failed to restart connection: "
-                "has_channel_config_id=%s error_type=%s",
+                "[Channels] Failed to restart connection: has_channel_config_id=%s error_type=%s",
                 bool(config_id),
                 type(e).__name__,
             )
@@ -1955,8 +1909,7 @@ async def delete_config(
             )
         except Exception as e:
             logger.warning(
-                "[Channels] Failed to disconnect channel: "
-                "has_channel_config_id=%s error_type=%s",
+                "[Channels] Failed to disconnect channel: has_channel_config_id=%s error_type=%s",
                 bool(config_id),
                 type(e).__name__,
             )

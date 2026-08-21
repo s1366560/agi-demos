@@ -232,7 +232,7 @@
       },
       "contract_digest": "sha256:aecfca5b66d87cfead065d18eeae8c3bd5fbae422af237b80303c614fe658d3b",
       "artifact": {
-        "digest": "sha256:368380bc41c17f4099f04ce347ba81be350b4aa1380885b281068a2a1fbce244",
+        "digest": "sha256:36aa77ce687a1cd349b3babf2c5acf9e875ed56661d30e412189f29e30b1f1dc",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },
@@ -265,7 +265,7 @@
       },
       "contract_digest": "sha256:b510246f29c7004d8cbf55f0af1515f1e4a506485c3ae9fa21217a12f89e582c",
       "artifact": {
-        "digest": "sha256:368380bc41c17f4099f04ce347ba81be350b4aa1380885b281068a2a1fbce244",
+        "digest": "sha256:36aa77ce687a1cd349b3babf2c5acf9e875ed56661d30e412189f29e30b1f1dc",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },

@@ -46,6 +46,7 @@ class ChannelAdapterMetadataV2:
     config_ui_hints: Mapping[str, object]
     defaults: Mapping[str, object]
     secret_paths: tuple[str, ...]
+    source_id: str = ""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -180,6 +181,7 @@ class ChannelAdapterCatalogV2:
                 config_ui_hints=MappingProxyType(dict(metadata.config_ui_hints)),
                 defaults=MappingProxyType(dict(metadata.defaults)),
                 secret_paths=secret_paths,
+                source_id=source_id,
             ),
             factory=contribution.factory,
         )

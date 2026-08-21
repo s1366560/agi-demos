@@ -5,8 +5,8 @@
 from typing import Final
 
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a183151d73939ef97bdaa05d1e4b52b3944b321d03537e5f5b29fa85d01af1'
-    '7a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:549fb93a966269989d68015762350099bfdb68b451891e366aae928d60e5d8'
+    'a5","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -251,8 +251,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'de18a8048398707cc5f562e431082ade282d718cacbf62d4bb32bf961261e","entrypoint":"src.infrast'
     'ructure.plugins.v2.workspace_runtime:_apply_workspace_session_start_v2","module_ref":"bu'
     'iltin://memstack/agent/workspace/session-start","plugin_id":"memstack-runtime-kernel","p'
-    'lugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:368380bc41c17f40'
-    '99f04ce347ba81be350b4aa1380885b281068a2a1fbce244","artifact_source":"repo+python://src/i'
+    'lugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:36aa77ce687a1cd3'
+    '49b3babf2c5acf9e875ed56661d30e412189f29e30b1f1dc","artifact_source":"repo+python://src/i'
     'nfrastructure/plugins/v2/channel_adapters.py","contract":{"config_schema":{"$schema":"ht'
     'tps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"'
     'strategy":{"const":"explicit-contributions","type":"string"}},"required":["strategy"],"t'
@@ -262,8 +262,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '065d18eeae8c3bd5fbae422af237b80303c614fe658d3b","entrypoint":"src.infrastructure.plugins'
     '.v2.channel_adapters:_apply_channel_adapter_catalog_v2","module_ref":"builtin://memstack'
     '/channel/adapter-catalog","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0"'
-    ',"targets":["python"]},{"artifact_digest":"sha256:368380bc41c17f4099f04ce347ba81be350b4a'
-    'a1380885b281068a2a1fbce244","artifact_source":"repo+python://src/infrastructure/plugins/'
+    ',"targets":["python"]},{"artifact_digest":"sha256:36aa77ce687a1cd349b3babf2c5acf9e875ed5'
+    '6661d30e412189f29e30b1f1dc","artifact_source":"repo+python://src/infrastructure/plugins/'
     'v2/channel_adapters.py","contract":{"config_schema":{"$schema":"https://json-schema.org/'
     'draft/2020-12/schema","additionalProperties":false,"properties":{"channel_type":{"const"'
     ':"feishu","type":"string"},"source_id":{"const":"builtin-feishu","type":"string"}},"requ'
@@ -376,7 +376,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a183151d73939ef97bdaa05d1e4b52b3944b321d03537e5f5b29fa85d01af17a"
+    "sha256:549fb93a966269989d68015762350099bfdb68b451891e366aae928d60e5d8a5"
 )
 
 __all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]
