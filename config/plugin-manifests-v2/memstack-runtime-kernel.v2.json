@@ -302,7 +302,44 @@
       },
       "contract_digest": "sha256:26828dca5d24b5abaaaeb665e90fc4e8d2ba2c276775f3e902201b6eb35de9f9",
       "artifact": {
-        "digest": "sha256:4fea12f6172c7a5b9733e8e833b66df39cf100c861650d1fd6827b690ad7368f",
+        "digest": "sha256:6adc2a06316f7a2c3687059893c0805ae6d98d036cbebc1bdef46e4349d0bd75",
+        "source": "repo+python://src/infrastructure/plugins/v2/backend_store_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/backend-store-services",
+      "entrypoint": "src.infrastructure.plugins.v2.backend_store_services:_apply_backend_store_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.backend-store-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.backend-store-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:5bf82c133033947930c25c6424ac357292239539224abc5b74f914b9f97fcefb",
+      "artifact": {
+        "digest": "sha256:6adc2a06316f7a2c3687059893c0805ae6d98d036cbebc1bdef46e4349d0bd75",
         "source": "repo+python://src/infrastructure/plugins/v2/backend_store_services.py"
       }
     },
@@ -339,7 +376,7 @@
       },
       "contract_digest": "sha256:dfa387f0258bbb5066e4eb54735099c175501ea25cb2df31c568d158de3224b1",
       "artifact": {
-        "digest": "sha256:4fea12f6172c7a5b9733e8e833b66df39cf100c861650d1fd6827b690ad7368f",
+        "digest": "sha256:6adc2a06316f7a2c3687059893c0805ae6d98d036cbebc1bdef46e4349d0bd75",
         "source": "repo+python://src/infrastructure/plugins/v2/backend_store_services.py"
       }
     },

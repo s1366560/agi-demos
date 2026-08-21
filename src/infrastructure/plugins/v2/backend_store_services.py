@@ -33,6 +33,8 @@ from .runtime import (
 
 BACKEND_STORE_PROVIDER_MODULE_V2 = "builtin://memstack/persistence/backend-store-provider"
 BACKEND_STORE_PROVIDER_SERVICE_V2 = "service:persistence.backend-store-provider"
+BACKEND_STORE_APPLICATION_MODULE_V2 = "builtin://memstack/application/backend-store-services"
+BACKEND_STORE_APPLICATION_SERVICE_V2 = "service:application.backend-store-services"
 BACKEND_STORE_SHADOW_MODULE_V2 = "builtin://memstack/application/backend-store-shadow"
 BACKEND_STORE_SHADOW_SERVICE_V2 = "service:application.backend-store-shadow"
 BACKEND_STORE_PROVIDER_INJECT_V2 = "provider"
@@ -86,6 +88,13 @@ class BackendStoreServiceFactoryProtocolV2(Protocol):
 
 
 @runtime_checkable
+class BackendStoreApplicationResolverProtocolV2(Protocol):
+    """Application-facing resolver injected through a declared service alias."""
+
+    def resolve(self, operation: OperationContextV2) -> BackendStoreServicesV2: ...
+
+
+@runtime_checkable
 class BackendStoreShadowProtocolV2(Protocol):
     """Boundary-visible structural comparator contract."""
 
@@ -123,6 +132,16 @@ class SqlBackendStoreServiceFactoryV2:
                 factory=build_default_retrieval_factory(),
             ),
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class BackendStoreApplicationResolverV2:
+    """Resolve request-owned services without exposing a Provider implementation."""
+
+    provider: BackendStoreServiceFactoryProtocolV2
+
+    def resolve(self, operation: OperationContextV2) -> BackendStoreServicesV2:
+        return self.provider.build(operation)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -237,12 +256,39 @@ def _apply_backend_store_shadow_v2(
     )
 
 
+def _apply_backend_store_application_v2(
+    context: ContextV2,
+    config: Mapping[str, Any],
+) -> None:
+    strategy = config.get("strategy")
+    if strategy != "operation-scoped-provider":
+        raise ValueError(
+            "backend store application resolver requires strategy operation-scoped-provider"
+        )
+    provider = context.require(BACKEND_STORE_PROVIDER_INJECT_V2)
+    if not isinstance(provider, BackendStoreServiceFactoryProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_backend_store_provider",
+            "backend store provider inject does not implement the factory contract",
+        )
+    _ = context.provide(
+        BACKEND_STORE_APPLICATION_SERVICE_V2,
+        BackendStoreApplicationResolverV2(provider=provider),
+        label="backend-store-application",
+    )
+
+
 def backend_store_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
     return (
         PluginDefinitionV2(
             module_ref=BACKEND_STORE_PROVIDER_MODULE_V2,
             contract_digest=generated_contract_digest_v2(BACKEND_STORE_PROVIDER_MODULE_V2),
             apply=_apply_backend_store_provider_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=BACKEND_STORE_APPLICATION_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(BACKEND_STORE_APPLICATION_MODULE_V2),
+            apply=_apply_backend_store_application_v2,
         ),
         PluginDefinitionV2(
             module_ref=BACKEND_STORE_SHADOW_MODULE_V2,
@@ -253,11 +299,15 @@ def backend_store_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
 
 
 __all__ = [
+    "BACKEND_STORE_APPLICATION_MODULE_V2",
+    "BACKEND_STORE_APPLICATION_SERVICE_V2",
     "BACKEND_STORE_PROVIDER_INJECT_V2",
     "BACKEND_STORE_PROVIDER_MODULE_V2",
     "BACKEND_STORE_PROVIDER_SERVICE_V2",
     "BACKEND_STORE_SHADOW_MODULE_V2",
     "BACKEND_STORE_SHADOW_SERVICE_V2",
+    "BackendStoreApplicationResolverProtocolV2",
+    "BackendStoreApplicationResolverV2",
     "BackendStoreServiceFactoryProtocolV2",
     "BackendStoreServicesV2",
     "BackendStoreShadowComparatorV2",

@@ -21,10 +21,13 @@ from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repos
 from src.infrastructure.graph.backend_factory import build_default_factory
 from src.infrastructure.graph.registry import get_graph_backend_registry
 from src.infrastructure.plugins.v2.backend_store_services import (
+    BACKEND_STORE_APPLICATION_MODULE_V2,
+    BACKEND_STORE_APPLICATION_SERVICE_V2,
     BACKEND_STORE_PROVIDER_MODULE_V2,
     BACKEND_STORE_PROVIDER_SERVICE_V2,
     BACKEND_STORE_SHADOW_MODULE_V2,
     BACKEND_STORE_SHADOW_SERVICE_V2,
+    BackendStoreApplicationResolverV2,
     BackendStoreServicesV2,
     BackendStoreShadowComparatorV2,
     SqlBackendStoreServiceFactoryV2,
@@ -103,6 +106,39 @@ async def test_backend_store_provider_builds_request_session_owned_services() ->
 
 
 @pytest.mark.unit
+async def test_backend_store_application_resolver_uses_the_operation_provider() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=8,
+        version=8,
+    )
+    assert publication.accepted is True
+    db = AsyncSession()
+    try:
+        async with (
+            await host.acquire() as generation,
+            OperationContextV2(
+                generation=generation,
+                operation_id="backend-store-application:tenant-a",
+                scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-a"),
+            ) as operation,
+        ):
+            _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
+            resolver = operation.require(BACKEND_STORE_APPLICATION_SERVICE_V2)
+            assert isinstance(resolver, BackendStoreApplicationResolverV2)
+
+            services = resolver.resolve(operation)
+
+            assert getattr(services.graph_service._repo, "_session", None) is db
+            assert getattr(services.retrieval_service._repo, "_session", None) is db
+    finally:
+        await db.close()
+        await host.close()
+
+
+@pytest.mark.unit
 async def test_backend_store_shadow_compares_scope_types_session_and_composition() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     publication = await host.bootstrap(
@@ -161,7 +197,7 @@ async def test_backend_store_shadow_rejects_missing_provider_without_fallback() 
         await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
 
     assert error.value.code == "missing_inject_provider"
-    assert "builtin-backend-store-shadow" in str(error.value)
+    assert "builtin-backend-store-services" in str(error.value)
 
 
 @pytest.mark.unit
@@ -170,7 +206,8 @@ def test_backend_store_modules_are_explicit_ordered_profile_entries() -> None:
     enabled_modules = tuple(entry.module_ref for entry in document.entries if entry.enabled)
 
     assert BACKEND_STORE_PROVIDER_MODULE_V2 in enabled_modules
+    assert BACKEND_STORE_APPLICATION_MODULE_V2 in enabled_modules
     assert BACKEND_STORE_SHADOW_MODULE_V2 in enabled_modules
-    assert enabled_modules.index(BACKEND_STORE_PROVIDER_MODULE_V2) < enabled_modules.index(
-        BACKEND_STORE_SHADOW_MODULE_V2
-    )
+    provider_index = enabled_modules.index(BACKEND_STORE_PROVIDER_MODULE_V2)
+    assert provider_index < enabled_modules.index(BACKEND_STORE_APPLICATION_MODULE_V2)
+    assert provider_index < enabled_modules.index(BACKEND_STORE_SHADOW_MODULE_V2)

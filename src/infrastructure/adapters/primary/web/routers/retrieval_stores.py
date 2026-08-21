@@ -7,35 +7,25 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.retrieval_store_service import (
     RetrievalStoreInUse,
     RetrievalStoreNameConflict,
     RetrievalStoreNotFound,
-    RetrievalStoreService,
     RetrievalStoreValidationError,
 )
-from src.infrastructure.adapters.primary.web.backend_store_shadow_v2 import (
-    backend_store_shadow_dependency_v2,
+from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
+    BackendStoreAuthorityV2,
+    backend_store_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
-    SqlRetrievalStoreRepository,
-)
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.backend_store_services import BackendStoreShadowEvidenceV2
-from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
-from src.infrastructure.retrieval.registry import (
-    ENV_RETRIEVAL_STORE_ID_PREFIX,
-    get_retrieval_backend_registry,
-)
+from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/retrieval-stores", tags=["retrieval-stores"])
@@ -57,14 +47,6 @@ class StoreUpdateRequest(BaseModel):
 class StoreTestRequest(BaseModel):
     engine_type: str = Field(default="memstack_pgvector")
     connection_config: dict[str, Any] = Field(default_factory=dict)
-
-
-def _service(db: AsyncSession) -> RetrievalStoreService:
-    return RetrievalStoreService(
-        repo=SqlRetrievalStoreRepository(db),
-        registry=get_retrieval_backend_registry(),
-        factory=build_default_retrieval_factory(),
-    )
 
 
 def _selected_tenant(tenant_id: str | None, fallback_tenant_id: str) -> str:
@@ -93,13 +75,10 @@ def _map_error(exc: Exception) -> HTTPException:
 @router.get("/types")
 async def list_store_types(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    _backend_store_shadow: BackendStoreShadowEvidenceV2 = Depends(
-        backend_store_shadow_dependency_v2
-    ),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
     _ = current_user
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     return {"success": True, "data": service.list_store_types()}
 
 
@@ -109,11 +88,12 @@ async def test_store_raw(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant, require_admin=True)
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     try:
         version = await service.test_connection(
             engine_type=request.engine_type,
@@ -130,11 +110,12 @@ async def create_store(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant, require_admin=True)
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     try:
         store = await service.create_store(
             tenant_id=selected_tenant,
@@ -161,11 +142,12 @@ async def list_stores(
     offset: int = Query(0, ge=0),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant)
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     stores = await service.list_stores(selected_tenant, limit=limit, offset=offset)
     data = [service.env_default_store_view(selected_tenant).to_dict()]
     for store in stores:
@@ -179,11 +161,12 @@ async def get_store(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant)
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     if store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
         return {"success": True, "data": service.env_default_store_view(selected_tenant).to_dict()}
     try:
@@ -202,8 +185,9 @@ async def update_store(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant, require_admin=True)
     if store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
@@ -211,7 +195,7 @@ async def update_store(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Environment stores are read-only"),
         )
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     try:
         store = await service.update_store(
             tenant_id=selected_tenant,
@@ -236,8 +220,9 @@ async def delete_store(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> None:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant, require_admin=True)
     if store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
@@ -245,7 +230,7 @@ async def delete_store(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Environment stores are read-only"),
         )
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     try:
         await service.delete_store(selected_tenant, store_id)
         await db.commit()
@@ -260,11 +245,12 @@ async def test_store_by_id(
     tenant_id: str | None = Query(None),
     fallback_tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> dict[str, Any]:
+    db = backend_store.db
     selected_tenant = _selected_tenant(tenant_id, fallback_tenant_id)
     await require_tenant_access(db, current_user, selected_tenant, require_admin=True)
-    service = _service(db)
+    service = backend_store.services.retrieval_service
     if store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
         version = await service.test_connection(
             engine_type="memstack_pgvector",
