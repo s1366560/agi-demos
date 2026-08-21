@@ -3,34 +3,32 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from .agent_events import (
     AGENT_BEFORE_REQUEST_EVENT_V2,
     AGENT_SESSION_START_EVENT_V2,
     TOOLS_AFTER_EXECUTE_EVENT_V2,
 )
-from .boundary import current_operation_context_v2
 from .runtime import OperationContextV2, RuntimeV2Error
 
-
-class _DispatchResultLike(Protocol):
-    payload: Mapping[str, Any]
-    diagnostics: Sequence[object]
-    denied: bool
+AGENT_RUNTIME_DISPATCHER_SERVICE_V2 = "service:agent-runtime-dispatcher"
 
 
-class _FallbackDispatcher(Protocol):
+@runtime_checkable
+class AgentRuntimeDispatcherProtocolV2(Protocol):
+    """Generation-owned seam used by the Agent processor lifecycle."""
+
     async def dispatch(
         self,
         hook_name: str,
         payload: Mapping[str, Any] | None = None,
         *,
         runtime_hook_overrides: list[dict[str, Any]] | None = None,
-    ) -> _DispatchResultLike: ...
+    ) -> AgentRuntimeDispatchResultV2: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -54,14 +52,7 @@ _WORKSPACE_SESSION_ROLES = frozenset({"leader", "worker", "contract"})
 
 @dataclass(frozen=True, kw_only=True)
 class PinnedAgentRuntimeDispatcherV2:
-    """Dispatch migrated hooks through the immutable operation generation.
-
-    A fallback is explicit and is used only for hook names that do not yet have
-    a public V2 event contract. Once the remaining hooks have V2 modules, the
-    fallback can be removed without changing processor call sites.
-    """
-
-    fallback: _FallbackDispatcher | None = None
+    """Dispatch declared hooks through the immutable operation generation."""
 
     async def dispatch(
         self,
@@ -73,11 +64,9 @@ class PinnedAgentRuntimeDispatcherV2:
         effective_payload = dict(payload or {})
         event = _V2_EVENT_BY_PROCESSOR_HOOK.get(hook_name)
         if event is None:
-            return await self._dispatch_fallback(
-                hook_name,
-                effective_payload,
-                runtime_hook_overrides=runtime_hook_overrides,
-            )
+            return AgentRuntimeDispatchResultV2(payload=effective_payload)
+
+        from .boundary import current_operation_context_v2
 
         operation = current_operation_context_v2()
         event_payload = _build_event_payload_v2(
@@ -92,26 +81,6 @@ class PinnedAgentRuntimeDispatcherV2:
         )
         return AgentRuntimeDispatchResultV2(
             payload=_merge_instruction_contributions(effective_payload, raw_results),
-        )
-
-    async def _dispatch_fallback(
-        self,
-        hook_name: str,
-        payload: dict[str, Any],
-        *,
-        runtime_hook_overrides: list[dict[str, Any]] | None,
-    ) -> AgentRuntimeDispatchResultV2:
-        if self.fallback is None:
-            return AgentRuntimeDispatchResultV2(payload=payload)
-        result = await self.fallback.dispatch(
-            hook_name,
-            payload=payload,
-            runtime_hook_overrides=runtime_hook_overrides,
-        )
-        return AgentRuntimeDispatchResultV2(
-            payload=dict(result.payload),
-            diagnostics=tuple(result.diagnostics),
-            denied=bool(result.denied),
         )
 
 
@@ -232,4 +201,9 @@ def _merge_instruction_contributions(
     return merged
 
 
-__all__ = ["AgentRuntimeDispatchResultV2", "PinnedAgentRuntimeDispatcherV2"]
+__all__ = [
+    "AGENT_RUNTIME_DISPATCHER_SERVICE_V2",
+    "AgentRuntimeDispatchResultV2",
+    "AgentRuntimeDispatcherProtocolV2",
+    "PinnedAgentRuntimeDispatcherV2",
+]

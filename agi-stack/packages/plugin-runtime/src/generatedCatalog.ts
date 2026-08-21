@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:17f54ea6bab57d44f8750afc763bc1fabf9d522070a20b2b87a70d0d44',
-  '0c4eab","modules":[{"artifact_digest":"sha256:4aa0eca5c0164c60a4cbf553158515dacddad0',
+  '{"catalog_digest":"sha256:f546ccbcdbf060a8b5845c5d7d80c6dd13760cf9a1fa2f3da527bdf2c8',
+  '9bfc5a","modules":[{"artifact_digest":"sha256:4aa0eca5c0164c60a4cbf553158515dacddad0',
   '6be6da505c98ab41ab5f8a1f5d","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_definition.py","contract":{"config_schema":{"$schema":"https://json-sch',
   'ema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":',
@@ -256,7 +256,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   't":"src.infrastructure.plugins.v2.selection_judge:_apply_plugin_selection_judge_v2",',
   '"module_ref":"builtin://memstack/plugins/selection-judge","plugin_id":"memstack-runt',
   'ime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha25',
-  '6:47d73ea09688536536439d945134dab7f5ab67b91981162df75248ff9e6ca6de","artifact_source',
+  '6:8adc2598a4fdb9e63cb861875a9c17f2ae9514105f85b272c4ff8fdf563fcfa5","artifact_source',
   '":"repo+python://src/infrastructure/plugins/v2/builtin_modules.py","contract":{"conf',
   'ig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProp',
   'erties":false,"properties":{"protocol_version":{"const":2,"type":"integer"}},"requir',
@@ -309,22 +309,23 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'th":4000,"minLength":1,"type":"string"},"maxItems":16,"type":"array"},"source_entry_',
   'id":{"minLength":1,"type":"string"}},"required":["response_instructions","session_in',
   'structions","source_entry_id"],"type":["object","null"]}}],"handles":[]},"services":',
-  '{"provides":[{"service":"service:runtime-generation-boundary","version":"1.0.0"}],"r',
-  'equires":[]}},"contract_digest":"sha256:68593275df0d77f819d15d2b636b66d7bfc9a73d5d03',
-  '21acd7659c15763ee60a","entrypoint":"src.infrastructure.plugins.v2.builtin_modules:_a',
-  'pply_runtime_boundary","module_ref":"builtin://memstack/runtime/generation-boundary"',
-  ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]',
-  '},{"artifact_digest":"sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f84560563',
-  'f0e979b48","artifact_source":"repo+python://src/infrastructure/plugins/v2/session_ev',
-  'ent_log.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/20',
-  '20-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordere',
-  'd-sql-event-log","type":"string"}},"required":["strategy"],"type":"object"},"events"',
-  ':{"emits":[],"handles":[]},"services":{"provides":[{"service":"service:session-event',
-  '-log","version":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:081387f06d341da1',
-  '2450daedda2583999da04ae134406a5f5c7804dcc64f0b9c","entrypoint":"src.infrastructure.p',
-  'lugins.v2.session_event_log:_apply_session_event_log_v2","module_ref":"builtin://mem',
-  'stack/session/event-log","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0',
-  '.0","targets":["python"]}],"schema_version":2}\n',
+  '{"provides":[{"service":"service:agent-runtime-dispatcher","version":"1.0.0"},{"serv',
+  'ice":"service:runtime-generation-boundary","version":"1.0.0"}],"requires":[]}},"cont',
+  'ract_digest":"sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a9',
+  '5","entrypoint":"src.infrastructure.plugins.v2.builtin_modules:_apply_runtime_bounda',
+  'ry","module_ref":"builtin://memstack/runtime/generation-boundary","plugin_id":"memst',
+  'ack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest',
+  '":"sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f84560563f0e979b48","artifac',
+  't_source":"repo+python://src/infrastructure/plugins/v2/session_event_log.py","contra',
+  'ct":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addi',
+  'tionalProperties":false,"properties":{"strategy":{"const":"ordered-sql-event-log","t',
+  'ype":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"handl',
+  'es":[]},"services":{"provides":[{"service":"service:session-event-log","version":"1.',
+  '0.0"}],"requires":[]}},"contract_digest":"sha256:081387f06d341da12450daedda2583999da',
+  '04ae134406a5f5c7804dcc64f0b9c","entrypoint":"src.infrastructure.plugins.v2.session_e',
+  'vent_log:_apply_session_event_log_v2","module_ref":"builtin://memstack/session/event',
+  '-log","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pyt',
+  'hon"]}],"schema_version":2}\n',
 ].join('');
 
 export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
@@ -332,4 +333,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:17f54ea6bab57d44f8750afc763bc1fabf9d522070a20b2b87a70d0d440c4eab' as const;
+  'sha256:f546ccbcdbf060a8b5845c5d7d80c6dd13760cf9a1fa2f3da527bdf2c89bfc5a' as const;

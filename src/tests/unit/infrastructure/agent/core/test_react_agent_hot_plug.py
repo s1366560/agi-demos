@@ -287,16 +287,24 @@ class TestRequestScopedConfigSeamForwarding:
     def test_provider_id_and_loop_resolver_forwarded(self):
         """_stream_create_processor_config must forward provider_id/loop_resolver."""
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            PinnedAgentRuntimeDispatcherV2,
+        )
 
         resolver = object()
         agent = ReActAgent(model="test-model", tools={})
         agent.config.provider_id = "zai_coding"
         agent.config.loop_resolver = resolver
+        operation = SimpleNamespace(require=lambda service: PinnedAgentRuntimeDispatcherV2())
 
-        new_config = agent._stream_create_processor_config(
-            agent.config,
-            ToolSelectionContext(),
-        )
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            new_config = agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+            )
 
         assert new_config.provider_id == "zai_coding"
         assert new_config.loop_resolver is resolver
@@ -305,15 +313,59 @@ class TestRequestScopedConfigSeamForwarding:
         """The request copy must not expose the V1 registry to the main processor."""
         from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
         from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
             PinnedAgentRuntimeDispatcherV2,
         )
 
         agent = ReActAgent(model="test-model", tools={})
+        dispatcher = PinnedAgentRuntimeDispatcherV2()
+        operation = SimpleNamespace(require=lambda service: dispatcher)
 
-        new_config = agent._stream_create_processor_config(
-            agent.config,
-            ToolSelectionContext(),
-        )
+        with patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ):
+            new_config = agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+            )
 
         assert new_config.plugin_registry is None
-        assert isinstance(new_config.plugin_event_dispatcher, PinnedAgentRuntimeDispatcherV2)
+        assert new_config.plugin_event_dispatcher is dispatcher
+        assert new_config.runtime_hook_overrides == []
+        assert operation.require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2) is dispatcher
+
+    def test_processor_config_requires_a_pinned_v2_operation(self):
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        agent = ReActAgent(model="test-model", tools={})
+
+        with pytest.raises(RuntimeV2Error) as error:
+            agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+            )
+
+        assert error.value.code == "operation_context_not_pinned"
+
+    def test_processor_config_rejects_invalid_v2_dispatcher_service(self):
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        agent = ReActAgent(model="test-model", tools={})
+        operation = SimpleNamespace(require=lambda service: object())
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=operation,
+            ),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            agent._stream_create_processor_config(
+                agent.config,
+                ToolSelectionContext(),
+            )
+
+        assert error.value.code == "invalid_agent_runtime_dispatcher"

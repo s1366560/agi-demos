@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+    AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+    AgentRuntimeDispatcherProtocolV2,
     PinnedAgentRuntimeDispatcherV2,
 )
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
@@ -62,8 +62,7 @@ def _workspace_payload() -> dict[str, object]:
 @pytest.mark.unit
 async def test_processor_events_dispatch_only_through_pinned_v2_generation() -> None:
     manager = await _manager()
-    fallback = SimpleNamespace(dispatch=AsyncMock(side_effect=AssertionError("V1 fallback used")))
-    dispatcher = PinnedAgentRuntimeDispatcherV2(fallback=fallback)
+    dispatcher = PinnedAgentRuntimeDispatcherV2()
 
     try:
         async with pin_operation_context_v2(
@@ -93,7 +92,6 @@ async def test_processor_events_dispatch_only_through_pinned_v2_generation() -> 
     finally:
         await manager.close()
 
-    fallback.dispatch.assert_not_awaited()
     assert len(session_start.payload["session_instructions"]) == 3
     assert len(before_request.payload["response_instructions"]) == 3
     assert len(after_tool.payload["response_instructions"]) == 2
@@ -101,29 +99,16 @@ async def test_processor_events_dispatch_only_through_pinned_v2_generation() -> 
 
 
 @pytest.mark.unit
-async def test_unmigrated_event_uses_explicit_legacy_fallback() -> None:
-    fallback_result = SimpleNamespace(
-        payload={"captured": True},
-        diagnostics=("legacy",),
-        denied=False,
-    )
-    fallback = SimpleNamespace(dispatch=AsyncMock(return_value=fallback_result))
-    dispatcher = PinnedAgentRuntimeDispatcherV2(fallback=fallback)
-    overrides = [{"plugin_name": "memory-runtime"}]
-
+async def test_unmigrated_processor_event_has_no_v1_fallback() -> None:
+    dispatcher = PinnedAgentRuntimeDispatcherV2()
     result = await dispatcher.dispatch(
-        "after_turn_complete",
+        "on_session_end",
         {"conversation_id": "session-a"},
-        runtime_hook_overrides=overrides,
+        runtime_hook_overrides=[{"plugin_name": "legacy-must-not-run"}],
     )
 
-    fallback.dispatch.assert_awaited_once_with(
-        "after_turn_complete",
-        payload={"conversation_id": "session-a"},
-        runtime_hook_overrides=overrides,
-    )
-    assert result.payload == {"captured": True}
-    assert result.diagnostics == ("legacy",)
+    assert result.payload == {"conversation_id": "session-a"}
+    assert result.diagnostics == ()
 
 
 @pytest.mark.unit
@@ -179,3 +164,21 @@ async def test_session_processor_does_not_require_v1_registry_for_v2_dispatch() 
 
     assert len(payload["response_instructions"]) == 3
     assert processor._response_instructions == payload["response_instructions"]
+
+
+@pytest.mark.unit
+async def test_runtime_boundary_provides_generation_owned_dispatcher_service() -> None:
+    manager = await _manager()
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="turn-a",
+            scope=_scope(),
+        ) as operation:
+            dispatcher = operation.require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+    finally:
+        await manager.close()
+
+    assert isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2)
+    assert isinstance(dispatcher, PinnedAgentRuntimeDispatcherV2)

@@ -933,8 +933,10 @@ class StreamMixin:
     ) -> ProcessorConfig:
         """Create request-scoped processor config, optionally with dynamic tool provider."""
         from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
-            PinnedAgentRuntimeDispatcherV2,
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+            AgentRuntimeDispatcherProtocolV2,
         )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
         from .processor import ProcessorConfig as _ProcessorConfig
 
@@ -949,6 +951,13 @@ class StreamMixin:
                 return list(tool_defs)
 
             tool_provider = _tool_provider_wrapper
+
+        dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+        if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_agent_runtime_dispatcher",
+                "service:agent-runtime-dispatcher has an invalid implementation",
+            )
 
         new_config = _ProcessorConfig(
             model=config.model,
@@ -972,10 +981,8 @@ class StreamMixin:
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
             plugin_registry=None,
-            plugin_event_dispatcher=PinnedAgentRuntimeDispatcherV2(
-                fallback=config.plugin_event_dispatcher,
-            ),
-            runtime_hook_overrides=[dict(item) for item in config.runtime_hook_overrides],
+            plugin_event_dispatcher=dispatcher,
+            runtime_hook_overrides=[],
             runtime_context=dict(config.runtime_context),
             tool_provider=tool_provider,
             forced_skill_name=config.forced_skill_name,
