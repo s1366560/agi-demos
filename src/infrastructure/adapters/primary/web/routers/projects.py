@@ -30,7 +30,13 @@ from src.application.schemas.project import (
     ProjectUpdate,
     SystemStatus,
 )
+from src.application.services.graph_store_service import GraphStoreNotFound
+from src.application.services.retrieval_store_service import RetrievalStoreNotFound
 from src.domain.ports.services.graph_store_port import GraphStorePort
+from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
+    BackendStoreAuthorityV2,
+    backend_store_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.backend_store_shadow_v2 import (
     backend_store_shadow_dependency_v2,
 )
@@ -54,15 +60,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
-    SqlGraphStoreRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
-    SqlRetrievalStoreRepository,
-)
 from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.plugins.v2.backend_store_services import BackendStoreShadowEvidenceV2
+from src.infrastructure.plugins.v2.backend_store_services import (
+    BackendStoreServicesV2,
+    BackendStoreShadowEvidenceV2,
+)
 from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
@@ -89,62 +92,39 @@ def _store_summary(display: Any) -> BackendStoreSummary:
 
 
 async def _normalize_graph_store_binding(
-    db: AsyncSession,
+    service: GraphStoreService,
     *,
     tenant_id: str,
     store_id: str | None,
 ) -> str | None:
     if not store_id or store_id.startswith(ENV_STORE_ID_PREFIX):
         return None
-    repo = SqlGraphStoreRepository(db)
-    if await repo.find_by_id(tenant_id, store_id) is None:
+    try:
+        _validated_store = await service.get_store(tenant_id, store_id)
+    except GraphStoreNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Graph store not found in tenant"),
-        )
+        ) from exc
     return store_id
 
 
 async def _normalize_retrieval_store_binding(
-    db: AsyncSession,
+    service: RetrievalStoreService,
     *,
     tenant_id: str,
     store_id: str | None,
 ) -> str | None:
     if not store_id or store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
         return None
-    repo = SqlRetrievalStoreRepository(db)
-    if await repo.find_by_id(tenant_id, store_id) is None:
+    try:
+        _validated_store = await service.get_store(tenant_id, store_id)
+    except RetrievalStoreNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Retrieval store not found in tenant"),
-        )
+        ) from exc
     return store_id
-
-
-def _build_backend_services(db: AsyncSession) -> tuple[GraphStoreService, RetrievalStoreService]:
-    """Construct graph/retrieval store services once per request.
-
-    Imports stay lazy (function-level) to avoid module import cycles.
-    """
-    from src.application.services.graph_store_service import GraphStoreService
-    from src.application.services.retrieval_store_service import RetrievalStoreService
-    from src.infrastructure.graph.backend_factory import build_default_factory
-    from src.infrastructure.graph.registry import get_graph_backend_registry
-    from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
-    from src.infrastructure.retrieval.registry import get_retrieval_backend_registry
-
-    graph_service = GraphStoreService(
-        repo=SqlGraphStoreRepository(db),
-        registry=get_graph_backend_registry(),
-        factory=build_default_factory(),
-    )
-    retrieval_service = RetrievalStoreService(
-        repo=SqlRetrievalStoreRepository(db),
-        registry=get_retrieval_backend_registry(),
-        factory=build_default_retrieval_factory(),
-    )
-    return graph_service, retrieval_service
 
 
 async def _batch_resolve_store_views(
@@ -212,9 +192,10 @@ def _attach_backend_summaries_from_views(
 async def _attach_backend_summaries(
     response: ProjectResponse,
     project: Project,
-    db: AsyncSession,
+    services: BackendStoreServicesV2,
 ) -> ProjectResponse:
-    graph_service, retrieval_service = _build_backend_services(db)
+    graph_service = services.graph_service
+    retrieval_service = services.retrieval_service
     graph_views = await _batch_resolve_store_views(graph_service, [project], "graph_store_id")
     retrieval_views = await _batch_resolve_store_views(
         retrieval_service, [project], "retrieval_store_id"
@@ -229,9 +210,12 @@ async def _attach_backend_summaries(
     )
 
 
-async def _project_response(project: Project, db: AsyncSession) -> ProjectResponse:
+async def _project_response(
+    project: Project,
+    services: BackendStoreServicesV2,
+) -> ProjectResponse:
     response = ProjectResponse.model_validate(project)
-    return await _attach_backend_summaries(response, project, db)
+    return await _attach_backend_summaries(response, project, services)
 
 
 def _order_project_list_query(query: Select[Any]) -> Select[Any]:
@@ -363,9 +347,10 @@ async def _lock_project_delete_scope(db: AsyncSession, project_id: str) -> bool:
 async def create_project(
     project_data: ProjectCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> ProjectResponse:
     """Create a new project."""
+    db = backend_store.db
     try:
         logger.info(
             f"Creating project '{project_data.name}' for user {current_user.id} in tenant {project_data.tenant_id}"
@@ -393,12 +378,12 @@ async def create_project(
             )
 
         graph_store_id = await _normalize_graph_store_binding(
-            db,
+            backend_store.services.graph_service,
             tenant_id=project_data.tenant_id,
             store_id=project_data.graph_store_id,
         )
         retrieval_store_id = await _normalize_retrieval_store_binding(
-            db,
+            backend_store.services.retrieval_service,
             tenant_id=project_data.tenant_id,
             store_id=project_data.retrieval_store_id,
         )
@@ -439,7 +424,7 @@ async def create_project(
         )
         project = result.scalar_one()
 
-        return await _project_response(project, db)
+        return await _project_response(project, backend_store.services)
     except HTTPException:
         raise
     except Exception as e:
@@ -460,6 +445,7 @@ async def list_projects(  # noqa: C901, PLR0915
     current_user: User = Depends(get_current_user),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
     project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
     _backend_store_shadow: BackendStoreShadowEvidenceV2 = Depends(
         backend_store_shadow_dependency_v2
     ),
@@ -578,7 +564,8 @@ async def list_projects(  # noqa: C901, PLR0915
         # Resolve bound store views for the whole page in one query per
         # store type (per tenant) instead of rebuilding services and
         # re-querying per project.
-        graph_service, retrieval_service = _build_backend_services(db)
+        graph_service = backend_store.services.graph_service
+        retrieval_service = backend_store.services.retrieval_service
         graph_views = await _batch_resolve_store_views(graph_service, projects, "graph_store_id")
         retrieval_views = await _batch_resolve_store_views(
             retrieval_service, projects, "retrieval_store_id"
@@ -636,9 +623,10 @@ async def get_project(
     project_id: str,
     tenant_id: str | None = Query(None, description="Expected tenant scope"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> ProjectResponse:
     """Get project by ID."""
+    db = backend_store.db
     # Use project_id directly as string (preserves original format from database)
     # Check if user has access to project
     user_project_result = await db.execute(
@@ -668,7 +656,7 @@ async def get_project(
             detail=_("Project not found in requested tenant"),
         )
 
-    return await _project_response(project, db)
+    return await _project_response(project, backend_store.services)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -676,9 +664,10 @@ async def update_project(
     project_id: str,
     project_data: ProjectUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
 ) -> ProjectResponse:
     """Update project."""
+    db = backend_store.db
     # Check if user is owner or admin
     user_project_result = await db.execute(
         refresh_select_statement(
@@ -709,13 +698,13 @@ async def update_project(
     update_data = project_data.model_dump(exclude_unset=True)
     if "graph_store_id" in update_data:
         update_data["graph_store_id"] = await _normalize_graph_store_binding(
-            db,
+            backend_store.services.graph_service,
             tenant_id=project.tenant_id,
             store_id=update_data.get("graph_store_id"),
         )
     if "retrieval_store_id" in update_data:
         update_data["retrieval_store_id"] = await _normalize_retrieval_store_binding(
-            db,
+            backend_store.services.retrieval_service,
             tenant_id=project.tenant_id,
             store_id=update_data.get("retrieval_store_id"),
         )
@@ -739,7 +728,7 @@ async def update_project(
     )
     project = result.scalar_one()
 
-    return await _project_response(project, db)
+    return await _project_response(project, backend_store.services)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

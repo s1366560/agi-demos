@@ -6,7 +6,7 @@ from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -18,7 +18,7 @@ from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
     BackendStoreAuthorityV2,
     backend_store_authority_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.routers import graph_stores, retrieval_stores
+from src.infrastructure.adapters.primary.web.routers import graph_stores, projects, retrieval_stores
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -53,6 +53,12 @@ _RETRIEVAL_ENDPOINTS = (
     retrieval_stores.delete_store,
     retrieval_stores.test_store_by_id,
 )
+_PROJECT_BACKEND_ENDPOINTS = (
+    projects.create_project,
+    projects.list_projects,
+    projects.get_project,
+    projects.update_project,
+)
 
 
 def _request() -> Request:
@@ -83,6 +89,43 @@ def test_store_management_routes_require_v2_authority(endpoint: Any) -> None:
 def test_store_management_legacy_service_accessors_are_removed() -> None:
     assert "_service" not in vars(graph_stores)
     assert "_service" not in vars(retrieval_stores)
+
+
+@pytest.mark.parametrize("endpoint", _PROJECT_BACKEND_ENDPOINTS)
+def test_project_backend_routes_require_v2_authority(endpoint: Any) -> None:
+    parameters = signature(endpoint).parameters
+    parameter = parameters["backend_store"]
+
+    assert parameter.default.dependency is backend_store_authority_dependency_v2
+    assert parameter.annotation in {"BackendStoreAuthorityV2", BackendStoreAuthorityV2}
+    assert "db" not in parameters
+
+
+def test_project_backend_static_service_builder_is_removed() -> None:
+    assert "_build_backend_services" not in vars(projects)
+
+
+@pytest.mark.parametrize(
+    ("normalizer", "store_id"),
+    (
+        (projects._normalize_graph_store_binding, "graph-store-a"),
+        (projects._normalize_retrieval_store_binding, "retrieval-store-a"),
+    ),
+)
+async def test_project_binding_normalizers_use_the_v2_service(
+    normalizer: Any,
+    store_id: str,
+) -> None:
+    service = SimpleNamespace(get_store=AsyncMock(return_value=object()))
+
+    normalized = await normalizer(
+        service,
+        tenant_id="tenant-a",
+        store_id=store_id,
+    )
+
+    assert normalized == store_id
+    service.get_store.assert_awaited_once_with("tenant-a", store_id)
 
 
 @pytest.mark.parametrize(

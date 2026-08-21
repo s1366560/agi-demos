@@ -166,6 +166,7 @@ async def test_list_projects_queries_the_v2_authority_session() -> None:
         current_user=cast(User, SimpleNamespace(id="user-a")),
         graph_store=None,
         project_tenant=SimpleNamespace(db=db),
+        backend_store=SimpleNamespace(services=SimpleNamespace()),
     )
 
     assert response.projects == []
