@@ -5,8 +5,8 @@
 from typing import Final
 
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:8783b2f5e8cc54a43a197d50c846d30db608b2ca0b1031c019a678b9b1e39c'
-    'e1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:abae4ede88ed2a3b06a696b77c4608f7b2d677f4726d80230ce53ef9bcb2ae'
+    '10","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -315,8 +315,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '":"sha256:7f7ceeb21dcef0999b7fd0d38d675e52eb41f0fbafb37e0165e8a66751ddbe1b","entrypoint"'
     ':"src.infrastructure.plugins.v2.selection_judge:_apply_plugin_selection_judge_v2","modul'
     'e_ref":"builtin://memstack/plugins/selection-judge","plugin_id":"memstack-runtime-kernel'
-    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fa715ac49799'
-    'ee47b10a90821d1687a07fa2edf39c30d7c30903544b644fdbed","artifact_source":"repo+python://s'
+    '","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:bfe04cf781a9'
+    '19e5431b061b844135e677f18c356bed2c989ea3833789d0e2eb","artifact_source":"repo+python://s'
     'rc/infrastructure/plugins/v2/builtin_modules.py","contract":{"config_schema":{"$schema":'
     '"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties"'
     ':{"protocol_version":{"const":2,"type":"integer"}},"required":["protocol_version"],"type'
@@ -381,11 +381,21 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'quires":[]}},"contract_digest":"sha256:081387f06d341da12450daedda2583999da04ae134406a5f5'
     'c7804dcc64f0b9c","entrypoint":"src.infrastructure.plugins.v2.session_event_log:_apply_se'
     'ssion_event_log_v2","module_ref":"builtin://memstack/session/event-log","plugin_id":"mem'
-    'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2'
-    '}\n'
+    'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":'
+    '"sha256:91a995cc34e28241381e7782d099372d818400600b1da335358883d43c3d560e","artifact_sour'
+    'ce":"repo+python://src/infrastructure/plugins/v2/workspace_pipeline.py","contract":{"con'
+    'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropert'
+    'ies":false,"properties":{"provider":{"const":"drone","type":"string"}},"required":["prov'
+    'ider"],"type":"object"},"events":{"emits":[],"handles":[]},"services":{"provides":[{"ser'
+    'vice":"service:workspace.pipeline-provider.drone","version":"1.0.0"}],"requires":[]}},"c'
+    'ontract_digest":"sha256:3608c2b23d7689c0c611c8c2a82305974c98ba680aa9478fac6e8da91767a138'
+    '","entrypoint":"src.infrastructure.plugins.v2.workspace_pipeline:_apply_workspace_drone_'
+    'pipeline_provider_v2","module_ref":"builtin://memstack/workspace/pipeline-provider/drone'
+    '","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],'
+    '"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:8783b2f5e8cc54a43a197d50c846d30db608b2ca0b1031c019a678b9b1e39ce1"
+    "sha256:abae4ede88ed2a3b06a696b77c4608f7b2d677f4726d80230ce53ef9bcb2ae10"
 )
 
 __all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:8783b2f5e8cc54a43a197d50c846d30db608b2ca0b1031c019a678b9b1',
-  'e39ce1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:abae4ede88ed2a3b06a696b77c4608f7b2d677f4726d80230ce53ef9bc',
+  'b2ae10","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -348,8 +348,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'd38d675e52eb41f0fbafb37e0165e8a66751ddbe1b","entrypoint":"src.infrastructure.plugins',
   '.v2.selection_judge:_apply_plugin_selection_judge_v2","module_ref":"builtin://memsta',
   'ck/plugins/selection-judge","plugin_id":"memstack-runtime-kernel","plugin_version":"',
-  '2.0.0","targets":["python"]},{"artifact_digest":"sha256:fa715ac49799ee47b10a90821d16',
-  '87a07fa2edf39c30d7c30903544b644fdbed","artifact_source":"repo+python://src/infrastru',
+  '2.0.0","targets":["python"]},{"artifact_digest":"sha256:bfe04cf781a919e5431b061b8441',
+  '35e677f18c356bed2c989ea3833789d0e2eb","artifact_source":"repo+python://src/infrastru',
   'cture/plugins/v2/builtin_modules.py","contract":{"config_schema":{"$schema":"https:/',
   '/json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"p',
   'rotocol_version":{"const":2,"type":"integer"}},"required":["protocol_version"],"type',
@@ -417,7 +417,18 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ct_digest":"sha256:081387f06d341da12450daedda2583999da04ae134406a5f5c7804dcc64f0b9c"',
   ',"entrypoint":"src.infrastructure.plugins.v2.session_event_log:_apply_session_event_',
   'log_v2","module_ref":"builtin://memstack/session/event-log","plugin_id":"memstack-ru',
-  'ntime-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n',
+  'ntime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha',
+  '256:91a995cc34e28241381e7782d099372d818400600b1da335358883d43c3d560e","artifact_sour',
+  'ce":"repo+python://src/infrastructure/plugins/v2/workspace_pipeline.py","contract":{',
+  '"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additiona',
+  'lProperties":false,"properties":{"provider":{"const":"drone","type":"string"}},"requ',
+  'ired":["provider"],"type":"object"},"events":{"emits":[],"handles":[]},"services":{"',
+  'provides":[{"service":"service:workspace.pipeline-provider.drone","version":"1.0.0"}',
+  '],"requires":[]}},"contract_digest":"sha256:3608c2b23d7689c0c611c8c2a82305974c98ba68',
+  '0aa9478fac6e8da91767a138","entrypoint":"src.infrastructure.plugins.v2.workspace_pipe',
+  'line:_apply_workspace_drone_pipeline_provider_v2","module_ref":"builtin://memstack/w',
+  'orkspace/pipeline-provider/drone","plugin_id":"memstack-runtime-kernel","plugin_vers',
+  'ion":"2.0.0","targets":["python"]}],"schema_version":2}\n',
 ].join('');
 
 export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
@@ -425,4 +436,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:8783b2f5e8cc54a43a197d50c846d30db608b2ca0b1031c019a678b9b1e39ce1' as const;
+  'sha256:abae4ede88ed2a3b06a696b77c4608f7b2d677f4726d80230ce53ef9bcb2ae10' as const;

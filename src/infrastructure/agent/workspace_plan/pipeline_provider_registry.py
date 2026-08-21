@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import inspect
-from typing import Protocol, cast
+from typing import Protocol, runtime_checkable
 
-from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-from src.infrastructure.agent.plugins.registry import get_plugin_registry
 from src.infrastructure.agent.workspace_plan.pipeline import PipelineContractSpec, PipelineRunResult
+from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-PIPELINE_PROVIDER_PREFIX = "pipeline:"
+PIPELINE_PROVIDER_SERVICE_PREFIX_V2 = "service:workspace.pipeline-provider."
 
 
+@runtime_checkable
 class PipelineProvider(Protocol):
     """Minimal pipeline provider contract used by workspace orchestration."""
 
@@ -29,27 +29,22 @@ class PipelineProviderUnavailableError(LookupError):
 
 
 async def resolve_pipeline_provider(provider: str) -> PipelineProvider | None:
-    """Resolve a pipeline provider from the plugin registry."""
+    """Resolve a pipeline provider only from the pinned V2 operation generation."""
 
     normalized_provider = _normalize_provider(provider)
-    _ = await get_plugin_runtime_manager().ensure_loaded()
-    registered = get_plugin_registry().get_provider(
-        f"{PIPELINE_PROVIDER_PREFIX}{normalized_provider}"
-    )
-    if registered is None:
-        return None
-    if isinstance(registered, type):
-        candidate = registered()
-        return cast(PipelineProvider, candidate) if hasattr(candidate, "run") else None
-    if hasattr(registered, "run"):
-        return cast(PipelineProvider, registered)
-    if callable(registered):
-        candidate = registered()
-        if inspect.isawaitable(candidate):
-            candidate = await candidate
-        if candidate is not None:
-            return cast(PipelineProvider, candidate) if hasattr(candidate, "run") else None
-    return None
+    service_key = f"{PIPELINE_PROVIDER_SERVICE_PREFIX_V2}{normalized_provider}"
+    try:
+        candidate = current_operation_context_v2().require(service_key)
+    except RuntimeV2Error as exc:
+        if exc.code == "missing_service":
+            return None
+        raise
+    if not isinstance(candidate, PipelineProvider):
+        raise RuntimeV2Error(
+            "invalid_pipeline_provider",
+            f"pipeline provider service {service_key} has an invalid implementation",
+        )
+    return candidate
 
 
 async def require_pipeline_provider(provider: str) -> PipelineProvider:
@@ -67,7 +62,7 @@ def _normalize_provider(provider: str | None) -> str:
 
 
 __all__ = [
-    "PIPELINE_PROVIDER_PREFIX",
+    "PIPELINE_PROVIDER_SERVICE_PREFIX_V2",
     "PipelineProvider",
     "PipelineProviderUnavailableError",
     "require_pipeline_provider",

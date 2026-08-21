@@ -339,6 +339,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workspace-drone-pipeline-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workspace/pipeline-provider/drone
+      enabled: true
+      config:
+        provider: drone
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-sisyphus-session-start
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

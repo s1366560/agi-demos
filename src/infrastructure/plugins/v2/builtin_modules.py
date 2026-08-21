@@ -35,6 +35,7 @@ from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
 )
+from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
 
 RUNTIME_BOUNDARY_MODULE_V2 = "builtin://memstack/runtime/generation-boundary"
@@ -94,6 +95,7 @@ def builtin_runtime_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
         builtin_subagent_contribution_v2(),
         builtin_session_event_log_definition_v2(),
         builtin_plugin_selection_judge_definition_v2(),
+        builtin_workspace_drone_pipeline_provider_definition_v2(),
         *sisyphus_runtime_definitions_v2(),
         *workspace_runtime_definitions_v2(),
     )
