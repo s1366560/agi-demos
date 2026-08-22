@@ -16,6 +16,18 @@ const authState = {
   user: { user_id: 'user-1', email: 'user@example.com', must_change_password: false },
 };
 
+type RouteAuthorityTestState = {
+  routeArtifactIds: string[];
+  status: 'disabled' | 'loading' | 'ready' | 'unavailable';
+};
+
+const routeAuthority = vi.hoisted(() => ({
+  state: {
+    routeArtifactIds: ['web.routes.default-business.v1'],
+    status: 'ready',
+  } as RouteAuthorityTestState,
+}));
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: (selector: (state: typeof authState) => unknown) => selector(authState),
 }));
@@ -36,6 +48,14 @@ vi.mock('@/theme', () => ({
   ThemeProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock('@/routes/v2/WebRouteAuthorityV2', () => ({
+  WebRouteAuthorityProviderV2: ({
+    children,
+  }: {
+    children: ReactNode | ((state: RouteAuthorityTestState) => ReactNode);
+  }) => <>{typeof children === 'function' ? children(routeAuthority.state) : children}</>,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -52,6 +72,10 @@ vi.mock('@/pages/project/ProjectAgentPatterns', () => ({
   default: () => <div data-testid="project-agent-route">patterns</div>,
 }));
 
+vi.mock('@/pages/NotFound', () => ({
+  NotFound: () => <div data-testid="not-found-route">not found</div>,
+}));
+
 function renderAppAt(entry: string) {
   return render(
     <MemoryRouter initialEntries={[entry]}>
@@ -61,8 +85,14 @@ function renderAppAt(entry: string) {
 }
 
 describe('App project Agent production routes', () => {
-  beforeEach(() => activateWebPluginGenerationRootV2());
-  afterEach(() => deactivateWebPluginGenerationRootV2());
+  beforeEach(() => {
+    routeAuthority.state = {
+      routeArtifactIds: ['web.routes.default-business.v1'],
+      status: 'ready',
+    };
+    activateWebPluginGenerationRootV2();
+  });
+  afterEach(async () => deactivateWebPluginGenerationRootV2());
 
   it.each([
     ['/tenant/tenant-1/project/project-1/agent', 'dashboard'],
@@ -76,5 +106,23 @@ describe('App project Agent production routes', () => {
     renderAppAt(entry);
 
     expect(await screen.findByTestId('project-agent-route')).toHaveTextContent(expected);
+  });
+
+  it('does not mount a known business route when its V2 artifact is disabled', async () => {
+    routeAuthority.state = { routeArtifactIds: [], status: 'ready' };
+
+    renderAppAt('/tenant/tenant-1/project/project-1/agent');
+
+    expect(await screen.findByTestId('not-found-route')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-agent-route')).not.toBeInTheDocument();
+  });
+
+  it('shows the generation loader for an authenticated business URL during bootstrap', async () => {
+    routeAuthority.state = { routeArtifactIds: [], status: 'loading' };
+
+    renderAppAt('/tenant/tenant-1/project/project-1/agent');
+
+    expect(await screen.findByRole('status')).toHaveTextContent('common.loading');
+    expect(screen.queryByTestId('project-agent-route')).not.toBeInTheDocument();
   });
 });

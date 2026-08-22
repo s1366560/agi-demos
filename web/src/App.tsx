@@ -11,6 +11,8 @@ import { SchemaLayout } from './layouts/SchemaLayout';
 import { TenantLayout } from './layouts/TenantLayout';
 import { Login } from './pages/Login';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
+import { WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 } from './routes/v2/webRendererArtifactCatalogV2';
+import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
 import { useAuthStore } from './stores/auth';
 import { useProjectStore } from './stores/project';
 import { useTenantStore } from './stores/tenant';
@@ -645,1422 +647,1441 @@ function App() {
       <ThemeProvider>
         <Suspense fallback={<PageLoader />}>
           <WebPluginGenerationHostV2 enabled={isAuthenticated}>
-            <Routes>
-            <Route path="/login" element={!isAuthenticated ? <Login /> : <LoginRedirect />} />
-            <Route
-              path="/login/callback/:provider"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <OAuthCallback />
-                </Suspense>
-              }
-            />
-            <Route
-              path="/invite/:token"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <InviteAccept />
-                </Suspense>
-              }
-            />
-            <Route
-              path="/device"
-              element={
-                isAuthenticated ? (
-                  <Suspense fallback={<PageLoader />}>
-                    <DeviceApprove />
-                  </Suspense>
-                ) : (
-                  <RedirectToLogin />
-                )
-              }
-            />
-
-            {/* Force Change Password */}
-            <Route
-              path="/force-change-password"
-              element={
-                isAuthenticated ? (
-                  <Suspense fallback={<PageLoader />}>
-                    <ForceChangePassword />
-                  </Suspense>
-                ) : (
-                  <Navigate to="/login" replace />
-                )
-              }
-            />
-
-            {/* Protected Routes */}
-            {/* Redirect root to tenant overview if authenticated */}
-            <Route
-              path="/"
-              element={
-                mustChangePassword ? (
-                  <Navigate to="/force-change-password" replace />
-                ) : isAuthenticated ? (
-                  <Navigate to="/tenant" replace />
-                ) : (
-                  <Navigate to="/login" replace />
-                )
-              }
-            />
-
-            <Route
-              path="/tenants/new"
-              element={
-                isAuthenticated ? (
-                  <Suspense fallback={<PageLoader />}>
-                    <NewTenant />
-                  </Suspense>
-                ) : (
-                  <RedirectToLogin />
-                )
-              }
-            />
-
-            <Route
-              path="/audit-logs"
-              element={
-                mustChangePassword ? (
-                  <Navigate to="/force-change-password" replace />
-                ) : isAuthenticated ? (
-                  <LegacyTenantAuditLogsRedirect />
-                ) : (
-                  <RedirectToLogin />
-                )
-              }
-            />
-
-            {/* Tenant Console */}
-            <Route
-              path="/tenant"
-              element={
-                mustChangePassword ? (
-                  <Navigate to="/force-change-password" replace />
-                ) : isAuthenticated ? (
-                  <OrgSetupGuard>
-                    <TenantLayout />
-                  </OrgSetupGuard>
-                ) : (
-                  <RedirectToLogin />
-                )
-              }
-            >
-              <Route
-                index
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TenantOverview />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":segment"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <LegacyTenantSingleSegmentRedirect />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="overview"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TenantOverview />
-                  </Suspense>
-                }
-              />
-
-              {/* Generic routes (use currentTenant from store) */}
-              <Route
-                path="projects"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProjectList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="projects/new"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <NewProject />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="projects/:projectId/edit"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EditProject />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="backend-stores"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <BackendStores />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="users"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UserList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="providers"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProviderList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="profile"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UserProfile />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="analytics"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Analytics />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="events"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Events />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="webhooks"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Webhooks />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="billing"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Billing />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="settings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TenantSettings />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="patterns"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkflowPatterns />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="tasks"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TaskDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="workspaces"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkspaceList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="workspaces/new"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkspaceCreate />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agents"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agent-workspace"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agent-workspace/:conversation"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="subagents"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SubAgentList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agent-definitions"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDefinitions />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agent-definitions/:definitionId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDefinitionDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="agent-bindings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentBindings />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="skills"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="evolution"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillEvolution />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="skills/:skillId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="templates"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TemplateMarketplace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="plugins"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PluginHub />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="plugins/:pluginName"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PluginDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="mcp-servers"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <McpServerList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="acp"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AcpDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="pool"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PoolDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="runtimes"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UnifiedRuntimes />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instances"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instances/create"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <CreateInstance />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instances/:instanceId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceLayout />
-                  </Suspense>
-                }
-              >
-                <Route
-                  index
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceOverview />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="files"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceFiles />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="channels"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceChannels />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="members"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceMembers />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="genes"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceGenes />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceSettings />
-                    </Suspense>
-                  }
-                />
-              </Route>
-              <Route
-                path="instances/:instanceId/deploy"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="audit-logs"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AuditLogs />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="dead-letter-queue"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeadLetterQueue />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="trust-policies"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TrustPolicies />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="decision-records"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DecisionRecords />
-                  </Suspense>
-                }
-              />
-              <Route path="org-settings" element={<OrgSettingsLayout />}>
-                <Route
-                  index
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgInfo />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="info"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgInfo />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="members"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgMembers />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="clusters"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgClusters />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="audit"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgAudit />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="registry"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgRegistry />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="smtp"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgSmtp />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="genes"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgGenes />
-                    </Suspense>
-                  }
-                />
-              </Route>
-              <Route
-                path="deploy"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="deploy/:deployId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="clusters"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ClusterList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="clusters/:clusterId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ClusterDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="genes"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GeneMarket />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="genes/:geneId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GeneDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instance-templates"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceTemplateList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instance-templates/:templateId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TemplateDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="instances/:instanceId/evolution"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EvolutionLog />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="genes/genomes/:genomeId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GenomeDetail />
-                  </Suspense>
-                }
-              />
-
-              {/* Project routes (generic, no tenantId in URL) - compatibility redirect only */}
-              <Route path="project/:projectId/*" element={<GenericTenantProjectRedirect />} />
-
-              {/* Tenant specific routes */}
-              <Route
-                path=":tenantId/overview"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TenantOverview />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/tasks"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TaskDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/workspaces"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkspaceList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/workspaces/new"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkspaceCreate />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agents"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agent-workspace/:conversation?"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/projects"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProjectList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/projects/new"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <NewProject />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/projects/:projectId/edit"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EditProject />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/backend-stores"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <BackendStores />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/users"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UserList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/providers"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProviderList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/profile"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UserProfile />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/analytics"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Analytics />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/events"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Events />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/webhooks"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Webhooks />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/billing"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Billing />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/settings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TenantSettings />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/org-settings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <OrgSettingsLayout />
-                  </Suspense>
-                }
-              >
-                <Route index element={<Navigate to="info" replace />} />
-                <Route
-                  path="info"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgInfo />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="members"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgMembers />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="clusters"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgClusters />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="audit"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgAudit />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="registry"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgRegistry />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="smtp"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgSmtp />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="genes"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <OrgGenes />
-                    </Suspense>
-                  }
-                />
-              </Route>
-              <Route
-                path=":tenantId/patterns"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <WorkflowPatterns />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/subagents"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SubAgentList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agent-definitions"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDefinitions />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agent-definitions/:definitionId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentDefinitionDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agent-bindings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentBindings />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/skills"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/evolution"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillEvolution />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/skills/:skillId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SkillDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/templates"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TemplateMarketplace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/plugins"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PluginHub />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/plugins/:pluginName"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PluginDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/mcp-servers"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <McpServerList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/acp"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AcpDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/pool"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <PoolDashboard />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/runtimes"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <UnifiedRuntimes />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instances"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instances/create"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <CreateInstance />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instances/:instanceId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceLayout />
-                  </Suspense>
-                }
-              >
-                <Route
-                  index
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceOverview />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="files"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceFiles />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="channels"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceChannels />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="members"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceMembers />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="genes"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceGenes />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <InstanceSettings />
-                    </Suspense>
-                  }
-                />
-              </Route>
-              <Route
-                path=":tenantId/instances/:instanceId/deploy"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/audit-logs"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AuditLogs />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/dead-letter-queue"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeadLetterQueue />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/trust-policies"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TrustPolicies />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/decision-records"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DecisionRecords />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/deploy"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/deploy/:deployId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <DeployProgress />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/clusters"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ClusterList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/clusters/:clusterId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ClusterDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/genes"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GeneMarket />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/genes/:geneId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GeneDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instance-templates"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <InstanceTemplateList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instance-templates/:templateId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <TemplateDetail />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/instances/:instanceId/evolution"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EvolutionLog />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/genes/genomes/:genomeId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <GenomeDetail />
-                  </Suspense>
-                }
-              />
-
-              {/* Project routes (tenantId-prefixed) */}
-              <Route path=":tenantId/project/:projectId">
-                <Route
-                  index
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <ProjectOverview />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="memories"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <MemoryList />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="memories/new"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <NewMemory />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="memory/:memoryId"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <MemoryDetail />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="graph"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <MemoryGraph />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="entities"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <EntitiesList />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="communities"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <CommunitiesList />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="advanced-search"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <EnhancedSearch />
-                    </Suspense>
-                  }
-                />
-                <Route path="search" element={<Navigate to="advanced-search" replace />} />
-                <Route
-                  path="maintenance"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <Maintenance />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="cron-jobs"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <CronJobs />
-                    </Suspense>
-                  }
-                />
-                <Route path="schema" element={<SchemaLayout />}>
+            <WebRouteAuthorityProviderV2 enabled={isAuthenticated}>
+              {({ routeArtifactIds, status }) => (
+                <Routes>
+                  <Route path="/login" element={!isAuthenticated ? <Login /> : <LoginRedirect />} />
                   <Route
-                    index
+                    path="/login/callback/:provider"
                     element={
                       <Suspense fallback={<PageLoader />}>
-                        <SchemaOverview />
+                        <OAuthCallback />
                       </Suspense>
                     }
                   />
                   <Route
-                    path="entities"
+                    path="/invite/:token"
                     element={
                       <Suspense fallback={<PageLoader />}>
-                        <EntityTypeList />
+                        <InviteAccept />
                       </Suspense>
                     }
                   />
                   <Route
-                    path="edges"
+                    path="/device"
                     element={
-                      <Suspense fallback={<PageLoader />}>
-                        <EdgeTypeList />
-                      </Suspense>
+                      isAuthenticated ? (
+                        <Suspense fallback={<PageLoader />}>
+                          <DeviceApprove />
+                        </Suspense>
+                      ) : (
+                        <RedirectToLogin />
+                      )
                     }
                   />
-                  <Route
-                    path="mapping"
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <EdgeMapList />
-                      </Suspense>
-                    }
-                  />
-                </Route>
-                <Route path="channels" element={<ProjectChannelsRedirect />} />
-                <Route
-                  path="team"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <Team />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <ProjectSettings />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="support"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <Support />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="blackboard"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <Blackboard />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="playbooks"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <PlaybookLibrary />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="workspaces"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <WorkspaceList />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="workspaces/new"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <WorkspaceCreate />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="workspaces/:workspaceId"
-                  element={
-                    <Suspense fallback={<PageLoader />}>
-                      <WorkspaceBlackboardRedirect />
-                    </Suspense>
-                  }
-                />
-                <Route path="agent">
-                  <Route
-                    index
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <ProjectAgentDashboard />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="logs"
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <ProjectAgentLogs />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="patterns"
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <ProjectAgentPatterns />
-                      </Suspense>
-                    }
-                  />
-                </Route>
-              </Route>
 
-              {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}
-              <Route
-                path=":tenantId/:conversation"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <LegacyTenantConversationRedirect />
-                  </Suspense>
-                }
-              />
-            </Route>
+                  {/* Force Change Password */}
+                  <Route
+                    path="/force-change-password"
+                    element={
+                      isAuthenticated ? (
+                        <Suspense fallback={<PageLoader />}>
+                          <ForceChangePassword />
+                        </Suspense>
+                      ) : (
+                        <Navigate to="/login" replace />
+                      )
+                    }
+                  />
 
-            {/* Legacy /project/:projectId redirect to tenant-scoped route */}
-            <Route
-              path="/project/:projectId/*"
-              element={isAuthenticated ? <LegacyProjectRedirect /> : <RedirectToLogin />}
-            />
+                  {/* Protected Routes */}
+                  {/* Redirect root to tenant overview if authenticated */}
+                  <Route
+                    path="/"
+                    element={
+                      mustChangePassword ? (
+                        <Navigate to="/force-change-password" replace />
+                      ) : isAuthenticated ? (
+                        <Navigate to="/tenant" replace />
+                      ) : (
+                        <Navigate to="/login" replace />
+                      )
+                    }
+                  />
 
-            {/* Fallback */}
-            <Route
-              path="*"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <NotFound />
-                </Suspense>
-              }
-            />
-            </Routes>
+                  {status === 'ready' &&
+                  routeArtifactIds.includes(WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2) ? (
+                    <>
+                      <Route
+                        path="/tenants/new"
+                        element={
+                          isAuthenticated ? (
+                            <Suspense fallback={<PageLoader />}>
+                              <NewTenant />
+                            </Suspense>
+                          ) : (
+                            <RedirectToLogin />
+                          )
+                        }
+                      />
+
+                      <Route
+                        path="/audit-logs"
+                        element={
+                          mustChangePassword ? (
+                            <Navigate to="/force-change-password" replace />
+                          ) : isAuthenticated ? (
+                            <LegacyTenantAuditLogsRedirect />
+                          ) : (
+                            <RedirectToLogin />
+                          )
+                        }
+                      />
+
+                      {/* Tenant Console */}
+                      <Route
+                        path="/tenant"
+                        element={
+                          mustChangePassword ? (
+                            <Navigate to="/force-change-password" replace />
+                          ) : isAuthenticated ? (
+                            <OrgSetupGuard>
+                              <TenantLayout />
+                            </OrgSetupGuard>
+                          ) : (
+                            <RedirectToLogin />
+                          )
+                        }
+                      >
+                        <Route
+                          index
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TenantOverview />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":segment"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <LegacyTenantSingleSegmentRedirect />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="overview"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TenantOverview />
+                            </Suspense>
+                          }
+                        />
+
+                        {/* Generic routes (use currentTenant from store) */}
+                        <Route
+                          path="projects"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ProjectList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="projects/new"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <NewProject />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="projects/:projectId/edit"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <EditProject />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="backend-stores"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <BackendStores />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="users"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UserList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="providers"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ProviderList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="profile"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UserProfile />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="analytics"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Analytics />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="events"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Events />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="webhooks"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Webhooks />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="billing"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Billing />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="settings"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TenantSettings />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="patterns"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkflowPatterns />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="tasks"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TaskDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="workspaces"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkspaceList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="workspaces/new"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkspaceCreate />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agents"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agent-workspace"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentWorkspace />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agent-workspace/:conversation"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentWorkspace />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="subagents"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SubAgentList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agent-definitions"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDefinitions />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agent-definitions/:definitionId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDefinitionDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="agent-bindings"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentBindings />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="skills"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="evolution"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillEvolution />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="skills/:skillId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="templates"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TemplateMarketplace />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="plugins"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PluginHub />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="plugins/:pluginName"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PluginDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="mcp-servers"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <McpServerList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="acp"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AcpDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="pool"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PoolDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="runtimes"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UnifiedRuntimes />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instances"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instances/create"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <CreateInstance />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instances/:instanceId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceLayout />
+                            </Suspense>
+                          }
+                        >
+                          <Route
+                            index
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceOverview />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="files"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceFiles />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="channels"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceChannels />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="members"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceMembers />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="genes"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceGenes />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="settings"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceSettings />
+                              </Suspense>
+                            }
+                          />
+                        </Route>
+                        <Route
+                          path="instances/:instanceId/deploy"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="audit-logs"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AuditLogs />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="dead-letter-queue"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeadLetterQueue />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="trust-policies"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TrustPolicies />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="decision-records"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DecisionRecords />
+                            </Suspense>
+                          }
+                        />
+                        <Route path="org-settings" element={<OrgSettingsLayout />}>
+                          <Route
+                            index
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgInfo />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="info"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgInfo />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="members"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgMembers />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="clusters"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgClusters />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="audit"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgAudit />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="registry"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgRegistry />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="smtp"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgSmtp />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="genes"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgGenes />
+                              </Suspense>
+                            }
+                          />
+                        </Route>
+                        <Route
+                          path="deploy"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="deploy/:deployId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="clusters"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ClusterList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="clusters/:clusterId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ClusterDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="genes"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GeneMarket />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="genes/:geneId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GeneDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instance-templates"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceTemplateList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instance-templates/:templateId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TemplateDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="instances/:instanceId/evolution"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <EvolutionLog />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="genes/genomes/:genomeId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GenomeDetail />
+                            </Suspense>
+                          }
+                        />
+
+                        {/* Project routes (generic, no tenantId in URL) - compatibility redirect only */}
+                        <Route
+                          path="project/:projectId/*"
+                          element={<GenericTenantProjectRedirect />}
+                        />
+
+                        {/* Tenant specific routes */}
+                        <Route
+                          path=":tenantId/overview"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TenantOverview />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/tasks"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TaskDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/workspaces"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkspaceList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/workspaces/new"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkspaceCreate />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/agents"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/agent-workspace/:conversation?"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentWorkspace />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/projects"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ProjectList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/projects/new"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <NewProject />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/projects/:projectId/edit"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <EditProject />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/backend-stores"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <BackendStores />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/users"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UserList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/providers"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ProviderList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/profile"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UserProfile />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/analytics"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Analytics />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/events"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Events />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/webhooks"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Webhooks />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/billing"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <Billing />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/settings"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TenantSettings />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/org-settings"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <OrgSettingsLayout />
+                            </Suspense>
+                          }
+                        >
+                          <Route index element={<Navigate to="info" replace />} />
+                          <Route
+                            path="info"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgInfo />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="members"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgMembers />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="clusters"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgClusters />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="audit"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgAudit />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="registry"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgRegistry />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="smtp"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgSmtp />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="genes"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <OrgGenes />
+                              </Suspense>
+                            }
+                          />
+                        </Route>
+                        <Route
+                          path=":tenantId/patterns"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <WorkflowPatterns />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/subagents"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SubAgentList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/agent-definitions"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDefinitions />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/agent-definitions/:definitionId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentDefinitionDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/agent-bindings"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AgentBindings />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/skills"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/evolution"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillEvolution />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/skills/:skillId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <SkillDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/templates"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TemplateMarketplace />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/plugins"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PluginHub />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/plugins/:pluginName"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PluginDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/mcp-servers"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <McpServerList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/acp"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AcpDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/pool"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <PoolDashboard />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/runtimes"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <UnifiedRuntimes />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instances"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instances/create"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <CreateInstance />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instances/:instanceId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceLayout />
+                            </Suspense>
+                          }
+                        >
+                          <Route
+                            index
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceOverview />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="files"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceFiles />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="channels"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceChannels />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="members"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceMembers />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="genes"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceGenes />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="settings"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <InstanceSettings />
+                              </Suspense>
+                            }
+                          />
+                        </Route>
+                        <Route
+                          path=":tenantId/instances/:instanceId/deploy"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/audit-logs"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <AuditLogs />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/dead-letter-queue"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeadLetterQueue />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/trust-policies"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TrustPolicies />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/decision-records"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DecisionRecords />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/deploy"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/deploy/:deployId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <DeployProgress />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/clusters"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ClusterList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/clusters/:clusterId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <ClusterDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/genes"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GeneMarket />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/genes/:geneId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GeneDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instance-templates"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <InstanceTemplateList />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instance-templates/:templateId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <TemplateDetail />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/instances/:instanceId/evolution"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <EvolutionLog />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path=":tenantId/genes/genomes/:genomeId"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <GenomeDetail />
+                            </Suspense>
+                          }
+                        />
+
+                        {/* Project routes (tenantId-prefixed) */}
+                        <Route path=":tenantId/project/:projectId">
+                          <Route
+                            index
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <ProjectOverview />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="memories"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <MemoryList />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="memories/new"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <NewMemory />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="memory/:memoryId"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <MemoryDetail />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="graph"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <MemoryGraph />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="entities"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <EntitiesList />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="communities"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <CommunitiesList />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="advanced-search"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <EnhancedSearch />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="search"
+                            element={<Navigate to="advanced-search" replace />}
+                          />
+                          <Route
+                            path="maintenance"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <Maintenance />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="cron-jobs"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <CronJobs />
+                              </Suspense>
+                            }
+                          />
+                          <Route path="schema" element={<SchemaLayout />}>
+                            <Route
+                              index
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <SchemaOverview />
+                                </Suspense>
+                              }
+                            />
+                            <Route
+                              path="entities"
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <EntityTypeList />
+                                </Suspense>
+                              }
+                            />
+                            <Route
+                              path="edges"
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <EdgeTypeList />
+                                </Suspense>
+                              }
+                            />
+                            <Route
+                              path="mapping"
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <EdgeMapList />
+                                </Suspense>
+                              }
+                            />
+                          </Route>
+                          <Route path="channels" element={<ProjectChannelsRedirect />} />
+                          <Route
+                            path="team"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <Team />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="settings"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <ProjectSettings />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="support"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <Support />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="blackboard"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <Blackboard />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="playbooks"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <PlaybookLibrary />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="workspaces"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <WorkspaceList />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="workspaces/new"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <WorkspaceCreate />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="workspaces/:workspaceId"
+                            element={
+                              <Suspense fallback={<PageLoader />}>
+                                <WorkspaceBlackboardRedirect />
+                              </Suspense>
+                            }
+                          />
+                          <Route path="agent">
+                            <Route
+                              index
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <ProjectAgentDashboard />
+                                </Suspense>
+                              }
+                            />
+                            <Route
+                              path="logs"
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <ProjectAgentLogs />
+                                </Suspense>
+                              }
+                            />
+                            <Route
+                              path="patterns"
+                              element={
+                                <Suspense fallback={<PageLoader />}>
+                                  <ProjectAgentPatterns />
+                                </Suspense>
+                              }
+                            />
+                          </Route>
+                        </Route>
+
+                        {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}
+                        <Route
+                          path=":tenantId/:conversation"
+                          element={
+                            <Suspense fallback={<PageLoader />}>
+                              <LegacyTenantConversationRedirect />
+                            </Suspense>
+                          }
+                        />
+                      </Route>
+
+                      {/* Legacy /project/:projectId redirect to tenant-scoped route */}
+                      <Route
+                        path="/project/:projectId/*"
+                        element={isAuthenticated ? <LegacyProjectRedirect /> : <RedirectToLogin />}
+                      />
+                    </>
+                  ) : null}
+
+                  {/* Fallback */}
+                  <Route
+                    path="*"
+                    element={
+                      isAuthenticated && status === 'loading' ? (
+                        <PageLoader />
+                      ) : (
+                        <Suspense fallback={<PageLoader />}>
+                          <NotFound />
+                        </Suspense>
+                      )
+                    }
+                  />
+                </Routes>
+              )}
+            </WebRouteAuthorityProviderV2>
           </WebPluginGenerationHostV2>
         </Suspense>
       </ThemeProvider>
