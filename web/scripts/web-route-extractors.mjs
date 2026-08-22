@@ -638,7 +638,12 @@ export function addProductionRouteKeys(routes) {
 export function extractProductionRoutes(
   routerSource,
   routeSourceEntries,
-  { sourceEntry = ROUTER_RELATIVE_PATH, addRouteKeys = true, parentRoutePath = '' } = {}
+  {
+    sourceEntry = ROUTER_RELATIVE_PATH,
+    addRouteKeys = true,
+    parentRoutePath = '',
+    resolveComponentEntries,
+  } = {}
 ) {
   const sourceFile = parseSource(routerSource, sourceEntry, ts.ScriptKind.TSX);
   const routeBindings = reactRouterRouteBindings(sourceFile);
@@ -651,15 +656,22 @@ export function extractProductionRoutes(
   }
   const routes = [];
 
-  function routeEntryForComponent(component) {
+  function routeEntriesForComponent(component) {
+    if (resolveComponentEntries) {
+      const resolved = resolveComponentEntries(component);
+      if (!Array.isArray(resolved)) {
+        throw new Error(`Component resolver must return an array for ${component}`);
+      }
+      return resolved;
+    }
     const directEntry = routeEntriesBySymbol.get(component);
     if (directEntry) {
-      return directEntry;
+      return [directEntry];
     }
 
     const namespaceSymbol = component.split('.')[0];
     const namespaceEntry = routeEntriesBySymbol.get(namespaceSymbol);
-    return namespaceEntry?.export_name === '*' ? namespaceEntry : undefined;
+    return namespaceEntry?.export_name === '*' ? [namespaceEntry] : [];
   }
 
   function visit(node, parentRoutePath) {
@@ -680,9 +692,15 @@ export function extractProductionRoutes(
         ? parentRoutePath || '/'
         : joinRoutePath(parentRoutePath, routePath);
       const elementComponents = routeElementComponents(node, sourceFile);
-      const sourceEntries = elementComponents
-        .map((component) => routeEntryForComponent(component))
-        .filter(Boolean);
+      const sourceEntryKeys = new Set();
+      const sourceEntries = elementComponents.flatMap((component) =>
+        routeEntriesForComponent(component).filter((entry) => {
+          const key = `${entry.symbol}\u0000${entry.source_entry}`;
+          if (sourceEntryKeys.has(key)) return false;
+          sourceEntryKeys.add(key);
+          return true;
+        })
+      );
 
       routes.push({
         path_pattern: pathPattern,

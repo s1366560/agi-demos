@@ -372,8 +372,8 @@ test('stale guard tracks routed entries and the audited production router source
     "import { Login } from './pages/RenamedLogin';"
   );
   const changedUnroutedImport = router.replace(
-    "import { useProjectStore } from './stores/project';",
-    "import { useProjectStore } from './stores/RenamedProject';"
+    "import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';",
+    "import { WebPluginGenerationHostV2 } from './plugins/RenamedPluginGenerationHostV2';"
   );
 
   assert.throws(
@@ -482,6 +482,165 @@ export function ProjectRoutes() {
         }),
       /Web route inventory is stale/
     );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('inventory projects V2 route artifact factories and their routed component catalog', () => {
+  const sandbox = mkdtempSync(resolve(tmpdir(), 'memstack-v2-route-artifact-inventory-'));
+  const isolatedRepository = resolve(sandbox, 'repository');
+  const isolatedRouterSource = `
+import { Route, Routes } from 'react-router-dom';
+import { RendererHostV2 } from './RendererHostV2';
+import { Login } from './pages/Login';
+
+export function App() {
+  return (
+    <RendererHostV2>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+      </Routes>
+    </RendererHostV2>
+  );
+}
+`;
+  const sources = new Map([
+    ['web/src/App.tsx', isolatedRouterSource],
+    ['web/src/config/navigation.ts', navigationSource],
+    [
+      'web/src/RendererHostV2.tsx',
+      `
+import { validateWebRendererContributionsV2 } from './routes/v2/webRendererArtifactCatalogV2';
+
+export function RendererHostV2({ children }) {
+  void validateWebRendererContributionsV2;
+  return children;
+}
+`,
+    ],
+    [
+      'web/src/routes/v2/webRendererArtifactCatalogV2.ts',
+      `
+import { createBusinessRouteElementsV2 } from './webBusinessRouteElementsV2';
+
+const catalog = [
+  defineWebRouteArtifactV2('web.routes.default-business.v1', createBusinessRouteElementsV2),
+];
+
+function defineWebRouteArtifactV2(id, createRouteElements) {
+  return { id, createRouteElements };
+}
+
+export function validateWebRendererContributionsV2() {
+  return catalog.length;
+}
+`,
+    ],
+    [
+      'web/src/routes/v2/webBusinessRouteElementsV2.tsx',
+      `
+import { Route } from 'react-router-dom';
+import { TenantShellV2 } from './webBusinessRouteGuardsV2';
+import { createTenantRouteElementsV2 } from './webTenantRouteElementsV2';
+
+export function createBusinessRouteElementsV2() {
+  return (
+    <Route path="/tenant" element={<TenantShellV2 />}>
+      {createTenantRouteElementsV2()}
+    </Route>
+  );
+}
+`,
+    ],
+    [
+      'web/src/routes/v2/webBusinessRouteGuardsV2.tsx',
+      `
+import { TenantLayout } from '../../layouts/TenantLayout';
+
+export function TenantShellV2() {
+  return <TenantLayout />;
+}
+`,
+    ],
+    [
+      'web/src/routes/v2/webTenantRouteElementsV2.tsx',
+      `
+import { Route } from 'react-router-dom';
+import { TenantOverview } from './webDefaultRouteComponentsV2';
+
+export function createTenantRouteElementsV2() {
+  return <Route index element={<TenantOverview />} />;
+}
+`,
+    ],
+    [
+      'web/src/routes/v2/webDefaultRouteComponentsV2.ts',
+      `
+import { lazy } from 'react';
+
+export const TenantOverview = lazy(() =>
+  import('../../pages/tenant/TenantOverview').then((module) => ({
+    default: module.TenantOverview,
+  }))
+);
+`,
+    ],
+    [
+      'web/src/layouts/TenantLayout.tsx',
+      'export function TenantLayout() { return <main>Tenant</main>; }\n',
+    ],
+    ['web/src/pages/Login.tsx', 'export function Login() { return <main>Login</main>; }\n'],
+    [
+      'web/src/pages/tenant/TenantOverview.tsx',
+      'export function TenantOverview() { return <main>Overview</main>; }\n',
+    ],
+  ]);
+  for (const [sourceEntry, source] of sources) {
+    const absolutePath = resolve(isolatedRepository, sourceEntry);
+    mkdirSync(resolve(absolutePath, '..'), { recursive: true });
+    writeFileSync(absolutePath, source);
+  }
+
+  try {
+    const inventory = buildWebRouteInventoryFromSources({
+      navigationSource,
+      repositoryRoot: isolatedRepository,
+      routerSource: isolatedRouterSource,
+    });
+
+    assert.deepEqual(inventory.route_registration_sources, [
+      'web/src/App.tsx',
+      'web/src/routes/v2/webBusinessRouteElementsV2.tsx',
+      'web/src/routes/v2/webTenantRouteElementsV2.tsx',
+    ]);
+    assert.deepEqual(
+      inventory.production_routes.map((route) => [
+        route.path_pattern,
+        route.registration_source,
+        route.source_entries.map((entry) => entry.symbol),
+      ]),
+      [
+        ['/login', 'web/src/App.tsx', ['Login']],
+        ['/tenant', 'web/src/routes/v2/webBusinessRouteElementsV2.tsx', ['TenantLayout']],
+        ['/tenant', 'web/src/routes/v2/webTenantRouteElementsV2.tsx', ['TenantOverview']],
+      ]
+    );
+    assert.deepEqual(
+      inventory.eager_route_entries.map((entry) => [entry.symbol, entry.source_entry]),
+      [
+        ['TenantLayout', 'web/src/layouts/TenantLayout.tsx'],
+        ['Login', 'web/src/pages/Login.tsx'],
+      ]
+    );
+    assert.deepEqual(inventory.lazy_page_entries, [
+      {
+        export_name: 'TenantOverview',
+        module: '../../pages/tenant/TenantOverview',
+        source_entry: 'web/src/pages/tenant/TenantOverview.tsx',
+        symbol: 'TenantOverview',
+      },
+    ]);
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }

@@ -188,7 +188,7 @@ function routeBindings(sourceFile) {
   return bindings;
 }
 
-function componentMountEdges(source, repositoryRoot, sourceEntry, mountPath) {
+function componentMountEdges(source, repositoryRoot, sourceEntry, mountPath, registersRoutes) {
   const sourceFile = parseSource(sourceEntry, source);
   const routes = routeBindings(sourceFile);
   const { bindings, reexports } = localBindings(sourceFile, repositoryRoot, sourceEntry);
@@ -212,6 +212,10 @@ function componentMountEdges(source, repositoryRoot, sourceEntry, mountPath) {
       const target = bindings.get(tagName.split('.')[0]);
       if (target) edges.push({ target, parent_path: parentRoutePath });
     }
+    if (registersRoutes && ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const target = bindings.get(node.expression.text);
+      if (target) edges.push({ target, parent_path: parentRoutePath });
+    }
     ts.forEachChild(node, (child) => visit(child, parentRoutePath));
   }
 
@@ -227,7 +231,7 @@ function componentMountEdges(source, repositoryRoot, sourceEntry, mountPath) {
 
 export function resolveRouteRegistrationMounts(sourceGraph, repositoryRoot) {
   const sources = new Map(
-    sourceGraph.reachable_sources.map((source) => [source.source_entry, source.source])
+    sourceGraph.reachable_sources.map((source) => [source.source_entry, source])
   );
   const mounts = new Map();
 
@@ -240,11 +244,17 @@ export function resolveRouteRegistrationMounts(sourceGraph, repositoryRoot) {
     sourceMounts.add(mountPath);
     mounts.set(sourceEntry, sourceMounts);
     const nextAncestry = new Set(ancestry).add(sourceEntry);
-    const source = sources.get(sourceEntry);
-    if (source === undefined) {
+    const sourceRecord = sources.get(sourceEntry);
+    if (sourceRecord === undefined) {
       throw new Error(`Missing reachable route source ${sourceEntry}`);
     }
-    for (const edge of componentMountEdges(source, repositoryRoot, sourceEntry, mountPath)) {
+    for (const edge of componentMountEdges(
+      sourceRecord.source,
+      repositoryRoot,
+      sourceEntry,
+      mountPath,
+      sourceRecord.registers_routes
+    )) {
       if (!sources.has(edge.target)) {
         continue;
       }
@@ -253,6 +263,9 @@ export function resolveRouteRegistrationMounts(sourceGraph, repositoryRoot) {
   }
 
   visit(ROUTER_RELATIVE_PATH, '', new Set());
+  for (const routeArtifactSource of sourceGraph.route_artifact_sources ?? []) {
+    visit(routeArtifactSource, '', new Set());
+  }
   return new Map(
     [...mounts].map(([sourceEntry, sourceMounts]) => [sourceEntry, [...sourceMounts].sort()])
   );
