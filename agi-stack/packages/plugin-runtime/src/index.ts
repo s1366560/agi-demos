@@ -7,7 +7,12 @@ export {
 } from './distribution';
 export * from './generated';
 export * from './generatedCatalog';
-export { RendererPluginRuntimeV2, type RendererDataPlaneTargetV2 } from './renderer';
+export {
+  RendererGenerationLeaseStoreV2,
+  RendererPluginRuntimeV2,
+  type RendererDataPlaneTargetV2,
+  type RendererGenerationLeaseSnapshotV2,
+} from './renderer';
 export {
   ContextV2,
   FiberV2,

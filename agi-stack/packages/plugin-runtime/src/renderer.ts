@@ -1,4 +1,5 @@
 import { parseControlPlaneDistributionV2, PluginSnapshotReconcilerV2 } from './distribution';
+import { RuntimeV2Error } from './errors';
 import type { DataPlaneTargetV2, SnapshotApplyReceiptV2 } from './generated';
 import {
   GenerationLeaseV2,
@@ -9,6 +10,10 @@ import {
 import { parseProfileSnapshotV2 } from './validate';
 
 export type RendererDataPlaneTargetV2 = Extract<DataPlaneTargetV2, 'web' | 'desktop-renderer'>;
+
+export interface RendererGenerationLeaseSnapshotV2 {
+  readonly generation: RuntimeGenerationV2 | undefined;
+}
 
 export class RendererPluginRuntimeV2 {
   private readonly reconciler: PluginSnapshotReconcilerV2;
@@ -40,4 +45,106 @@ export class RendererPluginRuntimeV2 {
   async close(): Promise<void> {
     await this.reconciler.close();
   }
+}
+
+export class RendererGenerationLeaseStoreV2 {
+  private readonly listeners = new Set<() => void>();
+  private readonly leases = new Map<RuntimeGenerationV2, GenerationLeaseV2>();
+  private readonly pendingReleases = new Set<Promise<void>>();
+  private rootActive = false;
+  private runtimeUnsubscribe: (() => void) | undefined;
+  private snapshot: RendererGenerationLeaseSnapshotV2;
+
+  constructor(private readonly runtime: RendererPluginRuntimeV2) {
+    this.snapshot = generationLeaseSnapshotV2(runtime.getSnapshot());
+  }
+
+  activateRoot(): void {
+    if (this.rootActive) {
+      throw new RuntimeV2Error(
+        'renderer_root_already_active',
+        'renderer generation lease store already owns a React root'
+      );
+    }
+    this.rootActive = true;
+    this.runtimeUnsubscribe = this.runtime.subscribe(this.capture);
+    try {
+      this.capture();
+    } catch (error) {
+      this.detach();
+      this.rootActive = false;
+      throw error;
+    }
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.assertRootActive();
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  readonly getSnapshot = (): RendererGenerationLeaseSnapshotV2 => {
+    this.assertRootActive();
+    return this.snapshot;
+  };
+
+  async commit(snapshot: RendererGenerationLeaseSnapshotV2): Promise<void> {
+    this.assertRootActive();
+    if (snapshot !== this.snapshot) return;
+    await this.releaseExcept(snapshot.generation);
+  }
+
+  async deactivateRoot(): Promise<void> {
+    if (!this.rootActive) return;
+    this.rootActive = false;
+    this.listeners.clear();
+    this.detach();
+    await this.releaseExcept(undefined);
+    await Promise.all(this.pendingReleases);
+  }
+
+  private readonly capture = (): void => {
+    if (!this.rootActive) return;
+    const generation = this.runtime.getSnapshot();
+    if (generation !== undefined && !this.leases.has(generation)) {
+      this.leases.set(generation, this.runtime.acquire());
+    }
+    if (this.snapshot.generation === generation) return;
+    this.snapshot = generationLeaseSnapshotV2(generation);
+    for (const listener of this.listeners) listener();
+  };
+
+  private assertRootActive(): void {
+    if (!this.rootActive) {
+      throw new RuntimeV2Error(
+        'renderer_root_inactive',
+        'activate the renderer generation lease store before rendering the React root'
+      );
+    }
+  }
+
+  private detach(): void {
+    this.runtimeUnsubscribe?.();
+    this.runtimeUnsubscribe = undefined;
+  }
+
+  private releaseExcept(retained: RuntimeGenerationV2 | undefined): Promise<void> {
+    const releases: Promise<void>[] = [];
+    for (const [generation, lease] of this.leases) {
+      if (generation === retained) continue;
+      this.leases.delete(generation);
+      releases.push(lease.release());
+    }
+    if (releases.length === 0) return Promise.resolve();
+    const pending = Promise.all(releases).then(() => undefined);
+    this.pendingReleases.add(pending);
+    void pending.finally(() => this.pendingReleases.delete(pending)).catch(() => undefined);
+    return pending;
+  }
+}
+
+function generationLeaseSnapshotV2(
+  generation: RuntimeGenerationV2 | undefined
+): RendererGenerationLeaseSnapshotV2 {
+  return Object.freeze({ generation });
 }

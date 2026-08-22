@@ -3,9 +3,13 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Outlet } from 'react-router-dom';
 
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '@/App';
+import {
+  activateWebPluginGenerationRootV2,
+  deactivateWebPluginGenerationRootV2,
+} from '@/plugins/webPluginGenerationV2';
 
 const authState = {
   isAuthenticated: true,
@@ -57,6 +61,9 @@ function renderAppAt(entry: string) {
 }
 
 describe('App project Agent production routes', () => {
+  beforeEach(() => activateWebPluginGenerationRootV2());
+  afterEach(() => deactivateWebPluginGenerationRootV2());
+
   it.each([
     ['/tenant/tenant-1/project/project-1/agent', 'dashboard'],
     ['/tenant/tenant-1/project/project-1/agent/logs', 'logs'],

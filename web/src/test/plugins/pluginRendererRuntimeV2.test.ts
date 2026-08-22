@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   digestV2,
   RendererContributionRegistryV2,
+  RendererGenerationLeaseStoreV2,
   RendererPluginRuntimeV2,
   type TargetHostDescriptorV2,
   WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
@@ -26,6 +27,22 @@ function distribution(snapshot: typeof bootstrapProfile) {
       nonce: 'renderer-bootstrap-v2',
       snapshot_digest: snapshot.digest,
       type_url: 'types.memstack.ai/plugin.profile.v2',
+    },
+  };
+}
+
+async function distributionAt(generation: number, version: number) {
+  const snapshot = structuredClone(bootstrapProfile);
+  snapshot.generation = generation;
+  const { digest: _digest, ...unsigned } = snapshot;
+  snapshot.digest = await digestV2(unsigned);
+  const value = distribution(snapshot);
+  return {
+    ...value,
+    envelope: {
+      ...value.envelope,
+      nonce: `renderer-publication-${version}`,
+      version,
     },
   };
 }
@@ -90,6 +107,128 @@ describe('RendererPluginRuntimeV2', () => {
 
     await lease.release();
     expect(leasedGeneration?.disposed).toBe(true);
+  });
+
+  it('keeps the committed generation leased until the replacement commits', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const unsubscribe = store.subscribe(vi.fn());
+    const firstSnapshot = store.getSnapshot();
+    await store.commit(firstSnapshot);
+    const firstGeneration = firstSnapshot.generation;
+
+    await runtime.apply(await distributionAt(2, 2));
+    const nextSnapshot = store.getSnapshot();
+
+    expect(firstGeneration?.retired).toBe(true);
+    expect(firstGeneration?.disposed).toBe(false);
+    expect(firstGeneration?.leaseCount).toBe(1);
+    expect(nextSnapshot.generation?.leaseCount).toBe(1);
+
+    await store.commit(nextSnapshot);
+    expect(firstGeneration?.disposed).toBe(true);
+    expect(nextSnapshot.generation?.leaseCount).toBe(1);
+
+    unsubscribe();
+    await store.deactivateRoot();
+    await runtime.close();
+  });
+
+  it('leases the initial render snapshot before React subscribes', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+
+    const initialRenderSnapshot = store.getSnapshot();
+    const initialGeneration = initialRenderSnapshot.generation;
+    await runtime.apply(await distributionAt(2, 2));
+
+    expect(initialGeneration?.retired).toBe(true);
+    expect(initialGeneration?.disposed).toBe(false);
+    expect(initialGeneration?.leaseCount).toBe(1);
+    expect(store.getSnapshot().generation?.leaseCount).toBe(1);
+
+    const unsubscribe = store.subscribe(vi.fn());
+    await store.commit(initialRenderSnapshot);
+    expect(initialGeneration?.disposed).toBe(false);
+
+    await store.commit(store.getSnapshot());
+    expect(initialGeneration?.disposed).toBe(true);
+
+    unsubscribe();
+    await store.deactivateRoot();
+    await runtime.close();
+  });
+
+  it('ignores a stale React commit while a newer generation is pending', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const unsubscribe = store.subscribe(vi.fn());
+    await store.commit(store.getSnapshot());
+    const firstGeneration = store.getSnapshot().generation;
+
+    await runtime.apply(await distributionAt(2, 2));
+    const staleSnapshot = store.getSnapshot();
+    await runtime.apply(await distributionAt(3, 3));
+    const currentSnapshot = store.getSnapshot();
+
+    await store.commit(staleSnapshot);
+    expect(firstGeneration?.disposed).toBe(false);
+    expect(staleSnapshot.generation?.disposed).toBe(false);
+
+    await store.commit(currentSnapshot);
+    expect(firstGeneration?.disposed).toBe(true);
+    expect(staleSnapshot.generation?.disposed).toBe(true);
+    expect(currentSnapshot.generation?.disposed).toBe(false);
+
+    unsubscribe();
+    await store.deactivateRoot();
+    await runtime.close();
+  });
+
+  it('survives a StrictMode-style unsubscribe and immediate resubscribe without underflow', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const firstUnsubscribe = store.subscribe(vi.fn());
+    await store.commit(store.getSnapshot());
+
+    firstUnsubscribe();
+    const secondUnsubscribe = store.subscribe(vi.fn());
+    await store.commit(store.getSnapshot());
+
+    expect(store.getSnapshot().generation?.leaseCount).toBe(1);
+    secondUnsubscribe();
+    expect(runtime.getSnapshot()?.leaseCount).toBe(1);
+    await store.deactivateRoot();
+    expect(runtime.getSnapshot()?.leaseCount).toBe(0);
+    await runtime.close();
+  });
+
+  it('holds a closing runtime generation until React commits the empty snapshot', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const generation = store.getSnapshot().generation;
+    await store.commit(store.getSnapshot());
+
+    await runtime.close();
+
+    expect(generation?.retired).toBe(true);
+    expect(generation?.disposed).toBe(false);
+    expect(store.getSnapshot().generation).toBeUndefined();
+
+    await store.commit(store.getSnapshot());
+    expect(generation?.disposed).toBe(true);
+
+    await store.deactivateRoot();
   });
 
   it('activates explicit route navigation and ui-slot contributions from the profile', async () => {
