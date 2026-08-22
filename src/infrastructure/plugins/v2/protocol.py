@@ -17,8 +17,12 @@ import rfc8785
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
     ArtifactReferenceV2,
+    BundleArtifactV2,
+    BundleManifestV2,
+    BundleReferenceV2,
     ControlPlaneEnvelopeV2,
     DataPlaneTargetV2,
+    DesiredBundleSetV2,
     EventContractsV2,
     EventContractV2,
     EventModeV2,
@@ -26,7 +30,11 @@ from src.domain.model.plugins.generated_v2 import (
     PluginManifestV2,
     PluginModuleV2,
     ProfileEntryV2,
+    ProfileLayerKindV2,
+    ProfileLayerV2,
     ProfileSnapshotV2,
+    ProfileSourceReferenceV2,
+    ProfileSourceV2,
     QuotaV2,
     RestartPolicyV2,
     RuntimeKindV2,
@@ -48,6 +56,8 @@ _REQUIRED_NULL_FIELDS = {
     "error_code",
     "error_message",
     "parent_entry_id",
+    "provenance",
+    "signature",
 }
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[4]
@@ -110,6 +120,104 @@ def parse_plugin_manifest_v2(payload: object) -> PluginManifestV2:
     _validate_manifest_semantics(payload)
     _validate_event_contracts((payload,))
     return _manifest_from_payload(payload)
+
+
+def parse_bundle_manifest_v2(payload: object) -> BundleManifestV2:
+    """Validate and parse one immutable protocol-v2 Bundle manifest."""
+    raw = _require_schema_version_v2(payload, kind="bundle manifest")
+    _validate_schema("BundleManifestV2", raw)
+    manifests = tuple(parse_plugin_manifest_v2(item) for item in raw["manifests"])
+    plugin_ids = tuple(manifest.plugin_id for manifest in manifests)
+    if len(plugin_ids) != len(set(plugin_ids)):
+        _fail("duplicate_plugin_id", "bundle manifest declares a plugin more than once")
+    _validate_event_contracts(raw["manifests"])
+    layers = tuple(_profile_layer_from_payload(item) for item in raw["layers"])
+    layer_ids = tuple(layer.layer_id for layer in layers)
+    if len(layer_ids) != len(set(layer_ids)):
+        _fail("duplicate_layer_id", "bundle manifest declares a layer more than once")
+    artifacts = tuple(
+        BundleArtifactV2(
+            artifact_id=item["artifact_id"],
+            target=DataPlaneTargetV2(item["target"]),
+            path=item["path"],
+            digest=item["digest"],
+            size_bytes=item["size_bytes"],
+            media_type=item["media_type"],
+        )
+        for item in raw["artifacts"]
+    )
+    _validate_bundle_artifact_inventory_v2(manifests, artifacts)
+    bundle = BundleManifestV2(
+        schema_version=2,
+        bundle_id=raw["bundle_id"],
+        version=raw["version"],
+        manifests=manifests,
+        layers=layers,
+        artifacts=artifacts,
+        digest=raw["digest"],
+        signature=raw["signature"],
+        provenance=raw["provenance"],
+    )
+    from .layer_composer import bundle_manifest_digest_v2
+
+    expected = bundle_manifest_digest_v2(bundle)
+    if bundle.digest != expected:
+        _fail("bundle_digest_mismatch", f"bundle manifest digest mismatch: expected {expected}")
+    return bundle
+
+
+def parse_profile_source_v2(payload: object) -> ProfileSourceV2:
+    """Validate and parse one exact revisioned protocol-v2 ProfileSource."""
+    raw = _require_schema_version_v2(payload, kind="profile source")
+    _validate_schema("ProfileSourceV2", raw)
+    layers = tuple(_profile_layer_from_payload(item) for item in raw["layers"])
+    layer_ids = tuple(layer.layer_id for layer in layers)
+    if len(layer_ids) != len(set(layer_ids)):
+        _fail("duplicate_layer_id", "profile source declares a layer more than once")
+    source = ProfileSourceV2(
+        schema_version=2,
+        source_id=raw["source_id"],
+        profile_id=raw["profile_id"],
+        revision=raw["revision"],
+        digest=raw["digest"],
+        provenance=raw["provenance"],
+        layers=layers,
+    )
+    from .layer_composer import profile_source_digest_v2
+
+    expected = profile_source_digest_v2(source)
+    if source.digest != expected:
+        _fail(
+            "profile_source_digest_mismatch", f"profile source digest mismatch: expected {expected}"
+        )
+    return source
+
+
+def parse_desired_bundle_set_v2(payload: object) -> DesiredBundleSetV2:
+    """Validate and parse one immutable ordered protocol-v2 desired Bundle set."""
+    raw = _require_schema_version_v2(payload, kind="desired bundle set")
+    _validate_schema("DesiredBundleSetV2", raw)
+    bundles = tuple(BundleReferenceV2(**item) for item in raw["bundles"])
+    bundle_ids = tuple(reference.bundle_id for reference in bundles)
+    if len(bundle_ids) != len(set(bundle_ids)):
+        _fail("duplicate_bundle_reference", "desired bundle set repeats a bundle reference")
+    desired = DesiredBundleSetV2(
+        schema_version=2,
+        desired_set_id=raw["desired_set_id"],
+        revision=raw["revision"],
+        bundles=bundles,
+        profile_source=ProfileSourceReferenceV2(**raw["profile_source"]),
+        digest=raw["digest"],
+    )
+    from .layer_composer import desired_bundle_set_digest_v2
+
+    expected = desired_bundle_set_digest_v2(desired)
+    if desired.digest != expected:
+        _fail(
+            "desired_bundle_set_digest_mismatch",
+            f"desired bundle set digest mismatch: expected {expected}",
+        )
+    return desired
 
 
 def parse_control_envelope_v2(payload: object) -> ControlPlaneEnvelopeV2:
@@ -193,6 +301,21 @@ def snapshot_apply_receipt_v2_to_payload(
 ) -> dict[str, Any]:
     """Return the complete JSON-compatible v2 receipt representation."""
     return cast(dict[str, Any], _json_value(asdict(receipt)))
+
+
+def bundle_manifest_v2_to_payload(bundle: BundleManifestV2) -> dict[str, Any]:
+    """Return the complete JSON-compatible Bundle manifest representation."""
+    return cast(dict[str, Any], _json_value(asdict(bundle)))
+
+
+def profile_source_v2_to_payload(source: ProfileSourceV2) -> dict[str, Any]:
+    """Return the complete JSON-compatible ProfileSource representation."""
+    return cast(dict[str, Any], _json_value(asdict(source)))
+
+
+def desired_bundle_set_v2_to_payload(desired: DesiredBundleSetV2) -> dict[str, Any]:
+    """Return the complete JSON-compatible DesiredBundleSet representation."""
+    return cast(dict[str, Any], _json_value(asdict(desired)))
 
 
 def _schema() -> dict[str, Any]:
@@ -348,6 +471,66 @@ def _snapshot_from_payload(payload: Mapping[str, Any]) -> ProfileSnapshotV2:
         entries=entries,
         digest=payload["digest"],
     )
+
+
+def _profile_layer_from_payload(payload: Mapping[str, Any]) -> ProfileLayerV2:
+    scope_payload = payload["scope"]
+    return ProfileLayerV2(
+        layer_id=payload["layer_id"],
+        kind=ProfileLayerKindV2(payload["kind"]),
+        scope=ScopeV2(
+            kind=ScopeKindV2(scope_payload["kind"]),
+            tenant_id=scope_payload.get("tenant_id"),
+            project_id=scope_payload.get("project_id"),
+            session_id=scope_payload.get("session_id"),
+        ),
+        entries=tuple(_entry_from_payload(item) for item in payload["entries"]),
+        replacements=tuple(_entry_from_payload(item) for item in payload["replacements"]),
+        disabled_entry_ids=tuple(payload["disabled_entry_ids"]),
+    )
+
+
+def _validate_bundle_artifact_inventory_v2(
+    manifests: Sequence[PluginManifestV2],
+    artifacts: Sequence[BundleArtifactV2],
+) -> None:
+    artifact_ids = tuple(artifact.artifact_id for artifact in artifacts)
+    if len(artifact_ids) != len(set(artifact_ids)):
+        _fail("duplicate_bundle_artifact", "bundle repeats an artifact_id")
+    artifact_paths = tuple(artifact.path for artifact in artifacts)
+    if len(artifact_paths) != len(set(artifact_paths)):
+        _fail("duplicate_bundle_artifact_path", "bundle repeats an artifact path")
+    available = {(artifact.target, artifact.digest) for artifact in artifacts}
+    required = {
+        (target, module.artifact.digest)
+        for manifest in manifests
+        for module in manifest.modules
+        for target in module.targets
+    }
+    missing = sorted(
+        f"{target.value}@{digest}"
+        for target, digest in required
+        if (target, digest) not in available
+    )
+    if missing:
+        _fail(
+            "bundle_artifact_coverage_missing",
+            f"bundle has no target artifact for: {', '.join(missing)}",
+        )
+
+
+def _require_schema_version_v2(payload: object, *, kind: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise PluginProtocolV2Error(
+            f"invalid_{kind.replace(' ', '_')}", f"{kind} must be an object"
+        )
+    raw = cast(dict[str, Any], payload)
+    if raw.get("schema_version") != 2:
+        raise PluginProtocolV2Error(
+            "incompatible_schema_version",
+            f"{kind} schema_version must be 2; v1 is not accepted",
+        )
+    return raw
 
 
 def _manifest_from_payload(payload: Mapping[str, Any]) -> PluginManifestV2:
