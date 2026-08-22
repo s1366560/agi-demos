@@ -5,22 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
     PlatformPluginDataPlaneReadinessResponseV2,
+    PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
     PlatformPluginPublicationReadinessResponseV2,
 )
-from src.domain.model.plugins.generated_v2 import SnapshotApplyReceiptV2
+from src.domain.model.plugins.generated_v2 import (
+    DesiredBundleSetV2,
+    ScopeV2,
+    SnapshotApplyReceiptV2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+    PlatformPluginDesiredBundleSetRecordV2,
+    PlatformPluginDesiredBundleSetRepositoryV2,
+    PlatformPluginDesiredBundleSetV2Error,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginLedgerV2Error,
@@ -30,10 +40,13 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
+    desired_bundle_set_v2_to_payload,
+    parse_desired_bundle_set_v2,
     parse_snapshot_apply_receipt_v2,
     snapshot_apply_receipt_v2_to_payload,
 )
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.scope import parse_scope_v2, scope_v2_to_payload
 
 router = APIRouter(prefix="/v2", tags=["Platform Plugins V2"])
 
@@ -43,6 +56,95 @@ class DataPlaneReceiptRequestV2:
     data_plane_id: str
     nonce: str
     receipt: SnapshotApplyReceiptV2
+
+
+@dataclass(frozen=True, kw_only=True)
+class DesiredBundleSetRequestV2:
+    scope: ScopeV2
+    expected_revision: int | None
+    desired_set: DesiredBundleSetV2
+
+
+@router.put(
+    "/desired-bundle-sets/current",
+    response_model=PlatformPluginDesiredBundleSetResponseV2,
+)
+async def put_current_desired_bundle_set_v2(
+    payload: dict[str, Any] = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginDesiredBundleSetResponseV2:
+    """Append one exact desired-set revision with compare-and-swap."""
+    _require_platform_admin(current_user)
+    try:
+        request = _parse_desired_bundle_set_request_v2(payload)
+    except PluginProtocolV2Error as exc:
+        _raise_protocol_error(exc)
+    try:
+        record = await PlatformPluginDesiredBundleSetRepositoryV2(db).record_desired_set(
+            scope=request.scope,
+            desired_set=request.desired_set,
+            expected_revision=request.expected_revision,
+            actor_id=current_user.id,
+        )
+    except PlatformPluginDesiredBundleSetV2Error as exc:
+        await db.rollback()
+        _raise_desired_bundle_set_error(exc)
+    await db.commit()
+    return _desired_bundle_set_response_v2(record)
+
+
+@router.get(
+    "/desired-bundle-sets/current",
+    response_model=PlatformPluginDesiredBundleSetResponseV2,
+)
+async def get_current_desired_bundle_set_v2(
+    scope_kind: str = Query(...),
+    tenant_id: str | None = Query(default=None),
+    project_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginDesiredBundleSetResponseV2:
+    """Return the latest exact desired-set revision for one scope."""
+    _require_platform_admin(current_user)
+    try:
+        scope = _parse_scope_query_v2(scope_kind, tenant_id, project_id, session_id)
+    except PluginProtocolV2Error as exc:
+        _raise_protocol_error(exc)
+    record = await PlatformPluginDesiredBundleSetRepositoryV2(db).current_desired_set(scope)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("No protocol v2 desired bundle set exists for this scope"),
+        )
+    return _desired_bundle_set_response_v2(record)
+
+
+@router.get(
+    "/desired-bundle-sets/history",
+    response_model=list[PlatformPluginDesiredBundleSetResponseV2],
+)
+async def list_desired_bundle_set_history_v2(
+    scope_kind: str = Query(...),
+    tenant_id: str | None = Query(default=None),
+    project_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PlatformPluginDesiredBundleSetResponseV2]:
+    """Return newest-first desired-state history for one scope."""
+    _require_platform_admin(current_user)
+    try:
+        scope = _parse_scope_query_v2(scope_kind, tenant_id, project_id, session_id)
+    except PluginProtocolV2Error as exc:
+        _raise_protocol_error(exc)
+    records = await PlatformPluginDesiredBundleSetRepositoryV2(db).list_history(
+        scope,
+        limit=limit,
+    )
+    return [_desired_bundle_set_response_v2(record) for record in records]
 
 
 @router.get("/distribution", response_model=PlatformPluginDistributionResponseV2)
@@ -209,6 +311,74 @@ def _publication_readiness_response_v2(
     )
 
 
+def _desired_bundle_set_response_v2(
+    record: PlatformPluginDesiredBundleSetRecordV2,
+) -> PlatformPluginDesiredBundleSetResponseV2:
+    return PlatformPluginDesiredBundleSetResponseV2(
+        record_id=record.record_id,
+        scope=scope_v2_to_payload(record.scope),
+        desired_bundle_set=desired_bundle_set_v2_to_payload(record.desired_set),
+        actor_id=record.actor_id,
+        created_at=record.created_at,
+    )
+
+
+def _parse_desired_bundle_set_request_v2(payload: object) -> DesiredBundleSetRequestV2:
+    if not isinstance(payload, dict):
+        raise PluginProtocolV2Error(
+            "invalid_desired_bundle_set_envelope",
+            "desired bundle set envelope must be an object",
+        )
+    raw = cast(dict[str, Any], payload)
+    if raw.get("schema_version") != 2:
+        raise PluginProtocolV2Error(
+            "incompatible_schema_version",
+            "desired bundle set envelope schema_version must be 2; v1 is not accepted",
+        )
+    if set(raw) != {
+        "schema_version",
+        "scope",
+        "expected_revision",
+        "desired_bundle_set",
+    }:
+        raise PluginProtocolV2Error(
+            "schema_validation_failed",
+            "desired bundle set envelope has invalid fields",
+        )
+    expected_revision = raw["expected_revision"]
+    if expected_revision is not None and (
+        isinstance(expected_revision, bool)
+        or not isinstance(expected_revision, int)
+        or expected_revision < 1
+    ):
+        raise PluginProtocolV2Error(
+            "schema_validation_failed",
+            "expected_revision must be null or a positive integer",
+        )
+    return DesiredBundleSetRequestV2(
+        scope=parse_scope_v2(raw["scope"]),
+        expected_revision=expected_revision,
+        desired_set=parse_desired_bundle_set_v2(raw["desired_bundle_set"]),
+    )
+
+
+def _parse_scope_query_v2(
+    scope_kind: str,
+    tenant_id: str | None,
+    project_id: str | None,
+    session_id: str | None,
+) -> ScopeV2:
+    payload = {"kind": scope_kind}
+    for key, value in (
+        ("tenant_id", tenant_id),
+        ("project_id", project_id),
+        ("session_id", session_id),
+    ):
+        if value is not None:
+            payload[key] = value
+    return parse_scope_v2(payload)
+
+
 def _parse_receipt_request_v2(payload: object) -> DataPlaneReceiptRequestV2:
     if not isinstance(payload, dict):
         raise PluginProtocolV2Error(
@@ -296,6 +466,17 @@ def _raise_ledger_error(error: PlatformPluginLedgerV2Error) -> NoReturn:
             "code": code,
             "reason": error.code,
             "message": _("Plugin protocol receipt conflicts with control-plane state"),
+        },
+    ) from error
+
+
+def _raise_desired_bundle_set_error(error: PlatformPluginDesiredBundleSetV2Error) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "plugin_desired_bundle_set_conflict",
+            "reason": error.code,
+            "message": _("Protocol v2 desired bundle set conflicts with current state"),
         },
     ) from error
 

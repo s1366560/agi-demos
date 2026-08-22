@@ -3244,6 +3244,64 @@ class PlatformPluginApplyStateEventModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginV2DesiredBundleSetModel(IdGeneratorMixin, Base):
+    """One immutable DesiredBundleSetV2 revision bound to an exact scope."""
+
+    __tablename__ = "platform_plugin_v2_desired_bundle_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    desired_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_key",
+            "revision",
+            name="uq_platform_plugin_v2_desired_scope_revision",
+        ),
+        UniqueConstraint(
+            "scope_key",
+            "digest",
+            name="uq_platform_plugin_v2_desired_scope_digest",
+        ),
+        CheckConstraint(
+            "scope_kind IN ('root', 'tenant', 'project', 'session')",
+            name="ck_platform_plugin_v2_desired_scope_kind",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_platform_plugin_v2_desired_revision",
+        ),
+        CheckConstraint(
+            "length(digest) = 71 AND substr(digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v2_desired_digest",
+        ),
+        Index(
+            "ix_platform_plugin_v2_desired_scope_revision",
+            "scope_key",
+            "revision",
+        ),
+        Index(
+            "ix_platform_plugin_v2_desired_scope_path",
+            "scope_kind",
+            "tenant_id",
+            "project_id",
+            "session_id",
+        ),
+    )
+
+
 class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     """Append-only requested protocol-v2 snapshot distribution."""
 

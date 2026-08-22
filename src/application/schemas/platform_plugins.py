@@ -107,6 +107,15 @@ class PlatformPluginPublicationReadinessResponseV2(BaseModel):
     data_planes: list[PlatformPluginDataPlaneReadinessResponseV2]
 
 
+class PlatformPluginDesiredBundleSetResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    record_id: str
+    scope: dict[str, str]
+    desired_bundle_set: dict[str, Any]
+    actor_id: str | None
+    created_at: datetime
+
+
 class PlatformPluginShadowRolloutEventResponse(BaseModel):
     capability: str
     event_name: str
