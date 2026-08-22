@@ -53,6 +53,7 @@ describe('WebRouteAuthorityV2', () => {
     expect(projectWebRouteAuthorityV2(generation)).toEqual({
       routeArtifacts: [],
       routeArtifactIds: [],
+      routeKeys: [],
       status: 'ready',
     });
     await runtime.close();

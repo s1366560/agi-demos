@@ -38,6 +38,7 @@ import { useTenantStore } from '@/stores/tenant';
 import { agentService } from '@/services/agentService';
 import { unifiedEventService } from '@/services/unifiedEventService';
 
+import { useCommandPaletteOpen } from '@/hooks/useCommandPaletteOpen';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 import { getTenantContentSections } from '@/config/navigation';
@@ -47,7 +48,7 @@ import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
 // eslint-disable-next-line no-restricted-imports
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
-import { CommandPalette, useCommandPaletteOpen } from '@/components/common/CommandPalette';
+import { CommandPalette } from '@/components/common/CommandPalette';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 import TenantHeader from '@/components/layout/TenantHeader';

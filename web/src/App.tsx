@@ -7,6 +7,7 @@ import './i18n/config';
 import { Login } from './pages/Login';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
 import { LoginRedirect, RedirectToLogin } from './routes/v2/webCoreRouteRedirectsV2';
+import { WebNavigationAuthorityProviderV2 } from './routes/v2/WebNavigationAuthorityV2';
 import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './routes/v2/WebRoutePageLoaderV2';
 import { useAuthStore } from './stores/auth';
@@ -46,86 +47,91 @@ function App() {
           <WebPluginGenerationHostV2 enabled={isAuthenticated}>
             <WebRouteAuthorityProviderV2 enabled={isAuthenticated}>
               {({ routeArtifacts, status }) => (
-                <Routes>
-                  <Route path="/login" element={!isAuthenticated ? <Login /> : <LoginRedirect />} />
-                  <Route
-                    path="/login/callback/:provider"
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <OAuthCallback />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="/invite/:token"
-                    element={
-                      <Suspense fallback={<PageLoader />}>
-                        <InviteAccept />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="/device"
-                    element={
-                      isAuthenticated ? (
+                <WebNavigationAuthorityProviderV2 enabled={isAuthenticated}>
+                  <Routes>
+                    <Route
+                      path="/login"
+                      element={!isAuthenticated ? <Login /> : <LoginRedirect />}
+                    />
+                    <Route
+                      path="/login/callback/:provider"
+                      element={
                         <Suspense fallback={<PageLoader />}>
-                          <DeviceApprove />
+                          <OAuthCallback />
                         </Suspense>
-                      ) : (
-                        <RedirectToLogin />
-                      )
-                    }
-                  />
-
-                  {/* Force Change Password */}
-                  <Route
-                    path="/force-change-password"
-                    element={
-                      isAuthenticated ? (
+                      }
+                    />
+                    <Route
+                      path="/invite/:token"
+                      element={
                         <Suspense fallback={<PageLoader />}>
-                          <ForceChangePassword />
+                          <InviteAccept />
                         </Suspense>
-                      ) : (
-                        <Navigate to="/login" replace />
-                      )
-                    }
-                  />
+                      }
+                    />
+                    <Route
+                      path="/device"
+                      element={
+                        isAuthenticated ? (
+                          <Suspense fallback={<PageLoader />}>
+                            <DeviceApprove />
+                          </Suspense>
+                        ) : (
+                          <RedirectToLogin />
+                        )
+                      }
+                    />
 
-                  {/* Protected Routes */}
-                  {/* Redirect root to tenant overview if authenticated */}
-                  <Route
-                    path="/"
-                    element={
-                      mustChangePassword ? (
-                        <Navigate to="/force-change-password" replace />
-                      ) : isAuthenticated ? (
-                        <Navigate to="/tenant" replace />
-                      ) : (
-                        <Navigate to="/login" replace />
-                      )
-                    }
-                  />
+                    {/* Force Change Password */}
+                    <Route
+                      path="/force-change-password"
+                      element={
+                        isAuthenticated ? (
+                          <Suspense fallback={<PageLoader />}>
+                            <ForceChangePassword />
+                          </Suspense>
+                        ) : (
+                          <Navigate to="/login" replace />
+                        )
+                      }
+                    />
 
-                  {status === 'ready'
-                    ? routeArtifacts.map((artifact) => (
-                        <Fragment key={artifact.id}>{artifact.createRouteElements()}</Fragment>
-                      ))
-                    : null}
+                    {/* Protected Routes */}
+                    {/* Redirect root to tenant overview if authenticated */}
+                    <Route
+                      path="/"
+                      element={
+                        mustChangePassword ? (
+                          <Navigate to="/force-change-password" replace />
+                        ) : isAuthenticated ? (
+                          <Navigate to="/tenant" replace />
+                        ) : (
+                          <Navigate to="/login" replace />
+                        )
+                      }
+                    />
 
-                  {/* Fallback */}
-                  <Route
-                    path="*"
-                    element={
-                      isAuthenticated && status === 'loading' ? (
-                        <PageLoader />
-                      ) : (
-                        <Suspense fallback={<PageLoader />}>
-                          <NotFound />
-                        </Suspense>
-                      )
-                    }
-                  />
-                </Routes>
+                    {status === 'ready'
+                      ? routeArtifacts.map((artifact) => (
+                          <Fragment key={artifact.id}>{artifact.createRouteElements()}</Fragment>
+                        ))
+                      : null}
+
+                    {/* Fallback */}
+                    <Route
+                      path="*"
+                      element={
+                        isAuthenticated && status === 'loading' ? (
+                          <PageLoader />
+                        ) : (
+                          <Suspense fallback={<PageLoader />}>
+                            <NotFound />
+                          </Suspense>
+                        )
+                      }
+                    />
+                  </Routes>
+                </WebNavigationAuthorityProviderV2>
               )}
             </WebRouteAuthorityProviderV2>
           </WebPluginGenerationHostV2>

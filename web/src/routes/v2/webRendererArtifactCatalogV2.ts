@@ -8,7 +8,16 @@ import {
   type RendererContributionKindV2,
 } from '@agistack/plugin-runtime';
 
+import { deriveTopNavigationItems } from '../../config/navigation';
+
 import { createDefaultBusinessRouteElementsV2 } from './webDefaultBusinessRouteElementsV2';
+
+import type {
+  DerivedNavigationItem,
+  NavigationRuntimeContext,
+  TopNavigationContext,
+} from '../../config/navigation';
+
 
 export const WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'web.routes.default-business.v1';
 export const WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'web.navigation.default.v1';
@@ -26,6 +35,10 @@ export interface WebRouteArtifactV2 extends WebRendererArtifactBaseV2 {
 }
 
 export interface WebNavigationArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly createTopNavigationItems: (
+    context: TopNavigationContext,
+    runtimeContext?: NavigationRuntimeContext
+  ) => readonly DerivedNavigationItem[];
   readonly kind: 'navigation';
 }
 
@@ -49,6 +62,7 @@ const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>(
   [
     WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
+      createTopNavigationItems: deriveTopNavigationItems,
       id: WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
     }),

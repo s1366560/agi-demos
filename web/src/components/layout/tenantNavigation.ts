@@ -1,5 +1,5 @@
 import {
-  deriveTopNavigationItems,
+  type DerivedNavigationItem,
   type NavigationDisplayRole,
   type NavigationGroupId,
 } from '@/config/navigation';
@@ -86,11 +86,9 @@ const NAV_GROUP_FALLBACK_LABELS: Record<NavigationGroupId, string> = {
 
 interface ContextualNavOptions {
   basePath: string;
+  navigationItems: readonly DerivedNavigationItem[];
   projectBasePath: string | null;
-  preferredWorkspaceId: string | null;
   t: (key: string, fallback?: string) => string;
-  tenantId?: string | undefined;
-  projectId?: string | undefined;
 }
 
 function stripSearch(path: string): string {
@@ -99,21 +97,15 @@ function stripSearch(path: string): string {
 
 export function getContextualTopNavItems({
   basePath,
+  navigationItems,
   projectBasePath,
-  preferredWorkspaceId,
   t,
-  tenantId,
-  projectId,
 }: ContextualNavOptions): TenantTopNavItem[] {
   const currentContext = projectBasePath ? 'project' : 'tenant';
   const fallbackLabels =
     currentContext === 'project' ? PROJECT_NAV_FALLBACK_LABELS : TENANT_NAV_FALLBACK_LABELS;
 
-  return deriveTopNavigationItems(currentContext, {
-    tenantId,
-    projectId,
-    preferredWorkspaceId,
-  }).map((item) => ({
+  return navigationItems.map((item) => ({
     displayRole: item.displayRole,
     id: item.id,
     label: t(item.label, fallbackLabels[item.id] ?? item.label),

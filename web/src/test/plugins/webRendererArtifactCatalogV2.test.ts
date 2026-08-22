@@ -96,6 +96,20 @@ describe('web renderer artifact catalog v2', () => {
     expect(new Set(artifact.routeKeys).size).toBe(artifact.routeKeys.length);
   });
 
+  it('exposes an executable default navigation artifact', () => {
+    const [artifact] = resolveWebRendererArtifactsV2([
+      contribution('web.default-navigation', 'navigation', [WEB_ARTIFACT_REFS.navigation]),
+    ]);
+
+    expect(artifact?.kind).toBe('navigation');
+    if (!artifact || artifact.kind !== 'navigation')
+      throw new Error('default navigation artifact is missing');
+    expect(artifact.createTopNavigationItems).toBeTypeOf('function');
+    expect(
+      artifact.createTopNavigationItems('tenant', { tenantId: 'tenant-1' }).map(({ id }) => id)
+    ).toContain('overview');
+  });
+
   it.each([
     {
       name: 'unknown artifact',

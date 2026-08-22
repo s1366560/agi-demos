@@ -52,6 +52,14 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+vi.mock('@/routes/v2/webNavigationAuthorityStateV2', async () => {
+  const navigation =
+    await vi.importActual<typeof import('@/config/navigation')>('@/config/navigation');
+  return {
+    useWebTopNavigationItemsV2: navigation.deriveTopNavigationItems,
+  };
+});
+
 vi.mock('@/stores/auth', () => ({
   useUser: () => ({
     name: 'Test User',
