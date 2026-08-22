@@ -51,6 +51,7 @@ describe('WebRouteAuthorityV2', () => {
     const generation = runtime.getSnapshot();
     if (!generation) throw new Error('acknowledged generation was not published');
     expect(projectWebRouteAuthorityV2(generation)).toEqual({
+      routeArtifacts: [],
       routeArtifactIds: [],
       status: 'ready',
     });

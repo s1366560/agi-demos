@@ -10,7 +10,7 @@ import {
   LegacyProjectRedirect,
   LegacyTenantAuditLogsRedirect,
   LegacyTenantSingleSegmentRedirect,
-} from '@/App';
+} from '@/routes/v2/webRouteRedirectsV2';
 
 const tenantState = {
   currentTenant: { id: 'tenant-1', name: 'Tenant One' },
@@ -247,35 +247,48 @@ describe('App route redirects', () => {
   });
 
   it('declares tenant static pages before the legacy conversation catch-all route', () => {
-    const appSource = readFileSync('src/App.tsx', 'utf8');
-    const legacyConversationIndex = appSource.indexOf('path=":tenantId/:conversation"');
+    const compositionSource = readFileSync(
+      'src/routes/v2/webDefaultBusinessRouteElementsV2.tsx',
+      'utf8'
+    );
+    const tenantSource = readFileSync('src/routes/v2/webTenantScopedRouteElementsV2.tsx', 'utf8');
+    const projectSource = readFileSync('src/routes/v2/webProjectRouteElementsV2.tsx', 'utf8');
+    const tenantMountIndex = compositionSource.indexOf('createTenantScopedRouteElementsV2()');
+    const projectMountIndex = compositionSource.indexOf('createProjectRouteElementsV2()');
 
-    expect(appSource.indexOf('path=":tenantId/subagents"')).toBeGreaterThan(-1);
-    expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeGreaterThan(-1);
-    expect(appSource.indexOf('path=":tenantId/dead-letter-queue"')).toBeGreaterThan(-1);
-    expect(legacyConversationIndex).toBeGreaterThan(-1);
-    expect(appSource.indexOf('path=":tenantId/subagents"')).toBeLessThan(legacyConversationIndex);
-    expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeLessThan(
-      legacyConversationIndex
-    );
-    expect(appSource.indexOf('path=":tenantId/dead-letter-queue"')).toBeLessThan(
-      legacyConversationIndex
-    );
+    expect(tenantSource).toContain('path=":tenantId/subagents"');
+    expect(tenantSource).toContain('path=":tenantId/agent-definitions"');
+    expect(tenantSource).toContain('path=":tenantId/dead-letter-queue"');
+    expect(projectSource).toContain('path=":tenantId/:conversation"');
+    expect(tenantMountIndex).toBeGreaterThan(-1);
+    expect(projectMountIndex).toBeGreaterThan(tenantMountIndex);
   });
 
   it('registers all canonical project Agent destinations as production routes', () => {
-    const appSource = readFileSync('src/App.tsx', 'utf8');
-    const projectRouteIndex = appSource.indexOf('path=":tenantId/project/:projectId"');
-    const agentRouteIndex = appSource.indexOf('path="agent"', projectRouteIndex);
-    const legacyConversationIndex = appSource.indexOf('path=":tenantId/:conversation"');
+    const projectSource = readFileSync('src/routes/v2/webProjectRouteElementsV2.tsx', 'utf8');
+    const projectRouteIndex = projectSource.indexOf('path=":tenantId/project/:projectId"');
+    const agentRouteIndex = projectSource.indexOf('path="agent"', projectRouteIndex);
+    const legacyConversationIndex = projectSource.indexOf('path=":tenantId/:conversation"');
 
     expect(projectRouteIndex).toBeGreaterThan(-1);
     expect(agentRouteIndex).toBeGreaterThan(projectRouteIndex);
     expect(agentRouteIndex).toBeLessThan(legacyConversationIndex);
-    expect(appSource.indexOf('path="logs"', agentRouteIndex)).toBeGreaterThan(agentRouteIndex);
-    expect(appSource.indexOf('path="patterns"', agentRouteIndex)).toBeGreaterThan(agentRouteIndex);
-    expect(appSource).toContain('<ProjectAgentDashboard />');
-    expect(appSource).toContain('<ProjectAgentLogs />');
-    expect(appSource).toContain('<ProjectAgentPatterns />');
+    expect(projectSource.indexOf('path="logs"', agentRouteIndex)).toBeGreaterThan(agentRouteIndex);
+    expect(projectSource.indexOf('path="patterns"', agentRouteIndex)).toBeGreaterThan(
+      agentRouteIndex
+    );
+    expect(projectSource).toContain('<ProjectAgentDashboard />');
+    expect(projectSource).toContain('<ProjectAgentLogs />');
+    expect(projectSource).toContain('<ProjectAgentPatterns />');
+  });
+
+  it('keeps the App shell free of business route definitions', () => {
+    const appSource = readFileSync('src/App.tsx', 'utf8');
+
+    expect(appSource).toContain('routeArtifacts.map((artifact)');
+    expect(appSource).toContain('artifact.createRouteElements()');
+    expect(appSource).not.toContain('path="/tenants/new"');
+    expect(appSource).not.toContain('path="/tenant"');
+    expect(appSource).not.toContain('path="/project/:projectId/*"');
   });
 });

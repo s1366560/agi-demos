@@ -1,8 +1,14 @@
+import type { ReactNode } from 'react';
+
+import { createRoutesFromElements, type RouteObject } from 'react-router-dom';
+
 import {
   RuntimeV2Error,
   type RegisteredRendererContributionV2,
   type RendererContributionKindV2,
 } from '@agistack/plugin-runtime';
+
+import { createDefaultBusinessRouteElementsV2 } from './webDefaultBusinessRouteElementsV2';
 
 export const WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'web.routes.default-business.v1';
 export const WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'web.navigation.default.v1';
@@ -14,6 +20,7 @@ interface WebRendererArtifactBaseV2 {
 }
 
 export interface WebRouteArtifactV2 extends WebRendererArtifactBaseV2 {
+  readonly createRouteElements: () => ReactNode;
   readonly kind: 'route';
   readonly routeKeys: readonly string[];
 }
@@ -34,11 +41,10 @@ export type WebRendererArtifactV2 =
 const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>([
   [
     WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
-    Object.freeze({
-      id: WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
-      kind: 'route',
-      routeKeys: Object.freeze(['root:web.default-business-routes']),
-    }),
+    defineWebRouteArtifactV2(
+      WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+      createDefaultBusinessRouteElementsV2
+    ),
   ],
   [
     WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
@@ -55,6 +61,42 @@ const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>(
     }),
   ],
 ]);
+
+function defineWebRouteArtifactV2(
+  id: string,
+  createRouteElements: () => ReactNode
+): WebRouteArtifactV2 {
+  const routeKeys = collectRouteKeysV2(createRoutesFromElements(createRouteElements()), '/');
+  return Object.freeze({
+    createRouteElements,
+    id,
+    kind: 'route',
+    routeKeys: Object.freeze(routeKeys),
+  });
+}
+
+function collectRouteKeysV2(routes: readonly RouteObject[], parentPath: string): string[] {
+  const keys: string[] = [];
+  for (const route of routes) {
+    if (route.index) {
+      keys.push(`route:${parentPath}#index`);
+    } else if (route.path !== undefined) {
+      keys.push(`route:${resolveRoutePathV2(parentPath, route.path)}`);
+    }
+    const childParent =
+      route.index || route.path === undefined
+        ? parentPath
+        : resolveRoutePathV2(parentPath, route.path);
+    if (route.children) keys.push(...collectRouteKeysV2(route.children, childParent));
+  }
+  return keys;
+}
+
+function resolveRoutePathV2(parentPath: string, path: string): string {
+  const combined = path.startsWith('/') ? path : `${parentPath}/${path}`;
+  const normalized = combined.replace(/\/{2,}/g, '/').replace(/\/$/, '');
+  return normalized || '/';
+}
 
 export function validateWebRendererContributionsV2(
   contributions: readonly RegisteredRendererContributionV2[]

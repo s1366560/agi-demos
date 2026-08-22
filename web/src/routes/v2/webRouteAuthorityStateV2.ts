@@ -6,22 +6,29 @@ import {
   type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
-import { resolveWebRendererArtifactsV2 } from './webRendererArtifactCatalogV2';
+import {
+  resolveWebRendererArtifactsV2,
+  type WebRouteArtifactV2,
+} from './webRendererArtifactCatalogV2';
 
 export type WebRouteAuthorityStatusV2 = 'disabled' | 'loading' | 'ready' | 'unavailable';
 
 export interface WebRouteAuthorityStateV2 {
   readonly error?: unknown;
+  readonly routeArtifacts: readonly WebRouteArtifactV2[];
   readonly routeArtifactIds: readonly string[];
   readonly status: WebRouteAuthorityStatusV2;
 }
 
+const EMPTY_ROUTE_ARTIFACTS_V2: readonly WebRouteArtifactV2[] = Object.freeze([]);
 const EMPTY_ROUTE_ARTIFACT_IDS_V2: readonly string[] = Object.freeze([]);
 const DISABLED_STATE_V2: WebRouteAuthorityStateV2 = Object.freeze({
+  routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
   routeArtifactIds: EMPTY_ROUTE_ARTIFACT_IDS_V2,
   status: 'disabled',
 });
 const LOADING_STATE_V2: WebRouteAuthorityStateV2 = Object.freeze({
+  routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
   routeArtifactIds: EMPTY_ROUTE_ARTIFACT_IDS_V2,
   status: 'loading',
 });
@@ -40,10 +47,12 @@ export function projectWebRouteAuthorityV2(
     WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
     { kind: 'root' }
   );
-  const routeArtifactIds = resolveWebRendererArtifactsV2(registry.list())
-    .filter((artifact) => artifact.kind === 'route')
-    .map((artifact) => artifact.id);
+  const routeArtifacts = resolveWebRendererArtifactsV2(registry.list()).filter(
+    (artifact): artifact is WebRouteArtifactV2 => artifact.kind === 'route'
+  );
+  const routeArtifactIds = routeArtifacts.map((artifact) => artifact.id);
   return Object.freeze({
+    routeArtifacts: Object.freeze(routeArtifacts),
     routeArtifactIds: Object.freeze(routeArtifactIds),
     status: 'ready',
   });
@@ -60,6 +69,7 @@ export function resolveWebRouteAuthorityStateV2(
   } catch (error) {
     return Object.freeze({
       error,
+      routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
       routeArtifactIds: EMPTY_ROUTE_ARTIFACT_IDS_V2,
       status: 'unavailable',
     });

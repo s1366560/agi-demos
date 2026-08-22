@@ -80,6 +80,22 @@ describe('web renderer artifact catalog v2', () => {
     ]);
   });
 
+  it('exposes an executable default route artifact with exact mount-aware keys', () => {
+    const [artifact] = resolveWebRendererArtifactsV2([
+      contribution('web.default-routes', 'route', [WEB_ARTIFACT_REFS.route]),
+    ]);
+
+    expect(artifact?.kind).toBe('route');
+    if (!artifact || artifact.kind !== 'route')
+      throw new Error('default route artifact is missing');
+    expect(artifact.createRouteElements).toBeTypeOf('function');
+    expect(artifact.routeKeys.length).toBeGreaterThan(100);
+    expect(artifact.routeKeys).toContain('route:/tenant/:tenantId/project/:projectId/agent/logs');
+    expect(artifact.routeKeys).toContain('route:/tenant/:tenantId/project/:projectId#index');
+    expect(artifact.routeKeys).not.toContain('root:web.default-business-routes');
+    expect(new Set(artifact.routeKeys).size).toBe(artifact.routeKeys.length);
+  });
+
   it.each([
     {
       name: 'unknown artifact',

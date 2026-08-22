@@ -10,6 +10,7 @@ import {
   activateWebPluginGenerationRootV2,
   deactivateWebPluginGenerationRootV2,
 } from '@/plugins/webPluginGenerationV2';
+import { createDefaultBusinessRouteElementsV2 } from '@/routes/v2/webDefaultBusinessRouteElementsV2';
 
 const authState = {
   isAuthenticated: true,
@@ -17,12 +18,17 @@ const authState = {
 };
 
 type RouteAuthorityTestState = {
+  routeArtifacts: Array<{
+    createRouteElements: () => ReactNode;
+    id: string;
+  }>;
   routeArtifactIds: string[];
   status: 'disabled' | 'loading' | 'ready' | 'unavailable';
 };
 
 const routeAuthority = vi.hoisted(() => ({
   state: {
+    routeArtifacts: [],
     routeArtifactIds: ['web.routes.default-business.v1'],
     status: 'ready',
   } as RouteAuthorityTestState,
@@ -87,6 +93,12 @@ function renderAppAt(entry: string) {
 describe('App project Agent production routes', () => {
   beforeEach(() => {
     routeAuthority.state = {
+      routeArtifacts: [
+        {
+          createRouteElements: createDefaultBusinessRouteElementsV2,
+          id: 'web.routes.default-business.v1',
+        },
+      ],
       routeArtifactIds: ['web.routes.default-business.v1'],
       status: 'ready',
     };
@@ -109,7 +121,7 @@ describe('App project Agent production routes', () => {
   });
 
   it('does not mount a known business route when its V2 artifact is disabled', async () => {
-    routeAuthority.state = { routeArtifactIds: [], status: 'ready' };
+    routeAuthority.state = { routeArtifacts: [], routeArtifactIds: [], status: 'ready' };
 
     renderAppAt('/tenant/tenant-1/project/project-1/agent');
 
@@ -118,7 +130,7 @@ describe('App project Agent production routes', () => {
   });
 
   it('shows the generation loader for an authenticated business URL during bootstrap', async () => {
-    routeAuthority.state = { routeArtifactIds: [], status: 'loading' };
+    routeAuthority.state = { routeArtifacts: [], routeArtifactIds: [], status: 'loading' };
 
     renderAppAt('/tenant/tenant-1/project/project-1/agent');
 
