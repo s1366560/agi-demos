@@ -1,11 +1,17 @@
 """Unit tests for billing API endpoints."""
 
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import FastAPI
 from sqlalchemy import select
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Invoice,
     Memory,
@@ -15,6 +21,16 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 
 TENANTS_API_URL = "/api/v1/tenants"
+
+
+@pytest.fixture(autouse=True)
+async def initialize_billing_route_generation(test_app: FastAPI) -> AsyncIterator[None]:
+    """Run billing API tests against the production V2 generation dispatcher."""
+    await initialize_plugin_runtime_v2(test_app)
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 class TestGetBillingInfo:
