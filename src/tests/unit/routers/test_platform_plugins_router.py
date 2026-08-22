@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -11,27 +10,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.plugins.generated_v2 import ApplyStatusV2, SnapshotApplyReceiptV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
-from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
-    DEFAULT_MANIFEST_V2_PATHS,
-    DEFAULT_PROFILE_V2_PATH,
-)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginApplyStateEventModel,
     PlatformPluginApplyStateModel,
-    PlatformPluginHttpRouteModel,
-    PlatformPluginV2ApplyStateEventModel,
     PlatformPluginV2ApplyStateModel,
     User,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
-    PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins import compose_profile, parse_profile_document
 from src.infrastructure.plugins.builtin_manifests import default_builtin_manifests
@@ -39,19 +28,11 @@ from src.infrastructure.plugins.cutover_readiness import (
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
-from src.infrastructure.plugins.http_routes import HttpRouteMountError
-from src.infrastructure.plugins.llm_adapters import LlmAdapterProviderRegistry
 from src.infrastructure.plugins.profile import ProfileSnapshot
 from src.infrastructure.plugins.rollout_readiness import (
     ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
 )
-from src.infrastructure.plugins.runtime_host import (
-    PlatformPluginRuntimeHost,
-    set_platform_plugin_runtime_host,
-)
-from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 
 def compose_snapshot(profile_id: str) -> ProfileSnapshot:
@@ -85,17 +66,60 @@ def make_client(db: AsyncSession, *, superuser: bool = True) -> TestClient:
     return TestClient(app)
 
 
-async def v2_publication(*, generation: int, version: int, nonce: str):
-    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    publication = await host.bootstrap(
-        profile_path=DEFAULT_PROFILE_V2_PATH,
-        manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
-        generation=generation,
-        version=version,
-        nonce=nonce,
-    )
-    await host.close()
-    return publication
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        (
+            "POST",
+            "/api/v1/platform-plugins/cutover/approve",
+            {"valid_for_seconds": 3_600},
+        ),
+        (
+            "POST",
+            "/api/v1/platform-plugins/cutover/revoke",
+            {"reason": "migrate to protocol V2"},
+        ),
+        (
+            "PUT",
+            "/api/v1/platform-plugins/http-routes/example-plugin",
+            {
+                "method": "GET",
+                "path": "/api/v1/plugins/{tenant_id}/example",
+                "permission": "plugin.example.read",
+                "authorization_mode": "tenant_member",
+                "enabled": True,
+            },
+        ),
+        ("POST", "/api/v1/platform-plugins/http-routes/reconcile", None),
+        ("POST", "/api/v1/platform-plugins/publish", None),
+        (
+            "POST",
+            "/api/v1/platform-plugins/data-plane-state",
+            {
+                "data_plane_id": "desktop-local",
+                "snapshot_digest": "a" * 64,
+                "requested_version": 1,
+                "applied_version": 1,
+                "status": "ack",
+            },
+        ),
+    ],
+)
+async def test_v1_control_plane_mutations_are_frozen(
+    db_session: AsyncSession,
+    method: str,
+    path: str,
+    payload: dict[str, object] | None,
+) -> None:
+    response = make_client(db_session).request(method, path, json=payload)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"] == {
+        "code": "plugin_protocol_v1_mutation_frozen",
+        "message": "Plugin protocol V1 mutations are frozen; use the V2 plugin marketplace",
+        "migration_target": "/api/v1/plugin-marketplace",
+    }
 
 
 @pytest.mark.unit
@@ -126,92 +150,6 @@ async def test_snapshot_endpoint_returns_404_without_published_snapshot(
     response = make_client(db_session).get("/api/v1/platform-plugins/snapshot")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.unit
-async def test_data_plane_ack_is_persisted(db_session: AsyncSession) -> None:
-    repository = PlatformPluginRepository(db_session)
-    snapshot = compose_snapshot("router-test-ack")
-    await repository.record_snapshot(snapshot, version=9, nonce="nonce-9")
-    await db_session.commit()
-
-    response = make_client(db_session).post(
-        "/api/v1/platform-plugins/data-plane-state",
-        json={
-            "data_plane_id": "desktop-local",
-            "snapshot_digest": snapshot.digest,
-            "requested_version": 9,
-            "applied_version": 9,
-            "status": "ack",
-        },
-    )
-
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["status"] == "ack"
-    apply_state_result = await db_session.execute(
-        select(PlatformPluginApplyStateModel).where(
-            PlatformPluginApplyStateModel.data_plane_id == "desktop-local"
-        )
-    )
-    apply_state = apply_state_result.scalar_one()
-    assert apply_state is not None
-    assert apply_state.snapshot_digest == snapshot.digest
-    assert apply_state.requested_version == 9
-    assert apply_state.applied_version == 9
-
-
-@pytest.mark.unit
-async def test_data_plane_nack_requires_reason(db_session: AsyncSession) -> None:
-    repository = PlatformPluginRepository(db_session)
-    snapshot = compose_snapshot("router-test-nack")
-    await repository.record_snapshot(snapshot, version=11, nonce="nonce-11")
-    await db_session.commit()
-
-    response = make_client(db_session).post(
-        "/api/v1/platform-plugins/data-plane-state",
-        json={
-            "data_plane_id": "desktop-local",
-            "snapshot_digest": snapshot.digest,
-            "requested_version": 11,
-            "applied_version": 10,
-            "status": "nack",
-            "error_message": " ",
-        },
-    )
-
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@pytest.mark.unit
-async def test_first_data_plane_nack_can_report_no_previously_applied_version(
-    db_session: AsyncSession,
-) -> None:
-    repository = PlatformPluginRepository(db_session)
-    snapshot = compose_snapshot("router-test-first-nack")
-    await repository.record_snapshot(snapshot, version=13, nonce="nonce-13")
-    await db_session.commit()
-
-    response = make_client(db_session).post(
-        "/api/v1/platform-plugins/data-plane-state",
-        json={
-            "data_plane_id": "desktop-local",
-            "snapshot_digest": snapshot.digest,
-            "requested_version": 13,
-            "applied_version": 0,
-            "status": "nack",
-            "error_message": "runtime artifact is unavailable",
-        },
-    )
-
-    assert response.status_code == status.HTTP_200_OK
-    result = await db_session.execute(
-        select(PlatformPluginApplyStateModel).where(
-            PlatformPluginApplyStateModel.data_plane_id == "desktop-local"
-        )
-    )
-    apply_state = result.scalar_one()
-    assert apply_state.applied_version == 0
-    assert apply_state.error_message == "runtime artifact is unavailable"
 
 
 @pytest.mark.unit
@@ -454,7 +392,7 @@ async def test_cutover_readiness_requires_shadow_parity_and_rollback_drill(
 
 
 @pytest.mark.unit
-async def test_cutover_approval_requires_readiness_and_is_durable(
+async def test_frozen_cutover_approval_rejects_even_when_legacy_readiness_passes(
     db_session: AsyncSession,
 ) -> None:
     repository = PlatformPluginRepository(db_session)
@@ -571,34 +509,13 @@ async def test_cutover_approval_requires_readiness_and_is_durable(
         "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
     )
 
-    assert approved.status_code == status.HTTP_200_OK
-    approval = approved.json()
-    assert approval["capability"] == "agent_runtime"
-    assert approval["evidence"]["ready"] is True
-    assert datetime.fromisoformat(approval["expires_at"].replace("Z", "+00:00")) > now
-    duplicate = client.post(
-        "/api/v1/platform-plugins/cutover/approve", json={"valid_for_seconds": 3_600}
+    assert approved.status_code == status.HTTP_409_CONFLICT
+    assert approved.json()["detail"]["code"] == "plugin_protocol_v1_mutation_frozen"
+    active_approval = await repository.latest_active_cutover_approval(
+        capability="agent_runtime",
+        now=datetime.now(UTC),
     )
-    assert duplicate.status_code == status.HTTP_409_CONFLICT
-
-    readiness = client.get(
-        "/api/v1/platform-plugins/cutover/readiness",
-        params={"minimum_samples_per_event": 1, "minimum_distinct_scopes": 1},
-    )
-    assert readiness.status_code == status.HTTP_200_OK
-    assert readiness.json()["operator_approved"] is True
-
-    revoked = client.post(
-        "/api/v1/platform-plugins/cutover/revoke",
-        json={"reason": "rollback drill approval was revoked"},
-    )
-    assert revoked.status_code == status.HTTP_200_OK
-    assert revoked.json()["revoked"] is True
-    missing_revoke = client.post(
-        "/api/v1/platform-plugins/cutover/revoke",
-        json={"reason": "already revoked"},
-    )
-    assert missing_revoke.status_code == status.HTTP_404_NOT_FOUND
+    assert active_approval is None
 
 
 @pytest.mark.unit
@@ -620,9 +537,37 @@ async def test_cutover_approval_and_revocation_require_platform_admin(
 
 
 @pytest.mark.unit
-async def test_http_route_control_plane_upserts_and_reconciles_desired_state(
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        (
+            "PUT",
+            "/api/v1/platform-plugins/http-routes/example-plugin",
+            {
+                "method": "GET",
+                "path": "/api/v1/plugins/{tenant_id}/example",
+                "permission": "plugin.example.read",
+                "authorization_mode": "tenant_member",
+                "enabled": True,
+            },
+        ),
+        ("POST", "/api/v1/platform-plugins/http-routes/reconcile", None),
+    ],
+)
+async def test_v1_route_mutations_authorize_before_freeze(
     db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    payload: dict[str, object] | None,
+) -> None:
+    response = make_client(db_session, superuser=False).request(method, path, json=payload)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.unit
+async def test_frozen_http_route_mutation_keeps_v1_inventory_readable(
+    db_session: AsyncSession,
 ) -> None:
     client = make_client(db_session)
 
@@ -637,111 +582,21 @@ async def test_http_route_control_plane_upserts_and_reconciles_desired_state(
         },
     )
 
-    assert created.status_code == status.HTTP_200_OK
-    assert created.json()["revision"] == 1
+    assert created.status_code == status.HTTP_409_CONFLICT
     routes = client.get("/api/v1/platform-plugins/http-routes")
     assert routes.status_code == status.HTTP_200_OK
-    assert len(routes.json()) == 1
-
-    async def fake_reconcile(
-        app: object,
-        *,
-        desired_rows: list[object],
-        on_publication: object,
-    ) -> tuple[int, int]:
-        assert callable(on_publication)
-        assert len(desired_rows) == 1
-        return 1, 0
-
-    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
-    reconciled = client.post("/api/v1/platform-plugins/http-routes/reconcile")
-    assert reconciled.status_code == status.HTTP_200_OK
-    assert reconciled.json() == {"mounted": 1, "unmounted": 0}
-
-    row = await db_session.execute(select(PlatformPluginHttpRouteModel))
-    assert row.scalar_one().plugin_id == "example-plugin"
+    assert routes.json() == []
 
 
 @pytest.mark.unit
-async def test_http_route_reconcile_persists_v2_ack_in_request_transaction(
+async def test_frozen_http_route_reconcile_does_not_record_v2_receipt(
     db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    publication = await v2_publication(generation=1, version=1, nonce="router-ledger-ack")
-
-    async def fake_reconcile(
-        app: object,
-        *,
-        desired_rows: list[object],
-        on_publication: object,
-    ) -> tuple[int, int]:
-        _ = app, desired_rows
-        assert callable(on_publication)
-        await on_publication(publication)
-        return 1, 0
-
-    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
-
-    response = make_client(db_session).post("/api/v1/platform-plugins/http-routes/reconcile")
-
-    assert response.status_code == status.HTTP_200_OK
-    state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
-    assert state is not None
-    assert state.status == "ack"
-    assert state.requested_version == 1
-    assert state.applied_version == 1
-
-
-@pytest.mark.unit
-async def test_http_route_reconcile_commits_v2_nack_and_retains_last_good(
-    db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    first = await v2_publication(generation=1, version=1, nonce="router-ledger-first")
-    requested = await v2_publication(generation=2, version=2, nonce="router-ledger-nack")
-    nack = replace(
-        requested,
-        receipt=SnapshotApplyReceiptV2(
-            status=ApplyStatusV2.NACK,
-            requested_version=2,
-            requested_digest=requested.snapshot.digest,
-            applied_version=1,
-            applied_digest=first.snapshot.digest,
-            error_code="publication_staging_failed",
-            error_message="route graph rejected",
-        ),
-    )
-    await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
-        first,
-        data_plane_id="python-api-v2",
-    )
-    await db_session.commit()
-
-    async def fake_reconcile(
-        app: object,
-        *,
-        desired_rows: list[object],
-        on_publication: object,
-    ) -> tuple[int, int]:
-        _ = app, desired_rows
-        assert callable(on_publication)
-        await on_publication(nack)
-        raise HttpRouteMountError("route graph rejected")
-
-    monkeypatch.setattr(platform_plugins, "reconcile_http_route_capabilities", fake_reconcile)
-
     response = make_client(db_session).post("/api/v1/platform-plugins/http-routes/reconcile")
 
     assert response.status_code == status.HTTP_409_CONFLICT
     state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
-    assert state is not None
-    assert state.status == "nack"
-    assert state.requested_version == 2
-    assert state.applied_version == 1
-    event_count = await db_session.scalar(
-        select(func.count()).select_from(PlatformPluginV2ApplyStateEventModel)
-    )
-    assert event_count == 2
+    assert state is None
 
 
 @pytest.mark.unit
@@ -899,91 +754,45 @@ def test_readiness_evaluator_rejects_missing_scope_counts_and_future_timestamps(
 
 
 @pytest.mark.unit
-async def test_data_plane_receipt_rejects_stale_version_or_digest(
+async def test_authenticated_v1_data_plane_receipt_is_frozen_without_mutation(
     db_session: AsyncSession,
 ) -> None:
-    repository = PlatformPluginRepository(db_session)
-    snapshot = compose_snapshot("router-test-conflict")
-    await repository.record_snapshot(snapshot, version=12, nonce="nonce-12")
-    await db_session.commit()
-    client = make_client(db_session)
-
-    stale_version = client.post(
-        "/api/v1/platform-plugins/data-plane-state",
-        json={
-            "data_plane_id": "desktop-local",
-            "snapshot_digest": snapshot.digest,
-            "requested_version": 11,
-            "applied_version": 11,
-            "status": "ack",
-        },
-    )
-    stale_digest = client.post(
+    response = make_client(db_session, superuser=False).post(
         "/api/v1/platform-plugins/data-plane-state",
         json={
             "data_plane_id": "desktop-local",
             "snapshot_digest": "a" * 64,
-            "requested_version": 12,
-            "applied_version": 12,
-            "status": "ack",
-        },
-    )
-    incomplete_ack = client.post(
-        "/api/v1/platform-plugins/data-plane-state",
-        json={
-            "data_plane_id": "desktop-local",
-            "snapshot_digest": snapshot.digest,
-            "requested_version": 12,
-            "applied_version": 11,
+            "requested_version": 1,
+            "applied_version": 1,
             "status": "ack",
         },
     )
 
-    assert stale_version.status_code == status.HTTP_409_CONFLICT
-    assert stale_digest.status_code == status.HTTP_409_CONFLICT
-    assert incomplete_ack.status_code == status.HTTP_409_CONFLICT
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"]["code"] == "plugin_protocol_v1_mutation_frozen"
+    state_count = await db_session.scalar(
+        select(func.count()).select_from(PlatformPluginApplyStateModel)
+    )
+    event_count = await db_session.scalar(
+        select(func.count()).select_from(PlatformPluginApplyStateEventModel)
+    )
+    assert state_count == 0
+    assert event_count == 0
 
 
 @pytest.mark.unit
-async def test_publish_endpoint_persists_snapshot_and_local_ack(
+async def test_frozen_publish_endpoint_does_not_persist_snapshot_or_local_ack(
     db_session: AsyncSession,
 ) -> None:
-    host = PlatformPluginRuntimeHost(adapter_registry=LlmAdapterProviderRegistry())
-    set_platform_plugin_runtime_host(host)
-    try:
-        client = make_client(db_session)
+    response = make_client(db_session).post("/api/v1/platform-plugins/publish")
 
-        first = client.post("/api/v1/platform-plugins/publish")
-        second = client.post("/api/v1/platform-plugins/publish")
-
-        assert first.status_code == status.HTTP_200_OK
-        assert second.status_code == status.HTTP_200_OK
-        first_body = first.json()
-        second_body = second.json()
-        assert first_body["version"] == 1
-        assert second_body["version"] == 1
-        assert second_body["digest"] == first_body["digest"]
-        assert first_body["local_status"] == "ack"
-        assert first_body["profile_id"] == "memstack-default"
-        assert first_body["plugin_count"] == 2
-        assert host.reconciler.applied_version == 1
-        assert host.capabilities.list_capabilities("workspace-runtime")
-
-        snapshot_response = client.get("/api/v1/platform-plugins/snapshot")
-        assert snapshot_response.status_code == status.HTTP_200_OK
-        assert snapshot_response.json()["version"] == 1
-        assert snapshot_response.json()["digest"] == first_body["digest"]
-
-        result = await db_session.execute(
-            select(PlatformPluginApplyStateModel).where(
-                PlatformPluginApplyStateModel.data_plane_id == "python-backend"
-            )
-        )
-        state = result.scalar_one()
-        assert state.status == "ack"
-        assert state.applied_version == 1
-    finally:
-        set_platform_plugin_runtime_host(None)
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"]["code"] == "plugin_protocol_v1_mutation_frozen"
+    assert await PlatformPluginRepository(db_session).latest_snapshot() is None
+    state_count = await db_session.scalar(
+        select(func.count()).select_from(PlatformPluginApplyStateModel)
+    )
+    assert state_count == 0
 
 
 @pytest.mark.unit

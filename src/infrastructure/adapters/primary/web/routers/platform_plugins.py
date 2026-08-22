@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from typing import NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
@@ -29,16 +29,7 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginShadowRolloutSummaryResponse,
     PlatformPluginSnapshotResponse,
 )
-from src.application.services.platform_plugin_profile_service import (
-    PlatformPluginProfileService,
-)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
-    reconcile_http_route_capabilities,
-)
-from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
-    plugin_publication_policy_v2_from_app,
-)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCutoverApprovalModel,
@@ -51,30 +42,36 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
     PlatformPluginRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
-    PYTHON_API_DATA_PLANE_ID_V2,
-    PlatformPluginRepositoryV2,
-)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.cutover_readiness import (
     RollbackDrillReadiness,
     evaluate_platform_plugin_cutover_readiness,
     evaluate_rollback_drill_readiness,
 )
-from src.infrastructure.plugins.http_routes import HttpRouteMountError
-from src.infrastructure.plugins.profile import ProfileCompositionError
 from src.infrastructure.plugins.rollout_readiness import (
     ShadowRolloutReadiness,
     evaluate_shadow_rollout_readiness,
 )
-from src.infrastructure.plugins.runtime_host import get_platform_plugin_runtime_host
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginPublicationV2
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+)
 
 from .platform_plugins_v2 import router as protocol_v2_router
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/platform-plugins", tags=["Platform Plugins"])
 router.include_router(protocol_v2_router)
+
+
+def _raise_plugin_protocol_v1_mutation_frozen() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+            "message": _("Plugin protocol V1 mutations are frozen; use the V2 plugin marketplace"),
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
+    )
 
 
 def _shadow_readiness_response(
@@ -280,73 +277,13 @@ async def approve_platform_plugin_cutover(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginCutoverApprovalResponse:
-    """Record platform-admin approval only after durable readiness passes."""
+    """Reject legacy cutover approval after platform-admin authorization."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Only a platform administrator may approve this cutover"),
         )
-    repository = PlatformPluginRepository(db)
-    checked_at = datetime.now(UTC)
-    if (
-        await repository.latest_active_cutover_approval(
-            capability="agent_runtime",
-            now=checked_at,
-        )
-        is not None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_("A platform plugin cutover approval is already active"),
-        )
-    shadow = evaluate_shadow_rollout_readiness(
-        summary=await repository.shadow_rollout_summary(),
-        scope_counts=await repository.shadow_rollout_scope_counts(),
-        checked_at=checked_at,
-    )
-    rollback_events = [
-        {
-            "id": event.id,
-            "data_plane_id": event.data_plane_id,
-            "requested_version": event.requested_version,
-            "applied_version": event.applied_version,
-            "status": event.status,
-            "error_message": event.error_message,
-            "recorded_at": event.recorded_at,
-        }
-        for event in await repository.list_apply_state_events(limit=5_000)
-    ]
-    rollback_drill = evaluate_rollback_drill_readiness(
-        events=rollback_events,
-        checked_at=checked_at,
-    )
-    readiness = evaluate_platform_plugin_cutover_readiness(
-        shadow=shadow,
-        rollback_drill=rollback_drill,
-    )
-    if not readiness.ready:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_("Cutover readiness failed"),
-            headers={"X-Platform-Plugin-Cutover-Reasons": ",".join(readiness.reasons)},
-        )
-    evidence = PlatformPluginCutoverReadinessResponse(
-        ready=readiness.ready,
-        checked_at=readiness.checked_at,
-        shadow=_shadow_readiness_response(shadow),
-        rollback_drill=_rollback_drill_response(rollback_drill),
-        reasons=list(readiness.reasons),
-    ).model_dump(mode="json")
-    expires_at = checked_at + timedelta(seconds=request.valid_for_seconds)
-    approval = await repository.record_cutover_approval(
-        capability="agent_runtime",
-        approved_by=current_user.id,
-        evidence=evidence,
-        expires_at=expires_at,
-    )
-    response = _cutover_approval_response(approval)
-    await db.commit()
-    return response
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post("/cutover/revoke", response_model=PlatformPluginCutoverRevocationResponse)
@@ -355,36 +292,13 @@ async def revoke_platform_plugin_cutover(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginCutoverRevocationResponse:
-    """Revoke the active cutover approval while retaining audit history."""
+    """Reject legacy cutover revocation after platform-admin authorization."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Only a platform administrator may revoke this cutover"),
         )
-    repository = PlatformPluginRepository(db)
-    approval = await repository.revoke_active_cutover_approval(
-        capability="agent_runtime",
-        reason=request.reason,
-    )
-    if approval is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("No active platform plugin cutover approval exists"),
-        )
-    revoked_at = approval.revoked_at
-    if revoked_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=_("Cutover approval revocation was not persisted"),
-        )
-    capability = approval.capability
-    await db.commit()
-    return PlatformPluginCutoverRevocationResponse(
-        capability=capability,
-        revoked=True,
-        revoked_at=revoked_at,
-        reason=request.reason,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.get("/http-routes", response_model=list[PlatformPluginHttpRouteResponse])
@@ -407,24 +321,13 @@ async def upsert_platform_plugin_http_route(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginHttpRouteResponse:
-    """Upsert one desired route after platform-admin authorization."""
+    """Reject legacy route desired-state mutation after authorization."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Only a platform administrator may manage plugin routes"),
         )
-    repository = PlatformPluginGovernanceRepository(db)
-    route = await repository.upsert_http_route(
-        plugin_id=plugin_id,
-        method=request.method,
-        path=request.path,
-        permission=request.permission,
-        authorization_mode=request.authorization_mode,
-        enabled=request.enabled,
-    )
-    response = _http_route_response(route)
-    await db.commit()
-    return response
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -432,54 +335,16 @@ async def upsert_platform_plugin_http_route(
     response_model=PlatformPluginHttpRouteReconcileResponse,
 )
 async def reconcile_platform_plugin_http_routes(
-    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginHttpRouteReconcileResponse:
-    """Reconcile mounted routes to persisted desired state without restart."""
+    """Reject legacy route reconciliation after platform-admin authorization."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Only a platform administrator may reconcile plugin routes"),
         )
-    rows = await PlatformPluginGovernanceRepository(db).list_http_routes()
-    ledger_recorded = False
-
-    async def record_publication(publication: PlatformPluginPublicationV2) -> None:
-        nonlocal ledger_recorded
-        repository = PlatformPluginRepositoryV2(db)
-        policy = plugin_publication_policy_v2_from_app(request.app)
-        if PYTHON_API_DATA_PLANE_ID_V2 in policy.required_data_plane_ids:
-            _ = await repository.record_publication_and_receipt(
-                publication,
-                data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
-                policy=policy,
-            )
-        else:
-            _ = await repository.record_publication(publication, policy=policy)
-        ledger_recorded = True
-
-    try:
-        mounted, unmounted = await reconcile_http_route_capabilities(
-            request.app,
-            desired_rows=rows,
-            on_publication=record_publication,
-        )
-    except (HttpRouteMountError, ValueError) as exc:
-        if ledger_recorded:
-            await db.commit()
-        else:
-            await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    if ledger_recorded:
-        await db.commit()
-    return PlatformPluginHttpRouteReconcileResponse(
-        mounted=mounted,
-        unmounted=unmounted,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post("/publish", response_model=PlatformPluginPublishResponse)
@@ -487,35 +352,13 @@ async def publish_snapshot(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginPublishResponse:
-    """Publish the next canonical snapshot and reconcile the local data plane."""
+    """Reject legacy snapshot publication after platform-admin authorization."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Only a platform administrator may publish plugin snapshots"),
         )
-    service = PlatformPluginProfileService(PlatformPluginRepository(db))
-    try:
-        result = await service.publish_and_reconcile_local(
-            runtime_host=get_platform_plugin_runtime_host(),
-            actor_id=current_user.id,
-        )
-    except ProfileCompositionError as exc:
-        logger.warning("Platform plugin profile composition failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_("Plugin profile composition failed"),
-        ) from exc
-    await db.commit()
-    publication = result.publication
-    return PlatformPluginPublishResponse(
-        version=publication.envelope.version,
-        nonce=publication.envelope.nonce,
-        profile_id=publication.snapshot.profile_id,
-        digest=publication.snapshot.digest,
-        plugin_count=len(publication.snapshot.rows),
-        local_status="ack" if result.receipt.accepted else "nack",
-        local_error_message=result.receipt.error_message,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.get("/snapshot", response_model=PlatformPluginSnapshotResponse)
@@ -545,41 +388,5 @@ async def record_data_plane_state(
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginApplyStateResponse:
-    """Persist one data-plane ACK/NACK receipt."""
-    repository = PlatformPluginRepository(db)
-    snapshot = await repository.latest_snapshot()
-    if (
-        snapshot is None
-        or snapshot.version != request.requested_version
-        or snapshot.digest != request.snapshot_digest
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_("Snapshot version and digest do not match the latest control-plane snapshot"),
-        )
-    if request.status == "nack" and not (request.error_message or "").strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_("A NACK receipt requires an error message"),
-        )
-    if request.status == "ack" and request.applied_version != request.requested_version:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_("An ACK receipt must apply the requested snapshot version"),
-        )
-    await repository.record_apply_state(
-        data_plane_id=request.data_plane_id,
-        snapshot_digest=request.snapshot_digest,
-        requested_version=request.requested_version,
-        applied_version=request.applied_version,
-        status=request.status,
-        error_message=request.error_message,
-    )
-    await db.commit()
-    return PlatformPluginApplyStateResponse(
-        data_plane_id=request.data_plane_id,
-        snapshot_digest=request.snapshot_digest,
-        requested_version=request.requested_version,
-        applied_version=request.applied_version,
-        status=request.status,
-    )
+    """Reject authenticated V1 data-plane receipts."""
+    _raise_plugin_protocol_v1_mutation_frozen()
