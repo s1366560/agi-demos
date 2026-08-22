@@ -6,8 +6,10 @@ from pathlib import Path
 
 import httpx
 import pytest
+from pydantic import create_model
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.http_routes import (
@@ -48,6 +50,59 @@ def test_route_table_rejects_conflicts_without_mutating_outer_routes() -> None:
         RouteTableV2((route, route))
 
     assert error.value.code == "route_conflict"
+
+
+@pytest.mark.unit
+def test_openapi_uses_stable_qualified_names_for_colliding_models() -> None:
+    first_payload = create_model(
+        "CollisionPayload",
+        value=(str, ...),
+        __module__="tests.openapi.first",
+    )
+    second_payload = create_model(
+        "CollisionPayload",
+        count=(int, ...),
+        __module__="tests.openapi.second",
+    )
+
+    async def first_endpoint() -> object:
+        return {"value": "first"}
+
+    async def second_endpoint() -> object:
+        return {"count": 2}
+
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="first-http",
+                path="/api/first",
+                methods=("GET",),
+                endpoint=first_endpoint,
+                name="first",
+                response_model=first_payload,
+            ),
+            RouteDefinitionV2(
+                owner_entry_id="second-http",
+                path="/api/second",
+                methods=("GET",),
+                endpoint=second_endpoint,
+                name="second",
+                response_model=second_payload,
+            ),
+        )
+    )
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="openapi-collision",
+        generation=1,
+        digest="0" * 64,
+    )
+
+    components = table.openapi_snapshot(descriptor).schema["components"]["schemas"]
+    assert "CollisionPayload" not in components
+    assert {
+        "tests__openapi__first__CollisionPayload",
+        "tests__openapi__second__CollisionPayload",
+    } <= components.keys()
 
 
 @pytest.mark.unit

@@ -15,6 +15,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
+from .openapi import build_openapi_schema_v2
 from .runtime import RuntimeV2Error
 
 
@@ -59,7 +60,7 @@ class RouteTableV2:
         self._definitions = routes
         self._routes: tuple[BaseRoute, ...] = tuple(app.router.routes)
         self._app: ASGIApp = app
-        self._openapi = MappingProxyType(app.openapi())
+        self._openapi = MappingProxyType(build_openapi_schema_v2(app))
 
     @classmethod
     def from_fastapi_graph(
@@ -73,7 +74,7 @@ class RouteTableV2:
         instance._definitions = tuple(definitions)
         instance._routes = tuple(app.router.routes)
         instance._app = Router(routes=list(instance._routes))
-        instance._openapi = MappingProxyType(app.openapi())
+        instance._openapi = MappingProxyType(build_openapi_schema_v2(app))
         return instance
 
     @property
