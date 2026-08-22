@@ -27,6 +27,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "memories",
         "project-my-work",
         "projects",
+        "retrieval-stores",
         "smtp-config",
         "system",
         "tenants",
