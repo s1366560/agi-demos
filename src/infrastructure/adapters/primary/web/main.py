@@ -67,6 +67,9 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PlatformPluginPublicationPolicyV2,
+)
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.llm.resilience.health_checker import (
     start_health_checker,
@@ -167,6 +170,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
     # sandbox/workflow resources are created by candidate effects and are not
     # retained by the legacy application container.
+    publication_policy = PlatformPluginPublicationPolicyV2.from_deployment(
+        environment=settings.environment,
+        required_data_plane_ids=settings.plugin_v2_required_data_plane_ids,
+        ack_deadline_seconds=settings.plugin_v2_ack_deadline_seconds,
+    )
     _ = await initialize_plugin_runtime_v2(
         app,
         desired_http_route_rows=desired_http_route_rows,
@@ -176,6 +184,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         sandbox_runtime_factory=sandbox_runtime_factory,
         sandbox_redis_client=redis_client,
         telemetry_runtime_manager=telemetry_runtime_manager,
+        publication_policy=publication_policy,
     )
     try:
         # Initialize DI Container

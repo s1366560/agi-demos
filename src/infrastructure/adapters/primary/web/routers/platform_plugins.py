@@ -36,6 +36,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.startup.http_route_capabilities import (
     reconcile_http_route_capabilities,
 )
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    plugin_publication_policy_v2_from_app,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCutoverApprovalModel,
@@ -444,10 +447,16 @@ async def reconcile_platform_plugin_http_routes(
 
     async def record_publication(publication: PlatformPluginPublicationV2) -> None:
         nonlocal ledger_recorded
-        _ = await PlatformPluginRepositoryV2(db).record_publication_and_receipt(
-            publication,
-            data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
-        )
+        repository = PlatformPluginRepositoryV2(db)
+        policy = plugin_publication_policy_v2_from_app(request.app)
+        if PYTHON_API_DATA_PLANE_ID_V2 in policy.required_data_plane_ids:
+            _ = await repository.record_publication_and_receipt(
+                publication,
+                data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
+                policy=policy,
+            )
+        else:
+            _ = await repository.record_publication(publication, policy=policy)
         ledger_recorded = True
 
     try:

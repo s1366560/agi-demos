@@ -3257,6 +3257,18 @@ class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     nonce: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     type_url: Mapped[str] = mapped_column(String(255), nullable=False)
     distribution: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    required_data_plane_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    ack_deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="reconciling", server_default="reconciling"
+    )
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    republished_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -3270,10 +3282,27 @@ class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
             "length(snapshot_digest) = 64",
             name="ck_platform_plugin_v2_publication_digest",
         ),
+        CheckConstraint(
+            "status IN ('reconciling', 'ready', 'degraded')",
+            name="ck_platform_plugin_v2_publication_status",
+        ),
+        CheckConstraint(
+            "ack_deadline_at > created_at",
+            name="ck_platform_plugin_v2_publication_deadline",
+        ),
         Index(
             "ix_platform_plugin_v2_publication_profile_generation",
             "profile_id",
             "generation",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_status_ready",
+            "status",
+            "ready_at",
+        ),
+        Index(
+            "ix_platform_plugin_v2_publication_republished_from",
+            "republished_from_id",
         ),
     )
 

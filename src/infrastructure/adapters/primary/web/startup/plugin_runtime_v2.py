@@ -12,6 +12,9 @@ from fastapi import FastAPI
 from starlette.types import Scope
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PlatformPluginPublicationPolicyV2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 _ROOT = Path(__file__).resolve().parents[6]
 DEFAULT_PROFILE_V2_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 DEFAULT_MANIFEST_V2_PATHS = (_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",)
+DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
 async def initialize_plugin_runtime_v2(
@@ -50,6 +54,7 @@ async def initialize_plugin_runtime_v2(
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     sandbox_redis_client: object | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
+    publication_policy: PlatformPluginPublicationPolicyV2 = DEFAULT_PUBLICATION_POLICY_V2,
 ) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
     host = PlatformPluginRuntimeHostV2(
@@ -116,6 +121,7 @@ async def initialize_plugin_runtime_v2(
             await _record_startup_publication_v2(
                 session_factory,
                 publication,
+                publication_policy=publication_policy,
                 retain_requested_as_last_good=durable_distribution is not None,
             )
             failure = publication.receipt
@@ -135,6 +141,7 @@ async def initialize_plugin_runtime_v2(
             await _record_startup_publication_v2(
                 session_factory,
                 publication,
+                publication_policy=publication_policy,
             )
     except Exception:
         await host.close()
@@ -148,6 +155,7 @@ async def initialize_plugin_runtime_v2(
         registry=route_registry,
         workspace_core_settings=workspace_core_settings,
     )
+    app.state.platform_plugin_publication_policy_v2 = publication_policy
     install_process_generation_host_v2(host)
     logger.info(
         "Published plugin runtime v2 generation=%d digest=%s",
@@ -183,6 +191,7 @@ async def _record_startup_publication_v2(
     session_factory: Callable[[], Any] | None,
     publication: PlatformPluginPublicationV2,
     *,
+    publication_policy: PlatformPluginPublicationPolicyV2,
     retain_requested_as_last_good: bool = False,
 ) -> None:
     if session_factory is None:
@@ -206,10 +215,18 @@ async def _record_startup_publication_v2(
             ),
         )
     async with session_factory() as session:
-        _ = await PlatformPluginRepositoryV2(session).record_publication_and_receipt(
-            publication,
-            data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
-        )
+        repository = PlatformPluginRepositoryV2(session)
+        if PYTHON_API_DATA_PLANE_ID_V2 in publication_policy.required_data_plane_ids:
+            _ = await repository.record_publication_and_receipt(
+                publication,
+                data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
+                policy=publication_policy,
+            )
+        else:
+            _ = await repository.record_publication(
+                publication,
+                policy=publication_policy,
+            )
         await session.commit()
 
 
@@ -224,6 +241,17 @@ async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     app.state.platform_plugin_route_registry_v2 = None
     app.state.platform_plugin_route_graph_v2 = None
     app.state.platform_plugin_http_route_publication_v2 = None
+    app.state.platform_plugin_publication_policy_v2 = None
+
+
+def plugin_publication_policy_v2_from_app(app: object) -> PlatformPluginPublicationPolicyV2:
+    """Resolve the deployment policy installed with the production generation host."""
+    policy = getattr(getattr(app, "state", None), "platform_plugin_publication_policy_v2", None)
+    if policy is None:
+        return PlatformPluginPublicationPolicyV2.local_default()
+    if not isinstance(policy, PlatformPluginPublicationPolicyV2):
+        raise TypeError("plugin v2 publication policy has an invalid type")
+    return policy
 
 
 def plugin_runtime_host_v2_from_scope(scope: Scope) -> PlatformPluginRuntimeHostV2:

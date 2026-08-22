@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 1682003a0f803e1dd6a1daac01313676938c17a961c581b4c462502ddb42ef1f
+// Schema SHA-256: 29d898f99289918dcdae5beb63e091ffb9f85f34470d8c6c191b2ec5e59277a5
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 use std::collections::BTreeMap;
@@ -47,6 +47,14 @@ pub enum RestartPolicyV2 {
 pub enum ApplyStatusV2 {
     Ack,
     Nack,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PublicationStatusV2 {
+    Reconciling,
+    Ready,
+    Degraded,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

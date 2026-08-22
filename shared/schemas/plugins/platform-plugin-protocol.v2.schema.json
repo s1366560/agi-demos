@@ -32,6 +32,10 @@
       "type": "string",
       "enum": ["ack", "nack"]
     },
+    "PublicationStatusV2": {
+      "type": "string",
+      "enum": ["reconciling", "ready", "degraded"]
+    },
     "DataPlaneTargetV2": {
       "type": "string",
       "enum": ["python", "rust-server", "desktop-sidecar", "web", "desktop-renderer"]

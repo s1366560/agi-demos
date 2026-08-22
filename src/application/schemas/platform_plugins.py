@@ -80,6 +80,33 @@ class PlatformPluginApplyStateResponseV2(BaseModel):
     receipt: dict[str, Any]
 
 
+class PlatformPluginDataPlaneReadinessResponseV2(BaseModel):
+    data_plane_id: str
+    status: Literal["ack", "nack"] | None
+    requested_version: int | None
+    requested_digest: str | None
+    applied_version: int | None
+    applied_digest: str | None
+    error_code: str | None
+    error_message: str | None
+
+
+class PlatformPluginPublicationReadinessResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    publication_id: str
+    profile_id: str
+    generation: int
+    requested_version: int
+    snapshot_digest: str
+    nonce: str
+    republished_from_nonce: str | None
+    required_data_plane_ids: list[str]
+    ack_deadline_at: datetime
+    status: Literal["reconciling", "ready", "degraded"]
+    ready_at: datetime | None
+    data_planes: list[PlatformPluginDataPlaneReadinessResponseV2]
+
+
 class PlatformPluginShadowRolloutEventResponse(BaseModel):
     capability: str
     event_name: str

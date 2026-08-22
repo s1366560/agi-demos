@@ -24,8 +24,10 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateEventModel,
     PlatformPluginV2ApplyStateModel,
+    PlatformPluginV2PublicationModel,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PlatformPluginPublicationPolicyV2,
     PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.boundary import (
@@ -239,6 +241,35 @@ async def test_restart_uses_durable_last_good_instead_of_unpublished_desired_row
     assert restarted_distribution.to_payload() == first_distribution.to_payload()
     assert configured_legacy_http_routes_v2(restarted_distribution.snapshot.entries) == ()
     await restarted.close()
+
+
+@pytest.mark.unit
+async def test_startup_records_publication_without_unrequired_local_receipt(
+    db_session: AsyncSession,
+) -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    policy = PlatformPluginPublicationPolicyV2(
+        required_data_plane_ids=("rust-server",),
+        ack_deadline_seconds=30,
+    )
+    app = FastAPI()
+
+    host = await initialize_plugin_runtime_v2(
+        app,
+        session_factory=session_factory,
+        publication_policy=policy,
+    )
+
+    publication = await db_session.scalar(select(PlatformPluginV2PublicationModel))
+    state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
+    assert publication is not None
+    assert publication.required_data_plane_ids == ["rust-server"]
+    assert state is None
+    assert app.state.platform_plugin_publication_policy_v2 is policy
+    await host.close()
 
 
 @pytest.mark.unit
