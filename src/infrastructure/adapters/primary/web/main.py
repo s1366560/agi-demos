@@ -76,6 +76,7 @@ from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
+from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
 from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
 
 logger = logging.getLogger(__name__)
@@ -115,9 +116,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
 
-    # Initialize OpenTelemetry and Langfuse
-    await initialize_telemetry()
-
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
     desired_http_route_rows = await load_desired_http_route_capabilities(
@@ -138,6 +136,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
+    telemetry_runtime_manager = TelemetryRuntimeManagerV2(
+        start=initialize_telemetry,
+        stop=shutdown_telemetry_services,
+    )
 
     async def graph_runtime_factory() -> GraphStorePort:
         return await _create_generation_graph_runtime(cast("Redis | None", redis_client))
@@ -173,6 +175,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         retrieval_runtime_factory=retrieval_runtime_factory,
         sandbox_runtime_factory=sandbox_runtime_factory,
         sandbox_redis_client=redis_client,
+        telemetry_runtime_manager=telemetry_runtime_manager,
     )
     try:
         # Initialize DI Container
@@ -401,9 +404,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Retire all V2 Fibers. Graph cleanup remains an effect and runs after all
     # request, session, and background workflow leases have drained.
     await shutdown_plugin_runtime_v2(app)
-
-    # Shutdown OpenTelemetry
-    shutdown_telemetry_services()
 
 
 def create_app(

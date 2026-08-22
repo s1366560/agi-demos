@@ -203,8 +203,39 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:55edc60fdb3c26e100bbf448d6a4e87bd5459ba95b34d08b6694cb26cc2c2b73",
+        "digest": "sha256:e53845d84be08f7703c9585554e6b02924c78a96eeb433d29f5f0304efef6953",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/telemetry/runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.telemetry_runtime:telemetry_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:telemetry.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "process-shared", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:39d359a773924c71b32492e0d03704335a4d4058ecfe5007ed5c310ef3eb3d5b",
+      "artifact": {
+        "digest": "sha256:d0a6bbffe3f80171ac2d3c3252f0a1105a9ea7bfa6c1172edd735937d48da2cf",
+        "source": "repo+python://src/infrastructure/plugins/v2/telemetry_runtime.py"
       }
     },
     {

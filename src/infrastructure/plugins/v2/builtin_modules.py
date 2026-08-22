@@ -41,6 +41,7 @@ from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
+from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_definition_v2
 from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
@@ -90,6 +91,7 @@ def builtin_runtime_definitions_v2(
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     sandbox_redis_client: object | None = None,
     workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
+    telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     return (
@@ -98,6 +100,7 @@ def builtin_runtime_definitions_v2(
             contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
         ),
+        telemetry_runtime_definition_v2(telemetry_runtime_manager),
         graph_runtime_definition_v2(graph_runtime_factory),
         *sandbox_service_definitions_v2(
             sandbox_runtime_factory,
