@@ -66,12 +66,13 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 60
+    assert len(route_graph.static_mounted_row_ids) == 59
     assert route_graph.v2_owned_row_ids == (
         "tenants",
         "project-my-work",
         "projects",
         "memories",
+        "graph-stores",
         "billing",
         "trust-workspace",
         "smtp-config",
@@ -84,6 +85,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-billing-http-routes",
         "builtin-invitations-http-routes",
         "builtin-invitations-public-http-routes",
+        "builtin-graph-stores-http-routes",
         "builtin-memories-http-routes",
         "builtin-project-my-work-http-routes",
         "builtin-projects-http-routes",

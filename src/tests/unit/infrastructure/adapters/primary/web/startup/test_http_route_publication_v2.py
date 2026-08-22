@@ -169,6 +169,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
     ("entry_id", "row_id"),
     (
         ("builtin-billing-http-routes", "billing"),
+        ("builtin-graph-stores-http-routes", "graph-stores"),
         ("builtin-memories-http-routes", "memories"),
         ("builtin-project-my-work-http-routes", "project-my-work"),
         ("builtin-projects-http-routes", "projects"),
