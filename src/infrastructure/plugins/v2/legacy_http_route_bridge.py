@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any, cast
 
 from fastapi import Depends
 
 from src.domain.model.plugins.generated_v2 import ProfileEntryV2
-from src.domain.ports.plugins import (
-    HttpAuthorizationMode,
-    HttpRouteDefinition,
-    route_definition_is_safe,
-)
 
 from .composer import ProfileDocumentV2
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
+from .route_authority import (
+    LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
+    LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
+    ROUTE_AUTHORITY_CATALOG_INJECT_V2,
+    DesiredPluginRouteV2,
+    PluginRouteAuthorityV2,
+    RouteAuthorityCatalogV2,
+    desired_plugin_routes_v2,
+)
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
 from .runtime import (
     ContextV2,
@@ -25,33 +29,10 @@ from .runtime import (
     generated_contract_digest_v2,
 )
 
-LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2 = "legacy-http-route-bridge"
-LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2 = "builtin://memstack/http/legacy-route-bridge"
-
 type InventoryProviderV2 = Callable[[], Mapping[str, Sequence[Any]]]
 type AuthorizationFactoryV2 = Callable[["LegacyHttpRouteRowV2"], Callable[..., Any]]
 
-
-@dataclass(frozen=True, kw_only=True)
-class LegacyHttpRouteRowV2:
-    """Canonical JSON-safe route row copied from the transitional desired-state table."""
-
-    plugin_id: str
-    method: str
-    path: str
-    permission: str
-    authorization_mode: str
-    enabled: bool
-
-    def to_payload(self) -> dict[str, str | bool]:
-        return {
-            "authorization_mode": self.authorization_mode,
-            "enabled": self.enabled,
-            "method": self.method,
-            "path": self.path,
-            "permission": self.permission,
-            "plugin_id": self.plugin_id,
-        }
+LegacyHttpRouteRowV2 = DesiredPluginRouteV2
 
 
 def project_legacy_http_routes_v2(
@@ -59,7 +40,7 @@ def project_legacy_http_routes_v2(
     desired_rows: Sequence[Any],
 ) -> ProfileDocumentV2:
     """Replace the bridge entry's whole config row with canonical desired routes."""
-    rows = tuple(sorted((_row_from_object(row) for row in desired_rows), key=_row_key))
+    rows = _desired_legacy_http_routes_v2(cast(Sequence[object], desired_rows))
     positions = {
         entry.entry_id: index
         for index, entry in enumerate(document.entries)
@@ -107,6 +88,12 @@ def legacy_http_route_bridge_definition_v2(
                 "invalid_route_table_builder",
                 "route_table inject is not a protocol v2 route table builder",
             )
+        authority_catalog = context.require(ROUTE_AUTHORITY_CATALOG_INJECT_V2)
+        if not isinstance(authority_catalog, RouteAuthorityCatalogV2):
+            raise RuntimeV2Error(
+                "invalid_route_authority_catalog",
+                "route_authority inject is not a protocol v2 authority catalog",
+            )
         inventory = _inventory_by_route(provide_inventory())
         definitions = tuple(
             _definition_from_row(
@@ -118,12 +105,25 @@ def legacy_http_route_bridge_definition_v2(
             for row in rows
             if row.enabled
         )
+        authorities = tuple(
+            PluginRouteAuthorityV2(
+                owner_entry_id=context.entry_id,
+                plugin_id=row.plugin_id,
+                method=row.method,
+                path=row.path,
+                permission=row.permission,
+                authorization_mode=row.authorization_mode,
+            )
+            for row in rows
+            if row.enabled
+        )
 
         async def setup() -> tuple[Callable[[], Awaitable[None]], ...]:
             disposers: list[Callable[[], Awaitable[None]]] = []
             try:
-                for definition in definitions:
+                for definition, authority in zip(definitions, authorities, strict=True):
                     disposers.append(builder.contribute(definition))
+                    disposers.append(authority_catalog.contribute(authority))
             except Exception:
                 for dispose in reversed(disposers):
                     await dispose()
@@ -145,98 +145,29 @@ def _rows_from_config(config: Mapping[str, Any]) -> tuple[LegacyHttpRouteRowV2, 
     payload = config["routes"]
     if not isinstance(payload, list):
         raise ValueError("legacy HTTP route bridge routes must be a list")
-    rows = tuple(_row_from_mapping(item) for item in cast(list[object], payload))
-    if rows != tuple(sorted(rows, key=_row_key)):
-        raise ValueError("legacy HTTP route bridge routes must use canonical order")
-    keys = [(row.method, row.path) for row in rows if row.enabled]
-    if len(keys) != len(set(keys)):
-        raise ValueError("legacy HTTP route bridge contains duplicate enabled routes")
-    return rows
-
-
-def _row_from_object(value: object) -> LegacyHttpRouteRowV2:
-    return _validated_row(
-        plugin_id=getattr(value, "plugin_id", None),
-        method=getattr(value, "method", None),
-        path=getattr(value, "path", None),
-        permission=getattr(value, "permission", None),
-        authorization_mode=getattr(value, "authorization_mode", None),
-        enabled=getattr(value, "enabled", None),
+    return _desired_legacy_http_routes_v2(
+        cast(list[object], payload),
+        require_canonical_order=True,
     )
 
 
-def _row_from_mapping(value: object) -> LegacyHttpRouteRowV2:
-    if not isinstance(value, Mapping):
-        raise ValueError("legacy HTTP route bridge route must be an object")
-    typed_value = cast(Mapping[str, object], value)
-    expected = {
-        "authorization_mode",
-        "enabled",
-        "method",
-        "path",
-        "permission",
-        "plugin_id",
-    }
-    if set(typed_value) != expected:
-        raise ValueError("legacy HTTP route bridge route has invalid fields")
-    return _validated_row(
-        plugin_id=typed_value["plugin_id"],
-        method=typed_value["method"],
-        path=typed_value["path"],
-        permission=typed_value["permission"],
-        authorization_mode=typed_value["authorization_mode"],
-        enabled=typed_value["enabled"],
-    )
-
-
-def _validated_row(
+def _desired_legacy_http_routes_v2(
+    values: Sequence[object],
     *,
-    plugin_id: object,
-    method: object,
-    path: object,
-    permission: object,
-    authorization_mode: object,
-    enabled: object,
-) -> LegacyHttpRouteRowV2:
-    string_values = {
-        "plugin_id": plugin_id,
-        "method": method,
-        "path": path,
-        "permission": permission,
-        "authorization_mode": authorization_mode,
-    }
-    if any(not isinstance(value, str) or not value.strip() for value in string_values.values()):
-        raise ValueError("legacy HTTP route bridge string fields must be non-empty")
-    if not isinstance(enabled, bool):
-        raise ValueError("legacy HTTP route bridge enabled must be boolean")
-    normalized_method = str(method).upper()
+    require_canonical_order: bool = False,
+) -> tuple[LegacyHttpRouteRowV2, ...]:
     try:
-        authorization = HttpAuthorizationMode(str(authorization_mode))
+        return desired_plugin_routes_v2(
+            values,
+            require_canonical_order=require_canonical_order,
+        )
     except ValueError as exc:
-        raise ValueError(f"unsupported route authorization mode: {authorization_mode}") from exc
-    definition = HttpRouteDefinition(
-        plugin_id=str(plugin_id),
-        method=normalized_method,
-        path=str(path),
-        permission=str(permission),
-        authorization=authorization,
-    )
-    if not route_definition_is_safe(definition):
-        raise ValueError(f"unsafe legacy HTTP route definition: {normalized_method} {path}")
-    if authorization is HttpAuthorizationMode.AUTHENTICATED:
-        raise ValueError("plugin routes must require tenant/project-scoped authorization")
-    return LegacyHttpRouteRowV2(
-        plugin_id=str(plugin_id),
-        method=normalized_method,
-        path=str(path),
-        permission=str(permission),
-        authorization_mode=authorization.value,
-        enabled=enabled,
-    )
-
-
-def _row_key(row: LegacyHttpRouteRowV2) -> tuple[str, str, str]:
-    return row.method, row.path, row.plugin_id
+        message = str(exc)
+        prefix = "unsafe desired plugin route:"
+        if message.startswith(prefix):
+            detail = message.removeprefix(prefix).strip()
+            raise ValueError(f"unsafe legacy HTTP route definition: {detail}") from exc
+        raise
 
 
 def _inventory_by_route(

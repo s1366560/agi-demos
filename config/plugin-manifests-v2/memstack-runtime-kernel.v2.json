@@ -984,7 +984,11 @@
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:http.route-table-builder", "version": "1.0.0" }
+            { "service": "service:http.route-table-builder", "version": "1.0.0" },
+            {
+              "service": "service:http.route-authority-catalog",
+              "version": "1.0.0"
+            }
           ],
           "requires": []
         },
@@ -996,9 +1000,9 @@
           "properties": {}
         }
       },
-      "contract_digest": "sha256:d8478b3b7a7100a0984d71a56373d0d9b76bdca8d56510b077bfed1f336e8d86",
+      "contract_digest": "sha256:7849adcbad64eb0ee82d50c7c85d32ca6e1baf073c199933338a76904de9bf91",
       "artifact": {
-        "digest": "sha256:80f7fb2f9c7187a4f819876f58bae22fe0a876941465b648e622c77abf46bfea",
+        "digest": "sha256:2f7efbf186480294910bc78f030ecff6f2720c66a78607c9dcc0eca0c95737e9",
         "source": "repo+python://src/infrastructure/plugins/v2/route_effects.py"
       }
     },
@@ -1013,6 +1017,11 @@
             {
               "alias": "route_table",
               "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "route_authority",
+              "service": "service:http.route-authority-catalog",
               "version": "1.0.0"
             }
           ]
@@ -1050,9 +1059,9 @@
           }
         }
       },
-      "contract_digest": "sha256:0e16c9f6154395c3a4ce95aab8f31a53e21b41a5607e7a03d6a80696f327640d",
+      "contract_digest": "sha256:e94d5c8fbebbf21c390db3264022315423a7c3c4a7fe3bc1e8adfac7313e7755",
       "artifact": {
-        "digest": "sha256:a977740b14661953e7fbb980fba030c468418db09a52a45ee9e81ed4278cdc57",
+        "digest": "sha256:88b16995bc93a291edcbeea45a109f8aaa64a43a05c6e83ff428e46445b2dffd",
         "source": "repo+python://src/infrastructure/plugins/v2/legacy_http_route_bridge.py"
       }
     },

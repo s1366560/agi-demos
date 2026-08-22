@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, status
@@ -11,18 +14,34 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.plugins.generated_v2 import ServiceContractV2, ServiceRequiredV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers import platform_plugins
+from src.infrastructure.adapters.primary.web.routers import platform_plugins, platform_plugins_v2
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateModel,
     User,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
+    PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginPublicationPolicyV2,
     PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
+from src.infrastructure.plugins.v2.protocol import parse_profile_snapshot_v2
+from src.infrastructure.plugins.v2.route_authority import (
+    LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
+    LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
+    ROUTE_AUTHORITY_CATALOG_INJECT_V2,
+    ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
+    ROUTE_TABLE_BUILDER_INJECT_V2,
+    PluginRouteAuthorityV2,
+    RouteAuthorityCatalogV2,
+)
+from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -98,6 +117,7 @@ async def test_v2_distribution_endpoint_allows_authenticated_non_admin(
     (
         ("post", "/api/v1/platform-plugins/v2/data-plane-state"),
         ("get", "/api/v1/platform-plugins/v2/readiness"),
+        ("get", "/api/v1/platform-plugins/v2/route-authority/readiness"),
         ("get", "/api/v1/platform-plugins/v2/publications/unknown/readiness"),
         ("post", "/api/v1/platform-plugins/v2/publications/republish-last-ready"),
     ),
@@ -119,6 +139,204 @@ async def test_v2_distribution_endpoint_returns_404_without_publication(
     response = _client(db_session).get("/api/v1/platform-plugins/v2/distribution")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def _route_authority_snapshot_v2(*, bridge_enabled: bool, target_enabled: bool = True):
+    snapshot = parse_profile_snapshot_v2(
+        json.loads(
+            (_ROOT / "shared/fixtures/platform-plugin-profile.v2.json").read_text(encoding="utf-8")
+        )
+    )
+    source_manifest = snapshot.manifests[0]
+    source_module = source_manifest.modules[0]
+    route_module = replace(
+        source_module,
+        module_ref="builtin://example/http-routes",
+        contract=replace(
+            source_module.contract,
+            services=ServiceContractV2(
+                provides=(),
+                requires=(
+                    ServiceRequiredV2(
+                        alias=ROUTE_TABLE_BUILDER_INJECT_V2,
+                        service=ROUTE_TABLE_BUILDER_SERVICE_V2,
+                        version="1.0.0",
+                    ),
+                    ServiceRequiredV2(
+                        alias=ROUTE_AUTHORITY_CATALOG_INJECT_V2,
+                        service=ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
+                        version="1.0.0",
+                    ),
+                ),
+            ),
+        ),
+    )
+    manifest = replace(
+        source_manifest,
+        plugin_id="example-plugin",
+        modules=(route_module,),
+    )
+    target_entry = replace(
+        snapshot.entries[0],
+        entry_id="example-http-routes",
+        plugin_ref=manifest.plugin_id,
+        module_ref=route_module.module_ref,
+        enabled=target_enabled,
+        inject={
+            ROUTE_TABLE_BUILDER_INJECT_V2: ROUTE_TABLE_BUILDER_SERVICE_V2,
+            ROUTE_AUTHORITY_CATALOG_INJECT_V2: ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
+        },
+    )
+    bridge_entry = replace(
+        target_entry,
+        entry_id=LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
+        plugin_ref="memstack-runtime-kernel",
+        module_ref=LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
+        enabled=bridge_enabled,
+    )
+    return replace(
+        snapshot,
+        manifests=(manifest,),
+        entries=(target_entry, bridge_entry),
+    )
+
+
+async def _record_desired_route_v2(db: AsyncSession) -> None:
+    await PlatformPluginGovernanceRepository(db).upsert_http_route(
+        plugin_id="example-plugin",
+        method="GET",
+        path="/api/v1/plugins/example",
+        permission="plugin.example.read",
+        authorization_mode="tenant_member",
+    )
+    await db.commit()
+
+
+def _route_definition_v2(owner_entry_id: str) -> RouteDefinitionV2:
+    async def endpoint() -> dict[str, bool]:
+        return {"ok": True}
+
+    return RouteDefinitionV2(
+        owner_entry_id=owner_entry_id,
+        path="/api/v1/plugins/example",
+        methods=("GET",),
+        endpoint=endpoint,
+        name="example-plugin-route",
+    )
+
+
+def _route_authority_v2(
+    owner_entry_id: str,
+    *,
+    permission: str = "plugin.example.read",
+) -> PluginRouteAuthorityV2:
+    return PluginRouteAuthorityV2(
+        owner_entry_id=owner_entry_id,
+        plugin_id="example-plugin",
+        method="GET",
+        path="/api/v1/plugins/example",
+        permission=permission,
+        authorization_mode="tenant_member",
+    )
+
+
+def _install_route_generation_v2(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    bridge_enabled: bool,
+    target_enabled: bool = True,
+    definition_owner: str | None = "example-http-routes",
+    authority_owner: str | None = "example-http-routes",
+    authority_permission: str = "plugin.example.read",
+) -> None:
+    builder = RouteTableBuilderV2()
+    if definition_owner is not None:
+        _ = builder.contribute(_route_definition_v2(definition_owner))
+    catalog = RouteAuthorityCatalogV2()
+    if authority_owner is not None:
+        _ = catalog.contribute(
+            _route_authority_v2(authority_owner, permission=authority_permission)
+        )
+    services = {
+        ROUTE_TABLE_BUILDER_SERVICE_V2: builder,
+        ROUTE_AUTHORITY_CATALOG_SERVICE_V2: catalog,
+    }
+    generation = SimpleNamespace(
+        snapshot=_route_authority_snapshot_v2(
+            bridge_enabled=bridge_enabled,
+            target_enabled=target_enabled,
+        ),
+        resolve=lambda service, _scope: services[service],
+    )
+    monkeypatch.setattr(platform_plugins_v2, "current_generation_v2", lambda: generation)
+
+
+@pytest.mark.unit
+async def test_v2_route_authority_readiness_returns_exact_bundle_binding(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _record_desired_route_v2(db_session)
+    _install_route_generation_v2(monkeypatch, bridge_enabled=False)
+
+    response = _client(db_session).get("/api/v1/platform-plugins/v2/route-authority/readiness")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["ready"] is True
+    assert response.json()["reasons"] == []
+    assert response.json()["bindings"] == [
+        {
+            "method": "GET",
+            "path": "/api/v1/plugins/example",
+            "source_plugin_id": "example-plugin",
+            "target_entry_id": "example-http-routes",
+            "target_plugin_ref": "example-plugin",
+            "target_module_ref": "builtin://example/http-routes",
+        }
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    (
+        ({"bridge_enabled": True}, "legacy_bridge_enabled"),
+        (
+            {"bridge_enabled": False, "authority_owner": None},
+            "route_authority_missing:GET /api/v1/plugins/example",
+        ),
+        (
+            {"bridge_enabled": False, "authority_permission": "plugin.example.admin"},
+            "route_authority_mismatch:GET /api/v1/plugins/example",
+        ),
+        (
+            {"bridge_enabled": False, "target_enabled": False},
+            "route_owner_entry_inactive:example-http-routes",
+        ),
+        (
+            {
+                "bridge_enabled": True,
+                "definition_owner": LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
+                "authority_owner": LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
+            },
+            "route_owner_is_legacy_bridge:GET /api/v1/plugins/example",
+        ),
+    ),
+)
+async def test_v2_route_authority_readiness_fails_closed_with_stable_reasons(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, object],
+    reason: str,
+) -> None:
+    await _record_desired_route_v2(db_session)
+    _install_route_generation_v2(monkeypatch, **kwargs)
+
+    response = _client(db_session).get("/api/v1/platform-plugins/v2/route-authority/readiness")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["ready"] is False
+    assert reason in response.json()["reasons"]
 
 
 @pytest.mark.unit

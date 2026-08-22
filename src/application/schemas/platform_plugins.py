@@ -116,6 +116,28 @@ class PlatformPluginDesiredBundleSetResponseV2(BaseModel):
     created_at: datetime
 
 
+class PlatformPluginRouteAuthorityBindingResponseV2(BaseModel):
+    method: str
+    path: str
+    source_plugin_id: str
+    target_entry_id: str
+    target_plugin_ref: str
+    target_module_ref: str
+
+
+class PlatformPluginRouteAuthorityReadinessResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    profile_id: str
+    generation: int
+    snapshot_digest: str
+    ready: bool
+    legacy_bridge_enabled: bool
+    required_route_count: int
+    bound_route_count: int
+    bindings: list[PlatformPluginRouteAuthorityBindingResponseV2]
+    reasons: list[str]
+
+
 class PlatformPluginShadowRolloutEventResponse(BaseModel):
     capability: str
     event_name: str

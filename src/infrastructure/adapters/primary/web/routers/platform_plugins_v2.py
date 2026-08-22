@@ -14,9 +14,11 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
     PlatformPluginPublicationReadinessResponseV2,
+    PlatformPluginRouteAuthorityReadinessResponseV2,
 )
 from src.domain.model.plugins.generated_v2 import (
     DesiredBundleSetV2,
+    ScopeKindV2,
     ScopeV2,
     SnapshotApplyReceiptV2,
 )
@@ -31,6 +33,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
     PlatformPluginDesiredBundleSetRepositoryV2,
     PlatformPluginDesiredBundleSetV2Error,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
+    PlatformPluginGovernanceRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginLedgerV2Error,
@@ -38,6 +43,8 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepositoryV2,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2
 from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
     desired_bundle_set_v2_to_payload,
@@ -45,6 +52,12 @@ from src.infrastructure.plugins.v2.protocol import (
     parse_snapshot_apply_receipt_v2,
     snapshot_apply_receipt_v2_to_payload,
 )
+from src.infrastructure.plugins.v2.route_authority import (
+    ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
+    RouteAuthorityCatalogV2,
+    verify_bundle_route_authority_v2,
+)
+from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scope import parse_scope_v2, scope_v2_to_payload
 
@@ -213,6 +226,34 @@ async def get_latest_publication_readiness_v2(
         )
     await db.commit()
     return _publication_readiness_response_v2(readiness)
+
+
+@router.get(
+    "/route-authority/readiness",
+    response_model=PlatformPluginRouteAuthorityReadinessResponseV2,
+)
+async def get_route_authority_readiness_v2(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginRouteAuthorityReadinessResponseV2:
+    """Prove every active desired route is owned by an exact non-bridge V2 effect."""
+    _require_platform_admin(current_user)
+    generation = current_generation_v2()
+    root_scope = ScopeV2(kind=ScopeKindV2.ROOT)
+    builder = generation.resolve(ROUTE_TABLE_BUILDER_SERVICE_V2, root_scope)
+    authority_catalog = generation.resolve(ROUTE_AUTHORITY_CATALOG_SERVICE_V2, root_scope)
+    if not isinstance(builder, RouteTableBuilderV2):
+        raise TypeError("plugin runtime v2 resolved an invalid route table builder")
+    if not isinstance(authority_catalog, RouteAuthorityCatalogV2):
+        raise TypeError("plugin runtime v2 resolved an invalid route authority catalog")
+    desired_rows = await PlatformPluginGovernanceRepository(db).list_http_routes()
+    evidence = verify_bundle_route_authority_v2(
+        snapshot=generation.snapshot,
+        route_definitions=builder.definitions,
+        authorities=authority_catalog.authorities,
+        desired_rows=desired_rows,
+    )
+    return PlatformPluginRouteAuthorityReadinessResponseV2.model_validate(evidence.to_payload())
 
 
 @router.get(

@@ -18,6 +18,7 @@ from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
 )
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.route_effects import (
+    ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
     ROUTE_TABLE_BUILDER_SERVICE_V2,
     route_table_builder_definition_v2,
 )
@@ -137,6 +138,10 @@ async def test_legacy_route_entry_contributes_and_disposes_a_real_route_effect()
         ROUTE_TABLE_BUILDER_SERVICE_V2,
         ScopeV2(kind=ScopeKindV2.ROOT),
     )
+    authority_catalog = generation.resolve(
+        ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
     definitions = builder.definitions
 
     assert len(definitions) == 1
@@ -144,9 +149,12 @@ async def test_legacy_route_entry_contributes_and_disposes_a_real_route_effect()
     assert definitions[0].endpoint is handler
     assert len(definitions[0].dependencies) == 1
     assert definitions[0].dependencies[0].dependency is authorize
+    assert authority_catalog.authorities[0].owner_entry_id == LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2
+    assert authority_catalog.authorities[0].plugin_id == "example-plugin"
 
     await generation.dispose()
     assert builder.definitions == ()
+    assert authority_catalog.authorities == ()
 
 
 @pytest.mark.unit
