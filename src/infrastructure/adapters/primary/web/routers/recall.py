@@ -6,16 +6,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Use Cases & DI Container
-from src.domain.ports.services.graph_store_port import GraphStorePort
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_graph_store,
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
+    GraphApplicationAuthorityV2,
+    graph_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.graph import _graph_project_scope
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
@@ -55,12 +53,15 @@ class ShortTermRecallResponse(BaseModel):
 async def short_term_recall(
     payload: ShortTermRecallQuery,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> ShortTermRecallResponse:
     """
     Recall short-term episodic memories within the given time window.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))

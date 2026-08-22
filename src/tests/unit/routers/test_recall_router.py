@@ -1,5 +1,6 @@
 """Unit tests for recall router project scoping."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -55,6 +56,13 @@ def _make_graph_store() -> Mock:
     return store
 
 
+def _application(db: AsyncSession, graph_store: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        services=SimpleNamespace(graph_store=graph_store),
+    )
+
+
 @pytest.mark.unit
 class TestRecallRouter:
     @pytest.mark.asyncio
@@ -69,8 +77,7 @@ class TestRecallRouter:
             await short_term_recall(
                 ShortTermRecallQuery(window_minutes=60, limit=10, project_id="not-a-member"),
                 current_user=test_user,
-                db=test_db,
-                graph_store=graph_store,
+                graph_application=_application(test_db, graph_store),
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -88,8 +95,7 @@ class TestRecallRouter:
         response = await short_term_recall(
             ShortTermRecallQuery(window_minutes=60, limit=10),
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_application(test_db, graph_store),
         )
 
         assert response.total == 0
@@ -114,8 +120,7 @@ class TestRecallRouter:
                 project_id=test_project_db.id,
             ),
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_application(test_db, graph_store),
         )
 
         kwargs = graph_store.recall_recent_episodes.await_args.kwargs
@@ -139,8 +144,7 @@ class TestRecallRouter:
                 tenant_id=test_project_db.tenant_id,
             ),
             current_user=test_user,
-            db=test_db,
-            graph_store=graph_store,
+            graph_application=_application(test_db, graph_store),
         )
 
         assert response.total == 0
@@ -167,8 +171,7 @@ class TestRecallRouter:
                     project_id=test_project_db.id,
                 ),
                 current_user=test_user,
-                db=test_db,
-                graph_store=graph_store,
+                graph_application=_application(test_db, graph_store),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -190,8 +193,7 @@ class TestRecallRouter:
             await short_term_recall(
                 ShortTermRecallQuery(window_minutes=60, limit=10, project_id=test_project_db.id),
                 current_user=test_user,
-                db=test_db,
-                graph_store=graph_store,
+                graph_application=_application(test_db, graph_store),
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
