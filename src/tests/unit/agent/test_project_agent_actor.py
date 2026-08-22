@@ -1,11 +1,13 @@
 """Unit tests for ProjectAgentActor HITL resume paths."""
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.secondary.persistence import (
     database as database_mod,
     sql_hitl_request_repository as hitl_repo_mod,
@@ -30,8 +32,11 @@ def _build_actor() -> object:
     actor_cls = project_agent_actor.ProjectAgentActor
     inner_cls = actor_cls.__ray_metadata__.modified_class
     actor = inner_cls.__new__(inner_cls)
-    actor._agent = object()
+    actor._agent = MagicMock()
+    actor._agent.initialize = AsyncMock(return_value=True)
     actor._lease_owner_suffix = "lease-1"
+    actor._init_lock = asyncio.Lock()
+    actor._agent_generation_descriptor_v2 = None
     actor._config = SimpleNamespace(
         tenant_id="tenant-1",
         project_id="project-1",
@@ -173,7 +178,9 @@ class TestProjectAgentActor:
         async def _enter_admission() -> object:
             nonlocal lease_active
             lease_active = True
-            return object()
+            return SimpleNamespace(
+                descriptor=PluginGenerationDescriptorV2.from_payload(generation),
+            )
 
         async def _exit_admission(*_args: object) -> bool:
             nonlocal lease_active

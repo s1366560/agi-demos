@@ -89,7 +89,11 @@ class TestToolContextRegistration:
             "src.infrastructure.agent.tools.define.get_registered_tools",
             lambda: registry,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_sandbox_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_sandbox_adapter,
+        )
 
         tools: dict[str, object] = {}
         worker_state._add_register_mcp_server_tool(
@@ -143,7 +147,11 @@ class TestToolContextRegistration:
             "src.infrastructure.agent.tools.define.get_registered_tools",
             lambda: registry,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_sandbox_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_sandbox_adapter,
+        )
 
         tools: dict[str, object] = {
             "bash": SimpleNamespace(_sandbox_id="sandbox-private-1"),
@@ -199,7 +207,11 @@ class TestToolContextRegistration:
             "src.infrastructure.agent.tools.define.get_registered_tools",
             lambda: registry,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_active_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_active_adapter,
+        )
 
         tools: dict[str, object] = {}
         worker_state._add_register_mcp_server_tool(
@@ -262,7 +274,11 @@ class TestToolContextRegistration:
             "src.infrastructure.agent.tools.define.get_registered_tools",
             lambda: registry,
         )
-        monkeypatch.setattr(worker_state, "_mcp_sandbox_adapter", fake_active_adapter)
+        monkeypatch.setattr(
+            worker_state,
+            "current_mcp_sandbox_adapter_v2",
+            lambda: fake_active_adapter,
+        )
 
         worker_state._add_register_mcp_server_tool(
             tools={},

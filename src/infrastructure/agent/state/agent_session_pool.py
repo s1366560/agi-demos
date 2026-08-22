@@ -797,11 +797,11 @@ async def get_or_create_agent_session(
         SandboxSkillResourceAdapter,
     )
     from src.infrastructure.agent.state.agent_worker_state import (
-        get_mcp_sandbox_adapter,
+        current_mcp_sandbox_adapter_v2,
         resolve_project_base_path,
     )
 
-    sandbox_adapter = get_mcp_sandbox_adapter()
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
     host_project_path = resolve_project_base_path(project_id)
 
     if sandbox_adapter:

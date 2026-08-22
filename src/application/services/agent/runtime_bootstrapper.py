@@ -1175,7 +1175,6 @@ class AgentRuntimeBootstrapper:
             )
 
             agent = ProjectReActAgent(agent_config)
-            await agent.initialize()
 
             # Inject plan repository for Plan Mode awareness
             try:
@@ -1193,6 +1192,9 @@ class AgentRuntimeBootstrapper:
                 pass  # Plan Mode awareness is optional
 
             from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+            from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                agent_worker_sandbox_runtime_factory_v2,
+            )
             from src.infrastructure.plugins.v2.boundary import (
                 OPERATION_IDENTITY_SERVICE_V2,
                 OPERATION_METADATA_SERVICE_V2,
@@ -1200,11 +1202,16 @@ class AgentRuntimeBootstrapper:
             from src.infrastructure.plugins.v2.builtin_modules import (
                 builtin_runtime_definitions_v2,
             )
+            from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
             from src.infrastructure.plugins.v2.runtime_host import (
                 DataPlaneGenerationAdmissionV2,
             )
 
-            admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+            admission = DataPlaneGenerationAdmissionV2(
+                builtin_runtime_definitions_v2(
+                    sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                )
+            )
             try:
                 async with admission.admit(
                     descriptor_payload=request.plugin_generation,
@@ -1228,6 +1235,12 @@ class AgentRuntimeBootstrapper:
                         },
                     },
                 ):
+                    initialized = await agent.initialize()
+                    if not initialized:
+                        raise RuntimeV2Error(
+                            "agent_initialization_failed",
+                            "agent initialization failed for the admitted plugin generation",
+                        )
                     result = await execute_project_chat(
                         agent,
                         request,
@@ -1304,45 +1317,9 @@ class AgentRuntimeBootstrapper:
                     logger.error("[AgentService] Graph service init failed: %s", e)
                     raise
 
-            await self._bootstrap_mcp_sandbox()
             await self._bootstrap_agent_orchestrator()
 
             AgentRuntimeBootstrapper._local_bootstrapped = True
-
-    async def _bootstrap_mcp_sandbox(self) -> None:
-        """Initialize MCP Sandbox Adapter for Project Sandbox tool loading."""
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_mcp_sandbox_adapter,
-            set_mcp_sandbox_adapter,
-            sync_mcp_sandbox_adapter_from_docker,
-        )
-
-        if get_mcp_sandbox_adapter():
-            return
-
-        try:
-            from src.configuration.config import get_settings
-            from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-                MCPSandboxAdapter,
-            )
-
-            settings = get_settings()
-            mcp_sandbox_adapter = MCPSandboxAdapter(
-                mcp_image=settings.sandbox_default_image,
-                default_timeout=settings.sandbox_timeout_seconds,
-                default_memory_limit=settings.sandbox_memory_limit,
-                default_cpu_limit=settings.sandbox_cpu_limit,
-            )
-            set_mcp_sandbox_adapter(mcp_sandbox_adapter)
-            count = await sync_mcp_sandbox_adapter_from_docker()
-            if count > 0:
-                logger.info("[AgentService] Synced %d existing sandboxes from Docker", count)
-            logger.info("[AgentService] MCP Sandbox adapter bootstrapped for local execution")
-        except Exception as e:
-            logger.warning(
-                "[AgentService] MCP Sandbox adapter init failed (Sandbox tools disabled): %s",
-                e,
-            )
 
     async def _bootstrap_agent_orchestrator(self) -> None:
         """Initialize AgentOrchestrator for multi-agent tools."""

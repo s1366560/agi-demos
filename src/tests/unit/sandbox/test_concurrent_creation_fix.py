@@ -278,11 +278,11 @@ class TestAgentWorkerSandboxConsistency:
         # Patch database session factory and global adapter
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
             # Set the mock adapter as the global
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             # Patch database imports
             with monkeypatch.context() as m:
@@ -314,7 +314,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             # Restore original adapter
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_uses_db_sandbox(
         self, mock_sandbox_adapter, monkeypatch
@@ -353,10 +353,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -390,7 +390,7 @@ class TestAgentWorkerSandboxConsistency:
                 mock_sandbox_adapter.connect_mcp.assert_called_with("db-sandbox-id")
 
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_project_sandbox_tools_cache_reuses_loaded_wrappers(
         self, mock_sandbox_adapter, monkeypatch
@@ -419,11 +419,11 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
         worker_state._project_sandbox_tools_cache.clear()
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -472,7 +472,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             worker_state._project_sandbox_tools_cache.clear()
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_project_sandbox_tools_force_refresh_bypasses_cache(
         self, mock_sandbox_adapter, monkeypatch
@@ -500,11 +500,11 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
         worker_state._project_sandbox_tools_cache.clear()
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -540,7 +540,7 @@ class TestAgentWorkerSandboxConsistency:
 
         finally:
             worker_state._project_sandbox_tools_cache.clear()
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_recovers_stale_db_sandbox(
         self, mock_sandbox_adapter, monkeypatch
@@ -590,10 +590,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -624,7 +624,7 @@ class TestAgentWorkerSandboxConsistency:
                 )
                 mock_sandbox_adapter.connect_mcp.assert_called_with("recovered-sandbox-id")
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
     async def test_load_project_sandbox_tools_falls_back_to_existing_project_container(
         self, mock_sandbox_adapter, monkeypatch
@@ -663,10 +663,10 @@ class TestAgentWorkerSandboxConsistency:
 
         import src.infrastructure.agent.state.agent_worker_state as worker_state
 
-        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        original_adapter = worker_state.current_mcp_sandbox_adapter_v2
 
         try:
-            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = lambda: mock_sandbox_adapter
 
             with monkeypatch.context() as m:
                 m.setattr(
@@ -691,7 +691,7 @@ class TestAgentWorkerSandboxConsistency:
                 mock_sandbox_adapter.connect_mcp.assert_called_with("existing-project-sandbox")
 
         finally:
-            worker_state._mcp_sandbox_adapter = original_adapter
+            worker_state.current_mcp_sandbox_adapter_v2 = original_adapter
 
 
 @pytest.mark.unit

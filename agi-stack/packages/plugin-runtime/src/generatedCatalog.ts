@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:eba19aaf9f54bab7c86a8c45895810b0b36cf248ba81f77af3612623ed',
-  'aae825","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:c9c0ce7bae5dea798e936d1cf0ac3e2928323ccd0e1d9b743ad6a309a5',
+  '565319","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -207,7 +207,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a1e4ba9608","entrypoint":"src.infrastructure.plugins.v2.tool_set:_apply_tool_set_res',
   'olver_v2","module_ref":"builtin://memstack/agent/tool-set","plugin_id":"memstack-run',
   'time-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha2',
-  '56:c4f3b7a4152eb5aa6630e5191dc59d82ae6542f23126a298938ae038925fb48d","artifact_sourc',
+  '56:65822a33d1edabfd15874f8f0c1a25bfa94447f7248b10309b00eae77ebe04d8","artifact_sourc',
   'e":"repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py","contract":',
   '{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addition',
   'alProperties":false,"properties":{"strategy":{"const":"generation-sandbox-runtime","',
@@ -644,4 +644,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:eba19aaf9f54bab7c86a8c45895810b0b36cf248ba81f77af3612623edaae825' as const;
+  'sha256:c9c0ce7bae5dea798e936d1cf0ac3e2928323ccd0e1d9b743ad6a309a5565319' as const;

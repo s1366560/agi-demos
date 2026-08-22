@@ -64,11 +64,17 @@ class TestInjectDiscoveredMCPToolsIntoCache:
         import src.infrastructure.agent.state.agent_worker_state as mod
 
         original_cache = mod._tools_cache.copy()
-        original_adapter = mod._mcp_sandbox_adapter
         yield
         mod._tools_cache.clear()
         mod._tools_cache.update(original_cache)
-        mod._mcp_sandbox_adapter = original_adapter
+
+    @pytest.fixture
+    def sandbox_adapter(self, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+        import src.infrastructure.agent.state.agent_worker_state as mod
+
+        adapter = MagicMock()
+        monkeypatch.setattr(mod, "current_mcp_sandbox_adapter_v2", lambda: adapter)
+        return adapter
 
     async def test_returns_zero_when_no_discovered_tools(self) -> None:
         from src.infrastructure.agent.state.agent_worker_state import (
@@ -82,13 +88,16 @@ class TestInjectDiscoveredMCPToolsIntoCache:
         )
         assert result == 0
 
-    async def test_returns_zero_when_no_sandbox_adapter(self) -> None:
+    async def test_returns_zero_when_no_sandbox_adapter(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_worker_state import (
             inject_discovered_mcp_tools_into_cache,
         )
 
-        mod._mcp_sandbox_adapter = None
+        monkeypatch.setattr(mod, "current_mcp_sandbox_adapter_v2", lambda: None)
         result = await inject_discovered_mcp_tools_into_cache(
             project_id="proj-1",
             server_name="test-server",
@@ -99,6 +108,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_explicit_descriptor_without_lease_does_not_inject(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_worker_state import (
@@ -107,7 +117,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
 
         distribution = generation_host.current_distribution
         assert distribution is not None
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
 
         with patch(
             "src.infrastructure.agent.state.agent_worker_state._resolve_project_sandbox_id",
@@ -128,13 +138,13 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_returns_zero_when_no_sandbox_id(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
-        import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_worker_state import (
             inject_discovered_mcp_tools_into_cache,
         )
 
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
 
         async with pin_operation_context_v2(
             generation_host,
@@ -157,6 +167,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_injects_tools_into_empty_cache(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
@@ -164,7 +175,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
             inject_discovered_mcp_tools_into_cache,
         )
 
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
         async with pin_operation_context_v2(
             generation_host,
             operation_id="mcp-injection-empty-cache",
@@ -198,6 +209,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_merges_with_existing_cache(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
@@ -205,7 +217,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
             inject_discovered_mcp_tools_into_cache,
         )
 
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
         async with pin_operation_context_v2(
             generation_host,
             operation_id="mcp-injection-merge-cache",
@@ -242,6 +254,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_skips_tools_with_empty_name(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
@@ -249,7 +262,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
             inject_discovered_mcp_tools_into_cache,
         )
 
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
         tools = [
             {"name": "valid_tool", "description": "ok", "inputSchema": {}},
             {"name": "", "description": "empty name", "inputSchema": {}},
@@ -284,6 +297,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
     async def test_adapter_instances_are_correct_type(
         self,
         generation_host: PlatformPluginRuntimeHostV2,
+        sandbox_adapter: MagicMock,
     ) -> None:
         import src.infrastructure.agent.state.agent_worker_state as mod
         from src.infrastructure.agent.state.agent_session_pool import generation_cache_key_v2
@@ -292,7 +306,7 @@ class TestInjectDiscoveredMCPToolsIntoCache:
         )
         from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
-        mod._mcp_sandbox_adapter = MagicMock()
+        _ = sandbox_adapter
 
         async with pin_operation_context_v2(
             generation_host,

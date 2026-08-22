@@ -762,10 +762,10 @@ class ProjectReActAgent:
 
         try:
             from src.infrastructure.agent.state.agent_worker_state import (
-                get_mcp_sandbox_adapter,
+                current_mcp_sandbox_adapter_v2,
             )
 
-            sandbox_adapter = get_mcp_sandbox_adapter()
+            sandbox_adapter = current_mcp_sandbox_adapter_v2()
             if not sandbox_adapter:
                 return False
 
@@ -820,6 +820,8 @@ class ProjectReActAgent:
             success = await self.initialize(force_refresh=True)
             return success
 
+        except RuntimeV2Error:
+            raise
         except Exception as e:
             logger.warning(
                 f"ProjectReActAgent[{self.project_key}]: Error checking sandbox tools: {e}"

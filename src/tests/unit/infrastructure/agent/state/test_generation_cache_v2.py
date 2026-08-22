@@ -336,7 +336,7 @@ async def test_agent_session_pool_isolated_by_generation(
         "get_system_prompt_manager",
         AsyncMock(return_value=object()),
     )
-    monkeypatch.setattr(agent_worker_state, "get_mcp_sandbox_adapter", lambda: None)
+    monkeypatch.setattr(agent_worker_state, "current_mcp_sandbox_adapter_v2", lambda: None)
     monkeypatch.setattr(agent_worker_state, "resolve_project_base_path", lambda _project: Path("."))
 
     async with pin_operation_context_v2(

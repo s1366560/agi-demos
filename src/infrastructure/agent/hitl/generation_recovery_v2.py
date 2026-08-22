@@ -33,10 +33,17 @@ async def admit_persisted_hitl_state_v2(
             "persisted HITL state does not contain the plugin distribution to resume",
         )
 
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        agent_worker_sandbox_runtime_factory_v2,
+    )
     from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
     from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmissionV2
 
-    admission = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+    admission = DataPlaneGenerationAdmissionV2(
+        builtin_runtime_definitions_v2(
+            sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+        )
+    )
     try:
         async with admission.admit(
             descriptor_payload=state.plugin_generation,

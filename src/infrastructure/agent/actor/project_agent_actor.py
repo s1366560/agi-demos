@@ -14,9 +14,7 @@ import ray
 
 from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
-from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-    MCPSandboxAdapter,
-)
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.actor.execution import (
     continue_project_chat,
     execute_project_chat,
@@ -32,10 +30,11 @@ from src.infrastructure.agent.core.project_react_agent import (
 )
 from src.infrastructure.agent.state.agent_worker_state import (
     set_agent_graph_service,
-    set_mcp_sandbox_adapter,
-    sync_mcp_sandbox_adapter_from_docker,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    agent_worker_sandbox_runtime_factory_v2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
@@ -59,7 +58,12 @@ class ProjectAgentActor:
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
-        self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(builtin_runtime_definitions_v2())
+        self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
+            builtin_runtime_definitions_v2(
+                sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+            )
+        )
+        self._agent_generation_descriptor_v2: PluginGenerationDescriptorV2 | None = None
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
@@ -85,6 +89,7 @@ class ProjectAgentActor:
             if self._agent and force_refresh:
                 await self._agent.stop()
                 self._agent = None
+                self._agent_generation_descriptor_v2 = None
 
             agent_config = ProjectAgentConfig(
                 tenant_id=config.tenant_id,
@@ -105,7 +110,7 @@ class ProjectAgentActor:
             )
 
             self._agent = ProjectReActAgent(agent_config)
-            success = await self._agent.initialize(force_refresh=force_refresh)
+            self._agent_generation_descriptor_v2 = None
 
             # Inject plan repository for Plan Mode awareness
             try:
@@ -122,9 +127,35 @@ class ProjectAgentActor:
             except Exception:
                 pass  # Plan Mode awareness is optional
 
-            status = "initialized" if success else "error"
+            return {"status": "initialized", "cached": False}
 
-            return {"status": status, "cached": False}
+    async def _ensure_agent_initialized_v2(
+        self,
+        operation: OperationContextV2,
+        *,
+        agent: ProjectReActAgent | None = None,
+    ) -> None:
+        """Initialize Agent state inside the exact admitted generation lease."""
+        target = agent if agent is not None else self._agent
+        if target is None:
+            raise RuntimeV2Error(
+                "agent_runtime_unavailable",
+                "agent runtime is not configured for the admitted operation",
+            )
+
+        descriptor = operation.descriptor
+        async with self._init_lock:
+            current = self._agent_generation_descriptor_v2 if target is self._agent else None
+            if current == descriptor:
+                return
+            success = await target.initialize(force_refresh=current is not None)
+            if not success:
+                raise RuntimeV2Error(
+                    "agent_initialization_failed",
+                    "agent initialization failed for the admitted plugin generation",
+                )
+            if target is self._agent:
+                self._agent_generation_descriptor_v2 = descriptor
 
     async def chat(self, request: ProjectChatRequest) -> dict[str, Any]:
         """Start a chat execution in the background."""
@@ -308,6 +339,7 @@ class ProjectAgentActor:
                     return
 
                 async with self._admit_plugin_turn(request) as operation:
+                    await self._ensure_agent_initialized_v2(operation)
                     distribution = self._plugin_admission_v2.host.distribution_for_generation(
                         operation.generation
                     )
@@ -476,7 +508,11 @@ class ProjectAgentActor:
                             "message_id": state.message_id,
                         },
                     },
-                ):
+                ) as operation:
+                    await self._ensure_agent_initialized_v2(
+                        operation,
+                        agent=resume_agent,
+                    )
                     result = await continue_project_chat(
                         resume_agent,
                         request_id,
@@ -593,18 +629,6 @@ class ProjectAgentActor:
             except Exception as e:
                 logger.error(f"[ProjectAgentActor] Graph service init failed: {e}")
                 raise
-
-            try:
-                mcp_sandbox_adapter = MCPSandboxAdapter(
-                    mcp_image=settings.sandbox_default_image,
-                    default_timeout=settings.sandbox_timeout_seconds,
-                    default_memory_limit=settings.sandbox_memory_limit,
-                    default_cpu_limit=settings.sandbox_cpu_limit,
-                )
-                set_mcp_sandbox_adapter(mcp_sandbox_adapter)
-                await sync_mcp_sandbox_adapter_from_docker()
-            except Exception as e:
-                logger.warning(f"[ProjectAgentActor] MCP Sandbox adapter disabled: {e}")
 
             from src.infrastructure.agent.state.agent_worker_state import (
                 get_agent_orchestrator,

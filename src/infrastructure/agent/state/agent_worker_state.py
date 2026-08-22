@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 import redis.asyncio as redis
 
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
 # Import Agent Session Pool components
 from .agent_session_pool import (
     AgentSessionContext,
@@ -83,8 +85,7 @@ __all__ = [  # noqa: RUF022
     "get_cached_tools_for_project",
     "get_custom_tool_diagnostics",
     "get_hitl_response_listener",
-    "get_mcp_sandbox_adapter",
-    "shutdown_mcp_sandbox_adapter",
+    "current_mcp_sandbox_adapter_v2",
     # MCP Tools
     "get_mcp_tools_from_cache",
     # Graph service
@@ -115,14 +116,11 @@ __all__ = [  # noqa: RUF022
     "set_agent_graph_service",
     # HITL Response Listener (real-time delivery)
     "set_hitl_response_listener",
-    # MCP Sandbox Adapter
-    "set_mcp_sandbox_adapter",
     # Multi-Agent Orchestrator
     "set_agent_orchestrator",
     "get_agent_orchestrator",
     # Pool Manager (new 3-tier architecture)
     "set_pool_adapter",
-    "sync_mcp_sandbox_adapter_from_docker",
     "update_mcp_tools_cache",
 ]
 
@@ -131,7 +129,6 @@ _agent_graph_service: Any | None = None
 _tenant_graph_services: dict[str, Any] = {}
 _tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
-_mcp_sandbox_adapter: Any | None = None
 _pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
 _agent_orchestrator: Any | None = None  # AgentOrchestrator (multi-agent)
@@ -217,65 +214,38 @@ async def get_or_create_agent_graph_service(tenant_id: str | None = None) -> Any
         return graph_service
 
 
-def set_mcp_sandbox_adapter(adapter: Any) -> None:
-    """Set the global MCP Sandbox Adapter instance for agent worker.
+def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
+    """Resolve the sandbox adapter from the exact pinned V2 operation."""
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+        MCPSandboxAdapter,
+    )
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        AGENT_WORKER_RUNTIME_SERVICE_V2,
+        AgentWorkerRuntimeResolverProtocolV2,
+        AgentWorkerRuntimeServicesV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 
-    Called during Agent Worker initialization to make MCPSandboxAdapter
-    available to all Agent Activities for loading Project Sandbox MCP tools.
-
-    Args:
-        adapter: The MCPSandboxAdapter instance
-    """
-    global _mcp_sandbox_adapter
-    _mcp_sandbox_adapter = adapter
-    logger.info("Agent Worker: MCP Sandbox Adapter registered for Activities")
-
-
-async def sync_mcp_sandbox_adapter_from_docker() -> int:
-    """Sync existing sandbox containers from Docker on startup.
-
-    Called during Agent Worker initialization to discover and recover
-    existing sandbox containers that may have been created before
-    the adapter was (re)initialized.
-
-    Returns:
-        Number of sandboxes discovered and synced
-    """
-    if _mcp_sandbox_adapter is None:
-        return 0
-
-    try:
-        count = await _mcp_sandbox_adapter.sync_from_docker()
-        if count > 0:
-            logger.info(f"Agent Worker: Synced {count} existing sandboxes from Docker")
-        return cast(int, count)
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to sync sandboxes from Docker: {e}")
-        return 0
-
-
-def get_mcp_sandbox_adapter() -> Any | None:
-    """Get the global MCP Sandbox Adapter instance for agent worker.
-
-    Returns:
-        The MCPSandboxAdapter instance or None if not initialized
-    """
-    return _mcp_sandbox_adapter
-
-
-async def shutdown_mcp_sandbox_adapter() -> None:
-    """Close and clear the global MCP sandbox adapter used by local agent runtime."""
-    global _mcp_sandbox_adapter
-
-    adapter = _mcp_sandbox_adapter
-    _mcp_sandbox_adapter = None
-    if adapter is None:
-        return
-
-    close = getattr(adapter, "close", None)
-    if close is not None:
-        await close()
-    logger.info("Agent Worker: MCP Sandbox Adapter closed")
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_WORKER_RUNTIME_SERVICE_V2)
+    if not isinstance(resolver, AgentWorkerRuntimeResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime service has an invalid resolver",
+        )
+    services = resolver.resolve(operation)
+    if not isinstance(services, AgentWorkerRuntimeServicesV2):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime resolver returned invalid services",
+        )
+    adapter = services.sandbox_adapter
+    if adapter is not None and not isinstance(adapter, MCPSandboxAdapter):
+        raise RuntimeV2Error(
+            "invalid_agent_worker_runtime",
+            "agent worker runtime resolved an invalid sandbox adapter",
+        )
+    return adapter
 
 
 def set_agent_orchestrator(orchestrator: Any) -> None:
@@ -575,7 +545,7 @@ async def _add_sandbox_tools(
     generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> None:
     """Load and add Project Sandbox MCP tools."""
-    if _mcp_sandbox_adapter is None:
+    if current_mcp_sandbox_adapter_v2() is None:
         return
     try:
         sandbox_tools = await _get_or_load_project_sandbox_tools(
@@ -592,6 +562,8 @@ async def _add_sandbox_tools(
                 f"Agent Worker: Loaded {len(sandbox_tools)} Project Sandbox tools "
                 f"for project {project_id}"
             )
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(
             f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
@@ -714,6 +686,7 @@ def _add_skill_sync_tool(
     project_id: str,
 ) -> None:
     """Add SkillSyncTool for syncing skills from sandbox back to the system."""
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as sync_session_factory,
@@ -725,7 +698,7 @@ def _add_skill_sync_tool(
         configure_skill_sync(
             tenant_id=tenant_id,
             project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id,
             session_factory=sync_session_factory,
             skill_loader_tool=tools.get("skill_loader"),
@@ -958,6 +931,7 @@ def _add_register_mcp_server_tool(
     project_id: str,
 ) -> None:
     """Configure register_mcp_server @tool_define tool."""
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
@@ -973,7 +947,7 @@ def _add_register_mcp_server_tool(
             session_factory=app_session_factory,
             tenant_id=tenant_id,
             project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id_for_tools,
         )
         registry = get_registered_tools()
@@ -1052,8 +1026,11 @@ def _find_sandbox_id(
         if sandbox_id:
             return sandbox_id
 
-    if project_id and _mcp_sandbox_adapter is not None:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+    if project_id:
+        sandbox_adapter = current_mcp_sandbox_adapter_v2()
+        if sandbox_adapter is None:
+            return None
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         candidates: list[tuple[str, Any]] = [
             (cast(str, sid), instance)
             for sid, instance in active.items()
@@ -1096,6 +1073,16 @@ def _has_memstack_content(base: Path) -> bool:
     )
 
 
+def _sandbox_adapter_for_path_v2() -> MCPSandboxAdapter | None:
+    """Resolve the optional sandbox path source without requiring local callers to pin."""
+    try:
+        return current_mcp_sandbox_adapter_v2()
+    except RuntimeV2Error as exc:
+        if exc.code != "operation_context_not_pinned":
+            raise
+        return None
+
+
 def _resolve_sandbox_path(
     project_id: str,
     tools: dict[str, Any] | None,
@@ -1108,7 +1095,8 @@ def _resolve_sandbox_path(
     """
     from pathlib import Path
 
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = _sandbox_adapter_for_path_v2()
+    if sandbox_adapter is None:
         return None
 
     sandbox_id: str | None = None
@@ -1116,7 +1104,7 @@ def _resolve_sandbox_path(
         sandbox_id = _find_sandbox_id(tools)
 
     if sandbox_id is None:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         for sid, instance in active.items():
             inst_project_id = getattr(instance, "project_id", None)
             if inst_project_id == project_id:
@@ -1126,7 +1114,7 @@ def _resolve_sandbox_path(
     if sandbox_id is None:
         return None
 
-    active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+    active = getattr(sandbox_adapter, "_active_sandboxes", {})
     instance = active.get(sandbox_id)
     if instance is None:
         return None
@@ -1449,8 +1437,9 @@ async def _load_project_sandbox_tools(
     """
 
     tools: dict[str, Any] = {}
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
 
-    if _mcp_sandbox_adapter is None:
+    if sandbox_adapter is None:
         return tools
 
     try:
@@ -1469,9 +1458,10 @@ async def _load_project_sandbox_tools(
             return tools
 
         # STEP 5: Connect to MCP and load tools
-        await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
+        await sandbox_adapter.connect_mcp(project_sandbox_id)
         tools = _wrap_sandbox_tools(
-            project_sandbox_id, await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
+            project_sandbox_id,
+            await sandbox_adapter.list_tools(project_sandbox_id),
         )
 
         logger.info(
@@ -1482,6 +1472,8 @@ async def _load_project_sandbox_tools(
         # STEP 6: Load user MCP server tools and resolve app IDs
         await _load_and_merge_user_mcp_tools(tools, project_sandbox_id, project_id, redis_client)
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
         import traceback
@@ -1536,7 +1528,8 @@ async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> 
     This recovery path is only reached after the DB points at a sandbox that is
     no longer usable and Docker discovery found no replacement.
     """
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
         return None
 
     try:
@@ -1558,7 +1551,7 @@ async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> 
 
             lifecycle = ProjectSandboxLifecycleService(
                 repository=sandbox_repo,
-                sandbox_adapter=_mcp_sandbox_adapter,
+                sandbox_adapter=sandbox_adapter,
             )
             info = await lifecycle.get_or_create_sandbox(
                 project_id=project_id,
@@ -1605,12 +1598,13 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
 
     Returns True if container is available, False otherwise.
     """
-    if _mcp_sandbox_adapter is None:
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
         return False
 
-    container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
+    container_exists = await sandbox_adapter.container_exists(project_sandbox_id)
     if not container_exists:
-        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        active = getattr(sandbox_adapter, "_active_sandboxes", {})
         active.pop(project_sandbox_id, None)
         logger.warning(
             f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
@@ -1619,16 +1613,16 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
         return False
 
     # Sync from Docker to ensure adapter has the container in its cache
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in sandbox_adapter._active_sandboxes:
         logger.info(
             f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
             f"to adapter's internal state"
         )
-        await _mcp_sandbox_adapter.sync_from_docker()
+        await sandbox_adapter.sync_from_docker()
 
     # Verify adapter state after sync. ``container_exists`` above is a real
     # Docker check, so stale in-memory entries cannot mask a removed container.
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in sandbox_adapter._active_sandboxes:
         logger.warning(
             f"[AgentWorker] Sandbox {project_sandbox_id} exists in Docker but "
             f"could not be synced into adapter state."
@@ -1642,13 +1636,17 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
     """Fall back to Docker discovery for backwards compatibility."""
     import asyncio
 
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return None
+
     logger.info(f"[AgentWorker] Checking Docker directly for project sandbox {project_id}...")
     loop = asyncio.get_event_loop()
 
     # List all containers with memstack.sandbox label
     containers = await loop.run_in_executor(
         None,
-        lambda: _mcp_sandbox_adapter._docker.containers.list(  # type: ignore[union-attr]
+        lambda: sandbox_adapter._docker.containers.list(
             all=True,
             filters={"label": "memstack.sandbox=true"},
         ),
@@ -1658,8 +1656,8 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
 
     if project_sandbox_id:
         # Sync to adapter if found in Docker
-        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
-            await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
+        if project_sandbox_id not in sandbox_adapter._active_sandboxes:
+            await sandbox_adapter.sync_from_docker()
 
     return project_sandbox_id
 
@@ -1702,6 +1700,10 @@ def _wrap_sandbox_tools(
     """Wrap sandbox MCP tools with SandboxMCPToolWrapper, filtering internal tools."""
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool
 
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return {}
+
     # MCP management tools are internal, not exposed to agents
     _MCP_MANAGEMENT_TOOLS = {
         "mcp_server_install",
@@ -1722,8 +1724,7 @@ def _wrap_sandbox_tools(
         if tool_name in _MCP_MANAGEMENT_TOOLS:
             continue
 
-        assert _mcp_sandbox_adapter is not None
-        adapter: SandboxPort = _mcp_sandbox_adapter
+        adapter: SandboxPort = sandbox_adapter
         tool_info_obj = create_sandbox_mcp_tool(
             sandbox_id=project_sandbox_id,
             tool_name=tool_name,
@@ -1744,8 +1745,10 @@ async def _load_and_merge_user_mcp_tools(
     redis_client: redis.Redis | None,
 ) -> None:
     """Load user MCP server tools and resolve MCPApp IDs."""
-    assert _mcp_sandbox_adapter is not None
-    adapter: SandboxPort = _mcp_sandbox_adapter
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
+        return
+    adapter: SandboxPort = sandbox_adapter
     user_mcp_tools = await _load_user_mcp_server_tools(
         sandbox_adapter=adapter,
         sandbox_id=project_sandbox_id,
@@ -2635,7 +2638,10 @@ async def inject_discovered_mcp_tools_into_cache(
     """
     from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
-    if not discovered_tools or _mcp_sandbox_adapter is None:
+    if not discovered_tools:
+        return 0
+    sandbox_adapter = current_mcp_sandbox_adapter_v2()
+    if sandbox_adapter is None:
         return 0
     generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
     if generation_descriptor is None:
@@ -2654,7 +2660,7 @@ async def inject_discovered_mcp_tools_into_cache(
         )
         return 0
 
-    adapter = cast("MCPSandboxAdapter", _mcp_sandbox_adapter)
+    adapter = sandbox_adapter
     injected: dict[str, Any] = {}
 
     for tool_info in discovered_tools:

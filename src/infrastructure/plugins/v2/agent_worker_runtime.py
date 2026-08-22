@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from src.configuration.config import get_settings
+from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 from .runtime import (
@@ -20,6 +23,8 @@ from .sandbox_runtime import SandboxRuntimeServiceV2
 AGENT_WORKER_RUNTIME_MODULE_V2 = "builtin://memstack/agent/worker-runtime"
 AGENT_WORKER_RUNTIME_SERVICE_V2 = "service:agent.worker-runtime"
 AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2 = "sandbox_runtime"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,6 +61,24 @@ class AgentWorkerRuntimeResolverV2:
         return AgentWorkerRuntimeServicesV2(sandbox_adapter=sandbox_services.adapter)
 
 
+def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
+    """Build the Agent Worker sandbox adapter owned by one V2 generation."""
+    settings = get_settings()
+    try:
+        return MCPSandboxAdapter(
+            mcp_image=settings.sandbox_default_image,
+            default_timeout=settings.sandbox_timeout_seconds,
+            default_memory_limit=settings.sandbox_memory_limit,
+            default_cpu_limit=settings.sandbox_cpu_limit,
+        )
+    except SandboxConnectionError as exc:
+        logger.warning(
+            "Agent Worker sandbox runtime unavailable: error_type=%s",
+            type(exc).__name__,
+        )
+        return None
+
+
 def agent_worker_runtime_definition_v2() -> PluginDefinitionV2:
     """Build the explicit Agent Worker runtime Consumer definition."""
 
@@ -89,4 +112,5 @@ __all__ = [
     "AgentWorkerRuntimeResolverV2",
     "AgentWorkerRuntimeServicesV2",
     "agent_worker_runtime_definition_v2",
+    "agent_worker_sandbox_runtime_factory_v2",
 ]

@@ -389,15 +389,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Stop Artifact content orphan GC after current bounded work.
     await shutdown_artifact_content_orphan_gc_worker()
 
-    try:
-        from src.infrastructure.agent.state.agent_worker_state import (
-            shutdown_mcp_sandbox_adapter,
-        )
-
-        await shutdown_mcp_sandbox_adapter()
-    except Exception:
-        logger.exception("Error closing agent MCP sandbox adapter")
-
     # Shutdown
     logger.info("Shutting down...")
 

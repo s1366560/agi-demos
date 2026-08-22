@@ -33,7 +33,7 @@ async def test_sandbox_refresh_ignores_non_running_project_sandbox(monkeypatch):
     adapter.container_exists.return_value = False
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.state.agent_worker_state.get_mcp_sandbox_adapter",
+        "src.infrastructure.agent.state.agent_worker_state.current_mcp_sandbox_adapter_v2",
         lambda: adapter,
     )
 

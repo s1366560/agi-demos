@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.plugins.v2 import agent_worker_runtime
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     AGENT_WORKER_RUNTIME_MODULE_V2,
     AGENT_WORKER_RUNTIME_SERVICE_V2,
@@ -142,3 +145,17 @@ def test_agent_worker_runtime_is_an_explicit_profile_entry() -> None:
     assert enabled_modules.index(SANDBOX_RUNTIME_MODULE_V2) < enabled_modules.index(
         AGENT_WORKER_RUNTIME_MODULE_V2
     )
+
+
+def test_agent_worker_sandbox_factory_reports_docker_unavailability_as_optional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter_type = MagicMock(
+        side_effect=SandboxConnectionError(
+            message="docker unavailable",
+            operation="init",
+        )
+    )
+    monkeypatch.setattr(agent_worker_runtime, "MCPSandboxAdapter", adapter_type)
+
+    assert agent_worker_runtime.agent_worker_sandbox_runtime_factory_v2() is None

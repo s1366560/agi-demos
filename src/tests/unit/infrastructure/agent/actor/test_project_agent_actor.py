@@ -2,11 +2,13 @@
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
 from src.infrastructure.agent.actor.types import (
     ProjectAgentActorConfig,
@@ -83,7 +85,8 @@ async def test_actor_admits_complete_distribution_and_pins_turn_generation() -> 
 async def test_actor_rejects_turn_without_generation_before_execution() -> None:
     actor = _actor_instance()
     actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
-    actor._agent = object()
+    actor._agent = MagicMock()
+    actor._agent.initialize = AsyncMock(return_value=True)
     request = ProjectChatRequest(
         conversation_id="conversation-a",
         message_id="message-a",
@@ -121,7 +124,8 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
 
     actor = _actor_instance()
     actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
-    actor._agent = object()
+    actor._agent = MagicMock()
+    actor._agent.initialize = AsyncMock(return_value=True)
     first_started = asyncio.Event()
     release_first = asyncio.Event()
     started: list[str] = []
@@ -181,4 +185,32 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
 
     assert started == ["msg-1", "msg-2"]
     assert observed_distributions == [distribution_payload, distribution_payload]
+    await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
+async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -> None:
+    actor = _actor_instance()
+    agent = MagicMock()
+    agent.initialize = AsyncMock(return_value=True)
+    actor._agent = agent
+    first = PluginGenerationDescriptorV2(
+        profile_id="memstack-default-v2",
+        generation=1,
+        digest="a" * 64,
+    )
+    second = PluginGenerationDescriptorV2(
+        profile_id="memstack-default-v2",
+        generation=2,
+        digest="b" * 64,
+    )
+
+    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
+    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
+    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=second))
+
+    assert agent.initialize.await_args_list == [
+        call(force_refresh=False),
+        call(force_refresh=True),
+    ]
     await actor._plugin_admission_v2.close()
