@@ -101,6 +101,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_invitations_public_http_routes import (
         builtin_invitations_public_http_routes_definition_v2,
     )
+    from .builtin_memories_http_routes import builtin_memories_http_routes_definition_v2
     from .builtin_project_my_work_http_routes import (
         builtin_project_my_work_http_routes_definition_v2,
     )
@@ -144,6 +145,7 @@ def builtin_runtime_definitions_v2(
         builtin_tenants_http_routes_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
+        builtin_memories_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
         builtin_trust_workspace_http_routes_definition_v2(),
         builtin_smtp_config_http_routes_definition_v2(),

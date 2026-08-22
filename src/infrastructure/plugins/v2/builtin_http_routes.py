@@ -23,6 +23,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "billing",
         "invitations",
         "invitations-public",
+        "memories",
         "project-my-work",
         "projects",
         "smtp-config",
