@@ -10,16 +10,19 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
   const app = source("src/App.tsx");
 
-  assert.match(hook, /RendererPluginRuntimeV2\('desktop-renderer'/u);
+  assert.match(hook, /RendererPluginRuntimeV2\(\s*["']desktop-renderer["']/u);
   assert.match(hook, /desktopRendererHostDefinitionV2/u);
   assert.match(hook, /desktopApiFetch\(/u);
   assert.doesNotMatch(hook, /DesktopApiClient/u);
   assert.match(hook, /runtime\.bootstrap\(bootstrapProfileV2\)/u);
+  const bootstrapIndex = hook.search(
+    /runtime\.bootstrap\(bootstrapProfileV2\)/u,
+  );
+  const remoteFetchIndex = hook.search(
+    /fetchDesktopPluginDistributionV2\(\s*config,\s*controller\.signal/u,
+  );
   assert.ok(
-    hook.indexOf("runtime.bootstrap(bootstrapProfileV2)") <
-      hook.indexOf(
-        "fetchDesktopPluginDistributionV2(config, controller.signal)",
-      ),
+    bootstrapIndex >= 0 && remoteFetchIndex > bootstrapIndex,
     "local bootstrap must activate before the first remote request",
   );
   assert.match(
