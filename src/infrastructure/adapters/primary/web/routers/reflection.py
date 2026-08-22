@@ -15,25 +15,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.common.base_repository import (
-    refresh_select_statement,
+from src.infrastructure.adapters.primary.web.reflection_application_authority_v2 import (
+    ReflectionApplicationAuthorityV2,
+    reflection_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    User,
-    UserProject,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
-    SqlPlaybookRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_reflection_verdict_repository import (
-    SqlReflectionVerdictRepository,
-)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.reflection_services import (
+    ReflectionApplicationServicesV2,
+)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["reflection"])
 logger = logging.getLogger(__name__)
@@ -71,19 +63,9 @@ class VerdictsResponse(BaseModel):
 
 
 async def _ensure_member(
-    *, db: AsyncSession, user_id: str, project_id: str
+    *, services: ReflectionApplicationServicesV2, user_id: str, project_id: str
 ) -> None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject).where(
-                and_(
-                    UserProject.user_id == user_id,
-                    UserProject.project_id == project_id,
-                )
-            )
-        )
-    )
-    if result.scalar_one_or_none() is None:
+    if not await services.membership.contains(user_id=user_id, project_id=project_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to project"),
@@ -98,12 +80,14 @@ async def list_playbooks(
     project_id: str,
     limit: int = Query(default=100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    reflection_application: ReflectionApplicationAuthorityV2 = Depends(
+        reflection_application_authority_dependency_v2
+    ),
 ) -> PlaybooksResponse:
     """Return all playbooks visible to the caller for this project."""
-    await _ensure_member(db=db, user_id=current_user.id, project_id=project_id)
-    repo = SqlPlaybookRepository(db)
-    playbooks = await repo.find_by_project(project_id, limit=limit)
+    services = reflection_application.services
+    await _ensure_member(services=services, user_id=current_user.id, project_id=project_id)
+    playbooks = await services.playbooks.find_by_project(project_id, limit=limit)
     items = [
         PlaybookView(
             id=p.id,
@@ -141,12 +125,14 @@ async def list_reflection_verdicts(
     project_id: str,
     limit: int = Query(default=100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    reflection_application: ReflectionApplicationAuthorityV2 = Depends(
+        reflection_application_authority_dependency_v2
+    ),
 ) -> VerdictsResponse:
     """Return the most-recent reflection verdicts for this project."""
-    await _ensure_member(db=db, user_id=current_user.id, project_id=project_id)
-    repo = SqlReflectionVerdictRepository(db)
-    rows = await repo.list_for_project(project_id, limit=limit)
+    services = reflection_application.services
+    await _ensure_member(services=services, user_id=current_user.id, project_id=project_id)
+    rows = await services.verdicts.list_for_project(project_id, limit=limit)
     items = [
         VerdictView(
             id=row.id,

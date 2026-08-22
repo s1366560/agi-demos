@@ -32,6 +32,7 @@ from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
+from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
@@ -117,6 +118,9 @@ def builtin_runtime_definitions_v2(
     )
     from .builtin_projects_http_routes import builtin_projects_http_routes_definition_v2
     from .builtin_recall_http_routes import builtin_recall_http_routes_definition_v2
+    from .builtin_reflection_http_routes import (
+        builtin_reflection_http_routes_definition_v2,
+    )
     from .builtin_retrieval_stores_http_routes import (
         builtin_retrieval_stores_http_routes_definition_v2,
     )
@@ -165,6 +169,7 @@ def builtin_runtime_definitions_v2(
         builtin_graph_stores_http_routes_definition_v2(),
         builtin_episodes_http_routes_definition_v2(),
         builtin_recall_http_routes_definition_v2(),
+        builtin_reflection_http_routes_definition_v2(),
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
@@ -177,6 +182,7 @@ def builtin_runtime_definitions_v2(
         builtin_invitations_public_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
+        *reflection_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),

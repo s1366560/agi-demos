@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:54db96d30c9d9f9c6eec11e9ba23e7b890e3edff40f7a60df46324c2f7ff97f4",
+        "digest": "sha256:8b9d166ead2d27e6b1b878093cbaab2f343e85babf0c087c71420828e2cf6399",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -851,6 +851,74 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/reflection-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.reflection_services:_apply_reflection_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.reflection-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ac3fbc98f9d0b7c11b15db393b75d0165f5f91ed2f5379bb3056b7a4a4f1cd2b",
+      "artifact": {
+        "digest": "sha256:e822247df19dbcfdeabb927a6e77c4ce34543d247ceefdf9487dcb364f5106fb",
+        "source": "repo+python://src/infrastructure/plugins/v2/reflection_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/reflection-services",
+      "entrypoint": "src.infrastructure.plugins.v2.reflection_services:_apply_reflection_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.reflection-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.reflection-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:97dc1d0d6cef30045028ed5ea94047e139b79bd2c72408e5ffeb115e3914c9b7",
+      "artifact": {
+        "digest": "sha256:e822247df19dbcfdeabb927a6e77c4ce34543d247ceefdf9487dcb364f5106fb",
+        "source": "repo+python://src/infrastructure/plugins/v2/reflection_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/persistence/backend-store-provider",
       "entrypoint": "src.infrastructure.plugins.v2.backend_store_services:_apply_backend_store_provider_v2",
       "targets": ["python"],
@@ -1331,6 +1399,35 @@
       "artifact": {
         "digest": "sha256:03971ea22b2eb0db353793e563f4736a1c8fd632e717aea46db8e945c302452d",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_recall_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/reflection-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_reflection_http_routes:builtin_reflection_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:3f49e1fdf456d5097c4f2d58394f370799f8c5350e0c92262c92ac17843cbe91",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_reflection_http_routes.py"
       }
     },
     {
