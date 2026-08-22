@@ -12,6 +12,7 @@ import pytest
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+from src.infrastructure.plugins.v2.graph_application_services import GRAPH_APPLICATION_MODULE_V2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.retrieval_runtime import (
@@ -164,7 +165,11 @@ async def test_retrieval_runtime_rejects_missing_graph_inject_without_fallback()
         document,
         entries=tuple(
             replace(entry, enabled=False)
-            if entry.module_ref == "builtin://memstack/graph/runtime"
+            if entry.module_ref
+            in {
+                "builtin://memstack/graph/runtime",
+                GRAPH_APPLICATION_MODULE_V2,
+            }
             else entry
             for entry in document.entries
         ),

@@ -26,6 +26,7 @@ from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
 )
+from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .mcp_services import mcp_service_definitions_v2
@@ -98,6 +99,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_enhanced_search_http_routes import (
         builtin_enhanced_search_http_routes_definition_v2,
     )
+    from .builtin_graph_http_routes import builtin_graph_http_routes_definition_v2
     from .builtin_graph_stores_http_routes import (
         builtin_graph_stores_http_routes_definition_v2,
     )
@@ -135,6 +137,7 @@ def builtin_runtime_definitions_v2(
         ),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         graph_runtime_definition_v2(graph_runtime_factory),
+        graph_application_service_definition_v2(),
         *sandbox_service_definitions_v2(
             sandbox_runtime_factory,
             redis_client=sandbox_redis_client,
@@ -155,6 +158,7 @@ def builtin_runtime_definitions_v2(
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
+        builtin_graph_http_routes_definition_v2(),
         builtin_graph_stores_http_routes_definition_v2(),
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),

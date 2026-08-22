@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:e28f66a0ba4acadc2a8d58b71aeb42716fb4857bceb3548910ac0adb693c6d31",
+        "digest": "sha256:0145de57014bd89f71bd948d04477b5c27acc24fb631fa2bc6eb3e88193a8568",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -268,6 +268,43 @@
       "artifact": {
         "digest": "sha256:b372ac240dccb409459733e066b00d0bff9a7b4273c4b3ffc5843208f27665d7",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/graph-services",
+      "entrypoint": "src.infrastructure.plugins.v2.graph_application_services:_apply_graph_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.graph-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "graph_runtime",
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-runtime-services", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:93c6e4a8460415235f080a6949e930b8c334c619de9ddc0e7b4ee1bbbd13073e",
+      "artifact": {
+        "digest": "sha256:f76bdf2338c738bb77e03436f79f274194a9980be8a110e210269737817407db",
+        "source": "repo+python://src/infrastructure/plugins/v2/graph_application_services.py"
       }
     },
     {
@@ -1120,6 +1157,35 @@
       "artifact": {
         "digest": "sha256:c2204d8e62684a210c36d58864ebc8aa68f716fb8ff833f461901f851b760b51",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_memories_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/graph-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_graph_http_routes:builtin_graph_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:b454330ef0375e58c921414c7b028cf3a0a01e41e52ab8b8d280087751efa125",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_graph_http_routes.py"
       }
     },
     {

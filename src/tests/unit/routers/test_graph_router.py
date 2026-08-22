@@ -1,5 +1,6 @@
 """Unit tests for knowledge graph router authorization and query construction."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -35,9 +36,7 @@ def _store() -> Mock:
     store.get_entity_types = AsyncMock(return_value=[])
     store.get_entity = AsyncMock(return_value=None)
     store.get_community = AsyncMock(return_value=None)
-    store.get_entity_relationships = AsyncMock(
-        return_value={"relationships": [], "total": 0}
-    )
+    store.get_entity_relationships = AsyncMock(return_value={"relationships": [], "total": 0})
     store.get_community_members = AsyncMock(return_value={"members": [], "total": 0})
     store.get_graph_visualization = AsyncMock(return_value=[])
     store.get_subgraph = AsyncMock(return_value=[])
@@ -45,6 +44,13 @@ def _store() -> Mock:
         return_value={"communities_count": 0, "entities_processed": 0}
     )
     return store
+
+
+def _application(graph_store: object, db: object | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db if db is not None else SimpleNamespace(),
+        services=SimpleNamespace(graph_store=graph_store),
+    )
 
 
 async def _add_other_tenant_project(
@@ -96,8 +102,7 @@ class TestGraphRouter:
                 limit=50,
                 offset=0,
                 current_user=test_user,
-                db=test_db,
-                graph_store=store,
+                graph_application=_application(store, test_db),
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -118,8 +123,7 @@ class TestGraphRouter:
                 limit=50,
                 offset=0,
                 current_user=test_user,
-                db=test_db,
-                graph_store=store,
+                graph_application=_application(store, test_db),
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -145,8 +149,7 @@ class TestGraphRouter:
                     limit=50,
                     offset=0,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             else:
                 await list_communities(
@@ -156,8 +159,7 @@ class TestGraphRouter:
                     limit=50,
                     offset=0,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -178,8 +180,7 @@ class TestGraphRouter:
             limit=50,
             offset=0,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response["total"] == 0
@@ -199,8 +200,7 @@ class TestGraphRouter:
             project_id=None,
             limit=100,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
@@ -224,8 +224,7 @@ class TestGraphRouter:
                 include_neighbors=False,
             ),
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
@@ -251,8 +250,7 @@ class TestGraphRouter:
                 include_neighbors=True,
             ),
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
@@ -277,8 +275,7 @@ class TestGraphRouter:
                     project_id=test_project_db.id,
                 ),
                 current_user=test_user,
-                db=test_db,
-                graph_store=store,
+                graph_application=_application(store, test_db),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -298,8 +295,7 @@ class TestGraphRouter:
             tenant_id=test_project_db.tenant_id,
             project_id=None,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"entity_types": [], "total": 0}
@@ -321,8 +317,7 @@ class TestGraphRouter:
                 tenant_id="not-the-project-tenant",
                 project_id=test_project_db.id,
                 current_user=test_user,
-                db=test_db,
-                graph_store=store,
+                graph_application=_application(store, test_db),
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -345,8 +340,7 @@ class TestGraphRouter:
             relationship_type=None,
             limit=50,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"relationships": [], "total": 0}
@@ -393,8 +387,7 @@ class TestGraphRouter:
             relationship_type=None,
             limit=1,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response["total"] == 3
@@ -417,8 +410,7 @@ class TestGraphRouter:
             community_id="community-1",
             limit=100,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response == {"members": [], "total": 0}
@@ -456,8 +448,7 @@ class TestGraphRouter:
             community_id="community-1",
             limit=1,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
         )
 
         assert response["total"] == 4
@@ -480,8 +471,7 @@ class TestGraphRouter:
             background=False,
             project_id=test_project_db.id,
             current_user=test_user,
-            db=test_db,
-            graph_store=store,
+            graph_application=_application(store, test_db),
             workflow_engine=Mock(),
         )
 
@@ -555,8 +545,7 @@ class TestGraphRouter:
                     limit=50,
                     offset=0,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "list_entities":
                 await list_entities(
@@ -565,22 +554,19 @@ class TestGraphRouter:
                     limit=50,
                     offset=0,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_entity_types":
                 await get_entity_types(
                     project_id=test_project_db.id,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_entity":
                 await get_entity(
                     entity_id="entity-1",
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_entity_relationships":
                 await get_entity_relationships(
@@ -588,46 +574,40 @@ class TestGraphRouter:
                     relationship_type=None,
                     limit=50,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_graph":
                 await get_graph(
                     project_id=test_project_db.id,
                     limit=100,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_subgraph":
                 await get_subgraph(
                     SubgraphRequest(node_uuids=["entity-1"], project_id=test_project_db.id),
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_community":
                 await get_community(
                     community_id="community-1",
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "get_community_members":
                 await get_community_members(
                     community_id="community-1",
                     limit=100,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                 )
             elif endpoint_name == "rebuild_communities":
                 await rebuild_communities(
                     background=False,
                     project_id=test_project_db.id,
                     current_user=test_user,
-                    db=test_db,
-                    graph_store=store,
+                    graph_application=_application(store, test_db),
                     workflow_engine=Mock(),
                 )
 

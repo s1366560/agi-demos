@@ -15,17 +15,16 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_graph_store,
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
+    GraphApplicationAuthorityV2,
+    graph_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
     workflow_engine_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.i18n import gettext as _
 
@@ -258,8 +257,9 @@ async def list_communities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     List communities in the knowledge graph with filtering and pagination.
@@ -267,6 +267,8 @@ async def list_communities(
     Note: Communities are now associated with projects via project_id (which equals group_id).
     If project_id is provided, filters by that project. Otherwise, returns all communities.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -314,10 +316,13 @@ async def list_entities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """List entities in the knowledge graph with filtering and pagination."""
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -352,14 +357,17 @@ async def get_entity_types(
     tenant_id: str | None = None,
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get all available entity types with their counts.
 
     Useful for populating filter dropdowns with dynamic entity types.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -387,8 +395,9 @@ async def get_entity_types(
 async def get_entity(
     entity_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get entity details by UUID.
@@ -399,6 +408,8 @@ async def get_entity(
     Returns:
         Entity details with properties
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -449,14 +460,17 @@ async def get_entity_relationships(
     relationship_type: str | None = Query(None, description="Filter by relationship type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get relationships for an entity.
 
     Returns both outgoing and incoming relationships for the specified entity.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -512,10 +526,13 @@ async def get_graph(
     limit: int = 100,
     since: str | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get graph data for visualization."""
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -545,10 +562,13 @@ async def get_graph(
 async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get subgraph for specific nodes."""
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -586,8 +606,9 @@ async def get_subgraph(
 async def get_community(
     community_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get community details by UUID.
@@ -598,6 +619,8 @@ async def get_community(
     Returns:
         Community details with properties
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -630,8 +653,9 @@ async def get_community_members(
     community_id: str,
     limit: int = Query(100, ge=1, le=500, description="Maximum members to return"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get members (entities) of a community.
@@ -643,6 +667,8 @@ async def get_community_members(
     Returns:
         List of community members with their details
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         if graph_store is None:
             raise HTTPException(status_code=503, detail=_("Graph backend not available"))
@@ -675,8 +701,9 @@ async def rebuild_communities(
     background: bool = Query(False, description="Run in background mode"),
     project_id: str | None = Query(None, description="Project ID to rebuild communities for"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
     workflow_engine: WorkflowEnginePort = Depends(workflow_engine_authority_dependency_v2),
 ) -> dict[str, Any]:
     """
@@ -698,6 +725,9 @@ async def rebuild_communities(
     """
     from datetime import datetime
     from uuid import uuid4
+
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
 
     # Get project_id from query parameter, or fall back to user's default project
     target_project_id = project_id or getattr(current_user, "project_id", None) or "neo4j"

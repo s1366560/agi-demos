@@ -15,6 +15,7 @@ from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+from src.infrastructure.plugins.v2.graph_application_services import GRAPH_APPLICATION_MODULE_V2
 from src.infrastructure.plugins.v2.memory_services import (
     MEMORY_APPLICATION_MODULE_V2,
     MEMORY_APPLICATION_SERVICE_V2,
@@ -145,7 +146,12 @@ async def test_memory_application_rejects_missing_required_inject_without_fallba
     document = load_profile_document_v2(_PROFILE_PATH)
     disabled_modules = {disabled_module}
     if disabled_module == "builtin://memstack/graph/runtime":
-        disabled_modules.add(RETRIEVAL_RUNTIME_MODULE_V2)
+        disabled_modules.update(
+            {
+                GRAPH_APPLICATION_MODULE_V2,
+                RETRIEVAL_RUNTIME_MODULE_V2,
+            }
+        )
     disabled = replace(
         document,
         entries=tuple(

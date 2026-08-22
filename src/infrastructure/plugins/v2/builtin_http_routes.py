@@ -23,6 +23,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "billing",
         "enhanced-search",
         "enhanced-search-memory",
+        "graph",
         "graph-stores",
         "invitations",
         "invitations-public",
