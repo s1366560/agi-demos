@@ -556,8 +556,9 @@ test('command palette derives Tenant Tasks with every canonical production route
   assert.match(canonicalNavigationSource, /'tenant-tenant-tasks', 'nav\.tasks'/);
   assert.match(
     appSource,
-    /const desktopCanonicalNavigationRegistry = useMemo\([\s\S]*CANONICAL_DESKTOP_ROUTE_IDS\.map\([\s\S]*desktopProductionRouteRegistry\.byId\.get/u,
+    /const desktopCanonicalNavigationRegistry = useMemo\([\s\S]*projectDesktopNavigationRegistryV2\([\s\S]*desktopProductionRouteRegistry,[\s\S]*desktopRendererAuthorityV2/u,
   );
+  assert.doesNotMatch(appSource, /CANONICAL_DESKTOP_ROUTE_IDS\.map\(/u);
   assert.match(appSource, /deriveDesktopNavigationDiscoveryEntries\(\{/);
   assert.match(
     appSource,

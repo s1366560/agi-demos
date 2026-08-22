@@ -219,10 +219,10 @@ test('workbench selections release an active native production route before chan
 test('anonymous unknown routes are handled natively before the login gate', () => {
   const forcedPasswordGate = appSource.lastIndexOf("auth.status === 'password_change_required'");
   const anonymousGate = appSource.indexOf('if (!identityAuthenticated)', forcedPasswordGate);
-  const authenticatedShell = appSource.indexOf('\n  return (\n    <Theme', anonymousGate + 1);
+  const anonymousGateEnd = appSource.indexOf('\n  const activeTenantName =', anonymousGate + 1);
   const anonymousSource =
-    anonymousGate >= 0 && authenticatedShell > anonymousGate
-      ? appSource.slice(anonymousGate, authenticatedShell)
+    anonymousGate >= 0 && anonymousGateEnd > anonymousGate
+      ? appSource.slice(anonymousGate, anonymousGateEnd)
       : '';
 
   assert.ok(forcedPasswordGate >= 0);
