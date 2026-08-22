@@ -1,39 +1,31 @@
-"""Application service for quarantined marketplace package installation."""
+"""Application service for signed protocol-v2 marketplace Bundle installation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal, Protocol
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from src.application.schemas.plugin_marketplace import MarketplacePackageRequest
-from src.domain.model.plugins import PluginManifest, parse_plugin_manifest
-from src.domain.ports.plugins import PluginPermission
+from src.application.services.plugin_marketplace_desired_bundle_service_v2 import (
+    PluginMarketplaceDesiredBundleServiceV2,
+)
+from src.domain.model.plugins.generated_v2 import (
+    BundleReferenceV2,
+    ScopeKindV2,
+    ScopeV2,
+    TrustKindV2,
+)
+from src.infrastructure.adapters.secondary.persistence.models import PlatformPluginPackageModel
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
-    PlatformPluginRepository,
-)
-from src.infrastructure.plugins.bundle import (
-    PluginBundle,
-    install_bundle_into_profile,
-)
-from src.infrastructure.plugins.governance import (
-    MarketplaceCatalogEntry,
-    PluginPackageBundle,
-    PluginPackageVerifier,
-    PluginTrustGate,
-    sha256_hex,
-)
-from src.infrastructure.plugins.package_archive import (
-    verify_plugin_package_archive,
-)
+from src.infrastructure.plugins.governance import sha256_hex
 from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
-from src.infrastructure.plugins.profile import ProfileLayer, ProfileRow
+from src.infrastructure.plugins.v2.bundle_archive import parse_bundle_archive_v2
+from src.infrastructure.plugins.v2.protocol import bundle_manifest_v2_to_payload
 
 
 class MarketplaceArtifactClient(Protocol):
@@ -53,35 +45,44 @@ class MarketplaceInstallDecision:
     version: str
     reason: str
     desired_revision: int | None = None
+    desired_changed: bool = False
 
 
 class PluginMarketplaceInstallService:
-    """Verify and record an install without mutating desired plugin state on failure."""
+    """Verify one closed v2 Bundle and append only protocol-v2 desired state."""
 
-    def __init__(
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         repository: PlatformPluginGovernanceRepository,
-        plugin_repository: PlatformPluginRepository,
+        desired_bundles: PluginMarketplaceDesiredBundleServiceV2,
         artifact_client: MarketplaceArtifactClient,
         *,
-        trusted_public_keys: tuple[str, ...] = (),
-        trust_gate: PluginTrustGate | None = None,
-        profile_path: str | Path | None = None,
+        trusted_public_keys: tuple[str, ...],
     ) -> None:
         self._repository = repository
-        self._plugin_repository = plugin_repository
+        self._desired_bundles = desired_bundles
         self._artifact_client = artifact_client
-        self._trust_gate = trust_gate or PluginTrustGate()
-        self._keys = trusted_public_keys
-        self._profile_path = Path(profile_path) if profile_path is not None else None
+        self._trusted_public_keys = trusted_public_keys
 
     async def request_install(
         self,
         *,
         request: MarketplacePackageRequest,
+        actor_id: str | None = None,
     ) -> MarketplaceInstallDecision:
-        """Return approved only when signature, provenance, scan, and permission gates pass."""
+        """Approve only a signed, provenance-bearing, permission-approved v2 Bundle."""
         try:
+            if not self._trusted_public_keys:
+                raise ValueError("protocol v2 marketplace trust store is empty")
+            if not request.tenant_admin_approved:
+                raise ValueError("tenant admin approval is required")
+            if not request.security_scan_passed:
+                raise ValueError("security scan failed")
+            signer_fingerprint = _trusted_signer_fingerprint(
+                request.signature.public_key_pem,
+                self._trusted_public_keys,
+            )
+
             artifact = await self._artifact_client.fetch(
                 registry=request.artifact.registry,
                 repository=request.artifact.repository,
@@ -89,96 +90,88 @@ class PluginMarketplaceInstallService:
             )
             if artifact.layer_digest != request.artifact_sha256:
                 raise ValueError("requested artifact digest does not match the OCI layer")
-            package = verify_plugin_package_archive(artifact.archive)
-            if package.manifest != request.manifest:
-                raise ValueError("package manifest differs from its catalog declaration")
-            parsed_manifest = parse_plugin_manifest(request.manifest)
-            public_key = serialization.load_pem_public_key(
-                request.signature.public_key_pem.encode("utf-8")
+            verified = parse_bundle_archive_v2(
+                artifact.archive,
+                source=_bundle_source(request.plugin_id, request.version),
+                trusted_public_keys=(request.signature.public_key_pem,),
+                approved_permissions=request.approved_permissions,
+                require_signature=True,
+                require_provenance=True,
             )
-            if not isinstance(public_key, Ed25519PublicKey):
-                raise ValueError("signature key must be Ed25519")
-            bundle = PluginPackageBundle(
-                manifest=parsed_manifest,
-                canonical_manifest=parsed_manifest.to_json(),
-                artifact_digest=request.artifact_sha256,
-                signature_base64=request.signature.signature_base64,
-                public_key_pem=request.signature.public_key_pem,
-                provenance={
-                    "predicateType": request.provenance.predicate_type,
-                    "builder": {"id": request.provenance.builder_id},
-                    "subject": [
-                        {
-                            "name": request.provenance.subject_name,
-                            "digest": {"sha256": request.artifact_sha256},
-                        }
-                    ],
-                },
-                checksum={"sha256": request.artifact_sha256},
+            bundle = verified.manifest
+            bundle_payload = bundle_manifest_v2_to_payload(bundle)
+            if bundle_payload != request.manifest:
+                raise ValueError("Bundle descriptor differs from its catalog declaration")
+            if bundle.bundle_id != request.plugin_id or bundle.version != request.version:
+                raise ValueError("Bundle identity differs from the marketplace package")
+            if any(manifest.trust is TrustKindV2.BUILTIN for manifest in bundle.manifests):
+                raise ValueError("marketplace Bundle cannot claim builtin trust")
+            signature = bundle.signature
+            if signature is None or signature != request.signature.signature_base64:
+                raise ValueError("Bundle signature differs from its catalog declaration")
+            signature_record: dict[str, object] = {
+                "algorithm": "Ed25519",
+                "public_key_sha256": signer_fingerprint,
+                "signature_sha256": sha256_hex(signature.encode("ascii")),
+            }
+            provenance_record: dict[str, object] = {
+                "reference": bundle.provenance,
+                "predicateType": request.provenance.predicate_type,
+                "builderId": request.provenance.builder_id,
+                "subjectName": request.provenance.subject_name,
+            }
+            existing = await self._repository.get_package_version(
+                bundle.bundle_id,
+                bundle.version,
             )
-            entry = MarketplaceCatalogEntry(
-                plugin_id=request.plugin_id,
-                version=request.version,
+            _validate_immutable_package_version(
+                existing,
                 publisher=request.publisher,
-                bundle=bundle,
+                artifact=artifact,
+                artifact_digest=request.artifact_sha256,
+                manifest=bundle_payload,
+                signature=signature_record,
+                provenance=provenance_record,
             )
-            verifier = PluginPackageVerifier(
-                self._keys or (request.signature.public_key_pem,),
-            )
-            verifier.verify(entry, artifact_sha256=request.artifact_sha256)
-            permissions = frozenset(PluginPermission(item) for item in request.approved_permissions)
-            trust = self._trust_gate.decide(entry.bundle.manifest, permissions)
-            if not trust.allowed:
-                return self._quarantine(entry, trust.reason)
-            if not request.tenant_admin_approved:
-                return self._quarantine(entry, "tenant admin approval is required")
-            if not request.security_scan_passed:
-                return self._quarantine(entry, "security scan failed")
-            await self._repository.upsert_package(
-                plugin_id=request.plugin_id,
-                version=request.version,
+
+            _ = await self._repository.upsert_package(
+                plugin_id=bundle.bundle_id,
+                version=bundle.version,
                 publisher=request.publisher,
                 artifact_digest=request.artifact_sha256,
-                artifact_registry=request.artifact.registry,
-                artifact_repository=request.artifact.repository,
-                oci_manifest_digest=request.artifact.manifest_sha256,
-                manifest=parsed_manifest.to_payload(),
-                signature={
-                    "algorithm": "Ed25519",
-                    "public_key_sha256": sha256_hex(
-                        request.signature.public_key_pem.encode("utf-8")
-                    ),
-                    "signature_sha256": sha256_hex(
-                        request.signature.signature_base64.encode("ascii")
-                    ),
-                },
-                provenance={
-                    "predicateType": request.provenance.predicate_type,
-                    "builderId": request.provenance.builder_id,
-                    "subjectName": request.provenance.subject_name,
-                },
+                artifact_registry=artifact.registry,
+                artifact_repository=artifact.repository,
+                oci_manifest_digest=artifact.manifest_digest,
+                manifest=bundle_payload,
+                signature=signature_record,
+                provenance=provenance_record,
                 security_scan_status="passed",
             )
-            await self._plugin_repository.upsert_catalog_manifest(parsed_manifest)
-            desired = await self._plugin_repository.set_desired_state(
-                plugin_id=parsed_manifest.id,
-                enabled=True,
-                config={},
+            mutation = await self._desired_bundles.install(
+                scope=ScopeV2(kind=ScopeKindV2.ROOT),
+                bundle=BundleReferenceV2(
+                    bundle_id=bundle.bundle_id,
+                    version=bundle.version,
+                    digest=bundle.digest,
+                    source=_bundle_source(bundle.bundle_id, bundle.version),
+                ),
+                actor_id=actor_id,
             )
-            for permission in sorted(permissions, key=lambda item: item.value):
-                await self._repository.grant_permission(
+            for permission in sorted(request.approved_permissions):
+                _ = await self._repository.grant_permission(
                     plugin_id=request.plugin_id,
-                    permission=permission.value,
+                    permission=permission,
                     scope_type="tenant",
                     scope_id=request.tenant_id,
+                    granted_by=actor_id,
                 )
-            self._install_profile_layer(parsed_manifest)
             return MarketplaceInstallDecision(
                 status="approved",
                 plugin_id=request.plugin_id,
                 version=request.version,
-                reason="package verified and approved",
-                desired_revision=desired.revision,
+                reason="protocol v2 Bundle verified and desired",
+                desired_revision=mutation.record.desired_set.revision,
+                desired_changed=mutation.changed,
             )
         except Exception as exc:
             return MarketplaceInstallDecision(
@@ -188,36 +181,68 @@ class PluginMarketplaceInstallService:
                 reason=str(exc),
             )
 
-    @staticmethod
-    def _quarantine(
-        entry: MarketplaceCatalogEntry,
-        reason: str,
-    ) -> MarketplaceInstallDecision:
-        return MarketplaceInstallDecision(
-            status="quarantined",
-            plugin_id=entry.plugin_id,
-            version=entry.version,
-            reason=reason,
-        )
 
-    def _install_profile_layer(self, manifest: PluginManifest) -> None:
-        """Append the approved plugin to the active profile as a bundle layer.
+def _bundle_source(bundle_id: str, version: str) -> str:
+    return f"marketplace://{bundle_id}/{version}"
 
-        I4: an approved marketplace install becomes visible to the composed
-        profile (and the HMR reconciler) through the same
-        ``install_bundle_into_profile`` entry the bundle CLI uses. Without a
-        configured profile path the step is skipped (tests, bare runs).
-        """
-        if self._profile_path is None:
-            return
-        bundle = PluginBundle(
-            bundle_id=f"marketplace.{manifest.id}",
-            version=manifest.version,
-            layer=ProfileLayer(
-                id=f"marketplace.{manifest.id}",
-                rows=(ProfileRow(id=manifest.id, enabled=True),),
-            ),
-            manifests=(manifest,),
-            description=f"marketplace install of {manifest.id}",
+
+def _trusted_signer_fingerprint(claimed_pem: str, trusted_pems: tuple[str, ...]) -> str:
+    try:
+        claimed = serialization.load_pem_public_key(claimed_pem.encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("marketplace signing key must be valid PEM") from exc
+    if not isinstance(claimed, Ed25519PublicKey):
+        raise ValueError("marketplace signing key must be Ed25519")
+    claimed_raw = claimed.public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    for trusted_pem in trusted_pems:
+        try:
+            trusted = serialization.load_pem_public_key(trusted_pem.encode("utf-8"))
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(trusted, Ed25519PublicKey):
+            continue
+        trusted_raw = trusted.public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
         )
-        install_bundle_into_profile(self._profile_path, bundle, replace=True)
+        if trusted_raw == claimed_raw:
+            return sha256_hex(claimed_raw)
+    raise ValueError("marketplace signing key is not trusted")
+
+
+def _validate_immutable_package_version(
+    existing: PlatformPluginPackageModel | None,
+    *,
+    publisher: str,
+    artifact: RegistryPluginArtifact,
+    artifact_digest: str,
+    manifest: dict[str, object],
+    signature: dict[str, object],
+    provenance: dict[str, object],
+) -> None:
+    if existing is None:
+        return
+    if existing.revoked:
+        raise ValueError("revoked marketplace Bundle version cannot be reinstalled")
+    immutable_fields_match = (
+        existing.publisher == publisher
+        and existing.artifact_digest == artifact_digest
+        and existing.artifact_registry == artifact.registry
+        and existing.artifact_repository == artifact.repository
+        and existing.oci_manifest_digest == artifact.manifest_digest
+        and existing.manifest == manifest
+        and existing.signature == signature
+        and existing.provenance == provenance
+    )
+    if not immutable_fields_match:
+        raise ValueError("marketplace Bundle version is immutable")
+
+
+__all__ = [
+    "MarketplaceArtifactClient",
+    "MarketplaceInstallDecision",
+    "PluginMarketplaceInstallService",
+]

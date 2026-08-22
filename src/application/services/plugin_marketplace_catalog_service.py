@@ -4,18 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.domain.model.plugins import parse_plugin_manifest
-from src.domain.ports.plugins import PluginPermission
+from src.application.services.plugin_marketplace_desired_bundle_service_v2 import (
+    PluginMarketplaceDesiredBundleServiceV2,
+)
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginPackageModel,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
-    PlatformPluginRepository,
-)
-from src.infrastructure.plugins.governance import PluginTrustGate
+from src.infrastructure.plugins.v2.protocol import parse_bundle_manifest_v2
 
 
 @dataclass(frozen=True)
@@ -30,6 +29,7 @@ class MarketplaceRevocationResult:
     plugin_id: str
     revoked_versions: tuple[str, ...]
     revoked_permissions: int
+    desired_removed: bool
 
 
 @dataclass(frozen=True)
@@ -43,16 +43,13 @@ class MarketplaceUninstallResult:
 class PluginMarketplaceCatalogService:
     """Read and govern packages without exposing signed secrets."""
 
-    def __init__(
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         repository: PlatformPluginGovernanceRepository,
-        plugin_repository: PlatformPluginRepository,
-        *,
-        trust_gate: PluginTrustGate | None = None,
+        desired_bundles: PluginMarketplaceDesiredBundleServiceV2,
     ) -> None:
         self._repository = repository
-        self._plugin_repository = plugin_repository
-        self._trust_gate = trust_gate or PluginTrustGate()
+        self._desired_bundles = desired_bundles
 
     async def list_packages(
         self,
@@ -92,15 +89,19 @@ class PluginMarketplaceCatalogService:
         if package.security_scan_status != "passed":
             raise PermissionError("marketplace package has not passed its security scan")
 
-        manifest = parse_plugin_manifest(package.manifest)
-        permissions = frozenset(PluginPermission(item) for item in approved_permissions)
-        decision = self._trust_gate.decide(manifest, permissions)
-        if not decision.allowed:
-            raise PermissionError(decision.reason)
-        for permission in sorted(permissions, key=lambda item: item.value):
-            await self._repository.grant_permission(
+        bundle = parse_bundle_manifest_v2(package.manifest)
+        declared_permissions = {
+            permission for manifest in bundle.manifests for permission in manifest.permissions
+        }
+        undeclared = sorted(approved_permissions - declared_permissions)
+        if undeclared:
+            raise PermissionError(
+                f"permissions not declared by protocol v2 Bundle: {', '.join(undeclared)}"
+            )
+        for permission in sorted(approved_permissions):
+            _ = await self._repository.grant_permission(
                 plugin_id=plugin_id,
-                permission=permission.value,
+                permission=permission,
                 scope_type="tenant",
                 scope_id=tenant_id,
                 granted_by=actor_id,
@@ -108,7 +109,7 @@ class PluginMarketplaceCatalogService:
         return MarketplaceApprovalResult(
             plugin_id=plugin_id,
             version=version,
-            granted_permissions=tuple(item.value for item in sorted(permissions)),
+            granted_permissions=tuple(sorted(approved_permissions)),
         )
 
     async def revoke(
@@ -117,16 +118,24 @@ class PluginMarketplaceCatalogService:
         plugin_id: str,
         reason: str,
         version: str | None = None,
+        actor_id: str | None = None,
     ) -> MarketplaceRevocationResult:
         """Revoke package versions and fail closed on every permission grant."""
         rows = await self._repository.revoke_packages(plugin_id, reason, version=version)
         if not rows:
             raise LookupError("marketplace package version was not found")
+        mutation = await self._desired_bundles.uninstall(
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            bundle_id=plugin_id,
+            version=version,
+            actor_id=actor_id,
+        )
         revoked_permissions = await self._repository.revoke_permissions(plugin_id)
         return MarketplaceRevocationResult(
             plugin_id=plugin_id,
             revoked_versions=tuple(row.version for row in rows),
             revoked_permissions=revoked_permissions,
+            desired_removed=mutation.changed,
         )
 
     async def uninstall(
@@ -134,16 +143,24 @@ class PluginMarketplaceCatalogService:
         *,
         plugin_id: str,
         version: str,
+        actor_id: str | None = None,
     ) -> MarketplaceUninstallResult:
         """Uninstall one package and remove it from the next desired snapshot."""
         package = await self._repository.uninstall_package(plugin_id, version)
         if package is None:
             raise LookupError("marketplace package version was not found")
-        desired_removed = await self._plugin_repository.remove_desired_state(plugin_id)
-        revoked_permissions = await self._repository.revoke_permissions(plugin_id)
+        mutation = await self._desired_bundles.uninstall(
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            bundle_id=plugin_id,
+            version=version,
+            actor_id=actor_id,
+        )
+        revoked_permissions = (
+            await self._repository.revoke_permissions(plugin_id) if mutation.changed else 0
+        )
         return MarketplaceUninstallResult(
             plugin_id=plugin_id,
             version=version,
-            desired_removed=desired_removed,
+            desired_removed=mutation.changed,
             revoked_permissions=revoked_permissions,
         )

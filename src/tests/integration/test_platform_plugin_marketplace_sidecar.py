@@ -39,12 +39,6 @@ from src.application.schemas.plugin_marketplace import (
 from src.application.services.platform_plugin_profile_service import (
     PlatformPluginProfileService,
 )
-from src.application.services.plugin_marketplace_catalog_service import (
-    PluginMarketplaceCatalogService,
-)
-from src.application.services.plugin_marketplace_install_service import (
-    PluginMarketplaceInstallService,
-)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -60,7 +54,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepository,
 )
 from src.infrastructure.plugins.governance import canonical_plugin_json, sha256_hex
-from src.infrastructure.plugins.package_registry import OciPluginArtifactClient
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 SIDECAR_BINARY = REPOSITORY_ROOT / "agi-stack/target/debug/agistack-desktop-sidecar"
@@ -382,7 +375,7 @@ async def set_desired_config(
 
 
 @pytest.mark.integration
-async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(  # noqa: PLR0915
+async def test_legacy_v1_package_polling_remains_independent_of_marketplace_v2(  # noqa: PLR0915
     tmp_path: Path,
 ) -> None:
     if not SIDECAR_BINARY.is_file() or not WORKSPACE_CORE_BINARY.is_file():
@@ -490,16 +483,44 @@ async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(
             tenant_admin_approved=True,
             security_scan_passed=True,
         )
-        async with session_factory() as session, httpx.AsyncClient() as client:
-            install = PluginMarketplaceInstallService(
-                PlatformPluginGovernanceRepository(session),
-                PlatformPluginRepository(session),
-                OciPluginArtifactClient(client),
-                trusted_public_keys=(public_pem,),
+        async with session_factory() as session:
+            from src.domain.model.plugins import parse_plugin_manifest
+
+            governance = PlatformPluginGovernanceRepository(session)
+            plugins = PlatformPluginRepository(session)
+            manifest = parse_plugin_manifest(request.manifest)
+            _ = await governance.upsert_package(
+                plugin_id=request.plugin_id,
+                version=request.version,
+                publisher=request.publisher,
+                artifact_digest=request.artifact_sha256,
+                artifact_registry=request.artifact.registry,
+                artifact_repository=request.artifact.repository,
+                oci_manifest_digest=request.artifact.manifest_sha256,
+                manifest=manifest.to_payload(),
+                signature={
+                    "algorithm": "Ed25519",
+                    "public_key_sha256": sha256_hex(public_pem.encode("utf-8")),
+                    "signature_sha256": sha256_hex(
+                        request.signature.signature_base64.encode("ascii")
+                    ),
+                },
+                provenance={"predicateType": request.provenance.predicate_type},
+                security_scan_status="passed",
             )
-            decision = await install.request_install(request=request)
+            _ = await plugins.upsert_catalog_manifest(manifest)
+            _ = await plugins.set_desired_state(
+                plugin_id=manifest.id,
+                enabled=True,
+                config={},
+            )
+            for permission in sorted(request.approved_permissions):
+                _ = await governance.grant_permission(
+                    plugin_id=manifest.id,
+                    permission=permission,
+                    scope_id=request.tenant_id,
+                )
             await session.commit()
-        assert decision.status == "approved", decision.reason
 
         async with session_factory() as session:
             publication = await PlatformPluginProfileService(
@@ -644,15 +665,15 @@ async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(
                 assert restored.json()["stdout"] == "cross-language-subprocess-ok"
 
             async with session_factory() as session:
-                catalog = PluginMarketplaceCatalogService(
-                    PlatformPluginGovernanceRepository(session),
-                    PlatformPluginRepository(session),
+                package = await PlatformPluginGovernanceRepository(session).uninstall_package(
+                    "cross-language-subprocess",
+                    "1.0.0",
                 )
-                uninstall = await catalog.uninstall(
-                    plugin_id="cross-language-subprocess",
-                    version="1.0.0",
+                desired_removed = await PlatformPluginRepository(session).remove_desired_state(
+                    "cross-language-subprocess"
                 )
-                assert uninstall.desired_removed is True
+                assert package is not None
+                assert desired_removed is True
                 await session.commit()
             await publish_snapshot(
                 session_factory,
@@ -692,16 +713,12 @@ async def test_marketplace_package_moves_through_live_control_plane_and_sidecar(
                 assert removed.status_code == 404
 
             async with session_factory() as session:
-                catalog = PluginMarketplaceCatalogService(
-                    PlatformPluginGovernanceRepository(session),
-                    PlatformPluginRepository(session),
-                )
-                revoke = await catalog.revoke(
-                    plugin_id="cross-language-subprocess",
-                    reason="cross-language lifecycle complete",
+                revoked = await PlatformPluginGovernanceRepository(session).revoke_packages(
+                    "cross-language-subprocess",
+                    "cross-language lifecycle complete",
                 )
                 await session.commit()
-            assert revoke.revoked_versions == ("1.0.0",)
+            assert tuple(row.version for row in revoked) == ("1.0.0",)
             async with session_factory() as session:
                 package = await session.get(
                     PlatformPluginPackageModel,

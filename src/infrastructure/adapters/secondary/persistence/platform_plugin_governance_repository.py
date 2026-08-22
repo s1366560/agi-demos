@@ -22,7 +22,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 class PlatformPluginGovernanceRepository:
     """Persist Phase 4/6 desired state without executing runtime effects."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
+        self,
+        session: AsyncSession,
+    ) -> None:
         self._session = session
 
     async def grant_permission(
@@ -81,6 +84,27 @@ class PlatformPluginGovernanceRepository:
                     PlatformPluginPermissionModel.revoked_at.is_(None),
                 )
                 .order_by(PlatformPluginPermissionModel.permission)
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_active_permissions_for_plugin(
+        self,
+        plugin_id: str,
+    ) -> list[PlatformPluginPermissionModel]:
+        """Return every active scoped grant used to verify an installed v2 Bundle."""
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginPermissionModel)
+                .where(
+                    PlatformPluginPermissionModel.plugin_id == plugin_id,
+                    PlatformPluginPermissionModel.revoked_at.is_(None),
+                )
+                .order_by(
+                    PlatformPluginPermissionModel.scope_type,
+                    PlatformPluginPermissionModel.scope_id,
+                    PlatformPluginPermissionModel.permission,
+                )
             )
         )
         return list(result.scalars().all())

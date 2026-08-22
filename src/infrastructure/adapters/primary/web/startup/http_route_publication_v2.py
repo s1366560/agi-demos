@@ -7,7 +7,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import (
+    ControlPlaneEnvelopeV2,
+    ProfileSnapshotV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.plugins.http_routes import HttpRouteMountError
 from src.infrastructure.plugins.v2.builtin_http_routes import (
     BuiltinRouteGraphV2,
@@ -53,6 +58,15 @@ class HttpRouteReconcilePublicationV2:
     route_publication: RoutePublicationV2
     graph: BuiltinRouteGraphV2 | None
     plugin_publication: PlatformPluginPublicationV2 | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class HttpRouteGenerationPublicationV2:
+    """One attempted runtime generation and its accepted route companion, if any."""
+
+    plugin_publication: PlatformPluginPublicationV2
+    route_publication: RoutePublicationV2 | None
+    graph: BuiltinRouteGraphV2 | None
 
 
 class HttpRoutePublicationCoordinatorV2:
@@ -113,50 +127,92 @@ class HttpRoutePublicationCoordinatorV2:
                 snapshot,
                 version=distribution.envelope.version + 1,
             )
-            staged_graph: BuiltinRouteGraphV2 | None = None
-            staged_route_publication: RoutePublicationV2 | None = None
-
-            async def stage_routes(
-                generation: RuntimeGenerationV2,
-            ) -> PreparedGenerationPublicationV2:
-                nonlocal staged_graph, staged_route_publication
-                builder = generation.resolve(
-                    ROUTE_TABLE_BUILDER_SERVICE_V2,
-                    ScopeV2(kind=ScopeKindV2.ROOT),
-                )
-                if not isinstance(builder, RouteTableBuilderV2):
-                    raise TypeError("plugin runtime v2 staged an invalid route table builder")
-                contributed_routes = builder.freeze().definitions
-                graph = build_builtin_route_graph_v2(
-                    workspace_core_settings=self._workspace_core_settings,
-                    route_definitions=contributed_routes,
-                )
-                route_publication = self._registry.stage(generation.descriptor, graph.table)
-                staged_graph = graph
-                staged_route_publication = route_publication
-                return PreparedGenerationPublicationV2(
-                    commit=lambda: self._registry.activate(route_publication),
-                    rollback=lambda: self._registry.discard(route_publication),
-                )
-
-            publication = await self._host.apply(
+            generation_publication = await self._publish_locked(
                 snapshot,
                 envelope,
-                publication_stager=stage_routes,
             )
+            publication = generation_publication.plugin_publication
             if not publication.accepted:
                 raise HttpRoutePublicationRejectedV2(publication)
-            if staged_graph is None or staged_route_publication is None:
+            if (
+                generation_publication.graph is None
+                or generation_publication.route_publication is None
+            ):
                 raise RuntimeError("accepted plugin route generation has no staged route graph")
             if on_commit is not None:
-                on_commit(staged_graph)
+                on_commit(generation_publication.graph)
             return HttpRouteReconcilePublicationV2(
                 mounted=mounted,
                 unmounted=unmounted,
-                route_publication=staged_route_publication,
-                graph=staged_graph,
+                route_publication=generation_publication.route_publication,
+                graph=generation_publication.graph,
                 plugin_publication=publication,
             )
+
+    async def publish_snapshot(
+        self,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        *,
+        on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
+    ) -> HttpRouteGenerationPublicationV2:
+        """Publish any complete v2 snapshot with the same route/OpenAPI transaction."""
+        async with self._lock:
+            result = await self._publish_locked(snapshot, envelope)
+            if result.plugin_publication.accepted and result.graph is not None:
+                if on_commit is not None:
+                    on_commit(result.graph)
+            return result
+
+    async def _publish_locked(
+        self,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+    ) -> HttpRouteGenerationPublicationV2:
+        staged_graph: BuiltinRouteGraphV2 | None = None
+        staged_route_publication: RoutePublicationV2 | None = None
+
+        async def stage_routes(
+            generation: RuntimeGenerationV2,
+        ) -> PreparedGenerationPublicationV2:
+            nonlocal staged_graph, staged_route_publication
+            builder = generation.resolve(
+                ROUTE_TABLE_BUILDER_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+            if not isinstance(builder, RouteTableBuilderV2):
+                raise TypeError("plugin runtime v2 staged an invalid route table builder")
+            contributed_routes = builder.freeze().definitions
+            graph = build_builtin_route_graph_v2(
+                workspace_core_settings=self._workspace_core_settings,
+                route_definitions=contributed_routes,
+            )
+            route_publication = self._registry.stage(generation.descriptor, graph.table)
+            staged_graph = graph
+            staged_route_publication = route_publication
+            return PreparedGenerationPublicationV2(
+                commit=lambda: self._registry.activate(route_publication),
+                rollback=lambda: self._registry.discard(route_publication),
+            )
+
+        publication = await self._host.apply(
+            snapshot,
+            envelope,
+            publication_stager=stage_routes,
+        )
+        if not publication.accepted:
+            return HttpRouteGenerationPublicationV2(
+                plugin_publication=publication,
+                route_publication=None,
+                graph=None,
+            )
+        if staged_graph is None or staged_route_publication is None:
+            raise RuntimeError("accepted plugin route generation has no staged route graph")
+        return HttpRouteGenerationPublicationV2(
+            plugin_publication=publication,
+            route_publication=staged_route_publication,
+            graph=staged_graph,
+        )
 
 
 def _route_change_counts(
@@ -172,6 +228,7 @@ def _route_change_counts(
 
 
 __all__ = [
+    "HttpRouteGenerationPublicationV2",
     "HttpRoutePublicationCoordinatorV2",
     "HttpRoutePublicationRejectedV2",
     "HttpRouteReconcilePublicationV2",
