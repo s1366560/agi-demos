@@ -19,7 +19,10 @@ from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
 )
-from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
+from src.infrastructure.plugins.v2.builtin_http_routes import (
+    REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+    build_builtin_route_graph_v2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
@@ -107,6 +110,7 @@ async def initialize_plugin_runtime_v2(
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=workspace_core_settings,
                 route_definitions=contributed_routes,
+                required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
             )
             staged = route_registry.stage(generation.descriptor, graph.table)
             route_graph = graph

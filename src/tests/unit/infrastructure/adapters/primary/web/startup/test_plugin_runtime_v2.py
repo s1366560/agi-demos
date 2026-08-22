@@ -66,6 +66,11 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
+    assert len(route_graph.static_mounted_row_ids) == 70
+    assert route_graph.v2_owned_row_ids == ("system",)
+    assert {definition.owner_entry_id for definition in route_graph.table.definitions} >= {
+        "builtin-system-http-routes"
+    }
     assert len(route_graph.route_signatures) > 72
     assert route_registry.current.openapi.descriptor == host.manager.current.descriptor
     route_builder = host.manager.current.resolve(

@@ -32,6 +32,7 @@ class RouteDefinitionV2:
     status_code: int | None = None
     response_model: object | None = None
     include_in_schema: bool = True
+    replaces_builtin_row_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,6 +240,8 @@ def _validate_routes(routes: tuple[RouteDefinitionV2, ...]) -> None:
             raise ValueError("route path must start with /")
         if not route.methods:
             raise ValueError("route methods must be non-empty")
+        if route.replaces_builtin_row_id is not None and not route.replaces_builtin_row_id.strip():
+            raise ValueError("replaced builtin route row id must be non-empty")
         for method in route.methods:
             normalized = method.upper()
             key = normalized, route.path

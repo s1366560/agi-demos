@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -160,6 +161,44 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
     assert result.route_publication is not None
     assert result.route_publication.descriptor.generation == snapshot.generation
     assert callback.disposals == 1
+    await host.close()
+
+
+@pytest.mark.unit
+async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, coordinator = await _coordinator(monkeypatch, inventory=_inventory())
+    host = app.state.platform_plugin_runtime_v2
+    registry = app.state.platform_plugin_route_registry_v2
+    current = host.current_distribution
+    current_routes = registry.current
+    assert current is not None
+    entries = tuple(
+        replace(entry, enabled=False) if entry.entry_id == "builtin-system-http-routes" else entry
+        for entry in current.snapshot.entries
+    )
+    snapshot = compose_profile_v2(
+        ProfileDocumentV2(
+            profile_id=current.snapshot.profile_id,
+            entries=entries,
+        ),
+        {manifest.plugin_id: manifest for manifest in current.snapshot.manifests},
+        generation=current.snapshot.generation + 1,
+    )
+
+    result = await coordinator.publish_snapshot(
+        snapshot,
+        control_envelope_v2(snapshot, version=current.envelope.version + 1),
+    )
+
+    assert result.plugin_publication.accepted is False
+    assert result.plugin_publication.receipt.error_code == "publication_staging_failed"
+    assert "required V2 builtin route row claims missing: system" in (
+        result.plugin_publication.receipt.error_message or ""
+    )
+    assert host.current_distribution is current
+    assert registry.current is current_routes
     await host.close()
 
 

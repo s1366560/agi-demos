@@ -25,6 +25,7 @@ from .route_inventory import INVENTORY_PATH
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "BuiltinRouteRowOverride",
     "RouteLoadError",
     "RouteRowPatch",
     "install_builtin_routes",
@@ -73,6 +74,26 @@ class RouteRowPatch:
     module: str | None = None
     expression: str | None = None
     prefix: str | None = None
+
+
+@dataclass(frozen=True)
+class BuiltinRouteRowOverride:
+    """One explicit, complete replacement for an ``include_router`` inventory row."""
+
+    row_id: str
+    route_keys: frozenset[tuple[str, str]]
+    install: Callable[[Any], None]
+
+    def __post_init__(self) -> None:
+        if not self.row_id.strip():
+            raise ValueError("builtin route override row_id must be non-empty")
+        if not self.route_keys:
+            raise ValueError("builtin route override route_keys must be non-empty")
+        for method, path in self.route_keys:
+            if method != method.upper() or not method.strip():
+                raise ValueError("builtin route override methods must use canonical uppercase form")
+            if not path.startswith("/"):
+                raise ValueError("builtin route override paths must start with /")
 
 
 def route_patches_from_profile(
@@ -139,6 +160,7 @@ def install_builtin_routes(
     inventory_path: Path = INVENTORY_PATH,
     helper_overrides: Mapping[str, Callable[..., object]] | None = None,
     row_patches: Mapping[str, RouteRowPatch] | None = None,
+    row_overrides: Mapping[str, BuiltinRouteRowOverride] | None = None,
 ) -> tuple[str, ...]:
     """Replay the baseline's route registrations against *app* in order.
 
@@ -149,54 +171,175 @@ def install_builtin_routes(
     ``row_patches`` applies per-row profile patches: unknown targets are
     rejected, disabled rows are skipped, and replacement fields change how
     an ``include_router`` row resolves.
+    ``row_overrides`` installs a complete V2-owned HTTP row at the baseline
+    position only when its declared method/path set exactly matches the
+    resolved inventory router. Partial ownership fails closed.
     """
     rows = load_builtin_route_rows(inventory_path)
-    if row_patches:
-        known = {entry.get("row_id") for entry in rows}
-        unknown = sorted(set(row_patches) - known)
-        if unknown:
-            raise RouteLoadError(
-                f"route patches target unknown baseline rows: {', '.join(unknown)}"
-            )
+    _validate_route_customizations(
+        rows,
+        row_patches=row_patches or {},
+        row_overrides=row_overrides or {},
+    )
+    patches = row_patches or {}
+    overrides = row_overrides or {}
+    helpers = helper_overrides or {}
     mounted: list[str] = []
     for entry in rows:
-        row_id = entry.get("row_id")
-        kind = entry.get("kind")
-        patch = row_patches.get(cast(str, row_id)) if row_patches else None
-        if patch is not None and patch.enabled is False:
-            logger.info("Builtin route row %s disabled by profile patch", row_id)
-            continue
-        if kind == "include_router":
-            router = _resolve_router(_patched_entry(entry, patch))
-            prefix = (
-                patch.prefix
-                if patch is not None and patch.prefix is not None
-                else entry.get("prefix")
-            )
-            if prefix is not None:
-                app.include_router(router, prefix=prefix)
-            else:
-                app.include_router(router)
-            mounted.append(cast(str, row_id))
-        elif kind == "helper" and row_id in _INTERLEAVED_HELPERS:
-            helper = cast(
-                Callable[..., object],
-                helper_overrides[row_id]
-                if helper_overrides and row_id in helper_overrides
-                else _resolve_dotted(_require_module(entry)),
-            )
-            if row_id in _SETTINGS_HELPERS:
-                if workspace_core_settings is None:
-                    raise RouteLoadError(f"helper {row_id} requires workspace_core_settings")
-                helper(app, workspace_core_settings)
-            else:
-                helper(app)
-            mounted.append(cast(str, row_id))
-    logger.info(
-        "Builtin route rows mounted from baseline: %d rows",
-        len(mounted),
-    )
+        if _mount_builtin_route_row(
+            app,
+            entry,
+            workspace_core_settings=workspace_core_settings,
+            helper_overrides=helpers,
+            row_patches=patches,
+            row_overrides=overrides,
+        ):
+            mounted.append(cast(str, entry["row_id"]))
+    logger.info("Builtin route rows mounted from baseline: %d rows", len(mounted))
     return tuple(mounted)
+
+
+def _validate_route_customizations(
+    rows: tuple[dict[str, Any], ...],
+    *,
+    row_patches: Mapping[str, RouteRowPatch],
+    row_overrides: Mapping[str, BuiltinRouteRowOverride],
+) -> None:
+    known = {entry.get("row_id") for entry in rows}
+    for label, candidates in (("patches", row_patches), ("overrides", row_overrides)):
+        unknown = sorted(set(candidates) - known)
+        if unknown:
+            raise RouteLoadError(
+                f"route {label} target unknown baseline rows: {', '.join(unknown)}"
+            )
+    overlap = sorted(set(row_patches) & set(row_overrides))
+    if overlap:
+        raise RouteLoadError(
+            "builtin route rows cannot have both a profile patch and a V2 override: "
+            + ", ".join(overlap)
+        )
+    for key, override in row_overrides.items():
+        if key != override.row_id:
+            raise RouteLoadError(
+                f"route override key {key} does not match declared row {override.row_id}"
+            )
+
+
+def _mount_builtin_route_row(
+    app: _RouteApp,
+    entry: dict[str, Any],
+    *,
+    workspace_core_settings: object | None,
+    helper_overrides: Mapping[str, Callable[..., object]],
+    row_patches: Mapping[str, RouteRowPatch],
+    row_overrides: Mapping[str, BuiltinRouteRowOverride],
+) -> bool:
+    row_id = entry.get("row_id")
+    if not isinstance(row_id, str) or not row_id:
+        raise RouteLoadError("builtin route inventory row_id must be a non-empty string")
+    patch = row_patches.get(row_id)
+    if patch is not None and patch.enabled is False:
+        logger.info("Builtin route row %s disabled by profile patch", row_id)
+        return False
+    override = row_overrides.get(row_id)
+    if override is not None:
+        _mount_v2_row_override(app, entry, override)
+        return True
+    if entry.get("kind") == "include_router":
+        _mount_inventory_router(app, entry, patch)
+        return True
+    if entry.get("kind") == "helper" and row_id in _INTERLEAVED_HELPERS:
+        _mount_interleaved_helper(
+            app,
+            entry,
+            row_id=row_id,
+            workspace_core_settings=workspace_core_settings,
+            helper_overrides=helper_overrides,
+        )
+        return True
+    return False
+
+
+def _mount_v2_row_override(
+    app: _RouteApp,
+    entry: dict[str, Any],
+    override: BuiltinRouteRowOverride,
+) -> None:
+    row_id = override.row_id
+    if entry.get("kind") != "include_router":
+        raise RouteLoadError(f"V2 route override target {row_id} must be an include_router row")
+    router = _resolve_router(entry)
+    expected_keys = _resolved_router_keys(
+        router,
+        row_id=row_id,
+        prefix=cast(str | None, entry.get("prefix")),
+    )
+    if override.route_keys != expected_keys:
+        missing = sorted(expected_keys - override.route_keys)
+        unexpected = sorted(override.route_keys - expected_keys)
+        detail = (
+            f"V2 override for row {row_id} must replace the complete route key set;"
+            f" missing={missing}, unexpected={unexpected}"
+        )
+        raise RouteLoadError(detail)
+    override.install(app)
+
+
+def _mount_inventory_router(
+    app: _RouteApp,
+    entry: dict[str, Any],
+    patch: RouteRowPatch | None,
+) -> None:
+    router = _resolve_router(_patched_entry(entry, patch))
+    prefix = patch.prefix if patch is not None and patch.prefix is not None else entry.get("prefix")
+    if prefix is not None:
+        app.include_router(router, prefix=prefix)
+    else:
+        app.include_router(router)
+
+
+def _mount_interleaved_helper(
+    app: _RouteApp,
+    entry: dict[str, Any],
+    *,
+    row_id: str,
+    workspace_core_settings: object | None,
+    helper_overrides: Mapping[str, Callable[..., object]],
+) -> None:
+    helper = cast(
+        Callable[..., object],
+        helper_overrides.get(row_id) or _resolve_dotted(_require_module(entry)),
+    )
+    if row_id not in _SETTINGS_HELPERS:
+        _ = helper(app)
+        return
+    if workspace_core_settings is None:
+        raise RouteLoadError(f"helper {row_id} requires workspace_core_settings")
+    _ = helper(app, workspace_core_settings)
+
+
+def _resolved_router_keys(
+    router: object,
+    *,
+    row_id: str,
+    prefix: str | None,
+) -> frozenset[tuple[str, str]]:
+    routes = getattr(router, "routes", None)
+    if not isinstance(routes, list):
+        raise RouteLoadError(f"route row {row_id} did not resolve to an HTTP router")
+    keys: set[tuple[str, str]] = set()
+    for route in cast(list[object], routes):
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if not isinstance(path, str) or not methods:
+            raise RouteLoadError(
+                f"route row {row_id} contains a non-HTTP route and cannot use a V2 override"
+            )
+        mounted_path = f"{prefix or ''}{path}"
+        keys.update((str(method).upper(), mounted_path) for method in methods)
+    if not keys:
+        raise RouteLoadError(f"route row {row_id} has no HTTP route keys")
+    return frozenset(keys)
 
 
 def _require_module(entry: dict[str, Any]) -> str:

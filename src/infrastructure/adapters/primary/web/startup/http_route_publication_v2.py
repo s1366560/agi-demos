@@ -15,6 +15,7 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.infrastructure.plugins.http_routes import HttpRouteMountError
 from src.infrastructure.plugins.v2.builtin_http_routes import (
+    REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
     BuiltinRouteGraphV2,
     build_builtin_route_graph_v2,
 )
@@ -186,6 +187,7 @@ class HttpRoutePublicationCoordinatorV2:
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=self._workspace_core_settings,
                 route_definitions=contributed_routes,
+                required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
             )
             route_publication = self._registry.stage(generation.descriptor, graph.table)
             staged_graph = graph

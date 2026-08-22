@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from src.infrastructure.plugins.route_inventory import INVENTORY_PATH
 from src.infrastructure.plugins.route_loader import (
+    BuiltinRouteRowOverride,
     RouteLoadError,
     install_builtin_routes,
     load_builtin_route_rows,
@@ -203,3 +204,110 @@ class TestRouteRowPatches:
 
         with pytest.raises(RouteLoadError, match="unknown config keys"):
             route_patches_from_profile([ProfilePatch(target="route:auth", config={"bogus": 1})])
+
+
+@pytest.mark.unit
+class TestBuiltinRouteRowOverridesV2:
+    """Explicit V2 row ownership replaces one complete inventory row in place."""
+
+    _SYSTEM_KEYS = frozenset(
+        {
+            ("GET", "/api/v1/system/features"),
+            ("GET", "/api/v1/system/info"),
+        }
+    )
+
+    def test_complete_override_mounts_at_the_inventory_row_position(self) -> None:
+        from src.infrastructure.adapters.primary.web.routers import (
+            plugin_marketplace,
+            tenant_webhooks,
+        )
+
+        app = _RecordingApp()
+
+        def mount_override(target: _RecordingApp) -> None:
+            target.calls.append({"override": "system"})
+
+        mounted, _ = _install_with_stub_helpers(
+            app,
+            row_overrides={
+                "system": BuiltinRouteRowOverride(
+                    row_id="system",
+                    route_keys=self._SYSTEM_KEYS,
+                    install=mount_override,
+                )
+            },
+        )
+
+        previous = next(
+            index
+            for index, call in enumerate(app.calls)
+            if call.get("router") is tenant_webhooks.router
+        )
+        override = app.calls.index({"override": "system"})
+        following = next(
+            index
+            for index, call in enumerate(app.calls)
+            if call.get("router") is plugin_marketplace.router
+        )
+        assert previous < override < following
+        assert "system" in mounted
+
+    def test_partial_multi_route_override_fails_closed(self) -> None:
+        app = _RecordingApp()
+
+        with pytest.raises(RouteLoadError, match="complete route key set"):
+            _install_with_stub_helpers(
+                app,
+                row_overrides={
+                    "system": BuiltinRouteRowOverride(
+                        row_id="system",
+                        route_keys=frozenset({("GET", "/api/v1/system/features")}),
+                        install=lambda _app: None,
+                    )
+                },
+            )
+
+        assert all(call.get("override") != "system" for call in app.calls)
+
+    def test_unknown_override_target_is_rejected(self) -> None:
+        with pytest.raises(RouteLoadError, match="unknown baseline rows"):
+            _install_with_stub_helpers(
+                _RecordingApp(),
+                row_overrides={
+                    "missing": BuiltinRouteRowOverride(
+                        row_id="missing",
+                        route_keys=self._SYSTEM_KEYS,
+                        install=lambda _app: None,
+                    )
+                },
+            )
+
+    def test_helper_row_cannot_be_overridden_as_an_http_route(self) -> None:
+        with pytest.raises(RouteLoadError, match="include_router"):
+            _install_with_stub_helpers(
+                _RecordingApp(),
+                row_overrides={
+                    "task-session": BuiltinRouteRowOverride(
+                        row_id="task-session",
+                        route_keys=self._SYSTEM_KEYS,
+                        install=lambda _app: None,
+                    )
+                },
+            )
+
+    def test_patch_and_v2_override_for_the_same_row_are_rejected(self) -> None:
+        from src.infrastructure.plugins.route_loader import RouteRowPatch
+
+        with pytest.raises(RouteLoadError, match="both a profile patch and a V2 override"):
+            _install_with_stub_helpers(
+                _RecordingApp(),
+                row_patches={"system": RouteRowPatch(row_id="system", enabled=False)},
+                row_overrides={
+                    "system": BuiltinRouteRowOverride(
+                        row_id="system",
+                        route_keys=self._SYSTEM_KEYS,
+                        install=lambda _app: None,
+                    )
+                },
+            )

@@ -5,12 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from src.configuration.workspace_core import get_workspace_core_settings
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
+    mount_generation_http_dispatcher_v2,
+)
 from src.infrastructure.plugins.route_inventory import INVENTORY_PATH
+from src.infrastructure.plugins.route_loader import RouteLoadError
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
-from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableRegistryV2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
 
@@ -78,3 +89,135 @@ def test_generation_route_precedes_root_preview_catch_all() -> None:
 
     paths = [path for path, _name, _methods in graph.route_signatures]
     assert paths.index("/plugin-startup/{tenant_id}/hello") < paths.index("/{path:path}")
+
+
+@pytest.mark.unit
+def test_complete_builtin_row_claim_replaces_static_handlers_in_place() -> None:
+    baseline = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+    )
+
+    async def features() -> dict[str, str]:
+        return {"source": "v2-features"}
+
+    async def info() -> dict[str, str]:
+        return {"source": "v2-info"}
+
+    claimed = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="builtin-system-routes",
+                path="/api/v1/system/features",
+                methods=("GET",),
+                endpoint=features,
+                name="list_features",
+                replaces_builtin_row_id="system",
+            ),
+            RouteDefinitionV2(
+                owner_entry_id="builtin-system-routes",
+                path="/api/v1/system/info",
+                methods=("GET",),
+                endpoint=info,
+                name="get_system_info",
+                replaces_builtin_row_id="system",
+            ),
+        ),
+    )
+
+    assert claimed.route_signatures == baseline.route_signatures
+    assert claimed.mounted_row_ids == baseline.mounted_row_ids
+    assert claimed.v2_owned_row_ids == ("system",)
+    assert "system" not in claimed.static_mounted_row_ids
+    assert len(claimed.static_mounted_row_ids) + len(claimed.v2_owned_row_ids) == len(
+        claimed.mounted_row_ids
+    )
+
+    request_host = FastAPI()
+    request_host.mount("/", claimed.table)
+    with TestClient(request_host) as client:
+        response = client.get("/api/v1/system/features")
+
+    assert response.status_code == 200
+    assert response.json() == {"source": "v2-features"}
+
+
+@pytest.mark.unit
+def test_partial_builtin_row_claim_is_rejected_before_mount() -> None:
+    with pytest.raises(RouteLoadError, match="complete route key set"):
+        build_builtin_route_graph_v2(
+            workspace_core_settings=get_workspace_core_settings(),
+            route_definitions=(
+                RouteDefinitionV2(
+                    owner_entry_id="builtin-system-routes",
+                    path="/api/v1/system/features",
+                    methods=("GET",),
+                    endpoint=lambda: {"source": "v2"},
+                    name="list_features",
+                    replaces_builtin_row_id="system",
+                ),
+            ),
+        )
+
+
+@pytest.mark.unit
+async def test_generation_dispatcher_executes_claimed_row_before_static_fallback() -> None:
+    async def v2_features() -> dict[str, str]:
+        return {"source": "v2"}
+
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="builtin-system-routes",
+                path="/api/v1/system/features",
+                methods=("GET",),
+                endpoint=v2_features,
+                name="list_features",
+                replaces_builtin_row_id="system",
+            ),
+            RouteDefinitionV2(
+                owner_entry_id="builtin-system-routes",
+                path="/api/v1/system/info",
+                methods=("GET",),
+                endpoint=lambda: {"source": "v2"},
+                name="get_system_info",
+                replaces_builtin_row_id="system",
+            ),
+        ),
+    )
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+    )
+    distribution = host.current_distribution
+    assert distribution is not None
+    registry = RouteTableRegistryV2()
+    await registry.publish(distribution.descriptor, graph.table)
+    outer = FastAPI()
+    outer.state.platform_plugin_route_registry_v2 = registry
+    mount_generation_http_dispatcher_v2(outer)
+
+    @outer.get("/api/v1/system/features")
+    async def static_fallback() -> dict[str, str]:
+        return {"source": "static"}
+
+    async with (
+        pin_operation_context_v2(
+            host,
+            operation_id="builtin-system-route-authority",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=outer),
+            base_url="http://test",
+        ) as client,
+    ):
+        response = await client.get("/api/v1/system/features")
+
+    assert response.status_code == 200
+    assert response.json() == {"source": "v2"}
+    await host.close()

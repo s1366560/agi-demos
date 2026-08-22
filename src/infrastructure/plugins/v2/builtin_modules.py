@@ -94,6 +94,8 @@ def builtin_runtime_definitions_v2(
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
+    from .builtin_system_http_routes import builtin_system_http_routes_definition_v2
+
     return (
         PluginDefinitionV2(
             module_ref=RUNTIME_BOUNDARY_MODULE_V2,
@@ -118,6 +120,7 @@ def builtin_runtime_definitions_v2(
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
+        builtin_system_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
