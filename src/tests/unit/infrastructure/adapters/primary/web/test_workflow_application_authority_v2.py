@@ -22,6 +22,7 @@ from src.infrastructure.adapters.primary.web.routers import (
 from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
     workflow_engine_authority_dependency_v2,
 )
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.boundary import pin_generation_v2
@@ -76,7 +77,7 @@ def test_workflow_routes_remove_static_dependency() -> None:
 
 
 async def test_authority_resolves_engine_from_pinned_generation() -> None:
-    engine = AsyncioWorkflowEngine()
+    engine = AsyncioWorkflowEngine(manager=TaskManager())
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(workflow_runtime_factory=lambda: engine)
     )

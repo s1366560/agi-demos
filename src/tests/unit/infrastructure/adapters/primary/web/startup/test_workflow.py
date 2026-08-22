@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.startup.workflow import (
     _run_rebuild_communities_workflow,
     build_asyncio_workflow_engine_v2,
 )
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog, User
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
@@ -77,7 +78,7 @@ class FakeNeo4jClient:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_build_asyncio_workflow_engine_registers_task_handlers() -> None:
-    engine = build_asyncio_workflow_engine_v2()
+    engine = build_asyncio_workflow_engine_v2(manager=TaskManager())
 
     assert engine is not None
     assert "episode_processing" in engine._workflow_handlers
@@ -130,7 +131,7 @@ async def test_workflow_handler_holds_an_independent_generation_lease(
     install_process_generation_host_v2(host)
 
     try:
-        engine = build_asyncio_workflow_engine_v2()
+        engine = build_asyncio_workflow_engine_v2(manager=TaskManager())
         assert engine is not None
         task = asyncio.create_task(engine._workflow_handlers["episode_processing"]({}))
         await handler_started.wait()

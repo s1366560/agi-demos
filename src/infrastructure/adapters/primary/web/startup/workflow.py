@@ -9,6 +9,7 @@ from typing import Any, cast
 from sqlalchemy import select
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog
@@ -435,9 +436,9 @@ def register_workflow_handlers_v2(
     return workflow_engine
 
 
-def build_asyncio_workflow_engine_v2() -> AsyncioWorkflowEngine:
+def build_asyncio_workflow_engine_v2(*, manager: TaskManager) -> AsyncioWorkflowEngine:
     """Build the local workflow engine activated by the V2 Provider effect."""
     logger.info("Initializing Asyncio Workflow Engine...")
-    workflow_engine = register_workflow_handlers_v2(AsyncioWorkflowEngine())
+    workflow_engine = register_workflow_handlers_v2(AsyncioWorkflowEngine(manager=manager))
     logger.info("Asyncio Workflow Engine initialized")
     return workflow_engine

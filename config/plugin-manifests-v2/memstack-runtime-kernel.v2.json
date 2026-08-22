@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:cd8a2d6d6a195d1596fb8ff4542260cfd067ef55357a8f03c57e74e7215346e4",
+        "digest": "sha256:f20f521b941535bceb56290b86c5b13547f46516308bf766bf2d7dd67a1f8e79",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -562,14 +562,14 @@
       }
     },
     {
-      "module_ref": "builtin://memstack/workflow/asyncio-runtime",
-      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_runtime_definition_v2",
+      "module_ref": "builtin://memstack/runtime/background-task-manager",
+      "entrypoint": "src.infrastructure.plugins.v2.background_task_services:background_task_manager_definition_v2",
       "targets": ["python"],
       "contract": {
         "services": {
           "provides": [
             {
-              "service": "service:workflow.runtime",
+              "service": "service:runtime.background-task-manager",
               "version": "1.0.0"
             }
           ],
@@ -582,13 +582,50 @@
           "additionalProperties": false,
           "required": ["strategy"],
           "properties": {
+            "strategy": { "const": "process-shared", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f906fa558857ebf5c673e41d04fda8a2904f5a81c1ba4bee22c67d15c248562e",
+      "artifact": {
+        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/workflow/asyncio-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:workflow.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "task_manager",
+              "service": "service:runtime.background-task-manager",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
             "strategy": { "const": "asyncio-local", "type": "string" }
           }
         }
       },
-      "contract_digest": "sha256:aa3fe0dc87bfc35bb90eb6f83171327439452f547af1d5c3d8e00ebbf042655b",
+      "contract_digest": "sha256:ea01e59a297d980cc24b1ad3bed0ac07024c3249b85002d0191492a7b84aeb1b",
       "artifact": {
-        "digest": "sha256:30354f75b8cc6415d176d28ea1a77c6166ff18c1b845ac8808b3599c67f2733e",
+        "digest": "sha256:c502cec9e5c5cac7f809456dba75db5519bde1f9bdfb7cbd43c10bef26690450",
         "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
       }
     },
@@ -625,7 +662,7 @@
       },
       "contract_digest": "sha256:8076ab08930cfb438e125fbd1be720ff920d3975d1d0b90b29af78c1fe7c0ce2",
       "artifact": {
-        "digest": "sha256:30354f75b8cc6415d176d28ea1a77c6166ff18c1b845ac8808b3599c67f2733e",
+        "digest": "sha256:c502cec9e5c5cac7f809456dba75db5519bde1f9bdfb7cbd43c10bef26690450",
         "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
       }
     },
@@ -1052,6 +1089,79 @@
       "artifact": {
         "digest": "sha256:c72a6c770d7b5fda677fb681c1591da4acb56473a1af37d25d5fcd5da0cc5621",
         "source": "repo+python://src/infrastructure/plugins/v2/notification_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/background-task-access-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.background_task_services:_apply_background_task_access_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.background-task-access-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:07fbfde8e0946272b13d9337fd8104d2b1027b091da656b3f494fdb40ffe141c",
+      "artifact": {
+        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/background-task-services",
+      "entrypoint": "src.infrastructure.plugins.v2.background_task_services:_apply_background_task_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.background-task-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "manager",
+              "service": "service:runtime.background-task-manager",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "provider",
+              "service": "service:persistence.background-task-access-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3c676fd0282e372e0b178cf2e4c7dc8f5bece550fec200e8fc4424b7f990a902",
+      "artifact": {
+        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
       }
     },
     {
@@ -1622,6 +1732,35 @@
       "artifact": {
         "digest": "sha256:3999578a6df49630cf2dd9c8aa5a0f199fb829748976c5a8ae689c4474424ce3",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_data_export_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/background-tasks-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_background_tasks_http_routes:builtin_background_tasks_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:cfec8aceb64047ec41bfd00a0d4132f6c020d7f44580d10580bad68a1735c248",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_background_tasks_http_routes.py"
       }
     },
     {

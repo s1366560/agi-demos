@@ -1,60 +1,19 @@
-"""
-Background task API routes.
+"""Background task API endpoints backed exclusively by a pinned V2 generation."""
 
-This router provides endpoints for managing long-running background tasks.
-"""
+from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.background_task_application_authority_v2 import (
+    BackgroundTaskApplicationAuthorityV2,
+    background_task_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.background_tasks import task_manager
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
-
-logger = logging.getLogger(__name__)
+from src.infrastructure.adapters.secondary.persistence.models import User
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
-
-
-def _is_superuser(current_user: User) -> bool:
-    return bool(getattr(current_user, "is_superuser", False))
-
-
-async def _accessible_project_ids(
-    db: AsyncSession,
-    current_user: User,
-) -> set[str] | None:
-    if _is_superuser(current_user):
-        return None
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.project_id).where(UserProject.user_id == current_user.id)
-        )
-    )
-    return set(result.scalars().all())
-
-
-def _is_task_accessible(
-    task: Any,
-    current_user: User,
-    project_ids: set[str] | None,
-) -> bool:
-    if project_ids is None:
-        return True
-
-    owner_user_id = getattr(task, "owner_user_id", None)
-    if isinstance(owner_user_id, str) and owner_user_id == str(current_user.id):
-        return True
-
-    project_id = getattr(task, "project_id", None)
-    return isinstance(project_id, str) and project_id in project_ids
 
 
 @router.get("/")
@@ -62,33 +21,15 @@ async def list_tasks(
     status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    background_task_application: BackgroundTaskApplicationAuthorityV2 = Depends(
+        background_task_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    """
-    List all background tasks.
-
-    Args:
-        status: Optional status filter (pending, running, completed, failed, cancelled)
-        limit: Maximum tasks to return
-
-    Returns:
-        List of tasks
-    """
-    project_ids = await _accessible_project_ids(db, current_user)
-    tasks = [
-        task
-        for task in task_manager.tasks.values()
-        if _is_task_accessible(task, current_user, project_ids)
-    ]
-
-    # Filter by status if provided
-    if status:
-        tasks = [t for t in tasks if t.status.value == status]
-
-    # Sort by created_at descending
-    tasks.sort(key=lambda t: t.created_at, reverse=True)
-
-    total = len(tasks)
-    tasks = tasks[:limit]
-
-    return {"tasks": [task.to_dict() for task in tasks], "total": total}
+    """List identity-visible in-memory workflow tasks from the pinned generation."""
+    page = await background_task_application.services.list_tasks(
+        user_id=str(current_user.id),
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        status=status,
+        limit=limit,
+    )
+    return {"tasks": [dict(task) for task in page.tasks], "total": page.total}

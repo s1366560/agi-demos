@@ -4,6 +4,8 @@ Replaces TemporalWorkflowEngine with in-process asyncio tasks,
 using the existing TaskManager for lifecycle tracking.
 """
 
+# pyright: reportImplicitOverride=false, reportMissingSuperCall=false, reportPrivateUsage=false
+
 import asyncio
 import logging
 import uuid
@@ -20,7 +22,6 @@ from src.infrastructure.adapters.secondary.background_tasks import (
     BackgroundTask,
     TaskManager,
     TaskStatus,
-    task_manager,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,16 +74,21 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
 
     def __init__(
         self,
-        manager: TaskManager | None = None,
+        *,
+        manager: TaskManager,
         max_concurrent: int = 50,
     ) -> None:
-        self._manager = manager or task_manager
+        self._manager = manager
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._workflow_handlers: dict[str, Any] = {}
 
     def register_handler(self, workflow_name: str, handler: Callable[..., Awaitable[Any]]) -> None:
         """Register an async handler function for a workflow name."""
         self._workflow_handlers[workflow_name] = handler
+
+    def bind_task_manager(self, manager: TaskManager) -> None:
+        """Bind this newly constructed engine to the generation's shared manager."""
+        self._manager = manager
 
     async def start_workflow(
         self,
@@ -168,7 +174,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
         status: WorkflowStatus | None = None,
         limit: int = 100,
     ) -> list[WorkflowExecution]:
-        results = []
+        results: list[WorkflowExecution] = []
         for wf_id, task in list(self._manager.tasks.items()):
             execution = self._to_execution(wf_id, task)
             if status and execution.status != status:

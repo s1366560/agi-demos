@@ -22,6 +22,7 @@ from .agent_runtime_dispatcher import (
 )
 from .agent_worker_runtime import agent_worker_runtime_definition_v2
 from .backend_store_services import backend_store_service_definitions_v2
+from .background_task_services import background_task_service_definitions_v2
 from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
@@ -98,6 +99,9 @@ def builtin_runtime_definitions_v2(
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
+    from .builtin_background_tasks_http_routes import (
+        builtin_background_tasks_http_routes_definition_v2,
+    )
     from .builtin_billing_http_routes import builtin_billing_http_routes_definition_v2
     from .builtin_data_export_http_routes import builtin_data_export_http_routes_definition_v2
     from .builtin_enhanced_search_http_routes import (
@@ -160,6 +164,7 @@ def builtin_runtime_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
         *mcp_service_definitions_v2(redis_client=sandbox_redis_client),
+        *background_task_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),
@@ -181,6 +186,7 @@ def builtin_runtime_definitions_v2(
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
+        builtin_background_tasks_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
         builtin_trust_workspace_http_routes_definition_v2(),
         builtin_smtp_config_http_routes_definition_v2(),

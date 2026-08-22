@@ -165,6 +165,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-background-task-manager
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/background-task-manager
+      enabled: true
+      config:
+        strategy: process-shared
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-workflow-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -172,7 +186,8 @@ profile:
       enabled: true
       config:
         strategy: asyncio-local
-      inject: {}
+      inject:
+        task_manager: service:runtime.background-task-manager
       isolate: {}
       scope:
         kind: root
@@ -366,6 +381,36 @@ profile:
         strategy: operation-scoped-provider
       inject:
         provider: service:persistence.notification-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-background-task-access-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/background-task-access-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-background-task-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/background-task-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        manager: service:runtime.background-task-manager
+        provider: service:persistence.background-task-access-provider
       isolate: {}
       scope:
         kind: root
@@ -630,6 +675,20 @@ profile:
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
       module_ref: builtin://memstack/http/billing-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-background-tasks-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/background-tasks-routes
       enabled: true
       config: {}
       inject:

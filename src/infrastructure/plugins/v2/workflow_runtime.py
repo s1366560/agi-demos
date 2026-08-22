@@ -5,11 +5,14 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 
+from .background_task_services import (
+    BackgroundTaskManagerRuntimeV2,
+)
 from .runtime import (
     ContextV2,
     EffectResultV2,
@@ -24,6 +27,7 @@ WORKFLOW_RUNTIME_SERVICE_V2 = "service:workflow.runtime"
 WORKFLOW_APPLICATION_MODULE_V2 = "builtin://memstack/application/workflow-services"
 WORKFLOW_APPLICATION_SERVICE_V2 = "service:application.workflow-services"
 WORKFLOW_RUNTIME_INJECT_V2 = "runtime"
+WORKFLOW_TASK_MANAGER_INJECT_V2 = "task_manager"
 
 type WorkflowRuntimeFactoryV2 = Callable[
     [], AsyncioWorkflowEngine | Awaitable[AsyncioWorkflowEngine]
@@ -85,15 +89,29 @@ def workflow_runtime_definition_v2(
         if config.get("strategy") != "asyncio-local":
             raise ValueError("workflow runtime requires strategy asyncio-local")
 
-        factory = workflow_runtime_factory or AsyncioWorkflowEngine
-        engine = factory()
-        if inspect.isawaitable(engine):
-            engine = await engine
-        if not isinstance(engine, AsyncioWorkflowEngine):
+        task_manager_runtime = context.require(WORKFLOW_TASK_MANAGER_INJECT_V2)
+        if not isinstance(task_manager_runtime, BackgroundTaskManagerRuntimeV2):
+            raise RuntimeV2Error(
+                "invalid_background_task_manager_inject",
+                "workflow runtime requires the shared background task manager",
+            )
+        candidate: object
+        if workflow_runtime_factory is None:
+            candidate = cast(
+                "object",
+                AsyncioWorkflowEngine(manager=task_manager_runtime.manager),
+            )
+        else:
+            candidate = cast("object", workflow_runtime_factory())
+        if inspect.isawaitable(candidate):
+            candidate = await candidate
+        if not isinstance(candidate, AsyncioWorkflowEngine):
             raise RuntimeV2Error(
                 "invalid_workflow_runtime",
                 "asyncio workflow runtime factory returned an invalid engine",
             )
+        engine = candidate
+        engine.bind_task_manager(task_manager_runtime.manager)
         engine = _register_workflow_handlers_v2(engine)
         _ = context.provide(
             WORKFLOW_RUNTIME_SERVICE_V2,
@@ -159,6 +177,7 @@ __all__ = [
     "WORKFLOW_RUNTIME_INJECT_V2",
     "WORKFLOW_RUNTIME_MODULE_V2",
     "WORKFLOW_RUNTIME_SERVICE_V2",
+    "WORKFLOW_TASK_MANAGER_INJECT_V2",
     "WorkflowApplicationResolverProtocolV2",
     "WorkflowApplicationResolverV2",
     "WorkflowApplicationServicesV2",

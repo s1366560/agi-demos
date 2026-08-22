@@ -131,12 +131,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await start_health_checker()
     logger.info("LLM health checker started with %d active providers", health_provider_count)
 
-    # Initialize Background Task Manager
-    from src.infrastructure.adapters.secondary.background_tasks import task_manager
-
-    task_manager.start_cleanup()
-    logger.info("Background task manager started")
-
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
     telemetry_runtime_manager = TelemetryRuntimeManagerV2(

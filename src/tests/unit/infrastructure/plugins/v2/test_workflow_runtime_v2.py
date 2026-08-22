@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.secondary.background_tasks import TaskManager
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
@@ -31,7 +32,7 @@ _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.
 
 class _CloseTrackedWorkflowEngine(AsyncioWorkflowEngine):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(manager=TaskManager())
         self.close_calls = 0
 
     async def close(self) -> None:
