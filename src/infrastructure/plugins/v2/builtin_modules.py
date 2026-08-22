@@ -31,6 +31,7 @@ from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
 from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
+from .notification_services import notification_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
@@ -114,6 +115,9 @@ def builtin_runtime_definitions_v2(
         builtin_invitations_public_http_routes_definition_v2,
     )
     from .builtin_memories_http_routes import builtin_memories_http_routes_definition_v2
+    from .builtin_notifications_http_routes import (
+        builtin_notifications_http_routes_definition_v2,
+    )
     from .builtin_project_my_work_http_routes import (
         builtin_project_my_work_http_routes_definition_v2,
     )
@@ -167,6 +171,7 @@ def builtin_runtime_definitions_v2(
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
+        builtin_notifications_http_routes_definition_v2(),
         builtin_graph_http_routes_definition_v2(),
         builtin_graph_stores_http_routes_definition_v2(),
         builtin_episodes_http_routes_definition_v2(),
@@ -187,6 +192,7 @@ def builtin_runtime_definitions_v2(
         *project_tenant_service_definitions_v2(),
         *reflection_service_definitions_v2(),
         *schema_service_definitions_v2(),
+        *notification_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
