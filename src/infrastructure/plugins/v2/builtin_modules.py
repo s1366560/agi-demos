@@ -27,6 +27,7 @@ from .channel_adapters import (
 )
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
+from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
@@ -104,6 +105,7 @@ def builtin_runtime_definitions_v2(
         *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
+        *mcp_service_definitions_v2(redis_client=sandbox_redis_client),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),

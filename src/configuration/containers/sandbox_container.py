@@ -90,66 +90,6 @@ class SandboxContainer:
             host_docker_socket_volume=self._resolve_docker_socket_volume(),
         )
 
-    def sandbox_mcp_server_manager(self) -> Any:
-        """Get SandboxMCPServerManager for managing user MCP servers in sandbox."""
-        from src.application.services.sandbox_mcp_server_manager import (
-            SandboxMCPServerManager,
-        )
-
-        return SandboxMCPServerManager(
-            sandbox_resource=self.sandbox_resource(),
-            app_service=self.mcp_app_service() if self._db else None,
-        )
-
-    def mcp_app_service(self) -> Any:
-        """Get MCPAppService for MCP App lifecycle management."""
-        from src.application.services.mcp_app_service import MCPAppService
-        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
-            SqlMCPAppRepository,
-        )
-        from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
-
-        assert self._db is not None
-        app_repo = SqlMCPAppRepository(self._db)
-        # Use factory callable to break circular dependency:
-        # MCPAppService -> ResourceResolver -> SandboxMCPServerManager -> MCPAppService
-        resource_resolver = MCPAppResourceResolver(
-            manager_factory=lambda: self.sandbox_mcp_server_manager(),
-        )
-        return MCPAppService(app_repo=app_repo, resource_resolver=resource_resolver)
-
-    def mcp_runtime_service(self) -> Any:
-        """Get MCPRuntimeService for unified MCP server+app lifecycle.
-
-        Centralises construction so routers no longer need direct SQL
-        repository imports (fix H2).  Injects lifecycle-event and project
-        repos so the service has no direct SQLAlchemy dependency (fix C5).
-        """
-        from src.application.services.mcp_runtime_service import MCPRuntimeService
-        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
-            SqlMCPAppRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_mcp_lifecycle_event_repository import (
-            SqlMCPLifecycleEventRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-            SqlMCPServerRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
-            SqlProjectRepository,
-        )
-
-        assert self._db is not None
-        return MCPRuntimeService(
-            server_repo=SqlMCPServerRepository(self._db),
-            app_repo=SqlMCPAppRepository(self._db),
-            app_service=self.mcp_app_service(),
-            sandbox_manager=self.sandbox_mcp_server_manager(),
-            lifecycle_event_repo=SqlMCPLifecycleEventRepository(self._db),
-            project_repo=SqlProjectRepository(self._db),
-            redis_client=self._redis_client,
-        )
-
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------

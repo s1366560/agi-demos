@@ -523,18 +523,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         key="sandbox_resource", group="agent", target="_sandbox.sandbox_resource", inject=()
     ),
     ContainerServiceBinding(
-        key="sandbox_mcp_server_manager",
-        group="agent",
-        target="_sandbox.sandbox_mcp_server_manager",
-        inject=(),
-    ),
-    ContainerServiceBinding(
-        key="mcp_app_service", group="agent", target="_sandbox.mcp_app_service", inject=()
-    ),
-    ContainerServiceBinding(
-        key="mcp_runtime_service", group="agent", target="_sandbox.mcp_runtime_service", inject=()
-    ),
-    ContainerServiceBinding(
         key="dependency_orchestrator",
         group="agent",
         target="_sandbox.dependency_orchestrator",

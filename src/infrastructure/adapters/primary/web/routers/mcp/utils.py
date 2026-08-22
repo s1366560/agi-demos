@@ -5,7 +5,6 @@ Contains dependency functions and helper utilities.
 
 import logging
 from collections.abc import Collection
-from typing import Any
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
@@ -27,16 +26,6 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """
     app_container: DIContainer = request.app.state.container
     return app_container.with_db(db)
-
-
-async def get_sandbox_mcp_server_manager(request: Request, db: AsyncSession) -> Any:
-    """Get SandboxMCPServerManager from DI container.
-
-    Creates a fresh container with the current DB session to ensure
-    proper transaction scoping.
-    """
-    container = get_container_with_db(request, db)
-    return container.sandbox_mcp_server_manager()
 
 
 def _access_denied() -> HTTPException:

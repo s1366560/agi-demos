@@ -7,7 +7,7 @@ MCP servers are project-scoped and run inside project sandbox containers.
 import logging
 import time
 from collections.abc import Collection
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import desc, select
@@ -18,6 +18,9 @@ from src.domain.model.mcp.server import MCPServer
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    mcp_runtime_service_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -82,16 +85,10 @@ def _mcp_server_action_failed_error(
     )
 
 
-async def _get_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
-    """Get unified MCP runtime service from DI container (H2 fix)."""
-    container = request.app.state.container.with_db(db)
-    return cast(MCPRuntimeService, container.mcp_runtime_service())
-
-
 @router.post("/create", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_mcp_server(
     server_data: MCPServerCreate,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -109,8 +106,7 @@ async def create_mcp_server(
         MCP_PROJECT_WRITE_ROLES,
     )
     try:
-        runtime = await _get_runtime_service(request, db)
-        server = await runtime.create_server(
+        server = await mcp_runtime.create_server(
             tenant_id=project_tenant_id,
             project_id=server_data.project_id,
             name=server_data.name,
@@ -192,7 +188,7 @@ async def get_mcp_server(
 async def update_mcp_server(
     server_id: str,
     server_data: MCPServerUpdate,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -210,8 +206,7 @@ async def update_mcp_server(
         MCP_PROJECT_WRITE_ROLES,
     )
     try:
-        runtime = await _get_runtime_service(request, db)
-        server = await runtime.update_server(
+        server = await mcp_runtime.update_server(
             server_id=server_id,
             tenant_id=checked_server.tenant_id,
             name=server_data.name,
@@ -247,7 +242,7 @@ async def update_mcp_server(
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_mcp_server(
     server_id: str,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -266,8 +261,7 @@ async def delete_mcp_server(
     )
 
     try:
-        runtime = await _get_runtime_service(request, db)
-        await runtime.delete_server(server_id, checked_server.tenant_id)
+        await mcp_runtime.delete_server(server_id, checked_server.tenant_id)
 
         from src.infrastructure.agent.state.agent_session_pool import (
             invalidate_mcp_tools_cache,
@@ -296,7 +290,7 @@ async def delete_mcp_server(
 @router.post("/{server_id}/sync", response_model=MCPServerResponse)
 async def sync_mcp_server_tools(
     server_id: str,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -314,8 +308,7 @@ async def sync_mcp_server_tools(
         MCP_PROJECT_WRITE_ROLES,
     )
     try:
-        runtime = await _get_runtime_service(request, db)
-        server = await runtime.sync_server(server_id, checked_server.tenant_id)
+        server = await mcp_runtime.sync_server(server_id, checked_server.tenant_id)
         await db.commit()
 
         from src.infrastructure.agent.state.agent_session_pool import (
@@ -346,7 +339,7 @@ async def sync_mcp_server_tools(
 @router.post("/{server_id}/test", response_model=MCPServerTestResult)
 async def test_mcp_server_connection(
     server_id: str,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -365,8 +358,7 @@ async def test_mcp_server_connection(
     )
     try:
         start_time = time.time()
-        runtime = await _get_runtime_service(request, db)
-        result = await runtime.test_server(server_id, checked_server.tenant_id)
+        result = await mcp_runtime.test_server(server_id, checked_server.tenant_id)
 
         latency_ms = (time.time() - start_time) * 1000
 
@@ -406,7 +398,7 @@ async def test_mcp_server_connection(
 @router.post("/reconcile/{project_id}", response_model=MCPReconcileResultResponse)
 async def reconcile_mcp_project(
     project_id: str,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -419,8 +411,7 @@ async def reconcile_mcp_project(
         MCP_PROJECT_WRITE_ROLES,
     )
     try:
-        runtime = await _get_runtime_service(request, db)
-        result = await runtime.reconcile_project(project_id, project_tenant_id)
+        result = await mcp_runtime.reconcile_project(project_id, project_tenant_id)
         await db.commit()
         if result is None:
             return MCPReconcileResultResponse(
@@ -538,7 +529,7 @@ async def get_mcp_server_health(
 @router.get("/{server_id}/prompts")
 async def list_mcp_server_prompts(
     server_id: str,
-    request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -551,8 +542,7 @@ async def list_mcp_server_prompts(
         current_user.id,
     )
     try:
-        runtime = await _get_runtime_service(request, db)
-        prompts = await runtime.list_server_prompts(server_id, checked_server.tenant_id)
+        prompts = await mcp_runtime.list_server_prompts(server_id, checked_server.tenant_id)
     except PermissionError as exc:
         raise _mcp_access_denied_error() from exc
     except ValueError as exc:
@@ -564,6 +554,7 @@ async def list_mcp_server_prompts(
 async def set_mcp_server_log_level(
     server_id: str,
     request: Request,
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -586,8 +577,11 @@ async def set_mcp_server_log_level(
     )
 
     try:
-        runtime = await _get_runtime_service(request, db)
-        success = await runtime.set_server_log_level(server_id, checked_server.tenant_id, level)
+        success = await mcp_runtime.set_server_log_level(
+            server_id,
+            checked_server.tenant_id,
+            level,
+        )
     except PermissionError as exc:
         raise _mcp_access_denied_error() from exc
     except ValueError as exc:

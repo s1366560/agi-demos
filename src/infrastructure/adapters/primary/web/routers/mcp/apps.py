@@ -11,15 +11,21 @@ import logging
 import time
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.mcp_app_service import MCPAppService
 from src.application.services.mcp_runtime_service import MCPRuntimeService
+from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    mcp_app_service_dependency_v2,
+    mcp_runtime_service_dependency_v2,
+    sandbox_mcp_server_manager_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -34,7 +40,6 @@ from .schemas import (
 from .utils import (
     MCP_PROJECT_WRITE_ROLES,
     ensure_project_access,
-    get_container_with_db,
     list_accessible_project_ids,
     resolve_project_tenant_id_for_access,
 )
@@ -56,8 +61,7 @@ def _cloud_tool_idempotency_unavailable(idempotency_key: str) -> MCPAppToolCallR
             {
                 "type": "text",
                 "text": (
-                    "Cloud MCP durable tool idempotency is unavailable for "
-                    f"key {idempotency_key}"
+                    f"Cloud MCP durable tool idempotency is unavailable for key {idempotency_key}"
                 ),
             }
         ],
@@ -125,21 +129,6 @@ def _reject_if_not_app_visible(
 router = APIRouter(prefix="/apps", tags=["MCP Apps"])
 
 
-# === Dependency ===
-
-
-def _get_mcp_app_service(request: Request, db: AsyncSession) -> MCPAppService:
-    """Get MCPAppService from DI container."""
-    container = get_container_with_db(request, db)
-    return cast(MCPAppService, container.mcp_app_service())
-
-
-async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
-    """Get MCP runtime service from DI container (H2 fix)."""
-    container = request.app.state.container.with_db(db)
-    return cast(MCPRuntimeService, container.mcp_runtime_service())
-
-
 def _mcp_app_not_found_error() -> HTTPException:
     return HTTPException(status_code=404, detail=_("MCP App not found"))
 
@@ -153,23 +142,25 @@ def _mcp_app_forbidden_error() -> HTTPException:
 
 @router.get("", response_model=list[MCPAppResponse])
 async def list_mcp_apps(
-    request: Request,
     project_id: str | None = Query(None, description="Filter by project ID"),
     include_disabled: bool = Query(False, description="Include disabled apps"),
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
 ) -> list[Any]:
     """List MCP Apps. If project_id is provided, scopes to that project; otherwise lists all tenant apps."""
-    service = _get_mcp_app_service(request, db)
     if project_id:
         _ = await resolve_project_tenant_id_for_access(db, project_id, current_user.id)
-        apps = await service.list_apps(project_id, include_disabled=include_disabled)
+        apps = await mcp_app_service.list_apps(project_id, include_disabled=include_disabled)
     else:
         accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
         if not accessible_project_ids:
             return []
-        apps = await service.list_apps_by_tenant(tenant_id, include_disabled=include_disabled)
+        apps = await mcp_app_service.list_apps_by_tenant(
+            tenant_id,
+            include_disabled=include_disabled,
+        )
         apps = [app for app in apps if app.project_id in accessible_project_ids]
 
     return [
@@ -216,8 +207,8 @@ class MCPDirectToolCallRequest(BaseModel):
 
 @router.post("/proxy/tool-call", response_model=MCPAppToolCallResponse)
 async def proxy_tool_call_direct(
-    request: Request,
     body: MCPDirectToolCallRequest,
+    mcp_manager: SandboxMCPServerManager = Depends(sandbox_mcp_server_manager_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -236,9 +227,6 @@ async def proxy_tool_call_direct(
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
-        container = get_container_with_db(request, db)
-        mcp_manager = container.sandbox_mcp_server_manager()
-
         # SEP-1865: Enforce tool visibility
         visibility = await _get_cached_tool_visibility(
             mcp_manager,
@@ -282,15 +270,14 @@ async def proxy_tool_call_direct(
 
 @router.get("/{app_id}", response_model=MCPAppResponse)
 async def get_mcp_app(
-    request: Request,
     app_id: str,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
 ) -> MCPAppResponse:
     """Get MCP App details."""
-    service = _get_mcp_app_service(request, db)
-    app = await service.get_app(app_id)
+    app = await mcp_app_service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
     await ensure_project_access(db, app.project_id, app.tenant_id, current_user.id)
@@ -316,8 +303,8 @@ async def get_mcp_app(
 
 @router.get("/{app_id}/resource", response_model=MCPAppResourceResponse)
 async def get_mcp_app_resource(
-    request: Request,
     app_id: str,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -327,8 +314,7 @@ async def get_mcp_app_resource(
     Returns the cached HTML content if available, or returns 404
     if the resource hasn't been resolved yet.
     """
-    service = _get_mcp_app_service(request, db)
-    app = await service.get_app(app_id)
+    app = await mcp_app_service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
     await ensure_project_access(db, app.project_id, app.tenant_id, current_user.id)
@@ -351,9 +337,10 @@ async def get_mcp_app_resource(
 
 @router.post("/{app_id}/tool-call", response_model=MCPAppToolCallResponse)
 async def proxy_tool_call(
-    request: Request,
     app_id: str,
     body: MCPAppToolCallRequest,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
+    mcp_manager: SandboxMCPServerManager = Depends(sandbox_mcp_server_manager_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -363,8 +350,7 @@ async def proxy_tool_call(
     This endpoint is called by the AppBridge when the app needs to
     invoke tools on its server (bidirectional communication).
     """
-    service = _get_mcp_app_service(request, db)
-    app = await service.get_app(app_id)
+    app = await mcp_app_service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
     await ensure_project_access(
@@ -379,9 +365,6 @@ async def proxy_tool_call(
         return _cloud_tool_idempotency_unavailable(body.idempotency_key)
 
     try:
-        container = get_container_with_db(request, db)
-        mcp_manager = container.sandbox_mcp_server_manager()
-
         # SEP-1865: Enforce tool visibility
         visibility = await _get_cached_tool_visibility(
             mcp_manager,
@@ -423,16 +406,16 @@ async def proxy_tool_call(
 
 @router.delete("/{app_id}")
 async def delete_mcp_app(
-    request: Request,
     app_id: str,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Delete an MCP App."""
     try:
-        service = _get_mcp_app_service(request, db)
-        app = await service.get_app(app_id)
+        app = await mcp_app_service.get_app(app_id)
         if not app:
             raise ValueError(f"MCP App not found: {app_id}")
         await ensure_project_access(
@@ -442,8 +425,7 @@ async def delete_mcp_app(
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
-        runtime = await _get_mcp_runtime_service(request, db)
-        deleted = await runtime.delete_app(app_id, app.tenant_id)
+        deleted = await mcp_runtime.delete_app(app_id, app.tenant_id)
         if not deleted:
             raise ValueError(f"MCP App not found: {app_id}")
         await db.commit()
@@ -465,8 +447,9 @@ async def delete_mcp_app(
 
 @router.post("/{app_id}/refresh", response_model=MCPAppResponse)
 async def refresh_mcp_app_resource(
-    request: Request,
     app_id: str,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
+    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -477,8 +460,7 @@ async def refresh_mcp_app_resource(
     Note: Requires full DI wiring for sandbox access.
     """
     try:
-        service = _get_mcp_app_service(request, db)
-        app = await service.get_app(app_id)
+        app = await mcp_app_service.get_app(app_id)
         if not app:
             raise ValueError(f"MCP App not found: {app_id}")
         await ensure_project_access(
@@ -488,8 +470,7 @@ async def refresh_mcp_app_resource(
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
-        runtime = await _get_mcp_runtime_service(request, db)
-        app = await runtime.refresh_app_resource(app_id, app.tenant_id)
+        app = await mcp_runtime.refresh_app_resource(app_id, app.tenant_id)
         await db.commit()
         return MCPAppResponse(
             id=app.id,
@@ -651,8 +632,9 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
 
 @router.post("/resources/read", response_model=MCPResourceReadResponse)
 async def proxy_resource_read(
-    request: Request,
     body: MCPResourceReadRequest,
+    mcp_app_service: MCPAppService = Depends(mcp_app_service_dependency_v2),
+    mcp_manager: SandboxMCPServerManager = Depends(sandbox_mcp_server_manager_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -669,10 +651,8 @@ async def proxy_resource_read(
     project_tenant_id = await resolve_project_tenant_id_for_access(
         db, body.project_id, current_user.id
     )
-    service = _get_mcp_app_service(request, db)
-
     # Path 1: Check if any registered app owns this URI
-    apps = await service.list_apps(body.project_id, include_disabled=False)
+    apps = await mcp_app_service.list_apps(body.project_id, include_disabled=False)
     for app in apps:
         if app.resource and app.resource.uri == body.uri and app.resource.html_content:
             return MCPResourceReadResponse(
@@ -695,9 +675,6 @@ async def proxy_resource_read(
                 status_code=400,
                 detail=_("Cannot determine server name from URI"),
             )
-
-        container = get_container_with_db(request, db)
-        mcp_manager = container.sandbox_mcp_server_manager()
 
         async def _read_resource() -> Any:
             """Call __resources_read__ with a 15s timeout."""
@@ -766,8 +743,8 @@ class MCPResourceListResponse(BaseModel):
 
 @router.post("/resources/list", response_model=MCPResourceListResponse)
 async def proxy_resource_list(
-    request: Request,
     body: MCPResourceListRequest,
+    mcp_manager: SandboxMCPServerManager = Depends(sandbox_mcp_server_manager_dependency_v2),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
     current_user: User = Depends(get_current_user),
@@ -781,8 +758,6 @@ async def proxy_resource_list(
         project_tenant_id = await resolve_project_tenant_id_for_access(
             db, body.project_id, current_user.id
         )
-        container = get_container_with_db(request, db)
-        mcp_manager = container.sandbox_mcp_server_manager()
         resources = await mcp_manager.list_resources(
             project_id=body.project_id,
             tenant_id=project_tenant_id,

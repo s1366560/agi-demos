@@ -154,12 +154,7 @@ def db() -> SimpleNamespace:
 
 
 @pytest.fixture(autouse=True)
-def failing_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_FailingMCPRuntime()),
-    )
+def route_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(servers_router, "SqlMCPServerRepository", _MCPServerRepository)
     monkeypatch.setattr(servers_router, "ensure_project_access", _allow_project_access)
 
@@ -183,7 +178,7 @@ async def test_create_mcp_server_sanitizes_internal_errors(
                 transport_config={"command": "python"},
                 project_id="project-1",
             ),
-            request=SimpleNamespace(),
+            mcp_runtime=_FailingMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -203,12 +198,6 @@ async def test_create_mcp_server_uses_authorized_project_tenant(
     test_user: User,
 ) -> None:
     runtime = _SuccessfulMCPRuntime()
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=runtime),
-    )
-
     response = await servers_router.create_mcp_server(
         server_data=MCPServerCreate(
             name="Local",
@@ -216,7 +205,7 @@ async def test_create_mcp_server_uses_authorized_project_tenant(
             transport_config={"url": "http://mcp.example.test"},
             project_id=test_project_db.id,
         ),
-        request=SimpleNamespace(),
+        mcp_runtime=runtime,
         db=test_db,
         tenant_id="fallback-tenant",
         current_user=test_user,
@@ -233,7 +222,7 @@ async def test_update_mcp_server_sanitizes_internal_errors(db: SimpleNamespace) 
         await servers_router.update_mcp_server(
             server_id="srv-1",
             server_data=MCPServerUpdate(name="Updated"),
-            request=SimpleNamespace(),
+            mcp_runtime=_FailingMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -255,7 +244,7 @@ async def test_delete_mcp_server_sanitizes_internal_errors(
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.delete_mcp_server(
             server_id="srv-1",
-            request=SimpleNamespace(),
+            mcp_runtime=_FailingMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -272,7 +261,7 @@ async def test_sync_mcp_server_tools_sanitizes_internal_errors(db: SimpleNamespa
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.sync_mcp_server_tools(
             server_id="srv-1",
-            request=SimpleNamespace(),
+            mcp_runtime=_FailingMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -290,7 +279,7 @@ async def test_test_mcp_server_connection_sanitizes_internal_errors(
 ) -> None:
     result = await servers_router.test_mcp_server_connection(
         server_id="srv-1",
-        request=SimpleNamespace(),
+        mcp_runtime=_FailingMCPRuntime(),
         db=db,
         tenant_id="tenant-1",
         current_user=SimpleNamespace(id="user-1"),
@@ -313,12 +302,6 @@ async def test_create_mcp_server_sanitizes_permission_errors(
         "resolve_project_tenant_id_for_access",
         AsyncMock(return_value="tenant-1"),
     )
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_PermissionMCPRuntime()),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.create_mcp_server(
             server_data=MCPServerCreate(
@@ -327,7 +310,7 @@ async def test_create_mcp_server_sanitizes_permission_errors(
                 transport_config={"command": "python"},
                 project_id="project-1",
             ),
-            request=SimpleNamespace(),
+            mcp_runtime=_PermissionMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -408,17 +391,11 @@ async def test_update_mcp_server_sanitizes_value_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_ValueErrorMCPRuntime("server srv-secret not found")),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.update_mcp_server(
             server_id="srv-secret",
             server_data=MCPServerUpdate(name="Updated"),
-            request=SimpleNamespace(),
+            mcp_runtime=_ValueErrorMCPRuntime("server srv-secret not found"),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -435,16 +412,10 @@ async def test_sync_mcp_server_tools_sanitizes_non_not_found_value_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_ValueErrorMCPRuntime("sandbox secret failed")),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.sync_mcp_server_tools(
             server_id="srv-1",
-            request=SimpleNamespace(),
+            mcp_runtime=_ValueErrorMCPRuntime("sandbox secret failed"),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -461,16 +432,10 @@ async def test_test_mcp_server_connection_sanitizes_value_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_ValueErrorMCPRuntime("server srv-secret not found")),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.test_mcp_server_connection(
             server_id="srv-secret",
-            request=SimpleNamespace(),
+            mcp_runtime=_ValueErrorMCPRuntime("server srv-secret not found"),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -492,16 +457,10 @@ async def test_reconcile_mcp_project_sanitizes_permission_errors(
         "resolve_project_tenant_id_for_access",
         AsyncMock(return_value="tenant-1"),
     )
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_PermissionMCPRuntime()),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.reconcile_mcp_project(
             project_id="project-secret",
-            request=SimpleNamespace(),
+            mcp_runtime=_PermissionMCPRuntime(),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -542,16 +501,10 @@ async def test_list_mcp_server_prompts_sanitizes_value_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_ValueErrorMCPRuntime("server srv-secret not found")),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.list_mcp_server_prompts(
             server_id="srv-secret",
-            request=SimpleNamespace(),
+            mcp_runtime=_ValueErrorMCPRuntime("server srv-secret not found"),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),
@@ -567,16 +520,11 @@ async def test_set_mcp_server_log_level_sanitizes_value_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
-    monkeypatch.setattr(
-        servers_router,
-        "_get_runtime_service",
-        AsyncMock(return_value=_ValueErrorMCPRuntime("server srv-secret not found")),
-    )
-
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.set_mcp_server_log_level(
             server_id="srv-secret",
             request=_JsonRequest(),
+            mcp_runtime=_ValueErrorMCPRuntime("server srv-secret not found"),
             db=db,
             tenant_id="tenant-1",
             current_user=SimpleNamespace(id="user-1"),

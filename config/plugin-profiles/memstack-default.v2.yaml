@@ -91,6 +91,36 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-mcp-operation-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/mcp/operation-service-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject:
+        sandbox_application: service:application.sandbox-operation-services
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-mcp-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/mcp-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:mcp.operation-service-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-workflow-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

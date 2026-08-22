@@ -658,15 +658,6 @@ class DIContainer:
     def sandbox_resource(self) -> SandboxResourcePort:
         return cast(SandboxResourcePort, self._services.get_or_activate("sandbox_resource"))
 
-    def sandbox_mcp_server_manager(self) -> Any:
-        return cast(Any, self._services.get_or_activate("sandbox_mcp_server_manager"))
-
-    def mcp_app_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("mcp_app_service"))
-
-    def mcp_runtime_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("mcp_runtime_service"))
-
     def dependency_orchestrator(self) -> Any:
         return cast(Any, self._services.get_or_activate("dependency_orchestrator"))
 
