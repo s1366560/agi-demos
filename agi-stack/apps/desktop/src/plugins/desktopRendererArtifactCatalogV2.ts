@@ -1,5 +1,9 @@
 import { CANONICAL_DESKTOP_ROUTE_IDS } from '../features/navigation/desktopCanonicalRouteCatalog';
 import {
+  createAppRouteRegistry,
+  type AppRouteRegistryRefs,
+} from '../features/navigation/appRouteRegistry';
+import {
   BACKEND_STORES_ROUTE_ID,
   DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
@@ -8,6 +12,8 @@ import {
   PROJECT_SUPPORT_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
 
+import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
+import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
 type DesktopRendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot';
@@ -66,6 +72,7 @@ interface DesktopRendererArtifactBaseV2 {
 }
 
 export interface DesktopRouteArtifactV2 extends DesktopRendererArtifactBaseV2 {
+  readonly createRegistry: (refs: AppRouteRegistryRefs) => DesktopRouteRegistry<DesktopRouteModule>;
   readonly kind: 'route';
   readonly routeIds: readonly string[];
 }
@@ -99,11 +106,11 @@ export class DesktopRendererArtifactErrorV2 extends Error {
 const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArtifactV2>([
   [
     DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
-    Object.freeze({
-      id: DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
-      kind: 'route',
-      routeIds: DEFAULT_BUSINESS_ROUTE_IDS_V2,
-    }),
+    defineDesktopRouteArtifactV2(
+      DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+      DEFAULT_BUSINESS_ROUTE_IDS_V2,
+      createAppRouteRegistry,
+    ),
   ],
   [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
@@ -122,6 +129,28 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     ),
   ],
 ]);
+
+export function defineDesktopRouteArtifactV2(
+  id: string,
+  routeIds: readonly string[],
+  createRegistry: (refs: AppRouteRegistryRefs) => DesktopRouteRegistry<DesktopRouteModule>,
+): DesktopRouteArtifactV2 {
+  if (!id.trim()) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_id_required', id);
+  }
+  if (routeIds.length === 0 || routeIds.some((routeId) => !routeId.trim())) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_routes_invalid', id);
+  }
+  if (new Set(routeIds).size !== routeIds.length) {
+    throw artifactErrorV2('desktop_renderer_route_artifact_routes_duplicate', id);
+  }
+  return Object.freeze({
+    createRegistry,
+    id,
+    kind: 'route',
+    routeIds: Object.freeze([...routeIds]),
+  });
+}
 
 export function defineDesktopUiSlotArtifactV2(
   id: string,

@@ -15,12 +15,14 @@ import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthority
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
 const EMPTY_IDS_V2: readonly string[] = Object.freeze([]);
+const EMPTY_ROUTE_ARTIFACTS_V2: readonly DesktopRouteArtifactV2[] = Object.freeze([]);
 const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([]);
 const DISABLED_STATE_V2: DesktopRendererAuthorityStateV2 = Object.freeze({
   navigationArtifactIds: EMPTY_IDS_V2,
   navigationDiscoveryRouteIds: EMPTY_IDS_V2,
   navigationRouteIds: EMPTY_IDS_V2,
   routeArtifactIds: EMPTY_IDS_V2,
+  routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
   routeIds: EMPTY_IDS_V2,
   slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
   status: 'disabled',
@@ -31,6 +33,7 @@ const LOADING_STATE_V2: DesktopRendererAuthorityStateV2 = Object.freeze({
   navigationDiscoveryRouteIds: EMPTY_IDS_V2,
   navigationRouteIds: EMPTY_IDS_V2,
   routeArtifactIds: EMPTY_IDS_V2,
+  routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
   routeIds: EMPTY_IDS_V2,
   slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
   status: 'loading',
@@ -61,6 +64,7 @@ export function projectDesktopRendererAuthorityV2(
     ),
     navigationRouteIds: freezeStringsV2(navigationArtifacts.flatMap(({ routeIds }) => routeIds)),
     routeArtifactIds: freezeStringsV2(routeArtifacts.map(({ id }) => id)),
+    routeArtifacts: Object.freeze(routeArtifacts),
     routeIds: freezeStringsV2(routeArtifacts.flatMap(({ routeIds }) => routeIds)),
     slotDefinitions: Object.freeze(
       uiSlotArtifacts.flatMap(({ slotDefinitions }) => slotDefinitions),
@@ -85,6 +89,7 @@ export function resolveDesktopRendererAuthorityStateV2(
       navigationDiscoveryRouteIds: EMPTY_IDS_V2,
       navigationRouteIds: EMPTY_IDS_V2,
       routeArtifactIds: EMPTY_IDS_V2,
+      routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
       routeIds: EMPTY_IDS_V2,
       slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
       status: 'unavailable',

@@ -51,6 +51,7 @@ function readyState(overrides = {}) {
     navigationDiscoveryRouteIds: ["tenant-tenant-overview"],
     navigationRouteIds: ["tenant-tenant-overview"],
     routeArtifactIds: [DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2],
+    routeArtifacts: [],
     routeIds: ["tenant-tenant-overview"],
     slotDefinitions: [],
     status: "ready",
@@ -86,6 +87,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
+  assert.equal(typeof artifacts[0].createRegistry, "function");
   assert.equal(artifacts[2].slotDefinitions.length, 2);
   assert.ok(
     artifacts[2].slotDefinitions.every(({ moduleRef }) =>
@@ -129,27 +131,49 @@ test("desktop catalog rejects unknown, mismatched, and duplicate artifact owners
 });
 
 test("route projection always retains only the authentication kernel without V2 business routes", () => {
+  let artifactRegistryCalls = 0;
   const candidate = createDesktopRouteRegistry([
     route("device-approval", "/device"),
     route("invitation-acceptance", "/invite"),
     route("tenant-tenant-overview", "/tenant/:tenantId", ["tenant"]),
   ]);
-  const disabled = projectDesktopRouteRegistryV2(candidate, {
-    ...readyState(),
-    routeArtifactIds: [],
-    routeIds: [],
-    status: "disabled",
-  });
+  const routeArtifact = {
+    createRegistry: () => {
+      artifactRegistryCalls += 1;
+      return candidate;
+    },
+    id: DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+    kind: "route",
+    routeIds: ["tenant-tenant-overview"],
+  };
+  const kernelFactory = () => candidate;
+  const disabled = projectDesktopRouteRegistryV2(
+    {},
+    {
+      ...readyState(),
+      routeArtifactIds: [],
+      routeArtifacts: [routeArtifact],
+      routeIds: [],
+      status: "disabled",
+    },
+    kernelFactory,
+  );
   assert.deepEqual(
     disabled.definitions.map(({ id }) => id),
     ["device-approval", "invitation-acceptance"],
   );
+  assert.equal(artifactRegistryCalls, 0);
 
-  const active = projectDesktopRouteRegistryV2(candidate, readyState());
+  const active = projectDesktopRouteRegistryV2(
+    {},
+    readyState({ routeArtifacts: [routeArtifact] }),
+    kernelFactory,
+  );
   assert.deepEqual(
     active.definitions.map(({ id }) => id),
     ["device-approval", "invitation-acceptance", "tenant-tenant-overview"],
   );
+  assert.equal(artifactRegistryCalls, 1);
 });
 
 test("navigation and UI-slot selectors expose only active V2 contributions", () => {

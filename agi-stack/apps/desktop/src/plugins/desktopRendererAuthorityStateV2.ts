@@ -1,6 +1,10 @@
 import { createContext, useContext, useMemo } from 'react';
 
 import {
+  createAppAuthenticationRouteRegistry,
+  type AppRouteRegistryRefs,
+} from '../features/navigation/appRouteRegistry';
+import {
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
@@ -9,6 +13,8 @@ import {
   type DesktopRouteRegistry,
 } from '../features/navigation/desktopRouteRegistry';
 
+import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
+import type { DesktopRouteArtifactV2 } from './desktopRendererArtifactCatalogV2';
 import type { UiSlotDefinition, UiSlotKind } from './uiSlotRegistry';
 
 export type DesktopRendererAuthorityStatusV2 = 'disabled' | 'loading' | 'ready' | 'unavailable';
@@ -19,6 +25,7 @@ export interface DesktopRendererAuthorityStateV2 {
   readonly navigationDiscoveryRouteIds: readonly string[];
   readonly navigationRouteIds: readonly string[];
   readonly routeArtifactIds: readonly string[];
+  readonly routeArtifacts: readonly DesktopRouteArtifactV2[];
   readonly routeIds: readonly string[];
   readonly slotDefinitions: readonly UiSlotDefinition[];
   readonly status: DesktopRendererAuthorityStatusV2;
@@ -30,12 +37,14 @@ const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = Object.freeze([
   INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
 const EMPTY_IDS_V2: readonly string[] = Object.freeze([]);
+const EMPTY_ROUTE_ARTIFACTS_V2: readonly DesktopRouteArtifactV2[] = Object.freeze([]);
 const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([]);
 const DISABLED_STATE_V2: DesktopRendererAuthorityStateV2 = Object.freeze({
   navigationArtifactIds: EMPTY_IDS_V2,
   navigationDiscoveryRouteIds: EMPTY_IDS_V2,
   navigationRouteIds: EMPTY_IDS_V2,
   routeArtifactIds: EMPTY_IDS_V2,
+  routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
   routeIds: EMPTY_IDS_V2,
   slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
   status: 'disabled',
@@ -49,22 +58,63 @@ export function useDesktopRendererAuthorityV2(): DesktopRendererAuthorityStateV2
   return useContext(DesktopRendererAuthorityContextV2);
 }
 
-export function projectDesktopRouteRegistryV2<TModule>(
-  candidate: DesktopRouteRegistry<TModule>,
+export function projectDesktopRouteRegistryV2(
+  refs: AppRouteRegistryRefs,
   state: DesktopRendererAuthorityStateV2,
-): DesktopRouteRegistry<TModule> {
-  const enabledRouteIds = new Set<string>(AUTHENTICATION_KERNEL_ROUTE_IDS_V2);
+  createAuthenticationRegistry: (
+    refs: AppRouteRegistryRefs,
+  ) => DesktopRouteRegistry<DesktopRouteModule> = createAppAuthenticationRouteRegistry,
+): DesktopRouteRegistry<DesktopRouteModule> {
+  const definitions: DesktopRouteRegistry<DesktopRouteModule>['definitions'][number][] = [];
+  const seenRouteIds = new Set<string>();
+  const authenticationRegistry = createAuthenticationRegistry(refs);
+  appendRouteDefinitionsV2(
+    definitions,
+    seenRouteIds,
+    authenticationRegistry,
+    AUTHENTICATION_KERNEL_ROUTE_IDS_V2,
+    'authentication-kernel',
+  );
+
   if (state.status === 'ready') {
-    for (const routeId of state.routeIds) {
-      if (!candidate.byId.has(routeId)) {
-        throw new Error(`desktop_renderer_route_artifact_missing:${routeId}`);
-      }
-      enabledRouteIds.add(routeId);
+    const artifactRouteIds = state.routeArtifacts.flatMap(({ routeIds }) => routeIds);
+    if (
+      artifactRouteIds.length !== state.routeIds.length ||
+      artifactRouteIds.some((routeId, index) => routeId !== state.routeIds[index])
+    ) {
+      throw new Error('desktop_renderer_route_projection_mismatch');
+    }
+    for (const artifact of state.routeArtifacts) {
+      appendRouteDefinitionsV2(
+        definitions,
+        seenRouteIds,
+        artifact.createRegistry(refs),
+        artifact.routeIds,
+        artifact.id,
+      );
     }
   }
-  return createDesktopRouteRegistry(
-    candidate.definitions.filter(({ id }) => enabledRouteIds.has(id)),
-  );
+  return createDesktopRouteRegistry(definitions);
+}
+
+function appendRouteDefinitionsV2(
+  definitions: DesktopRouteRegistry<DesktopRouteModule>['definitions'][number][],
+  seenRouteIds: Set<string>,
+  registry: DesktopRouteRegistry<DesktopRouteModule>,
+  routeIds: readonly string[],
+  source: string,
+): void {
+  for (const routeId of routeIds) {
+    const definition = registry.byId.get(routeId);
+    if (!definition) {
+      throw new Error(`desktop_renderer_route_artifact_missing:${source}:${routeId}`);
+    }
+    if (seenRouteIds.has(routeId)) {
+      throw new Error(`desktop_renderer_route_artifact_duplicate:${routeId}`);
+    }
+    seenRouteIds.add(routeId);
+    definitions.push(definition);
+  }
 }
 
 export function projectDesktopNavigationRegistryV2<TModule>(

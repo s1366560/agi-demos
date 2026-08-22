@@ -539,7 +539,6 @@ import {
   chatWorkflowTargetForReviewTab,
 } from './features/session/WorkspaceReviewPanel';
 import { CommandPalette } from './features/navigation/CommandPalette';
-import { createAppRouteRegistry } from './features/navigation/appRouteRegistry';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
 
@@ -999,32 +998,31 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
-  const desktopProductionRouteRegistryCandidate = useMemo(
-    () =>
-      createAppRouteRegistry({
-        api,
-        authRef,
-        configRef,
-        desktopProductionRouteLocation,
-        desktopProductionRouteNavigation,
-        projectCronJobsRouteBindingRef,
-        projectSearchRouteBindingRef,
-        setAuth,
-        setInvitationSignInRequested,
-        setSettingsInitialSection,
-        setSettingsWindowOpen,
-        commitRuntimeConfig,
-        settingsRouteCloseNavigationRef,
-      }),
+  const desktopRendererRouteRefsV2 = useMemo(
+    () => ({
+      api,
+      authRef,
+      configRef,
+      desktopProductionRouteLocation,
+      desktopProductionRouteNavigation,
+      projectCronJobsRouteBindingRef,
+      projectSearchRouteBindingRef,
+      setAuth,
+      setInvitationSignInRequested,
+      setSettingsInitialSection,
+      setSettingsWindowOpen,
+      commitRuntimeConfig,
+      settingsRouteCloseNavigationRef,
+    }),
     [],
   );
   const desktopProductionRouteRegistry = useMemo(
     () =>
       projectDesktopRouteRegistryV2(
-        desktopProductionRouteRegistryCandidate,
+        desktopRendererRouteRefsV2,
         desktopRendererAuthorityV2,
       ),
-    [desktopProductionRouteRegistryCandidate, desktopRendererAuthorityV2],
+    [desktopRendererAuthorityV2, desktopRendererRouteRefsV2],
   );
   const desktopCanonicalNavigationRegistry = useMemo(
     () =>

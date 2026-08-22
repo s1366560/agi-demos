@@ -210,6 +210,7 @@ import {
   type ProjectSearchRouteBinding,
 } from '../search/projectSearchRouteModule';
 import { type SettingsSection } from '../settings/SettingsWindow';
+import type { DesktopRouteModuleLoader } from './desktopRouteModule';
 import { createAgentDefinitionsRouteModuleLoader } from '../settings-routes/agentDefinitionsRouteModule';
 import { createChannelsRouteModuleLoader } from '../settings-routes/channelsRouteModule';
 import { createEvolutionRouteModuleLoader } from '../settings-routes/evolutionRouteModule';
@@ -280,6 +281,83 @@ function createSettingsRouteContent(
   return NativeSettingsRouteContent;
 }
 
+function createDeviceApprovalRouteLoader(refs: AppRouteRegistryRefs): DesktopRouteModuleLoader {
+  const { authRef, configRef, desktopProductionRouteLocation, desktopProductionRouteNavigation } =
+    refs;
+  return createDeviceApprovalRouteModuleLoader({
+    createBinding: () => {
+      const currentConfig = configRef.current;
+      return Object.freeze({
+        client: createDeviceApprovalClient(currentConfig),
+        accountLabel: authRef.current.user?.email ?? '',
+        initialCode: readDeviceApprovalCodeFromHash(desktopProductionRouteLocation.readHash()),
+        onNavigateBack: desktopProductionRouteNavigation.clearHash,
+      });
+    },
+  });
+}
+
+function createInvitationAcceptanceRouteLoader(
+  refs: AppRouteRegistryRefs,
+): DesktopRouteModuleLoader {
+  const {
+    authRef,
+    configRef,
+    desktopProductionRouteLocation,
+    desktopProductionRouteNavigation,
+    setAuth,
+    setInvitationSignInRequested,
+    commitRuntimeConfig,
+  } = refs;
+  return createInvitationAcceptanceRouteModuleLoader({
+    createBinding: () => {
+      return Object.freeze({
+        client: Object.freeze<InvitationAcceptanceClient>({
+          verify: (token, options) =>
+            createInvitationAcceptanceClient(configRef.current).verify(token, options),
+          accept: (token, options) =>
+            createInvitationAcceptanceClient(configRef.current).accept(token, options),
+        }),
+        token: readInvitationTokenFromHash(desktopProductionRouteLocation.readHash()),
+        authenticated: () => isIdentityAuthenticated(authRef.current),
+        accountEmail: () => authRef.current.user?.email ?? '',
+        onRequireSignIn: () => setInvitationSignInRequested(true),
+        onAccepted: async (invitation, signal) => {
+          try {
+            const client = new DesktopApiClient(configRef.current);
+            const authoritativeTenants = await client.listTenants(signal);
+            if (signal.aborted) return;
+            setAuth((current) => ({
+              ...current,
+              tenants: authoritativeTenants,
+            }));
+            if (authoritativeTenants.some((tenant) => tenant.id === invitation.tenant_id)) {
+              commitRuntimeConfig({
+                ...configRef.current,
+                tenantId: invitation.tenant_id,
+                projectId: '',
+                workspaceId: '',
+              });
+            }
+          } catch {
+            // Acceptance remains authoritative even if catalog refresh is stale.
+          }
+        },
+        onNavigateHome: desktopProductionRouteNavigation.clearHash,
+      });
+    },
+  });
+}
+
+export function createAppAuthenticationRouteRegistry(refs: AppRouteRegistryRefs) {
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [DEVICE_APPROVAL_ROUTE_ID]: createDeviceApprovalRouteLoader(refs),
+      [INVITATION_ACCEPTANCE_ROUTE_ID]: createInvitationAcceptanceRouteLoader(refs),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -290,11 +368,9 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
     projectCronJobsRouteBindingRef,
     projectSearchRouteBindingRef,
     setAuth,
-    setInvitationSignInRequested,
     setSettingsInitialSection,
     setSettingsWindowOpen,
     settingsRouteCloseNavigationRef,
-    commitRuntimeConfig,
   } = refs;
   const settingsRouteContent = (section: SettingsSection) =>
     createSettingsRouteContent(
@@ -357,17 +433,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
           });
         },
       }),
-      [DEVICE_APPROVAL_ROUTE_ID]: createDeviceApprovalRouteModuleLoader({
-        createBinding: () => {
-          const currentConfig = configRef.current;
-          return Object.freeze({
-            client: createDeviceApprovalClient(currentConfig),
-            accountLabel: authRef.current.user?.email ?? '',
-            initialCode: readDeviceApprovalCodeFromHash(desktopProductionRouteLocation.readHash()),
-            onNavigateBack: desktopProductionRouteNavigation.clearHash,
-          });
-        },
-      }),
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => {
           const currentConfig = configRef.current;
@@ -379,9 +444,8 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
                 tenants: [...upsertCreatedTenant(current.tenants, created)],
               }));
               try {
-                const authoritativeTenants = await new DesktopApiClient(currentConfig).listTenants(
-                  signal,
-                );
+                const client = new DesktopApiClient(currentConfig);
+                const authoritativeTenants = await client.listTenants(signal);
                 if (signal.aborted) {
                   return Object.freeze({
                     catalogRefreshed: false,
@@ -401,45 +465,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
               }
             },
             onNavigateBack: desktopProductionRouteNavigation.clearHash,
-          });
-        },
-      }),
-      [INVITATION_ACCEPTANCE_ROUTE_ID]: createInvitationAcceptanceRouteModuleLoader({
-        createBinding: () => {
-          return Object.freeze({
-            client: Object.freeze<InvitationAcceptanceClient>({
-              verify: (token, options) =>
-                createInvitationAcceptanceClient(configRef.current).verify(token, options),
-              accept: (token, options) =>
-                createInvitationAcceptanceClient(configRef.current).accept(token, options),
-            }),
-            token: readInvitationTokenFromHash(desktopProductionRouteLocation.readHash()),
-            authenticated: () => isIdentityAuthenticated(authRef.current),
-            accountEmail: () => authRef.current.user?.email ?? '',
-            onRequireSignIn: () => setInvitationSignInRequested(true),
-            onAccepted: async (invitation, signal) => {
-              try {
-                const authoritativeTenants = await new DesktopApiClient(
-                  configRef.current,
-                ).listTenants(signal);
-                if (signal.aborted) return;
-                setAuth((current) => ({
-                  ...current,
-                  tenants: authoritativeTenants,
-                }));
-                if (authoritativeTenants.some((tenant) => tenant.id === invitation.tenant_id)) {
-                  commitRuntimeConfig({
-                    ...configRef.current,
-                    tenantId: invitation.tenant_id,
-                    projectId: '',
-                    workspaceId: '',
-                  });
-                }
-              } catch {
-                // Acceptance remains authoritative even if catalog refresh is stale.
-              }
-            },
-            onNavigateHome: desktopProductionRouteNavigation.clearHash,
           });
         },
       }),

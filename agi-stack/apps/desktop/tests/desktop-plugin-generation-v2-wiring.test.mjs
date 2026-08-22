@@ -10,6 +10,8 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
   const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
+  const artifactCatalog = source("src/plugins/desktopRendererArtifactCatalogV2.ts");
+  const authority = source("src/plugins/desktopRendererAuthorityStateV2.ts");
   const main = source("src/main.tsx");
 
   assert.match(hook, /RendererPluginRuntimeV2\(\s*["']desktop-renderer["']/u);
@@ -34,17 +36,17 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
     bootstrapIndex >= 0 && remoteFetchIndex > bootstrapIndex,
     "local bootstrap must activate before the first remote request",
   );
-  assert.match(
-    app,
-    /useDesktopPluginGenerationV2\(config, identityAuthenticated\)/u,
-  );
+  assert.match(app, /useDesktopPluginGenerationV2\(\s*config,\s*identityAuthenticated\s*,?\s*\)/u);
   assert.match(app, /desktopPluginGenerationV2\.generation/u);
   assert.match(app, /desktopPluginGenerationV2\.status/u);
   assert.match(app, /resolveDesktopRendererAuthorityStateV2/u);
   assert.match(app, /projectDesktopRouteRegistryV2/u);
   assert.match(app, /projectDesktopNavigationRegistryV2/u);
   assert.match(app, /DesktopRendererAuthorityContextV2\.Provider/u);
+  assert.doesNotMatch(app, /createAppRouteRegistry/u);
   assert.doesNotMatch(app, /CANONICAL_DESKTOP_ROUTE_IDS\.map/u);
+  assert.match(artifactCatalog, /createRegistry:\s*\(/u);
+  assert.match(authority, /artifact\.createRegistry\(refs\)/u);
   assert.match(main, /activateDesktopPluginGenerationRootV2\(\)/u);
   assert.match(main, /root\.unmount\(\)/u);
   assert.match(main, /deactivateDesktopPluginGenerationRootV2\(\)/u);
