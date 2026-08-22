@@ -1,6 +1,16 @@
 export { canonicalJsonV2, digestV2 } from './canonical';
+export {
+  parseControlPlaneDistributionV2,
+  PluginSnapshotReconcilerV2,
+  type ControlPlaneDistributionV2,
+  type PluginGenerationDescriptorV2,
+} from './distribution';
 export * from './generated';
 export * from './generatedCatalog';
+export {
+  RendererPluginRuntimeV2,
+  type RendererDataPlaneTargetV2,
+} from './renderer';
 export {
   ContextV2,
   FiberV2,
@@ -8,6 +18,7 @@ export {
   GenerationManagerV2,
   LoaderV2,
   projectSnapshotEntriesV2,
+  RuntimeGenerationV2,
   RuntimeV2Error,
   type AsyncDisposerV2,
   type EffectResultV2,
@@ -21,3 +32,4 @@ export {
   PluginProtocolV2Error,
   parseProfileSnapshotV2,
 } from './validate';
+export * from './targetModules';

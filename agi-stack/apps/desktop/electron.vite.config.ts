@@ -54,6 +54,14 @@ export default defineConfig(({ command }) => ({
     root: desktopRoot,
     base: './',
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@agistack/plugin-runtime': resolve(
+          desktopRoot,
+          '../../packages/plugin-runtime/src/index.ts',
+        ),
+      },
+    },
     server: {
       watch: {
         ignored: generatedOutputWatchIgnores,

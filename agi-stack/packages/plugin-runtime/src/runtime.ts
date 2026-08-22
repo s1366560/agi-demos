@@ -2,12 +2,10 @@ import {
   ContextV2,
   EffectStackV2,
   resolveServiceV2,
-  type AsyncDisposerV2,
   type EffectRecordV2,
   type EffectResultV2,
   type EventRecordV2,
   type FiberPhaseV2,
-  type ProvideOptionsV2,
   type ResolveOptionsV2,
   type ServiceRecordV2,
 } from './context';

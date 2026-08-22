@@ -7,6 +7,7 @@ mod generated;
 mod generated_catalog;
 mod reconciler;
 mod runtime;
+mod target_modules;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,6 +21,12 @@ pub use runtime::{
     project_snapshot_entries_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
     GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2,
     RuntimeV2Error,
+};
+pub use target_modules::{
+    desktop_sidecar_host_definition_v2, rust_server_host_definition_v2,
+    DesktopSidecarHostModuleV2, RustServerHostModuleV2, TargetHostDescriptorV2,
+    DESKTOP_SIDECAR_HOST_MODULE_REF_V2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    RUST_SERVER_HOST_MODULE_REF_V2, RUST_SERVER_HOST_SERVICE_V2,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};

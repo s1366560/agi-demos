@@ -1,0 +1,61 @@
+schema_version: 2
+profile:
+  id: memstack-production-target-hosts-v2
+  entries:
+    - entry_id: builtin-rust-server-generation-host
+      parent_entry_id: null
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/rust-server/generation-host
+      enabled: true
+      config:
+        strategy: generated-catalog-bootstrap
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-sidecar-local-capability
+      parent_entry_id: null
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/desktop-sidecar/local-capability
+      enabled: true
+      config:
+        strategy: native-local-capability
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-renderer-host
+      parent_entry_id: null
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/web/renderer-host
+      enabled: true
+      config:
+        strategy: generation-renderer-host
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-renderer-host
+      parent_entry_id: null
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/renderer-host
+      enabled: true
+      config:
+        strategy: native-generation-renderer-host
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+patches: []

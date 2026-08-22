@@ -24,7 +24,15 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
 from src.infrastructure.plugins.v2.legacy_http_route_bridge import project_legacy_http_routes_v2
-from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
+from src.infrastructure.plugins.v2.protocol import (
+    control_envelope_v2,
+    parse_control_envelope_v2,
+    parse_profile_snapshot_v2,
+)
+from src.infrastructure.plugins.v2.reconciler import (
+    GenerationPublicationStagerV2,
+    PreparedGenerationPublicationV2,
+)
 from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeFactoryV2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
@@ -33,6 +41,12 @@ from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginRuntimeHostV2,
 )
 from src.infrastructure.plugins.v2.sandbox_runtime import SandboxRuntimeFactoryV2
+from src.infrastructure.plugins.v2.target_profiles import (
+    PRODUCTION_TARGET_MANIFEST_V2_PATHS,
+    compose_production_target_upgrade_v2,
+    include_production_target_hosts_v2,
+    production_target_hosts_active_v2,
+)
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
 
 from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
@@ -40,7 +54,10 @@ from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
 logger = logging.getLogger(__name__)
 _ROOT = Path(__file__).resolve().parents[6]
 DEFAULT_PROFILE_V2_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
-DEFAULT_MANIFEST_V2_PATHS = (_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",)
+DEFAULT_MANIFEST_V2_PATHS = (
+    *PRODUCTION_TARGET_MANIFEST_V2_PATHS,
+    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+)
 DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
@@ -100,23 +117,14 @@ async def initialize_plugin_runtime_v2(
             )
 
         durable_distribution = await _last_good_distribution_v2(session_factory)
-        if durable_distribution is None:
-            publication = await host.bootstrap(
-                profile_path=DEFAULT_PROFILE_V2_PATH,
-                manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
-                generation=1,
-                version=1,
-                profile_projector=lambda document: project_legacy_http_routes_v2(
-                    document,
-                    desired_http_route_rows,
-                ),
-                publication_stager=stage_routes,
-            )
-        else:
-            publication = await host.apply_distribution(
-                durable_distribution,
-                publication_stager=stage_routes,
-            )
+        latest_distribution = await _latest_requested_distribution_v2(session_factory)
+        publication, record_startup_publication = await _publish_startup_generation_v2(
+            host,
+            durable_distribution=durable_distribution,
+            latest_distribution=latest_distribution,
+            desired_http_route_rows=desired_http_route_rows,
+            publication_stager=stage_routes,
+        )
         if not publication.accepted:
             await _record_startup_publication_v2(
                 session_factory,
@@ -137,7 +145,7 @@ async def initialize_plugin_runtime_v2(
             raise RuntimeError("plugin runtime v2 published without a current generation")
         if route_graph is None or route_publication is None:
             raise RuntimeError("plugin runtime v2 published without a staged route graph")
-        if durable_distribution is None:
+        if record_startup_publication:
             await _record_startup_publication_v2(
                 session_factory,
                 publication,
@@ -171,6 +179,47 @@ async def initialize_plugin_runtime_v2(
     return host
 
 
+async def _publish_startup_generation_v2(
+    host: PlatformPluginRuntimeHostV2,
+    *,
+    durable_distribution: Mapping[str, object] | None,
+    latest_distribution: Mapping[str, object] | None,
+    desired_http_route_rows: Sequence[Any],
+    publication_stager: GenerationPublicationStagerV2,
+) -> tuple[PlatformPluginPublicationV2, bool]:
+    if durable_distribution is None:
+        publication = await host.bootstrap(
+            profile_path=DEFAULT_PROFILE_V2_PATH,
+            manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
+            generation=1,
+            version=1,
+            profile_projector=lambda document: project_legacy_http_routes_v2(
+                include_production_target_hosts_v2(document), desired_http_route_rows
+            ),
+            publication_stager=publication_stager,
+        )
+        return publication, True
+
+    publication = await host.apply_distribution(
+        durable_distribution,
+        publication_stager=publication_stager,
+    )
+    if not publication.accepted or production_target_hosts_active_v2(publication.snapshot):
+        return publication, False
+
+    generation, version = _next_startup_publication_v2(publication, latest_distribution)
+    snapshot = compose_production_target_upgrade_v2(
+        publication.snapshot,
+        generation=generation,
+    )
+    upgraded = await host.apply(
+        snapshot,
+        control_envelope_v2(snapshot, version=version),
+        publication_stager=publication_stager,
+    )
+    return upgraded, True
+
+
 async def _last_good_distribution_v2(
     session_factory: Callable[[], Any] | None,
 ) -> Mapping[str, object] | None:
@@ -185,6 +234,33 @@ async def _last_good_distribution_v2(
         return await PlatformPluginRepositoryV2(session).last_good_distribution(
             PYTHON_API_DATA_PLANE_ID_V2
         )
+
+
+async def _latest_requested_distribution_v2(
+    session_factory: Callable[[], Any] | None,
+) -> Mapping[str, object] | None:
+    if session_factory is None:
+        return None
+    from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+        PlatformPluginRepositoryV2,
+    )
+
+    async with session_factory() as session:
+        return await PlatformPluginRepositoryV2(session).latest_requested_distribution()
+
+
+def _next_startup_publication_v2(
+    last_good: PlatformPluginPublicationV2,
+    latest_distribution: Mapping[str, object] | None,
+) -> tuple[int, int]:
+    generation = last_good.snapshot.generation
+    version = last_good.envelope.version
+    if latest_distribution is not None:
+        snapshot = parse_profile_snapshot_v2(latest_distribution.get("snapshot"))
+        envelope = parse_control_envelope_v2(latest_distribution.get("envelope"))
+        generation = max(generation, snapshot.generation)
+        version = max(version, envelope.version)
+    return generation + 1, version + 1
 
 
 async def _record_startup_publication_v2(

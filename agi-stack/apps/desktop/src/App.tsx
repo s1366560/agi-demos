@@ -85,6 +85,7 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
+import { useDesktopPluginGenerationV2 } from './plugins/useDesktopPluginGenerationV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
@@ -956,6 +957,7 @@ export function App() {
   );
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
+  const desktopPluginGenerationV2 = useDesktopPluginGenerationV2(config, identityAuthenticated);
   authRef.current = auth;
   useEffect(() => {
     if (identityAuthenticated && invitationSignInRequested) {
@@ -6816,6 +6818,8 @@ export function App() {
     >
       <div
         ref={appShellRef}
+        data-plugin-generation-v2={desktopPluginGenerationV2?.snapshot.digest ?? 'unavailable'}
+        data-plugin-generation-v2-target="desktop-renderer"
         className={`app-shell hierarchy-shell runtime-mode ${
           runsInNativeDesktop ? 'desktop-window' : 'browser-window'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${

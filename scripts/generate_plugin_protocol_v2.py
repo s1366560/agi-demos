@@ -61,6 +61,8 @@ RUST_CATALOG_PATH = ROOT / "agi-stack/crates/plugin-host/src/protocol_v2/generat
 TYPESCRIPT_CATALOG_PATH = ROOT / "agi-stack/packages/plugin-runtime/src/generatedCatalog.ts"
 SERVICE_GRAPH_PATH = ROOT / "shared/graphs/plugin-service-dependencies.v2.json"
 EVENT_GRAPH_PATH = ROOT / "shared/graphs/plugin-events.v2.json"
+DEFAULT_PROFILE_PATH = ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
+BOOTSTRAP_PROFILE_PATH = ROOT / "shared/profiles/memstack-default-bootstrap.v2.json"
 _CONFORMANCE_ARTIFACT_BYTES_V2 = b"memstack-plugin-runtime-v2-test-artifact\n"
 
 
@@ -652,6 +654,26 @@ def _conformance_fixture(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _bootstrap_profile(manifests: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+    from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+    from src.infrastructure.plugins.v2.protocol import (
+        parse_plugin_manifest_v2,
+        profile_snapshot_v2_to_payload,
+    )
+    from src.infrastructure.plugins.v2.target_profiles import (
+        include_production_target_hosts_v2,
+    )
+
+    parsed = tuple(parse_plugin_manifest_v2(manifest) for manifest in manifests)
+    manifest_by_id = {manifest.plugin_id: manifest for manifest in parsed}
+    snapshot = compose_profile_v2(
+        include_production_target_hosts_v2(load_profile_document_v2(DEFAULT_PROFILE_PATH)),
+        manifest_by_id,
+        generation=1,
+    )
+    return profile_snapshot_v2_to_payload(snapshot)
+
+
 def _write_or_check(path: Path, content: str, *, check: bool) -> bool:
     expected = content.encode("utf-8")
     if check:
@@ -687,6 +709,7 @@ def main() -> int:
         TYPESCRIPT_CATALOG_PATH: _generate_typescript_catalog(catalog, schema_hash),
         SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifests)),
         EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifests)),
+        BOOTSTRAP_PROFILE_PATH: _canonical_document(_bootstrap_profile(manifests)),
         SNAPSHOT_FIXTURE_PATH: _canonical_document(snapshot),
         CONFORMANCE_FIXTURE_PATH: _canonical_document(_conformance_fixture(snapshot)),
         CONTRACT_CONFORMANCE_FIXTURE_PATH: _canonical_document(

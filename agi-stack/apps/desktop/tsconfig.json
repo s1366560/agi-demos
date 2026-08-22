@@ -16,6 +16,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "@agistack/plugin-runtime": ["./../../packages/plugin-runtime/src/index.ts"],
       "@agistack/plugin-slots": ["./../../packages/plugin-slots/src/index.ts"]
     }
   },

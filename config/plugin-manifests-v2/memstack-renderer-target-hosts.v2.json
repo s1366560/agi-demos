@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "plugin_id": "memstack-renderer-target-hosts",
+  "version": "2.0.0",
+  "runtime": "frontend",
+  "trust": "builtin",
+  "modules": [
+    {
+      "module_ref": "builtin://memstack/web/renderer-host",
+      "entrypoint": "applyWebRendererHostV2",
+      "artifact": {
+        "digest": "sha256:0c59de1155e910d44dee2bf03dc3ca248e030f24beb5e88a9945ba481f02bedf",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/targetModules.ts"
+      },
+      "targets": ["web"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:web.renderer-contributions", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-renderer-host", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:738916402aa90851926cd84da1bfb89996eeb37b3776f7156c91fcc0bf46822b"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/renderer-host",
+      "entrypoint": "applyDesktopRendererHostV2",
+      "artifact": {
+        "digest": "sha256:0c59de1155e910d44dee2bf03dc3ca248e030f24beb5e88a9945ba481f02bedf",
+        "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/targetModules.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.renderer-contributions",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "native-generation-renderer-host", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:eecbc11fe07bb5cf90fe46909601ba112a22db2ad444339f93717d3f37703aa2"
+    }
+  ],
+  "permissions": [],
+  "quotas": {}
+}

@@ -10,6 +10,7 @@ import './i18n/config';
 import { SchemaLayout } from './layouts/SchemaLayout';
 import { TenantLayout } from './layouts/TenantLayout';
 import { Login } from './pages/Login';
+import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
 import { useAuthStore } from './stores/auth';
 import { useProjectStore } from './stores/project';
 import { useTenantStore } from './stores/tenant';
@@ -643,7 +644,8 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <Suspense fallback={<PageLoader />}>
-          <Routes>
+          <WebPluginGenerationHostV2 enabled={isAuthenticated}>
+            <Routes>
             <Route path="/login" element={!isAuthenticated ? <Login /> : <LoginRedirect />} />
             <Route
               path="/login/callback/:provider"
@@ -2058,7 +2060,8 @@ function App() {
                 </Suspense>
               }
             />
-          </Routes>
+            </Routes>
+          </WebPluginGenerationHostV2>
         </Suspense>
       </ThemeProvider>
     </ErrorBoundary>

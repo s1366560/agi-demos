@@ -1,0 +1,39 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+function source(relativePath) {
+  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+test("desktop renderer owns a protocol-v2 generation host through the public fetch seam", () => {
+  const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
+  const app = source("src/App.tsx");
+
+  assert.match(hook, /RendererPluginRuntimeV2\('desktop-renderer'/u);
+  assert.match(hook, /desktopRendererHostDefinitionV2/u);
+  assert.match(hook, /desktopApiFetch\(/u);
+  assert.doesNotMatch(hook, /DesktopApiClient/u);
+  assert.match(hook, /runtime\.bootstrap\(bootstrapProfileV2\)/u);
+  assert.ok(
+    hook.indexOf("runtime.bootstrap(bootstrapProfileV2)") <
+      hook.indexOf(
+        "fetchDesktopPluginDistributionV2(config, controller.signal)",
+      ),
+    "local bootstrap must activate before the first remote request",
+  );
+  assert.match(
+    app,
+    /useDesktopPluginGenerationV2\(config, identityAuthenticated\)/u,
+  );
+});
+
+test("every desktop build path resolves the shared protocol-v2 runtime package", () => {
+  const tsconfig = source("tsconfig.json");
+  const vite = source("vite.config.ts");
+  const electronVite = source("electron.vite.config.ts");
+
+  for (const content of [tsconfig, vite, electronVite]) {
+    assert.match(content, /@agistack\/plugin-runtime/u);
+  }
+});

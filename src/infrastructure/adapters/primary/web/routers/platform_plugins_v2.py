@@ -47,11 +47,10 @@ class DataPlaneReceiptRequestV2:
 
 @router.get("/distribution", response_model=PlatformPluginDistributionResponseV2)
 async def get_distribution_v2(
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginDistributionResponseV2:
     """Return the newest complete distribution; data planes project targets locally."""
-    _require_platform_admin(current_user)
     distribution = await PlatformPluginRepositoryV2(db).latest_requested_distribution()
     if distribution is None:
         raise HTTPException(

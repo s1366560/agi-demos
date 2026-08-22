@@ -79,10 +79,35 @@ async def test_v2_distribution_endpoint_returns_complete_snapshot(
 
 
 @pytest.mark.unit
-async def test_v2_distribution_endpoint_requires_admin(
+async def test_v2_distribution_endpoint_allows_authenticated_non_admin(
     db_session: AsyncSession,
 ) -> None:
+    publication, distribution = await _publication()
+    await PlatformPluginRepositoryV2(db_session).record_publication(publication)
+    await db_session.commit()
+
     response = _client(db_session, superuser=False).get("/api/v1/platform-plugins/v2/distribution")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"schema_version": 2, **distribution}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path"),
+    (
+        ("post", "/api/v1/platform-plugins/v2/data-plane-state"),
+        ("get", "/api/v1/platform-plugins/v2/readiness"),
+        ("get", "/api/v1/platform-plugins/v2/publications/unknown/readiness"),
+        ("post", "/api/v1/platform-plugins/v2/publications/republish-last-ready"),
+    ),
+)
+async def test_v2_management_endpoints_require_admin(
+    db_session: AsyncSession,
+    method: str,
+    path: str,
+) -> None:
+    response = _client(db_session, superuser=False).request(method, path, json={})
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 

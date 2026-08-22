@@ -17,6 +17,8 @@ from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    DEFAULT_MANIFEST_V2_PATHS,
+    DEFAULT_PROFILE_V2_PATH,
     initialize_plugin_runtime_v2,
     plugin_runtime_host_v2_from_scope,
     shutdown_plugin_runtime_v2,
@@ -34,6 +36,7 @@ from src.infrastructure.plugins.v2.boundary import (
     PluginGenerationMiddlewareV2,
     current_process_generation_host_v2,
 )
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.graph_runtime import (
     GRAPH_RUNTIME_SERVICE_V2,
     GraphRuntimeFactoryV2,
@@ -45,6 +48,7 @@ from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
 )
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 
 @pytest.mark.unit
@@ -241,6 +245,63 @@ async def test_restart_uses_durable_last_good_instead_of_unpublished_desired_row
     assert restarted_distribution.to_payload() == first_distribution.to_payload()
     assert configured_legacy_http_routes_v2(restarted_distribution.snapshot.entries) == ()
     await restarted.close()
+
+
+@pytest.mark.unit
+async def test_restart_upgrades_legacy_empty_target_snapshot_with_monotonic_publication(
+    db_session: AsyncSession,
+) -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    legacy_host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    legacy = await legacy_host.bootstrap(
+        profile_path=DEFAULT_PROFILE_V2_PATH,
+        manifest_paths=(DEFAULT_MANIFEST_V2_PATHS[-1],),
+        generation=7,
+        version=11,
+        nonce="legacy-empty-target-snapshot",
+    )
+    assert legacy.accepted
+    await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
+        legacy,
+        data_plane_id="python-api-v2",
+    )
+    await db_session.commit()
+    await legacy_host.close()
+
+    newer_requested_host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    newer_requested = await newer_requested_host.bootstrap(
+        profile_path=DEFAULT_PROFILE_V2_PATH,
+        manifest_paths=(DEFAULT_MANIFEST_V2_PATHS[-1],),
+        generation=9,
+        version=15,
+        nonce="newer-unapplied-empty-target-snapshot",
+    )
+    await PlatformPluginRepositoryV2(db_session).record_publication(newer_requested)
+    await db_session.commit()
+    await newer_requested_host.close()
+
+    app = FastAPI()
+    upgraded = await initialize_plugin_runtime_v2(app, session_factory=session_factory)
+
+    distribution = upgraded.current_distribution
+    assert distribution is not None
+    assert distribution.snapshot.generation == 10
+    assert distribution.envelope.version == 16
+    enabled_modules = {entry.module_ref for entry in distribution.snapshot.entries if entry.enabled}
+    assert {
+        "builtin://memstack/rust-server/generation-host",
+        "builtin://memstack/desktop-sidecar/local-capability",
+        "builtin://memstack/web/renderer-host",
+        "builtin://memstack/desktop/renderer-host",
+    } <= enabled_modules
+    assert (
+        await PlatformPluginRepositoryV2(db_session).latest_requested_distribution()
+        == distribution.to_payload()
+    )
+    await upgraded.close()
 
 
 @pytest.mark.unit

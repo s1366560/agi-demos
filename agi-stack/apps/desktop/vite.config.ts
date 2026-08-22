@@ -8,6 +8,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@agistack/plugin-runtime': path.resolve(
+        __dirname,
+        '../../packages/plugin-runtime/src/index.ts'
+      ),
       '@agistack/plugin-slots': path.resolve(
         __dirname,
         '../../packages/plugin-slots/src/index.ts'

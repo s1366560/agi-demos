@@ -3,8 +3,9 @@
 use std::{sync::Arc, time::Duration};
 
 use agistack_plugin_host::{
-    parse_control_plane_distribution_v2, ControlPlaneDistributionV2, DataPlaneTargetV2, LoaderV2,
-    PluginDefinitionV2, PluginSnapshotReconcilerV2, SnapshotApplyReceiptV2,
+    desktop_sidecar_host_definition_v2, parse_control_plane_distribution_v2,
+    ControlPlaneDistributionV2, DataPlaneTargetV2, LoaderV2, PluginSnapshotReconcilerV2,
+    SnapshotApplyReceiptV2,
 };
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -124,7 +125,7 @@ async fn reconcile_loop(
 fn desktop_reconciler() -> PluginSnapshotReconcilerV2 {
     let loader = LoaderV2::for_target(
         DataPlaneTargetV2::DesktopSidecar,
-        std::iter::empty::<PluginDefinitionV2>(),
+        [desktop_sidecar_host_definition_v2()],
     );
     PluginSnapshotReconcilerV2::new(loader)
 }
@@ -377,16 +378,42 @@ struct DataPlaneReceiptRequestV2<'a> {
 
 #[cfg(test)]
 mod tests {
-    use agistack_plugin_host::ApplyStatusV2;
+    use agistack_plugin_host::{
+        ApplyStatusV2, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
+        DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    };
     use serde_json::{json, Value};
 
     use super::*;
 
     const SNAPSHOT: &str =
         include_str!("../../../../../../shared/fixtures/platform-plugin-profile.v2.json");
+    const BOOTSTRAP: &str =
+        include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
 
     fn distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
         let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
+        let digest = snapshot["digest"].as_str().expect("snapshot digest");
+        let raw = json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": version,
+                "nonce": nonce,
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        });
+        parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    }
+
+    fn bootstrap_distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
+        let snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
         let digest = snapshot["digest"].as_str().expect("snapshot digest");
         let raw = json!({
             "schema_version": 2,
@@ -477,6 +504,39 @@ mod tests {
         replace_reconciler(&mut reconciler).await;
 
         assert!(reconciler.manager().acquire().is_err());
+        reconciler.close().await;
+    }
+
+    #[tokio::test]
+    async fn desktop_reconciler_activates_the_generated_local_capability_module() {
+        let mut reconciler = desktop_reconciler();
+        let requested = bootstrap_distribution(18, "nonce-18");
+
+        assert_eq!(
+            reconciler.apply(&requested).await.status,
+            ApplyStatusV2::Ack
+        );
+        let lease = reconciler
+            .manager()
+            .acquire()
+            .expect("desktop-sidecar generation must be active");
+        let descriptor = lease
+            .generation()
+            .expect("generation must remain leased")
+            .resolve::<TargetHostDescriptorV2>(
+                DESKTOP_SIDECAR_HOST_SERVICE_V2,
+                &ScopeV2 {
+                    kind: ScopeKindV2::Root,
+                    tenant_id: None,
+                    project_id: None,
+                    session_id: None,
+                },
+                None,
+            )
+            .expect("local capability descriptor must resolve");
+        assert_eq!(descriptor.target, "desktop-sidecar");
+        assert_eq!(descriptor.strategy, "native-local-capability");
+        lease.release().await.expect("lease must release");
         reconciler.close().await;
     }
 }

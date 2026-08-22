@@ -113,7 +113,9 @@ use agistack_core::ports::{
 };
 use agistack_core::{MemoryService, ReActEngine};
 use agistack_plugin_host::{
-    ControlPlane, DataPlaneReconciler, HotPlugRegistry, LenTool, PluginHost, UpperTool,
+    parse_profile_snapshot_v2, rust_server_host_definition_v2, ControlPlane, DataPlaneReconciler,
+    DataPlaneTargetV2, GenerationManagerV2, HotPlugRegistry, LenTool, LoaderV2, PluginHost,
+    RuntimeV2Error, UpperTool,
 };
 
 use crate::admin_access::{build_admin_access, SharedAdminAccess};
@@ -329,6 +331,27 @@ pub(crate) struct AppState {
 }
 
 type ServerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+async fn start_plugin_runtime_v2() -> ServerResult<GenerationManagerV2> {
+    let snapshot = parse_profile_snapshot_v2(include_str!(
+        "../../../../shared/profiles/memstack-default-bootstrap.v2.json"
+    ))?;
+    let generation = LoaderV2::for_target(
+        DataPlaneTargetV2::RustServer,
+        [rust_server_host_definition_v2()],
+    )
+    .stage(snapshot)
+    .await?;
+    if generation.phases().is_empty() {
+        return Err(RuntimeV2Error::Module(
+            "rust-server protocol-v2 target catalog activated no modules".to_owned(),
+        )
+        .into());
+    }
+    let manager = GenerationManagerV2::new();
+    manager.publish(generation).await;
+    Ok(manager)
+}
 
 #[derive(Debug, Eq, PartialEq)]
 enum PersistenceMode {
@@ -1079,6 +1102,7 @@ async fn main() -> ServerResult<()> {
         .and_then(|scheduler| Arc::clone(scheduler).spawn_if_enabled());
     let app = demo_api::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let plugin_runtime_v2 = start_plugin_runtime_v2().await?;
     println!("agistack-server listening on http://{addr}");
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -1086,6 +1110,7 @@ async fn main() -> ServerResult<()> {
     if let Some(runtime) = cron_scheduler_runtime {
         runtime.shutdown().await;
     }
+    plugin_runtime_v2.close().await;
     serve_result?;
     Ok(())
 }
@@ -1099,6 +1124,24 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod runtime_mode_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn rust_server_starts_a_non_empty_protocol_v2_generation() {
+        let manager = start_plugin_runtime_v2()
+            .await
+            .expect("rust-server plugin runtime must start");
+        let lease = manager.acquire().expect("generation must be active");
+        assert_eq!(
+            lease
+                .generation()
+                .expect("generation must remain leased")
+                .phases()
+                .len(),
+            1
+        );
+        lease.release().await.expect("lease must release");
+        manager.close().await;
+    }
 
     #[test]
     fn missing_database_fails_closed_without_test_capability() {
