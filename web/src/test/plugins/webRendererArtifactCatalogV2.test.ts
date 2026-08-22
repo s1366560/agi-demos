@@ -8,6 +8,7 @@ import {
 } from '@agistack/plugin-runtime';
 
 import {
+  defineWebUiSlotArtifactV2,
   resolveWebRendererArtifactsV2,
   validateWebRendererContributionsV2,
 } from '../../routes/v2/webRendererArtifactCatalogV2';
@@ -108,6 +109,75 @@ describe('web renderer artifact catalog v2', () => {
     expect(
       artifact.createTopNavigationItems('tenant', { tenantId: 'tenant-1' }).map(({ id }) => id)
     ).toContain('overview');
+  });
+
+  it('exposes a code-owned default UI slot artifact', () => {
+    const [artifact] = resolveWebRendererArtifactsV2([
+      contribution('web.default-ui-slots', 'ui-slot', [WEB_ARTIFACT_REFS['ui-slot']]),
+    ]);
+
+    expect(artifact?.kind).toBe('ui-slot');
+    if (!artifact || artifact.kind !== 'ui-slot')
+      throw new Error('default UI slot artifact is missing');
+    expect(artifact.slotDefinitions).toEqual([]);
+  });
+
+  it.each([
+    {
+      code: 'renderer_ui_slot_module_ref_invalid',
+      name: 'non-builtin module',
+      slot: { moduleRef: 'https://evil.example/slot.js' },
+    },
+    {
+      code: 'renderer_ui_slot_permission_invalid',
+      name: 'non-UI permission',
+      slot: { permission: 'admin.full' },
+    },
+    {
+      code: 'renderer_ui_slot_sandbox_required',
+      name: 'unsandboxed renderer',
+      slot: { sandbox: false },
+    },
+  ])('rejects a $name in a code-owned UI slot artifact', ({ code, slot }) => {
+    expect(() =>
+      defineWebUiSlotArtifactV2('web.ui-slots.invalid.v1', [
+        {
+          pluginId: 'acme',
+          slot: 'settings_page',
+          id: 'settings-card',
+          contract: 'ui-slot:settings-card',
+          moduleRef: 'builtin:settings-card',
+          permission: 'ui.settings',
+          sandbox: true,
+          ...slot,
+        },
+      ])
+    ).toThrow(expect.objectContaining({ code }));
+  });
+
+  it('rejects duplicate UI slot ownership inside an artifact', () => {
+    const slot = {
+      pluginId: 'acme',
+      slot: 'settings_page' as const,
+      id: 'settings-card',
+      contract: 'ui-slot:settings-card',
+      moduleRef: 'builtin:settings-card',
+      permission: 'ui.settings',
+      sandbox: true,
+    };
+
+    expect(() => defineWebUiSlotArtifactV2('web.ui-slots.invalid.v1', [slot, slot])).toThrow(
+      expect.objectContaining({ code: 'renderer_ui_slot_conflict' })
+    );
+  });
+
+  it('rejects duplicate UI slot artifact ownership across contributions', () => {
+    expect(() =>
+      resolveWebRendererArtifactsV2([
+        contribution('web.default-ui-slots-a', 'ui-slot', [WEB_ARTIFACT_REFS['ui-slot']]),
+        contribution('web.default-ui-slots-b', 'ui-slot', [WEB_ARTIFACT_REFS['ui-slot']]),
+      ])
+    ).toThrow(expect.objectContaining({ code: 'renderer_ui_slot_artifact_conflict' }));
   });
 
   it.each([

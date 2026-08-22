@@ -1,74 +1,60 @@
+import type { ReactNode } from 'react';
+
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PluginToolResultRenderer } from '@/components/plugins/PluginToolResultRenderer';
 import {
   registerBuiltinRenderer,
   resetBuiltinRenderersForTests,
 } from '@/services/pluginRendererRegistry';
-import { refreshPluginSlots, resetPluginSlotsForTests } from '@/services/pluginSlotService';
-import type { PlatformPluginSnapshotResponse } from '@/types/pluginSlots';
+import {
+  WebUiSlotAuthorityContextV2,
+  type WebUiSlotAuthorityStateV2,
+} from '@/routes/v2/webUiSlotAuthorityStateV2';
 
-vi.mock('@/services/client/httpClient', () => ({
-  httpClient: { get: vi.fn() },
-}));
+const toolResultSlot = Object.freeze({
+  pluginId: 'acme',
+  slot: 'tool_result_renderer' as const,
+  id: 'memory_card',
+  contract: 'tool-result:memory_search',
+  moduleRef: 'builtin:memory-card',
+  permission: 'ui.tools',
+  sandbox: true,
+});
 
-import { httpClient } from '@/services/client/httpClient';
-
-function toolResultSnapshot(): PlatformPluginSnapshotResponse {
-  return {
-    version: 1,
-    nonce: 'n',
-    profile_id: 'p',
-    digest: 'd',
-    payload: {
-      schema_version: 1,
-      profile_id: 'p',
-      digest: 'd',
-      plugins: [
-        {
-          id: 'acme',
-          provides: [
-            {
-              kind: 'ui_renderer',
-              id: 'memory_card',
-              contract: 'tool-result:memory_search',
-              config_schema: {
-                slot: 'tool_result_renderer',
-                module_ref: 'builtin:memory-card',
-                permission: 'ui.tools',
-              },
-            },
-          ] as never,
-        },
-      ],
-    },
+function renderWithSlots(ui: ReactNode, slots = [toolResultSlot]) {
+  const state: WebUiSlotAuthorityStateV2 = {
+    slotDefinitions: slots,
+    status: 'ready',
+    uiSlotArtifactIds: ['test.ui-slots.v1'],
   };
+  return render(
+    <WebUiSlotAuthorityContextV2.Provider value={state}>{ui}</WebUiSlotAuthorityContextV2.Provider>
+  );
 }
 
 describe('PluginToolResultRenderer', () => {
   beforeEach(() => {
-    resetPluginSlotsForTests();
     resetBuiltinRenderersForTests();
   });
 
   it('renders the fallback when no slot matches the tool', () => {
-    render(
+    renderWithSlots(
       <PluginToolResultRenderer
         toolName="memory_search"
         result={{ ok: 1 }}
         fallback={<div>default-card</div>}
-      />
+      />,
+      []
     );
     expect(screen.getByText('default-card')).toBeTruthy();
   });
 
-  it('renders the keyed renderer matching tool-result:<tool>', async () => {
-    vi.mocked(httpClient.get).mockResolvedValue(toolResultSnapshot());
-    await refreshPluginSlots();
+  it('renders the keyed renderer matching tool-result:<tool>', () => {
     registerBuiltinRenderer('tool-result:memory_search', () => <div>memory-plugin-card</div>);
 
-    render(
+    renderWithSlots(
       <PluginToolResultRenderer
         toolName="memory_search"
         result={{ ok: 1 }}
@@ -79,11 +65,8 @@ describe('PluginToolResultRenderer', () => {
     expect(screen.queryByText('default-card')).toBeNull();
   });
 
-  it('falls back to the sandbox host for non-keyed matching slots', async () => {
-    vi.mocked(httpClient.get).mockResolvedValue(toolResultSnapshot());
-    await refreshPluginSlots();
-
-    render(
+  it('falls back to the sandbox host for non-keyed matching slots', () => {
+    renderWithSlots(
       <PluginToolResultRenderer
         toolName="memory_search"
         result={{ ok: 1 }}

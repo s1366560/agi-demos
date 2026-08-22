@@ -1,78 +1,67 @@
+import type { ReactNode } from 'react';
+
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PluginSlotOutlet } from '@/components/plugins/PluginSlotOutlet';
 import {
   registerBuiltinRenderer,
   resetBuiltinRenderersForTests,
 } from '@/services/pluginRendererRegistry';
-import { resetPluginSlotsForTests } from '@/services/pluginSlotService';
-import type { PlatformPluginSnapshotResponse } from '@/types/pluginSlots';
+import {
+  WebUiSlotAuthorityContextV2,
+  type WebUiSlotAuthorityStateV2,
+} from '@/routes/v2/webUiSlotAuthorityStateV2';
 
-vi.mock('@/services/client/httpClient', () => ({
-  httpClient: { get: vi.fn() },
-}));
-
-import { httpClient } from '@/services/client/httpClient';
-import { refreshPluginSlots } from '@/services/pluginSlotService';
-
-function snapshot(capabilities: Array<Record<string, unknown>>): PlatformPluginSnapshotResponse {
-  return {
-    version: 1,
-    nonce: 'n',
-    profile_id: 'p',
-    digest: 'd',
-    payload: {
-      schema_version: 1,
-      profile_id: 'p',
-      digest: 'd',
-      plugins: [{ id: 'acme', provides: capabilities as never }],
-    },
-  };
-}
-
-const settingsSlot = {
-  kind: 'ui_slot',
+const settingsSlot = Object.freeze({
+  pluginId: 'acme',
+  slot: 'settings_page' as const,
   id: 'settings-card',
   contract: 'ui-slot:settings-card',
-  config_schema: {
-    slot: 'settings_page',
-    module_ref: 'builtin:settings-card',
-    permission: 'ui.settings',
-  },
-};
+  moduleRef: 'builtin:settings-card',
+  permission: 'ui.settings',
+  sandbox: true,
+});
+
+function renderWithSlots(slots = [settingsSlot]) {
+  const state: WebUiSlotAuthorityStateV2 = {
+    slotDefinitions: slots,
+    status: 'ready',
+    uiSlotArtifactIds: ['test.ui-slots.v1'],
+  };
+  return (ui: ReactNode) =>
+    render(
+      <WebUiSlotAuthorityContextV2.Provider value={state}>
+        {ui}
+      </WebUiSlotAuthorityContextV2.Provider>
+    );
+}
 
 describe('PluginSlotOutlet', () => {
   beforeEach(() => {
-    resetPluginSlotsForTests();
     resetBuiltinRenderersForTests();
-    vi.mocked(httpClient.get).mockResolvedValue(snapshot([settingsSlot]));
   });
 
-  it('renders nothing when no slot of the kind exists', async () => {
-    const { container } = render(<PluginSlotOutlet kind="nav_item" />);
-    await screen.findByTestId('plugin-slot-settings-card', undefined, {
-      timeout: 50,
-    }).catch(() => undefined);
+  it('renders nothing when no V2 slot of the kind exists', () => {
+    const { container } = renderWithSlots()(<PluginSlotOutlet kind="nav_item" />);
     expect(container.innerHTML).toBe('');
   });
 
-  it('renders the sandbox host for slots without a keyed renderer', async () => {
-    render(<PluginSlotOutlet kind="settings_page" />);
-    const frame = await screen.findByTestId('plugin-slot-settings-card');
+  it('renders the sandbox host for V2 slots without a keyed renderer', () => {
+    renderWithSlots()(<PluginSlotOutlet kind="settings_page" />);
+    const frame = screen.getByTestId('plugin-slot-settings-card');
     expect(frame.tagName).toBe('IFRAME');
     expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
   });
 
-  it('renders the keyed builtin renderer when registered', async () => {
+  it('renders the keyed builtin renderer when registered', () => {
     registerBuiltinRenderer('ui-slot:settings-card', () => <div>keyed-settings</div>);
-    render(<PluginSlotOutlet kind="settings_page" />);
-    expect(await screen.findByText('keyed-settings')).toBeTruthy();
+    renderWithSlots()(<PluginSlotOutlet kind="settings_page" />);
+    expect(screen.getByText('keyed-settings')).toBeTruthy();
   });
 
-  it('filters by contractId when provided', async () => {
-    render(<PluginSlotOutlet kind="settings_page" contractId="ui-slot:other" />);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  it('filters by contractId when provided', () => {
+    renderWithSlots()(<PluginSlotOutlet kind="settings_page" contractId="ui-slot:other" />);
     expect(screen.queryByTestId('plugin-slot-settings-card')).toBeNull();
   });
 });

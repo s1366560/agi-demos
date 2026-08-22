@@ -17,7 +17,7 @@ import type {
   NavigationRuntimeContext,
   TopNavigationContext,
 } from '../../config/navigation';
-
+import type { UiSlotDefinition } from '../../types/pluginSlots';
 
 export const WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'web.routes.default-business.v1';
 export const WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'web.navigation.default.v1';
@@ -44,6 +44,7 @@ export interface WebNavigationArtifactV2 extends WebRendererArtifactBaseV2 {
 
 export interface WebUiSlotArtifactV2 extends WebRendererArtifactBaseV2 {
   readonly kind: 'ui-slot';
+  readonly slotDefinitions: readonly UiSlotDefinition[];
 }
 
 export type WebRendererArtifactV2 =
@@ -69,10 +70,7 @@ const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>(
   ],
   [
     WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
-    Object.freeze({
-      id: WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
-      kind: 'ui-slot',
-    }),
+    defineWebUiSlotArtifactV2(WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, []),
   ],
 ]);
 
@@ -86,6 +84,47 @@ function defineWebRouteArtifactV2(
     id,
     kind: 'route',
     routeKeys: Object.freeze(routeKeys),
+  });
+}
+
+export function defineWebUiSlotArtifactV2(
+  id: string,
+  slotDefinitions: readonly UiSlotDefinition[]
+): WebUiSlotArtifactV2 {
+  const owners = new Set<string>();
+  const definitions = slotDefinitions.map((slot) => {
+    const ownerKey = `${slot.pluginId}/${slot.id}`;
+    if (owners.has(ownerKey)) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_conflict',
+        `renderer_ui_slot_conflict:${ownerKey}`
+      );
+    }
+    owners.add(ownerKey);
+    if (!slot.moduleRef.startsWith('builtin:')) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_module_ref_invalid',
+        `renderer_ui_slot_module_ref_invalid:${ownerKey}`
+      );
+    }
+    if (!slot.permission.startsWith('ui.')) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_permission_invalid',
+        `renderer_ui_slot_permission_invalid:${ownerKey}`
+      );
+    }
+    if (!slot.sandbox) {
+      throw new RuntimeV2Error(
+        'renderer_ui_slot_sandbox_required',
+        `renderer_ui_slot_sandbox_required:${ownerKey}`
+      );
+    }
+    return Object.freeze({ ...slot });
+  });
+  return Object.freeze({
+    id,
+    kind: 'ui-slot',
+    slotDefinitions: Object.freeze(definitions),
   });
 }
 
@@ -123,6 +162,7 @@ export function resolveWebRendererArtifactsV2(
 ): readonly WebRendererArtifactV2[] {
   const artifacts: WebRendererArtifactV2[] = [];
   const routeOwners = new Map<string, string>();
+  const uiSlotArtifactOwners = new Map<string, string>();
   const ordered = [...contributions].sort(
     (left, right) =>
       left.order - right.order ||
@@ -146,12 +186,29 @@ export function resolveWebRendererArtifactsV2(
       }
       if (artifact.kind === 'route') {
         validateRouteKeysV2(routeOwners, artifact, contribution);
+      } else if (artifact.kind === 'ui-slot') {
+        validateUiSlotArtifactOwnershipV2(uiSlotArtifactOwners, artifact, contribution);
       }
       artifacts.push(artifact);
     }
   }
 
   return Object.freeze(artifacts);
+}
+
+function validateUiSlotArtifactOwnershipV2(
+  owners: Map<string, string>,
+  artifact: WebUiSlotArtifactV2,
+  contribution: RegisteredRendererContributionV2
+): void {
+  const existingOwner = owners.get(artifact.id);
+  if (existingOwner !== undefined) {
+    throw new RuntimeV2Error(
+      'renderer_ui_slot_artifact_conflict',
+      `renderer_ui_slot_artifact_conflict:${artifact.id}:${existingOwner}:${contribution.id}`
+    );
+  }
+  owners.set(artifact.id, contribution.id);
 }
 
 function artifactRefsV2(contribution: RegisteredRendererContributionV2): readonly string[] {
