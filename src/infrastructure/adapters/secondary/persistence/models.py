@@ -3302,6 +3302,43 @@ class PlatformPluginV2DesiredBundleSetModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginV1MigrationRunModel(IdGeneratorMixin, Base):
+    """Completed, append-only audit for one offline V1 desired-state conversion."""
+
+    __tablename__ = "platform_plugin_v1_conversion_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    migration_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    source_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    mapping_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    output_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(source_digest) = 71 AND substr(source_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_source_digest",
+        ),
+        CheckConstraint(
+            "length(mapping_digest) = 71 AND substr(mapping_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_mapping_digest",
+        ),
+        CheckConstraint(
+            "length(output_digest) = 71 AND substr(output_digest, 1, 7) = 'sha256:'",
+            name="ck_platform_plugin_v1_conversion_output_digest",
+        ),
+        Index(
+            "ix_platform_plugin_v1_conversion_created",
+            "created_at",
+            "migration_id",
+        ),
+    )
+
+
 class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     """Append-only requested protocol-v2 snapshot distribution."""
 
