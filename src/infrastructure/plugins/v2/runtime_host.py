@@ -74,8 +74,15 @@ class PlatformPluginDistributionV2:
 class PlatformPluginRuntimeHostV2:
     """Own one Python Loader/Reconciler/GenerationManager v2 graph."""
 
-    def __init__(self, definitions: Sequence[PluginDefinitionV2] = ()) -> None:
-        self.loader = LoaderV2(definitions)
+    def __init__(
+        self,
+        definitions: Sequence[PluginDefinitionV2] = (),
+        *,
+        loader: LoaderV2 | None = None,
+    ) -> None:
+        if loader is not None and definitions:
+            raise ValueError("definitions and an explicit v2 loader are mutually exclusive")
+        self.loader = loader or LoaderV2(definitions)
         self.reconciler = PlatformPluginSnapshotReconcilerV2(self.loader)
         self._apply_lock = asyncio.Lock()
         self._current_publication: PlatformPluginPublicationV2 | None = None

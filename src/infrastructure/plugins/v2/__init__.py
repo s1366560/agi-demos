@@ -4,6 +4,14 @@ The v2 package is intentionally isolated from the v1 compatibility runtime while
 the breaking protocol cutover is under construction.
 """
 
+from .profile_watcher import (
+    BundleTrustPolicyV2,
+    ProfileWatcherV2,
+    ProfileWatcherV2Error,
+    ProfileWatchEventV2,
+    ProfileWatchOutcomeV2,
+    ProfileWatchScheduleV2,
+)
 from .protocol import (
     PLUGIN_PROFILE_TYPE_URL_V2,
     PluginProtocolV2Error,
@@ -31,6 +39,7 @@ from .runtime import (
 
 __all__ = [
     "PLUGIN_PROFILE_TYPE_URL_V2",
+    "BundleTrustPolicyV2",
     "ContextV2",
     "FiberPhaseV2",
     "FiberV2",
@@ -40,6 +49,11 @@ __all__ = [
     "PlatformPluginSnapshotReconcilerV2",
     "PluginDefinitionV2",
     "PluginProtocolV2Error",
+    "ProfileWatchEventV2",
+    "ProfileWatchOutcomeV2",
+    "ProfileWatchScheduleV2",
+    "ProfileWatcherV2",
+    "ProfileWatcherV2Error",
     "RuntimeGenerationV2",
     "RuntimeV2Error",
     "build_profile_snapshot_v2",
