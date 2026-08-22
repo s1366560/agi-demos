@@ -41,6 +41,8 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "retrieval-stores",
         "smtp-config",
         "system",
+        "support",
+        "support-2",
         "tenants",
         "tenant-webhooks",
         "trust-workspace",

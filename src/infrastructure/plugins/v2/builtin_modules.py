@@ -46,6 +46,7 @@ from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
+from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
 from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_definition_v2
 from .tool_set import (
@@ -139,6 +140,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_smtp_config_http_routes import (
         builtin_smtp_config_http_routes_definition_v2,
     )
+    from .builtin_support_http_routes import builtin_support_http_routes_definition_v2
     from .builtin_system_http_routes import builtin_system_http_routes_definition_v2
     from .builtin_tenant_webhooks_http_routes import (
         builtin_tenant_webhooks_http_routes_definition_v2,
@@ -180,6 +182,7 @@ def builtin_runtime_definitions_v2(
         builtin_memories_http_routes_definition_v2(),
         builtin_notifications_http_routes_definition_v2(),
         builtin_events_http_routes_definition_v2(),
+        builtin_support_http_routes_definition_v2(),
         builtin_graph_http_routes_definition_v2(),
         builtin_graph_stores_http_routes_definition_v2(),
         builtin_episodes_http_routes_definition_v2(),
@@ -203,6 +206,7 @@ def builtin_runtime_definitions_v2(
         *schema_service_definitions_v2(),
         *notification_service_definitions_v2(),
         *event_log_service_definitions_v2(),
+        *support_ticket_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),

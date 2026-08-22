@@ -416,6 +416,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-support-ticket-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/support-ticket-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-support-ticket-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/support-ticket-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:persistence.support-ticket-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-background-task-access-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -746,6 +775,20 @@ profile:
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
       module_ref: builtin://memstack/http/events-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-support-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/support-routes
       enabled: true
       config: {}
       inject:
