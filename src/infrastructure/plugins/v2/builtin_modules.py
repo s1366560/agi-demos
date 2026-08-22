@@ -98,6 +98,9 @@ def builtin_runtime_definitions_v2(
         builtin_project_my_work_http_routes_definition_v2,
     )
     from .builtin_system_http_routes import builtin_system_http_routes_definition_v2
+    from .builtin_tenant_webhooks_http_routes import (
+        builtin_tenant_webhooks_http_routes_definition_v2,
+    )
 
     return (
         PluginDefinitionV2(
@@ -124,6 +127,7 @@ def builtin_runtime_definitions_v2(
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
+        builtin_tenant_webhooks_http_routes_definition_v2(),
         builtin_system_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
