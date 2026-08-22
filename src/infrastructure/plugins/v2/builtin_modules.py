@@ -104,6 +104,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_project_my_work_http_routes import (
         builtin_project_my_work_http_routes_definition_v2,
     )
+    from .builtin_projects_http_routes import builtin_projects_http_routes_definition_v2
     from .builtin_smtp_config_http_routes import (
         builtin_smtp_config_http_routes_definition_v2,
     )
@@ -140,6 +141,7 @@ def builtin_runtime_definitions_v2(
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
+        builtin_projects_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
         builtin_trust_workspace_http_routes_definition_v2(),
         builtin_smtp_config_http_routes_definition_v2(),

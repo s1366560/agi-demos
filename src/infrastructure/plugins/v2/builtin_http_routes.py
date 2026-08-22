@@ -24,6 +24,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "invitations",
         "invitations-public",
         "project-my-work",
+        "projects",
         "smtp-config",
         "system",
         "tenant-webhooks",

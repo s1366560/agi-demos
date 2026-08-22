@@ -170,6 +170,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
     (
         ("builtin-billing-http-routes", "billing"),
         ("builtin-project-my-work-http-routes", "project-my-work"),
+        ("builtin-projects-http-routes", "projects"),
         ("builtin-system-http-routes", "system"),
         ("builtin-tenant-webhooks-http-routes", "tenant-webhooks"),
         ("builtin-invitations-http-routes", "invitations"),
