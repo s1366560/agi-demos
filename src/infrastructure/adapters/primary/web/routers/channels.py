@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jsonschema import Draft7Validator, Draft202012Validator
@@ -50,6 +50,10 @@ from src.infrastructure.agent.plugins.registry import (
     get_plugin_registry,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+)
 from src.infrastructure.plugins.v2.boundary import current_generation_v2
 from src.infrastructure.plugins.v2.channel_adapters import (
     CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
@@ -61,6 +65,17 @@ from src.infrastructure.security.encryption_service import get_encryption_servic
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["channels"])
+
+
+def _raise_plugin_protocol_v1_mutation_frozen() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+            "message": _("Plugin protocol V1 mutations are frozen; use the V2 plugin marketplace"),
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
+    )
 
 
 async def verify_project_access(
@@ -1370,17 +1385,7 @@ async def install_tenant_plugin(
 ) -> PluginActionResponse:
     """Install plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.install_plugin(data.requirement)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed")
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1395,17 +1400,7 @@ async def enable_tenant_plugin(
 ) -> PluginActionResponse:
     """Enable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=True,
-        tenant_id=tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1420,17 +1415,7 @@ async def disable_tenant_plugin(
 ) -> PluginActionResponse:
     """Disable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=False,
-        tenant_id=tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1445,18 +1430,7 @@ async def uninstall_tenant_plugin(
 ) -> PluginActionResponse:
     """Uninstall plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.uninstall_plugin(plugin_name)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Plugin uninstall failed"),
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1470,13 +1444,7 @@ async def reload_tenant_plugins(
 ) -> PluginActionResponse:
     """Reload plugins from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.reload_plugins()
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.get(
@@ -1520,17 +1488,7 @@ async def install_project_plugin(
 ) -> PluginActionResponse:
     """Install a plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.install_plugin(data.requirement)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed")
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1545,18 +1503,7 @@ async def enable_project_plugin(
 ) -> PluginActionResponse:
     """Enable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=True,
-        tenant_id=project_tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1571,18 +1518,7 @@ async def disable_project_plugin(
 ) -> PluginActionResponse:
     """Disable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.set_plugin_enabled(
-        plugin_name,
-        enabled=False,
-        tenant_id=project_tenant_id,
-    )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1597,18 +1533,7 @@ async def uninstall_project_plugin(
 ) -> PluginActionResponse:
     """Uninstall plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.uninstall_plugin(plugin_name)
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Plugin uninstall failed"),
-        )
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(
@@ -1622,13 +1547,7 @@ async def reload_project_plugins(
 ) -> PluginActionResponse:
     """Reload runtime plugin discovery and registrations."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    control_plane = _build_plugin_control_plane()
-    result = await control_plane.reload_plugins()
-    return PluginActionResponse(
-        success=True,
-        message=result.message,
-        details=result.details,
-    )
+    _raise_plugin_protocol_v1_mutation_frozen()
 
 
 @router.post(

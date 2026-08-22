@@ -85,6 +85,57 @@ def mock_db_session():
     return session
 
 
+@pytest.mark.unit
+def test_all_v1_plugin_mutation_routes_are_frozen(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    """Every legacy mutation route must direct callers to DesiredBundleSetV2."""
+    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+    from src.infrastructure.adapters.secondary.persistence.database import get_db
+
+    async def override_get_db():
+        yield MagicMock(spec=AsyncSession)
+
+    async def override_get_current_user() -> User:
+        return User(id="u-1", email="user@example.com", hashed_password="hash")
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    requests = (
+        ("/api/v1/channels/tenants/tenant-1/plugins/install", {"requirement": "demo-package"}),
+        ("/api/v1/channels/tenants/tenant-1/plugins/demo/enable", None),
+        ("/api/v1/channels/tenants/tenant-1/plugins/demo/disable", None),
+        ("/api/v1/channels/tenants/tenant-1/plugins/demo/uninstall", None),
+        ("/api/v1/channels/tenants/tenant-1/plugins/reload", None),
+        ("/api/v1/channels/projects/project-1/plugins/install", {"requirement": "demo-package"}),
+        ("/api/v1/channels/projects/project-1/plugins/demo/enable", None),
+        ("/api/v1/channels/projects/project-1/plugins/demo/disable", None),
+        ("/api/v1/channels/projects/project-1/plugins/demo/uninstall", None),
+        ("/api/v1/channels/projects/project-1/plugins/reload", None),
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+            new=AsyncMock(),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+            new=AsyncMock(),
+        ),
+    ):
+        responses = [client.post(path, json=payload) for path, payload in requests]
+
+    for response in responses:
+        assert response.status_code == 409
+        assert response.json()["detail"] == {
+            "code": "plugin_protocol_v1_mutation_frozen",
+            "message": "Plugin protocol V1 mutations are frozen; use the V2 plugin marketplace",
+            "migration_target": "/api/v1/plugin-marketplace",
+        }
+
+
 @pytest.fixture
 def mock_current_user():
     """Create a mock current user."""
@@ -1513,14 +1564,9 @@ class TestPluginRuntimeReconcile:
         assert "secret-reconcile-token" not in caplog.text
 
     @pytest.mark.asyncio
-    async def test_reload_plugins_includes_channel_reload_plan(self, mock_db_session):
-        """Reload action should attach channel reconcile summary when manager is running."""
+    async def test_reload_project_plugins_rejects_frozen_v1_mutation(self, mock_db_session):
+        """Project plugin mutation must move through the V2 marketplace authority."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
-        runtime_manager = MagicMock()
-        runtime_manager.reload = AsyncMock(return_value=[])
-        reload_plan = SimpleNamespace(
-            summary=lambda: {"add": 1, "remove": 0, "restart": 0, "unchanged": 2}
-        )
 
         with (
             patch(
@@ -1528,27 +1574,19 @@ class TestPluginRuntimeReconcile:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_runtime_manager",
-                return_value=runtime_manager,
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
-                return_value=object(),
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.reload_channel_manager_connections",
-                new=AsyncMock(return_value=reload_plan),
-            ),
+                "src.infrastructure.adapters.primary.web.routers.channels._build_plugin_control_plane"
+            ) as control_plane,
+            pytest.raises(HTTPException) as exc_info,
         ):
-            response = await reload_project_plugins(
+            await reload_project_plugins(
                 project_id="project-1",
                 db=mock_db_session,
                 current_user=current_user,
             )
 
-        assert response.success is True
-        assert response.details is not None
-        assert response.details["channel_reload_plan"]["add"] == 1
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "plugin_protocol_v1_mutation_frozen"
+        control_plane.assert_not_called()
 
 
 class TestTenantPluginEndpoints:
@@ -1627,14 +1665,9 @@ class TestTenantPluginEndpoints:
         assert response.items[0].env_vars == {"feishu": ["FEISHU_APP_ID"]}
 
     @pytest.mark.asyncio
-    async def test_reload_tenant_plugins_includes_channel_reload_plan(self, mock_db_session):
-        """Tenant reload should trigger channel runtime reconcile summary."""
+    async def test_reload_tenant_plugins_rejects_frozen_v1_mutation(self, mock_db_session):
+        """Tenant reload must move through the V2 marketplace authority."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
-        runtime_manager = MagicMock()
-        runtime_manager.reload = AsyncMock(return_value=[])
-        reload_plan = SimpleNamespace(
-            summary=lambda: {"add": 0, "remove": 1, "restart": 1, "unchanged": 0}
-        )
 
         with (
             patch(
@@ -1642,27 +1675,19 @@ class TestTenantPluginEndpoints:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_runtime_manager",
-                return_value=runtime_manager,
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
-                return_value=object(),
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.reload_channel_manager_connections",
-                new=AsyncMock(return_value=reload_plan),
-            ),
+                "src.infrastructure.adapters.primary.web.routers.channels._build_plugin_control_plane"
+            ) as control_plane,
+            pytest.raises(HTTPException) as exc_info,
         ):
-            response = await reload_tenant_plugins(
+            await reload_tenant_plugins(
                 tenant_id="tenant-1",
                 db=mock_db_session,
                 current_user=current_user,
             )
 
-        assert response.success is True
-        assert response.details is not None
-        assert response.details["channel_reload_plan"]["remove"] == 1
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "plugin_protocol_v1_mutation_frozen"
+        control_plane.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_tenant_schema_endpoint_returns_metadata(self, mock_db_session):
@@ -2175,11 +2200,9 @@ class TestTenantPluginEndpoints:
         legacy_runtime.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_enable_tenant_plugin_uses_tenant_scope(self, mock_db_session):
-        """Tenant enable should pass tenant_id into runtime manager state toggle."""
+    async def test_enable_tenant_plugin_rejects_frozen_v1_mutation(self, mock_db_session):
+        """Tenant enable must not mutate the legacy runtime registry."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
-        runtime_manager = MagicMock()
-        runtime_manager.set_plugin_enabled = AsyncMock(return_value=[])
 
         with (
             patch(
@@ -2187,40 +2210,25 @@ class TestTenantPluginEndpoints:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_runtime_manager",
-                return_value=runtime_manager,
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
-                return_value=None,
-            ),
+                "src.infrastructure.adapters.primary.web.routers.channels._build_plugin_control_plane"
+            ) as control_plane,
+            pytest.raises(HTTPException) as exc_info,
         ):
-            response = await enable_tenant_plugin(
+            await enable_tenant_plugin(
                 tenant_id="tenant-1",
                 plugin_name="feishu-channel-plugin",
                 db=mock_db_session,
                 current_user=current_user,
             )
 
-        assert response.success is True
-        runtime_manager.set_plugin_enabled.assert_awaited_once_with(
-            "feishu-channel-plugin",
-            enabled=True,
-            tenant_id="tenant-1",
-        )
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "plugin_protocol_v1_mutation_frozen"
+        control_plane.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_uninstall_tenant_plugin_calls_runtime_manager(self, mock_db_session):
-        """Tenant uninstall should delegate to runtime manager uninstall flow."""
+    async def test_uninstall_tenant_plugin_rejects_frozen_v1_mutation(self, mock_db_session):
+        """Tenant uninstall must not mutate the legacy runtime registry."""
         current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
-        runtime_manager = MagicMock()
-        runtime_manager.uninstall_plugin = AsyncMock(
-            return_value={
-                "success": True,
-                "plugin_name": "feishu-channel-plugin",
-                "package": "memstack-plugin-feishu",
-            }
-        )
 
         with (
             patch(
@@ -2228,23 +2236,20 @@ class TestTenantPluginEndpoints:
                 new=AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_runtime_manager",
-                return_value=runtime_manager,
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
-                return_value=None,
-            ),
+                "src.infrastructure.adapters.primary.web.routers.channels._build_plugin_control_plane"
+            ) as control_plane,
+            pytest.raises(HTTPException) as exc_info,
         ):
-            response = await uninstall_tenant_plugin(
+            await uninstall_tenant_plugin(
                 tenant_id="tenant-1",
                 plugin_name="feishu-channel-plugin",
                 db=mock_db_session,
                 current_user=current_user,
             )
 
-        assert response.success is True
-        runtime_manager.uninstall_plugin.assert_awaited_once_with("feishu-channel-plugin")
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "plugin_protocol_v1_mutation_frozen"
+        control_plane.assert_not_called()
 
 
 class TestConfigConnectionTest:

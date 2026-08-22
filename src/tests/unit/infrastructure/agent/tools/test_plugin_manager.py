@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mutation_ledger import MutationLedger
 from src.infrastructure.agent.tools.plugin_manager import (
+    _pm_handle_enable_disable,
+    _pm_handle_install,
+    _pm_handle_reload,
+    _pm_handle_uninstall,
     plugin_manager_tool,
 )
 
@@ -26,6 +30,17 @@ def _make_ctx(**overrides: Any) -> ToolContext:
     }
     defaults.update(overrides)
     return ToolContext(**defaults)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_plugin_manager_mutation_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.plugin_manager._pm_mutation_ledger",
+        MutationLedger(tmp_path / "mutation-ledger.json"),
+    )
 
 
 @pytest.mark.unit
@@ -69,6 +84,33 @@ async def test_plugin_manager_list_action(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["install", "enable", "disable", "reload", "uninstall"])
+async def test_plugin_manager_rejects_frozen_v1_mutations(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+) -> None:
+    """Model-visible plugin mutations must use DesiredBundleSetV2 publication."""
+    manager_factory = MagicMock()
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.plugin_manager.get_plugin_runtime_manager",
+        manager_factory,
+    )
+
+    result = await plugin_manager_tool.execute(
+        _make_ctx(),
+        action=action,
+        requirement="demo-package",
+        plugin_name="demo-plugin",
+    )
+
+    assert result.is_error is True
+    assert result.metadata["error_code"] == "plugin_protocol_v1_mutation_frozen"
+    assert result.metadata["migration_target"] == "/api/v1/plugin-marketplace"
+    manager_factory.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_plugin_manager_disable_emits_toolset_changed_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -95,7 +137,7 @@ async def test_plugin_manager_disable_emits_toolset_changed_event(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="disable", plugin_name="demo-plugin")
+    result = await _pm_handle_enable_disable(ctx, "disable", "demo-plugin", False)
     pending = ctx.consume_pending_events()
 
     assert result.title == "Plugin disabled"
@@ -150,7 +192,7 @@ async def test_plugin_manager_disable_includes_provenance_summary(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="disable", plugin_name="demo-plugin")
+    result = await _pm_handle_enable_disable(ctx, "disable", "demo-plugin", False)
     pending = ctx.consume_pending_events()
 
     assert result.metadata["provenance"]["changed"] == ["demo-plugin"]
@@ -190,7 +232,7 @@ async def test_plugin_manager_disable_records_mutation_audit_and_rollback(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="disable", plugin_name="demo-plugin")
+    result = await _pm_handle_enable_disable(ctx, "disable", "demo-plugin", False)
     pending = ctx.consume_pending_events()
 
     assert result.metadata["rollback"]["action"] == "enable"
@@ -229,7 +271,7 @@ async def test_plugin_manager_uninstall_action(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="uninstall", plugin_name="demo-plugin")
+    result = await _pm_handle_uninstall(ctx, "demo-plugin", False)
     pending = ctx.consume_pending_events()
 
     assert result.title == "Plugin uninstalled"
@@ -254,7 +296,7 @@ async def test_plugin_manager_install_requires_requirement(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="install")
+    result = await _pm_handle_install(ctx, "", False)
 
     assert result.title == "Plugin Manager Failed"
     assert result.metadata["error"] == "requirement is required for install action"
@@ -284,7 +326,7 @@ async def test_plugin_manager_reload_dry_run_returns_plan(
     )
 
     ctx = _make_ctx()
-    result = await plugin_manager_tool.execute(ctx, action="reload", dry_run=True)
+    result = await _pm_handle_reload(ctx, True)
 
     assert result.title == "Plugin reload plan"
     assert result.metadata["dry_run"] is True
@@ -334,9 +376,9 @@ async def test_plugin_manager_blocks_repeated_mutation_fingerprint(
     )
 
     ctx1 = _make_ctx()
-    first = await plugin_manager_tool.execute(ctx1, action="disable", plugin_name="demo-plugin")
+    first = await _pm_handle_enable_disable(ctx1, "disable", "demo-plugin", False)
     ctx2 = _make_ctx()
-    second = await plugin_manager_tool.execute(ctx2, action="disable", plugin_name="demo-plugin")
+    second = await _pm_handle_enable_disable(ctx2, "disable", "demo-plugin", False)
 
     assert first.title == "Plugin disabled"
     assert second.title == "Plugin Manager Failed"

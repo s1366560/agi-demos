@@ -1,4 +1,4 @@
-"""Tool for plugin runtime install/list/enable/disable/reload operations."""
+"""Read-only V1 plugin inventory tool with fail-closed mutation compatibility."""
 
 from __future__ import annotations
 
@@ -22,6 +22,10 @@ from src.infrastructure.agent.tools.self_modifying_lifecycle import (
     SelfModifyingLifecycleOrchestrator,
 )
 from src.infrastructure.agent.tools.tool_mutation_guard import build_mutation_fingerprint
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,6 @@ class _MutationContext:
     rollback: dict[str, Any] = field(default_factory=dict)
     reload_plan: dict[str, Any] = field(default_factory=dict)
     mutation_audit: dict[str, Any] = field(default_factory=dict)
-
 
 
 def _serialize_diagnostic(diagnostic: Any) -> dict[str, Any]:
@@ -138,18 +141,12 @@ def _pm_build_provenance_summary(
     after_snapshot: list[Any],
 ) -> dict[str, Any]:
     """Build a before/after provenance dict from plugin snapshots."""
-    before_by_name: dict[str, Any] = {
-        item["name"]: item for item in before_snapshot
-    }
-    after_by_name: dict[str, Any] = {
-        item["name"]: item for item in after_snapshot
-    }
+    before_by_name: dict[str, Any] = {item["name"]: item for item in before_snapshot}
+    after_by_name: dict[str, Any] = {item["name"]: item for item in after_snapshot}
     before_names = set(before_by_name.keys())
     after_names = set(after_by_name.keys())
     changed = sorted(
-        name
-        for name in (before_names & after_names)
-        if before_by_name[name] != after_by_name[name]
+        name for name in (before_names & after_names) if before_by_name[name] != after_by_name[name]
     )
     return {
         "before_count": len(before_snapshot),
@@ -174,6 +171,7 @@ def _pm_format_plugin_list(plugins: list[Any]) -> str:
             f"- {item['name']} [{enabled}] source={source} package={package}",
         )
     return "\n".join(lines)
+
 
 # ---------------------------------------------------------------------------
 # Mutation lifecycle helpers (module-level, shared by all action handlers)
@@ -207,7 +205,9 @@ def _pm_init_mutation_context(
         requirement=requirement,
     )
     ctx.mutation_fingerprint = _pm_build_mutation_fingerprint(
-        action=action, plugin_name=plugin_name, requirement=requirement,
+        action=action,
+        plugin_name=plugin_name,
+        requirement=requirement,
     )
     ctx.mutation_guard = _pm_evaluate_mutation_guard(ctx.mutation_fingerprint)
     ctx.rollback = _pm_build_rollback_metadata(
@@ -257,9 +257,7 @@ def _pm_build_mutation_fingerprint(
         "tenant_id": _pm_tenant_id,
         "project_id": _pm_project_id,
     }
-    normalized = {
-        k: v for k, v in payload.items() if v is not None and v != ""
-    }
+    normalized = {k: v for k, v in payload.items() if v is not None and v != ""}
     return build_mutation_fingerprint(TOOL_NAME, normalized)
 
 
@@ -369,52 +367,63 @@ def _pm_build_rollback_metadata(
         "reason": "",
     }
     if action == "enable" and plugin_name:
-        rollback.update({
-            "available": True,
-            "action": "disable",
-            "inputs": {"plugin_name": plugin_name},
-            "reason": "inverse enable by disabling the same plugin",
-        })
+        rollback.update(
+            {
+                "available": True,
+                "action": "disable",
+                "inputs": {"plugin_name": plugin_name},
+                "reason": "inverse enable by disabling the same plugin",
+            }
+        )
         return rollback
     if action == "disable" and plugin_name:
-        rollback.update({
-            "available": True,
-            "action": "enable",
-            "inputs": {"plugin_name": plugin_name},
-            "reason": "inverse disable by enabling the same plugin",
-        })
+        rollback.update(
+            {
+                "available": True,
+                "action": "enable",
+                "inputs": {"plugin_name": plugin_name},
+                "reason": "inverse disable by enabling the same plugin",
+            }
+        )
         return rollback
     if action == "reload":
-        rollback.update({
-            "available": True,
-            "action": "reload",
-            "inputs": {},
-            "reason": "re-apply runtime discovery reload",
-        })
+        rollback.update(
+            {
+                "available": True,
+                "action": "reload",
+                "inputs": {},
+                "reason": "re-apply runtime discovery reload",
+            }
+        )
         return rollback
     if action == "install":
         added_plugins = list((provenance or {}).get("added") or [])
         if added_plugins:
-            rollback.update({
-                "available": True,
-                "action": "uninstall",
-                "inputs": {"plugin_names": added_plugins},
-                "reason": "uninstall newly added plugins",
-            })
+            rollback.update(
+                {
+                    "available": True,
+                    "action": "uninstall",
+                    "inputs": {"plugin_names": added_plugins},
+                    "reason": "uninstall newly added plugins",
+                }
+            )
         else:
             rollback["reason"] = "no added plugins detected for rollback"
         return rollback
     if action == "uninstall":
         resolved = requirement or _pm_resolve_requirement_for_plugin(
-            before_snapshot, plugin_name,
+            before_snapshot,
+            plugin_name,
         )
         if resolved:
-            rollback.update({
-                "available": True,
-                "action": "install",
-                "inputs": {"requirement": resolved},
-                "reason": "reinstall plugin requirement",
-            })
+            rollback.update(
+                {
+                    "available": True,
+                    "action": "install",
+                    "inputs": {"requirement": resolved},
+                    "reason": "reinstall plugin requirement",
+                }
+            )
         else:
             rollback["reason"] = "missing package requirement for reinstall rollback"
         return rollback
@@ -614,22 +623,24 @@ async def _pm_finalize_mutation(
     details["mutation_transaction"] = mctx.transaction.to_dict()
 
     # Emit toolset_changed event via ctx.emit (replaces _pending_events)
-    await tool_ctx.emit({
-        "type": "toolset_changed",
-        "data": {
-            "source": TOOL_NAME,
-            "tenant_id": _pm_tenant_id,
-            "project_id": _pm_project_id,
-            "action": mctx.action,
-            "plugin_name": mctx.plugin_name,
-            "trace_id": mctx.trace_id,
-            "mutation_fingerprint": mctx.mutation_fingerprint,
-            "reload_plan": mctx.reload_plan,
-            "details": details,
-            "lifecycle": lifecycle,
-        },
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    await tool_ctx.emit(
+        {
+            "type": "toolset_changed",
+            "data": {
+                "source": TOOL_NAME,
+                "tenant_id": _pm_tenant_id,
+                "project_id": _pm_project_id,
+                "action": mctx.action,
+                "plugin_name": mctx.plugin_name,
+                "trace_id": mctx.trace_id,
+                "mutation_fingerprint": mctx.mutation_fingerprint,
+                "reload_plan": mctx.reload_plan,
+                "details": details,
+                "lifecycle": lifecycle,
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    )
 
     metadata: dict[str, Any] = {
         "action": mctx.action,
@@ -720,7 +731,7 @@ def _pm_handle_list(ctx: ToolContext) -> ToolResult:
     )
 
 
-async def _pm_handle_install(
+async def _pm_handle_install(  # pyright: ignore[reportUnusedFunction]
     ctx: ToolContext,
     requirement: str,
     dry_run: bool,
@@ -767,7 +778,7 @@ async def _pm_handle_install(
     )
 
 
-async def _pm_handle_enable_disable(
+async def _pm_handle_enable_disable(  # pyright: ignore[reportUnusedFunction]
     ctx: ToolContext,
     action: str,
     plugin_name: str,
@@ -802,7 +813,9 @@ async def _pm_handle_enable_disable(
         )
 
     diagnostics = await manager.set_plugin_enabled(
-        plugin_name, enabled=enabled, tenant_id=_pm_tenant_id,
+        plugin_name,
+        enabled=enabled,
+        tenant_id=_pm_tenant_id,
     )
     result_details: dict[str, Any] = {
         "diagnostics": [_serialize_diagnostic(d) for d in diagnostics],
@@ -817,7 +830,7 @@ async def _pm_handle_enable_disable(
     )
 
 
-async def _pm_handle_uninstall(
+async def _pm_handle_uninstall(  # pyright: ignore[reportUnusedFunction]
     ctx: ToolContext,
     plugin_name: str,
     dry_run: bool,
@@ -863,7 +876,7 @@ async def _pm_handle_uninstall(
     )
 
 
-async def _pm_handle_reload(
+async def _pm_handle_reload(  # pyright: ignore[reportUnusedFunction]
     ctx: ToolContext,
     dry_run: bool,
 ) -> ToolResult:
@@ -903,7 +916,7 @@ async def _pm_handle_reload(
 # ---------------------------------------------------------------------------
 
 
-def _pm_as_bool(value: Any) -> bool:
+def _pm_as_bool(value: Any) -> bool:  # pyright: ignore[reportUnusedFunction]
     """Coerce a value to bool, matching PluginManagerTool._as_bool."""
     if isinstance(value, bool):
         return value
@@ -912,15 +925,27 @@ def _pm_as_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _pm_v1_mutation_frozen(action: str) -> ToolResult:
+    return ToolResult(
+        output=(
+            f"Error: plugin protocol V1 mutations are frozen; use {PLUGIN_MARKETPLACE_V2_PATH}"
+        ),
+        is_error=True,
+        title="Plugin Manager Mutation Frozen",
+        metadata={
+            "action": action,
+            "error_code": PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
+    )
+
+
 @tool_define(
     name="plugin_manager",
     description=(
-        "Manage runtime plugins with list/install/enable/disable/reload actions. "
-        "Plugins can be discovered from local folders "
-        "`.memstack/plugins/<name>/plugin.py` "
-        "or Python entry points in group 'memstack.agent_plugins'. "
-        "Use install to pip-install a package, then reload or enable specific "
-        "plugin names."
+        "List the frozen protocol V1 runtime inventory. Legacy install, enable, "
+        "disable, reload, and uninstall actions return a migration error; mutate "
+        "DesiredBundleSetV2 through the V2 plugin marketplace instead."
     ),
     parameters={
         "type": "object",
@@ -928,13 +953,12 @@ def _pm_as_bool(value: Any) -> bool:
             "action": {
                 "type": "string",
                 "enum": ["list", "install", "enable", "disable", "reload", "uninstall"],
-                "description": "Plugin management action. Default: list",
+                "description": "Read with list; mutation actions are frozen. Default: list",
             },
             "requirement": {
                 "type": "string",
                 "description": (
-                    "Package requirement for install action "
-                    "(e.g. my-plugin-package==1.0.0)"
+                    "Package requirement for install action (e.g. my-plugin-package==1.0.0)"
                 ),
             },
             "plugin_name": {
@@ -943,9 +967,7 @@ def _pm_as_bool(value: Any) -> bool:
             },
             "dry_run": {
                 "type": "boolean",
-                "description": (
-                    "When true, return mutation/reload plan without applying changes."
-                ),
+                "description": "Retained for V1 compatibility; mutation actions are frozen.",
             },
         },
         "required": [],
@@ -962,28 +984,14 @@ async def plugin_manager_tool(
     plugin_name: str = "",
     dry_run: bool | str = False,
 ) -> ToolResult:
-    """Manage runtime plugins (functional @tool_define equivalent)."""
+    """List V1 inventory and reject every legacy mutation action."""
     action = str(action).strip().lower() or "list"
-    dry_run_bool = _pm_as_bool(dry_run)
-    requirement = str(requirement).strip()
-    plugin_name = str(plugin_name).strip()
 
     if action == "list":
         return _pm_handle_list(ctx)
 
-    if action == "install":
-        return await _pm_handle_install(ctx, requirement, dry_run_bool)
-
-    if action in {"enable", "disable"}:
-        return await _pm_handle_enable_disable(
-            ctx, action, plugin_name, dry_run_bool,
-        )
-
-    if action == "uninstall":
-        return await _pm_handle_uninstall(ctx, plugin_name, dry_run_bool)
-
-    if action == "reload":
-        return await _pm_handle_reload(ctx, dry_run_bool)
+    if action in {"install", "enable", "disable", "reload", "uninstall"}:
+        return _pm_v1_mutation_frozen(action)
 
     return ToolResult(
         output=f"Error: Unsupported action: {action}",
