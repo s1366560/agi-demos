@@ -173,6 +173,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
             "builtin-enhanced-search-http-routes",
             "enhanced-search, enhanced-search-memory",
         ),
+        ("builtin-data-export-http-routes", "data-export"),
         ("builtin-episodes-http-routes", "episodes"),
         ("builtin-graph-http-routes", "graph"),
         ("builtin-graph-stores-http-routes", "graph-stores"),

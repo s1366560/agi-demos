@@ -9,11 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Use Cases & DI Container
-from src.domain.ports.services.graph_store_port import GraphStorePort
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_db,
-    get_graph_store,
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
+    GraphApplicationAuthorityV2,
+    graph_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import (
     has_global_admin_access,
@@ -189,12 +188,15 @@ async def export_data(
     include_relationships: bool = Body(True, description="Include relationship data"),
     include_communities: bool = Body(True, description="Include community data"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Export graph data as JSON.
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         effective_tenant_id, effective_project_id = await _resolve_graph_export_scope(
             tenant_id,
@@ -226,8 +228,9 @@ async def get_graph_stats(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     project_id: str | None = Query(None, description="Filter by project ID"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get graph statistics.
@@ -238,6 +241,8 @@ async def get_graph_stats(
     - Number of communities
     - Number of relationships (edges)
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         effective_tenant_id, effective_project_id = await _resolve_graph_export_scope(
             tenant_id,
@@ -274,8 +279,9 @@ async def cleanup_data(
     project_id: str | None = Query(None, description="Filter by project ID"),
     body: dict[str, Any] | None = Body(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    graph_store: GraphStorePort | None = Depends(get_graph_store),
+    graph_application: GraphApplicationAuthorityV2 = Depends(
+        graph_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Clean up old graph data.
@@ -283,6 +289,8 @@ async def cleanup_data(
     This endpoint can be used to remove old episodes and their associated
     entities and relationships. Use with caution!
     """
+    db = graph_application.db
+    graph_store = graph_application.services.graph_store
     try:
         effective_dry_run = _normalize_cleanup_dry_run(
             _cleanup_body_value(body, "dry_run", dry_run)
