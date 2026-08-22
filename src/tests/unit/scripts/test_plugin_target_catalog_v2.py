@@ -14,20 +14,34 @@ _CATALOG = _ROOT / "shared/catalogs/plugin-module-catalog.v2.json"
 _BOOTSTRAP = _ROOT / "shared/profiles/memstack-default-bootstrap.v2.json"
 
 _EXPECTED_TARGET_MODULES = {
-    "rust-server": "builtin://memstack/rust-server/generation-host",
-    "desktop-sidecar": "builtin://memstack/desktop-sidecar/local-capability",
-    "web": "builtin://memstack/web/renderer-host",
-    "desktop-renderer": "builtin://memstack/desktop/renderer-host",
+    "rust-server": frozenset({"builtin://memstack/rust-server/generation-host"}),
+    "desktop-sidecar": frozenset({"builtin://memstack/desktop-sidecar/local-capability"}),
+    "web": frozenset(
+        {
+            "builtin://memstack/web/renderer-host",
+            "builtin://memstack/web/renderer-contribution-registry",
+            "builtin://memstack/web/renderer-contribution",
+        }
+    ),
+    "desktop-renderer": frozenset(
+        {
+            "builtin://memstack/desktop/renderer-host",
+            "builtin://memstack/desktop/renderer-contribution-registry",
+            "builtin://memstack/desktop/renderer-contribution",
+        }
+    ),
 }
 
 
 @pytest.mark.unit
-def test_generated_catalog_has_one_production_host_module_per_non_python_target() -> None:
+def test_generated_catalog_has_exact_production_modules_per_non_python_target() -> None:
     catalog = json.loads(_CATALOG.read_text(encoding="utf-8"))
 
-    for target, module_ref in _EXPECTED_TARGET_MODULES.items():
-        matching = [module for module in catalog["modules"] if target in module["targets"]]
-        assert [module["module_ref"] for module in matching] == [module_ref]
+    for target, expected_module_refs in _EXPECTED_TARGET_MODULES.items():
+        matching = {
+            module["module_ref"] for module in catalog["modules"] if target in module["targets"]
+        }
+        assert matching == expected_module_refs
 
 
 @pytest.mark.unit
@@ -39,6 +53,9 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for module in manifest.modules
     }
 
-    for target, module_ref in _EXPECTED_TARGET_MODULES.items():
-        assert target in {item.value for item in modules[module_ref]}
-        assert any(entry.module_ref == module_ref and entry.enabled for entry in snapshot.entries)
+    for target, module_refs in _EXPECTED_TARGET_MODULES.items():
+        for module_ref in module_refs:
+            assert target in {item.value for item in modules[module_ref]}
+            assert any(
+                entry.module_ref == module_ref and entry.enabled for entry in snapshot.entries
+            )

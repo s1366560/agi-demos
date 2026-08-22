@@ -11,7 +11,7 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   const app = source("src/App.tsx");
 
   assert.match(hook, /RendererPluginRuntimeV2\(\s*["']desktop-renderer["']/u);
-  assert.match(hook, /desktopRendererHostDefinitionV2/u);
+  assert.match(hook, /desktopRendererDefinitionsV2/u);
   assert.match(hook, /desktopApiFetch\(/u);
   assert.doesNotMatch(hook, /DesktopApiClient/u);
   assert.match(hook, /runtime\.bootstrap\(bootstrapProfileV2\)/u);

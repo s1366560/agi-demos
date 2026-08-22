@@ -8,7 +8,7 @@ import {
   PluginSnapshotReconcilerV2,
   type ControlPlaneDistributionV2,
   type ProfileSnapshotV2,
-  webRendererHostDefinitionV2,
+  webRendererDefinitionsV2,
 } from '@agistack/plugin-runtime';
 
 import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
@@ -61,7 +61,7 @@ describe('protocol-v2 control-plane distribution', () => {
   it('publishes once and treats the exact publication as idempotent', async () => {
     const snapshot = await snapshotAt(12);
     const reconciler = new PluginSnapshotReconcilerV2(
-      new LoaderV2([webRendererHostDefinitionV2], 'web')
+      new LoaderV2(webRendererDefinitionsV2, 'web')
     );
 
     const first = await reconciler.apply(distribution(snapshot, 8));
@@ -80,7 +80,7 @@ describe('protocol-v2 control-plane distribution', () => {
   it('can close and reapply after a StrictMode lifecycle restart', async () => {
     const snapshot = await snapshotAt(17);
     const reconciler = new PluginSnapshotReconcilerV2(
-      new LoaderV2([webRendererHostDefinitionV2], 'web')
+      new LoaderV2(webRendererDefinitionsV2, 'web')
     );
     const first = await reconciler.apply(distribution(snapshot, 12));
     const firstGeneration = reconciler.manager.current;
@@ -104,7 +104,7 @@ describe('protocol-v2 control-plane distribution', () => {
     const current = await snapshotAt(13);
     const conflicting = await snapshotAt(14);
     const reconciler = new PluginSnapshotReconcilerV2(
-      new LoaderV2([webRendererHostDefinitionV2], 'web')
+      new LoaderV2(webRendererDefinitionsV2, 'web')
     );
     await reconciler.apply(distribution(current, 9));
 
@@ -130,12 +130,17 @@ describe('protocol-v2 control-plane distribution', () => {
   it('retains last-good when a complete candidate cannot activate', async () => {
     const emptyProjection = await snapshotAt(15, (snapshot) => {
       const { digest: _digest, ...payload } = snapshot;
+      const webModuleRefs = new Set(
+        payload.manifests.flatMap((manifest) =>
+          manifest.modules
+            .filter((module) => module.targets.includes('web'))
+            .map((module) => module.module_ref)
+        )
+      );
       return {
         ...payload,
         entries: payload.entries.map((entry) =>
-          entry.module_ref === 'builtin://memstack/web/renderer-host'
-            ? { ...entry, enabled: false }
-            : entry
+          webModuleRefs.has(entry.module_ref) ? { ...entry, enabled: false } : entry
         ),
       };
     });

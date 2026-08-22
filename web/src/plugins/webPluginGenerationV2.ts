@@ -1,12 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { RendererPluginRuntimeV2, webRendererHostDefinitionV2 } from '@agistack/plugin-runtime';
+import { RendererPluginRuntimeV2, webRendererDefinitionsV2 } from '@agistack/plugin-runtime';
 
 import { ApiError } from '../services/client/ApiError';
 import { httpClient } from '../services/client/httpClient';
 
 const POLL_INTERVAL_MS = 30_000;
-const webRendererRuntimeV2 = new RendererPluginRuntimeV2('web', [webRendererHostDefinitionV2]);
+const webRendererRuntimeV2 = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
 export type WebPluginDistributionSourceV2 = (signal: AbortSignal) => Promise<unknown | null>;

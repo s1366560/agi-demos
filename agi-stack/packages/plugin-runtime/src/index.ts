@@ -7,10 +7,7 @@ export {
 } from './distribution';
 export * from './generated';
 export * from './generatedCatalog';
-export {
-  RendererPluginRuntimeV2,
-  type RendererDataPlaneTargetV2,
-} from './renderer';
+export { RendererPluginRuntimeV2, type RendererDataPlaneTargetV2 } from './renderer';
 export {
   ContextV2,
   FiberV2,
@@ -33,3 +30,4 @@ export {
   parseProfileSnapshotV2,
 } from './validate';
 export * from './targetModules';
+export * from './rendererContributions';

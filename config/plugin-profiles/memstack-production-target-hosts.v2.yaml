@@ -44,6 +44,75 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-web-renderer-contribution-registry
+      parent_entry_id: builtin-web-renderer-host
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution-registry
+      enabled: true
+      config:
+        target: web
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-default-routes
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution
+      enabled: true
+      config:
+        id: web.default-business-routes
+        kind: route
+        order: 100
+        payload: {}
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-default-navigation
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution
+      enabled: true
+      config:
+        id: web.default-navigation
+        kind: navigation
+        order: 200
+        payload: {}
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-web-default-ui-slots
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution
+      enabled: true
+      config:
+        id: web.default-ui-slots
+        kind: ui-slot
+        order: 300
+        payload:
+          slots: []
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-renderer-host
       parent_entry_id: null
       plugin_ref: memstack-renderer-target-hosts
@@ -52,6 +121,89 @@ profile:
       config:
         strategy: native-generation-renderer-host
       inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-renderer-contribution-registry
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution-registry
+      enabled: true
+      config:
+        target: desktop-renderer
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-default-routes
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.production-routes
+        kind: route
+        order: 100
+        payload: {}
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-default-navigation
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.default-navigation
+        kind: navigation
+        order: 200
+        payload: {}
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-default-ui-slots
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.default-ui-slots
+        kind: ui-slot
+        order: 300
+        payload:
+          slots:
+            - pluginId: builtin-ui
+              slot: settings_page
+              id: plugin-settings
+              contract: ui-builtin:plugin-settings
+              moduleRef: builtin:plugin-settings
+              permission: ui.settings.plugins
+              sandbox: true
+            - pluginId: builtin-ui
+              slot: tool_result_renderer
+              id: structured-tool-result
+              contract: ui-builtin:structured-tool-result
+              moduleRef: builtin:structured-tool-result
+              permission: ui.render
+              sandbox: true
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}
       scope:
         kind: root

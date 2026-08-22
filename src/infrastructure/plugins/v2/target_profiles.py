@@ -22,6 +22,7 @@ PRODUCTION_TARGET_PROFILE_V2_PATH = (
 )
 PRODUCTION_TARGET_MANIFEST_V2_PATHS = (
     _ROOT / "config/plugin-manifests-v2/memstack-native-target-hosts.v2.json",
+    _ROOT / "config/plugin-manifests-v2/memstack-renderer-contributions.v2.json",
     _ROOT / "config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json",
 )
 

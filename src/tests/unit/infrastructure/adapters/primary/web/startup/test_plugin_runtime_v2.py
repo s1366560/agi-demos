@@ -295,7 +295,11 @@ async def test_restart_upgrades_legacy_empty_target_snapshot_with_monotonic_publ
         "builtin://memstack/rust-server/generation-host",
         "builtin://memstack/desktop-sidecar/local-capability",
         "builtin://memstack/web/renderer-host",
+        "builtin://memstack/web/renderer-contribution-registry",
+        "builtin://memstack/web/renderer-contribution",
         "builtin://memstack/desktop/renderer-host",
+        "builtin://memstack/desktop/renderer-contribution-registry",
+        "builtin://memstack/desktop/renderer-contribution",
     } <= enabled_modules
     assert (
         await PlatformPluginRepositoryV2(db_session).latest_requested_distribution()

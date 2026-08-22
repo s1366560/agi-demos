@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RendererPluginRuntimeV2,
   WEB_RENDERER_HOST_SERVICE_V2,
-  webRendererHostDefinitionV2,
+  webRendererDefinitionsV2,
 } from '@agistack/plugin-runtime';
 
 import {
@@ -38,7 +38,7 @@ afterEach(() => {
 describe('web plugin generation polling', () => {
   it('loads immediately, polls serially, and stops without discarding last-good', async () => {
     vi.useFakeTimers();
-    const runtime = new RendererPluginRuntimeV2('web', [webRendererHostDefinitionV2]);
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
     const source: WebPluginDistributionSourceV2 = vi.fn(async () => distribution());
 
     const stop = startWebPluginGenerationPollingV2(runtime, source, 100);

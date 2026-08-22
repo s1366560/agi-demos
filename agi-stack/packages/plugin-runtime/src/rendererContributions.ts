@@ -1,0 +1,222 @@
+import { RuntimeV2Error, type ContextV2, type PluginDefinitionV2 } from './runtime';
+import { desktopRendererHostDefinitionV2, webRendererHostDefinitionV2 } from './targetModules';
+
+export type RendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot';
+export type RendererContributionTargetV2 = 'web' | 'desktop-renderer';
+
+export interface RendererContributionV2 {
+  readonly id: string;
+  readonly kind: RendererContributionKindV2;
+  readonly order: number;
+  readonly payload: Readonly<Record<string, unknown>>;
+}
+
+export interface RegisteredRendererContributionV2 extends RendererContributionV2 {
+  readonly sourceEntryId: string;
+}
+
+export class RendererContributionRegistryV2 {
+  private readonly contributions = new Map<string, RegisteredRendererContributionV2>();
+
+  constructor(readonly target: RendererContributionTargetV2) {}
+
+  register(sourceEntryId: string, contribution: RendererContributionV2): () => void {
+    const key = contributionKeyV2(contribution);
+    if (this.contributions.has(key)) {
+      throw new RuntimeV2Error(
+        'renderer_contribution_conflict',
+        `renderer_contribution_conflict:${key}`
+      );
+    }
+    const registered = Object.freeze({
+      ...contribution,
+      payload: cloneAndFreezePayloadV2(contribution.payload),
+      sourceEntryId,
+    });
+    this.contributions.set(key, registered);
+    return () => {
+      if (this.contributions.get(key) === registered) {
+        this.contributions.delete(key);
+      }
+    };
+  }
+
+  list(kind?: RendererContributionKindV2): readonly RegisteredRendererContributionV2[] {
+    return Object.freeze(
+      [...this.contributions.values()]
+        .filter((contribution) => kind === undefined || contribution.kind === kind)
+        .sort(
+          (left, right) =>
+            left.order - right.order ||
+            contributionKeyV2(left).localeCompare(contributionKeyV2(right))
+        )
+    );
+  }
+}
+
+export const WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2 =
+  'service:web.renderer-contribution-registry';
+export const DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2 =
+  'service:desktop-renderer.renderer-contribution-registry';
+
+export const WEB_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2 =
+  'builtin://memstack/web/renderer-contribution-registry';
+export const WEB_RENDERER_CONTRIBUTION_MODULE_REF_V2 =
+  'builtin://memstack/web/renderer-contribution';
+export const DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2 =
+  'builtin://memstack/desktop/renderer-contribution-registry';
+export const DESKTOP_RENDERER_CONTRIBUTION_MODULE_REF_V2 =
+  'builtin://memstack/desktop/renderer-contribution';
+
+const WEB_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2 =
+  'sha256:ff9b73bb2be42465e2324b562c4e57e20aa2d466c6a40909f8b0d945392d2592';
+const WEB_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2 =
+  'sha256:5c941725e38c91a9b2eeda4dc6e7278870c40af67c9cd5d0ddad4c2a9f62603e';
+const DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2 =
+  'sha256:91c83d16b21ca69d3044af3849b5562d8fb362393c121ea0263cf16310c8eea8';
+const DESKTOP_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2 =
+  'sha256:4b1806786f85d9e87aae4d7518dbce470b376bc0a61201c331048a384472da22';
+
+export function applyWebRendererContributionRegistryV2(
+  context: ContextV2,
+  config: Readonly<Record<string, unknown>>
+): void {
+  requireTargetV2(config, 'web');
+  context.provide(
+    WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+    new RendererContributionRegistryV2('web')
+  );
+}
+
+export function applyWebRendererContributionV2(
+  context: ContextV2,
+  config: Readonly<Record<string, unknown>>
+): () => void {
+  const registry = context.require<RendererContributionRegistryV2>('registry');
+  return registry.register(context.entryId, contributionFromConfigV2(config));
+}
+
+export function applyDesktopRendererContributionRegistryV2(
+  context: ContextV2,
+  config: Readonly<Record<string, unknown>>
+): void {
+  requireTargetV2(config, 'desktop-renderer');
+  context.provide(
+    DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+    new RendererContributionRegistryV2('desktop-renderer')
+  );
+}
+
+export function applyDesktopRendererContributionV2(
+  context: ContextV2,
+  config: Readonly<Record<string, unknown>>
+): () => void {
+  const registry = context.require<RendererContributionRegistryV2>('registry');
+  return registry.register(context.entryId, contributionFromConfigV2(config));
+}
+
+export const webRendererContributionRegistryDefinitionV2: PluginDefinitionV2 = Object.freeze({
+  moduleRef: WEB_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
+  contractDigest: WEB_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
+  apply: applyWebRendererContributionRegistryV2,
+});
+
+export const webRendererContributionDefinitionV2: PluginDefinitionV2 = Object.freeze({
+  moduleRef: WEB_RENDERER_CONTRIBUTION_MODULE_REF_V2,
+  contractDigest: WEB_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2,
+  apply: applyWebRendererContributionV2,
+});
+
+export const desktopRendererContributionRegistryDefinitionV2: PluginDefinitionV2 = Object.freeze({
+  moduleRef: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
+  contractDigest: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
+  apply: applyDesktopRendererContributionRegistryV2,
+});
+
+export const desktopRendererContributionDefinitionV2: PluginDefinitionV2 = Object.freeze({
+  moduleRef: DESKTOP_RENDERER_CONTRIBUTION_MODULE_REF_V2,
+  contractDigest: DESKTOP_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2,
+  apply: applyDesktopRendererContributionV2,
+});
+
+export const webRendererDefinitionsV2: readonly PluginDefinitionV2[] = Object.freeze([
+  webRendererHostDefinitionV2,
+  webRendererContributionRegistryDefinitionV2,
+  webRendererContributionDefinitionV2,
+]);
+
+export const desktopRendererDefinitionsV2: readonly PluginDefinitionV2[] = Object.freeze([
+  desktopRendererHostDefinitionV2,
+  desktopRendererContributionRegistryDefinitionV2,
+  desktopRendererContributionDefinitionV2,
+]);
+
+function contributionFromConfigV2(
+  config: Readonly<Record<string, unknown>>
+): RendererContributionV2 {
+  const { id, kind, order, payload } = config;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new RuntimeV2Error(
+      'renderer_contribution_id_required',
+      'renderer_contribution_id_required'
+    );
+  }
+  if (kind !== 'route' && kind !== 'navigation' && kind !== 'ui-slot') {
+    throw new RuntimeV2Error(
+      'renderer_contribution_kind_invalid',
+      'renderer_contribution_kind_invalid'
+    );
+  }
+  if (!Number.isSafeInteger(order)) {
+    throw new RuntimeV2Error(
+      'renderer_contribution_order_invalid',
+      'renderer_contribution_order_invalid'
+    );
+  }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new RuntimeV2Error(
+      'renderer_contribution_payload_invalid',
+      'renderer_contribution_payload_invalid'
+    );
+  }
+  return Object.freeze({
+    id,
+    kind,
+    order: order as number,
+    payload: payload as Readonly<Record<string, unknown>>,
+  });
+}
+
+function requireTargetV2(
+  config: Readonly<Record<string, unknown>>,
+  target: RendererContributionTargetV2
+): void {
+  if (config.target !== target) {
+    throw new RuntimeV2Error(
+      'renderer_contribution_target_invalid',
+      `renderer_contribution_target_invalid:${target}`
+    );
+  }
+}
+
+function contributionKeyV2(contribution: RendererContributionV2): string {
+  return `${contribution.kind}:${contribution.id}`;
+}
+
+function cloneAndFreezePayloadV2(
+  payload: Readonly<Record<string, unknown>>
+): Readonly<Record<string, unknown>> {
+  return deepFreezeV2(structuredClone(payload)) as Readonly<Record<string, unknown>>;
+}
+
+function deepFreezeV2(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreezeV2(item);
+    return Object.freeze(value);
+  }
+  if (typeof value === 'object' && value !== null) {
+    for (const item of Object.values(value)) deepFreezeV2(item);
+    return Object.freeze(value);
+  }
+  return value;
+}

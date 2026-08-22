@@ -343,6 +343,7 @@ def _generate_python_catalog(catalog: dict[str, Any], schema_hash: str) -> str:
     canonical = _canonical_document(catalog)
     lines = _header("#", schema_hash)
     lines.extend(["from typing import Final", ""])
+    lines.append("# fmt: off")
     lines.append("PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (")
     lines.extend(f"    {chunk!r}" for chunk in _string_chunks(canonical))
     lines.extend(
@@ -351,6 +352,7 @@ def _generate_python_catalog(catalog: dict[str, Any], schema_hash: str) -> str:
             "PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (",
             f"    {json.dumps(catalog['catalog_digest'])}",
             ")",
+            "# fmt: on",
             "",
             '__all__ = ["PLUGIN_MODULE_CATALOG_DIGEST_V2", "PLUGIN_MODULE_CATALOG_V2_JSON"]',
             "",
