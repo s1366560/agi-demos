@@ -18,7 +18,9 @@ from src.infrastructure.plugins.route_loader import (
 from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definitions_v2
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
-REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset({"project-my-work", "system", "tenant-webhooks"})
+REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
+    {"invitations", "project-my-work", "system", "tenant-webhooks"}
+)
 
 
 @dataclass(frozen=True, kw_only=True)
