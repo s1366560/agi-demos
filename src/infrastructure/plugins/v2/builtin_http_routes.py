@@ -19,7 +19,7 @@ from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definiti
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
 REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
-    {"invitations", "project-my-work", "system", "tenant-webhooks"}
+    {"invitations", "invitations-public", "project-my-work", "system", "tenant-webhooks"}
 )
 
 

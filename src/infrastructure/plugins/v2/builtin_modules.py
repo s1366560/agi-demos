@@ -97,6 +97,9 @@ def builtin_runtime_definitions_v2(
     from .builtin_invitations_http_routes import (
         builtin_invitations_http_routes_definition_v2,
     )
+    from .builtin_invitations_public_http_routes import (
+        builtin_invitations_public_http_routes_definition_v2,
+    )
     from .builtin_project_my_work_http_routes import (
         builtin_project_my_work_http_routes_definition_v2,
     )
@@ -133,6 +136,7 @@ def builtin_runtime_definitions_v2(
         builtin_tenant_webhooks_http_routes_definition_v2(),
         builtin_system_http_routes_definition_v2(),
         builtin_invitations_http_routes_definition_v2(),
+        builtin_invitations_public_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
         *backend_store_service_definitions_v2(),

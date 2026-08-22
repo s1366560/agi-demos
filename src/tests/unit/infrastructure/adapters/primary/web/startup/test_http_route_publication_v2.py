@@ -172,6 +172,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
         ("builtin-system-http-routes", "system"),
         ("builtin-tenant-webhooks-http-routes", "tenant-webhooks"),
         ("builtin-invitations-http-routes", "invitations"),
+        ("builtin-invitations-public-http-routes", "invitations-public"),
     ),
 )
 async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
