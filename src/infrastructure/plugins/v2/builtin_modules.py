@@ -38,6 +38,7 @@ from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
 from .sandbox_operation_services import sandbox_operation_service_definitions_v2
 from .sandbox_runtime import SandboxRuntimeFactoryV2, sandbox_service_definitions_v2
+from .schema_services import schema_service_definitions_v2
 from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
@@ -124,6 +125,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_retrieval_stores_http_routes import (
         builtin_retrieval_stores_http_routes_definition_v2,
     )
+    from .builtin_schema_http_routes import builtin_schema_http_routes_definition_v2
     from .builtin_smtp_config_http_routes import (
         builtin_smtp_config_http_routes_definition_v2,
     )
@@ -170,6 +172,7 @@ def builtin_runtime_definitions_v2(
         builtin_episodes_http_routes_definition_v2(),
         builtin_recall_http_routes_definition_v2(),
         builtin_reflection_http_routes_definition_v2(),
+        builtin_schema_http_routes_definition_v2(),
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
@@ -183,6 +186,7 @@ def builtin_runtime_definitions_v2(
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
         *reflection_service_definitions_v2(),
+        *schema_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),

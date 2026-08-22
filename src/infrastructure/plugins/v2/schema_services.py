@@ -1,0 +1,467 @@
+"""Generation-owned persistence and application seams for project schemas."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Protocol, runtime_checkable
+from uuid import uuid4
+
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.schemas.schema import (
+    EdgeTypeCreate,
+    EdgeTypeMapCreate,
+    EdgeTypeUpdate,
+    EntityTypeCreate,
+    EntityTypeUpdate,
+)
+from src.infrastructure.adapters.secondary.common.base_repository import (
+    refresh_select_statement,
+)
+from src.infrastructure.adapters.secondary.persistence.models import (
+    EdgeType,
+    EdgeTypeMap,
+    EntityType,
+    UserProject,
+)
+
+from .runtime import (
+    ContextV2,
+    OperationContextV2,
+    PluginDefinitionV2,
+    RuntimeV2Error,
+    generated_contract_digest_v2,
+)
+
+SCHEMA_PROVIDER_MODULE_V2 = "builtin://memstack/persistence/schema-provider"
+SCHEMA_PROVIDER_SERVICE_V2 = "service:persistence.schema-provider"
+SCHEMA_APPLICATION_MODULE_V2 = "builtin://memstack/application/schema-services"
+SCHEMA_APPLICATION_SERVICE_V2 = "service:application.schema-services"
+SCHEMA_PROVIDER_INJECT_V2 = "provider"
+SCHEMA_WRITE_ROLES_V2 = frozenset({"owner", "admin", "member"})
+_OPERATION_DB_SESSION_SERVICE_V2 = "service:operation.db-session"
+
+
+class SchemaServiceErrorV2(Exception):
+    """Base class for typed project-schema application failures."""
+
+
+class SchemaAccessDeniedV2(SchemaServiceErrorV2):
+    """The operation identity is not allowed to access the project schema."""
+
+
+class SchemaEntityTypeConflictV2(SchemaServiceErrorV2):
+    """An entity type with the requested project-local name already exists."""
+
+
+class SchemaEntityTypeNotFoundV2(SchemaServiceErrorV2):
+    """The requested entity type does not belong to the project."""
+
+
+class SchemaEdgeTypeConflictV2(SchemaServiceErrorV2):
+    """An edge type with the requested project-local name already exists."""
+
+
+class SchemaEdgeTypeNotFoundV2(SchemaServiceErrorV2):
+    """The requested edge type does not belong to the project."""
+
+
+class SchemaEdgeMapConflictV2(SchemaServiceErrorV2):
+    """The requested project-local edge mapping already exists."""
+
+
+class SchemaEdgeMapNotFoundV2(SchemaServiceErrorV2):
+    """The requested edge mapping does not belong to the project."""
+
+
+@runtime_checkable
+class SchemaPersistenceProtocolV2(Protocol):
+    """Persistence operations hidden behind the exact schema Provider contract."""
+
+    async def find_membership(self, *, user_id: str, project_id: str) -> UserProject | None: ...
+
+    async def list_entity_types(self, *, project_id: str) -> Sequence[EntityType]: ...
+
+    async def create_entity_type(
+        self, *, project_id: str, data: EntityTypeCreate
+    ) -> EntityType: ...
+
+    async def update_entity_type(
+        self, *, project_id: str, entity_id: str, data: EntityTypeUpdate
+    ) -> EntityType: ...
+
+    async def delete_entity_type(self, *, project_id: str, entity_id: str) -> None: ...
+
+    async def list_edge_types(self, *, project_id: str) -> Sequence[EdgeType]: ...
+
+    async def create_edge_type(self, *, project_id: str, data: EdgeTypeCreate) -> EdgeType: ...
+
+    async def update_edge_type(
+        self, *, project_id: str, edge_id: str, data: EdgeTypeUpdate
+    ) -> EdgeType: ...
+
+    async def delete_edge_type(self, *, project_id: str, edge_id: str) -> None: ...
+
+    async def list_edge_maps(self, *, project_id: str) -> Sequence[EdgeTypeMap]: ...
+
+    async def create_edge_map(self, *, project_id: str, data: EdgeTypeMapCreate) -> EdgeTypeMap: ...
+
+    async def delete_edge_map(self, *, project_id: str, map_id: str) -> None: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class SqlSchemaPersistenceV2:
+    """SQL implementation bound to one operation-owned session."""
+
+    _session: AsyncSession
+
+    async def find_membership(self, *, user_id: str, project_id: str) -> UserProject | None:
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(UserProject).where(
+                    and_(
+                        UserProject.user_id == user_id,
+                        UserProject.project_id == project_id,
+                    )
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_entity_types(self, *, project_id: str) -> Sequence[EntityType]:
+        result = await self._session.execute(
+            refresh_select_statement(select(EntityType).where(EntityType.project_id == project_id))
+        )
+        return result.scalars().all()
+
+    async def create_entity_type(self, *, project_id: str, data: EntityTypeCreate) -> EntityType:
+        existing = await self._session.execute(
+            refresh_select_statement(
+                select(EntityType).where(
+                    and_(EntityType.project_id == project_id, EntityType.name == data.name)
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise SchemaEntityTypeConflictV2
+        entity_type = EntityType(
+            id=str(uuid4()),
+            project_id=project_id,
+            name=data.name,
+            description=data.description,
+            schema=data.schema_def,
+        )
+        self._session.add(entity_type)
+        await self._session.commit()
+        await self._session.refresh(entity_type)
+        return entity_type
+
+    async def update_entity_type(
+        self, *, project_id: str, entity_id: str, data: EntityTypeUpdate
+    ) -> EntityType:
+        entity_type = await self._session.get(EntityType, entity_id)
+        if entity_type is None or entity_type.project_id != project_id:
+            raise SchemaEntityTypeNotFoundV2
+        if data.description is not None:
+            entity_type.description = data.description
+        if data.schema_def is not None:
+            entity_type.schema = data.schema_def
+        await self._session.commit()
+        await self._session.refresh(entity_type)
+        return entity_type
+
+    async def delete_entity_type(self, *, project_id: str, entity_id: str) -> None:
+        entity_type = await self._session.get(EntityType, entity_id)
+        if entity_type is None or entity_type.project_id != project_id:
+            raise SchemaEntityTypeNotFoundV2
+        await self._session.delete(entity_type)
+        await self._session.commit()
+
+    async def list_edge_types(self, *, project_id: str) -> Sequence[EdgeType]:
+        result = await self._session.execute(
+            refresh_select_statement(select(EdgeType).where(EdgeType.project_id == project_id))
+        )
+        return result.scalars().all()
+
+    async def create_edge_type(self, *, project_id: str, data: EdgeTypeCreate) -> EdgeType:
+        existing = await self._session.execute(
+            refresh_select_statement(
+                select(EdgeType).where(
+                    and_(EdgeType.project_id == project_id, EdgeType.name == data.name)
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise SchemaEdgeTypeConflictV2
+        edge_type = EdgeType(
+            id=str(uuid4()),
+            project_id=project_id,
+            name=data.name,
+            description=data.description,
+            schema=data.schema_def,
+        )
+        self._session.add(edge_type)
+        await self._session.commit()
+        await self._session.refresh(edge_type)
+        return edge_type
+
+    async def update_edge_type(
+        self, *, project_id: str, edge_id: str, data: EdgeTypeUpdate
+    ) -> EdgeType:
+        edge_type = await self._session.get(EdgeType, edge_id)
+        if edge_type is None or edge_type.project_id != project_id:
+            raise SchemaEdgeTypeNotFoundV2
+        if data.description is not None:
+            edge_type.description = data.description
+        if data.schema_def is not None:
+            edge_type.schema = data.schema_def
+        await self._session.commit()
+        await self._session.refresh(edge_type)
+        return edge_type
+
+    async def delete_edge_type(self, *, project_id: str, edge_id: str) -> None:
+        edge_type = await self._session.get(EdgeType, edge_id)
+        if edge_type is None or edge_type.project_id != project_id:
+            raise SchemaEdgeTypeNotFoundV2
+        await self._session.delete(edge_type)
+        await self._session.commit()
+
+    async def list_edge_maps(self, *, project_id: str) -> Sequence[EdgeTypeMap]:
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id)
+            )
+        )
+        return result.scalars().all()
+
+    async def create_edge_map(self, *, project_id: str, data: EdgeTypeMapCreate) -> EdgeTypeMap:
+        existing = await self._session.execute(
+            refresh_select_statement(
+                select(EdgeTypeMap).where(
+                    and_(
+                        EdgeTypeMap.project_id == project_id,
+                        EdgeTypeMap.source_type == data.source_type,
+                        EdgeTypeMap.target_type == data.target_type,
+                        EdgeTypeMap.edge_type == data.edge_type,
+                    )
+                )
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise SchemaEdgeMapConflictV2
+        edge_map = EdgeTypeMap(
+            id=str(uuid4()),
+            project_id=project_id,
+            source_type=data.source_type,
+            target_type=data.target_type,
+            edge_type=data.edge_type,
+        )
+        self._session.add(edge_map)
+        await self._session.commit()
+        await self._session.refresh(edge_map)
+        return edge_map
+
+    async def delete_edge_map(self, *, project_id: str, map_id: str) -> None:
+        edge_map = await self._session.get(EdgeTypeMap, map_id)
+        if edge_map is None or edge_map.project_id != project_id:
+            raise SchemaEdgeMapNotFoundV2
+        await self._session.delete(edge_map)
+        await self._session.commit()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SchemaApplicationServicesV2:
+    """Project-schema operations with structural membership and role enforcement."""
+
+    persistence: SchemaPersistenceProtocolV2
+
+    async def _authorize(self, *, user_id: str, project_id: str, write: bool) -> None:
+        membership = await self.persistence.find_membership(
+            user_id=user_id,
+            project_id=project_id,
+        )
+        if membership is None or (write and membership.role not in SCHEMA_WRITE_ROLES_V2):
+            raise SchemaAccessDeniedV2
+
+    async def list_entity_types(self, *, user_id: str, project_id: str) -> Sequence[EntityType]:
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        return await self.persistence.list_entity_types(project_id=project_id)
+
+    async def create_entity_type(
+        self, *, user_id: str, project_id: str, data: EntityTypeCreate
+    ) -> EntityType:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        return await self.persistence.create_entity_type(project_id=project_id, data=data)
+
+    async def update_entity_type(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        entity_id: str,
+        data: EntityTypeUpdate,
+    ) -> EntityType:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        return await self.persistence.update_entity_type(
+            project_id=project_id,
+            entity_id=entity_id,
+            data=data,
+        )
+
+    async def delete_entity_type(self, *, user_id: str, project_id: str, entity_id: str) -> None:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        await self.persistence.delete_entity_type(project_id=project_id, entity_id=entity_id)
+
+    async def list_edge_types(self, *, user_id: str, project_id: str) -> Sequence[EdgeType]:
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        return await self.persistence.list_edge_types(project_id=project_id)
+
+    async def create_edge_type(
+        self, *, user_id: str, project_id: str, data: EdgeTypeCreate
+    ) -> EdgeType:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        return await self.persistence.create_edge_type(project_id=project_id, data=data)
+
+    async def update_edge_type(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        edge_id: str,
+        data: EdgeTypeUpdate,
+    ) -> EdgeType:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        return await self.persistence.update_edge_type(
+            project_id=project_id,
+            edge_id=edge_id,
+            data=data,
+        )
+
+    async def delete_edge_type(self, *, user_id: str, project_id: str, edge_id: str) -> None:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        await self.persistence.delete_edge_type(project_id=project_id, edge_id=edge_id)
+
+    async def list_edge_maps(self, *, user_id: str, project_id: str) -> Sequence[EdgeTypeMap]:
+        await self._authorize(user_id=user_id, project_id=project_id, write=False)
+        return await self.persistence.list_edge_maps(project_id=project_id)
+
+    async def create_edge_map(
+        self, *, user_id: str, project_id: str, data: EdgeTypeMapCreate
+    ) -> EdgeTypeMap:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        return await self.persistence.create_edge_map(project_id=project_id, data=data)
+
+    async def delete_edge_map(self, *, user_id: str, project_id: str, map_id: str) -> None:
+        await self._authorize(user_id=user_id, project_id=project_id, write=True)
+        await self.persistence.delete_edge_map(project_id=project_id, map_id=map_id)
+
+
+@runtime_checkable
+class SchemaServiceFactoryProtocolV2(Protocol):
+    """Provider contract hiding concrete persistence implementations."""
+
+    def build(self, operation: OperationContextV2) -> SchemaPersistenceProtocolV2: ...
+
+
+@runtime_checkable
+class SchemaApplicationResolverProtocolV2(Protocol):
+    """Application resolver injected through a declared service alias."""
+
+    def resolve(self, operation: OperationContextV2) -> SchemaApplicationServicesV2: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class SqlSchemaServiceFactoryV2:
+    """Build schema persistence from the operation's exact AsyncSession."""
+
+    strategy: str
+
+    def build(self, operation: OperationContextV2) -> SchemaPersistenceProtocolV2:
+        db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
+        if not isinstance(db, AsyncSession):
+            raise RuntimeV2Error(
+                "invalid_operation_db_session",
+                "schema services require an AsyncSession operation service",
+            )
+        return SqlSchemaPersistenceV2(_session=db)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SchemaApplicationResolverV2:
+    """Resolve operation-owned application services without exposing the Provider."""
+
+    provider: SchemaServiceFactoryProtocolV2
+
+    def resolve(self, operation: OperationContextV2) -> SchemaApplicationServicesV2:
+        return SchemaApplicationServicesV2(persistence=self.provider.build(operation))
+
+
+def _apply_schema_provider_v2(context: ContextV2, config: Mapping[str, Any]) -> None:
+    strategy = config.get("strategy")
+    if strategy != "request-async-session":
+        raise ValueError("schema provider requires strategy request-async-session")
+    _ = context.provide(
+        SCHEMA_PROVIDER_SERVICE_V2,
+        SqlSchemaServiceFactoryV2(strategy=strategy),
+        label="schema-provider",
+    )
+
+
+def _apply_schema_application_v2(context: ContextV2, config: Mapping[str, Any]) -> None:
+    strategy = config.get("strategy")
+    if strategy != "operation-scoped-provider":
+        raise ValueError("schema application resolver requires strategy operation-scoped-provider")
+    provider = context.require(SCHEMA_PROVIDER_INJECT_V2)
+    if not isinstance(provider, SchemaServiceFactoryProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_schema_provider",
+            "schema provider inject does not implement the factory contract",
+        )
+    _ = context.provide(
+        SCHEMA_APPLICATION_SERVICE_V2,
+        SchemaApplicationResolverV2(provider=provider),
+        label="schema-application",
+    )
+
+
+def schema_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+    return (
+        PluginDefinitionV2(
+            module_ref=SCHEMA_PROVIDER_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(SCHEMA_PROVIDER_MODULE_V2),
+            apply=_apply_schema_provider_v2,
+        ),
+        PluginDefinitionV2(
+            module_ref=SCHEMA_APPLICATION_MODULE_V2,
+            contract_digest=generated_contract_digest_v2(SCHEMA_APPLICATION_MODULE_V2),
+            apply=_apply_schema_application_v2,
+        ),
+    )
+
+
+__all__ = [
+    "SCHEMA_APPLICATION_MODULE_V2",
+    "SCHEMA_APPLICATION_SERVICE_V2",
+    "SCHEMA_PROVIDER_INJECT_V2",
+    "SCHEMA_PROVIDER_MODULE_V2",
+    "SCHEMA_PROVIDER_SERVICE_V2",
+    "SCHEMA_WRITE_ROLES_V2",
+    "SchemaAccessDeniedV2",
+    "SchemaApplicationResolverProtocolV2",
+    "SchemaApplicationResolverV2",
+    "SchemaApplicationServicesV2",
+    "SchemaEdgeMapConflictV2",
+    "SchemaEdgeMapNotFoundV2",
+    "SchemaEdgeTypeConflictV2",
+    "SchemaEdgeTypeNotFoundV2",
+    "SchemaEntityTypeConflictV2",
+    "SchemaEntityTypeNotFoundV2",
+    "SchemaPersistenceProtocolV2",
+    "SchemaServiceErrorV2",
+    "SchemaServiceFactoryProtocolV2",
+    "SqlSchemaPersistenceV2",
+    "SqlSchemaServiceFactoryV2",
+    "schema_service_definitions_v2",
+]

@@ -182,6 +182,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
         ("builtin-projects-http-routes", "projects"),
         ("builtin-recall-http-routes", "recall"),
         ("builtin-reflection-http-routes", "reflection"),
+        ("builtin-schema-http-routes", "schema"),
         ("builtin-retrieval-stores-http-routes", "retrieval-stores"),
         ("builtin-system-http-routes", "system"),
         ("builtin-tenants-http-routes", "tenants"),

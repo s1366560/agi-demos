@@ -1,10 +1,12 @@
+"""Project schema API endpoints backed exclusively by a pinned V2 generation."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.schema import (
     EdgeTypeCreate,
@@ -17,56 +19,79 @@ from src.application.schemas.schema import (
     EntityTypeUpdate,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    EdgeType,
-    EdgeTypeMap,
-    EntityType,
-    User,
-    UserProject,
+from src.infrastructure.adapters.primary.web.schema_application_authority_v2 import (
+    SchemaApplicationAuthorityV2,
+    schema_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.schema_services import (
+    SchemaAccessDeniedV2,
+    SchemaEdgeMapConflictV2,
+    SchemaEdgeMapNotFoundV2,
+    SchemaEdgeTypeConflictV2,
+    SchemaEdgeTypeNotFoundV2,
+    SchemaEntityTypeConflictV2,
+    SchemaEntityTypeNotFoundV2,
+)
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/schema", tags=["schema"])
 
-SCHEMA_WRITE_ROLES = ["owner", "admin", "member"]
 
-
-async def verify_project_access(
-    project_id: str,
-    user: User,
-    db: AsyncSession,
-    required_role: list[str] | None = None,
-) -> Any:
-    query = select(UserProject).where(
-        and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
-    )
-    if required_role:
-        query = query.where(UserProject.role.in_(required_role))
-
-    result = await db.execute(refresh_select_statement(query))
-    user_project = result.scalar_one_or_none()
-
-    if not user_project:
+async def _schema_call[ResultT](operation: Awaitable[ResultT]) -> ResultT:
+    try:
+        return await operation
+    except SchemaAccessDeniedV2 as error:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
-        )
-    return user_project
-
-
-# --- Entity Types ---
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        ) from error
+    except SchemaEntityTypeConflictV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Entity type with this name already exists"),
+        ) from error
+    except SchemaEntityTypeNotFoundV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Entity type not found"),
+        ) from error
+    except SchemaEdgeTypeConflictV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Edge type with this name already exists"),
+        ) from error
+    except SchemaEdgeTypeNotFoundV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Edge type not found"),
+        ) from error
+    except SchemaEdgeMapConflictV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("This mapping already exists"),
+        ) from error
+    except SchemaEdgeMapNotFoundV2 as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Mapping not found"),
+        ) from error
 
 
 @router.get("/entities", response_model=list[EntityTypeResponse])
 async def list_entity_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
-    result = await db.execute(refresh_select_statement(select(EntityType).where(EntityType.project_id == project_id)))
-    return result.scalars().all()
+    return await _schema_call(
+        schema_application.services.list_entity_types(
+            user_id=current_user.id,
+            project_id=project_id,
+        )
+    )
 
 
 @router.post("/entities", response_model=EntityTypeResponse)
@@ -74,33 +99,17 @@ async def create_entity_type(
     project_id: str,
     entity_data: EntityTypeCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-
-    # Check uniqueness
-    existing = await db.execute(
-        refresh_select_statement(select(EntityType).where(
-            and_(
-                EntityType.project_id == project_id,
-                EntityType.name == entity_data.name,
-            )
-        ))
+    return await _schema_call(
+        schema_application.services.create_entity_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            data=entity_data,
+        )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=_("Entity type with this name already exists"))
-
-    entity_type = EntityType(
-        id=str(uuid4()),
-        project_id=project_id,
-        name=entity_data.name,
-        description=entity_data.description,
-        schema=entity_data.schema_def,
-    )
-    db.add(entity_type)
-    await db.commit()
-    await db.refresh(entity_type)
-    return entity_type
 
 
 @router.put("/entities/{entity_id}", response_model=EntityTypeResponse)
@@ -109,21 +118,18 @@ async def update_entity_type(
     entity_id: str,
     entity_data: EntityTypeUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-    entity_type = await db.get(EntityType, entity_id)
-    if not entity_type or entity_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail=_("Entity type not found"))
-
-    if entity_data.description is not None:
-        entity_type.description = entity_data.description
-    if entity_data.schema_def is not None:
-        entity_type.schema = entity_data.schema_def
-
-    await db.commit()
-    await db.refresh(entity_type)
-    return entity_type
+    return await _schema_call(
+        schema_application.services.update_entity_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            entity_id=entity_id,
+            data=entity_data,
+        )
+    )
 
 
 @router.delete("/entities/{entity_id}", status_code=204, response_class=Response)
@@ -131,30 +137,34 @@ async def delete_entity_type(
     project_id: str,
     entity_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-    entity_type = await db.get(EntityType, entity_id)
-    if not entity_type or entity_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail=_("Entity type not found"))
-
-    await db.delete(entity_type)
-    await db.commit()
-    return Response(status_code=204)
-
-
-# --- Edge Types ---
+    await _schema_call(
+        schema_application.services.delete_entity_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            entity_id=entity_id,
+        )
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/edges", response_model=list[EdgeTypeResponse])
 async def list_edge_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
-    result = await db.execute(refresh_select_statement(select(EdgeType).where(EdgeType.project_id == project_id)))
-    return result.scalars().all()
+    return await _schema_call(
+        schema_application.services.list_edge_types(
+            user_id=current_user.id,
+            project_id=project_id,
+        )
+    )
 
 
 @router.post("/edges", response_model=EdgeTypeResponse)
@@ -162,29 +172,17 @@ async def create_edge_type(
     project_id: str,
     edge_data: EdgeTypeCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-
-    existing = await db.execute(
-        refresh_select_statement(select(EdgeType).where(
-            and_(EdgeType.project_id == project_id, EdgeType.name == edge_data.name)
-        ))
+    return await _schema_call(
+        schema_application.services.create_edge_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            data=edge_data,
+        )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=_("Edge type with this name already exists"))
-
-    edge_type = EdgeType(
-        id=str(uuid4()),
-        project_id=project_id,
-        name=edge_data.name,
-        description=edge_data.description,
-        schema=edge_data.schema_def,
-    )
-    db.add(edge_type)
-    await db.commit()
-    await db.refresh(edge_type)
-    return edge_type
 
 
 @router.put("/edges/{edge_id}", response_model=EdgeTypeResponse)
@@ -193,21 +191,18 @@ async def update_edge_type(
     edge_id: str,
     edge_data: EdgeTypeUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-    edge_type = await db.get(EdgeType, edge_id)
-    if not edge_type or edge_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail=_("Edge type not found"))
-
-    if edge_data.description is not None:
-        edge_type.description = edge_data.description
-    if edge_data.schema_def is not None:
-        edge_type.schema = edge_data.schema_def
-
-    await db.commit()
-    await db.refresh(edge_type)
-    return edge_type
+    return await _schema_call(
+        schema_application.services.update_edge_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            edge_id=edge_id,
+            data=edge_data,
+        )
+    )
 
 
 @router.delete("/edges/{edge_id}", status_code=204, response_class=Response)
@@ -215,30 +210,34 @@ async def delete_edge_type(
     project_id: str,
     edge_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-    edge_type = await db.get(EdgeType, edge_id)
-    if not edge_type or edge_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail=_("Edge type not found"))
-
-    await db.delete(edge_type)
-    await db.commit()
-    return Response(status_code=204)
-
-
-# --- Edge Maps ---
+    await _schema_call(
+        schema_application.services.delete_edge_type(
+            user_id=current_user.id,
+            project_id=project_id,
+            edge_id=edge_id,
+        )
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/mappings", response_model=list[EdgeTypeMapResponse])
 async def list_edge_maps(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
-    result = await db.execute(refresh_select_statement(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id)))
-    return result.scalars().all()
+    return await _schema_call(
+        schema_application.services.list_edge_maps(
+            user_id=current_user.id,
+            project_id=project_id,
+        )
+    )
 
 
 @router.post("/mappings", response_model=EdgeTypeMapResponse)
@@ -246,35 +245,17 @@ async def create_edge_map(
     project_id: str,
     map_data: EdgeTypeMapCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-
-    # Check uniqueness
-    existing = await db.execute(
-        refresh_select_statement(select(EdgeTypeMap).where(
-            and_(
-                EdgeTypeMap.project_id == project_id,
-                EdgeTypeMap.source_type == map_data.source_type,
-                EdgeTypeMap.target_type == map_data.target_type,
-                EdgeTypeMap.edge_type == map_data.edge_type,
-            )
-        ))
+    return await _schema_call(
+        schema_application.services.create_edge_map(
+            user_id=current_user.id,
+            project_id=project_id,
+            data=map_data,
+        )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=_("This mapping already exists"))
-
-    edge_map = EdgeTypeMap(
-        id=str(uuid4()),
-        project_id=project_id,
-        source_type=map_data.source_type,
-        target_type=map_data.target_type,
-        edge_type=map_data.edge_type,
-    )
-    db.add(edge_map)
-    await db.commit()
-    await db.refresh(edge_map)
-    return edge_map
 
 
 @router.delete("/mappings/{map_id}", status_code=204, response_class=Response)
@@ -282,13 +263,15 @@ async def delete_edge_map(
     project_id: str,
     map_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    schema_application: SchemaApplicationAuthorityV2 = Depends(
+        schema_application_authority_dependency_v2
+    ),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
-    edge_map = await db.get(EdgeTypeMap, map_id)
-    if not edge_map or edge_map.project_id != project_id:
-        raise HTTPException(status_code=404, detail=_("Mapping not found"))
-
-    await db.delete(edge_map)
-    await db.commit()
-    return Response(status_code=204)
+    await _schema_call(
+        schema_application.services.delete_edge_map(
+            user_id=current_user.id,
+            project_id=project_id,
+            map_id=map_id,
+        )
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
