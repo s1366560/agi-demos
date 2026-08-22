@@ -1,10 +1,16 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 
-import { desktopRendererDefinitionsV2, RendererPluginRuntimeV2 } from '@agistack/plugin-runtime';
+import {
+  createDesktopRendererDefinitionsV2,
+  RendererGenerationLeaseStoreV2,
+  RendererPluginRuntimeV2,
+} from '@agistack/plugin-runtime';
 
 import { desktopApiCredential, desktopLaunchCapability } from '../api/client';
 import { desktopApiFetch } from '../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../types';
+
+import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
 
 import bootstrapProfileV2 from '../../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 
@@ -13,16 +19,30 @@ const MAX_DISTRIBUTION_BYTES_V2 = 4 * 1024 * 1024;
 const POLL_INTERVAL_MS = 30_000;
 const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
-  desktopRendererDefinitionsV2
+  createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2)
+);
+const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(
+  desktopRendererRuntimeV2
 );
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
+export function activateDesktopPluginGenerationRootV2(): void {
+  desktopRendererLeaseStoreV2.activateRoot();
+}
+
+export async function deactivateDesktopPluginGenerationRootV2(): Promise<void> {
+  await desktopRendererLeaseStoreV2.deactivateRoot();
+}
+
 export function useDesktopPluginGenerationV2(config: DesktopRuntimeConfig, enabled: boolean) {
-  const generation = useSyncExternalStore(
-    desktopRendererRuntimeV2.subscribe,
-    desktopRendererRuntimeV2.getSnapshot,
-    desktopRendererRuntimeV2.getSnapshot
+  const snapshot = useSyncExternalStore(
+    desktopRendererLeaseStoreV2.subscribe,
+    desktopRendererLeaseStoreV2.getSnapshot,
+    desktopRendererLeaseStoreV2.getSnapshot
   );
+  useLayoutEffect(() => {
+    void desktopRendererLeaseStoreV2.commit(snapshot);
+  }, [snapshot]);
 
   useEffect(() => {
     if (pendingClose !== null) {
@@ -38,7 +58,7 @@ export function useDesktopPluginGenerationV2(config: DesktopRuntimeConfig, enabl
     };
   }, [config.apiBaseUrl, config.apiKey, config.localApiToken, config.mode, enabled]);
 
-  return generation;
+  return snapshot.generation;
 }
 
 function startDesktopPluginGenerationPollingV2(

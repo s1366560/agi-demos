@@ -262,7 +262,6 @@ export function SettingsWindow({
   });
   const platformPluginUiSlots = usePlatformPluginUiSlots({
     active: open && section === 'plugins',
-    config,
   });
   const channelManagement = useChannelConnectionManagement({
     active: open,

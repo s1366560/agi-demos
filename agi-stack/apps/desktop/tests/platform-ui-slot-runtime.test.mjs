@@ -10,9 +10,6 @@ const { UiSlotRegistry } =
 const { usePlatformPluginUiSlots } = require(
   '/tmp/agistack-desktop-test-dist/src/features/settings/usePlatformPluginUiSlots.js'
 );
-const { builtinUiFallbackSnapshot } = require(
-  '/tmp/agistack-desktop-test-dist/src/features/settings/usePlatformPluginUiSlots.js'
-);
 
 const definition = {
   pluginId: 'builtin-ui',
@@ -48,16 +45,8 @@ test('ui slot runtime reconciles slots from a canonical plugin snapshot', () => 
   assert.equal(disabled.slots.length, 0);
 });
 
-test('desktop settings hook exports a canonical-snapshot ui slot boundary', () => {
+test('desktop settings hook exports a V2 renderer-authority ui slot boundary', () => {
   assert.equal(typeof usePlatformPluginUiSlots, 'function');
-});
-
-test('builtin ui slots remain available when canonical snapshot is unavailable', () => {
-  const runtime = new UiSlotRuntime(new UiSlotRegistry());
-  const state = runtime.reconcile(builtinUiFallbackSnapshot(), [definition]);
-
-  assert.equal(state.slots.length, 1);
-  assert.equal(state.slots[0].moduleRef, 'builtin:plugin-settings');
 });
 
 test('signed canonical ui slots register with signed module trust', () => {

@@ -41,6 +41,8 @@
     "electron/main/updatePolicy.ts",
     "src/plugins/uiSlotRegistry.ts",
     "src/plugins/uiSlotRuntime.ts",
+    "src/plugins/desktopRendererArtifactCatalogV2.ts",
+    "src/plugins/desktopRendererAuthorityStateV2.ts",
     "src/features/settings/usePlatformPluginUiSlots.ts",
     "src/features/settings/SignedUiModuleBoundary.tsx",
     "src/vite-env.d.ts",

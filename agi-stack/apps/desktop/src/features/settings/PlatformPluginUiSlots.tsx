@@ -1,5 +1,5 @@
 import { useI18n } from '../../i18n';
-import type { RegisteredUiSlot } from '../../plugins/uiSlotRegistry';
+import type { UiSlotDefinition } from '../../plugins/uiSlotRegistry';
 import { SignedUiModuleBoundary } from './SignedUiModuleBoundary';
 import type { DesktopRuntimeConfig } from '../../types';
 
@@ -9,7 +9,7 @@ export function PlatformPluginUiSlots({
   loading,
   config,
 }: {
-  slots: readonly RegisteredUiSlot[];
+  slots: readonly UiSlotDefinition[];
   error: string | null;
   loading: boolean;
   config: DesktopRuntimeConfig;

@@ -85,6 +85,13 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
+import { resolveDesktopRendererAuthorityStateV2 } from './plugins/desktopRendererAuthorityProjectionV2';
+import {
+  DesktopRendererAuthorityContextV2,
+  isDesktopNavigationRouteEnabledV2,
+  projectDesktopNavigationRegistryV2,
+  projectDesktopRouteRegistryV2,
+} from './plugins/desktopRendererAuthorityStateV2';
 import { useDesktopPluginGenerationV2 } from './plugins/useDesktopPluginGenerationV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
@@ -234,7 +241,6 @@ import { AuxiliaryView } from './features/navigation/AuxiliaryView';
 import { DesktopProductionRouter } from './features/navigation/DesktopProductionRouter';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
-import { CANONICAL_DESKTOP_ROUTE_IDS } from './features/navigation/desktopCanonicalRouteCatalog';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   DEVICE_APPROVAL_ROUTE_ID,
@@ -958,6 +964,14 @@ export function App() {
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
   const desktopPluginGenerationV2 = useDesktopPluginGenerationV2(config, identityAuthenticated);
+  const desktopRendererAuthorityV2 = useMemo(
+    () =>
+      resolveDesktopRendererAuthorityStateV2(
+        desktopPluginGenerationV2,
+        identityAuthenticated,
+      ),
+    [desktopPluginGenerationV2, identityAuthenticated],
+  );
   authRef.current = auth;
   useEffect(() => {
     if (identityAuthenticated && invitationSignInRequested) {
@@ -985,7 +999,7 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
-  const desktopProductionRouteRegistry = useMemo(
+  const desktopProductionRouteRegistryCandidate = useMemo(
     () =>
       createAppRouteRegistry({
         api,
@@ -1004,21 +1018,21 @@ export function App() {
       }),
     [],
   );
+  const desktopProductionRouteRegistry = useMemo(
+    () =>
+      projectDesktopRouteRegistryV2(
+        desktopProductionRouteRegistryCandidate,
+        desktopRendererAuthorityV2,
+      ),
+    [desktopProductionRouteRegistryCandidate, desktopRendererAuthorityV2],
+  );
   const desktopCanonicalNavigationRegistry = useMemo(
     () =>
-      Object.freeze({
-        definitions: Object.freeze(
-          CANONICAL_DESKTOP_ROUTE_IDS.map((routeId) => {
-            const definition = desktopProductionRouteRegistry.byId.get(routeId);
-            if (!definition) {
-              throw new Error(`desktop_navigation_discovery_route_missing:${routeId}`);
-            }
-            return definition;
-          }),
-        ),
-        byId: desktopProductionRouteRegistry.byId,
-      }),
-    [desktopProductionRouteRegistry],
+      projectDesktopNavigationRegistryV2(
+        desktopProductionRouteRegistry,
+        desktopRendererAuthorityV2,
+      ),
+    [desktopProductionRouteRegistry, desktopRendererAuthorityV2],
   );
   const automationApi = useMemo(() => createDesktopAutomationApi(api, config), [api, config]);
   const artifactApi = useMemo(() => createHttpDesktopArtifactClient(config), [config]);
@@ -5995,16 +6009,22 @@ export function App() {
         detectShortcutPlatform(navigator.userAgent, navigator.platform),
       )
     : undefined;
-  const routeDiscoveryEntries = deriveDesktopNavigationDiscoveryEntries({
-    registry: desktopCanonicalNavigationRegistry,
-    authenticated: identityAuthenticated,
-    context: {
-      tenantId: config.tenantId,
-      projectId: config.projectId,
-      workspaceId: config.workspaceId,
-    },
-    translate: t,
-  });
+  const routeDiscoveryEntries =
+    desktopRendererAuthorityV2.status === 'ready' &&
+    desktopCanonicalNavigationRegistry.definitions.length > 0 &&
+    desktopCanonicalNavigationRegistry.definitions.length ===
+      desktopRendererAuthorityV2.navigationDiscoveryRouteIds.length
+      ? deriveDesktopNavigationDiscoveryEntries({
+          registry: desktopCanonicalNavigationRegistry,
+          authenticated: identityAuthenticated,
+          context: {
+            tenantId: config.tenantId,
+            projectId: config.projectId,
+            workspaceId: config.workspaceId,
+          },
+          translate: t,
+        })
+      : [];
   const routeCommandItems: CommandPaletteItem[] = routeDiscoveryEntries.map((entry) => ({
     id: `route:${entry.routeId}`,
     kind: 'route',
@@ -6224,14 +6244,20 @@ export function App() {
       ({ routeId }) => routeId,
     ),
   );
+  const authorizedCommandItems = commandItems.filter(
+    (item) =>
+      item.kind !== 'route' ||
+      (item.routeId !== undefined &&
+        isDesktopNavigationRouteEnabledV2(desktopRendererAuthorityV2, item.routeId)),
+  );
   const normalizedCommandQuery = commandQuery.trim().toLocaleLowerCase(locale);
   const filteredCommandItems = normalizedCommandQuery
-    ? commandItems.filter((item) =>
+    ? authorizedCommandItems.filter((item) =>
         item.kind === 'route' && item.id.startsWith('route:') && item.routeId
           ? matchingRouteIds.has(item.routeId as (typeof routeDiscoveryEntries)[number]['routeId'])
           : item.searchText.toLocaleLowerCase(locale).includes(normalizedCommandQuery),
       )
-    : commandItems;
+    : authorizedCommandItems;
 
   const renderChatPanel = () => (
     <>
@@ -6809,13 +6835,14 @@ export function App() {
     selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected');
 
   return (
-    <Theme
-      appearance={themeAppearance}
-      accentColor="cyan"
-      grayColor="slate"
-      radius="medium"
-      scaling="95%"
-    >
+    <DesktopRendererAuthorityContextV2.Provider value={desktopRendererAuthorityV2}>
+      <Theme
+        appearance={themeAppearance}
+        accentColor="cyan"
+        grayColor="slate"
+        radius="medium"
+        scaling="95%"
+      >
       <div
         ref={appShellRef}
         data-plugin-generation-v2={desktopPluginGenerationV2?.snapshot.digest ?? 'unavailable'}
@@ -7124,6 +7151,7 @@ export function App() {
           onSignOut={() => void logout()}
         />
       </div>
-    </Theme>
+      </Theme>
+    </DesktopRendererAuthorityContextV2.Provider>
   );
 }

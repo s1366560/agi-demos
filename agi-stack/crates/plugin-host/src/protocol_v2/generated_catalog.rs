@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:87a7cf1748352f8b2bd6b17ea54ca7af6f0bbb930f08a3be4b0f9961bbcf61",
-    "1f\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:c49d87bf4033a04b892f3d18c6f5431cfc011eb7bb2ca7f0a829d653edddd0",
+    "7e\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -392,8 +392,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "\":[]}},\"contract_digest\":\"sha256:417fd72b2a8177362bf2362158c113ed423ff84b1106634b271cddf",
     "17dbfbf46\",\"entrypoint\":\"DesktopSidecarHostModuleV2::apply\",\"module_ref\":\"builtin://mems",
     "tack/desktop-sidecar/local-capability\",\"plugin_id\":\"memstack-native-target-hosts\",\"plugi",
-    "n_version\":\"2.0.0\",\"targets\":[\"desktop-sidecar\"]},{\"artifact_digest\":\"sha256:ad740c2b155",
-    "2941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280\",\"artifact_source\":\"repo+typescrip",
+    "n_version\":\"2.0.0\",\"targets\":[\"desktop-sidecar\"]},{\"artifact_digest\":\"sha256:248e0adca40",
+    "18e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764\",\"artifact_source\":\"repo+typescrip",
     "t://agi-stack/packages/plugin-runtime/src/rendererContributions.ts\",\"contract\":{\"config_",
     "schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\"",
     ":false,\"properties\":{\"id\":{\"maxLength\":128,\"minLength\":1,\"type\":\"string\"},\"kind\":{\"enum\"",
@@ -407,7 +407,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "2455c37250a23e89c4c744ec07229724e\",\"entrypoint\":\"applyDesktopRendererContributionV2\",\"mo",
     "dule_ref\":\"builtin://memstack/desktop/renderer-contribution\",\"plugin_id\":\"memstack-rende",
     "rer-contributions\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},{\"artifact_d",
-    "igest\":\"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280\",\"artifa",
+    "igest\":\"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764\",\"artifa",
     "ct_source\":\"repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContribution",
     "s.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/sche",
     "ma\",\"additionalProperties\":false,\"properties\":{\"target\":{\"const\":\"desktop-renderer\",\"typ",
@@ -632,8 +632,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "e0d03704335a4d4058ecfe5007ed5c310ef3eb3d5b\",\"entrypoint\":\"src.infrastructure.plugins.v2.",
     "telemetry_runtime:telemetry_runtime_definition_v2\",\"module_ref\":\"builtin://memstack/tele",
     "metry/runtime\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":",
-    "[\"python\"]},{\"artifact_digest\":\"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7",
-    "a26a5d4180a5280\",\"artifact_source\":\"repo+typescript://agi-stack/packages/plugin-runtime/",
+    "[\"python\"]},{\"artifact_digest\":\"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d9",
+    "27d952e6e82a764\",\"artifact_source\":\"repo+typescript://agi-stack/packages/plugin-runtime/",
     "src/rendererContributions.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schem",
     "a.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"id\":{\"maxLength\"",
     ":128,\"minLength\":1,\"type\":\"string\"},\"kind\":{\"enum\":[\"route\",\"navigation\",\"ui-slot\"],\"typ",
@@ -646,8 +646,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "ha256:a1adf76747c59abd6fc897622f8a0fc318f26a52d5cfa3c5659fcf79d936fbd7\",\"entrypoint\":\"ap",
     "plyWebRendererContributionV2\",\"module_ref\":\"builtin://memstack/web/renderer-contribution",
     "\",\"plugin_id\":\"memstack-renderer-contributions\",\"plugin_version\":\"2.0.0\",\"targets\":[\"web",
-    "\"]},{\"artifact_digest\":\"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d41",
-    "80a5280\",\"artifact_source\":\"repo+typescript://agi-stack/packages/plugin-runtime/src/rend",
+    "\"]},{\"artifact_digest\":\"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6",
+    "e82a764\",\"artifact_source\":\"repo+typescript://agi-stack/packages/plugin-runtime/src/rend",
     "ererContributions.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/dr",
     "aft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"target\":{\"const\":\"web\",\"",
     "type\":\"string\"}},\"required\":[\"target\"],\"type\":\"object\"},\"events\":{\"emits\":[],\"handles\":[",
@@ -688,4 +688,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     ".0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:87a7cf1748352f8b2bd6b17ea54ca7af6f0bbb930f08a3be4b0f9961bbcf611f";
+    "sha256:c49d87bf4033a04b892f3d18c6f5431cfc011eb7bb2ca7f0a829d653edddd07e";

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:87a7cf1748352f8b2bd6b17ea54ca7af6f0bbb930f08a3be4b0f9961bb',
-  'cf611f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:c49d87bf4033a04b892f3d18c6f5431cfc011eb7bb2ca7f0a829d653ed',
+  'ddd07e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -431,8 +431,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '2362158c113ed423ff84b1106634b271cddf17dbfbf46","entrypoint":"DesktopSidecarHostModul',
   'eV2::apply","module_ref":"builtin://memstack/desktop-sidecar/local-capability","plug',
   'in_id":"memstack-native-target-hosts","plugin_version":"2.0.0","targets":["desktop-s',
-  'idecar"]},{"artifact_digest":"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940',
-  'd7a26a5d4180a5280","artifact_source":"repo+typescript://agi-stack/packages/plugin-ru',
+  'idecar"]},{"artifact_digest":"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4',
+  'd927d952e6e82a764","artifact_source":"repo+typescript://agi-stack/packages/plugin-ru',
   'ntime/src/rendererContributions.ts","contract":{"config_schema":{"$schema":"https://',
   'json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"id',
   '":{"maxLength":128,"minLength":1,"type":"string"},"kind":{"enum":["route","navigatio',
@@ -446,8 +446,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '62480ce42455c37250a23e89c4c744ec07229724e","entrypoint":"applyDesktopRendererContrib',
   'utionV2","module_ref":"builtin://memstack/desktop/renderer-contribution","plugin_id"',
   ':"memstack-renderer-contributions","plugin_version":"2.0.0","targets":["desktop-rend',
-  'erer"]},{"artifact_digest":"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7',
-  'a26a5d4180a5280","artifact_source":"repo+typescript://agi-stack/packages/plugin-runt',
+  'erer"]},{"artifact_digest":"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d9',
+  '27d952e6e82a764","artifact_source":"repo+typescript://agi-stack/packages/plugin-runt',
   'ime/src/rendererContributions.ts","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"targ',
   'et":{"const":"desktop-renderer","type":"string"}},"required":["target"],"type":"obje',
@@ -682,8 +682,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '58ecfe5007ed5c310ef3eb3d5b","entrypoint":"src.infrastructure.plugins.v2.telemetry_ru',
   'ntime:telemetry_runtime_definition_v2","module_ref":"builtin://memstack/telemetry/ru',
   'ntime","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["py',
-  'thon"]},{"artifact_digest":"sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7',
-  'a26a5d4180a5280","artifact_source":"repo+typescript://agi-stack/packages/plugin-runt',
+  'thon"]},{"artifact_digest":"sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d9',
+  '27d952e6e82a764","artifact_source":"repo+typescript://agi-stack/packages/plugin-runt',
   'ime/src/rendererContributions.ts","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"id":',
   '{"maxLength":128,"minLength":1,"type":"string"},"kind":{"enum":["route","navigation"',
@@ -696,8 +696,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ersion":"1.0.0"}]}},"contract_digest":"sha256:a1adf76747c59abd6fc897622f8a0fc318f26a',
   '52d5cfa3c5659fcf79d936fbd7","entrypoint":"applyWebRendererContributionV2","module_re',
   'f":"builtin://memstack/web/renderer-contribution","plugin_id":"memstack-renderer-con',
-  'tributions","plugin_version":"2.0.0","targets":["web"]},{"artifact_digest":"sha256:a',
-  'd740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280","artifact_source":"',
+  'tributions","plugin_version":"2.0.0","targets":["web"]},{"artifact_digest":"sha256:2',
+  '48e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764","artifact_source":"',
   'repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts","c',
   'ontract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema",',
   '"additionalProperties":false,"properties":{"target":{"const":"web","type":"string"}}',
@@ -746,4 +746,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:87a7cf1748352f8b2bd6b17ea54ca7af6f0bbb930f08a3be4b0f9961bbcf611f' as const;
+  'sha256:c49d87bf4033a04b892f3d18c6f5431cfc011eb7bb2ca7f0a829d653edddd07e' as const;

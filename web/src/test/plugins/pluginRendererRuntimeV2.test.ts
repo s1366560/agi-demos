@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createDesktopRendererDefinitionsV2,
   digestV2,
+  DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
   RendererContributionRegistryV2,
   RendererGenerationLeaseStoreV2,
   RendererPluginRuntimeV2,
@@ -246,6 +248,66 @@ describe('RendererPluginRuntimeV2', () => {
       ['web.default-navigation', 'navigation'],
       ['web.default-ui-slots', 'ui-slot'],
     ]);
+    await runtime.close();
+  });
+
+  it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
+    const knownArtifactRefs = new Set([
+      'desktop.routes.production.v1',
+      'desktop.navigation.default.v1',
+      'desktop.ui-slots.default.v1',
+    ]);
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2((candidate) => {
+        for (const contribution of candidate) {
+          const refs = contribution.payload.artifact_refs;
+          if (!Array.isArray(refs) || refs.some((ref) => !knownArtifactRefs.has(String(ref)))) {
+            throw new Error(`desktop_renderer_artifact_unknown:${contribution.id}`);
+          }
+        }
+      })
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const lastGood = runtime.getSnapshot();
+    const registry = lastGood?.resolve<RendererContributionRegistryV2>(
+      DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+      { kind: 'root' }
+    );
+    expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
+      ['desktop.production-routes', 'route'],
+      ['desktop.default-navigation', 'navigation'],
+      ['desktop.default-ui-slots', 'ui-slot'],
+    ]);
+
+    const invalid = structuredClone(bootstrapProfile);
+    const routeEntry = invalid.entries.find(
+      ({ entry_id }) => entry_id === 'builtin-desktop-default-routes'
+    );
+    if (!routeEntry) throw new Error('desktop route contribution fixture is missing');
+    routeEntry.config.payload = {
+      artifact_refs: ['desktop.routes.unknown.v1'],
+      schema_version: 1,
+    };
+    invalid.generation += 1;
+    const { digest: _digest, ...unsigned } = invalid;
+    invalid.digest = await digestV2(unsigned);
+    const nextDistribution = distribution(invalid);
+    const receipt = await runtime.apply({
+      ...nextDistribution,
+      envelope: {
+        ...nextDistribution.envelope,
+        nonce: 'desktop-renderer-unknown-artifact-v2',
+        version: 2,
+      },
+    });
+
+    expect(receipt).toMatchObject({
+      status: 'nack',
+      error_code: 'generation_apply_failed',
+    });
+    expect(receipt.error_message).toContain('desktop_renderer_artifact_unknown');
+    expect(runtime.getSnapshot()).toBe(lastGood);
     await runtime.close();
   });
 

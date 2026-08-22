@@ -101,12 +101,13 @@ export function applyWebRendererContributionV2(
 
 export function applyDesktopRendererContributionRegistryV2(
   context: ContextV2,
-  config: Readonly<Record<string, unknown>>
+  config: Readonly<Record<string, unknown>>,
+  validateCandidate?: RendererContributionSetValidatorV2
 ): void {
   requireTargetV2(config, 'desktop-renderer');
   context.provide(
     DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
-    new RendererContributionRegistryV2('desktop-renderer')
+    new RendererContributionRegistryV2('desktop-renderer', validateCandidate)
   );
 }
 
@@ -138,11 +139,19 @@ export const webRendererContributionDefinitionV2: PluginDefinitionV2 = Object.fr
   apply: applyWebRendererContributionV2,
 });
 
-export const desktopRendererContributionRegistryDefinitionV2: PluginDefinitionV2 = Object.freeze({
-  moduleRef: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
-  contractDigest: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
-  apply: applyDesktopRendererContributionRegistryV2,
-});
+export function createDesktopRendererContributionRegistryDefinitionV2(
+  validateCandidate?: RendererContributionSetValidatorV2
+): PluginDefinitionV2 {
+  return Object.freeze({
+    moduleRef: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
+    contractDigest: DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
+    apply: (context: ContextV2, config: Readonly<Record<string, unknown>>) =>
+      applyDesktopRendererContributionRegistryV2(context, config, validateCandidate),
+  });
+}
+
+export const desktopRendererContributionRegistryDefinitionV2 =
+  createDesktopRendererContributionRegistryDefinitionV2();
 
 export const desktopRendererContributionDefinitionV2: PluginDefinitionV2 = Object.freeze({
   moduleRef: DESKTOP_RENDERER_CONTRIBUTION_MODULE_REF_V2,
@@ -162,11 +171,17 @@ export function createWebRendererDefinitionsV2(
 
 export const webRendererDefinitionsV2 = createWebRendererDefinitionsV2();
 
-export const desktopRendererDefinitionsV2: readonly PluginDefinitionV2[] = Object.freeze([
-  desktopRendererHostDefinitionV2,
-  desktopRendererContributionRegistryDefinitionV2,
-  desktopRendererContributionDefinitionV2,
-]);
+export function createDesktopRendererDefinitionsV2(
+  validateCandidate?: RendererContributionSetValidatorV2
+): readonly PluginDefinitionV2[] {
+  return Object.freeze([
+    desktopRendererHostDefinitionV2,
+    createDesktopRendererContributionRegistryDefinitionV2(validateCandidate),
+    desktopRendererContributionDefinitionV2,
+  ]);
+}
+
+export const desktopRendererDefinitionsV2 = createDesktopRendererDefinitionsV2();
 
 function contributionFromConfigV2(
   config: Readonly<Record<string, unknown>>

@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/web/renderer-contribution-registry",
       "entrypoint": "applyWebRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["web"],
@@ -40,7 +40,7 @@
       "module_ref": "builtin://memstack/web/renderer-contribution",
       "entrypoint": "applyWebRendererContributionV2",
       "artifact": {
-        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["web"],
@@ -86,7 +86,7 @@
       "module_ref": "builtin://memstack/desktop/renderer-contribution-registry",
       "entrypoint": "applyDesktopRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["desktop-renderer"],
@@ -117,7 +117,7 @@
       "module_ref": "builtin://memstack/desktop/renderer-contribution",
       "entrypoint": "applyDesktopRendererContributionV2",
       "artifact": {
-        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
+        "digest": "sha256:248e0adca4018e0ecbbf689f5e94117f0af7d9845fc34d4d927d952e6e82a764",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["desktop-renderer"],

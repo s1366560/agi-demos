@@ -19,7 +19,7 @@ export function PlatformPluginConversationSlots({
   active: boolean;
   config: DesktopRuntimeConfig;
 }>) {
-  const { slots, error, loading } = usePlatformPluginUiSlots({ active, config });
+  const { slots, error, loading } = usePlatformPluginUiSlots({ active });
   const visible = slots.filter(
     (slot) => slot.slot === 'conversation_renderer' && slot.moduleRef.startsWith('signed:')
   );
