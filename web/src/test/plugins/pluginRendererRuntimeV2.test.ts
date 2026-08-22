@@ -321,6 +321,28 @@ describe('RendererPluginRuntimeV2', () => {
     });
   });
 
+  it('validates a complete candidate set before committing registry state', () => {
+    const registry = new RendererContributionRegistryV2('web', (candidate) => {
+      if (candidate.length > 1) throw new Error('candidate rejected');
+    });
+    registry.register('entry-one', {
+      id: 'web.first-route',
+      kind: 'route',
+      order: 100,
+      payload: {},
+    });
+
+    expect(() =>
+      registry.register('entry-two', {
+        id: 'web.second-route',
+        kind: 'route',
+        order: 200,
+        payload: {},
+      })
+    ).toThrow('candidate rejected');
+    expect(registry.list().map(({ id }) => id)).toEqual(['web.first-route']);
+  });
+
   it('nacks a duplicate contribution and retains the last-good generation', async () => {
     const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
     await runtime.apply(distribution(bootstrapProfile));

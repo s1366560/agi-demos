@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/web/renderer-contribution-registry",
       "entrypoint": "applyWebRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:98c8ae15d5f983e691664edb27cc2829b60f9c9073c09ab76bae268c6e5b522a",
+        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["web"],
@@ -40,7 +40,7 @@
       "module_ref": "builtin://memstack/web/renderer-contribution",
       "entrypoint": "applyWebRendererContributionV2",
       "artifact": {
-        "digest": "sha256:98c8ae15d5f983e691664edb27cc2829b60f9c9073c09ab76bae268c6e5b522a",
+        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["web"],
@@ -65,17 +65,28 @@
             "id": { "minLength": 1, "maxLength": 128, "type": "string" },
             "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
             "order": { "type": "integer" },
-            "payload": { "type": "object" }
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "artifact_refs"],
+              "properties": {
+                "schema_version": { "const": 1, "type": "integer" },
+                "artifact_refs": {
+                  "type": "array",
+                  "items": { "minLength": 1, "type": "string" }
+                }
+              }
+            }
           }
         }
       },
-      "contract_digest": "sha256:5c941725e38c91a9b2eeda4dc6e7278870c40af67c9cd5d0ddad4c2a9f62603e"
+      "contract_digest": "sha256:a1adf76747c59abd6fc897622f8a0fc318f26a52d5cfa3c5659fcf79d936fbd7"
     },
     {
       "module_ref": "builtin://memstack/desktop/renderer-contribution-registry",
       "entrypoint": "applyDesktopRendererContributionRegistryV2",
       "artifact": {
-        "digest": "sha256:98c8ae15d5f983e691664edb27cc2829b60f9c9073c09ab76bae268c6e5b522a",
+        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["desktop-renderer"],
@@ -106,7 +117,7 @@
       "module_ref": "builtin://memstack/desktop/renderer-contribution",
       "entrypoint": "applyDesktopRendererContributionV2",
       "artifact": {
-        "digest": "sha256:98c8ae15d5f983e691664edb27cc2829b60f9c9073c09ab76bae268c6e5b522a",
+        "digest": "sha256:ad740c2b1552941878553cc24f55f391e55c04d3a4c8940d7a26a5d4180a5280",
         "source": "repo+typescript://agi-stack/packages/plugin-runtime/src/rendererContributions.ts"
       },
       "targets": ["desktop-renderer"],
@@ -131,11 +142,22 @@
             "id": { "minLength": 1, "maxLength": 128, "type": "string" },
             "kind": { "enum": ["route", "navigation", "ui-slot"], "type": "string" },
             "order": { "type": "integer" },
-            "payload": { "type": "object" }
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["schema_version", "artifact_refs"],
+              "properties": {
+                "schema_version": { "const": 1, "type": "integer" },
+                "artifact_refs": {
+                  "type": "array",
+                  "items": { "minLength": 1, "type": "string" }
+                }
+              }
+            }
           }
         }
       },
-      "contract_digest": "sha256:4b1806786f85d9e87aae4d7518dbce470b376bc0a61201c331048a384472da22"
+      "contract_digest": "sha256:ee51655e1a4136786327a1a62480ce42455c37250a23e89c4c744ec07229724e"
     }
   ],
   "permissions": [],

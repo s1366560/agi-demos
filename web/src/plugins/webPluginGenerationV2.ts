@@ -1,18 +1,22 @@
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 
 import {
+  createWebRendererDefinitionsV2,
   RendererGenerationLeaseStoreV2,
   RendererPluginRuntimeV2,
   type RuntimeGenerationV2,
-  webRendererDefinitionsV2,
 } from '@agistack/plugin-runtime';
 
+import { validateWebRendererContributionsV2 } from '../routes/v2/webRendererArtifactCatalogV2';
 import { ApiError } from '../services/client/ApiError';
 import { httpClient } from '../services/client/httpClient';
 import { logger } from '../utils/logger';
 
 const POLL_INTERVAL_MS = 30_000;
-const webRendererRuntimeV2 = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+const webRendererRuntimeV2 = new RendererPluginRuntimeV2(
+  'web',
+  createWebRendererDefinitionsV2(validateWebRendererContributionsV2)
+);
 const webRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(webRendererRuntimeV2);
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
@@ -85,11 +89,9 @@ export function useRendererGenerationLeaseV2(
 ): RuntimeGenerationV2 | undefined {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   useLayoutEffect(() => {
-    void store
-      .commit(snapshot)
-      .catch((error: unknown) => {
-        logger.error('Failed to commit plugin generation lease', error);
-      });
+    void store.commit(snapshot).catch((error: unknown) => {
+      logger.error('Failed to commit plugin generation lease', error);
+    });
   }, [snapshot, store]);
   return snapshot.generation;
 }

@@ -67,7 +67,10 @@ profile:
         id: web.default-business-routes
         kind: route
         order: 100
-        payload: {}
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - web.routes.default-business.v1
       inject:
         registry: service:web.renderer-contribution-registry
       isolate: {}
@@ -85,7 +88,10 @@ profile:
         id: web.default-navigation
         kind: navigation
         order: 200
-        payload: {}
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - web.navigation.default.v1
       inject:
         registry: service:web.renderer-contribution-registry
       isolate: {}
@@ -104,7 +110,9 @@ profile:
         kind: ui-slot
         order: 300
         payload:
-          slots: []
+          schema_version: 1
+          artifact_refs:
+            - web.ui-slots.default.v1
       inject:
         registry: service:web.renderer-contribution-registry
       isolate: {}
@@ -150,7 +158,10 @@ profile:
         id: desktop.production-routes
         kind: route
         order: 100
-        payload: {}
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.routes.production.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}
@@ -168,7 +179,10 @@ profile:
         id: desktop.default-navigation
         kind: navigation
         order: 200
-        payload: {}
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.navigation.default.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}
@@ -187,21 +201,9 @@ profile:
         kind: ui-slot
         order: 300
         payload:
-          slots:
-            - pluginId: builtin-ui
-              slot: settings_page
-              id: plugin-settings
-              contract: ui-builtin:plugin-settings
-              moduleRef: builtin:plugin-settings
-              permission: ui.settings.plugins
-              sandbox: true
-            - pluginId: builtin-ui
-              slot: tool_result_renderer
-              id: structured-tool-result
-              contract: ui-builtin:structured-tool-result
-              moduleRef: builtin:structured-tool-result
-              permission: ui.render
-              sandbox: true
+          schema_version: 1
+          artifact_refs:
+            - desktop.ui-slots.default.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}

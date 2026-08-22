@@ -15,10 +15,17 @@ export interface RegisteredRendererContributionV2 extends RendererContributionV2
   readonly sourceEntryId: string;
 }
 
+export type RendererContributionSetValidatorV2 = (
+  contributions: readonly RegisteredRendererContributionV2[]
+) => void;
+
 export class RendererContributionRegistryV2 {
   private readonly contributions = new Map<string, RegisteredRendererContributionV2>();
 
-  constructor(readonly target: RendererContributionTargetV2) {}
+  constructor(
+    readonly target: RendererContributionTargetV2,
+    private readonly validateCandidate?: RendererContributionSetValidatorV2
+  ) {}
 
   register(sourceEntryId: string, contribution: RendererContributionV2): () => void {
     const key = contributionKeyV2(contribution);
@@ -33,6 +40,9 @@ export class RendererContributionRegistryV2 {
       payload: cloneAndFreezePayloadV2(contribution.payload),
       sourceEntryId,
     });
+    const candidate = new Map(this.contributions);
+    candidate.set(key, registered);
+    this.validateCandidate?.(orderedContributionsV2(candidate));
     this.contributions.set(key, registered);
     return () => {
       if (this.contributions.get(key) === registered) {
@@ -42,15 +52,7 @@ export class RendererContributionRegistryV2 {
   }
 
   list(kind?: RendererContributionKindV2): readonly RegisteredRendererContributionV2[] {
-    return Object.freeze(
-      [...this.contributions.values()]
-        .filter((contribution) => kind === undefined || contribution.kind === kind)
-        .sort(
-          (left, right) =>
-            left.order - right.order ||
-            contributionKeyV2(left).localeCompare(contributionKeyV2(right))
-        )
-    );
+    return orderedContributionsV2(this.contributions, kind);
   }
 }
 
@@ -71,20 +73,21 @@ export const DESKTOP_RENDERER_CONTRIBUTION_MODULE_REF_V2 =
 const WEB_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2 =
   'sha256:ff9b73bb2be42465e2324b562c4e57e20aa2d466c6a40909f8b0d945392d2592';
 const WEB_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2 =
-  'sha256:5c941725e38c91a9b2eeda4dc6e7278870c40af67c9cd5d0ddad4c2a9f62603e';
+  'sha256:a1adf76747c59abd6fc897622f8a0fc318f26a52d5cfa3c5659fcf79d936fbd7';
 const DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2 =
   'sha256:91c83d16b21ca69d3044af3849b5562d8fb362393c121ea0263cf16310c8eea8';
 const DESKTOP_RENDERER_CONTRIBUTION_CONTRACT_DIGEST_V2 =
-  'sha256:4b1806786f85d9e87aae4d7518dbce470b376bc0a61201c331048a384472da22';
+  'sha256:ee51655e1a4136786327a1a62480ce42455c37250a23e89c4c744ec07229724e';
 
 export function applyWebRendererContributionRegistryV2(
   context: ContextV2,
-  config: Readonly<Record<string, unknown>>
+  config: Readonly<Record<string, unknown>>,
+  validateCandidate?: RendererContributionSetValidatorV2
 ): void {
   requireTargetV2(config, 'web');
   context.provide(
     WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
-    new RendererContributionRegistryV2('web')
+    new RendererContributionRegistryV2('web', validateCandidate)
   );
 }
 
@@ -115,11 +118,19 @@ export function applyDesktopRendererContributionV2(
   return registry.register(context.entryId, contributionFromConfigV2(config));
 }
 
-export const webRendererContributionRegistryDefinitionV2: PluginDefinitionV2 = Object.freeze({
-  moduleRef: WEB_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
-  contractDigest: WEB_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
-  apply: applyWebRendererContributionRegistryV2,
-});
+export function createWebRendererContributionRegistryDefinitionV2(
+  validateCandidate?: RendererContributionSetValidatorV2
+): PluginDefinitionV2 {
+  return Object.freeze({
+    moduleRef: WEB_RENDERER_CONTRIBUTION_REGISTRY_MODULE_REF_V2,
+    contractDigest: WEB_RENDERER_CONTRIBUTION_REGISTRY_CONTRACT_DIGEST_V2,
+    apply: (context: ContextV2, config: Readonly<Record<string, unknown>>) =>
+      applyWebRendererContributionRegistryV2(context, config, validateCandidate),
+  });
+}
+
+export const webRendererContributionRegistryDefinitionV2 =
+  createWebRendererContributionRegistryDefinitionV2();
 
 export const webRendererContributionDefinitionV2: PluginDefinitionV2 = Object.freeze({
   moduleRef: WEB_RENDERER_CONTRIBUTION_MODULE_REF_V2,
@@ -139,11 +150,17 @@ export const desktopRendererContributionDefinitionV2: PluginDefinitionV2 = Objec
   apply: applyDesktopRendererContributionV2,
 });
 
-export const webRendererDefinitionsV2: readonly PluginDefinitionV2[] = Object.freeze([
-  webRendererHostDefinitionV2,
-  webRendererContributionRegistryDefinitionV2,
-  webRendererContributionDefinitionV2,
-]);
+export function createWebRendererDefinitionsV2(
+  validateCandidate?: RendererContributionSetValidatorV2
+): readonly PluginDefinitionV2[] {
+  return Object.freeze([
+    webRendererHostDefinitionV2,
+    createWebRendererContributionRegistryDefinitionV2(validateCandidate),
+    webRendererContributionDefinitionV2,
+  ]);
+}
+
+export const webRendererDefinitionsV2 = createWebRendererDefinitionsV2();
 
 export const desktopRendererDefinitionsV2: readonly PluginDefinitionV2[] = Object.freeze([
   desktopRendererHostDefinitionV2,
@@ -201,6 +218,21 @@ function requireTargetV2(
 
 function contributionKeyV2(contribution: RendererContributionV2): string {
   return `${contribution.kind}:${contribution.id}`;
+}
+
+function orderedContributionsV2(
+  contributions: ReadonlyMap<string, RegisteredRendererContributionV2>,
+  kind?: RendererContributionKindV2
+): readonly RegisteredRendererContributionV2[] {
+  return Object.freeze(
+    [...contributions.values()]
+      .filter((contribution) => kind === undefined || contribution.kind === kind)
+      .sort(
+        (left, right) =>
+          left.order - right.order ||
+          contributionKeyV2(left).localeCompare(contributionKeyV2(right))
+      )
+  );
 }
 
 function cloneAndFreezePayloadV2(
