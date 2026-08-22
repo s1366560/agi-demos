@@ -3,9 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from fastapi import status
 from sqlalchemy import delete
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
     AgentPlanVersionModel,
@@ -15,6 +20,17 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+
+
+@pytest.fixture(autouse=True)
+async def _project_my_work_v2_runtime(test_app):
+    """Exercise this migrated row through the production generation dispatcher."""
+    await initialize_plugin_runtime_v2(test_app)
+    assert "project-my-work" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 async def test_my_work_embeds_authoritative_agent_run_summary(

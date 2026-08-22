@@ -165,8 +165,17 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("entry_id", "row_id"),
+    (
+        ("builtin-project-my-work-http-routes", "project-my-work"),
+        ("builtin-system-http-routes", "system"),
+    ),
+)
 async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
     monkeypatch: pytest.MonkeyPatch,
+    entry_id: str,
+    row_id: str,
 ) -> None:
     app, coordinator = await _coordinator(monkeypatch, inventory=_inventory())
     host = app.state.platform_plugin_runtime_v2
@@ -175,7 +184,7 @@ async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
     current_routes = registry.current
     assert current is not None
     entries = tuple(
-        replace(entry, enabled=False) if entry.entry_id == "builtin-system-http-routes" else entry
+        replace(entry, enabled=False) if entry.entry_id == entry_id else entry
         for entry in current.snapshot.entries
     )
     snapshot = compose_profile_v2(
@@ -194,7 +203,7 @@ async def test_disabling_migrated_builtin_row_nacks_and_keeps_last_good(
 
     assert result.plugin_publication.accepted is False
     assert result.plugin_publication.receipt.error_code == "publication_staging_failed"
-    assert "required V2 builtin route row claims missing: system" in (
+    assert f"required V2 builtin route row claims missing: {row_id}" in (
         result.plugin_publication.receipt.error_message or ""
     )
     assert host.current_distribution is current

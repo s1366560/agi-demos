@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from src.configuration.workspace_core import get_workspace_core_settings
@@ -67,6 +67,45 @@ def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
 
     assert graph.table.definitions == (route,)
     assert ("/api/v2/dynamic", "dynamic-route", ("GET",)) in graph.route_signatures
+
+
+@pytest.mark.unit
+def test_shadow_graph_snapshots_outer_dependency_overrides() -> None:
+    async def original_dependency() -> str:
+        return "original"
+
+    async def generation_override() -> str:
+        return "generation"
+
+    async def later_override() -> str:
+        return "later"
+
+    async def endpoint(value: str = Depends(original_dependency)) -> dict[str, str]:
+        return {"value": value}
+
+    overrides = {original_dependency: generation_override}
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="override-route",
+                path="/api/v2/override",
+                methods=("GET",),
+                endpoint=endpoint,
+                name="override-route",
+            ),
+        ),
+        dependency_overrides=overrides,
+    )
+    overrides[original_dependency] = later_override
+
+    request_host = FastAPI()
+    request_host.mount("/", graph.table)
+    with TestClient(request_host) as client:
+        response = client.get("/api/v2/override")
+
+    assert response.status_code == 200
+    assert response.json() == {"value": "generation"}
 
 
 @pytest.mark.unit

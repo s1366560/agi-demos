@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +18,7 @@ from src.infrastructure.plugins.route_loader import (
 from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definitions_v2
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
-REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset({"system"})
+REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset({"project-my-work", "system"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +35,7 @@ def build_builtin_route_graph_v2(
     workspace_core_settings: object,
     route_definitions: Sequence[RouteDefinitionV2] = (),
     required_v2_row_ids: Collection[str] = (),
+    dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
 ) -> BuiltinRouteGraphV2:
     """Replay the authoritative 72-row inventory into an invisible private graph."""
     private_app = FastAPI(
@@ -43,6 +44,7 @@ def build_builtin_route_graph_v2(
         openapi_url=None,
         title="MemStack Builtin Routes V2",
     )
+    private_app.dependency_overrides.update(dict(dependency_overrides or {}))
     definitions = tuple(route_definitions)
     row_overrides = _builtin_row_overrides_v2(definitions)
     missing_required = sorted(set(required_v2_row_ids) - set(row_overrides))

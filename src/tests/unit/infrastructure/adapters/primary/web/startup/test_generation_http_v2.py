@@ -8,10 +8,13 @@ import httpx
 import pytest
 from fastapi import FastAPI, WebSocket
 from starlette.responses import StreamingResponse
+from starlette.routing import Match
 from starlette.testclient import TestClient
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
+    ApplicationGenerationRouteDispatcherV2,
     mount_generation_http_dispatcher_v2,
 )
 from src.infrastructure.plugins.v2.boundary import (
@@ -26,6 +29,50 @@ from src.infrastructure.plugins.v2.http_routes import (
     RouteTableV2,
 )
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+
+@pytest.mark.unit
+async def test_observability_route_match_uses_current_publication_before_boundary_pin() -> None:
+    app = FastAPI()
+    mount_generation_http_dispatcher_v2(app)
+    dispatcher = next(
+        route
+        for route in app.router.routes
+        if isinstance(route, ApplicationGenerationRouteDispatcherV2)
+    )
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="observability-route",
+                path="/api/observed",
+                methods=("GET",),
+                endpoint=lambda: {"ok": True},
+                name="observed",
+            ),
+        )
+    )
+    registry = RouteTableRegistryV2()
+    await registry.publish(
+        PluginGenerationDescriptorV2(
+            profile_id="observability",
+            generation=1,
+            digest="0" * 64,
+        ),
+        table,
+    )
+    app.state.platform_plugin_route_registry_v2 = registry
+
+    match, child_scope = dispatcher.matches(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/observed",
+            "root_path": "",
+        }
+    )
+
+    assert match is Match.FULL
+    assert child_scope == {"endpoint": dispatcher}
 
 
 @pytest.mark.unit

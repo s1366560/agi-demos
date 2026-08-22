@@ -111,6 +111,7 @@ async def initialize_plugin_runtime_v2(
                 workspace_core_settings=workspace_core_settings,
                 route_definitions=contributed_routes,
                 required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+                dependency_overrides=app.dependency_overrides,
             )
             staged = route_registry.stage(generation.descriptor, graph.table)
             route_graph = graph
@@ -166,6 +167,7 @@ async def initialize_plugin_runtime_v2(
         host=host,
         registry=route_registry,
         workspace_core_settings=workspace_core_settings,
+        dependency_overrides=app.dependency_overrides,
     )
     app.state.platform_plugin_publication_policy_v2 = publication_policy
     install_process_generation_host_v2(host)

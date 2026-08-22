@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,10 +79,12 @@ class HttpRoutePublicationCoordinatorV2:
         host: PlatformPluginRuntimeHostV2,
         registry: RouteTableRegistryV2,
         workspace_core_settings: object,
+        dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
     ) -> None:
         self._host = host
         self._registry = registry
         self._workspace_core_settings = workspace_core_settings
+        self._dependency_overrides = dict(dependency_overrides or {})
         self._lock = asyncio.Lock()
 
     async def reconcile(
@@ -188,6 +190,7 @@ class HttpRoutePublicationCoordinatorV2:
                 workspace_core_settings=self._workspace_core_settings,
                 route_definitions=contributed_routes,
                 required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+                dependency_overrides=self._dependency_overrides,
             )
             route_publication = self._registry.stage(generation.descriptor, graph.table)
             staged_graph = graph

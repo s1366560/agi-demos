@@ -13,6 +13,7 @@ from src.infrastructure.plugins.v2.http_routes import (
     GenerationRouteDispatcherV2,
     RouteTableRegistryV2,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class ApplicationGenerationRouteDispatcherV2(BaseRoute):
@@ -41,7 +42,16 @@ class ApplicationGenerationRouteDispatcherV2(BaseRoute):
         from src.infrastructure.plugins.v2.boundary import current_generation_v2
 
         registry = self._registry()
-        publication = registry.resolve(current_generation_v2().descriptor)
+        try:
+            descriptor = current_generation_v2().descriptor
+        except RuntimeV2Error as error:
+            if error.code != "generation_not_pinned":
+                raise
+            publication = registry.current
+            if publication is None:
+                raise RuntimeError("plugin route registry v2 has no current publication") from error
+        else:
+            publication = registry.resolve(descriptor)
         match = publication.table.match(scope)
         return match, {"endpoint": self} if match is not Match.NONE else {}
 
