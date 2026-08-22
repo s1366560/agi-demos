@@ -10,6 +10,10 @@ from sqlalchemy.orm import selectinload
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.main import create_app
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserRole
 
@@ -61,13 +65,22 @@ async def mock_get_current_user(db: AsyncSession = Depends(get_db)):
     return user
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_tenant_flow(integration_db_override):
-    # Override dependency
+@pytest.fixture
+async def tenant_v2_runtime(integration_db_override):
     app.dependency_overrides[get_db] = integration_db_override
     app.dependency_overrides[get_current_user] = mock_get_current_user
+    await initialize_plugin_runtime_v2(app)
+    assert "tenants" in app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(app)
+        app.dependency_overrides = {}
 
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_tenant_flow(tenant_v2_runtime):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as AC:
         # 2. Create Tenant
         print("\n2. Creating Tenant...")
@@ -122,5 +135,3 @@ async def test_tenant_flow(integration_db_override):
         # Verify deletion (skip assertion as 403 might happen due to access control on deleted items)
         response = await AC.get(f"/api/v1/tenants/{tenant_id}")
         # assert response.status_code == 404
-
-    app.dependency_overrides = {}

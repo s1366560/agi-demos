@@ -172,6 +172,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
         ("builtin-project-my-work-http-routes", "project-my-work"),
         ("builtin-projects-http-routes", "projects"),
         ("builtin-system-http-routes", "system"),
+        ("builtin-tenants-http-routes", "tenants"),
         ("builtin-tenant-webhooks-http-routes", "tenant-webhooks"),
         ("builtin-invitations-http-routes", "invitations"),
         ("builtin-invitations-public-http-routes", "invitations-public"),
@@ -245,7 +246,7 @@ async def test_reconcile_failure_keeps_last_good_generation_table_and_fallback(
 async def test_private_graph_conflict_nacks_without_exposing_staged_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    conflicting_path = "/api/v1/tenants/{tenant_id}"
+    conflicting_path = "/api/v1/llm-providers/tenants/{tenant_id}/assignments"
     app, coordinator = await _coordinator(
         monkeypatch,
         inventory=_inventory(path=conflicting_path),

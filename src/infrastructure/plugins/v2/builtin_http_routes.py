@@ -27,6 +27,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "projects",
         "smtp-config",
         "system",
+        "tenants",
         "tenant-webhooks",
         "trust-workspace",
     }

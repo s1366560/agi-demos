@@ -112,6 +112,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_tenant_webhooks_http_routes import (
         builtin_tenant_webhooks_http_routes_definition_v2,
     )
+    from .builtin_tenants_http_routes import builtin_tenants_http_routes_definition_v2
     from .builtin_trust_workspace_http_routes import (
         builtin_trust_workspace_http_routes_definition_v2,
     )
@@ -140,6 +141,7 @@ def builtin_runtime_definitions_v2(
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
         route_table_builder_definition_v2(),
+        builtin_tenants_http_routes_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
