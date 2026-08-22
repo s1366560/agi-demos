@@ -21,6 +21,7 @@ _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
 REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
     {
         "billing",
+        "episodes",
         "enhanced-search",
         "enhanced-search-memory",
         "graph",
