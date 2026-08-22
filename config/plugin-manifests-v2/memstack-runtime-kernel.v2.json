@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:248162485c1a3e44a42747e54918294a9e7195f5594667f759e49a440a5de803",
+        "digest": "sha256:e28f66a0ba4acadc2a8d58b71aeb42716fb4857bceb3548910ac0adb693c6d31",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1178,6 +1178,35 @@
       "artifact": {
         "digest": "sha256:f5ed2aee2632d29436390e12cc4c01669847efe91fcf15b6c5fa83c06374fc26",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_retrieval_stores_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/enhanced-search-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_enhanced_search_http_routes:builtin_enhanced_search_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:76fc3b3366a2e3cb8f75b2a0cbe1e662bcd2c8b6cc740d05c879fe3bf2de75f7",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_enhanced_search_http_routes.py"
       }
     },
     {
