@@ -96,5 +96,5 @@ async def test_list_event_types_uses_selected_tenant() -> None:
 
     response = await list_event_types(tenant_id="tenant-selected", service=service)
 
-    service.get_event_types.assert_awaited_once_with("tenant-selected")
+    service.get_event_types.assert_awaited_once_with(tenant_id="tenant-selected")
     assert response == ["gene.installed"]

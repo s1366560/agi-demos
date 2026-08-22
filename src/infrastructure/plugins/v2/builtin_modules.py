@@ -27,6 +27,7 @@ from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
 )
+from .event_log_services import event_log_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
@@ -108,6 +109,7 @@ def builtin_runtime_definitions_v2(
         builtin_enhanced_search_http_routes_definition_v2,
     )
     from .builtin_episodes_http_routes import builtin_episodes_http_routes_definition_v2
+    from .builtin_events_http_routes import builtin_events_http_routes_definition_v2
     from .builtin_graph_http_routes import builtin_graph_http_routes_definition_v2
     from .builtin_graph_stores_http_routes import (
         builtin_graph_stores_http_routes_definition_v2,
@@ -177,6 +179,7 @@ def builtin_runtime_definitions_v2(
         builtin_projects_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
         builtin_notifications_http_routes_definition_v2(),
+        builtin_events_http_routes_definition_v2(),
         builtin_graph_http_routes_definition_v2(),
         builtin_graph_stores_http_routes_definition_v2(),
         builtin_episodes_http_routes_definition_v2(),
@@ -199,6 +202,7 @@ def builtin_runtime_definitions_v2(
         *reflection_service_definitions_v2(),
         *schema_service_definitions_v2(),
         *notification_service_definitions_v2(),
+        *event_log_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
