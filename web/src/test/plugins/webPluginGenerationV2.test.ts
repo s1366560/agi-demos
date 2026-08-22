@@ -1,4 +1,13 @@
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { getDistributionMock } = vi.hoisted(() => ({
+  getDistributionMock: vi.fn(),
+}));
+
+vi.mock('../../services/client/httpClient', () => ({
+  httpClient: { get: getDistributionMock },
+}));
 
 import {
   RendererPluginRuntimeV2,
@@ -7,8 +16,11 @@ import {
 } from '@agistack/plugin-runtime';
 
 import {
+  activateWebPluginGenerationRootV2,
+  deactivateWebPluginGenerationRootV2,
   startWebPluginGenerationPollingV2,
   type WebPluginDistributionSourceV2,
+  useWebPluginGenerationV2,
 } from '../../plugins/webPluginGenerationV2';
 
 import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
@@ -31,7 +43,9 @@ function distribution() {
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await deactivateWebPluginGenerationRootV2();
+  getDistributionMock.mockReset();
   vi.useRealTimers();
 });
 
@@ -57,5 +71,30 @@ describe('web plugin generation polling', () => {
     expect(source).toHaveBeenCalledTimes(2);
     expect(runtime.getSnapshot()).toBeDefined();
     await runtime.close();
+  });
+
+  it('releases last-good when the authenticated generation host becomes disabled', async () => {
+    getDistributionMock.mockResolvedValue(distribution());
+    activateWebPluginGenerationRootV2();
+    const rendered = renderHook(
+      ({ enabled }: { enabled: boolean }) => useWebPluginGenerationV2(enabled),
+      { initialProps: { enabled: true } }
+    );
+    await waitFor(() => expect(rendered.result.current.status).toBe('ready'));
+    const firstGeneration = rendered.result.current.generation;
+
+    rendered.rerender({ enabled: false });
+
+    await waitFor(() => expect(firstGeneration?.disposed).toBe(true));
+    expect(rendered.result.current).toMatchObject({
+      status: 'empty',
+      generation: undefined,
+      error: undefined,
+    });
+
+    rendered.rerender({ enabled: true });
+    await waitFor(() => expect(rendered.result.current.status).toBe('ready'));
+    expect(rendered.result.current.generation).not.toBe(firstGeneration);
+    rendered.unmount();
   });
 });

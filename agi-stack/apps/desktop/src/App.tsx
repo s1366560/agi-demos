@@ -967,10 +967,10 @@ export function App() {
   const desktopRendererAuthorityV2 = useMemo(
     () =>
       resolveDesktopRendererAuthorityStateV2(
-        desktopPluginGenerationV2,
+        desktopPluginGenerationV2.generation,
         identityAuthenticated,
       ),
-    [desktopPluginGenerationV2, identityAuthenticated],
+    [desktopPluginGenerationV2.generation, identityAuthenticated],
   );
   authRef.current = auth;
   useEffect(() => {
@@ -6845,7 +6845,10 @@ export function App() {
       >
       <div
         ref={appShellRef}
-        data-plugin-generation-v2={desktopPluginGenerationV2?.snapshot.digest ?? 'unavailable'}
+        data-plugin-generation-v2={
+          desktopPluginGenerationV2.generation?.snapshot.digest ?? 'unavailable'
+        }
+        data-plugin-generation-v2-status={desktopPluginGenerationV2.status}
         data-plugin-generation-v2-target="desktop-renderer"
         className={`app-shell hierarchy-shell runtime-mode ${
           runsInNativeDesktop ? 'desktop-window' : 'browser-window'

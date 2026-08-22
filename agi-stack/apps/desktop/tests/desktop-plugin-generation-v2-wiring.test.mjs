@@ -8,6 +8,7 @@ function source(relativePath) {
 
 test("desktop renderer owns a protocol-v2 generation host through the public fetch seam", () => {
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
+  const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
   const main = source("src/main.tsx");
 
@@ -15,18 +16,20 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(hook, /createDesktopRendererDefinitionsV2/u);
   assert.match(hook, /validateDesktopRendererContributionsV2/u);
   assert.match(hook, /RendererGenerationLeaseStoreV2/u);
+  assert.match(hook, /RendererGenerationStatusStoreV2/u);
+  assert.match(hook, /projectRendererPluginGenerationStateV2/u);
   assert.match(hook, /useLayoutEffect/u);
   assert.match(hook, /desktopRendererLeaseStoreV2\.commit\(snapshot\)/u);
-  assert.match(hook, /return snapshot\.generation/u);
+  assert.match(hook, /return state/u);
+  assert.match(hook, /if \(!enabled\) \{\s*scheduleClose\(\);\s*return;\s*\}/u);
+  assert.doesNotMatch(hook, /if \(!enabled\) return \(\) => scheduleClose\(\)/u);
   assert.match(hook, /desktopApiFetch\(/u);
   assert.doesNotMatch(hook, /DesktopApiClient/u);
+  assert.match(hook, /startRendererGenerationPollingV2/u);
   assert.match(hook, /runtime\.bootstrap\(bootstrapProfileV2\)/u);
-  const bootstrapIndex = hook.search(
-    /runtime\.bootstrap\(bootstrapProfileV2\)/u,
-  );
-  const remoteFetchIndex = hook.search(
-    /fetchDesktopPluginDistributionV2\(\s*config,\s*controller\.signal/u,
-  );
+  assert.match(hook, /source:\s*\(signal\) => fetchDesktopPluginDistributionV2\(config, signal\)/u);
+  const bootstrapIndex = lifecycle.search(/await options\.bootstrap\(\)/u);
+  const remoteFetchIndex = lifecycle.search(/await options\.source\(signal\)/u);
   assert.ok(
     bootstrapIndex >= 0 && remoteFetchIndex > bootstrapIndex,
     "local bootstrap must activate before the first remote request",
@@ -35,6 +38,8 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
     app,
     /useDesktopPluginGenerationV2\(config, identityAuthenticated\)/u,
   );
+  assert.match(app, /desktopPluginGenerationV2\.generation/u);
+  assert.match(app, /desktopPluginGenerationV2\.status/u);
   assert.match(app, /resolveDesktopRendererAuthorityStateV2/u);
   assert.match(app, /projectDesktopRouteRegistryV2/u);
   assert.match(app, /projectDesktopNavigationRegistryV2/u);

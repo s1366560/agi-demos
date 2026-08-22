@@ -61,21 +61,41 @@ export class PluginSnapshotReconcilerV2 {
   readonly manager = new GenerationManagerV2();
   private appliedVersion: number | null = null;
   private appliedDigest: string | null = null;
+  private bootstrapPromise: Promise<void> | null = null;
+  private applyTail: Promise<void> = Promise.resolve();
+  private closePromise: Promise<void> | null = null;
 
   constructor(private readonly loader: LoaderV2) {}
 
   async bootstrap(snapshot: ProfileSnapshotV2): Promise<void> {
+    if (this.closePromise !== null) await this.closePromise;
     if (this.manager.current !== undefined) return;
-    const generation = await this.loader.stage(snapshot);
+    if (this.bootstrapPromise !== null) return this.bootstrapPromise;
+
+    const bootstrapPromise = this.publishBootstrap(snapshot);
+    this.bootstrapPromise = bootstrapPromise;
     try {
-      await this.manager.publish(generation);
-    } catch (error) {
-      await generation.dispose();
-      throw error;
+      await bootstrapPromise;
+    } finally {
+      if (this.bootstrapPromise === bootstrapPromise) this.bootstrapPromise = null;
     }
   }
 
   async apply(
+    distribution: ControlPlaneDistributionV2,
+  ): Promise<SnapshotApplyReceiptV2> {
+    if (this.closePromise !== null) await this.closePromise;
+    const applyPromise = this.applyTail.then(() =>
+      this.applyDistribution(distribution),
+    );
+    this.applyTail = applyPromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    return applyPromise;
+  }
+
+  private async applyDistribution(
     distribution: ControlPlaneDistributionV2,
   ): Promise<SnapshotApplyReceiptV2> {
     if (this.appliedVersion !== null) {
@@ -113,6 +133,36 @@ export class PluginSnapshotReconcilerV2 {
   }
 
   async close(): Promise<void> {
+    if (this.closePromise !== null) return this.closePromise;
+
+    const closePromise = this.closeRuntime();
+    this.closePromise = closePromise;
+    try {
+      await closePromise;
+    } finally {
+      if (this.closePromise === closePromise) this.closePromise = null;
+    }
+  }
+
+  private async publishBootstrap(snapshot: ProfileSnapshotV2): Promise<void> {
+    const generation = await this.loader.stage(snapshot);
+    if (this.manager.current !== undefined) {
+      await generation.dispose();
+      return;
+    }
+    try {
+      await this.manager.publish(generation);
+    } catch (error) {
+      await generation.dispose();
+      throw error;
+    }
+  }
+
+  private async closeRuntime(): Promise<void> {
+    if (this.bootstrapPromise !== null) {
+      await this.bootstrapPromise.catch(() => undefined);
+    }
+    await this.applyTail;
     await this.manager.close();
     this.appliedVersion = null;
     this.appliedDigest = null;

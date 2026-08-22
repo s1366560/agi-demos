@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   digestV2,
@@ -74,6 +74,153 @@ describe('protocol-v2 control-plane distribution', () => {
     });
     expect(repeated).toEqual(first);
     expect(reconciler.manager.current?.snapshot.digest).toBe(snapshot.digest);
+    await reconciler.close();
+  });
+
+  it('coalesces concurrent bootstrap attempts into one staged publication', async () => {
+    const snapshot = await snapshotAt(18);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const stage = vi.spyOn(loader, 'stage');
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+    const subscriber = vi.fn();
+    const unsubscribe = reconciler.manager.subscribe(subscriber);
+
+    await Promise.all([
+      reconciler.bootstrap(snapshot),
+      reconciler.bootstrap(snapshot),
+      reconciler.bootstrap(snapshot),
+    ]);
+
+    expect(stage).toHaveBeenCalledOnce();
+    expect(subscriber).toHaveBeenCalledOnce();
+    expect(reconciler.manager.current?.snapshot.digest).toBe(snapshot.digest);
+
+    unsubscribe();
+    await reconciler.close();
+  });
+
+  it('clears a failed bootstrap singleflight so the next attempt can retry', async () => {
+    const snapshot = await snapshotAt(19);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const failure = new Error('bootstrap stage failed');
+    const stage = vi.spyOn(loader, 'stage').mockRejectedValueOnce(failure);
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+
+    await expect(reconciler.bootstrap(snapshot)).rejects.toBe(failure);
+    await expect(reconciler.bootstrap(snapshot)).resolves.toBeUndefined();
+
+    expect(stage).toHaveBeenCalledTimes(2);
+    expect(reconciler.manager.current?.snapshot.digest).toBe(snapshot.digest);
+    await reconciler.close();
+  });
+
+  it('disposes a delayed bootstrap when a remote publication wins the race', async () => {
+    const bootstrapSnapshot = await snapshotAt(20);
+    const remoteSnapshot = await snapshotAt(21);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const originalStage = loader.stage.bind(loader);
+    let releaseBootstrap: (() => void) | undefined;
+    let stagedBootstrap: Awaited<ReturnType<LoaderV2['stage']>> | undefined;
+    const bootstrapGate = new Promise<void>((resolve) => {
+      releaseBootstrap = resolve;
+    });
+    const stage = vi.spyOn(loader, 'stage').mockImplementationOnce(async (snapshot) => {
+      await bootstrapGate;
+      stagedBootstrap = await originalStage(snapshot);
+      return stagedBootstrap;
+    });
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+
+    const bootstrap = reconciler.bootstrap(bootstrapSnapshot);
+    await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+    const receipt = await reconciler.apply(distribution(remoteSnapshot, 13));
+    releaseBootstrap?.();
+    await bootstrap;
+
+    expect(receipt.status).toBe('ack');
+    expect(reconciler.manager.current?.snapshot.digest).toBe(remoteSnapshot.digest);
+    expect(stagedBootstrap?.disposed).toBe(true);
+    await reconciler.close();
+  });
+
+  it('waits for an in-flight bootstrap before closing the reconciler', async () => {
+    const snapshot = await snapshotAt(22);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const originalStage = loader.stage.bind(loader);
+    let releaseBootstrap: (() => void) | undefined;
+    let stagedBootstrap: Awaited<ReturnType<LoaderV2['stage']>> | undefined;
+    const bootstrapGate = new Promise<void>((resolve) => {
+      releaseBootstrap = resolve;
+    });
+    const stage = vi.spyOn(loader, 'stage').mockImplementationOnce(async (candidate) => {
+      await bootstrapGate;
+      stagedBootstrap = await originalStage(candidate);
+      return stagedBootstrap;
+    });
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+
+    const bootstrap = reconciler.bootstrap(snapshot);
+    await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+    const close = reconciler.close();
+    releaseBootstrap?.();
+    await Promise.all([bootstrap, close]);
+
+    expect(reconciler.manager.current).toBeUndefined();
+    expect(stagedBootstrap?.disposed).toBe(true);
+  });
+
+  it('waits for an in-flight remote apply before closing the reconciler', async () => {
+    const snapshot = await snapshotAt(23);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const originalStage = loader.stage.bind(loader);
+    let releaseApply: (() => void) | undefined;
+    let stagedApply: Awaited<ReturnType<LoaderV2['stage']>> | undefined;
+    const applyGate = new Promise<void>((resolve) => {
+      releaseApply = resolve;
+    });
+    const stage = vi.spyOn(loader, 'stage').mockImplementationOnce(async (candidate) => {
+      await applyGate;
+      stagedApply = await originalStage(candidate);
+      return stagedApply;
+    });
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+
+    const apply = reconciler.apply(distribution(snapshot, 14));
+    await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+    const close = reconciler.close();
+    releaseApply?.();
+    const [receipt] = await Promise.all([apply, close]);
+
+    expect(receipt.status).toBe('ack');
+    expect(reconciler.manager.current).toBeUndefined();
+    expect(stagedApply?.disposed).toBe(true);
+  });
+
+  it('serializes concurrent remote publications in invocation order', async () => {
+    const newest = await snapshotAt(24);
+    const stale = await snapshotAt(25);
+    const loader = new LoaderV2(webRendererDefinitionsV2, 'web');
+    const originalStage = loader.stage.bind(loader);
+    let releaseNewest: (() => void) | undefined;
+    const newestGate = new Promise<void>((resolve) => {
+      releaseNewest = resolve;
+    });
+    const stage = vi.spyOn(loader, 'stage').mockImplementationOnce(async (candidate) => {
+      await newestGate;
+      return originalStage(candidate);
+    });
+    const reconciler = new PluginSnapshotReconcilerV2(loader);
+
+    const newestApply = reconciler.apply(distribution(newest, 16));
+    await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+    const staleApply = reconciler.apply(distribution(stale, 15));
+    releaseNewest?.();
+    const [newestReceipt, staleReceipt] = await Promise.all([newestApply, staleApply]);
+
+    expect(newestReceipt).toMatchObject({ status: 'ack', applied_version: 16 });
+    expect(staleReceipt).toMatchObject({ status: 'nack', error_code: 'stale_version' });
+    expect(stage).toHaveBeenCalledOnce();
+    expect(reconciler.manager.current?.snapshot.digest).toBe(newest.digest);
     await reconciler.close();
   });
 

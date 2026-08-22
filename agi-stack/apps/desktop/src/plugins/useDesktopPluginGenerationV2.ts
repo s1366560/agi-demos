@@ -3,7 +3,11 @@ import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import {
   createDesktopRendererDefinitionsV2,
   RendererGenerationLeaseStoreV2,
+  RendererGenerationStatusStoreV2,
   RendererPluginRuntimeV2,
+  projectRendererPluginGenerationStateV2,
+  startRendererGenerationPollingV2,
+  type RendererPluginGenerationStateV2,
 } from '@agistack/plugin-runtime';
 
 import { desktopApiCredential, desktopLaunchCapability } from '../api/client';
@@ -24,6 +28,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
 const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(
   desktopRendererRuntimeV2
 );
+const desktopRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
 export function activateDesktopPluginGenerationRootV2(): void {
@@ -34,11 +39,19 @@ export async function deactivateDesktopPluginGenerationRootV2(): Promise<void> {
   await desktopRendererLeaseStoreV2.deactivateRoot();
 }
 
-export function useDesktopPluginGenerationV2(config: DesktopRuntimeConfig, enabled: boolean) {
+export function useDesktopPluginGenerationV2(
+  config: DesktopRuntimeConfig,
+  enabled: boolean
+): RendererPluginGenerationStateV2 {
   const snapshot = useSyncExternalStore(
     desktopRendererLeaseStoreV2.subscribe,
     desktopRendererLeaseStoreV2.getSnapshot,
     desktopRendererLeaseStoreV2.getSnapshot
+  );
+  const status = useSyncExternalStore(
+    desktopRendererStatusStoreV2.subscribe,
+    desktopRendererStatusStoreV2.getSnapshot,
+    desktopRendererStatusStoreV2.getSnapshot
   );
   useLayoutEffect(() => {
     void desktopRendererLeaseStoreV2.commit(snapshot);
@@ -49,49 +62,39 @@ export function useDesktopPluginGenerationV2(config: DesktopRuntimeConfig, enabl
       clearTimeout(pendingClose);
       pendingClose = null;
     }
-    if (!enabled) return () => scheduleClose();
+    if (!enabled) {
+      scheduleClose();
+      return;
+    }
 
-    const stop = startDesktopPluginGenerationPollingV2(desktopRendererRuntimeV2, config);
+    const stop = startDesktopPluginGenerationPollingV2(
+      desktopRendererRuntimeV2,
+      config,
+      desktopRendererStatusStoreV2
+    );
     return () => {
       stop();
       scheduleClose();
     };
   }, [config.apiBaseUrl, config.apiKey, config.localApiToken, config.mode, enabled]);
 
-  return snapshot.generation;
+  const state = projectRendererPluginGenerationStateV2(enabled, snapshot.generation, status);
+  return state;
 }
 
 function startDesktopPluginGenerationPollingV2(
   runtime: RendererPluginRuntimeV2,
-  config: DesktopRuntimeConfig
+  config: DesktopRuntimeConfig,
+  statusStore: RendererGenerationStatusStoreV2
 ): () => void {
-  const controller = new AbortController();
-  let stopped = false;
-  let inFlight: Promise<void> | null = null;
-
-  const refresh = (): void => {
-    if (stopped || inFlight !== null) return;
-    const request = (async () => {
-      if (config.mode === 'local' && runtime.getSnapshot() === undefined) {
-        await runtime.bootstrap(bootstrapProfileV2);
-      }
-      if (stopped) return;
-      const remote = await fetchDesktopPluginDistributionV2(config, controller.signal);
-      if (!stopped && remote !== null) await runtime.apply(remote);
-    })().catch(() => undefined);
-    inFlight = request;
-    void request.finally(() => {
-      if (inFlight === request) inFlight = null;
-    });
-  };
-
-  refresh();
-  const timer = setInterval(refresh, POLL_INTERVAL_MS);
-  return () => {
-    stopped = true;
-    controller.abort();
-    clearInterval(timer);
-  };
+  return startRendererGenerationPollingV2({
+    runtime,
+    source: (signal) => fetchDesktopPluginDistributionV2(config, signal),
+    statusStore,
+    bootstrap:
+      config.mode === 'local' ? () => runtime.bootstrap(bootstrapProfileV2) : undefined,
+    pollIntervalMs: POLL_INTERVAL_MS,
+  });
 }
 
 async function fetchDesktopPluginDistributionV2(

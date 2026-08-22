@@ -1,6 +1,6 @@
-import { StrictMode, type PropsWithChildren } from 'react';
+import { StrictMode, Suspense, type PropsWithChildren } from 'react';
 
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -63,6 +63,55 @@ describe('useRendererGenerationLeaseV2', () => {
     rendered.unmount();
     await store.deactivateRoot();
     expect(runtime.getSnapshot()?.leaseCount).toBe(0);
+    await runtime.close();
+  });
+
+  it('keeps the committed generation alive while its replacement is suspended', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const replacement = await distributionAt(2, 2);
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    let replacementReady = false;
+    let releaseReplacement: (() => void) | undefined;
+    const replacementGate = new Promise<void>((resolve) => {
+      releaseReplacement = resolve;
+    });
+
+    function Consumer() {
+      const generation = useRendererGenerationLeaseV2(store);
+      if (generation?.snapshot.generation === 2 && !replacementReady) throw replacementGate;
+      return <div data-testid="renderer-generation">{generation?.snapshot.generation ?? 0}</div>;
+    }
+
+    const rendered = render(
+      <StrictMode>
+        <Suspense fallback={<div data-testid="renderer-fallback">loading</div>}>
+          <Consumer />
+        </Suspense>
+      </StrictMode>
+    );
+    const firstGeneration = store.getSnapshot().generation;
+    expect(screen.getByTestId('renderer-generation')).toHaveTextContent('1');
+
+    await act(async () => {
+      await runtime.apply(replacement);
+    });
+
+    expect(firstGeneration?.retired).toBe(true);
+    expect(firstGeneration?.disposed).toBe(false);
+    expect(firstGeneration?.leaseCount).toBe(1);
+
+    replacementReady = true;
+    await act(async () => {
+      releaseReplacement?.();
+      await replacementGate;
+    });
+    await waitFor(() => expect(screen.getByTestId('renderer-generation')).toHaveTextContent('2'));
+    expect(firstGeneration?.disposed).toBe(true);
+
+    rendered.unmount();
+    await store.deactivateRoot();
     await runtime.close();
   });
 });

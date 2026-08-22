@@ -14,6 +14,16 @@ export {
   type RendererGenerationLeaseSnapshotV2,
 } from './renderer';
 export {
+  projectRendererPluginGenerationStateV2,
+  RendererGenerationStatusStoreV2,
+  startRendererGenerationPollingV2,
+  type RendererGenerationStatusSnapshotV2,
+  type RendererGenerationStatusV2,
+  type RendererPluginDistributionSourceV2,
+  type RendererPluginGenerationStateV2,
+  type StartRendererGenerationPollingOptionsV2,
+} from './rendererLifecycle';
+export {
   ContextV2,
   FiberV2,
   GenerationLeaseV2,
