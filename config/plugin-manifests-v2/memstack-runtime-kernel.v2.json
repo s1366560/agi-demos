@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:8340b8e983f6034d6791c2b52e6c1407a381d645187daf43c8b0f017efc8e6f4",
+        "digest": "sha256:55edc60fdb3c26e100bbf448d6a4e87bd5459ba95b34d08b6694cb26cc2c2b73",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -306,6 +306,43 @@
       "artifact": {
         "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/worker-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_worker_runtime:agent_worker_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.worker-runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sandbox_runtime",
+              "service": "service:sandbox.runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-sandbox-runtime", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:5f215f5bba64b5399dd98551b217aa4c560501d7d1c682dd8853c2f8861c0f0e",
+      "artifact": {
+        "digest": "sha256:c4f3b7a4152eb5aa6630e5191dc59d82ae6542f23126a298938ae038925fb48d",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
     {

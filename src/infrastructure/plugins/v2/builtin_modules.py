@@ -20,6 +20,7 @@ from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
 )
+from .agent_worker_runtime import agent_worker_runtime_definition_v2
 from .backend_store_services import backend_store_service_definitions_v2
 from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
@@ -102,6 +103,7 @@ def builtin_runtime_definitions_v2(
             sandbox_runtime_factory,
             redis_client=sandbox_redis_client,
         ),
+        agent_worker_runtime_definition_v2(),
         *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
