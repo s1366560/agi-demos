@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.routers.tunnel import tunnel_connect, tunnel_status
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
@@ -20,7 +22,11 @@ from src.infrastructure.plugins.route_loader import RouteLoadError
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableRegistryV2
+from src.infrastructure.plugins.v2.http_routes import (
+    RouteDefinitionV2,
+    RouteTableRegistryV2,
+    WebSocketRouteDefinitionV2,
+)
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -67,6 +73,47 @@ def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
 
     assert graph.table.definitions == (route,)
     assert ("/api/v2/dynamic", "dynamic-route", ("GET",)) in graph.route_signatures
+
+
+@pytest.mark.unit
+def test_shadow_graph_can_replace_one_complete_mixed_http_websocket_row() -> None:
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="mixed-tunnel-row",
+        generation=1,
+        digest="0" * 64,
+    )
+    baseline = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+    )
+    claimed = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            WebSocketRouteDefinitionV2(
+                owner_entry_id="builtin-tunnel-routes",
+                path="/api/v1/tunnel/connect",
+                endpoint=tunnel_connect,
+                name="tunnel_connect",
+                replaces_builtin_row_id="tunnel",
+            ),
+            RouteDefinitionV2(
+                owner_entry_id="builtin-tunnel-routes",
+                path="/api/v1/admin/tunnel/status",
+                methods=("GET",),
+                endpoint=tunnel_status,
+                name="tunnel_status",
+                tags=("tunnel",),
+                response_model=dict[str, object],
+                replaces_builtin_row_id="tunnel",
+            ),
+        ),
+    )
+
+    assert claimed.route_signatures == baseline.route_signatures
+    assert (
+        claimed.table.openapi_snapshot(descriptor).schema
+        == baseline.table.openapi_snapshot(descriptor).schema
+    )
+    assert claimed.v2_owned_row_ids == ("tunnel",)
 
 
 @pytest.mark.unit

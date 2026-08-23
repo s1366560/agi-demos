@@ -15,7 +15,7 @@ from src.infrastructure.plugins.route_loader import (
     install_builtin_routes,
 )
 
-from .http_routes import RouteDefinitionV2, RouteTableV2, install_route_definitions_v2
+from .http_routes import RouteContributionV2, RouteTableV2, install_route_definitions_v2
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
 REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
@@ -67,7 +67,7 @@ class BuiltinRouteGraphV2:
 def build_builtin_route_graph_v2(
     *,
     workspace_core_settings: object,
-    route_definitions: Sequence[RouteDefinitionV2] = (),
+    route_definitions: Sequence[RouteContributionV2] = (),
     required_v2_row_ids: Collection[str] = (),
     dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
 ) -> BuiltinRouteGraphV2:
@@ -106,9 +106,9 @@ def build_builtin_route_graph_v2(
 
 
 def _builtin_row_overrides_v2(
-    definitions: Sequence[RouteDefinitionV2],
+    definitions: Sequence[RouteContributionV2],
 ) -> dict[str, BuiltinRouteRowOverride]:
-    grouped: dict[str, list[RouteDefinitionV2]] = {}
+    grouped: dict[str, list[RouteContributionV2]] = {}
     for definition in definitions:
         if definition.replaces_builtin_row_id is None:
             continue
@@ -126,7 +126,7 @@ def _builtin_row_overrides_v2(
             for method in definition.methods
         )
 
-        def install(app: FastAPI, routes: tuple[RouteDefinitionV2, ...] = frozen) -> None:
+        def install(app: FastAPI, routes: tuple[RouteContributionV2, ...] = frozen) -> None:
             install_route_definitions_v2(app, routes)
 
         overrides[row_id] = BuiltinRouteRowOverride(
@@ -139,7 +139,7 @@ def _builtin_row_overrides_v2(
 
 def _install_generation_routes_before_root_catch_all(
     app: FastAPI,
-    definitions: Sequence[RouteDefinitionV2],
+    definitions: Sequence[RouteContributionV2],
 ) -> None:
     """Keep declared routes reachable ahead of the host-preview fallback."""
     if not definitions:

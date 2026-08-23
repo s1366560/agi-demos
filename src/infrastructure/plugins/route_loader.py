@@ -19,10 +19,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from starlette.routing import WebSocketRoute
+
 from .profile import ProfilePatch
 from .route_inventory import INVENTORY_PATH
 
 logger = logging.getLogger(__name__)
+
+_WEBSOCKET_ROUTE_KEY_METHOD = "WEBSOCKET"
 
 __all__ = [
     "BuiltinRouteRowOverride",
@@ -78,7 +82,7 @@ class RouteRowPatch:
 
 @dataclass(frozen=True)
 class BuiltinRouteRowOverride:
-    """One explicit, complete replacement for an ``include_router`` inventory row."""
+    """One explicit, complete HTTP/WebSocket replacement for an inventory row."""
 
     row_id: str
     route_keys: frozenset[tuple[str, str]]
@@ -331,14 +335,21 @@ def _resolved_router_keys(
     for route in cast(list[object], routes):
         path = getattr(route, "path", None)
         methods = getattr(route, "methods", None)
-        if not isinstance(path, str) or not methods:
+        if not isinstance(path, str):
             raise RouteLoadError(
-                f"route row {row_id} contains a non-HTTP route and cannot use a V2 override"
+                f"route row {row_id} contains an unsupported route and cannot use a V2 override"
             )
         mounted_path = f"{prefix or ''}{path}"
-        keys.update((str(method).upper(), mounted_path) for method in methods)
+        if methods:
+            keys.update((str(method).upper(), mounted_path) for method in methods)
+        elif isinstance(route, WebSocketRoute):
+            keys.add((_WEBSOCKET_ROUTE_KEY_METHOD, mounted_path))
+        else:
+            raise RouteLoadError(
+                f"route row {row_id} contains an unsupported route and cannot use a V2 override"
+            )
     if not keys:
-        raise RouteLoadError(f"route row {row_id} has no HTTP route keys")
+        raise RouteLoadError(f"route row {row_id} has no HTTP/WebSocket route keys")
     return frozenset(keys)
 
 

@@ -1,4 +1,4 @@
-"""Immutable generation-aware HTTP route tables for protocol v2 plugins."""
+"""Immutable generation-aware HTTP/WebSocket tables for protocol v2 plugins."""
 
 from __future__ import annotations
 
@@ -11,13 +11,15 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
 from starlette.responses import Response
-from starlette.routing import BaseRoute, Match, Router
+from starlette.routing import BaseRoute, Match, Router, WebSocketRoute
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 from .openapi import build_openapi_schema_v2
 from .runtime import RuntimeV2Error
+
+WEBSOCKET_ROUTE_METHOD_V2 = "WEBSOCKET"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -39,6 +41,26 @@ class RouteDefinitionV2:
 
 
 @dataclass(frozen=True, kw_only=True)
+class WebSocketRouteDefinitionV2:
+    """One immutable WebSocket contribution owned by a plugin entry."""
+
+    owner_entry_id: str
+    path: str
+    endpoint: Callable[..., Any]
+    name: str
+    dependencies: tuple[DependsParam, ...] = ()
+    replaces_builtin_row_id: str | None = None
+
+    @property
+    def methods(self) -> tuple[str, ...]:
+        """Expose the structural key used for mixed builtin-row parity."""
+        return (WEBSOCKET_ROUTE_METHOD_V2,)
+
+
+type RouteContributionV2 = RouteDefinitionV2 | WebSocketRouteDefinitionV2
+
+
+@dataclass(frozen=True, kw_only=True)
 class OpenApiSnapshotV2:
     """OpenAPI schema published atomically with one route generation."""
 
@@ -49,7 +71,7 @@ class OpenApiSnapshotV2:
 class RouteTableV2:
     """Private FastAPI graph built once and never mutated after publication."""
 
-    def __init__(self, definitions: Sequence[RouteDefinitionV2]) -> None:
+    def __init__(self, definitions: Sequence[RouteContributionV2]) -> None:
         routes = tuple(definitions)
         _validate_routes(routes)
         app = FastAPI(
@@ -69,7 +91,7 @@ class RouteTableV2:
         cls,
         app: FastAPI,
         *,
-        definitions: Sequence[RouteDefinitionV2] = (),
+        definitions: Sequence[RouteContributionV2] = (),
     ) -> RouteTableV2:
         """Freeze an already assembled private FastAPI graph without re-registering routes."""
         instance = cls.__new__(cls)
@@ -80,7 +102,7 @@ class RouteTableV2:
         return instance
 
     @property
-    def definitions(self) -> tuple[RouteDefinitionV2, ...]:
+    def definitions(self) -> tuple[RouteContributionV2, ...]:
         return self._definitions
 
     def openapi_snapshot(
@@ -108,14 +130,14 @@ class RouteTableBuilderV2:
     """Mutable staging-only route contributions that freeze into one immutable table."""
 
     def __init__(self) -> None:
-        self._definitions: list[RouteDefinitionV2] = []
+        self._definitions: list[RouteContributionV2] = []
         self._frozen: RouteTableV2 | None = None
 
     @property
-    def definitions(self) -> tuple[RouteDefinitionV2, ...]:
+    def definitions(self) -> tuple[RouteContributionV2, ...]:
         return tuple(self._definitions)
 
-    def contribute(self, definition: RouteDefinitionV2) -> Callable[[], Awaitable[None]]:
+    def contribute(self, definition: RouteContributionV2) -> Callable[[], Awaitable[None]]:
         if self._frozen is not None:
             raise RuntimeV2Error(
                 "route_table_frozen",
@@ -234,7 +256,7 @@ class GenerationRouteDispatcherV2:
         await publication.table(scope, receive, send)
 
 
-def _validate_routes(routes: tuple[RouteDefinitionV2, ...]) -> None:
+def _validate_routes(routes: tuple[RouteContributionV2, ...]) -> None:
     seen: set[tuple[str, str]] = set()
     for route in routes:
         if not route.owner_entry_id.strip() or not route.name.strip():
@@ -245,6 +267,10 @@ def _validate_routes(routes: tuple[RouteDefinitionV2, ...]) -> None:
             raise ValueError("route methods must be non-empty")
         if route.replaces_builtin_row_id is not None and not route.replaces_builtin_row_id.strip():
             raise ValueError("replaced builtin route row id must be non-empty")
+        if isinstance(route, RouteDefinitionV2) and any(
+            method.upper() == WEBSOCKET_ROUTE_METHOD_V2 for method in route.methods
+        ):
+            raise ValueError("HTTP route methods cannot use the WebSocket structural key")
         for method in route.methods:
             normalized = method.upper()
             key = normalized, route.path
@@ -258,17 +284,21 @@ def _validate_routes(routes: tuple[RouteDefinitionV2, ...]) -> None:
 
 def install_route_definitions_v2(
     app: FastAPI,
-    definitions: Sequence[RouteDefinitionV2],
+    definitions: Sequence[RouteContributionV2],
 ) -> None:
-    """Atomically validate and mount staged definitions onto a private graph."""
+    """Atomically validate and mount staged HTTP/WebSocket contributions."""
     routes = tuple(definitions)
     _validate_routes(routes)
-    existing = {
-        (str(method).upper(), path)
-        for mounted in app.router.routes
-        if isinstance((path := getattr(mounted, "path", None)), str)
-        for method in (getattr(mounted, "methods", None) or ())
-    }
+    existing: set[tuple[str, str]] = set()
+    for mounted in app.router.routes:
+        path = getattr(mounted, "path", None)
+        if not isinstance(path, str):
+            continue
+        methods = getattr(mounted, "methods", None)
+        if methods:
+            existing.update((str(method).upper(), path) for method in methods)
+        elif isinstance(mounted, WebSocketRoute):
+            existing.add((WEBSOCKET_ROUTE_METHOD_V2, path))
     for route in routes:
         for method in route.methods:
             key = method.upper(), route.path
@@ -278,6 +308,14 @@ def install_route_definitions_v2(
                     f"v2 route conflicts with private graph {key[0]} {key[1]}",
                 )
     for route in routes:
+        if isinstance(route, WebSocketRouteDefinitionV2):
+            app.add_api_websocket_route(
+                route.path,
+                route.endpoint,
+                name=route.name,
+                dependencies=list(route.dependencies),
+            )
+            continue
         response_options: dict[str, Any] = {}
         if route.response_class is not None:
             response_options["response_class"] = route.response_class
@@ -296,12 +334,15 @@ def install_route_definitions_v2(
 
 
 __all__ = [
+    "WEBSOCKET_ROUTE_METHOD_V2",
     "GenerationRouteDispatcherV2",
     "OpenApiSnapshotV2",
+    "RouteContributionV2",
     "RouteDefinitionV2",
     "RoutePublicationV2",
     "RouteTableBuilderV2",
     "RouteTableRegistryV2",
     "RouteTableV2",
+    "WebSocketRouteDefinitionV2",
     "install_route_definitions_v2",
 ]

@@ -216,6 +216,12 @@ class TestBuiltinRouteRowOverridesV2:
             ("GET", "/api/v1/system/info"),
         }
     )
+    _TUNNEL_KEYS = frozenset(
+        {
+            ("GET", "/api/v1/admin/tunnel/status"),
+            ("WEBSOCKET", "/api/v1/tunnel/connect"),
+        }
+    )
 
     def test_complete_override_mounts_at_the_inventory_row_position(self) -> None:
         from src.infrastructure.adapters.primary.web.routers import (
@@ -252,6 +258,23 @@ class TestBuiltinRouteRowOverridesV2:
         )
         assert previous < override < following
         assert "system" in mounted
+
+    def test_mixed_http_websocket_override_uses_complete_structural_keys(self) -> None:
+        app = _RecordingApp()
+
+        mounted, _ = _install_with_stub_helpers(
+            app,
+            row_overrides={
+                "tunnel": BuiltinRouteRowOverride(
+                    row_id="tunnel",
+                    route_keys=self._TUNNEL_KEYS,
+                    install=lambda target: target.calls.append({"override": "tunnel"}),
+                )
+            },
+        )
+
+        assert {"override": "tunnel"} in app.calls
+        assert "tunnel" in mounted
 
     def test_partial_multi_route_override_fails_closed(self) -> None:
         app = _RecordingApp()

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi import FastAPI, WebSocket
+from fastapi.testclient import TestClient
 from pydantic import create_model
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -17,6 +19,7 @@ from src.infrastructure.plugins.v2.http_routes import (
     RouteDefinitionV2,
     RouteTableRegistryV2,
     RouteTableV2,
+    WebSocketRouteDefinitionV2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
@@ -45,6 +48,68 @@ def _table(value: str) -> RouteTableV2:
 @pytest.mark.unit
 def test_route_table_rejects_conflicts_without_mutating_outer_routes() -> None:
     route = _table("one").definitions[0]
+
+    with pytest.raises(RuntimeV2Error) as error:
+        RouteTableV2((route, route))
+
+    assert error.value.code == "route_conflict"
+
+
+@pytest.mark.unit
+def test_route_table_supports_http_and_websocket_contributions_at_one_path() -> None:
+    async def http_endpoint() -> dict[str, str]:
+        return {"transport": "http"}
+
+    async def websocket_endpoint(websocket: WebSocket) -> None:
+        await websocket.accept()
+        await websocket.send_json({"transport": "websocket"})
+        await websocket.close()
+
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="mixed-transport",
+                path="/api/mixed",
+                methods=("GET",),
+                endpoint=http_endpoint,
+                name="mixed-http",
+                response_model=dict[str, str],
+            ),
+            WebSocketRouteDefinitionV2(
+                owner_entry_id="mixed-transport",
+                path="/api/mixed",
+                endpoint=websocket_endpoint,
+                name="mixed-websocket",
+            ),
+        )
+    )
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="mixed-transport",
+        generation=1,
+        digest="0" * 64,
+    )
+    app = FastAPI()
+    app.mount("/", table)
+
+    with TestClient(app) as client:
+        assert client.get("/api/mixed").json() == {"transport": "http"}
+        with client.websocket_connect("/api/mixed") as websocket:
+            assert websocket.receive_json() == {"transport": "websocket"}
+
+    assert "/api/mixed" in table.openapi_snapshot(descriptor).schema["paths"]
+
+
+@pytest.mark.unit
+def test_route_table_rejects_duplicate_websocket_contributions() -> None:
+    async def websocket_endpoint(_websocket: WebSocket) -> None:
+        return None
+
+    route = WebSocketRouteDefinitionV2(
+        owner_entry_id="duplicate-websocket",
+        path="/api/ws",
+        endpoint=websocket_endpoint,
+        name="duplicate-websocket",
+    )
 
     with pytest.raises(RuntimeV2Error) as error:
         RouteTableV2((route, route))
