@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 12
+    assert len(route_graph.static_mounted_row_ids) == 11
     assert route_graph.v2_owned_row_ids == (
         "auth",
         "tenants",
@@ -97,6 +97,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "support",
         "support-2",
         "tenant-skill-configs",
+        "subagents",
         "mcp",
         "sandbox",
         "terminal",
@@ -166,6 +167,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-plugin-marketplace-http-routes",
         "builtin-project-sandbox-http-routes",
         "builtin-support-http-routes",
+        "builtin-subagents-http-routes",
         "builtin-project-my-work-http-routes",
         "builtin-projects-http-routes",
         "builtin-recall-http-routes",
