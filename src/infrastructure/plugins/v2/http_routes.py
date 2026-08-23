@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
+from fastapi.routing import APIRoute
 from starlette.responses import Response
 from starlette.routing import BaseRoute, Match, Router, WebSocketRoute
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -36,6 +37,7 @@ class RouteDefinitionV2:
     status_code: int | None = None
     response_model: object | None = None
     response_class: type[Response] | None = None
+    route_class_override: type[APIRoute] | None = None
     include_in_schema: bool = True
     replaces_builtin_row_id: str | None = None
 
@@ -319,7 +321,9 @@ def install_route_definitions_v2(
         response_options: dict[str, Any] = {}
         if route.response_class is not None:
             response_options["response_class"] = route.response_class
-        app.add_api_route(
+        if route.route_class_override is not None:
+            response_options["route_class_override"] = route.route_class_override
+        app.router.add_api_route(
             route.path,
             route.endpoint,
             methods=list(route.methods),

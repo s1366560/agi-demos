@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, Response, WebSocket
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import create_model
 
@@ -97,6 +100,44 @@ def test_route_table_supports_http_and_websocket_contributions_at_one_path() -> 
             assert websocket.receive_json() == {"transport": "websocket"}
 
     assert "/api/mixed" in table.openapi_snapshot(descriptor).schema["paths"]
+
+
+@pytest.mark.unit
+def test_route_table_applies_declared_route_class_override() -> None:
+    class HeaderRoute(APIRoute):
+        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+            original_route_handler = super().get_route_handler()
+
+            async def route_handler(request: Request) -> Response:
+                response = await original_route_handler(request)
+                response.headers["x-v2-route-class"] = "applied"
+                return response
+
+            return route_handler
+
+    async def endpoint() -> dict[str, bool]:
+        return {"ok": True}
+
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="custom-route-class",
+                path="/api/custom-route-class",
+                methods=("GET",),
+                endpoint=endpoint,
+                name="custom-route-class",
+                route_class_override=HeaderRoute,
+            ),
+        )
+    )
+    app = FastAPI()
+    app.mount("/", table)
+
+    with TestClient(app) as client:
+        response = client.get("/api/custom-route-class")
+
+    assert response.status_code == 200
+    assert response.headers["x-v2-route-class"] == "applied"
 
 
 @pytest.mark.unit
