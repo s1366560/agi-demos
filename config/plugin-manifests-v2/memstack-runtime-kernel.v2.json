@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:9e604cc44369a688261bd1cae9096a90b184af0ebafb3cc3680f01bd4c08fb02",
+        "digest": "sha256:c303adf51efddb268ad599f68858c20a24605d4e044ff66e6bb1d911811c7c22",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1850,6 +1850,35 @@
       "artifact": {
         "digest": "sha256:3292f627588687490b29ef34da180e300a16ab0aba05b694ff52373b19c226a3",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_projects_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/shares-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_shares_http_routes:builtin_shares_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:1341db8f9de31210fe0521113b754ae84abf127c62cdb8c483f4275fd0a4dd09",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_shares_http_routes.py"
       }
     },
     {

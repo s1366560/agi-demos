@@ -66,12 +66,13 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 38
+    assert len(route_graph.static_mounted_row_ids) == 37
     assert route_graph.v2_owned_row_ids == (
         "tenants",
         "project-sandbox",
         "project-my-work",
         "projects",
+        "shares",
         "memories",
         "graph",
         "graph-stores",
@@ -119,6 +120,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-memories-http-routes",
         "builtin-mcp-http-routes",
         "builtin-sandbox-http-routes",
+        "builtin-shares-http-routes",
         "builtin-notifications-http-routes",
         "builtin-project-sandbox-http-routes",
         "builtin-support-http-routes",
