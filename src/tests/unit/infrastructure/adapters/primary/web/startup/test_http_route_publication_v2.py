@@ -259,7 +259,9 @@ async def test_reconcile_failure_keeps_last_good_generation_table_and_fallback(
 async def test_private_graph_conflict_nacks_without_exposing_staged_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    conflicting_path = "/api/v1/channels/tenants/{tenant_id}/plugins"
+    conflicting_path = (
+        "/api/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions/capabilities"
+    )
     app, coordinator = await _coordinator(
         monkeypatch,
         inventory=_inventory(path=conflicting_path),

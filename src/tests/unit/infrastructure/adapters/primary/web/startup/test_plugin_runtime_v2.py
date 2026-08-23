@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 8
+    assert len(route_graph.static_mounted_row_ids) == 7
     assert route_graph.v2_owned_row_ids == (
         "auth",
         "tenants",
@@ -106,6 +106,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "terminal",
         "artifacts",
         "attachments-upload",
+        "channels",
         "instances",
         "instance-files",
         "instance-channels",
@@ -138,6 +139,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-agent-http-routes",
         "builtin-billing-http-routes",
         "builtin-clusters-http-routes",
+        "builtin-channels-http-routes",
         "builtin-background-tasks-http-routes",
         "builtin-ai-tools-http-routes",
         "builtin-artifacts-http-routes",
@@ -540,7 +542,7 @@ async def test_generation_one_fails_closed_when_desired_path_is_unsafe() -> None
 async def test_generation_one_fails_closed_on_builtin_route_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    path = "/api/v1/channels/tenants/{tenant_id}/plugins"
+    path = "/api/v1/tenants/{tenant_id}/projects/{project_id}/task-sessions/capabilities"
     monkeypatch.setattr(
         "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_inventory",
         lambda: _route_inventory(path=path),

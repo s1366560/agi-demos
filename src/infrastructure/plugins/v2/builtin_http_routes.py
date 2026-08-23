@@ -31,6 +31,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "background-tasks",
         "billing",
         "clusters",
+        "channels",
         "cron",
         "data-export",
         "deploy",
