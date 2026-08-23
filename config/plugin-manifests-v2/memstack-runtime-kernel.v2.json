@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:8e758ce4efe4b894f19678b1df39cf925cda5fe5e0a8e0a37d1558de534d02fe",
+        "digest": "sha256:9e604cc44369a688261bd1cae9096a90b184af0ebafb3cc3680f01bd4c08fb02",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2256,6 +2256,40 @@
       "artifact": {
         "digest": "sha256:d559d54677101361447a2f4f029b97949ae8f770e5c64b68dd94e3d25f49e6de",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_sandbox_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/project-sandbox-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_project_sandbox_http_routes:builtin_project_sandbox_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "http_service_registry",
+              "service": "service:sandbox.http-service-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:a926dc27f8e47990b62207989b972dd1f3eb27bc444425e0511206ef304d7464",
+      "artifact": {
+        "digest": "sha256:7d90d292d90aecb63886e01e1870b70f95e3cd4452122adebdd0544d9dd68088",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_project_sandbox_http_routes.py"
       }
     },
     {

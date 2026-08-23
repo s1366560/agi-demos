@@ -136,6 +136,9 @@ def builtin_runtime_definitions_v2(
     from .builtin_project_my_work_http_routes import (
         builtin_project_my_work_http_routes_definition_v2,
     )
+    from .builtin_project_sandbox_http_routes import (
+        builtin_project_sandbox_http_routes_definition_v2,
+    )
     from .builtin_projects_http_routes import builtin_projects_http_routes_definition_v2
     from .builtin_recall_http_routes import builtin_recall_http_routes_definition_v2
     from .builtin_reflection_http_routes import (
@@ -193,6 +196,7 @@ def builtin_runtime_definitions_v2(
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
+        builtin_project_sandbox_http_routes_definition_v2(),
         builtin_mcp_http_routes_definition_v2(),
         builtin_sandbox_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
