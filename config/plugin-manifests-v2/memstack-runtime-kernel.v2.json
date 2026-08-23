@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:9d8e729388ab2509c997b769e32b80f059498a180a54fa4c3105f8a975e4717e",
+        "digest": "sha256:9a770134ad0de23e5283dd701d82b031879df3a95fbf8ea541bdd53ab43ceabd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2778,6 +2778,35 @@
       "artifact": {
         "digest": "sha256:6064e72e67e06f9b62707a4390ae0e84c82255b52e0298dfcbde6762d6dbb13f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_clusters_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/genes-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_genes_http_routes:builtin_genes_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:03dd324ecc68d576d4e2dedec81058654a9bf91a251c48b701369d229dad9d3b",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_genes_http_routes.py"
       }
     },
     {
