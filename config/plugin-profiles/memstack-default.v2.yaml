@@ -893,6 +893,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-tasks-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/tasks-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-cron-http-routes
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

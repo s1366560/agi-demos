@@ -63,6 +63,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "system",
         "support",
         "support-2",
+        "tasks",
         "terminal",
         "tenants",
         "tenant-skill-configs",

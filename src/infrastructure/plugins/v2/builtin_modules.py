@@ -105,6 +105,7 @@ def builtin_runtime_definitions_v2(
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
+    from . import builtin_maintenance_http_routes, builtin_tasks_http_routes
     from .builtin_admin_dlq_http_routes import builtin_admin_dlq_http_routes_definition_v2
     from .builtin_ai_tools_http_routes import builtin_ai_tools_http_routes_definition_v2
     from .builtin_artifacts_http_routes import builtin_artifacts_http_routes_definition_v2
@@ -146,7 +147,6 @@ def builtin_runtime_definitions_v2(
     from .builtin_invitations_public_http_routes import (
         builtin_invitations_public_http_routes_definition_v2,
     )
-    from .builtin_maintenance_http_routes import builtin_maintenance_http_routes_definition_v2
     from .builtin_mcp_http_routes import builtin_mcp_http_routes_definition_v2
     from .builtin_memories_http_routes import builtin_memories_http_routes_definition_v2
     from .builtin_notifications_http_routes import (
@@ -259,7 +259,8 @@ def builtin_runtime_definitions_v2(
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
-        builtin_maintenance_http_routes_definition_v2(),
+        builtin_maintenance_http_routes.builtin_maintenance_http_routes_definition_v2(),
+        builtin_tasks_http_routes.builtin_tasks_http_routes_definition_v2(),
         builtin_cron_http_routes_definition_v2(),
         builtin_ai_tools_http_routes_definition_v2(),
         builtin_background_tasks_http_routes_definition_v2(),
