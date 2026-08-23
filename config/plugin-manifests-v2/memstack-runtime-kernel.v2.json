@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:686dc88ff1bd2d3c29cd7e9a5c0435c3e03f3effb3de6a765ce583d24387fe16",
+        "digest": "sha256:8e758ce4efe4b894f19678b1df39cf925cda5fe5e0a8e0a37d1558de534d02fe",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -374,6 +374,37 @@
       "artifact": {
         "digest": "sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/sandbox/http-service-registry",
+      "entrypoint": "src.infrastructure.plugins.v2.sandbox_http_service_registry:sandbox_http_service_registry_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:sandbox.http-service-registry",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-owned-registry", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3d7a635d9989bc2344b83c36822e5d7c99b1ce9f9afedd8e13fca81ff5806c55",
+      "artifact": {
+        "digest": "sha256:11b2d4955d1b4b56b4cd134f9d91fb19b10d82ab9068b0e4b918cf2a967f17e7",
+        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_http_service_registry.py"
       }
     },
     {

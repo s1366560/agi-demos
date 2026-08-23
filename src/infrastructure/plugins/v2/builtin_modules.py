@@ -42,6 +42,7 @@ from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
 from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
+from .sandbox_http_service_registry import sandbox_http_service_registry_definition_v2
 from .sandbox_operation_services import sandbox_operation_service_definitions_v2
 from .sandbox_runtime import SandboxRuntimeFactoryV2, sandbox_service_definitions_v2
 from .schema_services import schema_service_definitions_v2
@@ -169,6 +170,9 @@ def builtin_runtime_definitions_v2(
         graph_application_service_definition_v2(),
         *sandbox_service_definitions_v2(
             sandbox_runtime_factory,
+            redis_client=sandbox_redis_client,
+        ),
+        sandbox_http_service_registry_definition_v2(
             redis_client=sandbox_redis_client,
         ),
         agent_worker_runtime_definition_v2(),
