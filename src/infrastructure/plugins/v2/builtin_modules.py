@@ -162,6 +162,7 @@ def builtin_runtime_definitions_v2(
     )
     from .builtin_tenants_http_routes import builtin_tenants_http_routes_definition_v2
     from .builtin_terminal_http_routes import builtin_terminal_http_routes_definition_v2
+    from .builtin_trust_http_routes import builtin_trust_http_routes_definition_v2
     from .builtin_trust_workspace_http_routes import (
         builtin_trust_workspace_http_routes_definition_v2,
     )
@@ -211,6 +212,7 @@ def builtin_runtime_definitions_v2(
         builtin_sandbox_http_routes_definition_v2(),
         builtin_terminal_http_routes_definition_v2(),
         builtin_audit_http_routes_definition_v2(),
+        builtin_trust_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
         builtin_security_ws_http_routes_definition_v2(),
         builtin_voice_websocket_http_routes_definition_v2(),
