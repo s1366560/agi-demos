@@ -39,6 +39,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "invitations",
         "invitations-public",
         "instance-channels",
+        "instance-files",
         "memories",
         "mcp",
         "notifications",
