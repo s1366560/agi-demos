@@ -29,6 +29,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "billing",
         "cron",
         "data-export",
+        "deploy",
         "episodes",
         "events",
         "enhanced-search",
