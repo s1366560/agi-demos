@@ -164,10 +164,6 @@ async def test_create_sandbox_tool_registration_log_omits_exception_text(
         async def register_sandbox_tools(self, **_kwargs: Any) -> list[Any]:
             raise RuntimeError("tool registry secret")
 
-    class FakeDIContainer:
-        def sandbox_tool_registry(self) -> FailingRegistry:
-            return FailingRegistry()
-
     class Adapter:
         async def connect_mcp(self, _sandbox_id: str) -> None:
             return None
@@ -175,10 +171,12 @@ async def test_create_sandbox_tool_registration_log_omits_exception_text(
         async def list_tools(self, _sandbox_id: str) -> list[dict[str, str]]:
             return [{"name": "read"}]
 
-    import src.configuration.di_container as di_container
-
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_project", _allow_project_access)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    monkeypatch.setattr(
+        lifecycle_router,
+        "get_sandbox_tool_registry",
+        lambda: FailingRegistry(),
+    )
     _install_sandbox_authority(monkeypatch, LifecycleService())
     caplog.set_level(
         logging.WARNING,
@@ -305,18 +303,16 @@ async def test_terminate_sandbox_tool_unregister_log_omits_exception_text(
         async def unregister_sandbox_tools(self, _sandbox_id: str) -> bool:
             raise RuntimeError("tool unregister secret")
 
-    class FakeDIContainer:
-        def sandbox_tool_registry(self) -> FailingRegistry:
-            return FailingRegistry()
-
     class Adapter:
         async def terminate_sandbox(self, _sandbox_id: str) -> bool:
             return True
 
-    import src.configuration.di_container as di_container
-
     monkeypatch.setattr(lifecycle_router, "assert_caller_owns_sandbox", allow_sandbox_access)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
+    monkeypatch.setattr(
+        lifecycle_router,
+        "get_sandbox_tool_registry",
+        lambda: FailingRegistry(),
+    )
     caplog.set_level(
         logging.WARNING,
         logger="src.infrastructure.adapters.primary.web.routers.sandbox.lifecycle",

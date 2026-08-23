@@ -1,8 +1,10 @@
 """Sandbox API helpers and pinned-generation service projections."""
 
+from __future__ import annotations
+
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import and_, select
@@ -20,6 +22,9 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.i18n import gettext as _
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.sandbox_runtime import SandboxToolRegistryProtocolV2
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +64,15 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     )
 
     return current_sandbox_application_services_v2().event_publisher
+
+
+def get_sandbox_tool_registry() -> SandboxToolRegistryProtocolV2:
+    """Project the tool registry from the generation pinned to this ASGI boundary."""
+    from src.infrastructure.plugins.v2.sandbox_projection import (
+        current_sandbox_application_services_v2,
+    )
+
+    return current_sandbox_application_services_v2().tool_registry
 
 
 def extract_project_id(project_path: str) -> str:

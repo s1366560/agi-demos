@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_token_service import SandboxTokenService
+from src.application.services.sandbox_tool_registry import SandboxToolRegistry
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -42,6 +43,23 @@ type SandboxRuntimeFactoryV2 = Callable[
 logger = logging.getLogger(__name__)
 
 
+@runtime_checkable
+class SandboxToolRegistryProtocolV2(Protocol):
+    """Generation-owned Sandbox tool-registration seam for HTTP consumers."""
+
+    async def register_sandbox_tools(
+        self,
+        sandbox_id: str,
+        project_id: str,
+        tenant_id: str,
+        tools: list[str] | None = None,
+    ) -> list[str]: ...
+
+    async def unregister_sandbox_tools(self, sandbox_id: str) -> bool: ...
+
+    async def get_sandbox_tools(self, sandbox_id: str) -> list[str] | None: ...
+
+
 @dataclass(frozen=True, kw_only=True)
 class SandboxApplicationServicesV2:
     """Root sandbox services owned by one exact generation."""
@@ -50,6 +68,7 @@ class SandboxApplicationServicesV2:
     event_publisher: SandboxEventPublisher
     orchestrator: SandboxOrchestrator
     token_service: SandboxTokenService
+    tool_registry: SandboxToolRegistryProtocolV2
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -145,6 +164,11 @@ def sandbox_runtime_definition_v2(
         try:
             _ = await adapter.sync_from_docker()
             event_publisher = _build_event_publisher_v2(redis_client)
+            tool_registry = SandboxToolRegistry(
+                redis_client=cast("Redis | None", redis_client),
+                mcp_adapter=adapter,
+            )
+            _ = await tool_registry.refresh_all_from_redis()
             settings = get_settings()
             services = SandboxApplicationServicesV2(
                 adapter=adapter,
@@ -158,6 +182,7 @@ def sandbox_runtime_definition_v2(
                     secret_key=settings.secret_key,
                     token_ttl=300,
                 ),
+                tool_registry=tool_registry,
             )
             _provide_sandbox_runtime_v2(
                 context,
@@ -285,6 +310,7 @@ __all__ = [
     "SandboxApplicationServicesV2",
     "SandboxRuntimeFactoryV2",
     "SandboxRuntimeServiceV2",
+    "SandboxToolRegistryProtocolV2",
     "sandbox_application_definition_v2",
     "sandbox_runtime_definition_v2",
     "sandbox_service_definitions_v2",

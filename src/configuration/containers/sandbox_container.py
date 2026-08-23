@@ -25,7 +25,7 @@ class SandboxContainer:
     """Sub-container for sandbox-related services.
 
     Provides factory methods for sandbox repository, orchestrator,
-    tool registry, resource, and lifecycle service.
+    resource, and lifecycle service.
     Cross-domain dependencies are injected via callbacks.
     """
 
@@ -49,15 +49,6 @@ class SandboxContainer:
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
         """Project the generation-owned sandbox orchestrator."""
         return self._sandbox_application_services().orchestrator
-
-    def sandbox_tool_registry(self) -> Any:
-        """Get SandboxToolRegistry for dynamic MCP tool registration to Agent."""
-        from src.application.services.sandbox_tool_registry import SandboxToolRegistry
-
-        return SandboxToolRegistry(
-            redis_client=self._redis_client,
-            mcp_adapter=self._sandbox_application_services().adapter,
-        )
 
     def sandbox_resource(self) -> SandboxResourcePort:
         """Get SandboxResourcePort for agent workflow sandbox access."""

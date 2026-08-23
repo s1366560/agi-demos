@@ -8,8 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from src.application.services.sandbox_tool_registry import SandboxToolRegistry
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+    get_sandbox_tool_registry,
+)
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -62,7 +67,7 @@ async def test_sandbox_resolver_uses_generation_owned_adapter() -> None:
     assert publication.accepted is True
     try:
         async with (
-            await host.acquire() as generation,
+            pin_generation_v2(host) as generation,
             OperationContextV2(
                 generation=generation,
                 operation_id="sandbox-application:project-a",
@@ -79,6 +84,10 @@ async def test_sandbox_resolver_uses_generation_owned_adapter() -> None:
             services = resolver.resolve(operation)
             assert services.adapter is adapter
             assert services.orchestrator._adapter is adapter
+            assert isinstance(services.tool_registry, SandboxToolRegistry)
+            assert services.tool_registry._mcp_adapter is adapter
+            assert resolver.resolve(operation).tool_registry is services.tool_registry
+            assert get_sandbox_tool_registry() is services.tool_registry
             assert adapter.sync_calls == 1
     finally:
         await host.close()

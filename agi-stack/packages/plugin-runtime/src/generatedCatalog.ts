@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:20e5fa835092ebf52461f2cf3ea50572484bec9fdd21f8379a6459c8dc',
-  '865f42","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:2c42a1ecdd0e6969027bd38eca672d5deffe558a08fea71081ec084a71',
+  '6531e6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -440,7 +440,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '2.sandbox_operation_services:sandbox_operation_application_definition_v2","module_re',
   'f":"builtin://memstack/application/sandbox-operation-services","plugin_id":"memstack',
   '-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"',
-  'sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa","artifact_s',
+  'sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","artifact_s',
   'ource":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","contract":{',
   '"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additiona',
   'lProperties":false,"properties":{"strategy":{"const":"generation-runtime","type":"st',
@@ -1144,7 +1144,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '33c7eb3ccf7d25e5460fa6e7e","entrypoint":"RustServerHostModuleV2::apply","module_ref"',
   ':"builtin://memstack/rust-server/generation-host","plugin_id":"memstack-native-targe',
   't-hosts","plugin_version":"2.0.0","targets":["rust-server"]},{"artifact_digest":"sha',
-  '256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa","artifact_sour',
+  '256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","artifact_sour',
   'ce":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","contract":{"co',
   'nfig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPr',
   'operties":false,"properties":{"required":{"type":"boolean"},"strategy":{"const":"mcp',
@@ -1251,4 +1251,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:20e5fa835092ebf52461f2cf3ea50572484bec9fdd21f8379a6459c8dc865f42' as const;
+  'sha256:2c42a1ecdd0e6969027bd38eca672d5deffe558a08fea71081ec084a716531e6' as const;

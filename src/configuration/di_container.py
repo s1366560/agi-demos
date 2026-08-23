@@ -652,9 +652,6 @@ class DIContainer:
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
         return cast(SandboxOrchestrator, self._services.get_or_activate("sandbox_orchestrator"))
 
-    def sandbox_tool_registry(self) -> Any:
-        return cast(Any, self._services.get_or_activate("sandbox_tool_registry"))
-
     def sandbox_resource(self) -> SandboxResourcePort:
         return cast(SandboxResourcePort, self._services.get_or_activate("sandbox_resource"))
 

@@ -47,6 +47,7 @@ from .utils import (
     extract_project_id,
     get_event_publisher,
     get_sandbox_adapter,
+    get_sandbox_tool_registry,
     list_user_project_ids,
 )
 
@@ -188,10 +189,7 @@ async def create_sandbox(
                 # Register tools to Agent context via SandboxToolRegistry
                 if tools:
                     try:
-                        from src.configuration.di_container import DIContainer
-
-                        container = DIContainer()
-                        tool_registry = container.sandbox_tool_registry()
+                        tool_registry = get_sandbox_tool_registry()
                         registered_tools = await tool_registry.register_sandbox_tools(
                             sandbox_id=sandbox_info.sandbox_id,
                             project_id=project_id,
@@ -343,10 +341,7 @@ async def terminate_sandbox(
     )
     # Unregister tools from Agent context first
     try:
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        tool_registry = container.sandbox_tool_registry()
+        tool_registry = get_sandbox_tool_registry()
 
         unregistered = await tool_registry.unregister_sandbox_tools(sandbox_id)
         if unregistered:

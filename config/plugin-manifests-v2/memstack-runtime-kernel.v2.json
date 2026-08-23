@@ -335,7 +335,7 @@
       },
       "contract_digest": "sha256:744d4dfe3936dc34aab51e9448d9c7af2992f91a0f31187bbcfb88db35725612",
       "artifact": {
-        "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
+        "digest": "sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
       }
     },
@@ -372,7 +372,7 @@
       },
       "contract_digest": "sha256:f29bd4c6f75433ffdeff09ff681c255009eae20b4db5778f979ac76be3631e95",
       "artifact": {
-        "digest": "sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa",
+        "digest": "sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820",
         "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
       }
     },

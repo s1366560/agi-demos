@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:20e5fa835092ebf52461f2cf3ea50572484bec9fdd21f8379a6459c8dc865f'
-    '42","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:2c42a1ecdd0e6969027bd38eca672d5deffe558a08fea71081ec084a716531'
+    'e6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -404,7 +404,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ucture.plugins.v2.sandbox_operation_services:sandbox_operation_application_definition_v2'
     '","module_ref":"builtin://memstack/application/sandbox-operation-services","plugin_id":"'
     'memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_diges'
-    't":"sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa","artifact_s'
+    't":"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","artifact_s'
     'ource":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","contract":{"con'
     'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropert'
     'ies":false,"properties":{"strategy":{"const":"generation-runtime","type":"string"}},"req'
@@ -1076,7 +1076,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '708a65e2f30f789033c7eb3ccf7d25e5460fa6e7e","entrypoint":"RustServerHostModuleV2::apply",'
     '"module_ref":"builtin://memstack/rust-server/generation-host","plugin_id":"memstack-nati'
     've-target-hosts","plugin_version":"2.0.0","targets":["rust-server"]},{"artifact_digest":'
-    '"sha256:62f81bf4ecab81c3d1fcd961c99e24df617fbf0d6257500b5cc58d6f79fdc3aa","artifact_sour'
+    '"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","artifact_sour'
     'ce":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","contract":{"config'
     '_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties'
     '":false,"properties":{"required":{"type":"boolean"},"strategy":{"const":"mcp-docker","ty'
@@ -1174,7 +1174,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:20e5fa835092ebf52461f2cf3ea50572484bec9fdd21f8379a6459c8dc865f42"
+    "sha256:2c42a1ecdd0e6969027bd38eca672d5deffe558a08fea71081ec084a716531e6"
 )
 # fmt: on
 

@@ -514,12 +514,6 @@ CONTAINER_SERVICE_BINDINGS: tuple[ContainerServiceBinding, ...] = (
         key="sandbox_orchestrator", group="agent", target="_sandbox.sandbox_orchestrator", inject=()
     ),
     ContainerServiceBinding(
-        key="sandbox_tool_registry",
-        group="agent",
-        target="_sandbox.sandbox_tool_registry",
-        inject=(),
-    ),
-    ContainerServiceBinding(
         key="sandbox_resource", group="agent", target="_sandbox.sandbox_resource", inject=()
     ),
     ContainerServiceBinding(
