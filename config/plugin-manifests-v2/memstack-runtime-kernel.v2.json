@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:2a0813d9048ebfd806321c45889548e1ebd2d7f6fb75ac5a01be1fca625ef36d",
+        "digest": "sha256:ac7d88228f9d417957a25067034ac72a0d7a00d933e024a7df5e6199f97977fc",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2382,6 +2382,35 @@
       "artifact": {
         "digest": "sha256:66e43f59586531105fdb9deaf4caafd8f1a1c0ac3cfb724d49089ed1a10ce5a5",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_security_ws_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/voice-websocket-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_voice_websocket_http_routes:builtin_voice_websocket_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:1ee16c2f2eb932b481dc7cd708da8af38332d8b6b964cdf7f6fd9b0749c405c5",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_voice_websocket_http_routes.py"
       }
     },
     {

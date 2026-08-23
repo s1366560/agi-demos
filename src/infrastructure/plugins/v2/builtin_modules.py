@@ -164,6 +164,9 @@ def builtin_runtime_definitions_v2(
         builtin_trust_workspace_http_routes_definition_v2,
     )
     from .builtin_tunnel_http_routes import builtin_tunnel_http_routes_definition_v2
+    from .builtin_voice_websocket_http_routes import (
+        builtin_voice_websocket_http_routes_definition_v2,
+    )
     from .builtin_webhooks_http_routes import builtin_webhooks_http_routes_definition_v2
 
     return (
@@ -206,6 +209,7 @@ def builtin_runtime_definitions_v2(
         builtin_sandbox_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
         builtin_security_ws_http_routes_definition_v2(),
+        builtin_voice_websocket_http_routes_definition_v2(),
         builtin_notifications_http_routes_definition_v2(),
         builtin_events_http_routes_definition_v2(),
         builtin_tunnel_http_routes_definition_v2(),
