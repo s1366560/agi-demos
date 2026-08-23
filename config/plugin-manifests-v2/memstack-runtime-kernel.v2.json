@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:8181930d7acfbb2c320fd339df2aea2027f8ad2bc0b1366c6787f6988d380f02",
+        "digest": "sha256:686dc88ff1bd2d3c29cd7e9a5c0435c3e03f3effb3de6a765ce583d24387fe16",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1642,6 +1642,70 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/application/engine-catalog",
+      "entrypoint": "src.infrastructure.plugins.v2.engine_services:_apply_engine_catalog_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.engine-catalog",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engines", "strategy"],
+          "properties": {
+            "engines": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "default_registry_url",
+                  "display_description",
+                  "display_name",
+                  "display_powered_by",
+                  "display_tags",
+                  "image_registry_key",
+                  "order",
+                  "runtime_id"
+                ],
+                "properties": {
+                  "default_registry_url": { "type": "string", "minLength": 1 },
+                  "display_description": { "type": "string", "minLength": 1 },
+                  "display_name": { "type": "string", "minLength": 1 },
+                  "display_powered_by": { "type": "string", "minLength": 1 },
+                  "display_tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "image_registry_key": { "type": "string", "minLength": 1 },
+                  "order": { "type": "integer", "minimum": 0 },
+                  "runtime_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "strategy": { "const": "declared-engines", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6a837e6572e9e8269b355d2de5cd5d29d44f140764e94ed294b28d36c983e9f5",
+      "artifact": {
+        "digest": "sha256:ca97dc2d903be0bd24ac54a00a9675cfe18f8094f84acd287e57cdc20167887e",
+        "source": "repo+python://src/infrastructure/plugins/v2/engine_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/http/route-table-builder",
       "entrypoint": "src.infrastructure.plugins.v2.route_effects:route_table_builder_definition_v2",
       "targets": ["python"],
@@ -2161,6 +2225,40 @@
       "artifact": {
         "digest": "sha256:d559d54677101361447a2f4f029b97949ae8f770e5c64b68dd94e3d25f49e6de",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_sandbox_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/engines-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_engines_http_routes:builtin_engines_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "catalog",
+              "service": "service:application.engine-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:f164498311ac6823b45a81b2f0e079b0f1b213862f3cfdeeb160a33e5bceda14",
+      "artifact": {
+        "digest": "sha256:f68247792f41420c893843491f8d693f73844f615fb8ba0e1c5ae0d4eb8d4d27",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_engines_http_routes.py"
       }
     },
     {

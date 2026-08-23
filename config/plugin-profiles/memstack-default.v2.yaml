@@ -608,6 +608,54 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-engine-catalog
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/engine-catalog
+      enabled: true
+      config:
+        strategy: declared-engines
+        engines:
+          - runtime_id: python-3.12
+            display_name: Python 3.12
+            display_description: CPython 3.12 runtime with scientific computing packages
+            display_tags:
+              - python
+              - data-science
+              - general
+            display_powered_by: Docker
+            order: 1
+            image_registry_key: python
+            default_registry_url: docker.io/library/python:3.12-slim
+          - runtime_id: node-22
+            display_name: Node.js 22
+            display_description: Node.js 22 LTS runtime for JavaScript/TypeScript
+            display_tags:
+              - javascript
+              - typescript
+              - web
+            display_powered_by: Docker
+            order: 2
+            image_registry_key: node
+            default_registry_url: docker.io/library/node:22-slim
+          - runtime_id: sandbox-base
+            display_name: MemStack Sandbox
+            display_description: Full-featured sandbox with terminal, desktop, and MCP tools
+            display_tags:
+              - sandbox
+              - full-stack
+              - mcp
+            display_powered_by: Docker + noVNC
+            order: 3
+            image_registry_key: sandbox
+            default_registry_url: memstack/sandbox:latest
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-route-table-builder
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1007,6 +1055,21 @@ profile:
       config: {}
       inject:
         route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-engines-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/engines-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+        catalog: service:application.engine-catalog
       isolate: {}
       scope:
         kind: root
