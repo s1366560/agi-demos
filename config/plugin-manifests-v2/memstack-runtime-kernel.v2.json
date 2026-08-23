@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:0cc38fabfa1a33cd6f24829192bcdc3f636586a08ccf51a5974ebe8654c423be",
+        "digest": "sha256:d332d22c91ca25abaa75614edf2e5f570c30c012c5ff53a7ac088f50602f1b8f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2904,6 +2904,35 @@
       "artifact": {
         "digest": "sha256:55168bb3e05111dd05256ab68d8d717f1df8e6b53c72255e9ac0d3fefe2501dd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_websocket_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/acp-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_acp_http_routes:builtin_acp_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:fb94177a8c712cc6560babc24322392ed6490d3054e4af561f3c7945d1959c9a",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_acp_http_routes.py"
       }
     },
     {
