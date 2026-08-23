@@ -34,6 +34,9 @@ class RouteDefinitionV2:
     name: str
     dependencies: tuple[DependsParam, ...] = ()
     tags: tuple[str, ...] = ()
+    summary: str | None = None
+    description: str | None = None
+    deprecated: bool | None = None
     status_code: int | None = None
     response_model: object | None = None
     response_class: type[Response] | None = None
@@ -330,6 +333,9 @@ def install_route_definitions_v2(
             name=route.name,
             dependencies=list(route.dependencies),
             tags=list(route.tags),
+            summary=route.summary,
+            description=route.description,
+            deprecated=route.deprecated,
             status_code=route.status_code,
             response_model=route.response_model,
             include_in_schema=route.include_in_schema,

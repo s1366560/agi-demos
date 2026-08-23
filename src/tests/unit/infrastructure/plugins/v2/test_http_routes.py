@@ -141,6 +141,73 @@ def test_route_table_applies_declared_route_class_override() -> None:
 
 
 @pytest.mark.unit
+def test_route_table_preserves_explicit_openapi_metadata() -> None:
+    async def endpoint() -> dict[str, bool]:
+        """Inferred description that must not replace the explicit contract."""
+        return {"ok": True}
+
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="explicit-openapi-metadata",
+                path="/api/explicit-openapi-metadata",
+                methods=("GET",),
+                endpoint=endpoint,
+                name="explicit-openapi-metadata",
+                summary="Explicit summary",
+                description="Explicit description",
+                deprecated=True,
+            ),
+        )
+    )
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="explicit-openapi-metadata",
+        generation=1,
+        digest="0" * 64,
+    )
+
+    operation = table.openapi_snapshot(descriptor).schema["paths"][
+        "/api/explicit-openapi-metadata"
+    ]["get"]
+
+    assert operation["summary"] == "Explicit summary"
+    assert operation["description"] == "Explicit description"
+    assert operation["deprecated"] is True
+
+
+@pytest.mark.unit
+def test_route_table_preserves_fastapi_metadata_inference_by_default() -> None:
+    async def inferred_metadata_endpoint() -> dict[str, bool]:
+        """Inferred metadata description."""
+        return {"ok": True}
+
+    table = RouteTableV2(
+        (
+            RouteDefinitionV2(
+                owner_entry_id="inferred-openapi-metadata",
+                path="/api/inferred-openapi-metadata",
+                methods=("GET",),
+                endpoint=inferred_metadata_endpoint,
+                name="inferred-openapi-metadata",
+            ),
+        )
+    )
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="inferred-openapi-metadata",
+        generation=1,
+        digest="0" * 64,
+    )
+
+    operation = table.openapi_snapshot(descriptor).schema["paths"][
+        "/api/inferred-openapi-metadata"
+    ]["get"]
+
+    assert operation["summary"] == "Inferred-Openapi-Metadata"
+    assert operation["description"] == "Inferred metadata description."
+    assert "deprecated" not in operation
+
+
+@pytest.mark.unit
 def test_route_table_rejects_duplicate_websocket_contributions() -> None:
     async def websocket_endpoint(_websocket: WebSocket) -> None:
         return None
