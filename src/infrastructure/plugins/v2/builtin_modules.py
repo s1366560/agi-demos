@@ -149,6 +149,7 @@ def builtin_runtime_definitions_v2(
     )
     from .builtin_sandbox_http_routes import builtin_sandbox_http_routes_definition_v2
     from .builtin_schema_http_routes import builtin_schema_http_routes_definition_v2
+    from .builtin_security_ws_http_routes import builtin_security_ws_http_routes_definition_v2
     from .builtin_shares_http_routes import builtin_shares_http_routes_definition_v2
     from .builtin_smtp_config_http_routes import (
         builtin_smtp_config_http_routes_definition_v2,
@@ -204,6 +205,7 @@ def builtin_runtime_definitions_v2(
         builtin_mcp_http_routes_definition_v2(),
         builtin_sandbox_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
+        builtin_security_ws_http_routes_definition_v2(),
         builtin_notifications_http_routes_definition_v2(),
         builtin_events_http_routes_definition_v2(),
         builtin_tunnel_http_routes_definition_v2(),
