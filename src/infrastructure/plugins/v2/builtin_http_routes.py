@@ -38,6 +38,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "graph-stores",
         "invitations",
         "invitations-public",
+        "instance-channels",
         "memories",
         "mcp",
         "notifications",

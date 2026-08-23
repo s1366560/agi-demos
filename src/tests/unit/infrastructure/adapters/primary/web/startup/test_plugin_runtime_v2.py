@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 26
+    assert len(route_graph.static_mounted_row_ids) == 25
     assert route_graph.v2_owned_row_ids == (
         "tenants",
         "project-sandbox",
@@ -97,6 +97,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "terminal",
         "artifacts",
         "attachments-upload",
+        "instance-channels",
         "audit",
         "trust",
         "trust-workspace",
@@ -130,6 +131,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-engines-http-routes",
         "builtin-invitations-http-routes",
         "builtin-invitations-public-http-routes",
+        "builtin-instance-channels-http-routes",
         "builtin-graph-http-routes",
         "builtin-graph-stores-http-routes",
         "builtin-memories-http-routes",

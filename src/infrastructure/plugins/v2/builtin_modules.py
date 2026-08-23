@@ -128,6 +128,9 @@ def builtin_runtime_definitions_v2(
     from .builtin_graph_stores_http_routes import (
         builtin_graph_stores_http_routes_definition_v2,
     )
+    from .builtin_instance_channels_http_routes import (
+        builtin_instance_channels_http_routes_definition_v2,
+    )
     from .builtin_invitations_http_routes import (
         builtin_invitations_http_routes_definition_v2,
     )
@@ -222,6 +225,7 @@ def builtin_runtime_definitions_v2(
         builtin_terminal_http_routes_definition_v2(),
         builtin_artifacts_http_routes_definition_v2(),
         builtin_attachments_upload_http_routes_definition_v2(),
+        builtin_instance_channels_http_routes_definition_v2(),
         builtin_audit_http_routes_definition_v2(),
         builtin_trust_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
