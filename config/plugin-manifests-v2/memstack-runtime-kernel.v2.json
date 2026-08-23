@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:f43bd209c906ac8e3f0a0a97ac6e12be369b9146e32a8ea3099976708e08f4fb",
+        "digest": "sha256:867350875eb6272dd0c56c5f34be2b284b1b0e3f38305e234278479cea2fde53",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2140,6 +2140,35 @@
       "artifact": {
         "digest": "sha256:49c8fd0720651fe69c4a3166938bc89d5d11a5d297c401fa77f5db5d02bfec2f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_schema_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/llm-providers-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_llm_providers_http_routes:builtin_llm_providers_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:c81baf534f81231ba184a0d0e7c7db15229250b5be7b4781177db4a669024ce4",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_llm_providers_http_routes.py"
       }
     },
     {
