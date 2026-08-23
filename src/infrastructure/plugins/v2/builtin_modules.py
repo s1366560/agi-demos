@@ -107,6 +107,7 @@ def builtin_runtime_definitions_v2(
     """Return deterministic, repository-owned definitions allowed in-process."""
     from .builtin_admin_dlq_http_routes import builtin_admin_dlq_http_routes_definition_v2
     from .builtin_ai_tools_http_routes import builtin_ai_tools_http_routes_definition_v2
+    from .builtin_artifacts_http_routes import builtin_artifacts_http_routes_definition_v2
     from .builtin_attachments_upload_http_routes import (
         builtin_attachments_upload_http_routes_definition_v2,
     )
@@ -215,6 +216,7 @@ def builtin_runtime_definitions_v2(
         builtin_mcp_http_routes_definition_v2(),
         builtin_sandbox_http_routes_definition_v2(),
         builtin_terminal_http_routes_definition_v2(),
+        builtin_artifacts_http_routes_definition_v2(),
         builtin_attachments_upload_http_routes_definition_v2(),
         builtin_audit_http_routes_definition_v2(),
         builtin_trust_http_routes_definition_v2(),
