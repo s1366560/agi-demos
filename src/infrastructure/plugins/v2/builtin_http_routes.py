@@ -25,6 +25,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "artifacts",
         "attachments-upload",
         "audit",
+        "auth",
         "background-tasks",
         "billing",
         "clusters",

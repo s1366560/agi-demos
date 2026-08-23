@@ -106,6 +106,7 @@ def builtin_runtime_definitions_v2(
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
+        builtin_auth_http_routes,
         builtin_llm_providers_http_routes,
         builtin_maintenance_http_routes,
         builtin_observability_http_routes,
@@ -231,6 +232,7 @@ def builtin_runtime_definitions_v2(
         builtin_feishu_channel_adapter_definition_v2(),
         engine_catalog_definition_v2(),
         route_table_builder_definition_v2(),
+        builtin_auth_http_routes.builtin_auth_http_routes_definition_v2(),
         builtin_tenants_http_routes_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),

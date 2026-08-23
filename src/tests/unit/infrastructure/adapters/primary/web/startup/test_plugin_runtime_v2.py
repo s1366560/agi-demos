@@ -66,8 +66,9 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 13
+    assert len(route_graph.static_mounted_row_ids) == 12
     assert route_graph.v2_owned_row_ids == (
+        "auth",
         "tenants",
         "project-sandbox",
         "project-my-work",
@@ -136,6 +137,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-artifacts-http-routes",
         "builtin-attachments-upload-http-routes",
         "builtin-audit-http-routes",
+        "builtin-auth-http-routes",
         "builtin-data-export-http-routes",
         "builtin-deploy-http-routes",
         "builtin-cron-http-routes",
