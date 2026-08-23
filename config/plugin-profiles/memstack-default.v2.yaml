@@ -1103,6 +1103,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-platform-plugins-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/platform-plugins-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-admin-dlq-http-routes
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

@@ -108,6 +108,7 @@ def builtin_runtime_definitions_v2(
     from . import (
         builtin_maintenance_http_routes,
         builtin_observability_http_routes,
+        builtin_platform_plugins_http_routes,
         builtin_plugin_marketplace_http_routes,
         builtin_tasks_http_routes,
         builtin_websocket_http_routes,
@@ -279,6 +280,7 @@ def builtin_runtime_definitions_v2(
         builtin_tenant_webhooks_http_routes_definition_v2(),
         builtin_system_http_routes_definition_v2(),
         builtin_plugin_marketplace_http_routes.builtin_plugin_marketplace_http_routes_definition_v2(),
+        builtin_platform_plugins_http_routes.builtin_platform_plugins_http_routes_definition_v2(),
         builtin_admin_dlq_http_routes_definition_v2(),
         builtin_invitations_http_routes_definition_v2(),
         builtin_invitations_public_http_routes_definition_v2(),
