@@ -20,6 +20,7 @@ from .http_routes import RouteContributionV2, RouteTableV2, install_route_defini
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
 REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
     {
+        "admin-dlq",
         "ai-tools",
         "audit",
         "background-tasks",

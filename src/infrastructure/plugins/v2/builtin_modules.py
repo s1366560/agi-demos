@@ -105,6 +105,7 @@ def builtin_runtime_definitions_v2(
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
+    from .builtin_admin_dlq_http_routes import builtin_admin_dlq_http_routes_definition_v2
     from .builtin_ai_tools_http_routes import builtin_ai_tools_http_routes_definition_v2
     from .builtin_audit_http_routes import builtin_audit_http_routes_definition_v2
     from .builtin_background_tasks_http_routes import (
@@ -238,6 +239,7 @@ def builtin_runtime_definitions_v2(
         builtin_webhooks_http_routes_definition_v2(),
         builtin_tenant_webhooks_http_routes_definition_v2(),
         builtin_system_http_routes_definition_v2(),
+        builtin_admin_dlq_http_routes_definition_v2(),
         builtin_invitations_http_routes_definition_v2(),
         builtin_invitations_public_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),

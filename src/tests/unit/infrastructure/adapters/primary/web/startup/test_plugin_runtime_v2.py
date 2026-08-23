@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 30
+    assert len(route_graph.static_mounted_row_ids) == 29
     assert route_graph.v2_owned_row_ids == (
         "tenants",
         "project-sandbox",
@@ -105,12 +105,14 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "tunnel",
         "engines",
         "security-ws",
+        "admin-dlq",
         "invitations",
         "invitations-public",
         "voice-websocket",
         "project-sandbox-preview",
     )
     assert {definition.owner_entry_id for definition in route_graph.table.definitions} >= {
+        "builtin-admin-dlq-http-routes",
         "builtin-billing-http-routes",
         "builtin-background-tasks-http-routes",
         "builtin-ai-tools-http-routes",
