@@ -107,6 +107,7 @@ def builtin_runtime_definitions_v2(
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
         builtin_acp_http_routes,
+        builtin_agent_http_routes,
         builtin_auth_http_routes,
         builtin_llm_providers_http_routes,
         builtin_maintenance_http_routes,
@@ -238,6 +239,7 @@ def builtin_runtime_definitions_v2(
         builtin_tenants_http_routes_definition_v2(),
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
+        builtin_agent_http_routes.builtin_agent_http_routes_definition_v2(),
         builtin_shares_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
         builtin_project_sandbox_http_routes_definition_v2(),
