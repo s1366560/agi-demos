@@ -65,6 +65,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "schema",
         "security-ws",
         "shares",
+        "skills",
         "retrieval-stores",
         "smtp-config",
         "subagents",
