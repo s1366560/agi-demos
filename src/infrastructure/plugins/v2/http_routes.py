@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.params import Depends as DependsParam
+from starlette.responses import Response
 from starlette.routing import BaseRoute, Match, Router
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -32,6 +33,7 @@ class RouteDefinitionV2:
     tags: tuple[str, ...] = ()
     status_code: int | None = None
     response_model: object | None = None
+    response_class: type[Response] | None = None
     include_in_schema: bool = True
     replaces_builtin_row_id: str | None = None
 
@@ -276,6 +278,9 @@ def install_route_definitions_v2(
                     f"v2 route conflicts with private graph {key[0]} {key[1]}",
                 )
     for route in routes:
+        response_options: dict[str, Any] = {}
+        if route.response_class is not None:
+            response_options["response_class"] = route.response_class
         app.add_api_route(
             route.path,
             route.endpoint,
@@ -286,6 +291,7 @@ def install_route_definitions_v2(
             status_code=route.status_code,
             response_model=route.response_model,
             include_in_schema=route.include_in_schema,
+            **response_options,
         )
 
 
