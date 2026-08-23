@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:b41bb158f2cc6d1b792403a9c5e6679b3a6d60d8bda4388fbacd088ca3e238ad",
+        "digest": "sha256:8b4f0991ec2f67203c4a172862180b1d6fa0c3fe777e26935d2b0fe6091b4be5",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1228,6 +1228,74 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/ai-tool-tenant-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.ai_tool_services:_apply_ai_tool_tenant_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.ai-tool-tenant-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:464daee1d4cfbcf2d7ab67a97199873e2fb7382c515bda734c2b86049c7b98c1",
+      "artifact": {
+        "digest": "sha256:1bf9089e07e6f430df080f790edd4a589a6de5f5b478e6a60e4fce29d3b5ec45",
+        "source": "repo+python://src/infrastructure/plugins/v2/ai_tool_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/ai-tool-services",
+      "entrypoint": "src.infrastructure.plugins.v2.ai_tool_services:_apply_ai_tool_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.ai-tool-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.ai-tool-tenant-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:47f3780b0b71877399a77316883918a6cf0a1e078012472d5bf761bc60620a67",
+      "artifact": {
+        "digest": "sha256:1bf9089e07e6f430df080f790edd4a589a6de5f5b478e6a60e4fce29d3b5ec45",
+        "source": "repo+python://src/infrastructure/plugins/v2/ai_tool_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/persistence/background-task-access-provider",
       "entrypoint": "src.infrastructure.plugins.v2.background_task_services:_apply_background_task_access_provider_v2",
       "targets": ["python"],
@@ -1868,6 +1936,35 @@
       "artifact": {
         "digest": "sha256:3999578a6df49630cf2dd9c8aa5a0f199fb829748976c5a8ae689c4474424ce3",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_data_export_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/ai-tools-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_ai_tools_http_routes:builtin_ai_tools_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:d05c46d7a2a1af82305f647ca926f99ea70bbd564b35c63cc0a11dbae51a42bb",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_ai_tools_http_routes.py"
       }
     },
     {

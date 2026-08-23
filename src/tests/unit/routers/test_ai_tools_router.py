@@ -1,21 +1,50 @@
 """Unit tests for ai_tools router."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import status
+from fastapi import FastAPI, status
+from fastapi.testclient import TestClient
+
+from src.infrastructure.adapters.primary.web.ai_tool_application_authority_v2 import (
+    ai_tool_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.routers import ai_tools as ai_tools_router
+from src.infrastructure.plugins.v2.ai_tool_services import AiToolApplicationServicesV2
 
 
 @pytest.fixture
-def ai_tools_llm(monkeypatch):
-    """Patch ai_tools to use a tenant-bound mock LLM client."""
-    from src.infrastructure.adapters.primary.web.routers import ai_tools
-
+def ai_tools_llm():
+    """Return a tenant-bound mock LLM client and its V2 factory."""
     mock_llm_client = Mock()
     mock_llm_client.generate = AsyncMock(return_value={"content": "Test response"})
     mock_create_llm_client = AsyncMock(return_value=mock_llm_client)
-    monkeypatch.setattr(ai_tools, "create_llm_client", mock_create_llm_client)
     return mock_llm_client, mock_create_llm_client
+
+
+@pytest.fixture
+def client(ai_tools_llm) -> TestClient:
+    """Exercise handlers through the real V2 application service seam."""
+    _, mock_create_llm_client = ai_tools_llm
+    app = FastAPI()
+    app.include_router(ai_tools_router.router)
+    persistence = SimpleNamespace(resolve_tenant_id=AsyncMock(return_value="tenant-a"))
+
+    async def override_ai_tool_application():
+        yield SimpleNamespace(
+            user_id="user-a",
+            tenant_id=None,
+            services=AiToolApplicationServicesV2(
+                persistence=persistence,
+                client_factory=mock_create_llm_client,
+            ),
+        )
+
+    app.dependency_overrides[ai_tool_application_authority_dependency_v2] = (
+        override_ai_tool_application
+    )
+    return TestClient(app)
 
 
 @pytest.mark.unit

@@ -21,6 +21,7 @@ from .agent_runtime_dispatcher import (
     PinnedAgentRuntimeDispatcherV2,
 )
 from .agent_worker_runtime import agent_worker_runtime_definition_v2
+from .ai_tool_services import ai_tool_service_definitions_v2
 from .backend_store_services import backend_store_service_definitions_v2
 from .background_task_services import background_task_service_definitions_v2
 from .channel_adapters import (
@@ -101,6 +102,7 @@ def builtin_runtime_definitions_v2(
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
+    from .builtin_ai_tools_http_routes import builtin_ai_tools_http_routes_definition_v2
     from .builtin_background_tasks_http_routes import (
         builtin_background_tasks_http_routes_definition_v2,
     )
@@ -192,6 +194,7 @@ def builtin_runtime_definitions_v2(
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
+        builtin_ai_tools_http_routes_definition_v2(),
         builtin_background_tasks_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
         builtin_trust_workspace_http_routes_definition_v2(),
@@ -207,6 +210,7 @@ def builtin_runtime_definitions_v2(
         *notification_service_definitions_v2(),
         *event_log_service_definitions_v2(),
         *support_ticket_service_definitions_v2(),
+        *ai_tool_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
