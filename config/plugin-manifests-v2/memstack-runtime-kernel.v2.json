@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:d8acca6ebe18f294dd15eff569f3809320fcaff75a83c3e2df16907ed091f975",
+        "digest": "sha256:1d12a1f915a74e73b7999bc6fd7ce00c2d6c2015dd49370658f1192cfcf30f0f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2314,6 +2314,35 @@
       "artifact": {
         "digest": "sha256:0a7dd58f331824871d9a75defa1b255df6b4c898f0c4339f7c37d7fbd0112110",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_terminal_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/attachments-upload-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_attachments_upload_http_routes:builtin_attachments_upload_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:e189d610b07c2f61f6b9496bf840b790bd56f46f67637195a0f4a7c4ca255932",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_attachments_upload_http_routes.py"
       }
     },
     {
