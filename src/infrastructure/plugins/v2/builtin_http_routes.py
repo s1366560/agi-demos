@@ -23,6 +23,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "ai-tools",
         "background-tasks",
         "billing",
+        "cron",
         "data-export",
         "episodes",
         "events",

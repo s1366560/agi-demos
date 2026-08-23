@@ -5,12 +5,9 @@ Scoped under ``/api/v1/projects/{project_id}/cron-jobs``.
 
 from __future__ import annotations
 
-import logging
 from typing import Never
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.cron import (
     AutomationRunCommandV2,
@@ -33,7 +30,6 @@ from src.application.services.automation_command_service import (
     AutomationActor,
     AutomationCommandIdempotencyConflictError,
     AutomationCommandRevisionConflictError,
-    AutomationCommandService,
     AutomationCommandTargetNotFoundError,
     QueueManualRunCommand,
 )
@@ -41,26 +37,16 @@ from src.application.services.cron_service import (
     CronExecutionUnavailableError,
     CronMutationUnavailableError,
 )
-from src.configuration.di_container import DIContainer
-from src.domain.model.auth.user import User
-from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
-    get_current_user,
-)
-from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
-    ProjectTenantAuthorityV2,
-    project_tenant_authority_dependency_v2,
-)
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import (
-    get_db,
-)
-from src.infrastructure.adapters.secondary.persistence.models import UserProject
-from src.infrastructure.adapters.secondary.persistence.sql_cron_automation_command_repository import (
-    SqlCronAutomationCommandRepository,
+from src.infrastructure.adapters.primary.web.cron_application_authority_v2 import (
+    CronApplicationAuthorityV2,
+    cron_application_authority_dependency_v2,
 )
 from src.infrastructure.i18n import gettext as _
-
-logger = logging.getLogger(__name__)
+from src.infrastructure.plugins.v2.cron_services import (
+    CronProjectAccessDeniedV2,
+    remove_cron_schedule_v2,
+    sync_cron_schedule_v2,
+)
 
 router = APIRouter(
     prefix="/api/v1/projects/{project_id}/cron-jobs",
@@ -73,14 +59,6 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-def _container(db: AsyncSession) -> DIContainer:
-    return DIContainer(db)
-
-
-def _automation_command_service(db: AsyncSession) -> AutomationCommandService:
-    return AutomationCommandService(SqlCronAutomationCommandRepository(db))
-
-
 def _raise_mutation_unavailable(exc: CronMutationUnavailableError) -> Never:
     raise HTTPException(
         status_code=503,
@@ -89,20 +67,19 @@ def _raise_mutation_unavailable(exc: CronMutationUnavailableError) -> Never:
 
 
 async def _require_project_access(
+    authority: CronApplicationAuthorityV2,
     project_id: str,
-    current_user: User,
-    db: AsyncSession,
 ) -> None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.id).where(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-            )
+    try:
+        await authority.services.require_project_access(
+            project_id=project_id,
+            user_id=authority.user_id,
         )
-    )
-    if result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=403, detail=_("Access denied to project"))
+    except CronProjectAccessDeniedV2 as error:
+        raise HTTPException(
+            status_code=403,
+            detail=_("Access denied to project"),
+        ) from error
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +93,13 @@ async def list_cron_jobs(
     include_disabled: bool = False,
     limit: int = 50,
     offset: int = 0,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobListResponse:
     """List cron jobs for a project."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
     jobs = await svc.list_jobs(
         project_id,
         include_disabled=include_disabled,
@@ -138,11 +116,12 @@ async def list_cron_jobs(
 @router.get("/capabilities", response_model=CronJobCapabilitiesResponse)
 async def get_cron_job_capabilities(
     project_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobCapabilitiesResponse:
     """Return structured automation availability without inferring from failed requests."""
-    await _require_project_access(project_id, current_user, db)
+    await _require_project_access(cron_application, project_id)
     mutation_unavailable = CronActionCapability(
         allowed=False,
         reason_code="durable_automation_runtime_unavailable",
@@ -168,16 +147,15 @@ async def get_cron_job_capabilities(
 async def create_cron_job(
     project_id: str,
     body: CronJobCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobResponse:
     """Create a new cron job."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
-    # Resolve tenant_id from the project (User entity has no tenant_id)
-    project = await project_tenant.services.project_service.get_project(project_id)
+    project = await cron_application.services.projects.project_service.get_project(project_id)
     if project is None:
         raise HTTPException(status_code=404, detail=_("Project not found"))
 
@@ -198,24 +176,13 @@ async def create_cron_job(
             stagger_seconds=body.stagger_seconds,
             timeout_seconds=body.timeout_seconds,
             max_retries=body.max_retries,
-            created_by=current_user.id,
+            created_by=cron_application.user_id,
         )
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
-    await db.commit()
-    # Best-effort APScheduler registration
+    await cron_application.db.commit()
     if job.enabled:
-        try:
-            from src.infrastructure.scheduler.scheduler_service import register_job
-
-            await register_job(
-                job_id=job.id,
-                schedule_type=job.schedule.kind.value,
-                schedule_config=job.schedule.config,
-                timezone=job.timezone,
-            )
-        except Exception:
-            logger.debug("Scheduler not available -- skipping registration for %s", job.id)
+        await sync_cron_schedule_v2(cron_application.services, job=job, enabled=True)
     return cron_job_to_response(job)
 
 
@@ -223,12 +190,13 @@ async def create_cron_job(
 async def get_cron_job(
     project_id: str,
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobResponse:
     """Get a single cron job by ID."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
     job = await svc.get_job(job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
@@ -240,12 +208,13 @@ async def update_cron_job(
     project_id: str,
     job_id: str,
     body: CronJobUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobResponse:
     """Update a cron job (partial)."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
     # Verify ownership
     existing = await svc.get_job(job_id)
@@ -275,24 +244,12 @@ async def update_cron_job(
         )
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
-    await db.commit()
-    # Best-effort APScheduler re-registration
-    try:
-        if job.enabled:
-            from src.infrastructure.scheduler.scheduler_service import register_job
-
-            await register_job(
-                job_id=job.id,
-                schedule_type=job.schedule.kind.value,
-                schedule_config=job.schedule.config,
-                timezone=job.timezone,
-            )
-        else:
-            from src.infrastructure.scheduler.scheduler_service import unregister_job
-
-            await unregister_job(job.id)
-    except Exception:
-        logger.debug("Scheduler not available -- skipping re-registration for %s", job.id)
+    await cron_application.db.commit()
+    await sync_cron_schedule_v2(
+        cron_application.services,
+        job=job,
+        enabled=job.enabled,
+    )
     return cron_job_to_response(job)
 
 
@@ -300,29 +257,24 @@ async def update_cron_job(
 async def delete_cron_job(
     project_id: str,
     job_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> None:
     """Delete a cron job."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     try:
-        await svc.delete_job(job_id)
+        _deleted = await svc.delete_job(job_id)
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
-    await db.commit()
-    # Best-effort APScheduler unregistration
-    try:
-        from src.infrastructure.scheduler.scheduler_service import unregister_job
-
-        await unregister_job(job_id)
-    except Exception:
-        logger.debug("Scheduler not available -- skipping unregistration for %s", job_id)
+    await cron_application.db.commit()
+    await remove_cron_schedule_v2(cron_application.services, job_id=job_id)
 
 
 @router.post("/{job_id}/toggle", response_model=CronJobResponse)
@@ -330,12 +282,13 @@ async def toggle_cron_job(
     project_id: str,
     job_id: str,
     enabled: bool = True,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobResponse:
     """Enable or disable a cron job."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
@@ -345,24 +298,12 @@ async def toggle_cron_job(
         job = await svc.toggle_job(job_id, enabled=enabled)
     except CronMutationUnavailableError as exc:
         _raise_mutation_unavailable(exc)
-    await db.commit()
-    # Best-effort APScheduler toggle
-    try:
-        if enabled:
-            from src.infrastructure.scheduler.scheduler_service import register_job
-
-            await register_job(
-                job_id=job.id,
-                schedule_type=job.schedule.kind.value,
-                schedule_config=job.schedule.config,
-                timezone=job.timezone,
-            )
-        else:
-            from src.infrastructure.scheduler.scheduler_service import unregister_job
-
-            await unregister_job(job.id)
-    except Exception:
-        logger.debug("Scheduler not available -- skipping toggle for %s", job.id)
+    await cron_application.db.commit()
+    await sync_cron_schedule_v2(
+        cron_application.services,
+        job=job,
+        enabled=enabled,
+    )
     return cron_job_to_response(job)
 
 
@@ -375,25 +316,26 @@ async def trigger_manual_run(
     project_id: str,
     job_id: str,
     body: AutomationRunCommandV2 | ManualRunRequest | None = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobResponse | AutomationRunReceiptResponse:
     """Trigger a manual execution of a cron job."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     if isinstance(body, AutomationRunCommandV2):
-        command_service = _automation_command_service(db)
+        command_service = cron_application.services.commands
         try:
             receipt = await command_service.queue_manual_run(
                 actor=AutomationActor(
                     tenant_id=existing.tenant_id,
                     project_id=project_id,
-                    user_id=current_user.id,
+                    user_id=cron_application.user_id,
                 ),
                 command=QueueManualRunCommand(
                     job_id=job_id,
@@ -418,7 +360,7 @@ async def trigger_manual_run(
                 status_code=409,
                 detail={"reason_code": "automation_idempotency_conflict"},
             ) from exc
-        await db.commit()
+        await cron_application.db.commit()
         return AutomationRunReceiptResponse(
             receipt_id=receipt.receipt_id,
             operation_id=receipt.operation_id,
@@ -432,13 +374,13 @@ async def trigger_manual_run(
 
     conversation_id_override = body.conversation_id if body else None
     try:
-        await svc.trigger_manual_run(job_id, conversation_id=conversation_id_override)
+        _run = await svc.trigger_manual_run(job_id, conversation_id=conversation_id_override)
     except CronExecutionUnavailableError as exc:
         raise HTTPException(
             status_code=503,
             detail=_("Durable automation execution is not available"),
         ) from exc
-    await db.commit()
+    await cron_application.db.commit()
 
     # Return the refreshed job (state may have changed)
     refreshed = await svc.get_job(job_id)
@@ -452,12 +394,13 @@ async def list_cron_job_runs(
     job_id: str,
     limit: int = 50,
     offset: int = 0,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    cron_application: CronApplicationAuthorityV2 = Depends(
+        cron_application_authority_dependency_v2
+    ),
 ) -> CronJobRunListResponse:
     """List execution runs for a cron job."""
-    await _require_project_access(project_id, current_user, db)
-    svc = _container(db).cron_job_service()
+    await _require_project_access(cron_application, project_id)
+    svc = cron_application.services.cron_jobs
 
     # Verify the job belongs to this project
     existing = await svc.get_job(job_id)

@@ -28,6 +28,7 @@ from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
 )
+from .cron_services import cron_service_definitions_v2
 from .event_log_services import event_log_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
@@ -107,6 +108,7 @@ def builtin_runtime_definitions_v2(
         builtin_background_tasks_http_routes_definition_v2,
     )
     from .builtin_billing_http_routes import builtin_billing_http_routes_definition_v2
+    from .builtin_cron_http_routes import builtin_cron_http_routes_definition_v2
     from .builtin_data_export_http_routes import builtin_data_export_http_routes_definition_v2
     from .builtin_enhanced_search_http_routes import (
         builtin_enhanced_search_http_routes_definition_v2,
@@ -194,6 +196,7 @@ def builtin_runtime_definitions_v2(
         builtin_retrieval_stores_http_routes_definition_v2(),
         builtin_enhanced_search_http_routes_definition_v2(),
         builtin_data_export_http_routes_definition_v2(),
+        builtin_cron_http_routes_definition_v2(),
         builtin_ai_tools_http_routes_definition_v2(),
         builtin_background_tasks_http_routes_definition_v2(),
         builtin_billing_http_routes_definition_v2(),
@@ -205,6 +208,7 @@ def builtin_runtime_definitions_v2(
         builtin_invitations_public_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
+        *cron_service_definitions_v2(),
         *reflection_service_definitions_v2(),
         *schema_service_definitions_v2(),
         *notification_service_definitions_v2(),

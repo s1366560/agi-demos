@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2
+from src.infrastructure.adapters.primary.web.cron_application_authority_v2 import (
+    CronApplicationAuthorityV2,
+    cron_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
     ProjectTenantAuthorityV2,
     project_tenant_authority_dependency_v2,
@@ -133,10 +137,11 @@ async def test_authority_propagates_a_structured_generation_failure_without_fall
 
 
 @pytest.mark.unit
-def test_cron_create_route_requires_the_v2_authority_dependency() -> None:
-    parameter = signature(create_cron_job).parameters["project_tenant"]
+def test_cron_create_route_requires_the_dedicated_v2_authority_dependency() -> None:
+    parameter = signature(create_cron_job).parameters["cron_application"]
 
-    assert parameter.default.dependency is project_tenant_authority_dependency_v2
+    assert parameter.default.dependency is cron_application_authority_dependency_v2
+    assert parameter.annotation in {"CronApplicationAuthorityV2", CronApplicationAuthorityV2}
 
 
 @pytest.mark.unit
