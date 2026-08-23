@@ -43,6 +43,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "instance-channels",
         "instance-files",
         "instance-templates",
+        "instances",
         "memories",
         "mcp",
         "notifications",

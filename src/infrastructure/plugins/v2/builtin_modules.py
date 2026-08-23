@@ -139,6 +139,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_instance_templates_http_routes import (
         builtin_instance_templates_http_routes_definition_v2,
     )
+    from .builtin_instances_http_routes import builtin_instances_http_routes_definition_v2
     from .builtin_invitations_http_routes import (
         builtin_invitations_http_routes_definition_v2,
     )
@@ -233,6 +234,7 @@ def builtin_runtime_definitions_v2(
         builtin_terminal_http_routes_definition_v2(),
         builtin_artifacts_http_routes_definition_v2(),
         builtin_attachments_upload_http_routes_definition_v2(),
+        builtin_instances_http_routes_definition_v2(),
         builtin_instance_files_http_routes_definition_v2(),
         builtin_instance_channels_http_routes_definition_v2(),
         builtin_deploy_http_routes_definition_v2(),
