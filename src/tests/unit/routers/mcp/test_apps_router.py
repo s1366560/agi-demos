@@ -1,15 +1,19 @@
 """Tests for MCP app route hardening."""
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers.mcp import apps as apps_router
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.plugins.v2.mcp_services import SqlMCPProjectAccessV2
 
 
 class EmptyAppService:
@@ -42,15 +46,40 @@ class FailingRuntime:
 
 
 class MissingMCPServerRepository:
-    def __init__(self, _db: object) -> None:
-        pass
-
     async def get_by_name(self, _project_id: str, _server_name: str) -> None:
         return None
 
 
 async def _allow_project_access(*_args: Any, **_kwargs: Any) -> None:
     return None
+
+
+def _authority(
+    *,
+    db: object | None = None,
+    tenant_id: str = "tenant-1",
+    user_id: str = "user-1",
+    app_service: object | None = None,
+    manager: object | None = None,
+    runtime: object | None = None,
+    repository: object | None = None,
+    access: object | None = None,
+) -> MCPApplicationAuthorityV2:
+    return cast(
+        MCPApplicationAuthorityV2,
+        SimpleNamespace(
+            db=db or SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock()),
+            tenant_id=tenant_id,
+            user_id=user_id,
+            services=SimpleNamespace(
+                app_service=app_service or EmptyAppService(),
+                sandbox_manager=manager or FailingMCPManager(),
+                runtime_service=runtime or FailingRuntime(),
+                server_repository=repository or MissingMCPServerRepository(),
+                access=access,
+            ),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -65,10 +94,7 @@ async def test_direct_cloud_tool_call_fails_closed_for_idempotency_key() -> None
 
     response = await apps_router.proxy_tool_call_direct(
         body=body,
-        mcp_manager=FailingMCPManager(),
-        db=SimpleNamespace(),
-        tenant_id="tenant-1",
-        current_user=SimpleNamespace(id="user-1"),
+        authority=_authority(),
     )
 
     assert response.is_error is True
@@ -94,11 +120,7 @@ async def test_proxy_resource_read_sanitizes_mcp_errors(
                 project_id="project-1",
                 server_name="server-1",
             ),
-            mcp_app_service=EmptyAppService(),
-            mcp_manager=FailingMCPManager(),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
@@ -111,8 +133,6 @@ async def test_proxy_resource_read_sanitizes_mcp_errors(
 async def test_proxy_resource_read_sanitizes_missing_resource_after_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
-
     class TimeoutMCPManager:
         async def call_tool(self, **_kwargs: Any) -> Any:
             raise TimeoutError("secret timeout")
@@ -123,8 +143,6 @@ async def test_proxy_resource_read_sanitizes_missing_resource_after_retry(
         "resolve_project_tenant_id_for_access",
         AsyncMock(return_value="tenant-1"),
     )
-    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", MissingMCPServerRepository)
-
     with pytest.raises(HTTPException) as exc_info:
         await apps_router.proxy_resource_read(
             body=apps_router.MCPResourceReadRequest(
@@ -132,11 +150,7 @@ async def test_proxy_resource_read_sanitizes_missing_resource_after_retry(
                 project_id="project-1",
                 server_name="secret-server",
             ),
-            mcp_app_service=EmptyAppService(),
-            mcp_manager=TimeoutMCPManager(),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(manager=TimeoutMCPManager()),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -161,11 +175,7 @@ async def test_proxy_resource_read_sanitizes_missing_server_name(
                 uri="secret-resource-without-server",
                 project_id="project-1",
             ),
-            mcp_app_service=EmptyAppService(),
-            mcp_manager=FailingMCPManager(),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -209,10 +219,7 @@ async def test_proxy_resource_list_sanitizes_mcp_errors(
     with pytest.raises(HTTPException) as exc_info:
         await apps_router.proxy_resource_list(
             body=apps_router.MCPResourceListRequest(project_id="project-1"),
-            mcp_manager=FailingMCPManager(),
-            db=SimpleNamespace(),
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(),
         )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
@@ -237,10 +244,13 @@ async def test_proxy_resource_list_uses_authorized_project_tenant(
 
     response = await apps_router.proxy_resource_list(
         body=apps_router.MCPResourceListRequest(project_id=test_project_db.id),
-        mcp_manager=CapturingMCPManager(),
-        db=test_db,
-        tenant_id="fallback-tenant",
-        current_user=test_user,
+        authority=_authority(
+            db=test_db,
+            tenant_id=test_project_db.tenant_id,
+            user_id=test_user.id,
+            manager=CapturingMCPManager(),
+            access=SqlMCPProjectAccessV2(_session=test_db),
+        ),
     )
 
     assert response.resources == [{"uri": "ui://server/index.html"}]
@@ -257,11 +267,7 @@ async def test_delete_mcp_app_sanitizes_missing_app(
     with pytest.raises(HTTPException) as exc_info:
         await apps_router.delete_mcp_app(
             app_id="app-secret",
-            mcp_app_service=EmptyAppService(),
-            mcp_runtime=FailingRuntime(),
-            db=db,
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(db=db),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -281,11 +287,10 @@ async def test_refresh_mcp_app_resource_sanitizes_permission_error(
     with pytest.raises(HTTPException) as exc_info:
         await apps_router.refresh_mcp_app_resource(
             app_id="app-secret",
-            mcp_app_service=ExistingAppService(),
-            mcp_runtime=FailingRuntime(),
-            db=db,
-            tenant_id="tenant-1",
-            current_user=SimpleNamespace(id="user-1"),
+            authority=_authority(
+                db=db,
+                app_service=ExistingAppService(),
+            ),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN

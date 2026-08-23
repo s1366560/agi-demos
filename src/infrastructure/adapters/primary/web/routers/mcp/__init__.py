@@ -6,15 +6,12 @@ MCP servers provide external tools and capabilities via the Model Context Protoc
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Query
 
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+    mcp_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
 
 from . import apps, servers, tools
 from .schemas import (
@@ -26,7 +23,6 @@ from .schemas import (
     MCPToolCallResponse,
     MCPToolResponse,
 )
-from .utils import get_container_with_db
 
 # Create main router with prefix
 router = APIRouter(prefix="/api/v1/mcp", tags=["MCP Servers"])
@@ -41,20 +37,14 @@ router.include_router(tools.router)  # Tool listing and calling
 @router.post("", response_model=MCPServerResponse, include_in_schema=False)
 async def create_mcp_server_root(
     server_data: MCPServerCreate,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPServerResponse:
     """Create MCP server (root path alias)."""
     return cast(
         MCPServerResponse,
         await servers.create_mcp_server(
             server_data=server_data,
-            request=request,
-            db=db,
-            tenant_id=tenant_id,
-            current_user=current_user,
+            authority=authority,
         ),
     )
 
@@ -63,17 +53,13 @@ async def create_mcp_server_root(
 async def list_mcp_servers_root(
     project_id: str | None = Query(None, description="Filter by project ID"),
     enabled_only: bool = Query(False, description="Only return enabled servers"),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> list[MCPServerResponse]:
     """List MCP servers (root path alias)."""
     return await servers.list_mcp_servers(
         project_id=project_id,
         enabled_only=enabled_only,
-        db=db,
-        tenant_id=tenant_id,
-        current_user=current_user,
+        authority=authority,
     )
 
 
@@ -87,7 +73,5 @@ __all__ = [
     "MCPToolCallRequest",
     "MCPToolCallResponse",
     "MCPToolResponse",
-    # Utilities
-    "get_container_with_db",
     "router",
 ]

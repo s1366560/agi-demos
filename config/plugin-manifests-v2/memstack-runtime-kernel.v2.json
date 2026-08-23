@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:39101db46756ef7aae0d211a592588dc63426868accf98fac9fced976ca6980c",
+        "digest": "sha256:2aac39eddbd5c3bbcc3d687cc0c7112d960a92c2e68edb5a8fbeb0d9482b4b8f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -520,7 +520,7 @@
       },
       "contract_digest": "sha256:10868f4371f5689a787195fe94b2333b1427b7cfe81d239d764a48695b4fd354",
       "artifact": {
-        "digest": "sha256:395b0d16f7e9d9ca9d8204cfcae49a4e9db45c33bb03b6a92cda40df2b7ab221",
+        "digest": "sha256:8fd7c0e25015341d26c849c8cd43dd5444b4a5f9207c3e7cb27bb94d6ffbe91b",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -557,7 +557,7 @@
       },
       "contract_digest": "sha256:e135f2957e11313055a0137dcf3f8231af583ee046e6d9aec89e90197d4ad1ed",
       "artifact": {
-        "digest": "sha256:395b0d16f7e9d9ca9d8204cfcae49a4e9db45c33bb03b6a92cda40df2b7ab221",
+        "digest": "sha256:8fd7c0e25015341d26c849c8cd43dd5444b4a5f9207c3e7cb27bb94d6ffbe91b",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -2103,6 +2103,35 @@
       "artifact": {
         "digest": "sha256:d05c46d7a2a1af82305f647ca926f99ea70bbd564b35c63cc0a11dbae51a42bb",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_ai_tools_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/mcp-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_mcp_http_routes:builtin_mcp_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:bf2aec6373036d688347e5c0a634f2a8c7cdf2f3d9cc9fa7167e4b4a33ecf087",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_mcp_http_routes.py"
       }
     },
     {

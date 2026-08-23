@@ -6,29 +6,20 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from collections.abc import Collection
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import desc, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.domain.model.mcp.server import MCPServer
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
-)
 from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
-    mcp_runtime_service_dependency_v2,
-)
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import MCPLifecycleEvent, User
-from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-    SqlMCPServerRepository,
+    MCPApplicationAuthorityV2,
+    mcp_application_authority_dependency_v2,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.mcp_services import (
+    MCP_PROJECT_WRITE_ROLES_V2,
+    MCPLifecycleEventRecordV2,
+)
 
 from .schemas import (
     MCPHealthSummary,
@@ -40,7 +31,6 @@ from .schemas import (
     MCPServerUpdate,
 )
 from .utils import (
-    MCP_PROJECT_WRITE_ROLES,
     ensure_project_access,
     list_accessible_project_ids,
     resolve_project_tenant_id_for_access,
@@ -88,10 +78,7 @@ def _mcp_server_action_failed_error(
 @router.post("/create", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_mcp_server(
     server_data: MCPServerCreate,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> Any:
     """
     Create a new MCP server configuration.
@@ -100,13 +87,12 @@ async def create_mcp_server(
     Auto-discovers tools after creation so they are immediately available.
     """
     project_tenant_id = await resolve_project_tenant_id_for_access(
-        db,
+        authority,
         server_data.project_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
     try:
-        server = await mcp_runtime.create_server(
+        server = await authority.services.runtime_service.create_server(
             tenant_id=project_tenant_id,
             project_id=server_data.project_id,
             name=server_data.name,
@@ -115,20 +101,15 @@ async def create_mcp_server(
             transport_config=server_data.transport_config,
             enabled=server_data.enabled,
         )
-        await db.commit()
-
-        from src.infrastructure.agent.state.agent_session_pool import (
-            invalidate_mcp_tools_cache,
-        )
-
-        _cache_generation = invalidate_mcp_tools_cache(project_tenant_id)
+        await authority.db.commit()
+        _cache_generation = authority.services.tool_cache.invalidate(project_tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception as e:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to create MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -140,28 +121,26 @@ async def create_mcp_server(
 async def list_mcp_servers(
     project_id: str | None = Query(None, description="Filter by project ID"),
     enabled_only: bool = Query(False, description="Only return enabled servers"),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> list[Any]:
     """
     List MCP servers. If project_id is provided, returns servers for that project only.
     Otherwise returns all servers for the current tenant.
     """
-    repository = SqlMCPServerRepository(db)
+    repository = authority.services.server_repository
 
     if project_id:
-        _ = await resolve_project_tenant_id_for_access(db, project_id, current_user.id)
+        _ = await resolve_project_tenant_id_for_access(authority, project_id)
         servers = await repository.list_by_project(
             project_id=project_id,
             enabled_only=enabled_only,
         )
     else:
-        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        accessible_project_ids = await list_accessible_project_ids(authority)
         if not accessible_project_ids:
             return []
         servers = await repository.list_by_tenant(
-            tenant_id=tenant_id,
+            tenant_id=authority.tenant_id,
             enabled_only=enabled_only,
         )
         servers = [server for server in servers if server.project_id in accessible_project_ids]
@@ -172,14 +151,12 @@ async def list_mcp_servers(
 @router.get("/{server_id}", response_model=MCPServerResponse)
 async def get_mcp_server(
     server_id: str,
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> Any:
     """
     Get a specific MCP server by ID.
     """
-    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
+    server = await _get_mcp_server_for_tenant(authority, server_id)
 
     return MCPServerResponse.model_validate(server)
 
@@ -188,10 +165,7 @@ async def get_mcp_server(
 async def update_mcp_server(
     server_id: str,
     server_data: MCPServerUpdate,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> Any:
     """
     Update an MCP server configuration.
@@ -199,14 +173,12 @@ async def update_mcp_server(
     When enabled status changes, starts/stops the server in its project sandbox.
     """
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
     try:
-        server = await mcp_runtime.update_server(
+        server = await authority.services.runtime_service.update_server(
             server_id=server_id,
             tenant_id=checked_server.tenant_id,
             name=server_data.name,
@@ -215,23 +187,18 @@ async def update_mcp_server(
             transport_config=server_data.transport_config,
             enabled=server_data.enabled,
         )
-        await db.commit()
-
-        from src.infrastructure.agent.state.agent_session_pool import (
-            invalidate_mcp_tools_cache,
-        )
-
-        _cache_generation = invalidate_mcp_tools_cache(checked_server.tenant_id)
+        await authority.db.commit()
+        _cache_generation = authority.services.tool_cache.invalidate(checked_server.tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except ValueError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_server_not_found_error() from e
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception as e:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to update MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -242,10 +209,7 @@ async def update_mcp_server(
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_mcp_server(
     server_id: str,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> None:
     """
     Delete an MCP server.
@@ -253,33 +217,29 @@ async def delete_mcp_server(
     Stops the server in its project sandbox if enabled before deletion.
     """
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
 
     try:
-        await mcp_runtime.delete_server(server_id, checked_server.tenant_id)
-
-        from src.infrastructure.agent.state.agent_session_pool import (
-            invalidate_mcp_tools_cache,
+        await authority.services.runtime_service.delete_server(
+            server_id,
+            checked_server.tenant_id,
         )
-
-        _cache_generation = invalidate_mcp_tools_cache(checked_server.tenant_id)
+        _cache_generation = authority.services.tool_cache.invalidate(checked_server.tenant_id)
         # NOTE: MCPToolFactory.remove_adapter() was removed -- it was a bug
         # (calling instance method on class). Cache invalidation above is sufficient.
-        await db.commit()
+        await authority.db.commit()
 
     except ValueError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_server_not_found_error() from e
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception as e:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to delete MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -290,10 +250,7 @@ async def delete_mcp_server(
 @router.post("/{server_id}/sync", response_model=MCPServerResponse)
 async def sync_mcp_server_tools(
     server_id: str,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> Any:
     """
     Sync tools from an MCP server.
@@ -301,34 +258,30 @@ async def sync_mcp_server_tools(
     Uses the server's stored project_id to determine sandbox context.
     """
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
     try:
-        server = await mcp_runtime.sync_server(server_id, checked_server.tenant_id)
-        await db.commit()
-
-        from src.infrastructure.agent.state.agent_session_pool import (
-            invalidate_mcp_tools_cache,
+        server = await authority.services.runtime_service.sync_server(
+            server_id,
+            checked_server.tenant_id,
         )
-
-        _cache_generation = invalidate_mcp_tools_cache(checked_server.tenant_id)
+        await authority.db.commit()
+        _cache_generation = authority.services.tool_cache.invalidate(checked_server.tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except ValueError as e:
-        await db.rollback()
+        await authority.db.rollback()
         message = str(e)
         if "not found" in message.lower():
             raise _mcp_server_not_found_error() from e
         raise _mcp_server_action_failed_error() from e
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception as e:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to sync MCP server tools")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -339,10 +292,7 @@ async def sync_mcp_server_tools(
 @router.post("/{server_id}/test", response_model=MCPServerTestResult)
 async def test_mcp_server_connection(
     server_id: str,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPServerTestResult:
     """
     Test connection to an MCP server.
@@ -350,15 +300,16 @@ async def test_mcp_server_connection(
     Uses the server's stored project_id to determine sandbox context.
     """
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
     try:
         start_time = time.time()
-        result = await mcp_runtime.test_server(server_id, checked_server.tenant_id)
+        result = await authority.services.runtime_service.test_server(
+            server_id,
+            checked_server.tenant_id,
+        )
 
         latency_ms = (time.time() - start_time) * 1000
 
@@ -377,16 +328,16 @@ async def test_mcp_server_connection(
         )
 
     except ValueError as e:
-        await db.rollback()
+        await authority.db.rollback()
         message = str(e)
         if "not found" in message.lower():
             raise _mcp_server_not_found_error() from e
         raise _mcp_server_action_failed_error() from e
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to test MCP server connection")
         return MCPServerTestResult(
             success=False,
@@ -398,21 +349,20 @@ async def test_mcp_server_connection(
 @router.post("/reconcile/{project_id}", response_model=MCPReconcileResultResponse)
 async def reconcile_mcp_project(
     project_id: str,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPReconcileResultResponse:
     """Reconcile enabled MCP servers with current sandbox runtime."""
     project_tenant_id = await resolve_project_tenant_id_for_access(
-        db,
+        authority,
         project_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
     try:
-        result = await mcp_runtime.reconcile_project(project_id, project_tenant_id)
-        await db.commit()
+        result = await authority.services.runtime_service.reconcile_project(
+            project_id,
+            project_tenant_id,
+        )
+        await authority.db.commit()
         if result is None:
             return MCPReconcileResultResponse(
                 project_id=project_id,
@@ -429,10 +379,10 @@ async def reconcile_mcp_project(
             failed=result.failed,
         )
     except PermissionError as e:
-        await db.rollback()
+        await authority.db.rollback()
         raise _mcp_access_denied_error() from e
     except Exception as e:
-        await db.rollback()
+        await authority.db.rollback()
         logger.exception("Failed to reconcile MCP project %s", project_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -467,22 +417,16 @@ def _compute_server_health(server: MCPServer) -> MCPServerHealthStatus:
 @router.get("/health/summary", response_model=MCPHealthSummary)
 async def get_mcp_health_summary(
     project_id: str | None = Query(None, description="Filter by project ID"),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPHealthSummary:
     """Get aggregated health summary for all MCP servers."""
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
+    repository = authority.services.server_repository
 
     if project_id:
-        _ = await resolve_project_tenant_id_for_access(db, project_id, current_user.id)
+        _ = await resolve_project_tenant_id_for_access(authority, project_id)
         servers = await repository.list_by_project(project_id)
     else:
-        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        accessible_project_ids = await list_accessible_project_ids(authority)
         if not accessible_project_ids:
             return MCPHealthSummary(
                 total=0,
@@ -492,7 +436,7 @@ async def get_mcp_health_summary(
                 disabled=0,
                 servers=[],
             )
-        servers = await repository.list_by_tenant(tenant_id)
+        servers = await repository.list_by_tenant(authority.tenant_id)
         servers = [server for server in servers if server.project_id in accessible_project_ids]
 
     statuses = [_compute_server_health(s) for s in servers]
@@ -510,13 +454,11 @@ async def get_mcp_health_summary(
 @router.get("/{server_id}/health", response_model=MCPServerHealthStatus)
 async def get_mcp_server_health(
     server_id: str,
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPServerHealthStatus:
     """Get health status for a single MCP server (lightweight, no connection test)."""
 
-    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
+    server = await _get_mcp_server_for_tenant(authority, server_id)
 
     return _compute_server_health(server)
 
@@ -529,20 +471,18 @@ async def get_mcp_server_health(
 @router.get("/{server_id}/prompts")
 async def list_mcp_server_prompts(
     server_id: str,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> dict[str, list[dict[str, Any]]]:
     """List prompts exposed by an MCP server."""
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
     )
     try:
-        prompts = await mcp_runtime.list_server_prompts(server_id, checked_server.tenant_id)
+        prompts = await authority.services.runtime_service.list_server_prompts(
+            server_id,
+            checked_server.tenant_id,
+        )
     except PermissionError as exc:
         raise _mcp_access_denied_error() from exc
     except ValueError as exc:
@@ -554,10 +494,7 @@ async def list_mcp_server_prompts(
 async def set_mcp_server_log_level(
     server_id: str,
     request: Request,
-    mcp_runtime: MCPRuntimeService = Depends(mcp_runtime_service_dependency_v2),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Set the logging level for an MCP server."""
     body = await request.json()
@@ -569,15 +506,13 @@ async def set_mcp_server_log_level(
             detail=_("Invalid MCP logging level"),
         )
     checked_server = await _get_mcp_server_for_tenant(
-        db,
+        authority,
         server_id,
-        tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
 
     try:
-        success = await mcp_runtime.set_server_log_level(
+        success = await authority.services.runtime_service.set_server_log_level(
             server_id,
             checked_server.tenant_id,
             level,
@@ -587,7 +522,7 @@ async def set_mcp_server_log_level(
     except ValueError as exc:
         raise _mcp_server_not_found_error() from exc
 
-    await db.commit()
+    await authority.db.commit()
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -600,54 +535,38 @@ async def set_mcp_server_log_level(
 async def list_mcp_server_logs(
     server_id: str,
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> dict[str, list[dict[str, Any]]]:
     """List recent persisted lifecycle log messages for an MCP server."""
-    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
-    result = await db.execute(
-        refresh_select_statement(
-            select(MCPLifecycleEvent)
-            .where(
-                MCPLifecycleEvent.server_id == server.id,
-                MCPLifecycleEvent.tenant_id == server.tenant_id,
-            )
-            .order_by(desc(MCPLifecycleEvent.created_at))
-            .limit(limit)
-        )
+    server = await _get_mcp_server_for_tenant(authority, server_id)
+    events = await authority.services.lifecycle_queries.list_server_events(
+        server_id=server.id,
+        tenant_id=server.tenant_id,
+        limit=limit,
     )
-    events = result.scalars().all()
     return {"logs": [_mcp_lifecycle_event_to_log(event) for event in events]}
 
 
 async def _get_mcp_server_for_tenant(
-    db: AsyncSession,
+    authority: MCPApplicationAuthorityV2,
     server_id: str,
-    tenant_id: str,
-    user_id: str | None = None,
-    required_roles: Collection[str] | None = None,
+    required_roles: tuple[str, ...] | None = None,
 ) -> MCPServer:
-    repository = SqlMCPServerRepository(db)
-    server = await repository.get_by_id(server_id)
+    server = await authority.services.server_repository.get_by_id(server_id)
     if not server:
         raise _mcp_server_not_found_error()
-    if user_id is not None:
-        if not server.project_id:
-            raise _mcp_access_denied_error()
-        await ensure_project_access(
-            db,
-            server.project_id,
-            server.tenant_id,
-            user_id,
-            required_roles,
-        )
-    elif server.tenant_id != tenant_id:
+    if not server.project_id:
         raise _mcp_access_denied_error()
+    await ensure_project_access(
+        authority,
+        server.project_id,
+        server.tenant_id,
+        required_roles,
+    )
     return server
 
 
-def _mcp_lifecycle_event_to_log(event: MCPLifecycleEvent) -> dict[str, Any]:
+def _mcp_lifecycle_event_to_log(event: MCPLifecycleEventRecordV2) -> dict[str, Any]:
     level_by_status = {
         "success": "info",
         "failed": "error",
@@ -662,7 +581,7 @@ def _mcp_lifecycle_event_to_log(event: MCPLifecycleEvent) -> dict[str, Any]:
         "data": {
             "status": event.status,
             "message": event.error_message,
-            "metadata": event.metadata_json or {},
+            "metadata": event.metadata,
         },
         "timestamp": event.created_at.isoformat() if event.created_at else None,
     }

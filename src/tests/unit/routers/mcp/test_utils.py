@@ -1,16 +1,35 @@
+from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers.mcp.utils import (
-    MCP_PROJECT_WRITE_ROLES,
     ensure_project_access,
     list_accessible_project_ids,
     resolve_project_tenant_id_for_access,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
+from src.infrastructure.plugins.v2.mcp_services import (
+    MCP_PROJECT_WRITE_ROLES_V2,
+    SqlMCPProjectAccessV2,
+)
+
+
+def _authority(db: AsyncSession, tenant_id: str, user_id: str) -> MCPApplicationAuthorityV2:
+    return cast(
+        MCPApplicationAuthorityV2,
+        SimpleNamespace(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            services=SimpleNamespace(access=SqlMCPProjectAccessV2(_session=db)),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -22,10 +41,9 @@ async def test_ensure_project_access_rejects_same_tenant_non_member(
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await ensure_project_access(
-            test_db,
+            _authority(test_db, test_project_db.tenant_id, another_user.id),
             test_project_db.id,
             test_project_db.tenant_id,
-            another_user.id,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -49,19 +67,17 @@ async def test_ensure_project_access_allows_viewer_reads_but_not_writes(
     await test_db.commit()
 
     await ensure_project_access(
-        test_db,
+        _authority(test_db, test_project_db.tenant_id, another_user.id),
         test_project_db.id,
         test_project_db.tenant_id,
-        another_user.id,
     )
 
     with pytest.raises(HTTPException) as exc_info:
         await ensure_project_access(
-            test_db,
+            _authority(test_db, test_project_db.tenant_id, another_user.id),
             test_project_db.id,
             test_project_db.tenant_id,
-            another_user.id,
-            MCP_PROJECT_WRITE_ROLES,
+            MCP_PROJECT_WRITE_ROLES_V2,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
@@ -76,15 +92,11 @@ async def test_list_accessible_project_ids_returns_user_memberships_only(
     another_user: User,
 ) -> None:
     assert await list_accessible_project_ids(
-        test_db,
-        test_project_db.tenant_id,
-        test_user.id,
+        _authority(test_db, test_project_db.tenant_id, test_user.id),
     ) == {test_project_db.id}
     assert (
         await list_accessible_project_ids(
-            test_db,
-            test_project_db.tenant_id,
-            another_user.id,
+            _authority(test_db, test_project_db.tenant_id, another_user.id),
         )
         == set()
     )
@@ -99,9 +111,8 @@ async def test_resolve_project_tenant_id_for_access_returns_authorized_project_t
 ) -> None:
     assert (
         await resolve_project_tenant_id_for_access(
-            test_db,
+            _authority(test_db, test_project_db.tenant_id, test_user.id),
             test_project_db.id,
-            test_user.id,
         )
         == test_project_db.tenant_id
     )

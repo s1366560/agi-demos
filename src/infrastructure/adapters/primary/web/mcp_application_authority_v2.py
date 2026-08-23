@@ -9,9 +9,6 @@ from uuid import uuid4
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.mcp_app_service import MCPAppService
-from src.application.services.mcp_runtime_service import MCPRuntimeService
-from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -39,6 +36,8 @@ class MCPApplicationAuthorityV2:
 
     operation: OperationContextV2
     db: AsyncSession
+    tenant_id: str
+    user_id: str
     services: MCPApplicationServicesV2
 
 
@@ -78,35 +77,13 @@ async def mcp_application_authority_dependency_v2(
         yield MCPApplicationAuthorityV2(
             operation=operation,
             db=db,
+            tenant_id=tenant_id,
+            user_id=current_user.id,
             services=resolver.resolve(operation),
         )
 
 
-def mcp_app_service_dependency_v2(
-    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
-) -> MCPAppService:
-    """Project the app service from the request-owned MCP authority."""
-    return authority.services.app_service
-
-
-def mcp_runtime_service_dependency_v2(
-    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
-) -> MCPRuntimeService:
-    """Project the runtime service from the request-owned MCP authority."""
-    return authority.services.runtime_service
-
-
-def sandbox_mcp_server_manager_dependency_v2(
-    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
-) -> SandboxMCPServerManager:
-    """Project the sandbox manager from the request-owned MCP authority."""
-    return authority.services.sandbox_manager
-
-
 __all__ = [
     "MCPApplicationAuthorityV2",
-    "mcp_app_service_dependency_v2",
     "mcp_application_authority_dependency_v2",
-    "mcp_runtime_service_dependency_v2",
-    "sandbox_mcp_server_manager_dependency_v2",
 ]

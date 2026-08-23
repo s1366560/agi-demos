@@ -125,6 +125,7 @@ def builtin_runtime_definitions_v2(
     from .builtin_invitations_public_http_routes import (
         builtin_invitations_public_http_routes_definition_v2,
     )
+    from .builtin_mcp_http_routes import builtin_mcp_http_routes_definition_v2
     from .builtin_memories_http_routes import builtin_memories_http_routes_definition_v2
     from .builtin_notifications_http_routes import (
         builtin_notifications_http_routes_definition_v2,
@@ -184,6 +185,7 @@ def builtin_runtime_definitions_v2(
         builtin_project_my_work_http_routes_definition_v2(),
         builtin_projects_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
+        builtin_mcp_http_routes_definition_v2(),
         builtin_notifications_http_routes_definition_v2(),
         builtin_events_http_routes_definition_v2(),
         builtin_support_http_routes_definition_v2(),

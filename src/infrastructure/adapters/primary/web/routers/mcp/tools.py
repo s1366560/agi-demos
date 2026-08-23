@@ -7,16 +7,13 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.mcp_runtime_service import MCPRuntimeService
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
+from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
+    MCPApplicationAuthorityV2,
+    mcp_application_authority_dependency_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.mcp_services import MCP_PROJECT_WRITE_ROLES_V2
 
 from .schemas import (
     MCPToolCallRequest,
@@ -25,7 +22,6 @@ from .schemas import (
     MCPToolResponse,
 )
 from .utils import (
-    MCP_PROJECT_WRITE_ROLES,
     ensure_project_access,
     list_accessible_project_ids,
     resolve_project_tenant_id_for_access,
@@ -41,34 +37,26 @@ async def list_all_mcp_tools(
     project_id: str | None = Query(None, description="Filter by project ID"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(50, ge=1, le=200, description="Items per page"),
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPToolListResponse:
     """
     List all MCP tools from all enabled servers, optionally filtered by project.
     Supports pagination via page/per_page query parameters.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
+    repository = authority.services.server_repository
 
     if project_id:
-        project_tenant_id = await resolve_project_tenant_id_for_access(
-            db, project_id, current_user.id
-        )
+        project_tenant_id = await resolve_project_tenant_id_for_access(authority, project_id)
         servers = await repository.get_enabled_servers(project_tenant_id, project_id=project_id)
     else:
-        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        accessible_project_ids = await list_accessible_project_ids(authority)
         if not accessible_project_ids:
             return MCPToolListResponse(
                 items=[], total=0, page=page, per_page=per_page, total_pages=1
             )
         servers = [
             server
-            for server in await repository.get_enabled_servers(tenant_id)
+            for server in await repository.get_enabled_servers(authority.tenant_id)
             if server.project_id in accessible_project_ids
         ]
 
@@ -112,24 +100,15 @@ async def list_all_mcp_tools(
 @router.post("/tools/call", response_model=MCPToolCallResponse)
 async def call_mcp_tool(
     request_data: MCPToolCallRequest,
-    db: AsyncSession = Depends(get_db),
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
+    authority: MCPApplicationAuthorityV2 = Depends(mcp_application_authority_dependency_v2),
 ) -> MCPToolCallResponse:
     """
     Call a tool on an MCP server.
 
     Useful for testing tools before integrating them into agents.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-    from src.infrastructure.agent.mcp.client import MCPClient
-
-    repository = SqlMCPServerRepository(db)
-
     # Verify server exists and tenant ownership
-    server = await repository.get_by_id(request_data.server_id)
+    server = await authority.services.server_repository.get_by_id(request_data.server_id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -142,11 +121,10 @@ async def call_mcp_tool(
             detail=_("Access denied"),
         )
     await ensure_project_access(
-        db,
+        authority,
         server.project_id,
         server.tenant_id,
-        current_user.id,
-        MCP_PROJECT_WRITE_ROLES,
+        MCP_PROJECT_WRITE_ROLES_V2,
     )
 
     if not server.enabled:
@@ -160,9 +138,7 @@ async def call_mcp_tool(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "reason_code": "cloud_mcp_tool_idempotency_unavailable",
-                "message": _(
-                    "Cloud MCP durable tool idempotency is unavailable for this request"
-                ),
+                "message": _("Cloud MCP durable tool idempotency is unavailable for this request"),
             },
         )
 
@@ -179,14 +155,11 @@ async def call_mcp_tool(
                 detail=_("MCP server has no transport configuration"),
             )
 
-        async with MCPClient(
-            server_type=server.config.transport_type.value,
-            transport_config=MCPRuntimeService.to_sandbox_config(server.config),
-        ) as client:
-            result = await client.call_tool(
-                tool_name=request_data.tool_name,
-                arguments=request_data.arguments,
-            )
+        result = await authority.services.direct_tool_caller.call(
+            server=server,
+            tool_name=request_data.tool_name,
+            arguments=request_data.arguments,
+        )
 
         execution_time_ms = (time.time() - start_time) * 1000
 

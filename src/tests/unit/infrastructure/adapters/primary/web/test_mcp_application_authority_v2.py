@@ -15,12 +15,10 @@ from starlette.requests import Request
 from src.domain.model.plugins.generated_v2 import ScopeKindV2
 from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import (
     MCPApplicationAuthorityV2,
-    mcp_app_service_dependency_v2,
     mcp_application_authority_dependency_v2,
-    mcp_runtime_service_dependency_v2,
-    sandbox_mcp_server_manager_dependency_v2,
 )
-from src.infrastructure.adapters.primary.web.routers.mcp import apps, servers
+from src.infrastructure.adapters.primary.web.routers import mcp as mcp_router
+from src.infrastructure.adapters.primary.web.routers.mcp import apps, servers, tools
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.plugins.v2.boundary import (
@@ -36,34 +34,33 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 pytestmark = pytest.mark.unit
 
 _ROOT = Path(__file__).resolve().parents[7]
-_APP_SERVICE_ENDPOINTS = (
+_MCP_ENDPOINTS = (
     apps.list_mcp_apps,
+    apps.proxy_tool_call_direct,
     apps.get_mcp_app,
     apps.get_mcp_app_resource,
     apps.proxy_tool_call,
     apps.delete_mcp_app,
     apps.refresh_mcp_app_resource,
     apps.proxy_resource_read,
-)
-_MANAGER_ENDPOINTS = (
-    apps.proxy_tool_call_direct,
-    apps.proxy_tool_call,
-    apps.proxy_resource_read,
     apps.proxy_resource_list,
-)
-_APP_RUNTIME_ENDPOINTS = (
-    apps.delete_mcp_app,
-    apps.refresh_mcp_app_resource,
-)
-_SERVER_RUNTIME_ENDPOINTS = (
     servers.create_mcp_server,
+    servers.list_mcp_servers,
+    servers.get_mcp_server,
     servers.update_mcp_server,
     servers.delete_mcp_server,
     servers.sync_mcp_server_tools,
     servers.test_mcp_server_connection,
     servers.reconcile_mcp_project,
+    servers.get_mcp_health_summary,
+    servers.get_mcp_server_health,
     servers.list_mcp_server_prompts,
     servers.set_mcp_server_log_level,
+    servers.list_mcp_server_logs,
+    tools.list_all_mcp_tools,
+    tools.call_mcp_tool,
+    mcp_router.create_mcp_server_root,
+    mcp_router.list_mcp_servers_root,
 )
 
 
@@ -94,25 +91,11 @@ def _request() -> Request:
     )
 
 
-@pytest.mark.parametrize("endpoint", _APP_SERVICE_ENDPOINTS)
-def test_mcp_app_routes_require_v2_app_service(endpoint: Any) -> None:
-    parameter = signature(endpoint).parameters["mcp_app_service"]
+@pytest.mark.parametrize("endpoint", _MCP_ENDPOINTS)
+def test_mcp_routes_require_one_generation_owned_authority(endpoint: Any) -> None:
+    parameter = signature(endpoint).parameters["authority"]
 
-    assert parameter.default.dependency is mcp_app_service_dependency_v2
-
-
-@pytest.mark.parametrize("endpoint", _MANAGER_ENDPOINTS)
-def test_mcp_app_routes_require_v2_sandbox_manager(endpoint: Any) -> None:
-    parameter = signature(endpoint).parameters["mcp_manager"]
-
-    assert parameter.default.dependency is sandbox_mcp_server_manager_dependency_v2
-
-
-@pytest.mark.parametrize("endpoint", (*_APP_RUNTIME_ENDPOINTS, *_SERVER_RUNTIME_ENDPOINTS))
-def test_mcp_mutation_routes_require_v2_runtime_service(endpoint: Any) -> None:
-    parameter = signature(endpoint).parameters["mcp_runtime"]
-
-    assert parameter.default.dependency is mcp_runtime_service_dependency_v2
+    assert parameter.default.dependency is mcp_application_authority_dependency_v2
 
 
 async def test_authority_uses_tenant_scope_pinned_generation_and_request_db() -> None:
@@ -147,6 +130,8 @@ async def test_authority_uses_tenant_scope_pinned_generation_and_request_db() ->
             assert authority.operation.context.scope.kind is ScopeKindV2.TENANT
             assert authority.operation.context.scope.tenant_id == "tenant-a"
             assert authority.db is db
+            assert authority.tenant_id == "tenant-a"
+            assert authority.user_id == "user-a"
             assert authority.services.app_service._app_repo._session is db
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
