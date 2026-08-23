@@ -116,6 +116,7 @@ def builtin_runtime_definitions_v2(
         builtin_background_tasks_http_routes_definition_v2,
     )
     from .builtin_billing_http_routes import builtin_billing_http_routes_definition_v2
+    from .builtin_clusters_http_routes import builtin_clusters_http_routes_definition_v2
     from .builtin_cron_http_routes import builtin_cron_http_routes_definition_v2
     from .builtin_data_export_http_routes import builtin_data_export_http_routes_definition_v2
     from .builtin_deploy_http_routes import builtin_deploy_http_routes_definition_v2
@@ -232,6 +233,7 @@ def builtin_runtime_definitions_v2(
         builtin_instance_files_http_routes_definition_v2(),
         builtin_instance_channels_http_routes_definition_v2(),
         builtin_deploy_http_routes_definition_v2(),
+        builtin_clusters_http_routes_definition_v2(),
         builtin_audit_http_routes_definition_v2(),
         builtin_trust_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
