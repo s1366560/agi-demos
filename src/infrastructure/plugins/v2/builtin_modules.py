@@ -136,6 +136,9 @@ def builtin_runtime_definitions_v2(
     from .builtin_instance_files_http_routes import (
         builtin_instance_files_http_routes_definition_v2,
     )
+    from .builtin_instance_templates_http_routes import (
+        builtin_instance_templates_http_routes_definition_v2,
+    )
     from .builtin_invitations_http_routes import (
         builtin_invitations_http_routes_definition_v2,
     )
@@ -234,6 +237,7 @@ def builtin_runtime_definitions_v2(
         builtin_instance_channels_http_routes_definition_v2(),
         builtin_deploy_http_routes_definition_v2(),
         builtin_clusters_http_routes_definition_v2(),
+        builtin_instance_templates_http_routes_definition_v2(),
         builtin_audit_http_routes_definition_v2(),
         builtin_trust_http_routes_definition_v2(),
         builtin_engines_http_routes_definition_v2(),
