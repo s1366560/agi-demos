@@ -49,6 +49,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "mcp",
         "notifications",
         "observability",
+        "plugin-marketplace",
         "project-my-work",
         "project-sandbox",
         "project-sandbox-preview",
