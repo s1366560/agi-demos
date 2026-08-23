@@ -54,6 +54,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "tenants",
         "tenant-webhooks",
         "trust-workspace",
+        "webhooks",
     }
 )
 

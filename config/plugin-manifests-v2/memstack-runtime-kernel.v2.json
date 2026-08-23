@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:c303adf51efddb268ad599f68858c20a24605d4e044ff66e6bb1d911811c7c22",
+        "digest": "sha256:d0c49f927015d690fcad49209888e1eacb24f147455187366d18b07c3c66af8a",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2556,6 +2556,35 @@
       "artifact": {
         "digest": "sha256:e4bd718a0bdaf3ec96c52b010ec57e6648000c54bac060c9a9507a8715638d32",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_smtp_config_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/webhooks-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_webhooks_http_routes:builtin_webhooks_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:e51978588bd0e08afa6a1ba2fe4f02b70df7d201f7beeb321be9fe824cf05fe3",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_webhooks_http_routes.py"
       }
     },
     {
