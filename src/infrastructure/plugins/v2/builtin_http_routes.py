@@ -73,6 +73,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "trust-workspace",
         "tunnel",
         "voice-websocket",
+        "websocket",
         "webhooks",
     }
 )
