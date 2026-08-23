@@ -48,6 +48,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "memories",
         "mcp",
         "notifications",
+        "observability",
         "project-my-work",
         "project-sandbox",
         "project-sandbox-preview",

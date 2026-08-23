@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 18
+    assert len(route_graph.static_mounted_row_ids) == 17
     assert route_graph.v2_owned_row_ids == (
         "tenants",
         "project-sandbox",
@@ -116,6 +116,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "tunnel",
         "engines",
         "security-ws",
+        "observability",
         "admin-dlq",
         "invitations",
         "invitations-public",
@@ -153,6 +154,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-security-ws-http-routes",
         "builtin-shares-http-routes",
         "builtin-notifications-http-routes",
+        "builtin-observability-http-routes",
         "builtin-project-sandbox-http-routes",
         "builtin-support-http-routes",
         "builtin-project-my-work-http-routes",
