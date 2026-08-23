@@ -58,6 +58,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "support-2",
         "terminal",
         "tenants",
+        "tenant-skill-configs",
         "tenant-webhooks",
         "trust",
         "trust-workspace",

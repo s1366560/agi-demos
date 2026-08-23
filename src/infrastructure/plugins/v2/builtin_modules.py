@@ -162,6 +162,9 @@ def builtin_runtime_definitions_v2(
     )
     from .builtin_support_http_routes import builtin_support_http_routes_definition_v2
     from .builtin_system_http_routes import builtin_system_http_routes_definition_v2
+    from .builtin_tenant_skill_configs_http_routes import (
+        builtin_tenant_skill_configs_http_routes_definition_v2,
+    )
     from .builtin_tenant_webhooks_http_routes import (
         builtin_tenant_webhooks_http_routes_definition_v2,
     )
@@ -213,6 +216,7 @@ def builtin_runtime_definitions_v2(
         builtin_shares_http_routes_definition_v2(),
         builtin_memories_http_routes_definition_v2(),
         builtin_project_sandbox_http_routes_definition_v2(),
+        builtin_tenant_skill_configs_http_routes_definition_v2(),
         builtin_mcp_http_routes_definition_v2(),
         builtin_sandbox_http_routes_definition_v2(),
         builtin_terminal_http_routes_definition_v2(),
