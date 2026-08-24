@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   CANONICAL_DESKTOP_NAVIGATION_GROUPS,
   CANONICAL_DESKTOP_NAVIGATION_METADATA,
+  DESKTOP_AUXILIARY_NAVIGATION_METADATA,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopCanonicalNavigationCatalog.js');
 const {
   deriveDesktopNavigationDiscoveryEntries,
@@ -17,6 +18,9 @@ const {
   CANONICAL_DESKTOP_ROUTE_IDS,
   createDesktopCanonicalRouteCatalog,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopCanonicalRouteCatalog.js');
+const {
+  createDesktopRouteRegistry,
+} = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js');
 
 const inventory = JSON.parse(
   readFileSync(
@@ -61,6 +65,65 @@ test('Desktop discovery metadata exactly mirrors all 51 canonical Web navigation
   assert.equal(actual.length, 51);
   assert.equal(new Set(actual.map(({ routeId }) => routeId)).size, 51);
   assert.deepEqual(actual, expected);
+});
+
+test('Desktop discovery projects auxiliary routes only through selected navigation metadata', () => {
+  assert.deepEqual(
+    DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+    ['backend-stores', 'project-playbooks', 'project-support'],
+  );
+  const auxiliaryRegistry = createDesktopRouteRegistry([
+    auxiliaryRoute('backend-stores', '/tenant/:tenantId/backend-stores', ['tenant']),
+    auxiliaryRoute(
+      'project-playbooks',
+      '/tenant/:tenantId/project/:projectId/playbooks',
+      ['tenant', 'project'],
+    ),
+    auxiliaryRoute(
+      'project-support',
+      '/tenant/:tenantId/project/:projectId/support',
+      ['tenant', 'project'],
+    ),
+  ]);
+  const auxiliaryEntries = deriveDesktopNavigationDiscoveryEntries({
+    registry: auxiliaryRegistry,
+    authenticated: true,
+    context: { tenantId: 'tenant-1', projectId: 'project-1' },
+    translate,
+  });
+
+  assert.deepEqual(
+    auxiliaryEntries.map(({ routeId, groupId, label, description, destinationPath }) => ({
+      routeId,
+      groupId,
+      label,
+      description,
+      destinationPath,
+    })),
+    [
+      {
+        routeId: 'backend-stores',
+        groupId: 'desktop-auxiliary',
+        label: 'backendStores.title',
+        description: 'backendStores.subtitle',
+        destinationPath: '/tenant/tenant-1/backend-stores',
+      },
+      {
+        routeId: 'project-playbooks',
+        groupId: 'desktop-auxiliary',
+        label: 'projectPlaybooks.title',
+        description: 'projectPlaybooks.subtitle',
+        destinationPath: '/tenant/tenant-1/project/project-1/playbooks',
+      },
+      {
+        routeId: 'project-support',
+        groupId: 'desktop-auxiliary',
+        label: 'projectSupport.title',
+        description: 'projectSupport.subtitle',
+        destinationPath: '/tenant/tenant-1/project/project-1/support',
+      },
+    ],
+  );
 });
 
 test('Desktop discovery retains the canonical nine-group order and every route once', () => {
@@ -141,3 +204,16 @@ test('Desktop discovery search covers localized copy, group, alias and route ide
     ['project-project-graph'],
   );
 });
+
+function auxiliaryRoute(id, path, scope) {
+  return {
+    id,
+    path,
+    scope,
+    navGroup: 'desktop-auxiliary',
+    capability: id,
+    requiredPermission: [['authenticated', 'tenant_member']],
+    localPolicy: 'cloud_only',
+    loader: async () => ({ routeId: id }),
+  };
+}

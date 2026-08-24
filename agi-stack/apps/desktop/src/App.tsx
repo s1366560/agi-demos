@@ -243,15 +243,9 @@ import {
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
-  BACKEND_STORES_ROUTE_ID,
-  PROJECT_PLAYBOOKS_ROUTE_ID,
   PROJECT_SEARCH_ROUTE_ID,
-  PROJECT_SUPPORT_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
-import {
-  buildDesktopRoutePath,
-  restoreDesktopRoute,
-} from './features/navigation/desktopRouteRegistry';
+import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
 import {
   desktopRouteBasePermissionsForAuth,
   resolveDesktopRouteCapability,
@@ -6064,87 +6058,6 @@ export function App() {
       icon: <ActivityLogIcon />,
       searchText: `${t('automations.title')} ${t('automations.commandDescription')}`,
       onSelect: () => switchSection('automations'),
-    },
-    {
-      id: BACKEND_STORES_ROUTE_ID,
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: BACKEND_STORES_ROUTE_ID,
-      label: t('backendStores.title'),
-      description: t('backendStores.subtitle'),
-      icon: <GridIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.tenant'),
-            })
-          : undefined,
-      searchText: `${t('backendStores.title')} ${t('backendStores.subtitle')} ${BACKEND_STORES_ROUTE_ID}`,
-      onSelect: () => {
-        const route = desktopProductionRouteRegistry.byId.get(BACKEND_STORES_ROUTE_ID);
-        if (!route) return;
-        desktopProductionRouteNavigation.openPath(
-          buildDesktopRoutePath(route, { tenantId: config.tenantId }),
-        );
-      },
-    },
-    {
-      id: PROJECT_PLAYBOOKS_ROUTE_ID,
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: PROJECT_PLAYBOOKS_ROUTE_ID,
-      label: t('projectPlaybooks.title'),
-      description: t('projectPlaybooks.subtitle'),
-      icon: <ActivityLogIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.project'),
-            })
-          : undefined,
-      searchText: `${t('projectPlaybooks.title')} ${t('projectPlaybooks.subtitle')} ${PROJECT_PLAYBOOKS_ROUTE_ID}`,
-      onSelect: () => {
-        const route = desktopProductionRouteRegistry.byId.get(PROJECT_PLAYBOOKS_ROUTE_ID);
-        if (!route) return;
-        desktopProductionRouteNavigation.openPath(
-          buildDesktopRoutePath(route, {
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-          }),
-        );
-      },
-    },
-    {
-      id: 'project-support',
-      kind: 'route',
-      groupId: 'desktop-auxiliary',
-      groupLabel: t('featureDirectory.group.auxiliary'),
-      routeId: PROJECT_SUPPORT_ROUTE_ID,
-      label: t('projectSupport.title'),
-      description: t('projectSupport.subtitle'),
-      icon: <ActivityLogIcon />,
-      disabled: !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim(),
-      disabledReason:
-        !identityAuthenticated || !config.tenantId.trim() || !config.projectId.trim()
-          ? t('featureDirectory.disabled.requiredContext', {
-              scope: t('featureDirectory.scope.project'),
-            })
-          : undefined,
-      searchText: `${t('projectSupport.title')} ${t('projectSupport.subtitle')} ${PROJECT_SUPPORT_ROUTE_ID}`,
-      onSelect: () => {
-        const projectSupportRoute =
-          desktopProductionRouteRegistry.byId.get(PROJECT_SUPPORT_ROUTE_ID);
-        if (!projectSupportRoute) return;
-        const projectSupportPath = buildDesktopRoutePath(projectSupportRoute, {
-          tenantId: config.tenantId,
-          projectId: config.projectId,
-        });
-        desktopProductionRouteNavigation.openPath(projectSupportPath);
-      },
     },
     {
       id: 'settings',

@@ -19,6 +19,15 @@ export type CanonicalDesktopNavigationMetadata = Readonly<{
   aliases: readonly string[];
 }>;
 
+export type DesktopNavigationMetadata = Readonly<{
+  routeId: string;
+  groupId?: string;
+  labelKey: string;
+  descriptionKey: string;
+  displayRole: 'top-nav' | 'overflow';
+  aliases: readonly string[];
+}>;
+
 export type CanonicalDesktopNavigationGroup = Readonly<{
   id: string;
   labelKey: string;
@@ -69,6 +78,15 @@ export const CANONICAL_DESKTOP_NAVIGATION_GROUPS = Object.freeze([
   {
     id: 'project-configuration',
     labelKey: 'featureDirectory.group.projectConfiguration',
+    iconKey: 'configuration',
+  },
+] as const satisfies readonly CanonicalDesktopNavigationGroup[]);
+
+export const DESKTOP_NAVIGATION_GROUPS = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_GROUPS,
+  {
+    id: 'desktop-auxiliary',
+    labelKey: 'featureDirectory.group.auxiliary',
     iconKey: 'configuration',
   },
 ] as const satisfies readonly CanonicalDesktopNavigationGroup[]);
@@ -144,3 +162,36 @@ export const CANONICAL_DESKTOP_NAVIGATION_METADATA: readonly CanonicalDesktopNav
       aliases: Object.freeze([alias]),
     })),
   );
+
+export const DESKTOP_AUXILIARY_NAVIGATION_METADATA: readonly DesktopNavigationMetadata[] =
+  Object.freeze([
+    Object.freeze({
+      routeId: 'backend-stores',
+      groupId: 'desktop-auxiliary',
+      labelKey: 'backendStores.title',
+      descriptionKey: 'backendStores.subtitle',
+      displayRole: 'overflow',
+      aliases: Object.freeze(['backend-stores']),
+    }),
+    Object.freeze({
+      routeId: 'project-playbooks',
+      groupId: 'desktop-auxiliary',
+      labelKey: 'projectPlaybooks.title',
+      descriptionKey: 'projectPlaybooks.subtitle',
+      displayRole: 'overflow',
+      aliases: Object.freeze(['project-playbooks', 'playbooks']),
+    }),
+    Object.freeze({
+      routeId: 'project-support',
+      groupId: 'desktop-auxiliary',
+      labelKey: 'projectSupport.title',
+      descriptionKey: 'projectSupport.subtitle',
+      displayRole: 'overflow',
+      aliases: Object.freeze(['project-support', 'support']),
+    }),
+  ]);
+
+export const DESKTOP_NAVIGATION_METADATA: readonly DesktopNavigationMetadata[] = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA,
+  ...DESKTOP_AUXILIARY_NAVIGATION_METADATA,
+]);

@@ -1,15 +1,12 @@
-import { CANONICAL_DESKTOP_ROUTE_IDS } from '../features/navigation/desktopCanonicalRouteCatalog';
 import {
   createAppRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
+import { DESKTOP_NAVIGATION_METADATA } from '../features/navigation/desktopCanonicalNavigationCatalog';
 import {
-  BACKEND_STORES_ROUTE_ID,
   DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
-  PROJECT_PLAYBOOKS_ROUTE_ID,
-  PROJECT_SUPPORT_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
@@ -40,10 +37,7 @@ const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
-  ...CANONICAL_DESKTOP_ROUTE_IDS,
-  BACKEND_STORES_ROUTE_ID,
-  PROJECT_PLAYBOOKS_ROUTE_ID,
-  PROJECT_SUPPORT_ROUTE_ID,
+  ...DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
   Object.freeze({
@@ -115,7 +109,9 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
   [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
-      discoveryRouteIds: Object.freeze([...CANONICAL_DESKTOP_ROUTE_IDS]),
+      discoveryRouteIds: Object.freeze(
+        DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+      ),
       id: DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,

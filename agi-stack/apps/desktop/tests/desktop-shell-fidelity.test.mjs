@@ -65,6 +65,10 @@ const canonicalNavigationSource = readFileSync(
   new URL('../src/features/navigation/desktopCanonicalNavigationCatalog.ts', import.meta.url),
   'utf8',
 );
+const rendererArtifactCatalogSource = readFileSync(
+  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+  'utf8',
+);
 const workspaceDockSource = readFileSync(
   new URL('../src/features/workspace/WorkspaceDock.tsx', import.meta.url),
   'utf8',
@@ -556,7 +560,7 @@ test('command palette derives Tenant Tasks with every canonical production route
   assert.match(canonicalNavigationSource, /'tenant-tenant-tasks', 'nav\.tasks'/);
   assert.match(
     appSource,
-    /const desktopCanonicalNavigationRegistry = useMemo\([\s\S]*projectDesktopNavigationRegistryV2\([\s\S]*desktopProductionRouteRegistry,[\s\S]*desktopRendererAuthorityV2/u,
+    /navigationRegistry: desktopCanonicalNavigationRegistry,[\s\S]*desktopRendererGenerationV2\.state/u,
   );
   assert.doesNotMatch(appSource, /CANONICAL_DESKTOP_ROUTE_IDS\.map\(/u);
   assert.match(appSource, /deriveDesktopNavigationDiscoveryEntries\(\{/);
@@ -583,22 +587,24 @@ test('sidebar exposes one focus-restoring all-features launcher', () => {
   );
 });
 
-test('command palette opens Project Support through the scoped production route registry', () => {
+test('command palette derives auxiliary routes from the V2 navigation artifact', () => {
   const commandItems =
     appSource.match(/const commandItems: CommandPaletteItem\[\] = \[[\s\S]*?\n  \];/)?.[0] ?? '';
 
-  assert.match(commandItems, /id: 'project-support'/);
-  assert.match(commandItems, /label: t\('projectSupport\.title'\)/);
-  assert.match(commandItems, /description: t\('projectSupport\.subtitle'\)/);
   assert.match(
-    commandItems,
-    /desktopProductionRouteRegistry\.byId\.get\(PROJECT_SUPPORT_ROUTE_ID\)/,
+    canonicalNavigationSource,
+    /'project-support',[\s\S]*'projectSupport\.title',[\s\S]*'projectSupport\.subtitle'/u,
   );
   assert.match(
-    commandItems,
-    /buildDesktopRoutePath\(projectSupportRoute, \{\s*tenantId: config\.tenantId,\s*projectId: config\.projectId,/,
+    rendererArtifactCatalogSource,
+    /discoveryRouteIds:[\s\S]*DESKTOP_NAVIGATION_METADATA\.map/u,
   );
-  assert.match(commandItems, /desktopProductionRouteNavigation\.openPath\(projectSupportPath\)/);
+  assert.doesNotMatch(
+    commandItems,
+    /BACKEND_STORES_ROUTE_ID|PROJECT_PLAYBOOKS_ROUTE_ID|PROJECT_SUPPORT_ROUTE_ID/u,
+  );
+  assert.match(commandItems, /\.\.\.routeCommandItems/u);
+  assert.match(appSource, /desktopProductionRouteNavigation\.openPath\(entry\.destinationPath\)/u);
   assert.match(
     appSource,
     /item\.kind === 'route' && item\.id\.startsWith\('route:'\) && item\.routeId/u,

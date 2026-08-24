@@ -88,6 +88,11 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     ],
   );
   assert.equal(typeof artifacts[0].createRegistry, "function");
+  assert.deepEqual(artifacts[1].discoveryRouteIds.slice(-3), [
+    "backend-stores",
+    "project-playbooks",
+    "project-support",
+  ]);
   assert.equal(artifacts[2].slotDefinitions.length, 2);
   assert.ok(
     artifacts[2].slotDefinitions.every(({ moduleRef }) =>
