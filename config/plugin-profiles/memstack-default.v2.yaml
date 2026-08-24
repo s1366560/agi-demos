@@ -133,6 +133,30 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-pool-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/pool-runtime
+      enabled: false
+      config:
+        strategy: pooled-session-adapter
+        max_total_instances: 100
+        health_check_interval_seconds: 30
+        cleanup_interval_seconds: 300
+        enable_resource_isolation: true
+        enable_health_monitoring: true
+        enable_auto_classification: true
+        enable_prewarming: true
+        prewarm_on_startup: false
+        fallback_on_pool_error: false
+        enable_metrics: true
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-sandbox-operation-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1613,6 +1637,20 @@ profile:
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
       module_ref: builtin://memstack/http/voice-websocket-routes
+      enabled: true
+      config: {}
+      inject:
+        route_table: service:http.route-table-builder
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-pool-http-routes
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/http/agent-pool-routes
       enabled: true
       config: {}
       inject:

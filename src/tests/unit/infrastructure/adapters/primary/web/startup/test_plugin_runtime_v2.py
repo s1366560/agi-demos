@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 2
+    assert route_graph.static_mounted_row_ids == ()
     assert route_graph.v2_owned_row_ids == (
         "auth",
         "workspace-core-static",
@@ -135,6 +135,8 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "admin-dlq",
         "invitations",
         "invitations-public",
+        "create-pool",
+        "create-project-pool",
         "voice-websocket",
         "project-sandbox-preview",
     )
@@ -161,6 +163,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "builtin-engines-http-routes",
         "builtin-invitations-http-routes",
         "builtin-invitations-public-http-routes",
+        "builtin-agent-pool-http-routes",
         "builtin-instances-http-routes",
         "builtin-llm-providers-http-routes",
         "builtin-maintenance-http-routes",
@@ -560,10 +563,11 @@ async def test_generation_one_fails_closed_on_builtin_route_conflict(
     )
     app = FastAPI()
 
-    with pytest.raises(RuntimeV2Error, match="conflicts with private graph"):
+    with pytest.raises(RuntimeV2Error, match="duplicate v2 route") as error:
         await initialize_plugin_runtime_v2(
             app,
             desired_http_route_rows=(_desired_route(path=path),),
         )
 
+    assert error.value.code == "staging_failed"
     assert not hasattr(app.state, "platform_plugin_runtime_v2")

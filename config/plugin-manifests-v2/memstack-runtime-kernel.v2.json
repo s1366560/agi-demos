@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:6da65795562984f188bd13f703574a8f52107fb3b82b57c5dfbb682e1ae05db9",
+        "digest": "sha256:9ba5c23b86dfc79946f3bc83abf46622814bf93b8290724a1a126302ed728de8",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -473,6 +473,59 @@
       "artifact": {
         "digest": "sha256:65822a33d1edabfd15874f8f0c1a25bfa94447f7248b10309b00eae77ebe04d8",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/pool-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_pool_runtime:agent_pool_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.pool-runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "max_total_instances",
+            "health_check_interval_seconds",
+            "cleanup_interval_seconds",
+            "enable_resource_isolation",
+            "enable_health_monitoring",
+            "enable_auto_classification",
+            "enable_prewarming",
+            "prewarm_on_startup",
+            "fallback_on_pool_error",
+            "enable_metrics"
+          ],
+          "properties": {
+            "strategy": { "const": "pooled-session-adapter", "type": "string" },
+            "max_total_instances": { "type": "integer", "minimum": 1 },
+            "health_check_interval_seconds": { "type": "integer", "minimum": 1 },
+            "cleanup_interval_seconds": { "type": "integer", "minimum": 1 },
+            "enable_resource_isolation": { "type": "boolean" },
+            "enable_health_monitoring": { "type": "boolean" },
+            "enable_auto_classification": { "type": "boolean" },
+            "enable_prewarming": { "type": "boolean" },
+            "prewarm_on_startup": { "type": "boolean" },
+            "fallback_on_pool_error": { "type": "boolean" },
+            "enable_metrics": { "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:a99e8297498d4b96554263406873e4b33acd6a995b190758247565bac83a5270",
+      "artifact": {
+        "digest": "sha256:b2b2d6d4fbbae220cf16d0df197e9ac425e96d19aff38c6aa1810e226f60f6b3",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_pool_runtime.py"
       }
     },
     {
@@ -3718,6 +3771,35 @@
       "artifact": {
         "digest": "sha256:b471bba9d1d1482f11fb4595f8035b8cf87ee37663fa435d878a25e38b9132ed",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_invitations_public_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/http/agent-pool-routes",
+      "entrypoint": "src.infrastructure.plugins.v2.builtin_agent_pool_http_routes:builtin_agent_pool_http_routes_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "route_table",
+              "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "artifact": {
+        "digest": "sha256:5ec0ffa0eff6de620371a3e43e3aaed42dd31243770250f6321fd4f7a34e64a5",
+        "source": "repo+python://src/infrastructure/plugins/v2/builtin_agent_pool_http_routes.py"
       }
     },
     {

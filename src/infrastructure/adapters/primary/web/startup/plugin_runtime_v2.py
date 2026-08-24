@@ -11,9 +11,23 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.types import Scope
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import (
+    ControlPlaneEnvelopeV2,
+    ProfileSnapshotV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
+)
+from src.infrastructure.plugins.v2.agent_pool_profile import (
+    agent_pool_profile_matches_v2,
+    compose_agent_pool_profile_upgrade_v2,
+    project_agent_pool_runtime_v2,
+)
+from src.infrastructure.plugins.v2.agent_pool_runtime import (
+    AgentPoolRuntimeFactoryV2,
+    default_agent_pool_runtime_config_v2,
 )
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
@@ -71,11 +85,14 @@ DEFAULT_MANIFEST_V2_PATHS = (
 DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
-async def initialize_plugin_runtime_v2(
+async def initialize_plugin_runtime_v2(  # noqa: PLR0913
     app: FastAPI,
     *,
     desired_http_route_rows: Sequence[Any] = (),
     session_factory: Callable[[], Any] | None = None,
+    agent_pool_runtime_enabled: bool = False,
+    agent_pool_runtime_config: Mapping[str, object] | None = None,
+    agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
@@ -85,8 +102,14 @@ async def initialize_plugin_runtime_v2(
     publication_policy: PlatformPluginPublicationPolicyV2 = DEFAULT_PUBLICATION_POLICY_V2,
 ) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
+    resolved_agent_pool_config = (
+        default_agent_pool_runtime_config_v2()
+        if agent_pool_runtime_config is None
+        else dict(agent_pool_runtime_config)
+    )
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
+            agent_pool_runtime_factory=agent_pool_runtime_factory,
             graph_runtime_factory=graph_runtime_factory,
             retrieval_runtime_factory=retrieval_runtime_factory,
             sandbox_runtime_factory=sandbox_runtime_factory,
@@ -137,6 +160,8 @@ async def initialize_plugin_runtime_v2(
             durable_distribution=durable_distribution,
             latest_distribution=latest_distribution,
             desired_http_route_rows=desired_http_route_rows,
+            agent_pool_runtime_enabled=agent_pool_runtime_enabled,
+            agent_pool_runtime_config=resolved_agent_pool_config,
             activate_workspace_core_shadow=workspace_core_runtime_factory is not None,
             publication_stager=stage_routes,
         )
@@ -201,6 +226,8 @@ async def _publish_startup_generation_v2(
     durable_distribution: Mapping[str, object] | None,
     latest_distribution: Mapping[str, object] | None,
     desired_http_route_rows: Sequence[Any],
+    agent_pool_runtime_enabled: bool,
+    agent_pool_runtime_config: dict[str, object],
     activate_workspace_core_shadow: bool,
     publication_stager: GenerationPublicationStagerV2,
 ) -> tuple[PlatformPluginPublicationV2, bool]:
@@ -213,11 +240,55 @@ async def _publish_startup_generation_v2(
             profile_projector=lambda document: _project_startup_profile_v2(
                 document,
                 desired_http_route_rows=desired_http_route_rows,
+                agent_pool_runtime_enabled=agent_pool_runtime_enabled,
+                agent_pool_runtime_config=agent_pool_runtime_config,
                 activate_workspace_core_shadow=activate_workspace_core_shadow,
             ),
             publication_stager=publication_stager,
         )
         return publication, True
+
+    durable_snapshot = parse_profile_snapshot_v2(durable_distribution.get("snapshot"))
+    durable_envelope = parse_control_envelope_v2(durable_distribution.get("envelope"))
+    agent_pool_upgrade_required = not agent_pool_profile_matches_v2(
+        durable_snapshot,
+        enabled=agent_pool_runtime_enabled,
+        config=agent_pool_runtime_config,
+    )
+    target_upgrade_required = not production_target_hosts_active_v2(durable_snapshot)
+    workspace_core_upgrade_required = (
+        activate_workspace_core_shadow and not workspace_core_shadow_active_v2(durable_snapshot)
+    )
+
+    if agent_pool_upgrade_required:
+        generation, version = _next_startup_publication_v2(
+            durable_snapshot,
+            durable_envelope,
+            latest_distribution,
+        )
+        snapshot = durable_snapshot
+        if target_upgrade_required:
+            snapshot = compose_production_target_upgrade_v2(
+                snapshot,
+                generation=generation,
+            )
+        if workspace_core_upgrade_required:
+            snapshot = compose_workspace_core_shadow_upgrade_v2(
+                snapshot,
+                generation=generation,
+            )
+        snapshot = compose_agent_pool_profile_upgrade_v2(
+            snapshot,
+            generation=generation,
+            enabled=agent_pool_runtime_enabled,
+            config=agent_pool_runtime_config,
+        )
+        upgraded = await host.apply(
+            snapshot,
+            control_envelope_v2(snapshot, version=version),
+            publication_stager=publication_stager,
+        )
+        return upgraded, True
 
     publication = await host.apply_distribution(
         durable_distribution,
@@ -233,7 +304,11 @@ async def _publish_startup_generation_v2(
     if not target_upgrade_required and not workspace_core_upgrade_required:
         return publication, False
 
-    generation, version = _next_startup_publication_v2(publication, latest_distribution)
+    generation, version = _next_startup_publication_v2(
+        publication.snapshot,
+        publication.envelope,
+        latest_distribution,
+    )
     snapshot = publication.snapshot
     if target_upgrade_required:
         snapshot = compose_production_target_upgrade_v2(
@@ -257,9 +332,16 @@ def _project_startup_profile_v2(
     document: ProfileDocumentV2,
     *,
     desired_http_route_rows: Sequence[Any],
+    agent_pool_runtime_enabled: bool,
+    agent_pool_runtime_config: dict[str, object],
     activate_workspace_core_shadow: bool,
 ) -> ProfileDocumentV2:
-    projected = include_production_target_hosts_v2(document)
+    projected = project_agent_pool_runtime_v2(
+        document,
+        enabled=agent_pool_runtime_enabled,
+        config=agent_pool_runtime_config,
+    )
+    projected = include_production_target_hosts_v2(projected)
     if activate_workspace_core_shadow:
         projected = activate_workspace_core_shadow_v2(projected)
     return project_legacy_http_routes_v2(projected, desired_http_route_rows)
@@ -295,11 +377,12 @@ async def _latest_requested_distribution_v2(
 
 
 def _next_startup_publication_v2(
-    last_good: PlatformPluginPublicationV2,
+    last_good_snapshot: ProfileSnapshotV2,
+    last_good_envelope: ControlPlaneEnvelopeV2,
     latest_distribution: Mapping[str, object] | None,
 ) -> tuple[int, int]:
-    generation = last_good.snapshot.generation
-    version = last_good.envelope.version
+    generation = last_good_snapshot.generation
+    version = last_good_envelope.version
     if latest_distribution is not None:
         snapshot = parse_profile_snapshot_v2(latest_distribution.get("snapshot"))
         envelope = parse_control_envelope_v2(latest_distribution.get("envelope"))

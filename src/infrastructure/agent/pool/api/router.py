@@ -35,10 +35,12 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
 from src.infrastructure.audit.audit_log_service import get_audit_service
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from ..integration.session_adapter import get_global_adapter
 from ..manager import AgentPoolManager
 from ..metrics import get_metrics_collector
+from ..runtime_resolver import agent_pool_manager_v2_from_current_generation
 from ..types import ProjectTier
 
 logger = logging.getLogger(__name__)
@@ -153,19 +155,25 @@ class PoolAuthorityScope:
 # Dependency helpers (shared across endpoint handlers)
 # ============================================================================
 
-# Module-level reference set by create_pool_router
-_pool_manager_ref: AgentPoolManager | None = None
-
 
 async def _get_pool_manager_optional() -> AgentPoolManager | None:
     """获取池管理器 (可选，不抛出异常)."""
-    if _pool_manager_ref:
-        return _pool_manager_ref
+    try:
+        return agent_pool_manager_v2_from_current_generation()
+    except RuntimeV2Error as exc:
+        if exc.code != "generation_not_pinned":
+            raise
 
+    # Isolated unit tests and legacy callers without a generation boundary may
+    # temporarily retain the process-global adapter. Production requests are
+    # pinned and therefore never reach this compatibility branch.
+    from src.configuration.config import get_settings
+
+    if not get_settings().agent_pool_enabled:
+        return None
     try:
         adapter = await get_global_adapter()
-        if adapter and adapter._pool_manager:
-            return adapter._pool_manager
+        return adapter.pool_manager
     except Exception:
         pass
 
@@ -276,7 +284,7 @@ def _instance_health_status(instance: Any) -> str:
 def _instance_matches_scope(instance: Any, resolved_scope: PoolAuthorityScope) -> bool:
     if resolved_scope.scope is PoolScope.GLOBAL:
         return True
-    return instance.config.tenant_id == resolved_scope.tenant_id
+    return bool(instance.config.tenant_id == resolved_scope.tenant_id)
 
 
 def _get_scoped_instance(
@@ -387,18 +395,15 @@ async def _get_pool_status(
 
     此端点始终返回200，即使池未启用也会返回disabled状态。
     """
-    from src.configuration.config import get_settings
-
-    settings = get_settings()
-
-    # 如果池未启用，返回disabled状态
-    if not settings.agent_pool_enabled:
-        return _empty_pool_status(False, "disabled", resolved_scope)
-
     # 尝试获取池管理器
     manager = await _get_pool_manager_optional()
     if not manager:
-        return _empty_pool_status(True, "initializing", resolved_scope)
+        from src.configuration.config import get_settings
+
+        enabled = get_settings().agent_pool_enabled
+        return _empty_pool_status(
+            enabled, "initializing" if enabled else "disabled", resolved_scope
+        )
 
     if resolved_scope.scope is PoolScope.TENANT:
         instances = [
@@ -415,9 +420,7 @@ async def _get_pool_status(
             cold_instances=sum(i.config.tier.value == "cold" for i in instances),
             ready_instances=sum(i.status.value == "ready" for i in instances),
             executing_instances=sum(i.status.value == "executing" for i in instances),
-            unhealthy_instances=sum(
-                _instance_health_status(i) == "unhealthy" for i in instances
-            ),
+            unhealthy_instances=sum(_instance_health_status(i) == "unhealthy" for i in instances),
             prewarm_pool=None,
             resource_usage=None,
             resolved_scope=resolved_scope.scope.value,
@@ -697,9 +700,7 @@ async def _get_metrics_json(
                 },
             },
             health={
-                "unhealthy_count": sum(
-                    _instance_health_status(i) == "unhealthy" for i in instances
-                )
+                "unhealthy_count": sum(_instance_health_status(i) == "unhealthy" for i in instances)
             },
             prewarm=None,
             resolved_scope=resolved_scope.scope.value,
@@ -750,23 +751,18 @@ async def _get_metrics_prometheus(
 
 
 def create_pool_router(
-    pool_manager: AgentPoolManager | None = None,
     prefix: str = "/api/v1/admin/pool",
     tags: list[str] | None = None,
 ) -> APIRouter:
     """创建池管理 API 路由器.
 
     Args:
-        pool_manager: 可选的池管理器实例，如果不提供则使用全局适配器
         prefix: API 前缀
         tags: OpenAPI 标签
 
     Returns:
         FastAPI 路由器
     """
-    global _pool_manager_ref
-    _pool_manager_ref = pool_manager
-
     router = APIRouter(
         prefix=prefix,
         tags=cast("list[str | Enum]", tags or ["Agent Pool Admin"]),

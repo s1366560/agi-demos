@@ -59,6 +59,35 @@ class TestPooledAgentSessionAdapter:
         # Stop
         await adapter.stop()
         assert adapter._running is False
+        assert adapter.pool_manager is None
+
+    @pytest.mark.asyncio
+    async def test_partial_startup_failure_stops_and_clears_manager(
+        self,
+        adapter,
+        monkeypatch,
+    ):
+        """A failed prewarm must not leak a partially started pool generation."""
+        manager = MagicMock()
+        manager.start = AsyncMock()
+        manager.stop = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.agent.pool.integration.session_adapter.AgentPoolManager",
+            lambda config: manager,
+        )
+        adapter.adapter_config.enable_prewarming = True
+        adapter.adapter_config.prewarm_on_startup = True
+        adapter._prewarm_pool = AsyncMock(side_effect=RuntimeError("planned prewarm failure"))
+
+        with pytest.raises(RuntimeError, match="planned prewarm failure"):
+            await adapter.start()
+
+        manager.start.assert_awaited_once_with()
+        manager.stop.assert_awaited_once_with()
+        assert adapter._running is False
+        assert adapter.pool_manager is None
+        await adapter.stop()
+        manager.stop.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_get_stats_not_running(self, adapter):

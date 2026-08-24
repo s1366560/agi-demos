@@ -163,21 +163,12 @@ async def _get_project_pool_instance(
 ) -> ProjectPoolInstanceResponse:
     _require_matching_path(tenant_id, project_id, access)
 
-    from src.configuration.config import get_settings
-
-    if not get_settings().agent_pool_enabled:
+    if manager is None:
         return ProjectPoolInstanceResponse(
             enabled=False,
             instance=None,
             allowed_actions=access.allowed_actions,
             reason_code="agent_pool_disabled",
-        )
-    if manager is None:
-        return ProjectPoolInstanceResponse(
-            enabled=True,
-            instance=None,
-            allowed_actions=access.allowed_actions,
-            reason_code="agent_pool_initializing",
         )
 
     found = _find_exact_instance(manager, tenant_id, project_id, agent_mode)

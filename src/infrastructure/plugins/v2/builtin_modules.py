@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .agent_capabilities import (
     builtin_agent_capability_definition_v2,
@@ -65,6 +65,9 @@ from .workspace_core_runtime import (
 from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
 
+if TYPE_CHECKING:
+    from .agent_pool_runtime import AgentPoolRuntimeFactoryV2
+
 RUNTIME_BOUNDARY_MODULE_V2 = "builtin://memstack/runtime/generation-boundary"
 RUNTIME_BOUNDARY_SERVICE_V2 = "service:runtime-generation-boundary"
 
@@ -101,6 +104,7 @@ def _apply_runtime_boundary(
 
 def builtin_runtime_definitions_v2(
     *,
+    agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
@@ -111,8 +115,10 @@ def builtin_runtime_definitions_v2(
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
+        agent_pool_runtime,
         builtin_acp_http_routes,
         builtin_agent_http_routes,
+        builtin_agent_pool_http_routes,
         builtin_auth_http_routes,
         builtin_channels_http_routes,
         builtin_genes_http_routes,
@@ -235,6 +241,7 @@ def builtin_runtime_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
         agent_worker_runtime_definition_v2(),
+        agent_pool_runtime.agent_pool_runtime_definition_v2(agent_pool_runtime_factory),
         *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
@@ -314,6 +321,7 @@ def builtin_runtime_definitions_v2(
         builtin_admin_dlq_http_routes_definition_v2(),
         builtin_invitations_http_routes_definition_v2(),
         builtin_invitations_public_http_routes_definition_v2(),
+        builtin_agent_pool_http_routes.builtin_agent_pool_http_routes_definition_v2(),
         legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
         *cron_service_definitions_v2(),

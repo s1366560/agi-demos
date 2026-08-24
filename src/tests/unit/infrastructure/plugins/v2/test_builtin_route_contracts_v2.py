@@ -63,7 +63,9 @@ def test_catalog_covers_authoritative_inventory_in_order(route_catalog) -> None:
 def test_every_existing_v2_owned_row_has_a_routes_only_contract(route_catalog) -> None:
     by_id = {row.row_id: row for row in route_catalog.rows}
 
-    assert len(REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS) == 69
+    assert len(REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS) == 71
+    assert "create-pool" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
+    assert "create-project-pool" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
     assert "task-session" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
     assert "workspace-core" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
     assert "workspace-core-runtime" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
@@ -78,7 +80,7 @@ def test_every_existing_v2_owned_row_has_a_routes_only_contract(route_catalog) -
 def test_factory_and_helper_classification_uses_structural_effects(route_catalog) -> None:
     by_id = {row.row_id: row for row in route_catalog.rows}
 
-    assert by_id["create-pool"].classification is RouteRegistrationClassificationV2.HYBRID
+    assert by_id["create-pool"].classification is RouteRegistrationClassificationV2.ROUTES_ONLY
     assert (
         by_id["create-project-pool"].classification is RouteRegistrationClassificationV2.ROUTES_ONLY
     )

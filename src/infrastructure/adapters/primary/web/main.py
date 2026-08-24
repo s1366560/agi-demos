@@ -76,6 +76,9 @@ from src.infrastructure.llm.resilience.health_checker import (
 )
 from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
+from src.infrastructure.plugins.v2.agent_pool_runtime import (
+    default_agent_pool_runtime_config_v2,
+)
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
@@ -180,6 +183,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         app,
         desired_http_route_rows=desired_http_route_rows,
         session_factory=async_session_factory,
+        agent_pool_runtime_enabled=settings.agent_pool_enabled,
+        agent_pool_runtime_config=default_agent_pool_runtime_config_v2(
+            health_check_interval_seconds=settings.agent_pool_health_check_interval_seconds,
+        ),
         graph_runtime_factory=graph_runtime_factory,
         retrieval_runtime_factory=retrieval_runtime_factory,
         sandbox_runtime_factory=sandbox_runtime_factory,
