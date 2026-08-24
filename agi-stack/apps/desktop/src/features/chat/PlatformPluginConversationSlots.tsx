@@ -1,28 +1,14 @@
-/**
- * Desktop conversation slot surface (I3).
- *
- * Renders `conversation_renderer` plugin slots below the chat timeline,
- * reusing the same reconcile pipeline as the settings surface: signed
- * frontend modules run inside the SignedUiModuleBoundary sandbox (digest
- * verified against the snapshot), builtin rows render nothing here (their
- * renderers are keyed into builtin surfaces elsewhere).
- */
+/** Desktop V2 conversation-slot outlet. */
 
 import { usePlatformPluginUiSlots } from '../settings/usePlatformPluginUiSlots';
-import { SignedUiModuleBoundary } from '../settings/SignedUiModuleBoundary';
-import type { DesktopRuntimeConfig } from '../../types';
 
 export function PlatformPluginConversationSlots({
   active,
-  config,
 }: Readonly<{
   active: boolean;
-  config: DesktopRuntimeConfig;
 }>) {
   const { slots, error, loading } = usePlatformPluginUiSlots({ active });
-  const visible = slots.filter(
-    (slot) => slot.slot === 'conversation_renderer' && slot.moduleRef.startsWith('signed:')
-  );
+  const visible = slots.filter((slot) => slot.slot === 'conversation_renderer');
   if (visible.length === 0) return null;
 
   return (
@@ -33,11 +19,11 @@ export function PlatformPluginConversationSlots({
       data-error={error ?? undefined}
     >
       {visible.map((slot) => (
-        <SignedUiModuleBoundary
+        <div
           key={`${slot.pluginId}:${slot.id}`}
-          config={config}
-          pluginId={slot.pluginId}
-          expectedDigest={slot.moduleRef.slice('signed:'.length)}
+          data-contract={slot.contract}
+          data-module-ref={slot.moduleRef}
+          data-plugin-id={slot.pluginId}
         />
       ))}
     </section>

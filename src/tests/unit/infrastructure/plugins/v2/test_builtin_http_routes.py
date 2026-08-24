@@ -1,9 +1,6 @@
-"""Full builtin inventory shadow-graph parity tests."""
+"""V2-only builtin route graph tests."""
 
 from __future__ import annotations
-
-import json
-from pathlib import Path
 
 import httpx
 import pytest
@@ -17,8 +14,6 @@ from src.infrastructure.adapters.primary.web.routers.tunnel import tunnel_connec
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
-from src.infrastructure.plugins.route_inventory import INVENTORY_PATH
-from src.infrastructure.plugins.route_loader import RouteLoadError
 from src.infrastructure.plugins.v2 import builtin_system_http_routes as system_subject
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
@@ -28,33 +23,20 @@ from src.infrastructure.plugins.v2.http_routes import (
     RouteTableRegistryV2,
     WebSocketRouteDefinitionV2,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-
-_ROOT = Path(__file__).resolve().parents[6]
 
 
 @pytest.mark.unit
-def test_shadow_graph_replays_every_runtime_owned_inventory_row() -> None:
+def test_graph_without_v2_contributions_has_no_business_routes() -> None:
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
     )
-    inventory = json.loads((_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
-    runtime_owned = [
-        row["row_id"]
-        for row in inventory["entries"]
-        if row["kind"] == "include_router" or row["row_id"] != "http-route-capabilities"
-    ]
 
-    assert len(inventory["entries"]) == 72
-    assert graph.mounted_row_ids == tuple(runtime_owned)
-    assert len(graph.mounted_row_ids) == 71
-    assert len(graph.route_signatures) == len(set(graph.route_signatures))
-    assert "/api/v1/agent/ws" in {signature[0] for signature in graph.route_signatures}
-    assert "/api/v1/auth/token" in {signature[0] for signature in graph.route_signatures}
-    assert "/api/v1/platform-plugins/v2/distribution" in {
-        signature[0] for signature in graph.route_signatures
-    }
-    assert any(methods for _path, _name, methods in graph.route_signatures)
+    assert graph.mounted_row_ids == ()
+    assert graph.static_mounted_row_ids == ()
+    assert graph.v2_owned_row_ids == ()
+    assert graph.route_signatures == ()
 
 
 @pytest.mark.unit
@@ -77,14 +59,11 @@ def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
 
 
 @pytest.mark.unit
-def test_shadow_graph_can_replace_one_complete_mixed_http_websocket_row() -> None:
+def test_graph_mounts_one_declared_mixed_http_websocket_row() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="mixed-tunnel-row",
         generation=1,
         digest="0" * 64,
-    )
-    baseline = build_builtin_route_graph_v2(
-        workspace_core_settings=get_workspace_core_settings(),
     )
     claimed = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
@@ -109,12 +88,13 @@ def test_shadow_graph_can_replace_one_complete_mixed_http_websocket_row() -> Non
         ),
     )
 
-    assert claimed.route_signatures == baseline.route_signatures
-    assert (
-        claimed.table.openapi_snapshot(descriptor).schema
-        == baseline.table.openapi_snapshot(descriptor).schema
+    assert claimed.route_signatures == (
+        ("/api/v1/tunnel/connect", "tunnel_connect", ()),
+        ("/api/v1/admin/tunnel/status", "tunnel_status", ("GET",)),
     )
+    assert "/api/v1/admin/tunnel/status" in claimed.table.openapi_snapshot(descriptor).schema["paths"]
     assert claimed.v2_owned_row_ids == ("tunnel",)
+    assert claimed.static_mounted_row_ids == ()
 
 
 @pytest.mark.unit
@@ -161,9 +141,19 @@ def test_generation_route_precedes_root_preview_catch_all() -> None:
     async def dynamic(tenant_id: str) -> dict[str, str]:
         return {"tenant_id": tenant_id, "source": "generation"}
 
+    async def preview(path: str) -> dict[str, str]:
+        return {"path": path, "source": "preview"}
+
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="preview-route",
+                path="/{path:path}",
+                methods=("GET",),
+                endpoint=preview,
+                name="preview-route",
+            ),
             RouteDefinitionV2(
                 owner_entry_id="dynamic-route",
                 path="/plugin-startup/{tenant_id}/hello",
@@ -179,40 +169,30 @@ def test_generation_route_precedes_root_preview_catch_all() -> None:
 
 
 @pytest.mark.unit
-def test_complete_builtin_row_claim_replaces_static_handlers_in_place() -> None:
-    baseline = build_builtin_route_graph_v2(
-        workspace_core_settings=get_workspace_core_settings(),
-    )
-
+def test_declared_builtin_row_has_no_static_handlers() -> None:
     claimed = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=system_subject.system_route_definitions_v2(),
     )
 
-    assert claimed.route_signatures == baseline.route_signatures
-    assert claimed.mounted_row_ids == baseline.mounted_row_ids
+    expected = system_subject.system_route_definitions_v2()
+
+    assert claimed.table.definitions == expected
+    assert len(claimed.route_signatures) == len(expected)
+    assert claimed.mounted_row_ids == ("system",)
     assert claimed.v2_owned_row_ids == ("system",)
-    assert "system" not in claimed.static_mounted_row_ids
-    assert len(claimed.static_mounted_row_ids) + len(claimed.v2_owned_row_ids) == len(
-        claimed.mounted_row_ids
-    )
+    assert claimed.static_mounted_row_ids == ()
+
 
 @pytest.mark.unit
-def test_partial_builtin_row_claim_is_rejected_before_mount() -> None:
-    with pytest.raises(RouteLoadError, match="complete route key set"):
+def test_required_row_without_a_v2_contribution_is_rejected_before_mount() -> None:
+    with pytest.raises(RuntimeV2Error) as exc_info:
         build_builtin_route_graph_v2(
             workspace_core_settings=get_workspace_core_settings(),
-            route_definitions=(
-                RouteDefinitionV2(
-                    owner_entry_id="builtin-system-routes",
-                    path="/api/v1/system/features",
-                    methods=("GET",),
-                    endpoint=lambda: {"source": "v2"},
-                    name="list_features",
-                    replaces_builtin_row_id="system",
-                ),
-            ),
+            required_v2_row_ids={"system"},
         )
+
+    assert exc_info.value.code == "required_route_contribution_missing"
 
 
 @pytest.mark.unit

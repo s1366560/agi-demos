@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -94,7 +94,7 @@ def test_builtin_workspace_skill_source_preserves_task_harness() -> None:
 
 
 @pytest.mark.unit
-def test_cached_tool_read_does_not_use_legacy_scoped_generation(
+def test_cached_tool_read_uses_exact_v2_generation_descriptor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     descriptor = _descriptor()
@@ -110,15 +110,9 @@ def test_cached_tool_read_does_not_use_legacy_scoped_generation(
         lambda explicit=None: explicit,
     )
 
-    legacy_service = Mock(side_effect=AssertionError("legacy tool service must not be read"))
-    with patch(
-        "src.infrastructure.plugins.agent_tools.get_agent_tool_set_service",
-        legacy_service,
-    ):
-        result = agent_worker_state.get_cached_tools_for_project("project-a", descriptor)
+    result = agent_worker_state.get_cached_tools_for_project("project-a", descriptor)
 
     assert result == expected
-    legacy_service.assert_not_called()
 
 
 @pytest.mark.unit

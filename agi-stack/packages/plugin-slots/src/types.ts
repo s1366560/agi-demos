@@ -21,32 +21,3 @@ export interface UiSlotDefinition {
   permission: string;
   sandbox: boolean;
 }
-
-export interface PlatformPluginSnapshotPayload {
-  schema_version: number;
-  profile_id: string;
-  plugins: PlatformPluginSnapshotRow[];
-  digest: string;
-}
-
-export interface PlatformPluginSnapshotRow {
-  id: string;
-  provides: PlatformPluginCapability[];
-  config?: Record<string, unknown>;
-}
-
-export interface PlatformPluginCapability {
-  kind: string;
-  id: string;
-  contract: string;
-  config_schema?: Record<string, unknown>;
-  permissions?: string[] | undefined;
-}
-
-export interface PlatformPluginSnapshotResponse {
-  version: number;
-  nonce: string;
-  profile_id: string;
-  digest: string;
-  payload: PlatformPluginSnapshotPayload;
-}

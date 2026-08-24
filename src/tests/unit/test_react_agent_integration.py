@@ -12,9 +12,10 @@ import pytest
 
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.model_route import ModelRouteRef
-from src.infrastructure.agent.plugins.registry import HookDispatchResult
-from src.infrastructure.plugins.agent_events import AgentPluginEventDispatcher
-from src.infrastructure.plugins.v2.agent_runtime_dispatcher import PinnedAgentRuntimeDispatcherV2
+from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+    AgentRuntimeDispatchResultV2,
+    PinnedAgentRuntimeDispatcherV2,
+)
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -1055,17 +1056,14 @@ class TestReActAgentWorkspaceDelegation:
             WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
         )
 
-    async def test_stream_passes_tenant_runtime_hook_overrides_to_before_prompt_build(self):
+    async def test_stream_does_not_inject_retired_v1_runtime_hook_overrides(self):
         agent = _make_react_agent()
-        registry = MagicMock()
-        registry.apply_hook = AsyncMock(
-            return_value=HookDispatchResult(
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(
+            return_value=AgentRuntimeDispatchResultV2(
                 payload={"memory_context": "", "emitted_events": []},
-                diagnostics=[],
             )
         )
-        agent.config.plugin_registry = registry
-        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
         agent._stream_skill_state = {
             "matched_skill": None,
             "is_forced": False,
@@ -1137,6 +1135,10 @@ class TestReActAgentWorkspaceDelegation:
                 "_processor_factory",
                 new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
             ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=SimpleNamespace(require=lambda _service: dispatcher),
+            ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
             agent._stream_tools_to_use = []
@@ -1154,22 +1156,17 @@ class TestReActAgentWorkspaceDelegation:
                 events.append(event)
 
         assert events[-1]["type"] == "complete"
-        assert registry.apply_hook.await_args.args[0] == "before_prompt_build"
-        assert registry.apply_hook.await_args.kwargs["runtime_overrides"] == [
-            runtime_hook.to_dict()
-        ]
+        assert dispatcher.dispatch.await_args.args[0] == "before_prompt_build"
+        assert "runtime_hook_overrides" not in dispatcher.dispatch.await_args.kwargs
 
     async def test_stream_resets_stale_memory_context_before_before_prompt_build(self):
         agent = _make_react_agent()
-        registry = MagicMock()
-        registry.apply_hook = AsyncMock(
-            return_value=HookDispatchResult(
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(
+            return_value=AgentRuntimeDispatchResultV2(
                 payload={"memory_context": "", "emitted_events": []},
-                diagnostics=[],
             )
         )
-        agent.config.plugin_registry = registry
-        agent.config.plugin_event_dispatcher = AgentPluginEventDispatcher(legacy_registry=registry)
 
         async def _empty_async_gen(*args, **kwargs):
             if False:
@@ -1225,6 +1222,10 @@ class TestReActAgentWorkspaceDelegation:
                 "_processor_factory",
                 new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
             ),
+            patch(
+                "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+                return_value=SimpleNamespace(require=lambda _service: dispatcher),
+            ),
         ):
             agent._stream_memory_context = "stale memory"
             async for _event in agent.stream(
@@ -1238,7 +1239,7 @@ class TestReActAgentWorkspaceDelegation:
             ):
                 pass
 
-        payload = registry.apply_hook.await_args.kwargs["payload"]
+        payload = dispatcher.dispatch.await_args.kwargs["payload"]
         assert payload["memory_context"] is None
 
     def test_filter_workspace_root_tools_removes_generic_agent_bypass_tools(self):

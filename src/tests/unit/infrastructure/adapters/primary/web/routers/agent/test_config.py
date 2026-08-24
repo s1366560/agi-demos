@@ -1,6 +1,5 @@
 """Unit tests for tenant agent config router helpers."""
 
-from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,7 +17,6 @@ from src.infrastructure.adapters.primary.web.routers.agent.access import (
     require_tenant_access as _require_tenant_access,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.config import (
-    _validate_runtime_hooks,
     _validate_tool_policy,
     check_config_modify_permission,
     get_hook_catalog,
@@ -199,73 +197,6 @@ class TestRequireTenantAccess:
 
 
 @pytest.mark.unit
-class TestValidateRuntimeHooks:
-    """Tests for runtime hook override validation."""
-
-    def test_accepts_valid_hook_override(self) -> None:
-        _validate_runtime_hooks(
-            [
-                RuntimeHookConfig(
-                    plugin_name="sisyphus-runtime",
-                    hook_name="before_response",
-                    enabled=True,
-                    priority=30,
-                    settings={
-                        "response_reminder": "Keep going until the task is done.",
-                        "require_direct_outcome": True,
-                    },
-                )
-            ]
-        )
-
-    def test_rejects_invalid_hook_settings(self) -> None:
-        with pytest.raises(HTTPException, match="Invalid settings"):
-            _validate_runtime_hooks(
-                [
-                    RuntimeHookConfig(
-                        plugin_name="sisyphus-runtime",
-                        hook_name="before_response",
-                        enabled=True,
-                        settings={"unknown_setting": "nope"},
-                    )
-                ]
-            )
-
-    def test_rejects_oversized_hook_settings(self) -> None:
-        with pytest.raises(HTTPException, match="cannot exceed"):
-            _validate_runtime_hooks(
-                [
-                    RuntimeHookConfig(
-                        plugin_name="sisyphus-runtime",
-                        hook_name="before_response",
-                        enabled=True,
-                        settings={"response_reminder": "x" * 5000},
-                    )
-                ]
-            )
-
-    def test_allows_round_tripping_existing_unknown_hooks(self) -> None:
-        legacy_hook = RuntimeHookConfig(
-            plugin_name="legacy-plugin",
-            hook_name="legacy-hook",
-            enabled=True,
-            priority=None,
-            settings={"keep": True},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-
-        with patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-            return_value=registry,
-        ):
-            _validate_runtime_hooks(
-                [legacy_hook],
-                allowed_unknown_hook_keys={legacy_hook.key},
-            )
-
-
-@pytest.mark.unit
 class TestValidateToolPolicy:
     def test_rejects_duplicate_enabled_tools(self) -> None:
         with pytest.raises(HTTPException, match="duplicate tool"):
@@ -274,120 +205,6 @@ class TestValidateToolPolicy:
     def test_rejects_overlap_between_enabled_and_disabled(self) -> None:
         with pytest.raises(HTTPException, match="both enabled and disabled"):
             _validate_tool_policy(["bash"], ["bash"])
-
-    def test_rejects_oversized_existing_unknown_hook_settings(self) -> None:
-        legacy_hook = RuntimeHookConfig(
-            plugin_name="legacy-plugin",
-            hook_name="legacy-hook",
-            enabled=True,
-            priority=None,
-            settings={"payload": "x" * 5000},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-
-        with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-                return_value=registry,
-            ),
-            pytest.raises(HTTPException, match="cannot exceed"),
-        ):
-            _validate_runtime_hooks(
-                [legacy_hook],
-                allowed_unknown_hook_keys={legacy_hook.key},
-            )
-
-    def test_rejects_custom_hook_without_hook_family(self) -> None:
-        custom_hook = RuntimeHookConfig(
-            hook_name="before_response",
-            plugin_name="__custom__",
-            executor_kind="script",
-            source_ref="src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-            entrypoint="append_demo_response_instruction",
-            enabled=True,
-            settings={},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-
-        with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-                return_value=registry,
-            ),
-            pytest.raises(HTTPException, match="hook_family"),
-        ):
-            _validate_runtime_hooks([custom_hook])
-
-    def test_allows_well_known_custom_hook_with_explicit_identity(self) -> None:
-        custom_hook = RuntimeHookConfig(
-            hook_name="before_response",
-            plugin_name="__custom__",
-            hook_family="mutating",
-            executor_kind="script",
-            source_ref="src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-            entrypoint="append_demo_response_instruction",
-            enabled=True,
-            settings={},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-        registry.list_well_known_hooks.return_value = {"before_response"}
-
-        with patch(
-            "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-            return_value=registry,
-        ):
-            _validate_runtime_hooks([custom_hook])
-
-    def test_rejects_script_executor_for_policy_family(self) -> None:
-        custom_hook = RuntimeHookConfig(
-            hook_name="before_tool_execution",
-            plugin_name="__custom__",
-            hook_family="policy",
-            executor_kind="script",
-            source_ref="src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-            entrypoint="append_demo_response_instruction",
-            enabled=True,
-            settings={},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-        registry.list_well_known_hooks.return_value = {"before_tool_execution"}
-
-        with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-                return_value=registry,
-            ),
-            pytest.raises(HTTPException, match="cannot use executor_kind"),
-        ):
-            _validate_runtime_hooks([custom_hook])
-
-    def test_rejects_custom_hook_timeout_outside_bounds(self) -> None:
-        custom_hook = RuntimeHookConfig(
-            hook_name="before_response",
-            plugin_name="__custom__",
-            hook_family="mutating",
-            executor_kind="script",
-            source_ref="src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-            entrypoint="append_demo_response_instruction",
-            enabled=True,
-            settings={"timeout_seconds": 999},
-        )
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = []
-        registry.list_well_known_hooks.return_value = {"before_response"}
-
-        with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-                return_value=registry,
-            ),
-            pytest.raises(HTTPException, match="timeout_seconds must be between"),
-        ):
-            _validate_runtime_hooks([custom_hook])
 
 
 @pytest.mark.unit
@@ -423,7 +240,7 @@ class TestUpdateTenantAgentConfig:
         assert response.config_type == "custom"
 
     @pytest.mark.asyncio
-    async def test_unrelated_update_does_not_revalidate_existing_runtime_hooks(self) -> None:
+    async def test_unrelated_update_preserves_read_only_runtime_hooks(self) -> None:
         repo = _make_authority_repo(
             TenantAgentConfig(
                 id="cfg-1",
@@ -460,9 +277,6 @@ class TestUpdateTenantAgentConfig:
                 return_value=repo,
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config._validate_runtime_hooks"
-            ) as validate_runtime_hooks,
-            patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.config.invalidate_agent_session"
             ),
         ):
@@ -475,8 +289,37 @@ class TestUpdateTenantAgentConfig:
                 db=db,
             )
 
-        validate_runtime_hooks.assert_not_called()
         assert response.llm_model == "anthropic/claude-sonnet-4.5"
+        assert response.runtime_hooks[0].settings == {"legacy_setting": "stale"}
+
+    @pytest.mark.asyncio
+    async def test_runtime_hook_mutation_is_retired_before_authority_lock(self) -> None:
+        authority_factory = MagicMock()
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.require_tenant_access",
+                AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "SqlTenantAgentConfigAuthorityRepository",
+                authority_factory,
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await update_tenant_agent_config(
+                UpdateTenantAgentConfigRequest(runtime_hooks=[]),
+                request=MagicMock(),
+                tenant_id="tenant-1",
+                expected_revision=1,
+                current_user=_make_user(),
+                db=MagicMock(),
+            )
+
+        assert exc_info.value.status_code == 410
+        assert exc_info.value.detail["code"] == "plugin_protocol_v1_retired"
+        authority_factory.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_non_tool_update_still_validates_final_tool_policy(self) -> None:
@@ -698,38 +541,21 @@ class TestHookCatalogAccess:
         assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_hook_catalog_includes_family_and_executor_defaults(self) -> None:
-        registry = MagicMock()
-        registry.list_hook_catalog.return_value = [
+    async def test_hook_catalog_is_projected_from_pinned_v2_generation(self) -> None:
+        generation = object()
+        rows = (
             SimpleNamespace(
+                module_ref="builtin://memstack/agent/sisyphus/before-request",
                 plugin_name="sisyphus-runtime",
                 hook_name="before_response",
                 hook_family="mutating",
-                display_name="Before response",
+                display_name="Sisyphus before response",
                 description="desc",
                 default_priority=30,
-                default_enabled=True,
-                default_executor_kind="builtin",
-                default_source_ref="sisyphus-runtime",
-                default_entrypoint=None,
-                default_settings={},
-                settings_schema={},
+                default_settings={"require_direct_outcome": True},
+                settings_schema={"type": "object"},
             ),
-            SimpleNamespace(
-                plugin_name="memory-runtime",
-                hook_name="before_prompt_build",
-                hook_family="mutating",
-                display_name="Memory recall",
-                description="desc",
-                default_priority=25,
-                default_enabled=True,
-                default_executor_kind="builtin",
-                default_source_ref="memory-runtime",
-                default_entrypoint=None,
-                default_settings={},
-                settings_schema={},
-            ),
-        ]
+        )
 
         with (
             patch(
@@ -737,9 +563,13 @@ class TestHookCatalogAccess:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.get_plugin_registry",
-                return_value=registry,
+                "src.infrastructure.adapters.primary.web.routers.agent.config.current_generation_v2",
+                return_value=generation,
             ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.runtime_hook_catalog_v2",
+                return_value=rows,
+            ) as project_catalog,
         ):
             response = await get_hook_catalog(
                 tenant_id="tenant-1",
@@ -747,38 +577,12 @@ class TestHookCatalogAccess:
                 db=MagicMock(),
             )
 
+        project_catalog.assert_called_once_with(generation)
+        assert len(response.hooks) == 1
         assert response.hooks[0].hook_family == "mutating"
         assert response.hooks[0].default_executor_kind == "builtin"
-        assert {hook.plugin_name for hook in response.hooks} == {
-            "sisyphus-runtime",
-            "memory-runtime",
-        }
-
-    @pytest.mark.asyncio
-    async def test_hook_catalog_omits_memory_runtime_when_globally_disabled(self) -> None:
-        registry_module = import_module("src.infrastructure.agent.plugins.registry")
-        monkey_registry = registry_module.AgentPluginRegistry()
-
-        with (
-            patch(
-                "src.configuration.config.get_settings",
-                return_value=SimpleNamespace(agent_memory_runtime_mode="disabled"),
-            ),
-            patch.object(registry_module, "_global_plugin_registry", monkey_registry),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.require_tenant_access",
-                AsyncMock(),
-            ),
-        ):
-            response = await get_hook_catalog(
-                tenant_id="tenant-1",
-                current_user=_make_user(),
-                db=MagicMock(),
-            )
-
-        plugin_names = {hook.plugin_name for hook in response.hooks}
-        assert "sisyphus-runtime" in plugin_names
-        assert "memory-runtime" not in plugin_names
+        assert response.hooks[0].default_source_ref == rows[0].module_ref
+        assert response.hooks[0].default_settings == {"require_direct_outcome": True}
 
 
 @pytest.mark.unit

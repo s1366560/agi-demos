@@ -671,7 +671,9 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
     let mut trusted_session_id = None;
 
     for route in contract.routes {
-        if !source_contains_marker(&sources, &route.source, &route.source_marker) {
+        if route.authority != "retired_v1"
+            && !source_contains_marker(&sources, &route.source, &route.source_marker)
+        {
             missing_client_markers.push(format!(
                 "{} {} [{} marker {}]",
                 route.method, route.uri, route.area, route.source_marker
@@ -767,6 +769,20 @@ async fn desktop_client_and_axum_router_have_no_local_parity_route_difference() 
             assert_eq!(
                 payload["reason_code"],
                 "local_agent_binding_routing_authority_unavailable"
+            );
+        } else if route.authority == "retired_v1" {
+            assert_eq!(
+                response.status(),
+                StatusCode::GONE,
+                "{} {} must reject the retired V1 plugin protocol",
+                route.method,
+                route.uri
+            );
+            let payload = response_json(response).await;
+            assert_eq!(payload["detail"]["code"], "plugin_protocol_v1_retired");
+            assert_eq!(
+                payload["detail"]["migration_target"],
+                "/api/v1/plugin-marketplace"
             );
         } else if route.authority == "structured_unavailable" {
             assert_eq!(

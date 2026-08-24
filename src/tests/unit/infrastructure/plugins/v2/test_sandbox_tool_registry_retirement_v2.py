@@ -24,7 +24,6 @@ def test_sandbox_tool_registry_has_no_static_di_authority() -> None:
         for relative_path in (
             "src/configuration/containers/sandbox_container.py",
             "src/configuration/di_container.py",
-            "src/configuration/service_bindings.py",
         )
     )
 

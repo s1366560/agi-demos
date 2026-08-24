@@ -371,9 +371,7 @@ impl DesktopSessionStore {
                     json!(if enabled { "active" } else { "disabled" }),
                 );
             }
-            ManagedResourceKind::Plugin
-            | ManagedResourceKind::Agent
-            | ManagedResourceKind::SubAgent => {
+            ManagedResourceKind::Agent | ManagedResourceKind::SubAgent => {
                 object.insert("enabled".to_string(), json!(enabled));
                 object.insert(
                     "status".to_string(),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -983,54 +984,40 @@ class TestSkillMerger:
         assert "# Body" in skill.full_content
 
 
-class TestHookRegistration:
-    """Verify the hook is registered in the global plugin registry."""
+class TestV2LifecycleRegistration:
+    """Verify skill evolution is owned by the V2 lifecycle definition."""
 
-    def test_hook_registered_in_registry(self) -> None:
-        from src.infrastructure.agent.plugins.registry import (
-            AgentPluginRegistry,
+    def test_skill_evolution_lifecycle_definition_is_declared(self) -> None:
+        from src.infrastructure.plugins.v2.agent_lifecycle_runtime import (
+            SKILL_EVOLUTION_LIFECYCLE_MODULE_V2,
+            agent_lifecycle_definitions_v2,
         )
+
+        definitions = agent_lifecycle_definitions_v2()
+
+        assert SKILL_EVOLUTION_LIFECYCLE_MODULE_V2 in {
+            definition.module_ref for definition in definitions
+        }
+
+    def test_plugin_runtime_retains_disabled_config(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            register_builtin_skill_evolution_plugin,
+            SkillEvolutionPlugin,
         )
 
-        registry = AgentPluginRegistry()
-        plugin = register_builtin_skill_evolution_plugin(
-            registry,
-            config=SkillEvolutionConfig(enabled=True),
-            skill_service=MagicMock(),
-            llm_provider_manager=MagicMock(),
-            session_factory=None,
-        )
-        assert plugin is not None
-        assert plugin.config.enabled is True
-
-    def test_plugin_disabled_when_config_disabled(self) -> None:
-        from src.infrastructure.agent.plugins.registry import (
-            AgentPluginRegistry,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            register_builtin_skill_evolution_plugin,
-        )
-
-        registry = AgentPluginRegistry()
-        plugin = register_builtin_skill_evolution_plugin(
-            registry,
+        plugin = SkillEvolutionPlugin(
             config=SkillEvolutionConfig(enabled=False),
             skill_service=MagicMock(),
-            llm_provider_manager=MagicMock(),
+            llm_client_lease=MagicMock(),
             session_factory=None,
         )
         assert plugin.config.enabled is False
 
     @pytest.mark.asyncio
     async def test_skill_loader_hook_attributes_next_turn_capture(self) -> None:
-        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
-        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
         from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            _after_tool_execution,
-            _after_turn_complete,
+            capture_skill_evolution_turn,
+            record_skill_evolution_tool_event,
         )
 
         collector = MagicMock()
@@ -1042,31 +1029,24 @@ class TestHookRegistration:
         plugin_module._loaded_skill_names_by_turn.clear()
         plugin_module._tool_events_by_turn.clear()
 
-        registry = AgentPluginRegistry()
-        api = PluginRuntimeApi("skill-evolution", registry=registry)
-        api.register_hook("after_tool_execution", _after_tool_execution)
-        api.register_hook("after_turn_complete", _after_turn_complete)
-
         try:
-            await registry.apply_hook(
-                "after_tool_execution",
-                payload={
+            await record_skill_evolution_tool_event(
+                {
                     "tool_name": "skill_loader",
                     "conversation_id": "conv-1",
                     "result_metadata": {"name": "dynamic-skill"},
                     "result": "Loaded skill: dynamic-skill",
-                },
+                }
             )
-            await registry.apply_hook(
-                "after_turn_complete",
-                payload={
+            await capture_skill_evolution_turn(
+                {
                     "tenant_id": "t1",
                     "conversation_id": "conv-1",
                     "user_message": "use the dynamic skill",
                     "final_content": "done",
                     "conversation_context": [],
                     "success": True,
-                },
+                }
             )
         finally:
             plugin_module._collector = previous_collector
@@ -1085,7 +1065,7 @@ class TestHookRegistration:
             SkillEvolutionSession,
         )
         from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            _after_turn_complete,
+            capture_skill_evolution_turn,
         )
 
         collector = MagicMock()
@@ -1117,7 +1097,7 @@ class TestHookRegistration:
         plugin_module._scheduler = scheduler
 
         try:
-            await _after_turn_complete(
+            await capture_skill_evolution_turn(
                 {
                     "tenant_id": "tenant-1",
                     "conversation_id": "conv-1",
@@ -1152,7 +1132,7 @@ class TestEvolutionScheduler:
             judge=MagicMock(),
             aggregator=MagicMock(),
             engine=MagicMock(),
-            llm_provider_manager=MagicMock(),
+            llm_client_lease=MagicMock(),
             session_factory=session_factory or MagicMock(),
         )
 
@@ -1293,8 +1273,6 @@ class TestSkillEvolutionEndToEnd:
         from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
             SqlSkillRepository,
         )
-        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
-        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
         from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionJob,
@@ -1359,13 +1337,6 @@ class TestSkillEvolutionEndToEnd:
                     raise AssertionError(f"Unexpected prompt: {system[:120]}")
                 return {"choices": [{"message": {"content": content}}]}
 
-        class FakeLLMProviderManager:
-            def __init__(self, client: FakeLLMClient) -> None:
-                self.client = client
-
-            async def get_llm_client(self) -> FakeLLMClient:
-                return self.client
-
         class FakeSkillService:
             def __init__(self, session_factory) -> None:
                 self._session_factory = session_factory
@@ -1413,6 +1384,11 @@ class TestSkillEvolutionEndToEnd:
                 await db.commit()
 
             client = FakeLLMClient()
+
+            @asynccontextmanager
+            async def fake_llm_client_lease(**_kwargs):
+                yield client
+
             config = SkillEvolutionConfig(
                 enabled=True,
                 min_sessions_per_skill=1,
@@ -1425,15 +1401,12 @@ class TestSkillEvolutionEndToEnd:
             plugin = SkillEvolutionPlugin(
                 config=config,
                 skill_service=FakeSkillService(session_factory),
-                llm_provider_manager=FakeLLMProviderManager(client),
+                llm_client_lease=fake_llm_client_lease,
                 session_factory=session_factory,
             )
 
-            registry = AgentPluginRegistry()
-            plugin.setup(PluginRuntimeApi("skill-evolution", registry=registry))
-            hook_result = await registry.apply_hook(
-                "after_turn_complete",
-                payload={
+            await plugin_module.capture_skill_evolution_turn(
+                {
                     "tenant_id": tenant_id,
                     "project_id": project_id,
                     "conversation_id": "conv-evolution-smoke",
@@ -1443,7 +1416,7 @@ class TestSkillEvolutionEndToEnd:
                     "conversation_context": [{"role": "assistant", "content": "Done."}],
                     "success": True,
                     "execution_time_ms": 120,
-                },
+                }
             )
 
             result = await plugin.trigger_evolution(
@@ -1484,8 +1457,6 @@ class TestSkillEvolutionEndToEnd:
             plugin_module._scheduler = None
             plugin_module._session_factory = None
 
-        assert "after_turn_complete" in registry.list_hooks()
-        assert hook_result.diagnostics == []
         assert result == {
             "summarized": 1,
             "judged": 1,

@@ -38,20 +38,27 @@ export type ManagedResourceFact = {
     | 'package'
     | 'kind'
     | 'discovery'
+    | 'publisher'
+    | 'installStatus'
+    | 'securityScan'
     | 'model'
     | 'project';
   value: string;
 };
 
 export type ManagedResourceCapabilityGroup = {
-  key: 'tools' | 'providers' | 'skills' | 'channels' | 'mcpServers' | 'fallbackModels';
+  key:
+    | 'tools'
+    | 'skills'
+    | 'mcpServers'
+    | 'fallbackModels'
+    | 'targets';
   values: string[];
 };
 
 export type ManagedResourceAction = {
   kind:
     | 'set_skill_status'
-    | 'set_plugin_enabled'
     | 'set_agent_enabled'
     | 'set_subagent_enabled';
   nextActive: boolean;
@@ -73,8 +80,10 @@ export function managedResourceStatus(
   }
   if (section === 'plugins') {
     const plugin = item as ManagedPlugin;
-    if (!plugin.discovered) return 'attention';
-    return plugin.enabled ? 'active' : 'disabled';
+    if (plugin.revoked) return 'attention';
+    if (plugin.install_status === 'installed') return 'active';
+    if (plugin.install_status === 'uninstalled') return 'disabled';
+    return 'attention';
   }
   if (section === 'subagents') {
     return (item as ManagedSubAgent).enabled ? 'active' : 'disabled';
@@ -126,7 +135,6 @@ export function managedResourceView(
   }
   if (section === 'plugins') {
     const plugin = item as ManagedPlugin;
-    const toolCount = toolNames(plugin).length;
     return {
       id: plugin.id,
       title: plugin.name || plugin.id,
@@ -134,7 +142,6 @@ export function managedResourceView(
       meta: compactMeta([
         textMeta(plugin.source),
         plugin.version ? { kind: 'version', value: plugin.version } : null,
-        toolCount > 0 ? { kind: 'tool_count', count: toolCount } : null,
       ]),
       status: managedResourceStatus(section, item),
     };
@@ -193,10 +200,10 @@ export function managedResourceFacts(
     const plugin = item as ManagedPlugin;
     return compactFacts([
       fact('source', plugin.source),
-      fact('package', plugin.package ?? ''),
+      fact('publisher', plugin.publisher),
       fact('version', plugin.version ?? ''),
-      fact('kind', plugin.kind ?? ''),
-      fact('discovery', plugin.discovered ? 'discovered' : 'unavailable'),
+      fact('installStatus', plugin.install_status),
+      fact('securityScan', plugin.security_scan_status),
     ]);
   }
   if (section === 'subagents') {
@@ -226,12 +233,7 @@ export function managedResourceCapabilityGroups(
   }
   if (section === 'plugins') {
     const plugin = item as ManagedPlugin;
-    return compactGroups([
-      { key: 'tools', values: toolNames(plugin) },
-      { key: 'providers', values: cleanStrings(plugin.providers) },
-      { key: 'skills', values: cleanStrings(plugin.skills) },
-      { key: 'channels', values: cleanStrings(plugin.channel_types) },
-    ]);
+    return compactGroups([{ key: 'targets', values: cleanStrings(plugin.targets) }]);
   }
   if (section === 'subagents') {
     const subagent = item as ManagedSubAgent;
@@ -273,15 +275,13 @@ export function managedResourceAction(
   canManage: boolean,
   mode: RuntimeMode,
 ): ManagedResourceAction | null {
+  if (section === 'plugins') return null;
   if (!canManage || resourceIsImmutable(section, item, mode)) return null;
-  if (section === 'plugins' && !(item as ManagedPlugin).discovered) return null;
   return {
     kind:
       section === 'skills'
         ? 'set_skill_status'
-        : section === 'plugins'
-          ? 'set_plugin_enabled'
-          : section === 'subagents'
+        : section === 'subagents'
             ? 'set_subagent_enabled'
             : 'set_agent_enabled',
     nextActive: !resourceIsActive(section, item),
@@ -310,14 +310,15 @@ export function managedResourceManagementAllowed(
 export function resourceIsImmutable(
   section: ResourceSection,
   item: ManagedResource,
-  mode: RuntimeMode,
+  _mode: RuntimeMode,
 ): boolean {
   if (section === 'skills') {
     const skill = item as ManagedSkill;
     return skill.is_system_skill === true || skill.scope.trim().toLowerCase() === 'system';
   }
   if (section === 'plugins') {
-    return mode === 'local' && (item as ManagedPlugin).source === 'builtin';
+    const plugin = item as ManagedPlugin;
+    return plugin.revoked || plugin.install_status !== 'installed';
   }
   if (section === 'subagents') {
     return (item as ManagedSubAgent).source === 'filesystem';
@@ -346,14 +347,18 @@ function managedResourceSearchValues(
     return normalizeSearchValues([
       plugin.id,
       plugin.name,
+      plugin.plugin_id,
+      plugin.publisher,
       plugin.source,
       plugin.package,
       plugin.version,
       plugin.kind,
-      ...cleanStrings(plugin.providers),
-      ...cleanStrings(plugin.skills),
-      ...cleanStrings(plugin.channel_types),
-      ...toolNames(plugin),
+      plugin.artifact_registry,
+      plugin.artifact_repository,
+      plugin.install_status,
+      plugin.security_scan_status,
+      plugin.revocation_reason,
+      ...cleanStrings(plugin.targets),
     ]);
   }
   if (section === 'subagents') {
@@ -392,14 +397,6 @@ function managedResourceSearchValues(
 
 function agentModel(agent: ManagedAgentDefinition): string {
   return stringValue(agent.model) || agent.model_name || '';
-}
-
-function toolNames(plugin: ManagedPlugin): string[] {
-  return cleanStrings(
-    plugin.tool_definitions?.map((tool) =>
-      typeof tool.name === 'string' ? tool.name : '',
-    ),
-  );
 }
 
 function cleanStrings(values: readonly unknown[] | undefined): string[] {

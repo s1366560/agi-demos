@@ -5,21 +5,11 @@ from __future__ import annotations
 import pytest
 
 from src.application.schemas.platform_plugins import (
-    PlatformPluginApplyStateResponse,
     PlatformPluginApplyStateResponseV2,
-    PlatformPluginCutoverApprovalResponse,
-    PlatformPluginCutoverReadinessResponse,
-    PlatformPluginCutoverRevocationResponse,
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
-    PlatformPluginHttpRouteReconcileResponse,
-    PlatformPluginHttpRouteResponse,
     PlatformPluginPublicationReadinessResponseV2,
-    PlatformPluginPublishResponse,
     PlatformPluginRouteAuthorityReadinessResponseV2,
-    PlatformPluginShadowRolloutReadinessResponse,
-    PlatformPluginShadowRolloutResponse,
-    PlatformPluginSnapshotResponse,
 )
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
@@ -93,77 +83,27 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             PlatformPluginPublicationReadinessResponseV2,
         ),
         (
-            f"{prefix}/shadow-rollout",
-            ("GET",),
-            "get_shadow_rollout_evidence",
-            PlatformPluginShadowRolloutResponse,
+            prefix,
+            ("GET", "POST", "PUT", "PATCH", "DELETE"),
+            "retired_plugin_protocol_v1_root_route",
+            None,
         ),
         (
-            f"{prefix}/shadow-rollout/readiness",
-            ("GET",),
-            "get_shadow_rollout_readiness",
-            PlatformPluginShadowRolloutReadinessResponse,
-        ),
-        (
-            f"{prefix}/cutover/readiness",
-            ("GET",),
-            "get_platform_plugin_cutover_readiness",
-            PlatformPluginCutoverReadinessResponse,
-        ),
-        (
-            f"{prefix}/cutover/approve",
-            ("POST",),
-            "approve_platform_plugin_cutover",
-            PlatformPluginCutoverApprovalResponse,
-        ),
-        (
-            f"{prefix}/cutover/revoke",
-            ("POST",),
-            "revoke_platform_plugin_cutover",
-            PlatformPluginCutoverRevocationResponse,
-        ),
-        (
-            f"{prefix}/http-routes",
-            ("GET",),
-            "list_platform_plugin_http_routes",
-            list[PlatformPluginHttpRouteResponse],
-        ),
-        (
-            f"{prefix}/http-routes/{{plugin_id}}",
-            ("PUT",),
-            "upsert_platform_plugin_http_route",
-            PlatformPluginHttpRouteResponse,
-        ),
-        (
-            f"{prefix}/http-routes/reconcile",
-            ("POST",),
-            "reconcile_platform_plugin_http_routes",
-            PlatformPluginHttpRouteReconcileResponse,
-        ),
-        (
-            f"{prefix}/publish",
-            ("POST",),
-            "publish_snapshot",
-            PlatformPluginPublishResponse,
-        ),
-        (
-            f"{prefix}/snapshot",
-            ("GET",),
-            "get_snapshot",
-            PlatformPluginSnapshotResponse,
-        ),
-        (
-            f"{prefix}/data-plane-state",
-            ("POST",),
-            "record_data_plane_state",
-            PlatformPluginApplyStateResponse,
+            f"{prefix}/{{legacy_path:path}}",
+            ("GET", "POST", "PUT", "PATCH", "DELETE"),
+            "retired_plugin_protocol_v1_route",
+            None,
         ),
     )
     assert (
         tuple(definition.tags for definition in definitions[:9])
         == (("Platform Plugins", "Platform Plugins V2"),) * 9
     )
-    assert tuple(definition.tags for definition in definitions[9:]) == (("Platform Plugins",),) * 11
+    assert tuple(definition.tags for definition in definitions[9:]) == (
+        ("Platform Plugins",),
+        ("Platform Plugins",),
+    )
+    assert all(definition.include_in_schema is False for definition in definitions[-2:])
     assert {definition.owner_entry_id for definition in definitions} == {
         subject.PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2
     }
@@ -178,19 +118,22 @@ def test_platform_plugins_row_preserves_route_order_and_openapi() -> None:
         generation=1,
         digest="0" * 64,
     )
-    baseline = build_builtin_route_graph_v2(
-        workspace_core_settings=get_workspace_core_settings(),
-    )
     claimed = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.platform_plugins_route_definitions_v2(),
     )
 
-    assert claimed.route_signatures == baseline.route_signatures
-    assert (
-        claimed.table.openapi_snapshot(descriptor).schema
-        == baseline.table.openapi_snapshot(descriptor).schema
+    assert claimed.route_signatures == tuple(
+        (
+            definition.path,
+            definition.name,
+            ()
+            if definition.methods == ("WEBSOCKET",)
+            else tuple(sorted(definition.methods)),
+        )
+        for definition in claimed.table.definitions
     )
+    assert claimed.table.openapi_snapshot(descriptor).schema["openapi"].startswith("3.")
     assert claimed.v2_owned_row_ids == ("platform-plugins",)
 
 

@@ -1,8 +1,7 @@
-"""Generic channel plugin module loader.
+"""Generic channel implementation module loader.
 
-Loads channel plugin modules from ``.memstack/plugins/<channel>/`` using
-``importlib`` so that application-layer consumers are decoupled from any
-specific channel implementation.
+Loads stable channel modules from the infrastructure package using ``importlib``
+so application-layer consumers remain decoupled from specific implementations.
 
 Usage::
 
@@ -13,7 +12,7 @@ Usage::
     client_mod = load_channel_module("feishu", "client")
     FeishuClient = client_mod.FeishuClient
 
-To register a custom channel whose plugin files live outside the default
+To register a custom channel whose implementation files live outside the default
 directory tree, call :func:`register_channel_plugin` before first use.
 """
 
@@ -32,10 +31,8 @@ _SIBLING_FQN_PREFIX: dict[str, str] = {
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT: Path = Path(__file__).resolve().parents[5]
-
 _CHANNEL_MODULE_REGISTRY: dict[str, Path] = {
-    "feishu": _PROJECT_ROOT / ".memstack" / "plugins" / "feishu",
+    "feishu": Path(__file__).resolve().parent / "feishu",
 }
 
 
@@ -74,16 +71,16 @@ def load_channel_module(channel: str, submodule: str) -> ModuleType:
     ImportError
         If the module spec cannot be created.
     """
-    plugin_dir = _CHANNEL_MODULE_REGISTRY.get(channel)
-    if plugin_dir is None:
+    implementation_dir = _CHANNEL_MODULE_REGISTRY.get(channel)
+    if implementation_dir is None:
         msg = (
             f"Unknown channel {channel!r}. Registered channels: {sorted(_CHANNEL_MODULE_REGISTRY)}"
         )
         raise KeyError(msg)
 
-    file_path = plugin_dir / f"{submodule}.py"
+    file_path = implementation_dir / f"{submodule}.py"
     if not file_path.exists():
-        msg = f"Channel plugin module not found: {file_path}"
+        msg = f"Channel implementation module not found: {file_path}"
         raise FileNotFoundError(msg)
 
     module_fqn = f"memstack_plugins_{channel}.{submodule}"
@@ -97,7 +94,7 @@ def load_channel_module(channel: str, submodule: str) -> ModuleType:
     if sibling_fqn in sys.modules:
         mod = sys.modules[sibling_fqn]
         sys.modules[module_fqn] = mod
-        _ensure_parent_package(channel, plugin_dir)
+        _ensure_parent_package(channel, implementation_dir)
         return mod
     if module_fqn in sys.modules:
         return sys.modules[module_fqn]
@@ -116,7 +113,7 @@ def load_channel_module(channel: str, submodule: str) -> ModuleType:
 
     # Ensure a parent package exists so unittest.mock.patch() can resolve
     # dotted names like "memstack_plugins_feishu.adapter.threading".
-    _ensure_parent_package(channel, plugin_dir)
+    _ensure_parent_package(channel, implementation_dir)
 
     spec.loader.exec_module(module)
     return module

@@ -57,7 +57,6 @@ from src.configuration.containers import (
     SandboxContainer,
     TaskContainer,
 )
-from src.configuration.service_bindings import declare_container_services
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
@@ -159,7 +158,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repo
     SqlWorkflowPatternRepository,
 )
 from src.infrastructure.agent.context.window_manager import ContextWindowManager
-from src.infrastructure.plugins.service_registry import ServiceRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -217,13 +215,6 @@ class DIContainer:
             agent_message_bus_factory=self._infra.agent_message_bus,
         )
 
-        # I1 shadow composition root: every zero-arg accessor is declared as
-        # a lazy service. Facades keep their current behavior until the B6
-        # cutover; the registry is per-container, so with_db() clones get
-        # request-scoped caching while the global container caches singletons.
-        self._services: ServiceRegistry = ServiceRegistry()
-        _ = declare_container_services(self._services, self)
-
     def with_db(self, db: AsyncSession) -> "DIContainer":
         """Create a new container instance with a specific db session.
 
@@ -256,11 +247,6 @@ class DIContainer:
             )
         return self._db
 
-    @property
-    def services(self) -> ServiceRegistry:
-        """Shadow composition root (I1): lazy service view of the container."""
-        return self._services
-
     def ai_service_factory(self) -> Any:
         """Get the AIServiceFactory singleton."""
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
@@ -277,35 +263,35 @@ class DIContainer:
     # === Auth Container delegates ===
 
     def user_repository(self) -> UserRepository:
-        return cast(UserRepository, self._services.get_or_activate("user_repository"))
+        return self._auth.user_repository()
 
     def api_key_repository(self) -> APIKeyRepository:
-        return cast(APIKeyRepository, self._services.get_or_activate("api_key_repository"))
+        return self._auth.api_key_repository()
 
     # === Task Container delegates ===
 
     def task_repository(self) -> TaskRepository:
-        return cast(TaskRepository, self._services.get_or_activate("task_repository"))
+        return self._task.task_repository()
 
     def task_service(self) -> TaskService:
-        return cast(TaskService, self._services.get_or_activate("task_service"))
+        return self._task.task_service()
 
     def create_task_use_case(self) -> CreateTaskUseCase:
-        return cast(CreateTaskUseCase, self._services.get_or_activate("create_task_use_case"))
+        return self._task.create_task_use_case()
 
     def get_task_use_case(self) -> GetTaskUseCase:
-        return cast(GetTaskUseCase, self._services.get_or_activate("get_task_use_case"))
+        return self._task.get_task_use_case()
 
     def list_tasks_use_case(self) -> ListTasksUseCase:
-        return cast(ListTasksUseCase, self._services.get_or_activate("list_tasks_use_case"))
+        return self._task.list_tasks_use_case()
 
     def update_task_use_case(self) -> UpdateTaskUseCase:
-        return cast(UpdateTaskUseCase, self._services.get_or_activate("update_task_use_case"))
+        return self._task.update_task_use_case()
 
     # === Cron Container delegates ===
 
     def cron_job_service(self) -> CronJobService:
-        return cast(CronJobService, self._services.get_or_activate("cron_job_service"))
+        return self._cron.cron_job_service()
 
     # === Reflection (friction → playbook loop) ===
 
@@ -477,51 +463,41 @@ class DIContainer:
     # === Project Container delegates ===
 
     def workspace_repository(self) -> WorkspaceRepository:
-        return cast(WorkspaceRepository, self._services.get_or_activate("workspace_repository"))
+        return self._project.workspace_repository()
 
     def workspace_member_repository(self) -> WorkspaceMemberRepository:
-        return cast(
-            WorkspaceMemberRepository, self._services.get_or_activate("workspace_member_repository")
-        )
+        return self._project.workspace_member_repository()
 
     def workspace_agent_repository(self) -> WorkspaceAgentRepository:
-        return cast(
-            WorkspaceAgentRepository, self._services.get_or_activate("workspace_agent_repository")
-        )
+        return self._project.workspace_agent_repository()
 
     def blackboard_repository(self) -> BlackboardRepository:
-        return cast(BlackboardRepository, self._services.get_or_activate("blackboard_repository"))
+        return cast(BlackboardRepository, self._project.blackboard_repository())
 
     def blackboard_service(self) -> BlackboardService:
-        return cast(BlackboardService, self._services.get_or_activate("blackboard_service"))
+        return cast(BlackboardService, self._project.blackboard_service())
 
     def blackboard_file_repository(self) -> BlackboardFileRepository:
-        return cast(
-            BlackboardFileRepository, self._services.get_or_activate("blackboard_file_repository")
-        )
+        return cast(BlackboardFileRepository, self._project.blackboard_file_repository())
 
     def blackboard_file_service(self) -> BlackboardFileService:
-        return cast(
-            BlackboardFileService, self._services.get_or_activate("blackboard_file_service")
-        )
+        return cast(BlackboardFileService, self._project.blackboard_file_service())
 
     def workspace_task_repository(self) -> WorkspaceTaskRepository:
-        return cast(
-            WorkspaceTaskRepository, self._services.get_or_activate("workspace_task_repository")
-        )
+        return self._project.workspace_task_repository()
 
     def workspace_task_session_attempt_repository(
         self,
     ) -> WorkspaceTaskSessionAttemptRepository:
         return cast(
             WorkspaceTaskSessionAttemptRepository,
-            self._services.get_or_activate("workspace_task_session_attempt_repository"),
+            self._project.workspace_task_session_attempt_repository(),
         )
 
     def workspace_task_session_attempt_service(self) -> WorkspaceTaskSessionAttemptService:
         return cast(
             WorkspaceTaskSessionAttemptService,
-            self._services.get_or_activate("workspace_task_session_attempt_service"),
+            self._project.workspace_task_session_attempt_service(),
         )
 
     # === Workspace V2 (multi-agent orchestrator) ===
@@ -531,18 +507,16 @@ class DIContainer:
         raise RuntimeError("Workspace Plan V2 orchestration is owned by Avernet Workspace Core")
 
     def topology_repository(self) -> TopologyRepository:
-        return cast(TopologyRepository, self._services.get_or_activate("topology_repository"))
+        return cast(TopologyRepository, self._project.topology_repository())
 
     def topology_service(self) -> TopologyService:
-        return cast(TopologyService, self._services.get_or_activate("topology_service"))
+        return cast(TopologyService, self._project.topology_service())
 
     def cyber_objective_repository(self) -> CyberObjectiveRepository:
-        return cast(
-            CyberObjectiveRepository, self._services.get_or_activate("cyber_objective_repository")
-        )
+        return cast(CyberObjectiveRepository, self._project.cyber_objective_repository())
 
     def cyber_gene_repository(self) -> CyberGeneRepository:
-        return cast(CyberGeneRepository, self._services.get_or_activate("cyber_gene_repository"))
+        return cast(CyberGeneRepository, self._project.cyber_gene_repository())
 
     def workspace_message_service(
         self,
@@ -555,213 +529,163 @@ class DIContainer:
     # === Instance Container delegates ===
 
     def instance_repository(self) -> InstanceRepository:
-        return cast(InstanceRepository, self._services.get_or_activate("instance_repository"))
+        return self._instance.instance_repository()
 
     def instance_member_repository(self) -> InstanceMemberRepository:
-        return cast(
-            InstanceMemberRepository, self._services.get_or_activate("instance_member_repository")
-        )
+        return self._instance.instance_member_repository()
 
     def deploy_record_repository(self) -> DeployRecordRepository:
-        return cast(
-            DeployRecordRepository, self._services.get_or_activate("deploy_record_repository")
-        )
+        return self._instance.deploy_record_repository()
 
     def cluster_repository(self) -> ClusterRepository:
-        return cast(ClusterRepository, self._services.get_or_activate("cluster_repository"))
+        return self._instance.cluster_repository()
 
     def gene_repository(self) -> GeneRepository:
-        return cast(GeneRepository, self._services.get_or_activate("gene_repository"))
+        return self._instance.gene_repository()
 
     def genome_repository(self) -> GenomeRepository:
-        return cast(GenomeRepository, self._services.get_or_activate("genome_repository"))
+        return self._instance.genome_repository()
 
     def instance_gene_repository(self) -> InstanceGeneRepository:
-        return cast(
-            InstanceGeneRepository, self._services.get_or_activate("instance_gene_repository")
-        )
+        return self._instance.instance_gene_repository()
 
     def gene_rating_repository(self) -> GeneRatingRepository:
-        return cast(GeneRatingRepository, self._services.get_or_activate("gene_rating_repository"))
+        return self._instance.gene_rating_repository()
 
     def gene_review_repository(self) -> GeneReviewRepository:
-        return cast(GeneReviewRepository, self._services.get_or_activate("gene_review_repository"))
+        return self._instance.gene_review_repository()
 
     def evolution_event_repository(self) -> EvolutionEventRepository:
-        return cast(
-            EvolutionEventRepository, self._services.get_or_activate("evolution_event_repository")
-        )
+        return self._instance.evolution_event_repository()
 
     def instance_template_repository(self) -> InstanceTemplateRepository:
-        return cast(
-            InstanceTemplateRepository,
-            self._services.get_or_activate("instance_template_repository"),
-        )
+        return self._instance.instance_template_repository()
 
     def instance_service(self) -> InstanceService:
-        return cast(InstanceService, self._services.get_or_activate("instance_service"))
+        return self._instance.instance_service()
 
     def deploy_service(self) -> DeployService:
-        return cast(DeployService, self._services.get_or_activate("deploy_service"))
+        return self._instance.deploy_service()
 
     def cluster_service(self) -> ClusterService:
-        return cast(ClusterService, self._services.get_or_activate("cluster_service"))
+        return self._instance.cluster_service()
 
     def gene_service(self) -> GeneService:
-        return cast(GeneService, self._services.get_or_activate("gene_service"))
+        return self._instance.gene_service()
 
     def instance_template_service(self) -> InstanceTemplateService:
-        return cast(
-            InstanceTemplateService, self._services.get_or_activate("instance_template_service")
-        )
+        return self._instance.instance_template_service()
 
     def instance_file_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("instance_file_service"))
+        return cast(Any, self._instance.instance_file_service())
 
     def instance_channel_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("instance_channel_service"))
+        return cast(Any, self._instance.instance_channel_service())
 
     # === Infra Container delegates ===
 
     def redis(self) -> redis.Redis | None:
-        return cast(redis.Redis | None, self._services.get_or_activate("redis"))
+        return self._infra.redis()
 
     def sequence_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("sequence_service"))
+        return self._infra.sequence_service()
 
     def hitl_message_bus(self) -> HITLMessageBusPort | None:
-        return cast(HITLMessageBusPort | None, self._services.get_or_activate("hitl_message_bus"))
+        return self._infra.hitl_message_bus()
 
     def agent_message_bus(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_message_bus"))
+        return self._infra.agent_message_bus()
 
     def storage_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("storage_service"))
+        return self._infra.storage_service()
 
     def distributed_lock_adapter(self) -> Any:
-        return cast(Any, self._services.get_or_activate("distributed_lock_adapter"))
+        return self._infra.distributed_lock_adapter()
 
     # === Sandbox Container delegates ===
 
     def project_sandbox_repository(self) -> SqlProjectSandboxRepository:
-        return cast(
-            SqlProjectSandboxRepository,
-            self._services.get_or_activate("project_sandbox_repository"),
-        )
+        return self._sandbox.project_sandbox_repository()
 
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
-        return cast(SandboxOrchestrator, self._services.get_or_activate("sandbox_orchestrator"))
+        return self._sandbox.sandbox_orchestrator()
 
     def sandbox_resource(self) -> SandboxResourcePort:
-        return cast(SandboxResourcePort, self._services.get_or_activate("sandbox_resource"))
+        return self._sandbox.sandbox_resource()
 
     def dependency_orchestrator(self) -> Any:
-        return cast(Any, self._services.get_or_activate("dependency_orchestrator"))
+        return self._sandbox.dependency_orchestrator()
 
     # === Agent Container delegates ===
 
     def conversation_repository(self) -> SqlConversationRepository:
-        return cast(
-            SqlConversationRepository, self._services.get_or_activate("conversation_repository")
-        )
+        return self._agent.conversation_repository()
 
     def agent_execution_repository(self) -> SqlAgentExecutionRepository:
-        return cast(
-            SqlAgentExecutionRepository,
-            self._services.get_or_activate("agent_execution_repository"),
-        )
+        return self._agent.agent_execution_repository()
 
     def tool_execution_record_repository(self) -> SqlToolExecutionRecordRepository:
-        return cast(
-            SqlToolExecutionRecordRepository,
-            self._services.get_or_activate("tool_execution_record_repository"),
-        )
+        return self._agent.tool_execution_record_repository()
 
     def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
-        return cast(
-            SqlAgentExecutionEventRepository,
-            self._services.get_or_activate("agent_execution_event_repository"),
-        )
+        return self._agent.agent_execution_event_repository()
 
     def execution_checkpoint_repository(self) -> SqlExecutionCheckpointRepository:
-        return cast(
-            SqlExecutionCheckpointRepository,
-            self._services.get_or_activate("execution_checkpoint_repository"),
-        )
+        return self._agent.execution_checkpoint_repository()
 
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
-        return cast(
-            SqlWorkflowPatternRepository,
-            self._services.get_or_activate("workflow_pattern_repository"),
-        )
+        return self._agent.workflow_pattern_repository()
 
     def context_summary_adapter(self) -> Any:
-        return cast(Any, self._services.get_or_activate("context_summary_adapter"))
+        return cast(Any, self._agent.context_summary_adapter())
 
     def tool_composition_repository(self) -> SqlToolCompositionRepository:
-        return cast(
-            SqlToolCompositionRepository,
-            self._services.get_or_activate("tool_composition_repository"),
-        )
+        return self._agent.tool_composition_repository()
 
     def tool_environment_variable_repository(self) -> SqlToolEnvironmentVariableRepository:
-        return cast(
-            SqlToolEnvironmentVariableRepository,
-            self._services.get_or_activate("tool_environment_variable_repository"),
-        )
+        return self._agent.tool_environment_variable_repository()
 
     def hitl_request_repository(self) -> SqlHITLRequestRepository:
-        return cast(
-            SqlHITLRequestRepository, self._services.get_or_activate("hitl_request_repository")
-        )
+        return self._agent.hitl_request_repository()
 
     def tenant_agent_config_repository(self) -> SqlTenantAgentConfigRepository:
-        return cast(
-            SqlTenantAgentConfigRepository,
-            self._services.get_or_activate("tenant_agent_config_repository"),
-        )
+        return self._agent.tenant_agent_config_repository()
 
     def skill_repository(self) -> SqlSkillRepository:
-        return cast(SqlSkillRepository, self._services.get_or_activate("skill_repository"))
+        return self._agent.skill_repository()
 
     def skill_version_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("skill_version_repository"))
+        return cast(Any, self._agent.skill_version_repository())
 
     def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
-        return cast(
-            SqlTenantSkillConfigRepository,
-            self._services.get_or_activate("tenant_skill_config_repository"),
-        )
+        return self._agent.tenant_skill_config_repository()
 
     def subagent_repository(self) -> SqlSubAgentRepository:
-        return cast(SqlSubAgentRepository, self._services.get_or_activate("subagent_repository"))
+        return self._agent.subagent_repository()
 
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
-        return cast(
-            SqlSubAgentTemplateRepository,
-            self._services.get_or_activate("subagent_template_repository"),
-        )
+        return self._agent.subagent_template_repository()
 
     def agent_registry(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_registry"))
+        return self._agent.agent_registry()
 
     def agent_binding_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_binding_repository"))
+        return self._agent.agent_binding_repository()
 
     def binding_router(self) -> Any:
-        return cast(Any, self._services.get_or_activate("binding_router"))
+        return self._agent.binding_router()
 
     def attachment_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("attachment_repository"))
+        return self._agent.attachment_repository()
 
     def attachment_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("attachment_service"))
+        return self._agent.attachment_service()
 
     def artifact_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("artifact_service"))
+        return self._agent.artifact_service()
 
     def skill_service(self) -> SkillService:
-        return cast(SkillService, self._services.get_or_activate("skill_service"))
+        return self._agent.skill_service()
 
     def skill_evolution_plugin(self) -> Any:
         """Get or initialize the skill evolution plugin (cached singleton).
@@ -777,17 +701,14 @@ class DIContainer:
             logger.info("Skill evolution plugin not initialized: DB-scoped container is required")
             return None
 
-        from src.application.services.llm_provider_manager import (
-            get_llm_provider_manager,
-        )
-        from src.infrastructure.agent.plugins.registry import (
-            get_plugin_registry,
-        )
         from src.infrastructure.agent.plugins.skill_evolution.config import (
             SkillEvolutionConfig,
         )
         from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            register_builtin_skill_evolution_plugin,
+            build_skill_evolution_runtime,
+        )
+        from src.infrastructure.plugins.v2.llm_client_service import (
+            lease_tenant_llm_client_v2,
         )
 
         config = SkillEvolutionConfig.from_env()
@@ -795,13 +716,10 @@ class DIContainer:
             return None
 
         try:
-            registry = get_plugin_registry()
-            llm_provider_manager = get_llm_provider_manager()
-            return register_builtin_skill_evolution_plugin(
-                registry=registry,
+            return build_skill_evolution_runtime(
                 config=config,
                 skill_service=self.skill_service(),
-                llm_provider_manager=llm_provider_manager,
+                llm_client_lease=lease_tenant_llm_client_v2,
                 session_factory=self._session_factory,
             )
         except Exception:
@@ -809,37 +727,37 @@ class DIContainer:
             return None
 
     def workspace_manager(self) -> Any:
-        return cast(Any, self._services.get_or_activate("workspace_manager"))
+        return self._agent.workspace_manager()
 
     def agent_session_registry(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_session_registry"))
+        return cast(Any, self._agent.agent_session_registry())
 
     def spawn_manager(self) -> Any:
-        return cast(Any, self._services.get_or_activate("spawn_manager"))
+        return self._agent.spawn_manager()
 
     def subagent_run_registry(self) -> Any:
-        return cast(Any, self._services.get_or_activate("subagent_run_registry"))
+        return self._agent.subagent_run_registry()
 
     def agent_orchestrator(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_orchestrator"))
+        return self._agent.agent_orchestrator()
 
     def graph_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("graph_repository"))
+        return cast(Any, self._agent.graph_repository())
 
     def graph_run_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("graph_run_repository"))
+        return cast(Any, self._agent.graph_run_repository())
 
     def graph_orchestrator(self) -> Any:
-        return cast(Any, self._services.get_or_activate("graph_orchestrator"))
+        return self._agent.graph_orchestrator()
 
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
     def event_converter(self) -> Any:
-        return cast(Any, self._services.get_or_activate("event_converter"))
+        return self._agent.event_converter()
 
     def attachment_processor(self) -> Any:
-        return cast(Any, self._services.get_or_activate("attachment_processor"))
+        return self._agent.attachment_processor()
 
     def llm_invoker(self, llm: LLMClient) -> Any:
         return self._agent.llm_invoker(llm)
@@ -848,16 +766,16 @@ class DIContainer:
         return self._agent.tool_executor(tools)
 
     def artifact_extractor(self) -> Any:
-        return cast(Any, self._services.get_or_activate("artifact_extractor"))
+        return self._agent.artifact_extractor()
 
     def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
         return self._agent.react_loop(llm, tools)
 
     def message_builder(self) -> Any:
-        return cast(Any, self._services.get_or_activate("message_builder"))
+        return self._agent.message_builder()
 
     def attachment_injector(self) -> Any:
-        return cast(Any, self._services.get_or_activate("attachment_injector"))
+        return self._agent.attachment_injector()
 
     def context_facade(self, window_manager: ContextWindowManager | None = None) -> Any:
         return self._agent.context_facade(window_manager)
@@ -881,15 +799,13 @@ class DIContainer:
         return self._agent.synthesize_results_use_case(llm)
 
     def find_similar_pattern_use_case(self) -> FindSimilarPattern:
-        return cast(
-            FindSimilarPattern, self._services.get_or_activate("find_similar_pattern_use_case")
-        )
+        return self._agent.find_similar_pattern_use_case()
 
     def learn_pattern_use_case(self) -> LearnPattern:
-        return cast(LearnPattern, self._services.get_or_activate("learn_pattern_use_case"))
+        return self._agent.learn_pattern_use_case()
 
     def workflow_learner(self) -> WorkflowLearner:
-        return cast(WorkflowLearner, self._services.get_or_activate("workflow_learner"))
+        return self._agent.workflow_learner()
 
     def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
         return self._agent.compose_tools_use_case(llm)
@@ -897,28 +813,28 @@ class DIContainer:
     # === Multi-Agent Services (Phase 1-4) ===
 
     def span_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("span_service"))
+        return self._agent.span_service()
 
     def fork_merge_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("fork_merge_service"))
+        return self._agent.fork_merge_service()
 
     def layered_tool_policy_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("layered_tool_policy_service"))
+        return self._agent.layered_tool_policy_service()
 
     def default_message_router(self) -> Any:
-        return cast(Any, self._services.get_or_activate("default_message_router"))
+        return self._agent.default_message_router()
 
     def message_binding_repository(self) -> Any:
-        return cast(Any, self._services.get_or_activate("message_binding_repository"))
+        return self._agent.message_binding_repository()
 
     def agent_router_service(self) -> Any:
-        return cast(Any, self._services.get_or_activate("agent_router_service"))
+        return self._agent.agent_router_service()
 
     def redis_agent_namespace(self) -> Any:
-        return cast(Any, self._services.get_or_activate("redis_agent_namespace"))
+        return self._agent.redis_agent_namespace()
 
     def redis_agent_credential_scope(self) -> Any:
-        return cast(Any, self._services.get_or_activate("redis_agent_credential_scope"))
+        return self._agent.redis_agent_credential_scope()
 
     def default_context_engine(self, window_manager: Any | None = None) -> Any:
         return self._agent.default_context_engine(window_manager)

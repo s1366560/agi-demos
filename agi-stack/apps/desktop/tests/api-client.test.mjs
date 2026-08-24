@@ -4728,32 +4728,42 @@ test('cloud managed skill import preserves the existing request contract', async
   }
 });
 
-test('managed plugin APIs preserve authoritative ids and toggle by id', async () => {
+test('marketplace V2 APIs preserve exact versions and uninstall desired bundles', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
+    if (init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({
+          plugin_id: 'release/notifier',
+          version: '2.4.1',
+          status: 'uninstalled',
+          desired_removed: true,
+          revoked_permissions: 2,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
     return new Response(
-      JSON.stringify({
-        items: [
-          {
-            id: 'runtime/github',
-            name: 'github-display-name',
-            source: 'entrypoint',
-            enabled: true,
-            discovered: true,
-            channel_types: [],
-          },
-          {
-            name: 'legacy-plugin',
-            source: 'entrypoint',
-            enabled: false,
-            discovered: true,
-            channel_types: [],
-          },
-        ],
-        diagnostics: [],
-      }),
+      JSON.stringify([
+        {
+          plugin_id: 'release/notifier',
+          version: '2.4.1',
+          publisher: 'MemStack Labs',
+          artifact_digest: 'sha256:artifact',
+          artifact_registry: 'registry.example.test',
+          artifact_repository: 'plugins/release-notifier',
+          oci_manifest_digest: 'sha256:manifest',
+          install_status: 'installed',
+          manifest: { targets: ['python', 'desktop-renderer'] },
+          signature: { algorithm: 'Ed25519' },
+          provenance: { builder_id: 'builder-v2' },
+          security_scan_status: 'passed',
+          revoked: false,
+          revocation_reason: null,
+        },
+      ]),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
   };
@@ -4765,173 +4775,27 @@ test('managed plugin APIs preserve authoritative ids and toggle by id', async ()
       localApiToken: 'local-session-token',
       tenantId: 'tenant 1',
     });
-    const plugins = await client.listManagedPlugins();
-    await client.setManagedPluginEnabled(plugins[0].id, false);
-    await client.setManagedPluginEnabled(plugins[1].id, true);
+    const plugins = await client.listMarketplacePlugins();
+    const response = await client.uninstallMarketplacePlugin(
+      plugins[0].plugin_id,
+      plugins[0].version,
+    );
 
-    assert.equal(plugins[0].id, 'runtime/github');
-    assert.equal(plugins[1].id, 'legacy-plugin');
+    assert.equal(plugins[0].id, 'release/notifier@2.4.1');
+    assert.equal(plugins[0].enabled, true);
+    assert.equal(response.status, 'uninstalled');
     assert.deepEqual(
       calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
       [
         [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins',
+          'http://127.0.0.1:8088/api/v1/plugin-marketplace/packages?include_revoked=true',
           'GET',
           undefined,
         ],
         [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/runtime%2Fgithub/disable',
+          'http://127.0.0.1:8088/api/v1/plugin-marketplace/packages/release%2Fnotifier/uninstall',
           'POST',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/legacy-plugin/enable',
-          'POST',
-          undefined,
-        ],
-      ]
-    );
-    assert.doesNotMatch(String(calls[0]?.input), /mcp\/apps/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('managed plugin lifecycle and configuration preserve tenant control-plane contracts', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    const url = String(input);
-    if (url.endsWith('/config-schema')) {
-      return new Response(
-        JSON.stringify({
-          plugin_name: 'release/notifier',
-          providers: [],
-          skills: [],
-          enabled: true,
-          discovered: true,
-          schema_supported: true,
-          config_schema: { type: 'object', properties: {} },
-          secret_paths: [],
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    }
-    if (url.endsWith('/config') && init?.method !== 'PUT') {
-      return new Response(
-        JSON.stringify({
-          tenant_id: 'tenant 1',
-          plugin_name: 'release/notifier',
-          config: { endpoint: 'https://example.test' },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    }
-    return new Response(JSON.stringify({ success: true, message: 'ok' }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'http://127.0.0.1:8088',
-      localApiToken: 'local-session-token',
-      tenantId: 'tenant 1',
-    });
-
-    await client.installManagedPlugin('memstack-release-notifier>=2.0');
-    await client.reloadManagedPlugins();
-    await client.getManagedPluginConfigSchema('release/notifier');
-    await client.getManagedPluginConfig('release/notifier');
-    await client.updateManagedPluginConfig('release/notifier', {
-      config: { endpoint: 'https://example.test/v2' },
-    });
-    await client.uninstallManagedPlugin('release/notifier');
-
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method, call.init?.body]),
-      [
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/install',
-          'POST',
-          JSON.stringify({ requirement: 'memstack-release-notifier>=2.0' }),
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/reload',
-          'POST',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config-schema',
-          'GET',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config',
-          'GET',
-          undefined,
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/config',
-          'PUT',
-          JSON.stringify({ config: { endpoint: 'https://example.test/v2' } }),
-        ],
-        [
-          'http://127.0.0.1:8088/api/v1/channels/tenants/tenant%201/plugins/release%2Fnotifier/uninstall',
-          'POST',
-          undefined,
-        ],
-      ],
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('cloud managed plugins use the response name as the operation key when id is absent', async () => {
-  const calls = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => {
-    calls.push({ input, init });
-    return new Response(
-      JSON.stringify({
-        plugins: [
-          {
-            name: 'github',
-            source: 'entrypoint',
-            enabled: true,
-            discovered: true,
-            channel_types: [],
-          },
-        ],
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
-    );
-  };
-
-  try {
-    const client = new DesktopApiClient({
-      ...DEFAULT_CONFIG,
-      apiBaseUrl: 'https://api.memstack.test',
-      apiKey: 'cloud-session-token',
-      localApiToken: '',
-      tenantId: 'tenant 1',
-      mode: 'cloud',
-    });
-    const plugins = await client.listManagedPlugins();
-    await client.setManagedPluginEnabled(plugins[0].id, false);
-
-    assert.equal(plugins[0].id, 'github');
-    assert.deepEqual(
-      calls.map((call) => [String(call.input), call.init?.method]),
-      [
-        ['https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins', 'GET'],
-        [
-          'https://api.memstack.test/api/v1/channels/tenants/tenant%201/plugins/github/disable',
-          'POST',
+          JSON.stringify({ tenant_id: 'tenant 1', version: '2.4.1' }),
         ],
       ]
     );

@@ -7,22 +7,13 @@ import type {
   ChannelConfigList,
   ChannelConnectionStatus,
   ChannelObservabilitySummary,
-  RuntimePluginList,
-  PluginActionResponse,
   ChannelPluginCatalog,
   ChannelPluginConfigSchema,
-  PluginConfigRecord,
-  PluginConfigSchema,
-  UpdatePluginConfigRequest,
 } from '@/types/channel';
 
 const BASE_URL = '/channels';
 
 export const channelService = {
-  async listTenantPlugins(tenantId: string): Promise<RuntimePluginList> {
-    return httpClient.get<RuntimePluginList>(`${BASE_URL}/tenants/${tenantId}/plugins`);
-  },
-
   async listTenantChannelPluginCatalog(tenantId: string): Promise<ChannelPluginCatalog> {
     return httpClient.get<ChannelPluginCatalog>(
       `${BASE_URL}/tenants/${tenantId}/plugins/channel-catalog`
@@ -38,65 +29,6 @@ export const channelService = {
     );
   },
 
-  async installTenantPlugin(tenantId: string, requirement: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/install`,
-      { requirement }
-    );
-  },
-
-  async enableTenantPlugin(tenantId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/enable`
-    );
-  },
-
-  async disableTenantPlugin(tenantId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/disable`
-    );
-  },
-
-  async uninstallTenantPlugin(tenantId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/uninstall`
-    );
-  },
-
-  async reloadTenantPlugins(tenantId: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(`${BASE_URL}/tenants/${tenantId}/plugins/reload`);
-  },
-
-  async getTenantPluginConfigSchema(
-    tenantId: string,
-    pluginName: string
-  ): Promise<PluginConfigSchema> {
-    return httpClient.get<PluginConfigSchema>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config-schema`
-    );
-  },
-
-  async getTenantPluginConfig(tenantId: string, pluginName: string): Promise<PluginConfigRecord> {
-    return httpClient.get<PluginConfigRecord>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config`
-    );
-  },
-
-  async updateTenantPluginConfig(
-    tenantId: string,
-    pluginName: string,
-    data: UpdatePluginConfigRequest
-  ): Promise<PluginConfigRecord> {
-    return httpClient.put<PluginConfigRecord>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config`,
-      data
-    );
-  },
-
-  async listPlugins(projectId: string): Promise<RuntimePluginList> {
-    return httpClient.get<RuntimePluginList>(`${BASE_URL}/projects/${projectId}/plugins`);
-  },
-
   async listChannelPluginCatalog(projectId: string): Promise<ChannelPluginCatalog> {
     return httpClient.get<ChannelPluginCatalog>(
       `${BASE_URL}/projects/${projectId}/plugins/channel-catalog`
@@ -109,37 +41,6 @@ export const channelService = {
   ): Promise<ChannelPluginConfigSchema> {
     return httpClient.get<ChannelPluginConfigSchema>(
       `${BASE_URL}/projects/${projectId}/plugins/channel-catalog/${channelType}/schema`
-    );
-  },
-
-  async installPlugin(projectId: string, requirement: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/projects/${projectId}/plugins/install`,
-      { requirement }
-    );
-  },
-
-  async enablePlugin(projectId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/projects/${projectId}/plugins/${pluginName}/enable`
-    );
-  },
-
-  async disablePlugin(projectId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/projects/${projectId}/plugins/${pluginName}/disable`
-    );
-  },
-
-  async uninstallPlugin(projectId: string, pluginName: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/projects/${projectId}/plugins/${pluginName}/uninstall`
-    );
-  },
-
-  async reloadPlugins(projectId: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/projects/${projectId}/plugins/reload`
     );
   },
 

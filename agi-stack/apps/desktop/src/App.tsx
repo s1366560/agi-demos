@@ -6126,8 +6126,7 @@ export function App() {
       runCompletionSummary={selectedConversation ? runCompletionSummary : null}
       onOpenSessionCanvasTab={openSessionCanvasTab}
       />
-      {/* I3: plugin conversation renderers mount below the chat panel. */}
-      <PlatformPluginConversationSlots active config={config} />
+      <PlatformPluginConversationSlots active />
     </>
   );
 

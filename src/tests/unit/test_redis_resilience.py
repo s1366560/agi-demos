@@ -4,13 +4,12 @@ Tests cover:
 - RedisCircuitBreakerStore: persistence, TTL, fallback on Redis errors
 - CircuitBreaker: pluggable state store integration
 - RedisRateLimiter: distributed RPM checks, fallback on Redis errors
-- LLMProviderManager: redis_client wiring
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -427,81 +426,3 @@ class TestRedisRateLimiter:
         limiter = RedisRateLimiter(redis_client=None)
         all_stats = limiter.get_all_stats()
         assert isinstance(all_stats, dict)
-
-
-# -------------------------------------------------------------------
-# LLMProviderManager wiring
-# -------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestLLMProviderManagerRedisWiring:
-    """Tests for redis_client wiring in LLMProviderManager."""
-
-    def test_no_redis_uses_defaults(self) -> None:
-        """Without redis_client, defaults are used."""
-        from src.application.services.llm_provider_manager import (
-            LLMProviderManager,
-        )
-        from src.infrastructure.llm.resilience.rate_limiter import (
-            ProviderRateLimiter,
-        )
-
-        manager = LLMProviderManager()
-        assert isinstance(manager._circuit_breakers, CircuitBreakerRegistry)
-        assert isinstance(manager._rate_limiter, ProviderRateLimiter)
-
-    def test_with_redis_creates_redis_backed_components(self) -> None:
-        """With redis_client, Redis-backed stores are created."""
-        from src.application.services.llm_provider_manager import (
-            LLMProviderManager,
-        )
-        from src.infrastructure.llm.resilience.rate_limiter import (
-            RedisRateLimiter,
-        )
-
-        redis = _make_redis_mock()
-        manager = LLMProviderManager(redis_client=redis)
-
-        # Circuit breaker registry should have a store
-        assert manager._circuit_breakers._state_store is not None
-        assert isinstance(
-            manager._circuit_breakers._state_store,
-            RedisCircuitBreakerStore,
-        )
-        # Rate limiter should be RedisRateLimiter
-        assert isinstance(manager._rate_limiter, RedisRateLimiter)
-
-    def test_explicit_registry_overrides_redis(self) -> None:
-        """Explicitly provided registry takes precedence over redis."""
-        from src.application.services.llm_provider_manager import (
-            LLMProviderManager,
-        )
-
-        custom_registry = CircuitBreakerRegistry()
-        redis = _make_redis_mock()
-        manager = LLMProviderManager(
-            circuit_breaker_registry=custom_registry,
-            redis_client=redis,
-        )
-        assert manager._circuit_breakers is custom_registry
-
-    def test_redis_failure_during_build_falls_back(self) -> None:
-        """If Redis store creation fails, fallback to in-memory."""
-        from src.application.services.llm_provider_manager import (
-            LLMProviderManager,
-        )
-
-        redis = _make_redis_mock()
-        with patch(
-            "src.application.services.llm_provider_manager"
-            ".LLMProviderManager._build_circuit_breaker_registry",
-        ) as mock_build_cb:
-            # Simulate the method returning the default registry
-            from src.infrastructure.llm.resilience import (
-                get_circuit_breaker_registry,
-            )
-
-            mock_build_cb.return_value = get_circuit_breaker_registry()
-            manager = LLMProviderManager(redis_client=redis)
-            assert manager._circuit_breakers is not None

@@ -659,7 +659,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins",
       "source": "client",
       "source_marker": "/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins",
-      "authority": "local_registry",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -668,7 +669,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/enable",
       "source": "client",
       "source_marker": "/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins",
-      "authority": "local_registry",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -677,7 +679,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/disable",
       "source": "client",
       "source_marker": "/${enabled ? 'enable' : 'disable'}`",
-      "authority": "local_registry",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -686,7 +689,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/install",
       "source": "client",
       "source_marker": "/plugins/install",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -695,7 +699,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/reload",
       "source": "client",
       "source_marker": "/plugins/reload",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -704,7 +709,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/uninstall",
       "source": "client",
       "source_marker": "/uninstall",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -713,7 +719,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config-schema",
       "source": "client",
       "source_marker": "/config-schema",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -722,7 +729,8 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
       "source": "client",
       "source_marker": "/config`",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
     },
     {
@@ -731,8 +739,32 @@
       "uri": "/api/v1/channels/tenants/local/plugins/local-workspace/config",
       "source": "client",
       "source_marker": "/config`",
-      "authority": "structured_unavailable",
+      "authority": "retired_v1",
+      "expected_status": 410,
       "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "GET",
+      "uri": "/api/v1/plugin-marketplace/packages?include_revoked=true",
+      "source": "client",
+      "source_marker": "/api/v1/plugin-marketplace/packages?include_revoked=true",
+      "authority": "cloud_plugin_marketplace_v2",
+      "expected_status": 503,
+      "body": {}
+    },
+    {
+      "area": "plugins",
+      "method": "POST",
+      "uri": "/api/v1/plugin-marketplace/packages/local-workspace/uninstall",
+      "source": "client",
+      "source_marker": "/api/v1/plugin-marketplace/packages/${encodeURIComponent(",
+      "authority": "cloud_plugin_marketplace_v2",
+      "expected_status": 503,
+      "body": {
+        "tenant_id": "local",
+        "version": "exact-version"
+      }
     },
     {
       "area": "plugins",
@@ -1928,6 +1960,56 @@
   ],
   "router_fixture_not_applicable": [
     {
+      "method": "DELETE",
+      "path": "/api/v1/platform-plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/platform-plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/platform-plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/platform-plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/platform-plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/platform-plugins/{legacy_path}",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/platform-plugins/{legacy_path}",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/platform-plugins/{legacy_path}",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/platform-plugins/{legacy_path}",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/platform-plugins/{legacy_path}",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/agent/artifact-versions/{artifact_version_id}/deliver",
       "reason_code": "executable_fixture_registered_route_not_catalogued"
@@ -2171,41 +2253,6 @@
       "method": "GET",
       "path": "/api/v1/workspaces/{workspace_id}/tasks",
       "reason_code": "executable_fixture_registered_route_not_catalogued"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/platform-plugins/snapshot",
-      "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/platform-plugins/snapshot",
-      "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/platform-plugins/apply-state",
-      "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/platform-plugins/ack",
-      "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/platform-plugins/nack",
-      "reason_code": "executable_fixture_platform_plugin_control_plane_pending_ui_parity"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/platform-plugins/tools/invoke",
-      "reason_code": "executable_fixture_platform_plugin_tool_pending_ui_parity"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/platform-plugins/frontend/{plugin_id}/module",
-      "reason_code": "executable_fixture_platform_plugin_frontend_pending_ui_parity"
     }
   ],
   "catalog_fixture_not_applicable": [

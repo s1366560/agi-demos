@@ -69,11 +69,22 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
 test("desktop UI slot consumers use the pinned V2 authority without V1 fallback", () => {
   const hook = source("src/features/settings/usePlatformPluginUiSlots.ts");
   const conversationSlots = source("src/features/chat/PlatformPluginConversationSlots.tsx");
+  const settingsSlots = source("src/features/settings/PlatformPluginUiSlots.tsx");
+  const client = source("src/api/client.ts");
+  const activity = source("src/features/settings/usePluginManagement.ts");
 
   assert.match(hook, /useDesktopRendererAuthorityV2/u);
   assert.doesNotMatch(hook, /DesktopApiClient|getPlatformPluginSnapshot/u);
   assert.doesNotMatch(hook, /builtinUiFallbackSnapshot|BUILTIN_UI_SLOT_DEFINITIONS/u);
   assert.doesNotMatch(conversationSlots, /usePlatformPluginUiSlots\(\{ active, config \}\)/u);
+  assert.match(conversationSlots, /data-module-ref/u);
+  assert.doesNotMatch(conversationSlots, /SignedUiModuleBoundary|signed:/u);
+  assert.doesNotMatch(settingsSlots, /SignedUiModuleBoundary|signed:/u);
+  assert.doesNotMatch(
+    client,
+    /getPlatformPlugin(?:ApplyState|Snapshot|FrontendModule)|platform-plugins\/(?:apply-state|snapshot|frontend)/u,
+  );
+  assert.doesNotMatch(activity, /snapshotState|getPlatformPluginApplyState/u);
 });
 
 test("every desktop build path resolves the shared protocol-v2 runtime package", () => {

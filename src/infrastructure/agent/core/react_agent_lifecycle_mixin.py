@@ -13,13 +13,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
-from src.infrastructure.plugins.agent_events import create_agent_plugin_event_dispatcher
 
 from ..config import ExecutionConfig
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..plugins.policy_context import normalize_policy_layers
-from ..plugins.registry import get_plugin_registry
 from ..plugins.selection_pipeline import build_default_tool_selection_pipeline
 from ..prompts import SystemPromptManager
 from .processor import ProcessorConfig, ToolDefinition
@@ -419,8 +417,6 @@ class LifecycleMixin:
             max_tokens=max_tokens,
             max_steps=max_steps,
             llm_client=self._llm_client,
-            plugin_registry=get_plugin_registry(),
-            plugin_event_dispatcher=create_agent_plugin_event_dispatcher(get_plugin_registry()),
             skill_names=[s.name for s in (self.skills or [])],
             provider_options=_provider_opts,
             message_bus=message_bus,

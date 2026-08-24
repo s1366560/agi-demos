@@ -60,7 +60,8 @@ import type {
   ManagedChannelTestResult,
   ManagedLlmProvider,
   ManagedPlugin,
-  ManagedPluginRuntime,
+  MarketplacePluginCatalogEntry,
+  MarketplacePluginUninstallResponse,
   ManagedSkill,
   ManagedSkillContent,
   ManagedSkillCreateMutation,
@@ -77,14 +78,7 @@ import type {
   ManagedSubAgent,
   ManagedSubAgentMutation,
   ManagedSubAgentTemplateList,
-  PluginActionResponse,
-  PluginConfigRecord,
-  PluginConfigSchema,
   PaginatedConversationsResponse,
-  PlatformPluginSnapshot,
-  PlatformPluginSnapshotRow,
-  PlatformPluginApplyState,
-  PlatformPluginFrontendModule,
   PlanSnapshot,
   PromptTemplateCreateInput,
   PromptTemplateRecord,
@@ -114,10 +108,10 @@ import type {
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
-  UpdatePluginConfigRequest,
   CreateManagedChannelConfigRequest,
   UpdateManagedChannelConfigRequest,
 } from '../types';
+import { managedPluginFromMarketplaceEntry } from './pluginMarketplaceModel';
 import {
   desktopSearchRequestContract,
   normalizeDesktopSearchResponse,
@@ -2314,119 +2308,32 @@ export class DesktopApiClient {
     });
   }
 
-  async listManagedPlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {
-    return (await this.getManagedPluginRuntime(signal)).items;
-  }
-
-  async getManagedPluginRuntime(signal?: AbortSignal): Promise<ManagedPluginRuntime> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
+  async listMarketplacePlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {
     const payload = await this.request<unknown>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins`,
+      '/api/v1/plugin-marketplace/packages?include_revoked=true',
       { signal },
     );
-    return {
-      items: readArray<ManagedPlugin>(payload, ['items', 'plugins', 'data']).map((plugin) => ({
-        ...plugin,
-        id: plugin.id ?? plugin.name,
-      })),
-      diagnostics: readArray(payload, ['diagnostics']),
-    };
+    return readArray<MarketplacePluginCatalogEntry>(payload, ['items', 'packages', 'data']).map(
+      managedPluginFromMarketplaceEntry,
+    );
   }
 
-  async getPlatformPluginApplyState(signal?: AbortSignal): Promise<PlatformPluginApplyState> {
-    return this.request<PlatformPluginApplyState>('/api/v1/platform-plugins/apply-state', {
-      signal,
-    });
-  }
-
-  async getPlatformPluginSnapshot(signal?: AbortSignal): Promise<PlatformPluginSnapshot> {
-    const payload = await this.request<unknown>('/api/v1/platform-plugins/snapshot', {
-      signal,
-    });
-    const snapshot = this.readPlatformPluginSnapshot(payload);
-    return {
-      ...snapshot,
-      plugins: readArray<PlatformPluginSnapshotRow>(snapshot, ['plugins']),
-    };
-  }
-
-  async getPlatformPluginFrontendModule(
+  async uninstallMarketplacePlugin(
     pluginId: string,
-    signal?: AbortSignal,
-  ): Promise<PlatformPluginFrontendModule> {
-    return this.request<PlatformPluginFrontendModule>(
-      `/api/v1/platform-plugins/frontend/${encodeURIComponent(pluginId)}/module`,
-      { signal },
-    );
-  }
-
-  async setManagedPluginEnabled(
-    pluginId: string,
-    enabled: boolean,
-  ): Promise<PluginActionResponse> {
+    version: string,
+  ): Promise<MarketplacePluginUninstallResponse> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginActionResponse>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginId,
-      )}/${enabled ? 'enable' : 'disable'}`,
-      { method: 'POST' },
-    );
-  }
-
-  async installManagedPlugin(requirement: string): Promise<PluginActionResponse> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginActionResponse>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/install`,
-      { method: 'POST', body: { requirement: requirement.trim() } },
-    );
-  }
-
-  async reloadManagedPlugins(): Promise<PluginActionResponse> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginActionResponse>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/reload`,
-      { method: 'POST' },
-    );
-  }
-
-  async uninstallManagedPlugin(pluginId: string): Promise<PluginActionResponse> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginActionResponse>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginId,
+    return this.request<MarketplacePluginUninstallResponse>(
+      `/api/v1/plugin-marketplace/packages/${encodeURIComponent(
+        requireValue(pluginId, 'plugin id'),
       )}/uninstall`,
-      { method: 'POST' },
-    );
-  }
-
-  async getManagedPluginConfigSchema(pluginId: string): Promise<PluginConfigSchema> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginConfigSchema>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginId,
-      )}/config-schema`,
-    );
-  }
-
-  async getManagedPluginConfig(pluginId: string): Promise<PluginConfigRecord> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginConfigRecord>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginId,
-      )}/config`,
-    );
-  }
-
-  async updateManagedPluginConfig(
-    pluginId: string,
-    body: UpdatePluginConfigRequest,
-  ): Promise<PluginConfigRecord> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<PluginConfigRecord>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/${encodeURIComponent(
-        pluginId,
-      )}/config`,
-      { method: 'PUT', body },
+      {
+        method: 'POST',
+        body: {
+          tenant_id: tenantId,
+          version: requireValue(version, 'plugin version'),
+        },
+      },
     );
   }
 
@@ -2437,18 +2344,6 @@ export class DesktopApiClient {
       { signal },
     );
     return readArray<ManagedChannelPluginCatalogItem>(payload, ['items', 'data']);
-  }
-
-  private readPlatformPluginSnapshot(payload: unknown): Record<string, unknown> {
-    if (!payload || typeof payload !== 'object') return {};
-    const record = payload as Record<string, unknown>;
-    if (record.snapshot && typeof record.snapshot === 'object') {
-      return record.snapshot as Record<string, unknown>;
-    }
-    if (record.payload && typeof record.payload === 'object') {
-      return record.payload as Record<string, unknown>;
-    }
-    return record;
   }
 
   async getManagedChannelSchema(channelType: string): Promise<ManagedChannelPluginConfigSchema> {

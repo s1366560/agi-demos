@@ -6,34 +6,15 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from src.application.schemas.platform_plugins import (
-    PlatformPluginApplyStateResponse,
     PlatformPluginApplyStateResponseV2,
-    PlatformPluginCutoverApprovalResponse,
-    PlatformPluginCutoverReadinessResponse,
-    PlatformPluginCutoverRevocationResponse,
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
-    PlatformPluginHttpRouteReconcileResponse,
-    PlatformPluginHttpRouteResponse,
     PlatformPluginPublicationReadinessResponseV2,
-    PlatformPluginPublishResponse,
     PlatformPluginRouteAuthorityReadinessResponseV2,
-    PlatformPluginShadowRolloutReadinessResponse,
-    PlatformPluginShadowRolloutResponse,
-    PlatformPluginSnapshotResponse,
 )
 from src.infrastructure.adapters.primary.web.routers.platform_plugins import (
-    approve_platform_plugin_cutover,
-    get_platform_plugin_cutover_readiness,
-    get_shadow_rollout_evidence,
-    get_shadow_rollout_readiness,
-    get_snapshot,
-    list_platform_plugin_http_routes,
-    publish_snapshot,
-    reconcile_platform_plugin_http_routes,
-    record_data_plane_state,
-    revoke_platform_plugin_cutover,
-    upsert_platform_plugin_http_route,
+    retired_plugin_protocol_v1_root_route,
+    retired_plugin_protocol_v1_route,
 )
 from src.infrastructure.adapters.primary.web.routers.platform_plugins_v2 import (
     get_current_desired_bundle_set_v2,
@@ -60,7 +41,6 @@ PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2 = "builtin-platform-plugins-http-routes"
 PLATFORM_PLUGINS_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/platform-plugins-routes"
 PLATFORM_PLUGINS_HTTP_ROUTES_ROW_V2 = "platform-plugins"
 _PLATFORM_PLUGINS_PREFIX_V2 = "/api/v1/platform-plugins"
-_PLATFORM_PLUGINS_TAGS_V2 = ("Platform Plugins",)
 _PROTOCOL_V2_TAGS_V2 = ("Platform Plugins", "Platform Plugins V2")
 
 
@@ -72,6 +52,7 @@ def _platform_plugins_route_v2(
     name: str,
     response_model: object,
     tags: tuple[str, ...],
+    include_in_schema: bool = True,
 ) -> RouteDefinitionV2:
     return RouteDefinitionV2(
         owner_entry_id=PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2,
@@ -81,12 +62,13 @@ def _platform_plugins_route_v2(
         name=name,
         tags=tags,
         response_model=response_model,
+        include_in_schema=include_in_schema,
         replaces_builtin_row_id=PLATFORM_PLUGINS_HTTP_ROUTES_ROW_V2,
     )
 
 
 def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
-    """Return the complete nested V2 and frozen V1 ``platform-plugins`` row."""
+    """Return exact V2 routes followed by explicit V1 retirement traps."""
     prefix = _PLATFORM_PLUGINS_PREFIX_V2
     v2 = f"{prefix}/v2"
     mapping: tuple[
@@ -172,96 +154,8 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             PlatformPluginPublicationReadinessResponseV2,
             _PROTOCOL_V2_TAGS_V2,
         ),
-        (
-            f"{prefix}/shadow-rollout",
-            ("GET",),
-            get_shadow_rollout_evidence,
-            "get_shadow_rollout_evidence",
-            PlatformPluginShadowRolloutResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/shadow-rollout/readiness",
-            ("GET",),
-            get_shadow_rollout_readiness,
-            "get_shadow_rollout_readiness",
-            PlatformPluginShadowRolloutReadinessResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/cutover/readiness",
-            ("GET",),
-            get_platform_plugin_cutover_readiness,
-            "get_platform_plugin_cutover_readiness",
-            PlatformPluginCutoverReadinessResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/cutover/approve",
-            ("POST",),
-            approve_platform_plugin_cutover,
-            "approve_platform_plugin_cutover",
-            PlatformPluginCutoverApprovalResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/cutover/revoke",
-            ("POST",),
-            revoke_platform_plugin_cutover,
-            "revoke_platform_plugin_cutover",
-            PlatformPluginCutoverRevocationResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/http-routes",
-            ("GET",),
-            list_platform_plugin_http_routes,
-            "list_platform_plugin_http_routes",
-            list[PlatformPluginHttpRouteResponse],
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/http-routes/{{plugin_id}}",
-            ("PUT",),
-            upsert_platform_plugin_http_route,
-            "upsert_platform_plugin_http_route",
-            PlatformPluginHttpRouteResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/http-routes/reconcile",
-            ("POST",),
-            reconcile_platform_plugin_http_routes,
-            "reconcile_platform_plugin_http_routes",
-            PlatformPluginHttpRouteReconcileResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/publish",
-            ("POST",),
-            publish_snapshot,
-            "publish_snapshot",
-            PlatformPluginPublishResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/snapshot",
-            ("GET",),
-            get_snapshot,
-            "get_snapshot",
-            PlatformPluginSnapshotResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
-        (
-            f"{prefix}/data-plane-state",
-            ("POST",),
-            record_data_plane_state,
-            "record_data_plane_state",
-            PlatformPluginApplyStateResponse,
-            _PLATFORM_PLUGINS_TAGS_V2,
-        ),
     )
-    return tuple(
+    v2_routes = tuple(
         _platform_plugins_route_v2(
             path=path,
             methods=methods,
@@ -272,6 +166,25 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         )
         for path, methods, endpoint, name, response_model, tags in mapping
     )
+    retired_v1_root = _platform_plugins_route_v2(
+        path=prefix,
+        methods=("GET", "POST", "PUT", "PATCH", "DELETE"),
+        endpoint=retired_plugin_protocol_v1_root_route,
+        name="retired_plugin_protocol_v1_root_route",
+        response_model=None,
+        tags=("Platform Plugins",),
+        include_in_schema=False,
+    )
+    retired_v1_descendants = _platform_plugins_route_v2(
+        path=f"{prefix}/{{legacy_path:path}}",
+        methods=("GET", "POST", "PUT", "PATCH", "DELETE"),
+        endpoint=retired_plugin_protocol_v1_route,
+        name="retired_plugin_protocol_v1_route",
+        response_model=None,
+        tags=("Platform Plugins",),
+        include_in_schema=False,
+    )
+    return (*v2_routes, retired_v1_root, retired_v1_descendants)
 
 
 def builtin_platform_plugins_http_routes_definition_v2() -> PluginDefinitionV2:

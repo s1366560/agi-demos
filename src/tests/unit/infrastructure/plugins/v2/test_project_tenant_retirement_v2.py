@@ -10,7 +10,6 @@ import pytest
 from src.configuration.containers.auth_container import AuthContainer
 from src.configuration.containers.project_container import ProjectContainer
 from src.configuration.di_container import DIContainer
-from src.configuration.service_bindings import CONTAINER_SERVICE_BINDINGS
 from src.infrastructure.plugins.v2.composer import load_profile_document_v2
 from src.infrastructure.plugins.v2.project_tenant_services import (
     PROJECT_TENANT_APPLICATION_MODULE_V2,
@@ -56,14 +55,11 @@ def test_project_tenant_legacy_di_accessors_and_shadow_adapter_are_removed() -> 
         "project_service",
         "tenant_service",
     }
-    binding_keys = {binding.key for binding in CONTAINER_SERVICE_BINDINGS}
-
     assert not retired_accessors.intersection(vars(DIContainer))
     assert "tenant_repository" not in vars(AuthContainer)
     assert not {"project_repository", "project_service", "tenant_service"}.intersection(
         vars(ProjectContainer)
     )
-    assert retired_accessors.isdisjoint(binding_keys)
     assert not (
         _ROOT / "src/infrastructure/adapters/primary/web/project_tenant_shadow_v2.py"
     ).exists()

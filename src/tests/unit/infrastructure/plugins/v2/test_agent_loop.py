@@ -13,6 +13,7 @@ from src.infrastructure.agent.processor.factory import ProcessorFactory, _defaul
 from src.infrastructure.plugins.v2.agent_loop import (
     AGENT_LOOP_RESOLVER_SERVICE_V2,
     BuiltinAgentLoopResolverV2,
+    validate_loop_implementation,
 )
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -23,6 +24,14 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
+
+
+@pytest.mark.unit
+def test_agent_loop_contract_rejects_implementation_without_run() -> None:
+    with pytest.raises(RuntimeV2Error) as error:
+        validate_loop_implementation(object())
+
+    assert error.value.code == "agent_loop_implementation_invalid"
 
 
 @pytest.mark.unit

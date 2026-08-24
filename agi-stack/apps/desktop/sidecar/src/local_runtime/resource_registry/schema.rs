@@ -130,7 +130,8 @@ fn backfill_managed_resource_versions(connection: &Connection) -> Result<(), Str
              SELECT kind, scope_kind, scope_id, id, revision, status,
                     CASE WHEN status = 'deleted' THEN 1 ELSE 0 END,
                     updated_at_ms, value_json, vault_refs_json
-             FROM desktop_managed_resources",
+             FROM desktop_managed_resources
+             WHERE kind != 'plugin'",
             [],
         )
         .map(|_| ())
@@ -240,61 +241,6 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 &tenant_id,
                 id,
                 &skill,
-                now_ms,
-            )?;
-        }
-        for (id, name, package, tools) in [
-            (
-                "local-workspace",
-                "Local workspace tools",
-                "builtin:local-tools",
-                vec!["read", "write", "edit", "glob", "grep", "terminal"],
-            ),
-            (
-                "model-context-protocol",
-                "Model Context Protocol",
-                "builtin:mcp-runtime",
-                vec!["mcp_tools_list", "mcp_tools_call"],
-            ),
-        ] {
-            let tool_definitions = tools
-                .into_iter()
-                .map(|name| json!({ "name": name }))
-                .collect::<Vec<_>>();
-            let plugin = json!({
-                "id": id,
-                "name": name,
-                "source": "builtin",
-                "package": package,
-                "version": env!("CARGO_PKG_VERSION"),
-                "kind": "runtime",
-                "enabled": true,
-                "status": "active",
-                "discovered": true,
-                "providers": ["local"],
-                "skills": [],
-                "channel_types": [],
-                "tool_definitions": tool_definitions,
-                "revision": 0,
-                "updated_at": iso_from_millis(now_ms),
-            });
-            insert_seed(
-                connection,
-                ManagedResourceKind::Plugin,
-                "tenant",
-                &tenant_id,
-                id,
-                "active",
-                &plugin,
-                now_ms,
-            )?;
-            reconcile_immutable_seed(
-                connection,
-                ManagedResourceKind::Plugin,
-                "tenant",
-                &tenant_id,
-                id,
-                &plugin,
                 now_ms,
             )?;
         }
@@ -456,17 +402,6 @@ fn reconcile_immutable_seed(
                 object,
                 canonical,
                 &["name", "description", "scope", "tools"],
-            );
-        }
-        ManagedResourceKind::Plugin => {
-            changed |= replace_if_different(object, "source", json!("builtin"));
-            changed |= replace_if_different(object, "enabled", json!(true));
-            changed |= replace_if_different(object, "status", json!("active"));
-            changed |= replace_if_different(object, "discovered", json!(true));
-            changed |= replace_seed_fields(
-                object,
-                canonical,
-                &["name", "package", "kind", "providers", "tool_definitions"],
             );
         }
         ManagedResourceKind::Agent => {

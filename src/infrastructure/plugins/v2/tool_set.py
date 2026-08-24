@@ -136,6 +136,12 @@ class ToolSetCatalogV2:
                 source_by_name[normalized_tool_name] = source_id
                 resolved_tools[tool_name] = tool
             definitions.extend(contribution_definitions)
+        resolved_tools, definitions = _select_complete_tool_set_v2(
+            agent=agent,
+            selection_context=selection_context,
+            tools=resolved_tools,
+            definitions=definitions,
+        )
         return ToolSetV2(
             tools=MappingProxyType(resolved_tools),
             definitions=tuple(definitions),
@@ -202,7 +208,8 @@ def _agent_owned_tools_v2(
             "invalid_tool_contribution",
             "agent-owned tool contribution requires callable _get_current_tools",
         )
-    result: object = get_current_tools(selection_context=selection_context)
+    _ = selection_context
+    result: object = get_current_tools(selection_context=None)
     if not isinstance(result, tuple) or len(result) != 2:
         raise RuntimeV2Error(
             "invalid_tool_contribution",
@@ -222,6 +229,48 @@ def _agent_owned_tools_v2(
     tools = cast("Mapping[str, Any]", raw_tools)
     definitions = raw_definitions
     return ToolSetV2(tools=tools, definitions=tuple(definitions))
+
+
+def _select_complete_tool_set_v2(
+    *,
+    agent: object,
+    selection_context: object | None,
+    tools: dict[str, Any],
+    definitions: list[Any],
+) -> tuple[dict[str, Any], list[Any]]:
+    """Run the agent-owned selector once after all V2 contributions are merged."""
+    if selection_context is None:
+        return tools, definitions
+    pipeline = getattr(agent, "_tool_selection_pipeline", None)
+    if pipeline is None:
+        return tools, definitions
+    select_with_trace = getattr(pipeline, "select_with_trace", None)
+    if not callable(select_with_trace):
+        raise RuntimeV2Error(
+            "invalid_tool_selection_pipeline",
+            "agent tool-selection pipeline has no callable select_with_trace",
+        )
+    result = select_with_trace(dict(tools), selection_context)
+    selected_tools = getattr(result, "tools", None)
+    trace = getattr(result, "trace", None)
+    if not isinstance(selected_tools, Mapping) or trace is None:
+        raise RuntimeV2Error(
+            "invalid_tool_selection_result",
+            "agent tool-selection pipeline returned an invalid result",
+        )
+    normalized_tools: dict[str, Any] = {}
+    for name, tool in selected_tools.items():
+        if not isinstance(name, str) or name not in tools or tools[name] is not tool:
+            raise RuntimeV2Error(
+                "invalid_tool_selection_result",
+                "agent tool-selection pipeline returned an unknown tool",
+            )
+        normalized_tools[name] = tool
+    cast("Any", agent)._last_tool_selection_trace = tuple(trace)
+
+    from src.infrastructure.agent.core.tool_converter import convert_tools
+
+    return normalized_tools, list(convert_tools(normalized_tools))
 
 
 def _apply_tool_contribution_v2(

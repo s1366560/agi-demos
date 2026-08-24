@@ -1,7 +1,13 @@
 # Feishu Plugin Migration Plan
 
+> **Historical V1 document — do not execute.** This plan describes the retired protocol-V1
+> `.memstack/plugins` runtime and its compatibility facade. The production authority is now the
+> Cordis V2 contract catalog, profile, and generation runtime. Use
+> `platform-plugin-kernel.md` and `plugin-capability-inventory.md` for the current architecture;
+> do not recreate any loader, facade, manifest, or mutation path proposed below.
+
 **Date**: 2026-03-14
-**Status**: Proposed
+**Status**: Historical / superseded by Cordis V2
 **Goal**: Completely migrate the Feishu channel plugin from `src/infrastructure/adapters/secondary/channels/feishu/` to `.memstack/plugins/feishu/`, leaving zero Feishu code inside `src/`.
 
 ---

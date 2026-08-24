@@ -133,54 +133,24 @@ test("Skills keeps tenant authority separate from project contributor authority"
   assertActions(capability, "desktop_local", commonMutations, [["tenant_admin"]]);
 });
 
-test("Plugins separates tenant control-plane and project channel authorities", () => {
+test("Plugin Marketplace exposes only V2 reads and exact-version uninstall", () => {
   const capability = readCapability(
     "parity-capability-definitions.06-plugins.v2.json",
     "tenant-tenant-plugins",
   );
   const tenantAdminOrOwner = [["tenant_admin"], ["tenant_owner"]];
-  const projectAdminOrOwner = [["project_admin"], ["project_owner"]];
-  const tenantAndProjectMember = [
-    ["tenant_admin", "project_member"],
-    ["tenant_owner", "project_member"],
-  ];
-  const tenantAndProjectAdminOrOwner = [
-    ["tenant_admin", "project_admin"],
-    ["tenant_admin", "project_owner"],
-    ["tenant_owner", "project_admin"],
-    ["tenant_owner", "project_owner"],
-  ];
 
   assertActions(
     capability,
     "web",
-    [
-      "view",
-      "list",
-      "view-channel-catalog",
-      "view-channel-schema",
-      "view-config-schema",
-      "view-config",
-    ],
+    ["view", "list", "view-detail"],
     [["tenant_member"]],
   );
   assertActions(
     capability,
     "web",
-    ["install", "enable", "disable", "uninstall", "reload", "update-config"],
+    ["uninstall-exact-version"],
     tenantAdminOrOwner,
-  );
-  assertActions(
-    capability,
-    "web",
-    ["list-channel-configs", "test-channel-config"],
-    [["project_member"]],
-  );
-  assertActions(
-    capability,
-    "web",
-    ["create-channel-config", "update-channel-config", "delete-channel-config"],
-    projectAdminOrOwner,
   );
 
   assertMatrix(capability, "desktop_cloud", {
@@ -190,69 +160,42 @@ test("Plugins separates tenant control-plane and project channel authorities", (
   assertActions(
     capability,
     "desktop_cloud",
-    [
-      "view-config-schema",
-      "view-config",
-      "install",
-      "enable",
-      "disable",
-      "uninstall",
-      "reload",
-      "update-config",
-    ],
+    ["uninstall-exact-version"],
     tenantAdminOrOwner,
-  );
-  assertActions(
-    capability,
-    "desktop_cloud",
-    [
-      "view-channel-catalog",
-      "view-channel-schema",
-      "list-channel-configs",
-      "test-channel-config",
-    ],
-    tenantAndProjectMember,
-  );
-  assertActions(
-    capability,
-    "desktop_cloud",
-    ["create-channel-config", "update-channel-config", "delete-channel-config"],
-    tenantAndProjectAdminOrOwner,
   );
   assertActions(capability, "desktop_local", ["view", "list"], [["tenant_member"]]);
   assertActions(
     capability,
     "desktop_local",
-    ["enable", "disable"],
+    ["uninstall-exact-version"],
     tenantAdminOrOwner,
   );
 
-  const pluginNameContracts = [
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/enable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/disable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config-schema",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
-    "PUT /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
-  ];
-  for (const surface of ["web", "desktop_cloud"]) {
-    const contracts = contractKeys(capability, surface);
-    for (const contract of pluginNameContracts) {
-      assert.ok(contracts.includes(contract), `${surface} missing ${contract}`);
-    }
-    assert.equal(
-      contracts.some((contract) => contract.includes("{plugin_id}")),
-      false,
-      `${surface} must use the production plugin_name parameter`,
-    );
+  assert.deepEqual(contractKeys(capability, "web"), [
+    "GET /api/v1/plugin-marketplace/packages",
+    "GET /api/v1/plugin-marketplace/packages/{plugin_id}",
+    "POST /api/v1/plugin-marketplace/packages/{plugin_id}/uninstall",
+  ]);
+  for (const surface of ["desktop_cloud", "desktop_local"]) {
+    assert.deepEqual(contractKeys(capability, surface), [
+      "GET /api/v1/plugin-marketplace/packages",
+      "POST /api/v1/plugin-marketplace/packages/{plugin_id}/uninstall",
+    ]);
   }
-  assert.deepEqual(
-    contractKeys(capability, "desktop_local").filter((contract) =>
-      contract.includes("/{plugin_id}/"),
+  for (const retiredAction of [
+    "install",
+    "enable",
+    "disable",
+    "reload",
+    "view-config",
+    "update-config",
+  ]) {
+    assert.equal(capability.actions.includes(retiredAction), false, retiredAction);
+  }
+  assert.equal(
+    capability.api_contracts.some((contract) =>
+      contract.path.includes("/channels/tenants/{tenant_id}/plugins"),
     ),
-    [
-      "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_id}/enable",
-      "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_id}/disable",
-    ],
+    false,
   );
 });

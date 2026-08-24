@@ -26,10 +26,6 @@ from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
-from .http_route_capabilities import (
-    install_http_route_capabilities,
-    load_desired_http_route_capabilities,
-)
 from .llm import initialize_llm_providers, sync_health_checker_providers
 from .redis import initialize_redis_client
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
@@ -48,8 +44,6 @@ __all__ = [
     "initialize_redis_client",
     "initialize_telemetry",
     "initialize_websocket_manager",
-    "install_http_route_capabilities",
-    "load_desired_http_route_capabilities",
     "mount_generation_http_dispatcher_v2",
     "reload_channel_manager_connections",
     "set_message_router",

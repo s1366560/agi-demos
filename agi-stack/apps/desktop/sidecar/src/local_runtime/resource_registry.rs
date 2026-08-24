@@ -19,7 +19,6 @@ pub(super) use schema::initialize_resource_registry;
 pub(super) enum ManagedResourceKind {
     Provider,
     Skill,
-    Plugin,
     Agent,
     SubAgent,
     PromptTemplate,
@@ -30,7 +29,6 @@ impl ManagedResourceKind {
         match self {
             Self::Provider => "provider",
             Self::Skill => "skill",
-            Self::Plugin => "plugin",
             Self::Agent => "agent",
             Self::SubAgent => "subagent",
             Self::PromptTemplate => "prompt_template",

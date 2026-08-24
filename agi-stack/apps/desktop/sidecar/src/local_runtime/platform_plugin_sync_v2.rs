@@ -16,11 +16,12 @@ use url::Url;
 use crate::{
     plugin_snapshots_v2,
     trusted_session::{
-        TrustedSessionBroker, TrustedSessionCredentialKind, TrustedSessionRuntimeMode,
+        TrustedSessionBroker, TrustedSessionCredentialKind, TrustedSessionRecord,
+        TrustedSessionRuntimeMode,
     },
 };
 
-use super::{platform_plugin_sync, LocalRuntimeState};
+use super::LocalRuntimeState;
 
 const DATA_PLANE_ID: &str = "desktop-sidecar-v2";
 const SUCCESS_INTERVAL: Duration = Duration::from_secs(30);
@@ -29,9 +30,9 @@ const MAX_ERROR_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DISTRIBUTION_BYTES: usize = 4 * 1024 * 1024;
 
-struct CloudAuthorityV2 {
-    base_url: Url,
-    credential: String,
+pub(super) struct CloudAuthorityV2 {
+    pub(super) base_url: Url,
+    pub(super) credential: String,
     fingerprint: String,
 }
 
@@ -120,6 +121,7 @@ async fn reconcile_loop(
         }
     }
     reconciler.close().await;
+    state.platform_plugin_authority_v2.clear();
 }
 
 fn desktop_reconciler() -> PluginSnapshotReconcilerV2 {
@@ -139,6 +141,7 @@ async fn reconcile_iteration(
     let authority = match load_cloud_authority(trusted_sessions) {
         Ok(authority) => authority,
         Err(error) => {
+            state.platform_plugin_authority_v2.clear();
             if active_authority.take().is_some() {
                 replace_reconciler(reconciler).await;
             }
@@ -149,6 +152,7 @@ async fn reconcile_iteration(
         .as_ref()
         .map(|authority| authority.fingerprint.as_str());
     if active_authority.as_deref() != next_fingerprint {
+        state.platform_plugin_authority_v2.clear();
         replace_reconciler(reconciler).await;
         active_authority.take();
         if let Some(authority) = authority.as_ref() {
@@ -167,7 +171,7 @@ async fn replace_reconciler(reconciler: &mut PluginSnapshotReconcilerV2) {
     previous.close().await;
 }
 
-fn load_cloud_authority(
+pub(super) fn load_cloud_authority(
     trusted_sessions: &TrustedSessionBroker,
 ) -> Result<Option<CloudAuthorityV2>, String> {
     let Some(record) = trusted_sessions.load().map_err(|error| error.to_string())? else {
@@ -182,7 +186,7 @@ fn load_cloud_authority(
     ) {
         return Ok(None);
     }
-    let base_url = platform_plugin_sync::validate_cloud_base_url(&record)?;
+    let base_url = validate_cloud_base_url(&record)?;
     let fingerprint = authority_fingerprint(&base_url, &record.credential)?;
     Ok(Some(CloudAuthorityV2 {
         base_url,
@@ -236,6 +240,7 @@ async fn restore_last_good(
             .error_code
             .unwrap_or_else(|| "last_good_restore_failed".into()));
     }
+    state.platform_plugin_authority_v2.publish(&distribution);
     Ok(())
 }
 
@@ -260,6 +265,9 @@ async fn reconcile_once(
             .map_err(|error| error.to_string())?;
     }
     let receipt = reconciler.apply(&distribution).await;
+    if receipt.status == agistack_plugin_host::ApplyStatusV2::Ack {
+        state.platform_plugin_authority_v2.publish(&distribution);
+    }
     {
         let mut connection = state.session_store.connection()?;
         plugin_snapshots_v2::record_receipt(
@@ -285,8 +293,7 @@ async fn fetch_distribution(
     base_url: &Url,
     credential: &str,
 ) -> Result<Option<ControlPlaneDistributionV2>, String> {
-    let url =
-        platform_plugin_sync::control_plane_url(base_url, "platform-plugins/v2/distribution")?;
+    let url = control_plane_url(base_url, "platform-plugins/v2/distribution");
     let response = client
         .get(url)
         .bearer_auth(credential)
@@ -343,8 +350,7 @@ async fn post_receipt(
     distribution: &ControlPlaneDistributionV2,
     receipt: &SnapshotApplyReceiptV2,
 ) -> Result<(), String> {
-    let url =
-        platform_plugin_sync::control_plane_url(base_url, "platform-plugins/v2/data-plane-state")?;
+    let url = control_plane_url(base_url, "platform-plugins/v2/data-plane-state");
     let body = DataPlaneReceiptRequestV2 {
         schema_version: 2,
         data_plane_id: DATA_PLANE_ID,
@@ -374,6 +380,33 @@ struct DataPlaneReceiptRequestV2<'a> {
     data_plane_id: &'a str,
     nonce: &'a str,
     receipt: &'a SnapshotApplyReceiptV2,
+}
+
+fn validate_cloud_base_url(record: &TrustedSessionRecord) -> Result<Url, String> {
+    let url = Url::parse(&record.api_base_url)
+        .map_err(|_| "trusted cloud API base URL is invalid".to_string())?;
+    let loopback = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    if (url.scheme() != "https" && !loopback)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("trusted cloud API base URL is unsafe".to_string());
+    }
+    Ok(url)
+}
+
+pub(super) fn control_plane_url(base: &Url, suffix: &str) -> Url {
+    let base_path = base.path().trim_end_matches('/');
+    let prefix = if base_path.ends_with("/api/v1") {
+        base_path.to_string()
+    } else {
+        format!("{base_path}/api/v1")
+    };
+    let mut url = base.clone();
+    url.set_path(&format!("{prefix}/{suffix}"));
+    url
 }
 
 #[cfg(test)]
@@ -431,6 +464,41 @@ mod tests {
             },
         });
         parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    }
+
+    fn trusted_record(api_base_url: &str) -> TrustedSessionRecord {
+        TrustedSessionRecord {
+            version: 1,
+            api_base_url: api_base_url.to_string(),
+            runtime_mode: TrustedSessionRuntimeMode::Cloud,
+            credential_kind: TrustedSessionCredentialKind::CloudBearer,
+            credential: "test-credential".to_string(),
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn cloud_authority_url_accepts_https_and_loopback_only() {
+        assert!(validate_cloud_base_url(&trusted_record("https://example.com/control")).is_ok());
+        assert!(validate_cloud_base_url(&trusted_record("http://127.0.0.1:8000")).is_ok());
+        assert!(validate_cloud_base_url(&trusted_record("http://example.com")).is_err());
+        assert!(validate_cloud_base_url(&trusted_record("https://user@example.com")).is_err());
+        assert!(validate_cloud_base_url(&trusted_record("https://example.com?token=x")).is_err());
+    }
+
+    #[test]
+    fn control_plane_url_preserves_one_api_v1_prefix() {
+        let root = Url::parse("https://example.com/control").expect("root URL");
+        let prefixed = Url::parse("https://example.com/control/api/v1").expect("prefixed URL");
+
+        assert_eq!(
+            control_plane_url(&root, "platform-plugins/v2/distribution").as_str(),
+            "https://example.com/control/api/v1/platform-plugins/v2/distribution"
+        );
+        assert_eq!(
+            control_plane_url(&prefixed, "platform-plugins/v2/data-plane-state").as_str(),
+            "https://example.com/control/api/v1/platform-plugins/v2/data-plane-state"
+        );
     }
 
     #[test]

@@ -2,11 +2,7 @@ import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
 import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
 import { MCPServerDialog } from './MCPServerDialog';
-import {
-  PluginConfigDialog,
-  PluginInstallDialog,
-  PluginRuntimeActivityDialog,
-} from './PluginManagementDialogs';
+import { PluginUninstallDialog } from './PluginManagementDialogs';
 import { SkillManagementDialogs } from './SkillManagementDialogs';
 import { SubAgentEditorDialog } from './SubAgentEditorDialog';
 import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
@@ -70,31 +66,16 @@ export function SettingsManagementDialogs({
         management={skills}
         packages={skillPackages}
       />
-      {plugins.dialog?.kind === 'install' ? (
-        <PluginInstallDialog
-          key={plugins.dialog.key}
-          busy={plugins.dialogBusy}
-          error={plugins.dialogError}
-          onClose={plugins.closeDialog}
-          onInstall={(requirement) => void plugins.install(requirement)}
-        />
-      ) : null}
-      {plugins.dialog?.kind === 'config' ? (
-        <PluginConfigDialog
+      {plugins.dialog?.kind === 'uninstall' ? (
+        <PluginUninstallDialog
           key={plugins.dialog.key}
           plugin={plugins.dialog.plugin}
-          schema={plugins.dialog.schema}
-          record={plugins.dialog.record}
-          loading={plugins.dialog.loading}
           busy={plugins.dialogBusy}
           error={plugins.dialogError}
-          initialConfirmUninstall={plugins.dialog.confirmUninstall}
           onClose={plugins.closeDialog}
-          onSave={(input) => void plugins.saveConfig(input)}
           onUninstall={() => void plugins.uninstall()}
         />
       ) : null}
-      <PluginRuntimeActivityDialog management={plugins} />
       <ChannelConnectionsDialog management={channels} />
       {mcpServers.dialog ? (
         <MCPServerDialog

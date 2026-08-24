@@ -16,7 +16,6 @@ from src.application.services.plugin_protocol_v1_to_v2_migration_service import 
     PluginProtocolV1ToV2MigrationService,
     plugin_v1_to_v2_decision_output_digest,
 )
-from src.domain.model.plugins import PluginScope
 from src.domain.model.plugins.generated_v2 import (
     BundleArtifactV2,
     BundleManifestV2,
@@ -41,9 +40,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository import (
-    PlatformPluginRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_v1_migration_repository import (
     PlatformPluginV1MigrationRepository,
@@ -182,11 +178,48 @@ def _service(db: AsyncSession) -> PluginProtocolV1ToV2MigrationService:
     )
 
 
+async def _seed_legacy_desired_state(
+    db: AsyncSession,
+    *,
+    plugin_id: str,
+    enabled: bool,
+    config: dict[str, object],
+    scope_type: str = "global",
+    scope_id: str = "global",
+) -> PlatformPluginDesiredStateModel:
+    """Populate frozen V1 rows without retaining the retired runtime repository."""
+    result = await db.execute(
+        select(PlatformPluginDesiredStateModel).where(
+            PlatformPluginDesiredStateModel.scope_type == scope_type,
+            PlatformPluginDesiredStateModel.scope_id == scope_id,
+            PlatformPluginDesiredStateModel.plugin_id == plugin_id,
+        )
+    )
+    model = result.scalar_one_or_none()
+    if model is None:
+        model = PlatformPluginDesiredStateModel(
+            id=PlatformPluginDesiredStateModel.generate_id(),
+            scope_type=scope_type,
+            scope_id=scope_id,
+            plugin_id=plugin_id,
+            enabled=enabled,
+            config=dict(config),
+            revision=1,
+        )
+        db.add(model)
+    else:
+        model.enabled = enabled
+        model.config = dict(config)
+        model.revision += 1
+    await db.flush()
+    return model
+
+
 async def test_explicit_mapping_is_atomic_audited_idempotent_and_secret_safe(
     db_session: AsyncSession,
 ) -> None:
-    legacy_repository = PlatformPluginRepository(db_session)
-    legacy = await legacy_repository.set_desired_state(
+    legacy = await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=True,
         config={"api_token": "must-not-appear-in-export", "mode": "strict"},
@@ -240,8 +273,8 @@ async def test_explicit_mapping_is_atomic_audited_idempotent_and_secret_safe(
 async def test_unmapped_or_drifted_source_fails_before_target_writes(
     db_session: AsyncSession,
 ) -> None:
-    legacy_repository = PlatformPluginRepository(db_session)
-    await legacy_repository.set_desired_state(
+    await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=True,
         config={"mode": "strict"},
@@ -254,7 +287,8 @@ async def test_unmapped_or_drifted_source_fails_before_target_writes(
     assert unmapped.value.code == "migration_decision_missing"
 
     mapping = _decide(template, action="retain_baseline", target_bundle=None)
-    await legacy_repository.set_desired_state(
+    await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=True,
         config={"mode": "changed"},
@@ -277,7 +311,8 @@ async def test_unmapped_or_drifted_source_fails_before_target_writes(
 async def test_mapping_scope_fields_and_migration_id_evidence_are_exact(
     db_session: AsyncSession,
 ) -> None:
-    await PlatformPluginRepository(db_session).set_desired_state(
+    await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=True,
         config={},
@@ -321,7 +356,8 @@ async def test_mapping_scope_fields_and_migration_id_evidence_are_exact(
 async def test_target_head_change_and_untrusted_bundle_fail_closed(
     db_session: AsyncSession,
 ) -> None:
-    await PlatformPluginRepository(db_session).set_desired_state(
+    await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=True,
         config={},
@@ -355,7 +391,8 @@ async def test_target_head_change_and_untrusted_bundle_fail_closed(
 async def test_disabled_mapping_removes_only_the_exact_reviewed_bundle(
     db_session: AsyncSession,
 ) -> None:
-    await PlatformPluginRepository(db_session).set_desired_state(
+    await _seed_legacy_desired_state(
+        db_session,
         plugin_id="legacy-tools",
         enabled=False,
         config={},
@@ -412,17 +449,17 @@ async def test_scope_projection_is_structural_for_tenant_project_and_session(
     )
     db_session.add(conversation)
     await db_session.flush()
-    legacy = PlatformPluginRepository(db_session)
-    for scope, scope_id in (
-        (PluginScope.TENANT, tenant_id),
-        (PluginScope.PROJECT, project_id),
-        (PluginScope.SESSION, conversation.id),
+    for scope_type, scope_id in (
+        ("tenant", tenant_id),
+        ("project", project_id),
+        ("session", conversation.id),
     ):
-        await legacy.set_desired_state(
-            plugin_id=f"legacy-{scope.value}",
+        await _seed_legacy_desired_state(
+            db_session,
+            plugin_id=f"legacy-{scope_type}",
             enabled=True,
             config={},
-            scope=scope,
+            scope_type=scope_type,
             scope_id=scope_id,
         )
     service = _service(db_session)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol, cast, runtime_checkable
@@ -12,6 +12,12 @@ from .agent_events import (
     AGENT_BEFORE_REQUEST_EVENT_V2,
     AGENT_SESSION_START_EVENT_V2,
     TOOLS_AFTER_EXECUTE_EVENT_V2,
+)
+from .agent_lifecycle_runtime import (
+    AGENT_AFTER_TURN_COMPLETE_EVENT_V2,
+    AGENT_BEFORE_PROMPT_BUILD_EVENT_V2,
+    AGENT_CONTEXT_OVERFLOW_EVENT_V2,
+    AGENT_SKILL_TOOL_OBSERVED_EVENT_V2,
 )
 from .runtime import OperationContextV2, RuntimeV2Error
 
@@ -45,6 +51,9 @@ _V2_EVENT_BY_PROCESSOR_HOOK = MappingProxyType(
         "on_session_start": AGENT_SESSION_START_EVENT_V2,
         "before_response": AGENT_BEFORE_REQUEST_EVENT_V2,
         "after_tool_execution": TOOLS_AFTER_EXECUTE_EVENT_V2,
+        "before_prompt_build": AGENT_BEFORE_PROMPT_BUILD_EVENT_V2,
+        "on_context_overflow": AGENT_CONTEXT_OVERFLOW_EVENT_V2,
+        "after_turn_complete": AGENT_AFTER_TURN_COMPLETE_EVENT_V2,
     }
 )
 _WORKSPACE_SESSION_ROLES = frozenset({"leader", "worker", "contract"})
@@ -79,9 +88,30 @@ class PinnedAgentRuntimeDispatcherV2:
             event=event,
             payload=event_payload,
         )
-        return AgentRuntimeDispatchResultV2(
-            payload=_merge_instruction_contributions(effective_payload, raw_results),
-        )
+        if event == TOOLS_AFTER_EXECUTE_EVENT_V2:
+            await _dispatch_migrated_event_v2(
+                operation,
+                event=AGENT_SKILL_TOOL_OBSERVED_EVENT_V2,
+                payload=_build_event_payload_v2(
+                    operation,
+                    event=AGENT_SKILL_TOOL_OBSERVED_EVENT_V2,
+                    payload=effective_payload,
+                ),
+            )
+        if event in {
+            AGENT_SESSION_START_EVENT_V2,
+            AGENT_BEFORE_REQUEST_EVENT_V2,
+            TOOLS_AFTER_EXECUTE_EVENT_V2,
+        }:
+            resolved_payload = _merge_instruction_contributions(effective_payload, raw_results)
+        elif isinstance(raw_results, Mapping):
+            resolved_payload = dict(raw_results)
+        else:
+            raise RuntimeV2Error(
+                "invalid_agent_event_result",
+                f"Agent lifecycle event {event} did not return an object payload",
+            )
+        return AgentRuntimeDispatchResultV2(payload=resolved_payload)
 
 
 async def _dispatch_migrated_event_v2(
@@ -90,16 +120,21 @@ async def _dispatch_migrated_event_v2(
     event: str,
     payload: Mapping[str, object],
 ) -> object:
-    if event == AGENT_SESSION_START_EVENT_V2:
-        return await operation.dispatch("agent.session.start", payload)
-    if event == AGENT_BEFORE_REQUEST_EVENT_V2:
-        return await operation.dispatch("agent.before_request", payload)
-    if event == TOOLS_AFTER_EXECUTE_EVENT_V2:
-        return await operation.dispatch("tools.after_execute", payload)
-    raise RuntimeV2Error(
-        "undeclared_agent_event",
-        f"Agent processor event {event} is not declared by the V2 dispatcher",
-    )
+    dispatch_event = {
+        AGENT_SESSION_START_EVENT_V2: "agent.session.start",
+        AGENT_BEFORE_REQUEST_EVENT_V2: "agent.before_request",
+        TOOLS_AFTER_EXECUTE_EVENT_V2: "tools.after_execute",
+        AGENT_BEFORE_PROMPT_BUILD_EVENT_V2: "agent.before_prompt_build",
+        AGENT_CONTEXT_OVERFLOW_EVENT_V2: "agent.context_overflow",
+        AGENT_AFTER_TURN_COMPLETE_EVENT_V2: "agent.after_turn_complete",
+        AGENT_SKILL_TOOL_OBSERVED_EVENT_V2: "agent.skill_tool_observed",
+    }.get(event)
+    if dispatch_event is None:
+        raise RuntimeV2Error(
+            "undeclared_agent_event",
+            f"Agent processor event {event} is not declared by the V2 dispatcher",
+        )
+    return await operation.dispatch(dispatch_event, payload)
 
 
 def _build_event_payload_v2(
@@ -109,11 +144,47 @@ def _build_event_payload_v2(
     payload: Mapping[str, Any],
 ) -> dict[str, object]:
     scope = operation.context.scope
-    required_scope = {
-        "tenant_id": scope.tenant_id,
+    _validate_event_scope_v2(
+        payload,
+        required_scope={
+            "tenant_id": scope.tenant_id,
+            "project_id": scope.project_id,
+            "session_id": scope.session_id,
+        },
+    )
+
+    event_id = f"{operation.operation_id}:{event}:{uuid.uuid4().hex}"
+    event_payload: dict[str, object] = {
+        "conversation_id": scope.session_id,
+        "event_id": event_id,
+        "generation_digest": operation.generation.digest,
+        "operation_id": operation.operation_id,
         "project_id": scope.project_id,
         "session_id": scope.session_id,
+        "tenant_id": scope.tenant_id,
     }
+    if event in {
+        AGENT_BEFORE_PROMPT_BUILD_EVENT_V2,
+        AGENT_CONTEXT_OVERFLOW_EVENT_V2,
+        AGENT_AFTER_TURN_COMPLETE_EVENT_V2,
+    }:
+        event_payload = {**payload, **event_payload}
+    _add_workspace_event_context_v2(event_payload, payload)
+    if event in {TOOLS_AFTER_EXECUTE_EVENT_V2, AGENT_SKILL_TOOL_OBSERVED_EVENT_V2}:
+        _add_tool_event_context_v2(
+            event_payload,
+            payload,
+            event_id=event_id,
+            include_result=event == AGENT_SKILL_TOOL_OBSERVED_EVENT_V2,
+        )
+    return event_payload
+
+
+def _validate_event_scope_v2(
+    payload: Mapping[str, Any],
+    *,
+    required_scope: Mapping[str, str | None],
+) -> None:
     for field, expected in required_scope.items():
         if not isinstance(expected, str) or not expected:
             raise RuntimeV2Error(
@@ -127,16 +198,11 @@ def _build_event_payload_v2(
                 f"Agent event {field} differs from the pinned operation",
             )
 
-    event_id = f"{operation.operation_id}:{event}:{uuid.uuid4().hex}"
-    event_payload: dict[str, object] = {
-        "conversation_id": scope.session_id,
-        "event_id": event_id,
-        "generation_digest": operation.generation.digest,
-        "operation_id": operation.operation_id,
-        "project_id": scope.project_id,
-        "session_id": scope.session_id,
-        "tenant_id": scope.tenant_id,
-    }
+
+def _add_workspace_event_context_v2(
+    event_payload: dict[str, object],
+    payload: Mapping[str, Any],
+) -> None:
     if payload.get("task_authority") == "workspace":
         event_payload["task_authority"] = "workspace"
     workspace_id = payload.get("workspace_id")
@@ -151,19 +217,67 @@ def _build_event_payload_v2(
             )
         event_payload["workspace_session_role"] = workspace_role
 
-    if event == TOOLS_AFTER_EXECUTE_EVENT_V2:
-        tool_name = payload.get("tool_name")
-        if not isinstance(tool_name, str) or not tool_name:
-            raise RuntimeV2Error(
-                "invalid_agent_event_context",
-                "tools.after_execute requires a non-empty tool_name",
-            )
-        event_payload["tool_name"] = tool_name
-        call_id = payload.get("call_id")
-        event_payload["tool_result_event_id"] = (
-            call_id if isinstance(call_id, str) and call_id else event_id
+
+def _add_tool_event_context_v2(
+    event_payload: dict[str, object],
+    payload: Mapping[str, Any],
+    *,
+    event_id: str,
+    include_result: bool,
+) -> None:
+    tool_name = payload.get("tool_name")
+    if not isinstance(tool_name, str) or not tool_name:
+        raise RuntimeV2Error(
+            "invalid_agent_event_context",
+            "tool lifecycle event requires a non-empty tool_name",
         )
-    return event_payload
+    event_payload["tool_name"] = tool_name
+    call_id = payload.get("call_id")
+    event_payload["tool_result_event_id"] = (
+        call_id if isinstance(call_id, str) and call_id else event_id
+    )
+    if not include_result:
+        return
+    if isinstance(call_id, str) and call_id:
+        event_payload["call_id"] = call_id
+    error = payload.get("error")
+    if error:
+        event_payload["error"] = str(error)[:500]
+    metadata = payload.get("result_metadata")
+    if isinstance(metadata, Mapping):
+        event_payload["result_metadata"] = _json_safe_mapping(metadata)
+    result = payload.get("result")
+    if result is not None:
+        event_payload["tool_result_text"] = str(result)[:1200]
+
+
+def _json_safe_mapping(value: Mapping[object, object]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        normalized = _json_safe_value(item)
+        if normalized is not _UNSAFE_VALUE:
+            result[key] = normalized
+    return result
+
+
+_UNSAFE_VALUE = object()
+
+
+def _json_safe_value(value: object) -> object:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Mapping):
+        return _json_safe_mapping(value)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        normalized: list[object] = []
+        for item in value:
+            safe_item = _json_safe_value(item)
+            if safe_item is not _UNSAFE_VALUE:
+                normalized.append(safe_item)
+        return normalized
+    return _UNSAFE_VALUE
 
 
 def _merge_instruction_contributions(

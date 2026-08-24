@@ -8,7 +8,7 @@ import {
 
 export type PluginsRouteAuthority = Pick<
   DesktopApiClient,
-  'listManagedPlugins'
+  'listMarketplacePlugins'
 >;
 
 export function createPluginsRouteClient(
@@ -22,7 +22,7 @@ export function createPluginsRouteClient(
         runtimeConfig,
         scope,
       );
-      const plugins = await authority.listManagedPlugins(options?.signal);
+      const plugins = await authority.listMarketplacePlugins(options?.signal);
       return managementRouteObservation(currentScope, plugins.length);
     },
   };

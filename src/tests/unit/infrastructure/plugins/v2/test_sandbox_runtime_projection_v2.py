@@ -15,7 +15,6 @@ from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.containers.infra_container import InfraContainer
 from src.configuration.containers.sandbox_container import SandboxContainer
 from src.configuration.di_container import DIContainer
-from src.configuration.service_bindings import CONTAINER_SERVICE_BINDINGS
 from src.infrastructure.adapters.primary.web.routers.sandbox import utils as sandbox_utils
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.plugins.v2.boundary import (
@@ -74,14 +73,10 @@ def test_web_sandbox_singleton_state_and_manual_shutdown_are_removed() -> None:
 
 
 def test_static_sandbox_root_facades_and_callback_injection_are_removed() -> None:
-    binding_keys = {binding.key for binding in CONTAINER_SERVICE_BINDINGS}
-
     assert "sandbox_adapter" not in vars(InfraContainer)
     assert "sandbox_event_publisher" not in vars(InfraContainer)
     assert "sandbox_adapter" not in vars(DIContainer)
     assert "sandbox_event_publisher" not in vars(DIContainer)
-    assert "sandbox_adapter" not in binding_keys
-    assert "sandbox_event_publisher" not in binding_keys
     assert "sandbox_adapter_factory" not in signature(SandboxContainer).parameters
     assert "sandbox_event_publisher_factory" not in signature(SandboxContainer).parameters
     assert "sandbox_orchestrator_factory" not in signature(AgentContainer).parameters

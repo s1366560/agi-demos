@@ -16,11 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.infrastructure.plugins.v2.builtin_route_contracts import (  # noqa: E402
-    BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2,
-    build_builtin_route_contract_catalog_v2,
-)
-
 if TYPE_CHECKING:
     from scripts.plugin_contract_catalog_v2 import (
         JSON_SCHEMA_DIALECT_V2,
@@ -705,7 +700,6 @@ def main() -> int:
     schema_hash = hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest()
     manifests = _builtin_manifest(schema)
     catalog = build_catalog_v2(manifests)
-    builtin_route_catalog = build_builtin_route_contract_catalog_v2()
     snapshot = _snapshot_fixture()
     outputs = {
         PYTHON_PATH: _generate_python(definitions, schema_hash),
@@ -715,9 +709,6 @@ def main() -> int:
         PYTHON_CATALOG_PATH: _generate_python_catalog(catalog, schema_hash),
         RUST_CATALOG_PATH: _generate_rust_catalog(catalog, schema_hash),
         TYPESCRIPT_CATALOG_PATH: _generate_typescript_catalog(catalog, schema_hash),
-        BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2: _canonical_document(
-            builtin_route_catalog.to_payload()
-        ),
         SERVICE_GRAPH_PATH: _canonical_document(build_service_graph_v2(manifests)),
         EVENT_GRAPH_PATH: _canonical_document(build_event_graph_v2(manifests)),
         BOOTSTRAP_PROFILE_PATH: _canonical_document(_bootstrap_profile(manifests)),

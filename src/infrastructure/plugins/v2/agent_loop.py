@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .runtime import ContextV2, PluginDefinitionV2, generated_contract_digest_v2
+from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error, generated_contract_digest_v2
 
 AGENT_LOOP_MODULE_V2 = "builtin://memstack/agent/loop"
 AGENT_LOOP_RESOLVER_SERVICE_V2 = "service:agent-loop-resolver"
@@ -23,6 +23,15 @@ class AgentLoopSelectionV2:
 class _BuiltinReActLoopV2:
     async def run(self, _context: object) -> None:
         raise NotImplementedError("builtin ReAct executes through the native processor path")
+
+
+def validate_loop_implementation(implementation: object) -> None:
+    """Fail closed when a selected v2 loop does not implement the driver contract."""
+    if not callable(getattr(implementation, "run", None)):
+        raise RuntimeV2Error(
+            "agent_loop_implementation_invalid",
+            f"agent loop implementation {type(implementation).__name__} has no callable run",
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -76,4 +85,5 @@ __all__ = [
     "AgentLoopSelectionV2",
     "BuiltinAgentLoopResolverV2",
     "builtin_agent_loop_definition_v2",
+    "validate_loop_implementation",
 ]

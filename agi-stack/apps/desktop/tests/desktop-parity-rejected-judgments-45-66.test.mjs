@@ -48,17 +48,8 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
   );
   const expectedWebActions = [
     "view",
-    "list",
-    "install",
-    "enable",
-    "disable",
-    "uninstall",
-    "reload",
     "view-channel-catalog",
     "view-channel-schema",
-    "view-config-schema",
-    "view-config",
-    "update-config",
     "list-channel-configs",
     "create-channel-config",
     "update-channel-config",
@@ -78,17 +69,8 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
     },
   ]);
   assert.deepEqual(contractKeys(capability, "web"), [
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins",
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/install",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/enable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/disable",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
-    "POST /api/v1/channels/tenants/{tenant_id}/plugins/reload",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config-schema",
-    "GET /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
-    "PUT /api/v1/channels/tenants/{tenant_id}/plugins/{plugin_name}/config",
     "GET /api/v1/channels/projects/{project_id}/configs",
     "POST /api/v1/channels/projects/{project_id}/configs",
     "PUT /api/v1/channels/configs/{config_id}",
@@ -110,26 +92,11 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
 
   for (const action of [
     "view",
-    "list",
     "view-channel-catalog",
     "view-channel-schema",
-    "view-config-schema",
-    "view-config",
+    "list-channel-configs",
+    "test-channel-config",
   ]) {
-    assertActionRole(capability, "web", action, "tenant_member");
-  }
-  for (const action of [
-    "install",
-    "enable",
-    "disable",
-    "uninstall",
-    "reload",
-    "update-config",
-  ]) {
-    assertActionRole(capability, "web", action, "tenant_admin");
-    assertActionRole(capability, "web", action, "tenant_owner");
-  }
-  for (const action of ["list-channel-configs", "test-channel-config"]) {
     assertActionRole(capability, "web", action, "project_member");
   }
   for (const action of [
@@ -141,8 +108,15 @@ test("Project Channels follows ProjectChannelsRedirect into the PluginHub produc
     assertActionRole(capability, "web", action, "project_owner");
   }
 
+  assert.equal(
+    contractKeys(capability, "web").some((contract) =>
+      /\/plugins\/(?:install|reload|\{plugin_name\})/u.test(contract),
+    ),
+    false,
+  );
   assert.match(capability.judgment_rationale, /ProjectChannelsRedirect/u);
   assert.match(capability.judgment_rationale, /PluginHub/u);
+  assert.match(capability.judgment_rationale, /generation-backed/u);
 });
 
 test("Project Channels Cloud contract matches the native connection dialog", () => {
@@ -161,6 +135,13 @@ test("Project Channels Cloud contract matches the native connection dialog", () 
     "test-channel-config",
   ];
 
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
+  assert.equal(capability.local_status, "not_applicable");
+  assert.equal(
+    capability.local_reason_code,
+    "local_channel_runtime_not_applicable",
+  );
   assert.deepEqual(capability.cloud_actions, expectedCloudActions);
   assert.deepEqual(contractKeys(capability, "desktop_cloud"), [
     "GET /api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog",

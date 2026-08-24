@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared plugin UI slot contract, postMessage protocol, and snapshot extraction for MemStack web and desktop renderers (I3).",
+  "description": "Shared V2 plugin UI slot contract and postMessage protocol for MemStack renderers.",
   "exports": {
     ".": "./src/index.ts"
   }

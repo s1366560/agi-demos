@@ -157,7 +157,7 @@ def _upsert_entries_v2(
         (
             index
             for index, entry in enumerate(merged)
-            if entry.entry_id == "legacy-http-route-bridge"
+            if entry.entry_id == "builtin-agent-loop"
         ),
         len(merged),
     )

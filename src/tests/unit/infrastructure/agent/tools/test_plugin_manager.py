@@ -162,7 +162,7 @@ async def test_plugin_manager_list_fails_when_generation_is_not_pinned(
 
 
 @pytest.mark.parametrize("action", ["install", "enable", "disable", "reload", "uninstall"])
-async def test_plugin_manager_rejects_frozen_v1_mutations(
+async def test_plugin_manager_rejects_retired_v1_mutations(
     monkeypatch: pytest.MonkeyPatch,
     action: str,
 ) -> None:
@@ -179,7 +179,8 @@ async def test_plugin_manager_rejects_frozen_v1_mutations(
     )
 
     assert result.is_error is True
-    assert result.metadata["error_code"] == "plugin_protocol_v1_mutation_frozen"
+    assert result.title == "Plugin Protocol V1 Retired"
+    assert result.metadata["error_code"] == "plugin_protocol_v1_retired"
     assert result.metadata["migration_target"] == "/api/v1/plugin-marketplace"
 
 
@@ -188,16 +189,6 @@ async def test_plugin_manager_rejects_unsupported_action() -> None:
 
     assert result.is_error is True
     assert result.metadata["error"] == "Unsupported action: inspect"
-
-
-def test_configure_plugin_manager_is_compatibility_noop() -> None:
-    plugin_manager.configure_plugin_manager(
-        tenant_id="tenant-1",
-        project_id="project-1",
-        mutation_ledger=object(),
-        mutation_loop_threshold=1,
-        mutation_loop_window_seconds=1,
-    )
 
 
 def test_plugin_manager_source_has_no_v1_runtime_or_mutation_lifecycle() -> None:

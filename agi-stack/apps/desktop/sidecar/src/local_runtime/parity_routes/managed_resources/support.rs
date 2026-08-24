@@ -351,7 +351,7 @@ pub(super) fn normalize_resource_value(
                 .entry("usage_count".to_string())
                 .or_insert_with(|| json!(0));
         }
-        ManagedResourceKind::Provider | ManagedResourceKind::Plugin => {}
+        ManagedResourceKind::Provider => {}
     }
     Ok(())
 }

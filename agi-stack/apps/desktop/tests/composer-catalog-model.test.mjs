@@ -23,7 +23,7 @@ test('unbound composer catalog skips workspace agents and loads every project ca
       calls.push('skills');
       return [{ id: 'skill-1' }];
     },
-    listManagedPlugins: async () => {
+    listMarketplacePlugins: async () => {
       calls.push('plugins');
       return [{ id: 'plugin-1' }];
     },
@@ -50,7 +50,7 @@ test('composer catalog keeps workspace scope behavior for bound clients', async 
     listWorkspaceAgents: async () => [{ id: 'binding-1' }],
     listManagedAgents: async () => [],
     listManagedSkills: async () => [],
-    listManagedPlugins: async () => [],
+    listMarketplacePlugins: async () => [],
   });
 
   assert.deepEqual(catalog.workspaceAgents, [{ id: 'binding-1' }]);

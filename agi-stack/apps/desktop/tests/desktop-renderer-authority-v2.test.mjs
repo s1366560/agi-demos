@@ -30,6 +30,7 @@ const {
   DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
+  defineDesktopUiSlotArtifactV2,
   resolveDesktopRendererArtifactsV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererArtifactCatalogV2.js");
 const {
@@ -80,6 +81,24 @@ function readyState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("desktop V2 UI-slot artifacts reject runtime signed module references", () => {
+  assert.throws(
+    () =>
+      defineDesktopUiSlotArtifactV2("desktop.ui-slots.signed", [
+        {
+          pluginId: "third-party-ui",
+          slot: "conversation_renderer",
+          id: "signed-conversation",
+          contract: "ui:signed-conversation",
+          moduleRef: `signed:${"a".repeat(64)}`,
+          permission: "ui.render",
+          sandbox: true,
+        },
+      ]),
+    (error) => error.code === "desktop_renderer_ui_slot_module_ref_invalid",
+  );
+});
 
 test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts", () => {
   const artifacts = resolveDesktopRendererArtifactsV2([

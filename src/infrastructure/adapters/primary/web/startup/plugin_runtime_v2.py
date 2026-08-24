@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -41,7 +41,6 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
-from src.infrastructure.plugins.v2.legacy_http_route_bridge import project_legacy_http_routes_v2
 from src.infrastructure.plugins.v2.protocol import (
     control_envelope_v2,
     parse_control_envelope_v2,
@@ -85,10 +84,9 @@ DEFAULT_MANIFEST_V2_PATHS = (
 DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
-async def initialize_plugin_runtime_v2(  # noqa: PLR0913
+async def initialize_plugin_runtime_v2(
     app: FastAPI,
     *,
-    desired_http_route_rows: Sequence[Any] = (),
     session_factory: Callable[[], Any] | None = None,
     agent_pool_runtime_enabled: bool = False,
     agent_pool_runtime_config: Mapping[str, object] | None = None,
@@ -159,7 +157,6 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
             host,
             durable_distribution=durable_distribution,
             latest_distribution=latest_distribution,
-            desired_http_route_rows=desired_http_route_rows,
             agent_pool_runtime_enabled=agent_pool_runtime_enabled,
             agent_pool_runtime_config=resolved_agent_pool_config,
             activate_workspace_core_shadow=workspace_core_runtime_factory is not None,
@@ -225,7 +222,6 @@ async def _publish_startup_generation_v2(
     *,
     durable_distribution: Mapping[str, object] | None,
     latest_distribution: Mapping[str, object] | None,
-    desired_http_route_rows: Sequence[Any],
     agent_pool_runtime_enabled: bool,
     agent_pool_runtime_config: dict[str, object],
     activate_workspace_core_shadow: bool,
@@ -239,7 +235,6 @@ async def _publish_startup_generation_v2(
             version=1,
             profile_projector=lambda document: _project_startup_profile_v2(
                 document,
-                desired_http_route_rows=desired_http_route_rows,
                 agent_pool_runtime_enabled=agent_pool_runtime_enabled,
                 agent_pool_runtime_config=agent_pool_runtime_config,
                 activate_workspace_core_shadow=activate_workspace_core_shadow,
@@ -331,7 +326,6 @@ async def _publish_startup_generation_v2(
 def _project_startup_profile_v2(
     document: ProfileDocumentV2,
     *,
-    desired_http_route_rows: Sequence[Any],
     agent_pool_runtime_enabled: bool,
     agent_pool_runtime_config: dict[str, object],
     activate_workspace_core_shadow: bool,
@@ -344,7 +338,7 @@ def _project_startup_profile_v2(
     projected = include_production_target_hosts_v2(projected)
     if activate_workspace_core_shadow:
         projected = activate_workspace_core_shadow_v2(projected)
-    return project_legacy_http_routes_v2(projected, desired_http_route_rows)
+    return projected
 
 
 async def _last_good_distribution_v2(

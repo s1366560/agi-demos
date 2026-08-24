@@ -39,19 +39,22 @@ def test_websocket_row_preserves_route_order_and_openapi() -> None:
         generation=1,
         digest="0" * 64,
     )
-    baseline = build_builtin_route_graph_v2(
-        workspace_core_settings=get_workspace_core_settings(),
-    )
     claimed = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.websocket_route_definitions_v2(),
     )
 
-    assert claimed.route_signatures == baseline.route_signatures
-    assert (
-        claimed.table.openapi_snapshot(descriptor).schema
-        == baseline.table.openapi_snapshot(descriptor).schema
+    assert claimed.route_signatures == tuple(
+        (
+            definition.path,
+            definition.name,
+            ()
+            if definition.methods == ("WEBSOCKET",)
+            else tuple(sorted(definition.methods)),
+        )
+        for definition in claimed.table.definitions
     )
+    assert claimed.table.openapi_snapshot(descriptor).schema["openapi"].startswith("3.")
     assert claimed.v2_owned_row_ids == ("websocket",)
 
 

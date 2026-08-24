@@ -1,17 +1,12 @@
 /**
- * Frontend plugin slot contract (P3/I3).
+ * Frontend plugin slot contract.
  *
- * The source of truth moved to the shared `@agistack/plugin-slots` package
- * (`agi-stack/packages/plugin-slots`) so the desktop renderer consumes the
- * exact same contract; this module stays as the web-side compatibility
- * re-export.
+ * V2 renderer generations project slot definitions into the Web authority.
+ * The shared package keeps Web and Desktop on the same slot and message
+ * protocol without retaining the retired snapshot extraction path.
  */
 
 export type {
-  PlatformPluginCapability,
-  PlatformPluginSnapshotPayload,
-  PlatformPluginSnapshotResponse,
-  PlatformPluginSnapshotRow,
   UiSlotDefinition,
   UiSlotKind,
 } from '@agistack/plugin-slots';

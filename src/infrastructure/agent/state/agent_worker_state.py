@@ -435,7 +435,7 @@ async def get_or_create_tools(
         generation_descriptor=generation_descriptor,
     )
 
-    # 4. Configure skill_installer and plugin_manager tools
+    # 4. Configure the skill_installer tool
     _add_skill_installer_tools(tools, tenant_id, project_id)
 
     # 5. Add SkillSyncTool
@@ -658,9 +658,8 @@ def _add_skill_installer_tools(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure skill_installer and plugin_manager @tool_define tools."""
+    """Configure the skill_installer @tool_define tool."""
     try:
-        from src.infrastructure.agent.tools.plugin_manager import configure_plugin_manager
         from src.infrastructure.agent.tools.skill_installer import configure_skill_installer
 
         project_path = resolve_project_base_path(project_id)
@@ -669,15 +668,9 @@ def _add_skill_installer_tools(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        configure_plugin_manager(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        logger.info(
-            f"Agent Worker: skill_installer + plugin_manager configured for project {project_id}"
-        )
+        logger.info(f"Agent Worker: skill_installer configured for project {project_id}")
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to configure skill_installer/plugin_manager: {e}")
+        logger.warning(f"Agent Worker: Failed to configure skill_installer: {e}")
 
 
 def _add_skill_sync_tool(

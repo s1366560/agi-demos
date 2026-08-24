@@ -80,7 +80,7 @@ const qaApi: ComposerCatalogClient = {
   listWorkspaceAgents: async () => [],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
-  listManagedPlugins: async () => [],
+  listMarketplacePlugins: async () => [],
   uploadSandboxFile: async (file) => {
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     return {

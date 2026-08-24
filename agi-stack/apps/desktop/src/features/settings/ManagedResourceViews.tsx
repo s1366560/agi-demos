@@ -89,7 +89,6 @@ export function ManagedResourceWorkspace({
   onSubAgentLibrary,
   onImportSubAgent,
   onChannels,
-  onPluginActivity,
   onReload,
   onRemove,
 }: {
@@ -120,7 +119,6 @@ export function ManagedResourceWorkspace({
   onSubAgentLibrary: () => void;
   onImportSubAgent: (item: ManagedResource) => void;
   onChannels: () => void;
-  onPluginActivity: () => void;
   onReload: () => void;
   onRemove: (item: ManagedResource) => void;
 }) {
@@ -135,21 +133,12 @@ export function ManagedResourceWorkspace({
             <span>{t(meta.eyebrow)}</span>
             <h1>{t(meta.label)}</h1>
           </div>
-          {(canCreate &&
-            (section === 'skills' || section === 'agents' || section === 'plugins')) ||
+          {(section === 'plugins' && canCreate) ||
+          (canCreate && (section === 'skills' || section === 'agents')) ||
           (section === 'subagents' && canCreate) ? (
             <div className="managed-resource-header-actions">
               {section === 'plugins' ? (
                 <>
-                  <button
-                    type="button"
-                    className="managed-resource-reload"
-                    disabled={busy}
-                    onClick={onPluginActivity}
-                  >
-                    <ClockIcon />
-                    {t('settings.pluginActivity.action')}
-                  </button>
                   {mode === 'cloud' ? (
                     <button
                       type="button"
@@ -168,7 +157,7 @@ export function ManagedResourceWorkspace({
                     onClick={onReload}
                   >
                     <ReloadIcon className={busy ? 'managed-resource-spin' : ''} />
-                    {t('settings.pluginManager.reload')}
+                    {t('common.refresh')}
                   </button>
                 </>
               ) : null}
@@ -204,7 +193,7 @@ export function ManagedResourceWorkspace({
                     {t('settings.subagentEditor.createAction')}
                   </button>
                 </>
-              ) : (
+              ) : section === 'skills' || section === 'agents' ? (
                 <button
                   type="button"
                   className="managed-resource-create"
@@ -213,14 +202,12 @@ export function ManagedResourceWorkspace({
                 >
                   <PlusIcon />
                   {t(
-                    section === 'plugins'
-                      ? 'settings.pluginManager.install'
-                      : section === 'skills'
-                        ? 'settings.skillEditor.createAction'
-                        : 'settings.agentEditor.createAction'
+                    section === 'skills'
+                      ? 'settings.skillEditor.createAction'
+                      : 'settings.agentEditor.createAction'
                   )}
                 </button>
-              )}
+              ) : null}
             </div>
           ) : null}
         </header>
@@ -407,11 +394,7 @@ function ResourceDetail({
   const editable =
     canManage &&
     !resourceIsImmutable(section, item, mode) &&
-    (section === 'skills' ||
-      section === 'agents' ||
-      section === 'subagents' ||
-      (section === 'plugins' &&
-        (item as { schema_supported?: unknown }).schema_supported === true));
+    (section === 'skills' || section === 'agents' || section === 'subagents');
   const removable = section === 'plugins' && canManage && !resourceIsImmutable(section, item, mode);
   const skillCanEvolve = section === 'skills' && !resourceIsImmutable(section, item, mode);
   const filesystemSubAgent =
@@ -420,6 +403,8 @@ function ResourceDetail({
     ? t('settings.immutableResource')
     : !canManage
       ? t('settings.resourceReadOnly')
+      : section === 'plugins'
+        ? null
       : !action
         ? t('settings.resourceActionUnavailable')
         : null;
@@ -459,7 +444,7 @@ function ResourceDetail({
               onClick={onEdit}
             >
               <Pencil2Icon />
-              {t(section === 'plugins' ? 'settings.pluginManager.configure' : 'common.edit')}
+              {t('common.edit')}
             </button>
           ) : null}
           {section === 'skills' ? (

@@ -1,4 +1,4 @@
-"""Generation-scoped proof that legacy HTTP routes are owned by V2 Bundle entries."""
+"""Generation-scoped proof that HTTP routes are owned by V2 Bundle entries."""
 
 from __future__ import annotations
 
@@ -15,8 +15,6 @@ from src.domain.ports.plugins import (
 
 from .http_routes import RouteDefinitionV2
 
-LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2 = "legacy-http-route-bridge"
-LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2 = "builtin://memstack/http/legacy-route-bridge"
 ROUTE_AUTHORITY_CATALOG_SERVICE_V2 = "service:http.route-authority-catalog"
 ROUTE_AUTHORITY_CATALOG_INJECT_V2 = "route_authority"
 ROUTE_TABLE_BUILDER_SERVICE_V2 = "service:http.route-table-builder"
@@ -150,7 +148,6 @@ class BundleRouteAuthorityEvidenceV2:
     generation: int
     snapshot_digest: str
     ready: bool
-    legacy_bridge_enabled: bool
     required_route_count: int
     bound_route_count: int
     bindings: tuple[BundleRouteAuthorityBindingV2, ...]
@@ -163,7 +160,6 @@ class BundleRouteAuthorityEvidenceV2:
             "generation": self.generation,
             "snapshot_digest": self.snapshot_digest,
             "ready": self.ready,
-            "legacy_bridge_enabled": self.legacy_bridge_enabled,
             "required_route_count": self.required_route_count,
             "bound_route_count": self.bound_route_count,
             "bindings": [binding.to_payload() for binding in self.bindings],
@@ -194,7 +190,7 @@ def verify_bundle_route_authority_v2(
     authorities: Sequence[PluginRouteAuthorityV2],
     desired_rows: Sequence[object],
 ) -> BundleRouteAuthorityEvidenceV2:
-    """Prove every active V1 row maps to one explicit, non-bridge V2 route effect."""
+    """Prove every active desired row maps to one explicit V2 route effect."""
     desired = tuple(row for row in desired_plugin_routes_v2(desired_rows) if row.enabled)
     entries = {entry.entry_id: entry for entry in snapshot.entries}
     modules = {
@@ -216,13 +212,6 @@ def verify_bundle_route_authority_v2(
             )
             continue
         authorities_by_key[candidate_authority.key] = candidate_authority
-
-    bridge_enabled = any(
-        entry.entry_id == LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2 and entry.enabled
-        for entry in snapshot.entries
-    )
-    if bridge_enabled:
-        reasons.append("legacy_bridge_enabled")
 
     bindings: list[BundleRouteAuthorityBindingV2] = []
     for row in desired:
@@ -256,7 +245,6 @@ def verify_bundle_route_authority_v2(
         generation=snapshot.generation,
         snapshot_digest=snapshot.digest,
         ready=not stable_reasons and len(bindings) == len(desired),
-        legacy_bridge_enabled=bridge_enabled,
         required_route_count=len(desired),
         bound_route_count=len(bindings),
         bindings=tuple(bindings),
@@ -309,11 +297,6 @@ def _route_owner_reason_v2(
 ) -> str | None:
     if not entry.enabled:
         return f"route_owner_entry_inactive:{authority.owner_entry_id}"
-    if (
-        entry.entry_id == LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2
-        or entry.module_ref == LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2
-    ):
-        return f"route_owner_is_legacy_bridge:{label}"
     if entry.plugin_ref != authority.plugin_id:
         return f"route_owner_plugin_mismatch:{authority.owner_entry_id}"
     return None
@@ -416,8 +399,6 @@ def _fail(message: str) -> NoReturn:
 
 
 __all__ = [
-    "LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2",
-    "LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2",
     "ROUTE_AUTHORITY_CATALOG_INJECT_V2",
     "ROUTE_AUTHORITY_CATALOG_SERVICE_V2",
     "ROUTE_TABLE_BUILDER_INJECT_V2",

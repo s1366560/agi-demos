@@ -1661,16 +1661,13 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: legacy-http-route-bridge
+    - entry_id: builtin-tenant-llm-client-factory
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
-      module_ref: builtin://memstack/http/legacy-route-bridge
+      module_ref: builtin://memstack/llm/tenant-client-factory
       enabled: true
-      config:
-        routes: []
-      inject:
-        route_table: service:http.route-table-builder
-        route_authority: service:http.route-authority-catalog
+      config: {}
+      inject: {}
       isolate: {}
       scope:
         kind: root
@@ -1734,6 +1731,51 @@ profile:
       config:
         strategy: agent-runtime-state
         source_id: agent-owned-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-github-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/github
+      enabled: true
+      config:
+        source_id: builtin-github-tool
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-docker-compose-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/docker-compose
+      enabled: true
+      config:
+        source_id: builtin-docker-compose-tool
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-drone-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/drone
+      enabled: true
+      config:
+        source_id: builtin-drone-tool
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
@@ -1914,6 +1956,69 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-github-skill
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill/github
+      enabled: true
+      config:
+        source_id: builtin-github-skill
+      inject:
+        catalog: service:agent-capability-catalog
+        tool: service:agent-tool.github
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-docker-compose-skill
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill/docker-compose
+      enabled: true
+      config:
+        source_id: builtin-docker-compose-skill
+      inject:
+        catalog: service:agent-capability-catalog
+        tool: service:agent-tool.docker-compose
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-drone-skill
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill/drone
+      enabled: true
+      config:
+        source_id: builtin-drone-skill
+      inject:
+        catalog: service:agent-capability-catalog
+        tool: service:agent-tool.drone
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-darwinian-evolver-skill
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill/darwinian-evolver
+      enabled: true
+      config:
+        source_id: builtin-darwinian-evolver-skill
+      inject:
+        catalog: service:agent-capability-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-session-event-log
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1949,6 +2054,32 @@ profile:
       enabled: true
       config:
         provider: drone
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-skill-evolution-lifecycle
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/skill-evolution-lifecycle
+      enabled: true
+      config: {}
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-memory-lifecycle
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/memory-lifecycle
+      enabled: true
+      config: {}
       inject: {}
       isolate: {}
       scope:

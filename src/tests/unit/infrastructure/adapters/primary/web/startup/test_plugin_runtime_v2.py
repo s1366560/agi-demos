@@ -3,19 +3,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 from typing import cast
 
-import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
-    mount_generation_http_dispatcher_v2,
-)
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     DEFAULT_MANIFEST_V2_PATHS,
     DEFAULT_PROFILE_V2_PATH,
@@ -32,10 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginPublicationPolicyV2,
     PlatformPluginRepositoryV2,
 )
-from src.infrastructure.plugins.v2.boundary import (
-    PluginGenerationMiddlewareV2,
-    current_process_generation_host_v2,
-)
+from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.graph_runtime import (
     GRAPH_RUNTIME_SERVICE_V2,
@@ -43,9 +35,6 @@ from src.infrastructure.plugins.v2.graph_runtime import (
     GraphRuntimeServiceV2,
 )
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
-from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
-    configured_legacy_http_routes_v2,
-)
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
@@ -71,24 +60,21 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "auth",
         "workspace-core-static",
         "tenants",
-        "project-sandbox",
         "project-my-work",
         "projects",
         "agent",
-        "websocket",
-        "acp",
         "shares",
         "memories",
         "graph",
         "graph-stores",
         "retrieval-stores",
-        "schema",
-        "llm-providers",
         "episodes",
-        "recall",
-        "reflection",
         "enhanced-search",
         "enhanced-search-memory",
+        "recall",
+        "reflection",
+        "schema",
+        "llm-providers",
         "data-export",
         "maintenance",
         "tasks",
@@ -97,11 +83,23 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "task-session",
         "cron",
         "ai-tools",
-        "background-tasks",
         "billing",
+        "background-tasks",
         "notifications",
+        "events",
+        "tunnel",
         "support",
         "support-2",
+        "trust-workspace",
+        "smtp-config",
+        "webhooks",
+        "tenant-webhooks",
+        "system",
+        "plugin-marketplace",
+        "platform-plugins",
+        "admin-dlq",
+        "invitations",
+        "invitations-public",
         "skills",
         "tenant-skill-configs",
         "subagents",
@@ -120,24 +118,15 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "instance-templates",
         "audit",
         "trust",
-        "trust-workspace",
-        "smtp-config",
-        "webhooks",
-        "tenant-webhooks",
-        "system",
-        "plugin-marketplace",
-        "platform-plugins",
-        "events",
-        "tunnel",
+        "project-sandbox",
         "engines",
         "security-ws",
+        "websocket",
+        "acp",
         "observability",
-        "admin-dlq",
-        "invitations",
-        "invitations-public",
+        "voice-websocket",
         "create-pool",
         "create-project-pool",
-        "voice-websocket",
         "project-sandbox-preview",
     )
     assert {definition.owner_entry_id for definition in route_graph.table.definitions} >= {
@@ -277,83 +266,8 @@ def test_scope_resolution_fails_before_runtime_startup() -> None:
         plugin_runtime_host_v2_from_scope({"app": app})
 
 
-def _desired_route(*, path: str = "/plugin-startup/{tenant_id}/hello") -> SimpleNamespace:
-    return SimpleNamespace(
-        plugin_id="startup-plugin",
-        method="GET",
-        path=path,
-        permission="plugin.startup.read",
-        authorization_mode="tenant_member",
-        enabled=True,
-    )
-
-
-def _route_inventory(
-    *,
-    path: str = "/plugin-startup/{tenant_id}/hello",
-) -> dict[str, list[SimpleNamespace]]:
-    async def handler(tenant_id: str) -> dict[str, str]:
-        return {"tenant_id": tenant_id, "source": "generation-one"}
-
-    return {
-        "startup-plugin": [
-            SimpleNamespace(
-                plugin_name="startup-plugin",
-                method="GET",
-                path=path,
-                handler=handler,
-                tags=("Startup",),
-            )
-        ]
-    }
-
-
-async def _allow_route() -> None:
-    return None
-
-
 @pytest.mark.unit
-async def test_generation_one_projects_desired_routes_without_outer_mount(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path = "/plugin-startup/{tenant_id}/hello"
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_inventory",
-        _route_inventory,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_authorization",
-        lambda _row: _allow_route,
-    )
-    app = FastAPI()
-    app.add_middleware(
-        PluginGenerationMiddlewareV2,
-        host_provider=plugin_runtime_host_v2_from_scope,
-    )
-    mount_generation_http_dispatcher_v2(app)
-
-    host = await initialize_plugin_runtime_v2(
-        app,
-        desired_http_route_rows=(_desired_route(),),
-    )
-
-    distribution = host.current_distribution
-    assert distribution is not None
-    assert distribution.descriptor.generation == 1
-    assert configured_legacy_http_routes_v2(distribution.snapshot.entries)[0].path == path
-    assert path not in {getattr(route, "path", None) for route in app.router.routes}
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.get("/plugin-startup/tenant-1/hello")
-    assert response.status_code == 200
-    assert response.json() == {"tenant_id": "tenant-1", "source": "generation-one"}
-    await host.close()
-
-
-@pytest.mark.unit
-async def test_restart_uses_durable_last_good_instead_of_unpublished_desired_rows(
+async def test_restart_reuses_durable_last_good_distribution(
     db_session: AsyncSession,
 ) -> None:
     @asynccontextmanager
@@ -376,14 +290,12 @@ async def test_restart_uses_durable_last_good_instead_of_unpublished_desired_row
     restarted_app = FastAPI()
     restarted = await initialize_plugin_runtime_v2(
         restarted_app,
-        desired_http_route_rows=(_desired_route(path="not-an-absolute-path"),),
         session_factory=session_factory,
     )
 
     restarted_distribution = restarted.current_distribution
     assert restarted_distribution is not None
     assert restarted_distribution.to_payload() == first_distribution.to_payload()
-    assert configured_legacy_http_routes_v2(restarted_distribution.snapshot.entries) == ()
     await restarted.close()
 
 
@@ -517,57 +429,3 @@ async def test_restart_nack_is_durable_and_retains_last_good(
         select(func.count()).select_from(PlatformPluginV2ApplyStateEventModel)
     )
     assert event_count == 2
-
-
-@pytest.mark.unit
-async def test_generation_one_fails_closed_when_desired_handler_is_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_inventory",
-        dict,
-    )
-    app = FastAPI()
-
-    with pytest.raises(RuntimeError, match="handler is not owned"):
-        await initialize_plugin_runtime_v2(app, desired_http_route_rows=(_desired_route(),))
-
-    assert not hasattr(app.state, "platform_plugin_runtime_v2")
-
-
-@pytest.mark.unit
-async def test_generation_one_fails_closed_when_desired_path_is_unsafe() -> None:
-    app = FastAPI()
-
-    with pytest.raises(ValueError, match="unsafe legacy HTTP route definition"):
-        await initialize_plugin_runtime_v2(
-            app,
-            desired_http_route_rows=(_desired_route(path="not-an-absolute-path"),),
-        )
-
-    assert not hasattr(app.state, "platform_plugin_runtime_v2")
-
-
-@pytest.mark.unit
-async def test_generation_one_fails_closed_on_builtin_route_conflict(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path = "/api/v1/tenants/{tenant_id}/projects/{project_id}/pool/instances/{agent_mode}"
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_inventory",
-        lambda: _route_inventory(path=path),
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_authorization",
-        lambda _row: _allow_route,
-    )
-    app = FastAPI()
-
-    with pytest.raises(RuntimeV2Error, match="duplicate v2 route") as error:
-        await initialize_plugin_runtime_v2(
-            app,
-            desired_http_route_rows=(_desired_route(path=path),),
-        )
-
-    assert error.value.code == "staging_failed"
-    assert not hasattr(app.state, "platform_plugin_runtime_v2")

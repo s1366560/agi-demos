@@ -238,11 +238,7 @@ def test_legacy_create_and_background_callers_use_v2_operation_authority() -> No
 def test_lifecycle_di_accessors_and_binding_are_retired() -> None:
     from src.configuration.containers.sandbox_container import SandboxContainer
     from src.configuration.di_container import DIContainer
-    from src.configuration.service_bindings import CONTAINER_SERVICE_BINDINGS
 
     assert "project_sandbox_lifecycle_service" not in vars(DIContainer)
     assert "project_sandbox_lifecycle_service" not in vars(SandboxContainer)
     assert "workspace_sync_service" not in vars(SandboxContainer)
-    assert all(
-        binding.key != "project_sandbox_lifecycle_service" for binding in CONTAINER_SERVICE_BINDINGS
-    )

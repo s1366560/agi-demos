@@ -1,10 +1,10 @@
 # pyright: reportUninitializedInstanceVariable=false
 """Hook mixin extracted from ``react_agent.py``.
 
-Hosts runtime-hook dispatch helpers (``_notify_runtime_hook``,
+Hosts protocol-v2 lifecycle dispatch helpers (``_notify_runtime_hook``,
 ``_apply_before_prompt_build_hook``, ``_notify_context_overflow_hook``,
 ``_notify_after_turn_complete_hook``). All of them route through the
-shared plugin registry on ``self.config``.
+pinned generation dispatcher.
 
 ``ReActAgent`` composes this mixin via multiple inheritance — the move
 is pure code relocation with zero behavior change.
@@ -12,13 +12,10 @@ is pure code relocation with zero behavior change.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Protocol, cast
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.skill import Skill
-
-logger = logging.getLogger(__name__)
 
 
 class _HookAgent(Protocol):
@@ -41,51 +38,23 @@ class HookMixin:
         hook_name: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Dispatch one runtime hook via the shared plugin registry."""
+        """Dispatch one lifecycle event through the pinned V2 generation."""
         effective_payload = dict(payload or {})
-        event_dispatcher = getattr(self.config, "plugin_event_dispatcher", None)
-        if event_dispatcher is not None:
-            try:
-                result = await event_dispatcher.dispatch(
-                    hook_name,
-                    payload=effective_payload,
-                    runtime_hook_overrides=getattr(
-                        self.config,
-                        "runtime_hook_overrides",
-                        [],
-                    ),
-                )
-            except Exception:
-                logger.warning(
-                    "[ReActAgent] Typed plugin event %r failed",
-                    hook_name,
-                    exc_info=True,
-                )
-                return effective_payload
-            return dict(result.payload)
-        plugin_registry = getattr(self.config, "plugin_registry", None)
-        if plugin_registry is None:
-            return effective_payload
+        from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
+            AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
+            AgentRuntimeDispatcherProtocolV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        try:
-            result = await plugin_registry.apply_hook(
-                hook_name,
-                payload=effective_payload,
-                runtime_overrides=getattr(self.config, "runtime_hook_overrides", []),
+        dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
+        if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_agent_runtime_dispatcher",
+                "service:agent-runtime-dispatcher has an invalid implementation",
             )
-            for diagnostic in result.diagnostics:
-                log_level = logging.ERROR if diagnostic.level == "error" else logging.WARNING
-                logger.log(
-                    log_level,
-                    "[ReActAgent] Runtime hook %s diagnostic [%s]: %s",
-                    hook_name,
-                    diagnostic.plugin_name,
-                    diagnostic.message,
-                )
-            return dict(result.payload)
-        except Exception:
-            logger.warning("[ReActAgent] Runtime hook %r failed", hook_name, exc_info=True)
-            return effective_payload
+        result = await dispatcher.dispatch(hook_name, payload=effective_payload)
+        return dict(result.payload)
 
     async def _apply_before_prompt_build_hook(
         self: _HookAgent,

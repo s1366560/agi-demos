@@ -2,29 +2,20 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.domain.events.agent_events import AgentStartEvent
-from src.domain.model.plugins import (
-    CapabilityKind,
-    PluginManifest,
-    PluginRuntimeKind,
-    PluginTrust,
-    ProvidedCapability,
-)
 from src.infrastructure.agent.processor.factory import ProcessorFactory, _default_loop_resolver
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
-from src.infrastructure.plugins.agent_loop_runtime import (
-    AgentLoopResolutionError,
-    AgentLoopResolver,
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopSelectionV2,
+    BuiltinAgentLoopResolverV2,
 )
-from src.infrastructure.plugins.context import CapabilityRegistry, PluginContext
-from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
@@ -39,30 +30,22 @@ class _ExternalLoop:
         yield {"type": "external_loop_event"}
 
 
-def _register_loop(
-    registry: CapabilityRegistry,
-    plugin_id: str,
-    capability_id: str,
-    implementation: object,
-    *,
-    trust: PluginTrust = PluginTrust.SIGNED,
-) -> None:
-    manifest = PluginManifest(
-        schema_version=1,
-        id=plugin_id,
-        version="1.0.0",
-        runtime=PluginRuntimeKind.PYTHON_TRUSTED,
-        trust=trust,
-        provides=(
-            ProvidedCapability(
-                kind=CapabilityKind.AGENT_LOOP,
-                id=capability_id,
-                contract=f"agent-loop:{capability_id}",
-            ),
-        ),
-    )
-    context = PluginContext(registry, manifest)
-    context.register_capability(CapabilityKind.AGENT_LOOP, capability_id, implementation)
+class _StaticLoopResolverV2:
+    def __init__(self, implementation: object) -> None:
+        self._implementation = implementation
+
+    def resolve(self, provider_id: str, model_id: str) -> AgentLoopSelectionV2:
+        return AgentLoopSelectionV2(
+            loop_id=f"{provider_id}:{model_id}",
+            plugin_id="plugin-x",
+            scope="model",
+            implementation=self._implementation,
+        )
+
+
+class _FailingLoopResolverV2:
+    def resolve(self, provider_id: str, model_id: str) -> AgentLoopSelectionV2:
+        raise ValueError(f"no loop for {provider_id}/{model_id}")
 
 
 @pytest.mark.unit
@@ -73,19 +56,13 @@ class TestAgentLoopWiring:
 
         assert error.value.code == "operation_context_not_pinned"
 
-    def test_factory_main_processor_does_not_use_v1_runtime_host_fallback(self) -> None:
+    def test_factory_main_processor_requires_pinned_v2_operation(self) -> None:
         config = ProcessorConfig(model="m", provider_id="provider")
 
-        with (
-            patch(
-                "src.infrastructure.plugins.runtime_host.get_platform_plugin_runtime_host"
-            ) as get_runtime_host,
-            pytest.raises(RuntimeV2Error) as error,
-        ):
+        with pytest.raises(RuntimeV2Error) as error:
             ProcessorFactory().create_for_main(config, [])
 
         assert error.value.code == "operation_context_not_pinned"
-        get_runtime_host.assert_not_called()
 
     def test_resolve_fails_without_resolver(self) -> None:
         processor = SessionProcessor(config=ProcessorConfig(model="m"), tools=[])
@@ -130,7 +107,7 @@ class TestAgentLoopWiring:
             config=ProcessorConfig(
                 model="m",
                 provider_id="deepseek",
-                loop_resolver=AgentLoopResolver(CapabilityRegistry()),
+                loop_resolver=_FailingLoopResolverV2(),
             ),
             tools=[],
         )
@@ -139,7 +116,7 @@ class TestAgentLoopWiring:
             processor._resolve_agent_loop()
 
         assert error.value.code == "agent_loop_resolution_failed"
-        assert isinstance(error.value.__cause__, AgentLoopResolutionError)
+        assert isinstance(error.value.__cause__, ValueError)
 
     def test_resolve_returns_explicit_v2_builtin_selection(self) -> None:
         loop = _ExternalLoop()
@@ -186,39 +163,13 @@ class TestAgentLoopWiring:
         assert processor._loop_selection.scope == "builtin"
         assert loop.contexts == []
 
-    async def test_process_does_not_read_v1_prompt_section_runtime_host(self) -> None:
-        resolver = BuiltinAgentLoopResolverV2(
-            loop_id="builtin-react",
-            plugin_id="memstack-kernel",
-            implementation=_ExternalLoop(),
-        )
-        processor = SessionProcessor(
-            config=ProcessorConfig(
-                model="v3",
-                provider_id="deepseek",
-                loop_resolver=resolver,
-            ),
-            tools=[],
-        )
-
-        with patch(
-            "src.infrastructure.plugins.runtime_host.get_platform_plugin_runtime_host"
-        ) as get_runtime_host:
-            events = processor.process("s1", [{"role": "user", "content": "hi"}])
-            await anext(events)
-            await events.aclose()
-
-        get_runtime_host.assert_not_called()
-
     async def test_process_dispatches_external_loop(self) -> None:
-        registry = CapabilityRegistry()
         loop = _ExternalLoop()
-        _register_loop(registry, "plugin-x", "deepseek:v3", loop)
         processor = SessionProcessor(
             config=ProcessorConfig(
                 model="v3",
                 provider_id="deepseek",
-                loop_resolver=AgentLoopResolver(registry),
+                loop_resolver=_StaticLoopResolverV2(loop),
             ),
             tools=[],
         )
@@ -237,13 +188,11 @@ class TestAgentLoopWiring:
         assert processor._loop_selection.scope == "model"
 
     async def test_execution_summary_records_loop_selection(self) -> None:
-        registry = CapabilityRegistry()
-        _register_loop(registry, "plugin-x", "deepseek:v3", _ExternalLoop())
         processor = SessionProcessor(
             config=ProcessorConfig(
                 model="v3",
                 provider_id="deepseek",
-                loop_resolver=AgentLoopResolver(registry),
+                loop_resolver=_StaticLoopResolverV2(_ExternalLoop()),
             ),
             tools=[],
         )

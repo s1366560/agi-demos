@@ -28,18 +28,20 @@ const skill = {
 };
 
 const plugin = {
-  id: 'runtime/github',
-  name: 'GitHub',
-  source: 'marketplace',
-  package: '@memstack/github',
+  id: 'github@2.1.0',
+  name: 'github',
+  plugin_id: 'github',
+  publisher: 'MemStack Labs',
+  source: 'marketplace-v2',
+  package: 'plugins/github',
   version: '2.1.0',
-  kind: 'mcp',
+  kind: 'bundle-v2',
+  install_status: 'installed',
+  security_scan_status: 'passed',
+  revoked: false,
   enabled: true,
   discovered: true,
-  providers: ['github'],
-  skills: ['pull-request-review'],
-  channel_types: ['issues'],
-  tool_definitions: [{ name: 'list_pull_requests' }, {}, { name: '' }],
+  targets: ['python', 'desktop-renderer'],
 };
 
 const agent = {
@@ -86,7 +88,7 @@ test('managed resource activity follows explicit structural status fields', () =
   assert.equal(resourceIsActive('skills', skill), true);
   assert.equal(resourceIsActive('skills', { ...skill, status: 'deprecated' }), false);
   assert.equal(resourceIsActive('plugins', plugin), true);
-  assert.equal(resourceIsActive('plugins', { ...plugin, discovered: false }), false);
+  assert.equal(resourceIsActive('plugins', { ...plugin, revoked: true }), false);
   assert.equal(resourceIsActive('agents', agent), true);
   assert.equal(resourceIsActive('agents', { ...agent, enabled: false, status: 'active' }), false);
   assert.equal(
@@ -113,14 +115,23 @@ test('search uses only declared public fields and never hidden prompt or arbitra
 });
 
 test('list filtering classifies non-effective resources as attention', () => {
-  const plugins = [plugin, { ...plugin, id: 'offline', name: 'Offline', discovered: false }];
+  const plugins = [
+    plugin,
+    {
+      ...plugin,
+      id: 'offline@2.1.0',
+      name: 'offline',
+      install_status: 'uninstalled',
+      enabled: false,
+    },
+  ];
   assert.deepEqual(
     filterManagedResources('plugins', plugins, '', 'active').map((item) => item.id),
-    ['runtime/github'],
+    ['github@2.1.0'],
   );
   assert.deepEqual(
     filterManagedResources('plugins', plugins, '', 'attention').map((item) => item.id),
-    ['offline'],
+    ['offline@2.1.0'],
   );
 });
 
@@ -138,15 +149,18 @@ test('resource views do not invent versions, packages, tools, or agent descripti
   assert.deepEqual(
     managedResourceView('plugins', {
       ...plugin,
-      package: undefined,
-      version: undefined,
-      tool_definitions: [{}],
+      publisher: '',
+      package: '',
+      targets: [],
     }),
     {
-      id: 'runtime/github',
-      title: 'GitHub',
-      description: 'mcp',
-      meta: [{ kind: 'text', value: 'marketplace' }],
+      id: 'github@2.1.0',
+      title: 'github',
+      description: 'bundle-v2',
+      meta: [
+        { kind: 'text', value: 'marketplace-v2' },
+        { kind: 'version', value: '2.1.0' },
+      ],
       status: 'active',
     },
   );
@@ -178,17 +192,14 @@ test('resource views do not invent versions, packages, tools, or agent descripti
 
 test('facts and capability groups are separated and derive only from response fields', () => {
   assert.deepEqual(managedResourceFacts('plugins', plugin), [
-    { key: 'source', value: 'marketplace' },
-    { key: 'package', value: '@memstack/github' },
+    { key: 'source', value: 'marketplace-v2' },
+    { key: 'publisher', value: 'MemStack Labs' },
     { key: 'version', value: '2.1.0' },
-    { key: 'kind', value: 'mcp' },
-    { key: 'discovery', value: 'discovered' },
+    { key: 'installStatus', value: 'installed' },
+    { key: 'securityScan', value: 'passed' },
   ]);
   assert.deepEqual(managedResourceCapabilityGroups('plugins', plugin), [
-    { key: 'tools', values: ['list_pull_requests'] },
-    { key: 'providers', values: ['github'] },
-    { key: 'skills', values: ['pull-request-review'] },
-    { key: 'channels', values: ['issues'] },
+    { key: 'targets', values: ['python', 'desktop-renderer'] },
   ]);
   assert.deepEqual(managedResourceCapabilityGroups('agents', agent), [
     { key: 'tools', values: ['read', 'git_diff'] },
@@ -251,10 +262,7 @@ test('status actions honor permission and immutable system resources', () => {
     kind: 'set_skill_status',
     nextActive: false,
   });
-  assert.deepEqual(managedResourceAction('plugins', plugin, true, 'cloud'), {
-    kind: 'set_plugin_enabled',
-    nextActive: false,
-  });
+  assert.equal(managedResourceAction('plugins', plugin, true, 'cloud'), null);
   assert.deepEqual(managedResourceAction('agents', agent, true, 'cloud'), {
     kind: 'set_agent_enabled',
     nextActive: false,
@@ -276,14 +284,7 @@ test('status actions honor permission and immutable system resources', () => {
     ),
     null,
   );
-  assert.deepEqual(
-    managedResourceAction('plugins', { ...plugin, source: 'builtin' }, true, 'cloud'),
-    { kind: 'set_plugin_enabled', nextActive: false },
-  );
-  assert.equal(
-    managedResourceAction('plugins', { ...plugin, source: 'builtin' }, true, 'local'),
-    null,
-  );
+  assert.equal(managedResourceAction('plugins', plugin, true, 'local'), null);
   assert.equal(
     managedResourceAction('agents', { ...agent, id: 'builtin:all-access' }, true, 'cloud'),
     null,

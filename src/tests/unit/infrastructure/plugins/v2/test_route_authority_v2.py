@@ -16,8 +16,6 @@ from src.domain.model.plugins.generated_v2 import (
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2
 from src.infrastructure.plugins.v2.protocol import parse_profile_snapshot_v2
 from src.infrastructure.plugins.v2.route_authority import (
-    LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-    LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
     ROUTE_AUTHORITY_CATALOG_INJECT_V2,
     ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
     ROUTE_TABLE_BUILDER_INJECT_V2,
@@ -31,7 +29,7 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[6]
 
 
-def _snapshot(*, bridge_enabled: bool, target_enabled: bool = True):
+def _snapshot(*, target_enabled: bool = True):
     snapshot = parse_profile_snapshot_v2(
         json.loads(
             (_ROOT / "shared/fixtures/platform-plugin-profile.v2.json").read_text(encoding="utf-8")
@@ -77,17 +75,10 @@ def _snapshot(*, bridge_enabled: bool, target_enabled: bool = True):
             ROUTE_AUTHORITY_CATALOG_INJECT_V2: ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
         },
     )
-    bridge_entry = replace(
-        target_entry,
-        entry_id=LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-        plugin_ref="memstack-runtime-kernel",
-        module_ref=LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
-        enabled=bridge_enabled,
-    )
     return replace(
         snapshot,
         manifests=(manifest,),
-        entries=(target_entry, bridge_entry),
+        entries=(target_entry,),
     )
 
 
@@ -146,9 +137,9 @@ async def test_route_authority_catalog_is_unique_reversible_and_freezes() -> Non
     assert frozen.authorities == (first,)
 
 
-def test_bundle_route_authority_requires_exact_non_legacy_owner_and_route_effect() -> None:
+def test_bundle_route_authority_requires_exact_owner_and_route_effect() -> None:
     evidence = verify_bundle_route_authority_v2(
-        snapshot=_snapshot(bridge_enabled=False),
+        snapshot=_snapshot(),
         route_definitions=(_definition(),),
         authorities=(_authority(),),
         desired_rows=(_desired_row(),),
@@ -166,25 +157,19 @@ def test_bundle_route_authority_requires_exact_non_legacy_owner_and_route_effect
     ("snapshot", "definitions", "authorities", "reason"),
     [
         (
-            _snapshot(bridge_enabled=True),
-            (_definition(LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2),),
-            (_authority(LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2),),
-            "legacy_bridge_enabled",
-        ),
-        (
-            _snapshot(bridge_enabled=False),
+            _snapshot(),
             (),
             (_authority(),),
             "route_effect_missing:GET /api/v1/plugins/example",
         ),
         (
-            _snapshot(bridge_enabled=False, target_enabled=False),
+            _snapshot(target_enabled=False),
             (_definition(),),
             (_authority(),),
             "route_owner_entry_inactive:example-http-routes",
         ),
         (
-            _snapshot(bridge_enabled=False),
+            _snapshot(),
             (_definition(),),
             (replace(_authority(), permission="plugin.example.admin"),),
             "route_authority_mismatch:GET /api/v1/plugins/example",
@@ -209,7 +194,7 @@ def test_bundle_route_authority_fails_closed_with_stable_reasons(
 
 
 def test_route_authority_requires_module_contract_to_consume_route_builder() -> None:
-    snapshot = _snapshot(bridge_enabled=False)
+    snapshot = _snapshot()
     manifest = snapshot.manifests[0]
     module = manifest.modules[0]
     without_route_contract = replace(
@@ -260,7 +245,7 @@ def test_route_authority_requires_both_module_contract_services(
     missing_service: str,
     reason: str,
 ) -> None:
-    snapshot = _snapshot(bridge_enabled=False)
+    snapshot = _snapshot()
     manifest = snapshot.manifests[0]
     module = manifest.modules[0]
     incomplete = replace(
@@ -303,13 +288,13 @@ def test_route_authority_requires_both_exact_entry_injects(
     missing_alias: str,
     service: str,
 ) -> None:
-    snapshot = _snapshot(bridge_enabled=False)
-    target, bridge = snapshot.entries
+    snapshot = _snapshot()
+    (target,) = snapshot.entries
     inject = dict(target.inject)
     del inject[missing_alias]
 
     evidence = verify_bundle_route_authority_v2(
-        snapshot=replace(snapshot, entries=(replace(target, inject=inject), bridge)),
+        snapshot=replace(snapshot, entries=(replace(target, inject=inject),)),
         route_definitions=(_definition(),),
         authorities=(_authority(),),
         desired_rows=(_desired_row(),),

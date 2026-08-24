@@ -645,3 +645,47 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
     )
     .is_ok());
 }
+
+#[test]
+fn composer_plugin_context_ignores_legacy_registry_without_active_v2_generation() {
+    let state = test_state("composer-plugin-v2-secret");
+    let authenticated = state
+        .session_store
+        .validate_session_credential("composer-plugin-v2-secret", Utc::now().timestamp_millis())
+        .expect("validate session credential")
+        .expect("authenticated context");
+    state
+        .session_store
+        .connection()
+        .expect("legacy plugin registry connection")
+        .execute(
+            "INSERT INTO desktop_managed_resources(
+               kind, scope_kind, scope_id, id, status, revision,
+               created_at_ms, updated_at_ms, value_json, vault_refs_json
+             ) VALUES (
+               'plugin', 'tenant', 'local', 'legacy-plugin', 'active', 0,
+               1752384000000, 1752384000000,
+               '{\"id\":\"legacy-plugin\",\"enabled\":true,\"discovered\":true}', '[]'
+             )",
+            [],
+        )
+        .expect("seed inert legacy plugin row");
+    let context = [ComposerContextItem {
+        kind: ComposerContextKind::Plugin,
+        resource_id: "legacy-plugin".to_string(),
+        label: "Legacy plugin".to_string(),
+        metadata: Some(json!({ "execution_slot": "plugin" })),
+    }];
+
+    let (status, Json(payload)) =
+        validate_composer_context_authority(&state, &authenticated, "local-workspace", &context)
+            .expect_err("legacy registry row must not restore plugin authority");
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        payload["detail"]["code"],
+        "plugin_generation_v2_unavailable"
+    );
+    assert_eq!(payload["detail"]["target"], "desktop-sidecar");
+    assert_eq!(payload["detail"]["generation"], Value::Null);
+}

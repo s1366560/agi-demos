@@ -3,24 +3,32 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     PlatformPluginDesiredStateModel,
     PlatformPluginPackageModel,
     PlatformPluginV1MigrationRunModel,
+    PlatformPluginV2PublicationModel,
     Project,
     Tenant,
 )
-from src.infrastructure.plugins.v2.protocol import canonical_json_v2
+from src.infrastructure.plugins.v2.protocol import (
+    PluginProtocolV2Error,
+    canonical_json_v2,
+    parse_control_envelope_v2,
+    parse_profile_snapshot_v2,
+)
 
 
 class PlatformPluginV1MigrationRepositoryError(ValueError):
@@ -92,6 +100,45 @@ class PlatformPluginV1MigrationRunRecord:
     created_at: datetime
 
 
+@dataclass(frozen=True, kw_only=True)
+class GloballyReadyPluginPublicationExportV2:
+    """Immutable recovery snapshot of one publication that historically reached ready."""
+
+    publication_id: str
+    profile_id: str
+    generation: int
+    snapshot_digest: str
+    requested_version: int
+    nonce: str
+    type_url: str
+    required_data_plane_ids: tuple[str, ...]
+    globally_ready_at: datetime
+    distribution: dict[str, Any]
+    digest: str
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            **self._unsigned_payload(),
+            "digest": self.digest,
+        }
+
+    def _unsigned_payload(self) -> dict[str, object]:
+        return {
+            "schema_version": 2,
+            "kind": "globally_ready_plugin_publication_v2",
+            "publication_id": self.publication_id,
+            "profile_id": self.profile_id,
+            "generation": self.generation,
+            "snapshot_digest": self.snapshot_digest,
+            "requested_version": self.requested_version,
+            "nonce": self.nonce,
+            "type_url": self.type_url,
+            "required_data_plane_ids": list(self.required_data_plane_ids),
+            "globally_ready_at": _format_utc_v1_to_v2(self.globally_ready_at),
+            "distribution": deepcopy(self.distribution),
+        }
+
+
 class PlatformPluginV1MigrationRepository:
     """Snapshot frozen V1 inputs and append one completed conversion record."""
 
@@ -156,6 +203,63 @@ class PlatformPluginV1MigrationRepository:
             }
         )
         return LegacyPluginDesiredStateExportV1(digest=digest, rows=tuple(rows))
+
+    async def export_globally_ready_v2(
+        self,
+        *,
+        nonce: str | None = None,
+    ) -> GloballyReadyPluginPublicationExportV2:
+        """Export an exact historical globally-ready distribution for disaster recovery."""
+        statement = select(PlatformPluginV2PublicationModel).where(
+            PlatformPluginV2PublicationModel.ready_at.is_not(None)
+        )
+        if nonce is None:
+            statement = statement.order_by(
+                PlatformPluginV2PublicationModel.requested_version.desc(),
+                PlatformPluginV2PublicationModel.ready_at.desc(),
+                PlatformPluginV2PublicationModel.id.desc(),
+            )
+        else:
+            statement = statement.where(PlatformPluginV2PublicationModel.nonce == nonce)
+        result = await self._session.execute(refresh_select_statement(statement))
+        model = result.scalars().first()
+        if model is None:
+            _fail(
+                "migration_globally_ready_missing",
+                "no matching globally-ready plugin v2 publication is available",
+            )
+        ready_at = model.ready_at
+        if ready_at is None:  # pragma: no cover - SQL predicate invariant
+            raise RuntimeError("globally-ready plugin v2 publication has no ready_at")
+        distribution = deepcopy(model.distribution)
+        self._validate_globally_ready_distribution(model, distribution)
+        unsigned: dict[str, object] = {
+            "schema_version": 2,
+            "kind": "globally_ready_plugin_publication_v2",
+            "publication_id": model.id,
+            "profile_id": model.profile_id,
+            "generation": model.generation,
+            "snapshot_digest": model.snapshot_digest,
+            "requested_version": model.requested_version,
+            "nonce": model.nonce,
+            "type_url": model.type_url,
+            "required_data_plane_ids": list(model.required_data_plane_ids),
+            "globally_ready_at": _format_utc_v1_to_v2(ready_at),
+            "distribution": distribution,
+        }
+        return GloballyReadyPluginPublicationExportV2(
+            publication_id=model.id,
+            profile_id=model.profile_id,
+            generation=model.generation,
+            snapshot_digest=model.snapshot_digest,
+            requested_version=model.requested_version,
+            nonce=model.nonce,
+            type_url=model.type_url,
+            required_data_plane_ids=tuple(model.required_data_plane_ids),
+            globally_ready_at=_as_utc_v1_to_v2(ready_at),
+            distribution=distribution,
+            digest=digest_payload_v1_to_v2(unsigned),
+        )
 
     async def get_completed_run(
         self,
@@ -268,6 +372,53 @@ class PlatformPluginV1MigrationRepository:
         return {plugin_id: tuple(items) for plugin_id, items in grouped.items()}
 
     @staticmethod
+    def _validate_globally_ready_distribution(
+        model: PlatformPluginV2PublicationModel,
+        distribution: dict[str, Any],
+    ) -> None:
+        if set(distribution) != {"descriptor", "snapshot", "envelope"}:
+            _fail(
+                "migration_globally_ready_corrupt",
+                "globally-ready publication distribution fields are invalid",
+            )
+        descriptor_payload = distribution["descriptor"]
+        if not isinstance(descriptor_payload, dict):
+            _fail(
+                "migration_globally_ready_corrupt",
+                "globally-ready publication descriptor is invalid",
+            )
+        try:
+            descriptor = PluginGenerationDescriptorV2.from_payload(
+                cast(dict[str, Any], descriptor_payload)
+            )
+            snapshot = parse_profile_snapshot_v2(distribution["snapshot"])
+            envelope = parse_control_envelope_v2(distribution["envelope"])
+        except (PluginProtocolV2Error, TypeError, ValueError) as exc:
+            raise PlatformPluginV1MigrationRepositoryError(
+                "migration_globally_ready_corrupt",
+                "globally-ready publication does not contain valid protocol-v2 data",
+            ) from exc
+        expected_descriptor = PluginGenerationDescriptorV2(
+            profile_id=snapshot.profile_id,
+            generation=snapshot.generation,
+            digest=snapshot.digest,
+        )
+        if (
+            descriptor != expected_descriptor
+            or model.profile_id != snapshot.profile_id
+            or model.generation != snapshot.generation
+            or model.snapshot_digest != snapshot.digest
+            or model.requested_version != envelope.version
+            or model.snapshot_digest != envelope.snapshot_digest
+            or model.nonce != envelope.nonce
+            or model.type_url != envelope.type_url
+        ):
+            _fail(
+                "migration_globally_ready_corrupt",
+                "globally-ready publication metadata differs from its distribution",
+            )
+
+    @staticmethod
     def _run_record(
         model: PlatformPluginV1MigrationRunModel,
     ) -> PlatformPluginV1MigrationRunRecord:
@@ -299,11 +450,22 @@ def scope_v2_to_payload(scope: ScopeV2) -> dict[str, str]:
     return payload
 
 
+def _as_utc_v1_to_v2(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _format_utc_v1_to_v2(value: datetime) -> str:
+    return _as_utc_v1_to_v2(value).isoformat().replace("+00:00", "Z")
+
+
 def _fail(code: str, message: str) -> NoReturn:
     raise PlatformPluginV1MigrationRepositoryError(code, message)
 
 
 __all__ = [
+    "GloballyReadyPluginPublicationExportV2",
     "LegacyPluginDesiredStateExportV1",
     "LegacyPluginDesiredStateRowV1",
     "PlatformPluginV1MigrationRepository",

@@ -1,4 +1,4 @@
-"""Pinned-generation V2 plugin inventory with frozen legacy mutations."""
+"""Pinned-generation V2 plugin inventory with retired legacy mutations."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.plugins.v1_retirement import (
     PLUGIN_MARKETPLACE_V2_PATH,
-    PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+    PLUGIN_PROTOCOL_V1_RETIRED_CODE,
 )
 from src.infrastructure.plugins.v2.runtime_context import FiberPhaseV2, RuntimeV2Error
 
@@ -17,24 +17,6 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2
 
 TOOL_NAME = "plugin_manager"
-
-
-def configure_plugin_manager(
-    *,
-    tenant_id: str | None = None,
-    project_id: str | None = None,
-    mutation_ledger: object | None = None,
-    mutation_loop_threshold: int = 10,
-    mutation_loop_window_seconds: int = 120,
-) -> None:
-    """Retain the worker bootstrap call while V2 obtains scope from its pinned generation."""
-    _ = (
-        tenant_id,
-        project_id,
-        mutation_ledger,
-        mutation_loop_threshold,
-        mutation_loop_window_seconds,
-    )
 
 
 def _current_generation_v2() -> RuntimeGenerationV2:
@@ -139,16 +121,14 @@ def _pm_handle_list(ctx: ToolContext) -> ToolResult:
     )
 
 
-def _pm_v1_mutation_frozen(action: str) -> ToolResult:
+def _pm_v1_retired(action: str) -> ToolResult:
     return ToolResult(
-        output=(
-            f"Error: plugin protocol V1 mutations are frozen; use {PLUGIN_MARKETPLACE_V2_PATH}"
-        ),
+        output=f"Error: plugin protocol V1 is retired; use {PLUGIN_MARKETPLACE_V2_PATH}",
         is_error=True,
-        title="Plugin Manager Mutation Frozen",
+        title="Plugin Protocol V1 Retired",
         metadata={
             "action": action,
-            "error_code": PLUGIN_PROTOCOL_V1_MUTATION_FROZEN_CODE,
+            "error_code": PLUGIN_PROTOCOL_V1_RETIRED_CODE,
             "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
         },
     )
@@ -167,19 +147,19 @@ def _pm_v1_mutation_frozen(action: str) -> ToolResult:
             "action": {
                 "type": "string",
                 "enum": ["list", "install", "enable", "disable", "reload", "uninstall"],
-                "description": "Read with list; legacy mutation actions are frozen. Default: list",
+                "description": "Read with list; legacy mutation actions are retired. Default: list",
             },
             "requirement": {
                 "type": "string",
-                "description": "Retained for frozen V1 install compatibility.",
+                "description": "Retained only to return the V1 retirement error.",
             },
             "plugin_name": {
                 "type": "string",
-                "description": "Retained for frozen V1 mutation compatibility.",
+                "description": "Retained only to return the V1 retirement error.",
             },
             "dry_run": {
                 "type": "boolean",
-                "description": "Retained for frozen V1 mutation compatibility.",
+                "description": "Retained only to return the V1 retirement error.",
             },
         },
         "required": [],
@@ -204,7 +184,7 @@ async def plugin_manager_tool(
         return _pm_handle_list(ctx)
 
     if action in {"install", "enable", "disable", "reload", "uninstall"}:
-        return _pm_v1_mutation_frozen(action)
+        return _pm_v1_retired(action)
 
     return ToolResult(
         output=f"Error: Unsupported action: {action}",
@@ -214,4 +194,4 @@ async def plugin_manager_tool(
     )
 
 
-__all__ = ["TOOL_NAME", "configure_plugin_manager", "plugin_manager_tool"]
+__all__ = ["TOOL_NAME", "plugin_manager_tool"]

@@ -96,8 +96,8 @@ mod mcp_supervisor;
 #[cfg(test)]
 mod mcp_supervisor_tests;
 mod parity_routes;
-pub(crate) mod platform_plugin_sync;
-pub(crate) use platform_plugin_sync::PlatformPluginControlPlaneReconciler;
+mod platform_plugin_authority_v2;
+mod platform_plugin_marketplace_v2;
 mod platform_plugin_sync_v2;
 pub(crate) use platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2;
 mod provider_credentials;
@@ -148,6 +148,7 @@ use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesIn
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
 use conversation_llm_route::{normalized_conversation_llm_route, workload_role_for_capability};
 use mcp_supervisor::{McpSupervisor, SupervisorLimits};
+use platform_plugin_authority_v2::PlatformPluginAvailabilityV2Error;
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -400,20 +401,13 @@ impl LocalRuntimeService {
         }
     }
 
-    pub(crate) fn start_platform_plugin_control_plane(
-        &self,
-        trusted_sessions: crate::trusted_session::TrustedSessionBroker,
-    ) -> platform_plugin_sync::PlatformPluginControlPlaneReconciler {
-        platform_plugin_sync::PlatformPluginControlPlaneReconciler::start(
-            Arc::clone(&self.state),
-            trusted_sessions,
-        )
-    }
-
     pub(crate) fn start_platform_plugin_control_plane_v2(
         &self,
         trusted_sessions: crate::trusted_session::TrustedSessionBroker,
     ) -> platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2 {
+        self.state
+            .platform_plugin_authority_v2
+            .install_trusted_sessions(trusted_sessions.clone());
         platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2::start(
             Arc::clone(&self.state),
             trusted_sessions,
@@ -824,6 +818,7 @@ struct LocalRuntimeState {
     agent_runs: Mutex<HashMap<String, ActiveAgentRun>>,
     workspace_core_generation: AtomicU64,
     workspace_core_authority: Mutex<Option<Arc<workspace_core_bridge::WorkspaceCoreAuthority>>>,
+    platform_plugin_authority_v2: platform_plugin_authority_v2::PlatformPluginAuthorityV2,
     automation_worker: Mutex<Option<automation_worker::AutomationWorkerHandle>>,
     browser_bridge: Mutex<Option<browser_bridge::BrowserBridgeRuntime>>,
     browser_once_consents: browser_run_tool_host::BrowserOnceConsents,
@@ -1114,6 +1109,8 @@ impl LocalRuntimeState {
             agent_runs: Mutex::new(HashMap::new()),
             workspace_core_generation: AtomicU64::new(0),
             workspace_core_authority: Mutex::new(None),
+            platform_plugin_authority_v2:
+                platform_plugin_authority_v2::PlatformPluginAuthorityV2::default(),
             automation_worker: Mutex::new(None),
             browser_bridge: Mutex::new(None),
             browser_once_consents: browser_run_tool_host::new_browser_once_consents(),
@@ -2884,18 +2881,6 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             get(get_llm_provider_usage),
         )
         .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins",
-            get(list_managed_plugins),
-        )
-        .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/enable",
-            post(enable_managed_plugin),
-        )
-        .route(
-            "/api/v1/channels/tenants/:tenant_id/plugins/:plugin_id/disable",
-            post(disable_managed_plugin),
-        )
-        .route(
             "/api/v1/projects/:project_id/my-work",
             get(list_project_my_work),
         )
@@ -3046,9 +3031,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
         )
         .route("/mcp/tools/list", get(mcp_tools_list))
         .route("/mcp/tools/call", post(mcp_tools_call))
-        .merge(workspace_core_bridge::platform_plugin_router(Arc::clone(
-            &state,
-        )))
+        .merge(platform_plugin_marketplace_v2::router())
         .merge(parity_routes::router())
         .fallback(workspace_core_bridge::proxy_workspace_fallback)
         .layer(middleware::from_fn_with_state(
@@ -4789,58 +4772,6 @@ async fn list_managed_skills(
     Ok(Json(json!({ "items": items })))
 }
 
-async fn list_managed_plugins(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(tenant_id): Path<String>,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, Some(&tenant_id))?;
-    let items = state
-        .session_store
-        .list_managed_resources(ManagedResourceKind::Plugin, "tenant", &tenant_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": items })))
-}
-
-async fn enable_managed_plugin(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, plugin_id)): Path<(String, String)>,
-) -> LocalJsonResult {
-    set_plugin_enabled(state, authenticated, tenant_id, plugin_id, true)
-}
-
-async fn disable_managed_plugin(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, plugin_id)): Path<(String, String)>,
-) -> LocalJsonResult {
-    set_plugin_enabled(state, authenticated, tenant_id, plugin_id, false)
-}
-
-fn set_plugin_enabled(
-    state: Arc<LocalRuntimeState>,
-    authenticated: AuthenticatedContext,
-    tenant_id: String,
-    plugin_id: String,
-    enabled: bool,
-) -> LocalJsonResult {
-    ensure_tenant_scope(&authenticated, Some(&tenant_id))?;
-    ensure_managed_resource_manager(&authenticated)?;
-    state
-        .session_store
-        .set_managed_resource_enabled(
-            ManagedResourceKind::Plugin,
-            "tenant",
-            &tenant_id,
-            &plugin_id,
-            enabled,
-            Utc::now().timestamp_millis(),
-        )
-        .map(|plugin| Json(json!({ "item": plugin })))
-        .map_err(resource_registry_error)
-}
-
 async fn list_managed_agents(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -6516,6 +6447,23 @@ fn invalid_composer_context(detail: &'static str) -> (StatusCode, Json<Value>) {
     )
 }
 
+fn unavailable_plugin_composer_context(
+    error: PlatformPluginAvailabilityV2Error,
+    generation: Option<&platform_plugin_authority_v2::ActivePlatformPluginGenerationDescriptorV2>,
+) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({
+            "detail": {
+                "code": error.code(),
+                "message": error.message(),
+                "target": "desktop-sidecar",
+                "generation": generation,
+            },
+        })),
+    )
+}
+
 fn validate_composer_context_authority(
     state: &LocalRuntimeState,
     authenticated: &AuthenticatedContext,
@@ -6605,19 +6553,27 @@ fn validate_composer_context_authority(
                         resource.get("status").and_then(Value::as_str) == Some("active")
                     })
             }
-            ComposerContextKind::Plugin => state
-                .session_store
-                .managed_resource(
-                    ManagedResourceKind::Plugin,
-                    "tenant",
-                    &authenticated.workspace.tenant_id,
-                    &item.resource_id,
-                )
-                .map_err(local_store_error)?
-                .is_some_and(|resource| {
-                    resource.get("enabled").and_then(Value::as_bool) == Some(true)
-                        && resource.get("discovered").and_then(Value::as_bool) == Some(true)
-                }),
+            ComposerContextKind::Plugin => {
+                let generation = state
+                    .platform_plugin_authority_v2
+                    .active_generation()
+                    .ok_or_else(|| {
+                        unavailable_plugin_composer_context(
+                            PlatformPluginAvailabilityV2Error::GenerationUnavailable,
+                            None,
+                        )
+                    })?;
+                generation
+                    .plugin_availability(
+                        &item.resource_id,
+                        &authenticated.workspace.tenant_id,
+                        &authenticated.workspace.project_id,
+                    )
+                    .map_err(|error| {
+                        unavailable_plugin_composer_context(error, Some(generation.descriptor()))
+                    })?;
+                true
+            }
         };
         if !available {
             return Err(invalid_composer_context(
@@ -14770,32 +14726,6 @@ mod tests {
                 .split(',')
                 .any(|header| header.trim().eq_ignore_ascii_case(expected)));
         }
-
-        let platform_plugin_preflight = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method(Method::OPTIONS)
-                    .uri("/api/v1/platform-plugins/apply-state")
-                    .header("origin", "http://localhost:5173")
-                    .header("access-control-request-method", "GET")
-                    .header("access-control-request-headers", "authorization")
-                    .body(Body::empty())
-                    .expect("platform plugin GET preflight request"),
-            )
-            .await
-            .expect("platform plugin GET preflight response");
-        assert_eq!(
-            platform_plugin_preflight.status(),
-            axum::http::StatusCode::OK
-        );
-        assert_eq!(
-            platform_plugin_preflight
-                .headers()
-                .get("access-control-allow-origin")
-                .and_then(|value| value.to_str().ok()),
-            Some("http://localhost:5173")
-        );
 
         let tenant_project_post_preflight = app
             .clone()

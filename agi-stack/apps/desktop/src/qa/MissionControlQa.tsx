@@ -50,7 +50,7 @@ const api: ComposerCatalogClient = {
   ],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
-  listManagedPlugins: async () => [],
+  listMarketplacePlugins: async () => [],
 };
 
 const workspaces: WorkspaceSummary[] = [

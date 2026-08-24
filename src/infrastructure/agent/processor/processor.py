@@ -515,15 +515,11 @@ class SessionProcessor:
         """Fire a plugin hook, log diagnostics, and return the resulting payload."""
         effective_payload = dict(payload or {})
         if self._plugin_event_dispatcher is not None:
-            try:
-                result = await self._plugin_event_dispatcher.dispatch(
-                    hook_name,
-                    payload=effective_payload,
-                    runtime_hook_overrides=self.config.runtime_hook_overrides,
-                )
-            except Exception:
-                logger.warning("Typed plugin event %r failed", hook_name, exc_info=True)
-                return effective_payload
+            result = await self._plugin_event_dispatcher.dispatch(
+                hook_name,
+                payload=effective_payload,
+                runtime_hook_overrides=self.config.runtime_hook_overrides,
+            )
             for diagnostic in result.diagnostics:
                 diagnostic_message = getattr(diagnostic, "message", str(diagnostic))
                 diagnostic_plugin = getattr(diagnostic, "plugin_name", "unknown")
@@ -2201,7 +2197,7 @@ class SessionProcessor:
         be an async iterator of events, an awaitable resolving to one, or a
         single event/value.
         """
-        from src.infrastructure.plugins.agent_loop_runtime import validate_loop_implementation
+        from src.infrastructure.plugins.v2.agent_loop import validate_loop_implementation
 
         validate_loop_implementation(selection.implementation)
         yield AgentStartEvent()

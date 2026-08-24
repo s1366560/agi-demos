@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -236,3 +237,80 @@ async def test_attested_bytes_load_entrypoint_and_activate_only_after_preflight(
     )
     assert "artifact_fixture_v2" in sys.modules
     await generation.dispose()
+
+
+@pytest.mark.unit
+async def test_verified_artifact_can_stage_again_in_a_new_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_bytes = b"def apply(context, config):\n    context.provide('service:attested', True)\n"
+    (tmp_path / "artifact_fixture_v2.py").write_bytes(source_bytes)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("artifact_fixture_v2", None)
+    snapshot = _snapshot(source_bytes)
+
+    first = await LoaderV2(
+        target_catalog=_catalog(snapshot),
+        artifact_resolver=RepositoryPythonArtifactResolverV2(tmp_path),
+    ).stage(snapshot)
+    second = await LoaderV2(
+        target_catalog=_catalog(snapshot),
+        artifact_resolver=RepositoryPythonArtifactResolverV2(tmp_path),
+    ).stage(snapshot)
+
+    assert second.resolve("service:attested", ScopeV2(kind=ScopeKindV2.ROOT)) is True
+    await second.dispose()
+    await first.dispose()
+
+
+@pytest.mark.unit
+async def test_changed_attested_artifact_uses_isolated_module_while_old_generation_is_pinned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_bytes = b"def apply(context, config):\n    context.provide('service:attested', 'old')\n"
+    new_bytes = b"def apply(context, config):\n    context.provide('service:attested', 'new')\n"
+    artifact_path = tmp_path / "artifact_fixture_v2.py"
+    artifact_path.write_bytes(old_bytes)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("artifact_fixture_v2", None)
+    old_snapshot = _snapshot(old_bytes)
+
+    old_generation = await LoaderV2(
+        target_catalog=_catalog(old_snapshot),
+        artifact_resolver=RepositoryPythonArtifactResolverV2(tmp_path),
+    ).stage(old_snapshot)
+    artifact_path.write_bytes(new_bytes)
+    new_snapshot = _snapshot(new_bytes)
+    new_generation = await LoaderV2(
+        target_catalog=_catalog(new_snapshot),
+        artifact_resolver=RepositoryPythonArtifactResolverV2(tmp_path),
+    ).stage(new_snapshot)
+
+    scope = ScopeV2(kind=ScopeKindV2.ROOT)
+    assert old_generation.resolve("service:attested", scope) == "old"
+    assert new_generation.resolve("service:attested", scope) == "new"
+    await new_generation.dispose()
+    await old_generation.dispose()
+
+
+@pytest.mark.unit
+async def test_unverified_preimport_is_rejected_even_when_source_bytes_match(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_bytes = b"def apply(context, config):\n    context.provide('service:attested', True)\n"
+    (tmp_path / "artifact_fixture_v2.py").write_bytes(source_bytes)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("artifact_fixture_v2", None)
+    _ = importlib.import_module("artifact_fixture_v2")
+    snapshot = _snapshot(source_bytes)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(
+            target_catalog=_catalog(snapshot),
+            artifact_resolver=RepositoryPythonArtifactResolverV2(tmp_path),
+        ).stage(snapshot)
+
+    assert error.value.code == "artifact_loaded_before_attestation"

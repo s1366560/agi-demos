@@ -306,11 +306,6 @@ test("management route capabilities fail closed when authority revisions are abs
       "tenant-tenant-evolution",
       "local_skill_evolution_authority_unavailable",
     ],
-    [
-      "parity-capability-definitions.06-plugins.v2.json",
-      "tenant-tenant-plugins",
-      "capability_authority_revision_unavailable",
-    ],
   ];
 
   for (const [fragment, capabilityId, localReason] of cases) {
@@ -334,6 +329,30 @@ test("management route capabilities fail closed when authority revisions are abs
       );
     }
   }
+});
+
+test("Plugin Marketplace records observed Cloud and Local V2 authority", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.06-plugins.v2.json",
+    "tenant-tenant-plugins",
+  );
+
+  assert.equal(capability.cloud_status, "implemented");
+  assert.equal(capability.local_status, "implemented");
+  assert.equal(Object.hasOwn(capability, "cloud_reason_code"), false);
+  assert.equal(Object.hasOwn(capability, "local_reason_code"), false);
+  for (const entry of [
+    "agi-stack/apps/desktop/src/App.tsx",
+    "agi-stack/apps/desktop/src/api/pluginMarketplaceModel.ts",
+    "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/plugins/DesktopRendererGenerationHostV2.tsx",
+  ]) {
+    assert.ok(capability.cloud_entries.includes(entry), entry);
+    assert.ok(capability.local_entries.includes(entry), entry);
+  }
+  assert.match(capability.judgment_rationale, /V2 Marketplace/u);
+  assert.match(capability.judgment_rationale, /authority revision/u);
 });
 
 test("Skill Evolution records tenant-native and adjacent Web review permissions", () => {

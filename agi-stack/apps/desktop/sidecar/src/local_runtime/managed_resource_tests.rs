@@ -115,24 +115,6 @@ fn seed_mutable_resources(state: &LocalRuntimeState, tenant_id: &str, project_id
     state
         .session_store
         .put_managed_resource(
-            ManagedResourceKind::Plugin,
-            "tenant",
-            tenant_id,
-            "custom-plugin",
-            "active",
-            None,
-            json!({
-                "name": "Custom plugin",
-                "source": "local",
-                "enabled": true,
-                "status": "active",
-            }),
-            now_ms,
-        )
-        .expect("seed mutable plugin");
-    state
-        .session_store
-        .put_managed_resource(
             ManagedResourceKind::Agent,
             "project",
             project_id,
@@ -161,7 +143,6 @@ async fn tenant_members_can_read_but_cannot_mutate_managed_resources() {
 
     for uri in [
         "/api/v1/skills/?tenant_id=orbital&project_id=agent-evals",
-        "/api/v1/channels/tenants/orbital/plugins",
         "/api/v1/agent/definitions?tenant_id=orbital&project_id=agent-evals",
     ] {
         let response = app
@@ -182,11 +163,6 @@ async fn tenant_members_can_read_but_cannot_mutate_managed_resources() {
             "PATCH",
             "/api/v1/skills/custom-skill/status?status=disabled&tenant_id=orbital",
             v2_update("member-disable-skill", 0, json!({ "status": "disabled" })),
-        ),
-        (
-            "POST",
-            "/api/v1/channels/tenants/orbital/plugins/custom-plugin/disable",
-            json!({}),
         ),
         (
             "PATCH",
@@ -217,11 +193,6 @@ async fn tenant_owners_can_mutate_non_builtin_managed_resources() {
             "PATCH",
             "/api/v1/skills/custom-skill/status?status=disabled&tenant_id=local",
             v2_update("owner-disable-skill", 0, json!({ "status": "disabled" })),
-        ),
-        (
-            "POST",
-            "/api/v1/channels/tenants/local/plugins/custom-plugin/disable",
-            json!({}),
         ),
         (
             "PATCH",
@@ -255,11 +226,6 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
             v2_update("builtin-disable-skill", 0, json!({ "status": "disabled" })),
         ),
         (
-            "POST",
-            "/api/v1/channels/tenants/local/plugins/local-workspace/disable",
-            json!({}),
-        ),
-        (
             "PATCH",
             "/api/v1/agent/definitions/builtin%3Aall-access/enabled?tenant_id=local&project_id=local-project",
             v2_update("builtin-disable-agent", 0, json!({ "enabled": false })),
@@ -283,12 +249,6 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
             "implementation",
         ),
         (
-            ManagedResourceKind::Plugin,
-            "tenant",
-            "local",
-            "local-workspace",
-        ),
-        (
             ManagedResourceKind::Agent,
             "project",
             "local-project",
@@ -303,7 +263,7 @@ async fn tenant_owners_cannot_mutate_immutable_managed_resources() {
         assert_eq!(resource["revision"], 0);
         match kind {
             ManagedResourceKind::Skill => assert_eq!(resource["status"], "active"),
-            ManagedResourceKind::Plugin | ManagedResourceKind::Agent => {
+            ManagedResourceKind::Agent => {
                 assert_eq!(resource["enabled"], true);
             }
             ManagedResourceKind::SubAgent | ManagedResourceKind::PromptTemplate => {

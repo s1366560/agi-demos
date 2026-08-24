@@ -214,7 +214,7 @@ export function SettingsWindow({
           resourceSection === 'skills'
             ? await managedResources.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await new DesktopApiClient(config).listManagedPlugins(signal)
+              ? await new DesktopApiClient(config).listMarketplacePlugins(signal)
               : resourceSection === 'agents'
                 ? await managedResources.listManagedAgents(signal)
                 : await managedResources.listManagedSubAgents(signal);
@@ -472,18 +472,6 @@ export function SettingsWindow({
           action.nextActive ? 'active' : 'disabled',
           skill.revision,
         );
-      } else if (action.kind === 'set_plugin_enabled') {
-        const plugin = item as ManagedPlugin;
-        const response = await new DesktopApiClient(config).setManagedPluginEnabled(
-          plugin.id,
-          action.nextActive,
-        );
-        if (
-          activeSectionRef.current === mutationSection &&
-          resourceContextKeyRef.current === mutationContextKey
-        ) {
-          pluginManagement.recordAction(response, action.nextActive ? 'enable' : 'disable');
-        }
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
         await managedResources.setManagedSubAgentEnabled(
@@ -524,7 +512,6 @@ export function SettingsWindow({
       skillPackageManagement.versionsDialog ||
       skillPackageManagement.evolutionDialog ||
       pluginManagement.dialog ||
-      pluginManagement.activityOpen ||
       channelManagement.open ||
       channelManagement.editor ||
       mcpServerManagement.dialog ||
@@ -710,7 +697,6 @@ export function SettingsWindow({
                       slots={platformPluginUiSlots.slots}
                       error={platformPluginUiSlots.error}
                       loading={platformPluginUiSlots.loading}
-                      config={config}
                     />
                   ) : null}
                   <ManagedResourceWorkspace
@@ -722,13 +708,12 @@ export function SettingsWindow({
                   loading={resourceLoading}
                   error={resourceError}
                   actionError={
-                    resourceActionError ?? pluginManagement.reloadError ??
-                    skillPackageManagement.packageActionError ?? subAgentLibrary.error ??
+                    resourceActionError ?? skillPackageManagement.packageActionError ??
+                    subAgentLibrary.error ??
                     subAgentDefinitions.error
                   }
                   busy={
                     actionBusyId !== null ||
-                    pluginManagement.reloadBusy ||
                     skillPackageManagement.importBusy ||
                     skillPackageManagement.exportBusyId !== null ||
                     subAgentLibrary.importBusyId !== null ||
@@ -766,16 +751,12 @@ export function SettingsWindow({
                   onAction={(item) => void toggleResource(item)}
                   onCreate={() => {
                     if (section === 'skills') void skillManagement.open(null);
-                    if (section === 'plugins') pluginManagement.openInstall();
                     if (section === 'agents') agentManagement.open(null);
                     if (section === 'subagents') subAgentDefinitions.open(null);
                   }}
                   onImport={skillPackageManagement.openImport}
                   onEdit={(item) => {
                     if (section === 'skills') void skillManagement.open(item as ManagedSkill);
-                    if (section === 'plugins') {
-                      void pluginManagement.openConfig(item as ManagedPlugin);
-                    }
                     if (section === 'agents') agentManagement.open(item as ManagedAgentDefinition);
                     if (section === 'subagents') {
                       subAgentDefinitions.open(item as ManagedSubAgent);
@@ -804,11 +785,10 @@ export function SettingsWindow({
                     void subAgentLibrary.importFilesystem(item as ManagedSubAgent)
                   }
                   onChannels={channelManagement.launch}
-                  onPluginActivity={pluginManagement.openActivity}
-                  onReload={() => void pluginManagement.reload()}
+                  onReload={() => void reloadPluginResources()}
                   onRemove={(item) => {
                     if (section === 'plugins') {
-                      void pluginManagement.openConfig(item as ManagedPlugin, true);
+                      pluginManagement.openUninstall(item as ManagedPlugin);
                     }
                   }}
                   />

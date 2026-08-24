@@ -33,8 +33,6 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from src.infrastructure.plugins.v2.protocol import parse_profile_snapshot_v2
 from src.infrastructure.plugins.v2.route_authority import (
-    LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-    LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
     ROUTE_AUTHORITY_CATALOG_INJECT_V2,
     ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
     ROUTE_TABLE_BUILDER_INJECT_V2,
@@ -141,7 +139,7 @@ async def test_v2_distribution_endpoint_returns_404_without_publication(
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-def _route_authority_snapshot_v2(*, bridge_enabled: bool, target_enabled: bool = True):
+def _route_authority_snapshot_v2(*, target_enabled: bool = True):
     snapshot = parse_profile_snapshot_v2(
         json.loads(
             (_ROOT / "shared/fixtures/platform-plugin-profile.v2.json").read_text(encoding="utf-8")
@@ -187,17 +185,10 @@ def _route_authority_snapshot_v2(*, bridge_enabled: bool, target_enabled: bool =
             ROUTE_AUTHORITY_CATALOG_INJECT_V2: ROUTE_AUTHORITY_CATALOG_SERVICE_V2,
         },
     )
-    bridge_entry = replace(
-        target_entry,
-        entry_id=LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-        plugin_ref="memstack-runtime-kernel",
-        module_ref=LEGACY_HTTP_ROUTE_BRIDGE_MODULE_V2,
-        enabled=bridge_enabled,
-    )
     return replace(
         snapshot,
         manifests=(manifest,),
-        entries=(target_entry, bridge_entry),
+        entries=(target_entry,),
     )
 
 
@@ -243,7 +234,6 @@ def _route_authority_v2(
 def _install_route_generation_v2(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    bridge_enabled: bool,
     target_enabled: bool = True,
     definition_owner: str | None = "example-http-routes",
     authority_owner: str | None = "example-http-routes",
@@ -263,7 +253,6 @@ def _install_route_generation_v2(
     }
     generation = SimpleNamespace(
         snapshot=_route_authority_snapshot_v2(
-            bridge_enabled=bridge_enabled,
             target_enabled=target_enabled,
         ),
         resolve=lambda service, _scope: services[service],
@@ -277,7 +266,7 @@ async def test_v2_route_authority_readiness_returns_exact_bundle_binding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     await _record_desired_route_v2(db_session)
-    _install_route_generation_v2(monkeypatch, bridge_enabled=False)
+    _install_route_generation_v2(monkeypatch)
 
     response = _client(db_session).get("/api/v1/platform-plugins/v2/route-authority/readiness")
 
@@ -300,26 +289,17 @@ async def test_v2_route_authority_readiness_returns_exact_bundle_binding(
 @pytest.mark.parametrize(
     ("kwargs", "reason"),
     (
-        ({"bridge_enabled": True}, "legacy_bridge_enabled"),
         (
-            {"bridge_enabled": False, "authority_owner": None},
+            {"authority_owner": None},
             "route_authority_missing:GET /api/v1/plugins/example",
         ),
         (
-            {"bridge_enabled": False, "authority_permission": "plugin.example.admin"},
+            {"authority_permission": "plugin.example.admin"},
             "route_authority_mismatch:GET /api/v1/plugins/example",
         ),
         (
-            {"bridge_enabled": False, "target_enabled": False},
+            {"target_enabled": False},
             "route_owner_entry_inactive:example-http-routes",
-        ),
-        (
-            {
-                "bridge_enabled": True,
-                "definition_owner": LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-                "authority_owner": LEGACY_HTTP_ROUTE_BRIDGE_ENTRY_V2,
-            },
-            "route_owner_is_legacy_bridge:GET /api/v1/plugins/example",
         ),
     ),
 )

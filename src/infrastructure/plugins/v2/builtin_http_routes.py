@@ -9,13 +9,8 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.routing import BaseRoute
 
-from src.infrastructure.plugins.route_loader import (
-    BuiltinRouteRowOverride,
-    RouteLoadError,
-    install_builtin_routes,
-)
-
 from .http_routes import RouteContributionV2, RouteTableV2, install_route_definitions_v2
+from .runtime import RuntimeV2Error
 
 _ROOT_PREVIEW_CATCH_ALL = "/{path:path}"
 REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
@@ -111,7 +106,8 @@ def build_builtin_route_graph_v2(
     required_v2_row_ids: Collection[str] = (),
     dependency_overrides: Mapping[Callable[..., Any], Callable[..., Any]] | None = None,
 ) -> BuiltinRouteGraphV2:
-    """Replay the authoritative 72-row inventory into an invisible private graph."""
+    """Build one private graph exclusively from the generation's V2 contributions."""
+    _ = workspace_core_settings
     private_app = FastAPI(
         docs_url=None,
         redoc_url=None,
@@ -120,76 +116,70 @@ def build_builtin_route_graph_v2(
     )
     private_app.dependency_overrides.update(dict(dependency_overrides or {}))
     definitions = tuple(route_definitions)
-    row_overrides = _builtin_row_overrides_v2(definitions)
-    missing_required = sorted(set(required_v2_row_ids) - set(row_overrides))
+    row_owners = _builtin_row_owners_v2(definitions)
+    missing_required = sorted(set(required_v2_row_ids) - set(row_owners))
     if missing_required:
-        raise RouteLoadError(
-            "required V2 builtin route row claims missing: " + ", ".join(missing_required)
+        raise RuntimeV2Error(
+            "required_route_contribution_missing",
+            "required V2 route contributions are missing: " + ", ".join(missing_required),
         )
-    mounted = install_builtin_routes(
-        private_app,
-        workspace_core_settings=workspace_core_settings,
-        row_overrides=row_overrides,
-    )
-    standalone = tuple(
-        definition for definition in definitions if definition.replaces_builtin_row_id is None
-    )
-    _install_generation_routes_before_root_catch_all(private_app, standalone)
-    v2_owned = tuple(row_id for row_id in mounted if row_id in row_overrides)
+    ordered_definitions = _definitions_before_root_catch_all_v2(definitions)
+    install_route_definitions_v2(private_app, ordered_definitions)
+    mounted = _ordered_builtin_row_ids_v2(ordered_definitions)
     return BuiltinRouteGraphV2(
-        table=RouteTableV2.from_fastapi_graph(private_app, definitions=definitions),
+        table=RouteTableV2.from_fastapi_graph(
+            private_app,
+            definitions=ordered_definitions,
+        ),
         mounted_row_ids=mounted,
-        static_mounted_row_ids=tuple(row_id for row_id in mounted if row_id not in row_overrides),
-        v2_owned_row_ids=v2_owned,
+        static_mounted_row_ids=(),
+        v2_owned_row_ids=mounted,
         route_signatures=route_signatures_v2(private_app.router.routes),
     )
 
 
-def _builtin_row_overrides_v2(
+def _builtin_row_owners_v2(
     definitions: Sequence[RouteContributionV2],
-) -> dict[str, BuiltinRouteRowOverride]:
-    grouped: dict[str, list[RouteContributionV2]] = {}
+) -> dict[str, str]:
+    owners: dict[str, str] = {}
     for definition in definitions:
-        if definition.replaces_builtin_row_id is None:
+        row_id = definition.replaces_builtin_row_id
+        if row_id is None:
             continue
-        grouped.setdefault(definition.replaces_builtin_row_id, []).append(definition)
-
-    overrides: dict[str, BuiltinRouteRowOverride] = {}
-    for row_id, claimed in grouped.items():
-        owners = {definition.owner_entry_id for definition in claimed}
-        if len(owners) != 1:
-            raise ValueError(f"builtin route row {row_id} must have exactly one V2 owner")
-        frozen = tuple(claimed)
-        owner_entry_id = next(iter(owners))
-
-        overrides[row_id] = BuiltinRouteRowOverride(
-            row_id=row_id,
-            owner_entry_id=owner_entry_id,
-            definitions=frozen,
-        )
-    return overrides
+        existing_owner = owners.setdefault(row_id, definition.owner_entry_id)
+        if existing_owner != definition.owner_entry_id:
+            raise RuntimeV2Error(
+                "route_row_owner_conflict",
+                f"V2 route row {row_id} must have exactly one owner",
+            )
+    return owners
 
 
-def _install_generation_routes_before_root_catch_all(
-    app: FastAPI,
+def _definitions_before_root_catch_all_v2(
     definitions: Sequence[RouteContributionV2],
-) -> None:
-    """Keep declared routes reachable ahead of the host-preview fallback."""
-    if not definitions:
-        return
-    existing_count = len(app.router.routes)
-    install_route_definitions_v2(app, definitions)
-    contributed = app.router.routes[existing_count:]
-    del app.router.routes[existing_count:]
-    insertion_index = next(
-        (
-            index
-            for index, route in enumerate(app.router.routes)
-            if getattr(route, "path", None) == _ROOT_PREVIEW_CATCH_ALL
-        ),
-        len(app.router.routes),
+) -> tuple[RouteContributionV2, ...]:
+    """Keep every declared route reachable ahead of the host-preview fallback."""
+    regular = tuple(
+        definition for definition in definitions if definition.path != _ROOT_PREVIEW_CATCH_ALL
     )
-    app.router.routes[insertion_index:insertion_index] = contributed
+    catch_all = tuple(
+        definition for definition in definitions if definition.path == _ROOT_PREVIEW_CATCH_ALL
+    )
+    return (*regular, *catch_all)
+
+
+def _ordered_builtin_row_ids_v2(
+    definitions: Sequence[RouteContributionV2],
+) -> tuple[str, ...]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for definition in definitions:
+        row_id = definition.replaces_builtin_row_id
+        if row_id is None or row_id in seen:
+            continue
+        seen.add(row_id)
+        ordered.append(row_id)
+    return tuple(ordered)
 
 
 def route_signatures_v2(

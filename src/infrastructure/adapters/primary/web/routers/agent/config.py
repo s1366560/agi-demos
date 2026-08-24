@@ -1,19 +1,15 @@
 """Tenant agent configuration endpoints for Agent API."""
 
-import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 
-import jsonschema
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
 from src.domain.model.agent.tenant_agent_config import (
     ConfigType,
-    HookExecutorKind,
-    RuntimeHookConfig,
     TenantAgentConfig,
 )
 from src.domain.model.auth.user import User
@@ -28,19 +24,14 @@ from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_a
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
-from src.infrastructure.agent.plugins.hook_security_policy import (
-    ALLOWED_ISOLATION_MODES,
-    HOST_ISOLATION_MODE,
-    ISOLATION_MODE_SETTING_KEY,
-    MAX_CUSTOM_HOOK_TIMEOUT_SECONDS,
-    MIN_CUSTOM_HOOK_TIMEOUT_SECONDS,
-    TIMEOUT_SETTING_KEY,
-    is_executor_allowed_for_family,
-    normalize_hook_family,
-)
-from src.infrastructure.agent.plugins.registry import RegisteredHookMetadata, get_plugin_registry
 from src.infrastructure.agent.state.agent_session_pool import invalidate_agent_session
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v1_retirement import (
+    PLUGIN_MARKETPLACE_V2_PATH,
+    PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+)
+from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.runtime_hook_catalog import runtime_hook_catalog_v2
 
 from .access import has_tenant_admin_access, require_tenant_access
 from .schemas import (
@@ -56,10 +47,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-MAX_RUNTIME_HOOK_OVERRIDES = 32
-MAX_RUNTIME_HOOK_SETTINGS_KEYS = 16
-MAX_RUNTIME_HOOK_SETTINGS_BYTES = 4096
-MAX_RUNTIME_HOOK_PRIORITY = 1000
 MAX_TOOL_POLICY_ITEMS = 128
 MAX_TOOL_NAME_LENGTH = 128
 INTERNAL_ERROR_DETAIL = "Internal server error"
@@ -106,211 +93,18 @@ def _build_config_response(
     )
 
 
-def _validate_runtime_hooks(
-    runtime_hooks: list[RuntimeHookConfig],
-    *,
-    allowed_unknown_hook_keys: set[tuple[str, str, str, str]] | None = None,
-) -> None:
-    """Reject invalid runtime hook overrides before they reach execution."""
-    if len(runtime_hooks) > MAX_RUNTIME_HOOK_OVERRIDES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("runtime_hooks cannot exceed the maximum number of entries"),
-        )
-
-    allowed_unknown_keys = allowed_unknown_hook_keys or set()
-    catalog = {
-        (entry.plugin_name.strip().lower(), entry.hook_name.strip().lower()): entry
-        for entry in get_plugin_registry().list_hook_catalog()
-    }
-    seen_hooks: set[tuple[str, str, str, str]] = set()
-
-    for hook in runtime_hooks:
-        _validate_runtime_hook_override(
-            hook,
-            catalog_entry=catalog.get(hook.catalog_key),
-            seen_hooks=seen_hooks,
-            allowed_unknown_keys=allowed_unknown_keys,
-        )
-
-
-def _validate_runtime_hook_override(
-    hook: RuntimeHookConfig,
-    *,
-    catalog_entry: RegisteredHookMetadata | None,
-    seen_hooks: set[tuple[str, str, str, str]],
-    allowed_unknown_keys: set[tuple[str, str, str, str]],
-) -> None:
-    """Validate one runtime hook override against the catalog."""
-    hook_label = f"{hook.plugin_name}:{hook.hook_name}"
-    if hook.key in seen_hooks:
-        raise HTTPException(status_code=422, detail=_("Duplicate runtime hook override"))
-    seen_hooks.add(hook.key)
-
-    _validate_runtime_hook_priority(hook, hook_label)
-    _validate_runtime_hook_identity(hook, hook_label, catalog_entry)
-    _validate_runtime_hook_settings_size(hook, hook_label)
-    _validate_runtime_hook_security_boundary(hook, hook_label, catalog_entry)
-
-    if catalog_entry is None:
-        registry = get_plugin_registry()
-        if (
-            hook.key not in allowed_unknown_keys
-            and hook.hook_name not in registry.list_well_known_hooks()
-        ):
-            raise HTTPException(status_code=422, detail=_("Unknown runtime hook"))
-        return
-
-    _validate_runtime_hook_settings_schema(hook, catalog_entry, hook_label)
-
-
-def _validate_runtime_hook_priority(hook: RuntimeHookConfig, hook_label: str) -> None:
-    """Validate runtime hook priority bounds."""
-    if hook.priority is None or abs(hook.priority) <= MAX_RUNTIME_HOOK_PRIORITY:
-        return
-
+def _raise_runtime_hook_v1_retired() -> NoReturn:
+    """Reject mutation of runtime hooks that are now V2 Profile entries."""
     raise HTTPException(
-        status_code=422,
-        detail=_("Runtime hook priority must be within the allowed range"),
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": PLUGIN_PROTOCOL_V1_RETIRED_CODE,
+            "message": _(
+                "Runtime hook V1 mutation is retired; manage lifecycle modules through V2 Profiles"
+            ),
+            "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
+        },
     )
-
-
-def _validate_runtime_hook_identity(
-    hook: RuntimeHookConfig,
-    hook_label: str,
-    catalog_entry: RegisteredHookMetadata | None,
-) -> None:
-    """Validate runtime hook identity and executor fields."""
-    normalized_executor_kind = hook.executor_kind.strip().lower()
-    if normalized_executor_kind not in {item.value for item in HookExecutorKind}:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook has unsupported executor_kind"),
-        )
-    if normalized_executor_kind == HookExecutorKind.BUILTIN.value:
-        if not hook.plugin_name.strip():
-            raise HTTPException(
-                status_code=422,
-                detail=_("Builtin runtime hook requires plugin_name"),
-            )
-        return
-
-    if not (hook.source_ref or "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires source_ref"),
-        )
-    if not (hook.entrypoint or "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires entrypoint"),
-        )
-    effective_family = (
-        hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")
-    ).strip()
-    if not effective_family:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Custom runtime hook requires hook_family"),
-        )
-
-
-def _validate_runtime_hook_security_boundary(
-    hook: RuntimeHookConfig,
-    hook_label: str,
-    catalog_entry: RegisteredHookMetadata | None,
-) -> None:
-    """Validate executor/family permission boundaries for runtime hooks."""
-    normalized_executor_kind = hook.executor_kind.strip().lower()
-    if normalized_executor_kind == HookExecutorKind.BUILTIN.value:
-        return
-
-    effective_family = normalize_hook_family(
-        hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")
-    )
-    if not is_executor_allowed_for_family(
-        executor_kind=normalized_executor_kind,
-        hook_family=effective_family,
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook cannot use executor_kind for hook_family"),
-        )
-
-    timeout_override = hook.settings.get(TIMEOUT_SETTING_KEY)
-    if timeout_override is not None and not isinstance(timeout_override, (int, float)):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook timeout_seconds must be numeric"),
-        )
-    if timeout_override is not None:
-        timeout_seconds = float(timeout_override)
-        if not (
-            MIN_CUSTOM_HOOK_TIMEOUT_SECONDS <= timeout_seconds <= MAX_CUSTOM_HOOK_TIMEOUT_SECONDS
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail=_("Runtime hook timeout_seconds must be between the allowed bounds"),
-            )
-
-    isolation_mode = hook.settings.get(ISOLATION_MODE_SETTING_KEY, HOST_ISOLATION_MODE)
-    if not isinstance(isolation_mode, str):
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook isolation_mode must be a string"),
-        )
-    normalized_isolation_mode = isolation_mode.strip().lower()
-    if normalized_isolation_mode not in ALLOWED_ISOLATION_MODES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook isolation_mode must be allowed"),
-        )
-
-
-def _validate_runtime_hook_settings_size(hook: RuntimeHookConfig, hook_label: str) -> None:
-    """Validate runtime hook settings size limits."""
-    if len(hook.settings) > MAX_RUNTIME_HOOK_SETTINGS_KEYS:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook settings cannot exceed the maximum number of keys"),
-        )
-
-    serialized_settings = json.dumps(hook.settings, separators=(",", ":"))
-    if len(serialized_settings.encode("utf-8")) > MAX_RUNTIME_HOOK_SETTINGS_BYTES:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Runtime hook settings cannot exceed the maximum size"),
-        )
-
-
-def _validate_runtime_hook_settings_schema(
-    hook: RuntimeHookConfig,
-    catalog_entry: RegisteredHookMetadata,
-    hook_label: str,
-) -> None:
-    """Validate runtime hook settings against the catalog schema."""
-    schema = dict(catalog_entry.settings_schema)
-    if not schema:
-        if hook.settings:
-            raise HTTPException(
-                status_code=422,
-                detail=_("Runtime hook does not accept custom settings"),
-            )
-        return
-
-    try:
-        jsonschema.validate(instance=hook.settings, schema=schema)
-    except jsonschema.ValidationError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=_("Invalid settings for runtime hook"),
-        ) from exc
-    except jsonschema.SchemaError as exc:
-        logger.error("Invalid hook schema for %s: %s", hook_label, exc)
-        raise HTTPException(
-            status_code=500,
-            detail=_("Runtime hook schema is invalid"),
-        ) from exc
 
 
 def _normalize_tool_policy_list(
@@ -458,7 +252,7 @@ async def get_hook_catalog(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> HookCatalogResponse:
-    """Return the runtime hook catalog for tenant admins."""
+    """Return lifecycle modules active in the request's pinned V2 generation."""
     await require_tenant_access(db, current_user, tenant_id, require_admin=True)
     hooks = [
         HookCatalogEntryResponse(
@@ -468,14 +262,14 @@ async def get_hook_catalog(
             display_name=entry.display_name,
             description=entry.description,
             default_priority=entry.default_priority,
-            default_enabled=entry.default_enabled,
-            default_executor_kind=entry.default_executor_kind,
-            default_source_ref=entry.default_source_ref,
-            default_entrypoint=entry.default_entrypoint,
+            default_enabled=True,
+            default_executor_kind="builtin",
+            default_source_ref=entry.module_ref,
+            default_entrypoint=None,
             default_settings=dict(entry.default_settings),
             settings_schema=dict(entry.settings_schema),
         )
-        for entry in get_plugin_registry().list_hook_catalog()
+        for entry in runtime_hook_catalog_v2(current_generation_v2())
     ]
     return HookCatalogResponse(hooks=hooks)
 
@@ -500,6 +294,8 @@ async def update_tenant_agent_config(
     """
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
+        if update_request.runtime_hooks is not None:
+            _raise_runtime_hook_v1_retired()
         authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
 
         snapshot = await authority_repo.lock_for_update(
@@ -550,29 +346,7 @@ async def update_tenant_agent_config(
             else list(config.disabled_tools)
         )
         enabled_tools, disabled_tools = _validate_tool_policy(enabled_tools, disabled_tools)
-        runtime_hooks = (
-            [
-                RuntimeHookConfig(
-                    hook_name=item.hook_name,
-                    plugin_name=item.plugin_name,
-                    hook_family=item.hook_family,
-                    executor_kind=item.executor_kind,
-                    source_ref=item.source_ref,
-                    entrypoint=item.entrypoint,
-                    enabled=item.enabled,
-                    priority=item.priority,
-                    settings=dict(item.settings),
-                )
-                for item in update_request.runtime_hooks
-            ]
-            if update_request.runtime_hooks is not None
-            else list(config.runtime_hooks)
-        )
-        if update_request.runtime_hooks is not None:
-            _validate_runtime_hooks(
-                runtime_hooks,
-                allowed_unknown_hook_keys={hook.key for hook in config.runtime_hooks},
-            )
+        runtime_hooks = list(config.runtime_hooks)
 
         # Create updated config
         updated_config = TenantAgentConfig(

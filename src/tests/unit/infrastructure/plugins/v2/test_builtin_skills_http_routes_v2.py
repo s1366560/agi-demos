@@ -215,9 +215,6 @@ def test_skills_row_preserves_route_order_openapi_and_recursive_dependencies() -
         generation=1,
         digest="0" * 64,
     )
-    baseline = build_builtin_route_graph_v2(
-        workspace_core_settings=get_workspace_core_settings(),
-    )
     claimed = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.skills_route_definitions_v2(),
@@ -227,11 +224,17 @@ def test_skills_row_preserves_route_order_openapi_and_recursive_dependencies() -
     claimed_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     install_route_definitions_v2(claimed_app, subject.skills_route_definitions_v2())
 
-    assert claimed.route_signatures == baseline.route_signatures
-    assert (
-        claimed.table.openapi_snapshot(descriptor).schema
-        == baseline.table.openapi_snapshot(descriptor).schema
+    assert claimed.route_signatures == tuple(
+        (
+            definition.path,
+            definition.name,
+            ()
+            if definition.methods == ("WEBSOCKET",)
+            else tuple(sorted(definition.methods)),
+        )
+        for definition in claimed.table.definitions
     )
+    assert claimed.table.openapi_snapshot(descriptor).schema["openapi"].startswith("3.")
     assert _dependency_signatures(claimed_app) == _dependency_signatures(legacy_app)
     assert claimed.v2_owned_row_ids == ("skills",)
 

@@ -15,6 +15,7 @@ from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
 )
+from .agent_lifecycle_runtime import agent_lifecycle_definitions_v2
 from .agent_loop import builtin_agent_loop_definition_v2
 from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -33,7 +34,7 @@ from .engine_services import engine_catalog_definition_v2
 from .event_log_services import event_log_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
-from .legacy_http_route_bridge import legacy_http_route_bridge_definition_v2
+from .llm_client_service import builtin_tenant_llm_client_factory_definition_v2
 from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
@@ -322,7 +323,6 @@ def builtin_runtime_definitions_v2(
         builtin_invitations_http_routes_definition_v2(),
         builtin_invitations_public_http_routes_definition_v2(),
         builtin_agent_pool_http_routes.builtin_agent_pool_http_routes_definition_v2(),
-        legacy_http_route_bridge_definition_v2(),
         *project_tenant_service_definitions_v2(),
         *cron_service_definitions_v2(),
         *reflection_service_definitions_v2(),
@@ -332,6 +332,7 @@ def builtin_runtime_definitions_v2(
         *support_ticket_service_definitions_v2(),
         *ai_tool_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
+        builtin_tenant_llm_client_factory_definition_v2(),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
@@ -344,6 +345,7 @@ def builtin_runtime_definitions_v2(
         builtin_session_event_log_definition_v2(),
         builtin_plugin_selection_judge_definition_v2(),
         builtin_workspace_drone_pipeline_provider_definition_v2(),
+        *agent_lifecycle_definitions_v2(),
         *sisyphus_runtime_definitions_v2(),
         *workspace_runtime_definitions_v2(),
     )

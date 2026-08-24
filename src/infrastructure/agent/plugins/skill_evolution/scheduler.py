@@ -10,15 +10,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from src.application.services.llm_provider_manager import (
-        LLMProviderManager,
-    )
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
         SkillSessionAggregator,
@@ -37,6 +36,8 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+type LlmClientLease = Callable[..., AbstractAsyncContextManager["LLMClient"]]
 
 _CAPTURE_TRIGGER_DELAY_SECONDS = 5.0
 _STARTUP_TRIGGER_DELAY_SECONDS = 0.1
@@ -67,7 +68,7 @@ class EvolutionScheduler:
         judge: SessionJudge,
         aggregator: SkillSessionAggregator,
         engine: EvolutionEngine,
-        llm_provider_manager: LLMProviderManager,
+        llm_client_lease: LlmClientLease,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self._config = config
@@ -75,7 +76,7 @@ class EvolutionScheduler:
         self._judge = judge
         self._aggregator = aggregator
         self._engine = engine
-        self._llm_provider_manager = llm_provider_manager
+        self._llm_client_lease = llm_client_lease
         self._session_factory = session_factory
         self._task: asyncio.Task[None] | None = None
         self._run_lock = asyncio.Lock()
@@ -340,139 +341,100 @@ class EvolutionScheduler:
             )
 
             repo = SkillEvolutionRepository(db)
-            run_config = await _load_tenant_config(db, tenant_id=tenant_id, default_config=self._config)
+            run_config = await _load_tenant_config(
+                db, tenant_id=tenant_id, default_config=self._config
+            )
             self._summarizer._config = run_config
             self._judge._config = run_config
             self._aggregator._config = run_config
             self._engine._config = run_config
             skill_repo = SqlSkillRepository(db)
             skill_version_repo = SqlSkillVersionRepository(db)
-            llm_client = await self._get_llm_client(db=db, tenant_id=tenant_id)
-
-            # Stage 1: Summarize unprocessed sessions
-            unprocessed = await repo.get_unprocessed_sessions(
-                tenant_id=tenant_id,
-                skill_name=skill_name,
-                project_id=project_id,
-                filter_project_id=skill_name is not None or project_id is not None,
-                min_skill_sessions=run_config.scoring_min_sessions_per_skill,
-                limit=run_config.max_sessions_per_batch,
-            )
-            logger.info(
-                "Skill evolution summarization stage tenant=%s skill=%s pending=%d",
-                tenant_id,
-                skill_name or "*",
-                len(unprocessed),
-            )
-            if unprocessed:
-                result["summarized"] = await self._summarizer.summarize_batch(
-                    unprocessed, llm_client, repo
+            async with self._llm_client_lease(db=db, tenant_id=tenant_id) as llm_client:
+                # Stage 1: Summarize unprocessed sessions
+                unprocessed = await repo.get_unprocessed_sessions(
+                    tenant_id=tenant_id,
+                    skill_name=skill_name,
+                    project_id=project_id,
+                    filter_project_id=skill_name is not None or project_id is not None,
+                    min_skill_sessions=run_config.scoring_min_sessions_per_skill,
+                    limit=run_config.max_sessions_per_batch,
                 )
-                await db.commit()
+                logger.info(
+                    "Skill evolution summarization stage tenant=%s skill=%s pending=%d",
+                    tenant_id,
+                    skill_name or "*",
+                    len(unprocessed),
+                )
+                if unprocessed:
+                    result["summarized"] = await self._summarizer.summarize_batch(
+                        unprocessed, llm_client, repo
+                    )
+                    await db.commit()
 
-            # Stage 2: Judge unscored sessions
-            unscored = await repo.get_unscored_sessions(
-                tenant_id=tenant_id,
-                skill_name=skill_name,
-                project_id=project_id,
-                filter_project_id=skill_name is not None or project_id is not None,
-                min_skill_sessions=run_config.scoring_min_sessions_per_skill,
-                limit=run_config.max_sessions_per_batch,
-            )
-            logger.info(
-                "Skill evolution judging stage tenant=%s skill=%s pending=%d",
-                tenant_id,
-                skill_name or "*",
-                len(unscored),
-            )
-            if unscored:
-                result["judged"] = await self._judge.judge_batch(unscored, llm_client, repo)
-                await db.commit()
+                # Stage 2: Judge unscored sessions
+                unscored = await repo.get_unscored_sessions(
+                    tenant_id=tenant_id,
+                    skill_name=skill_name,
+                    project_id=project_id,
+                    filter_project_id=skill_name is not None or project_id is not None,
+                    min_skill_sessions=run_config.scoring_min_sessions_per_skill,
+                    limit=run_config.max_sessions_per_batch,
+                )
+                logger.info(
+                    "Skill evolution judging stage tenant=%s skill=%s pending=%d",
+                    tenant_id,
+                    skill_name or "*",
+                    len(unscored),
+                )
+                if unscored:
+                    result["judged"] = await self._judge.judge_batch(unscored, llm_client, repo)
+                    await db.commit()
 
-            # Stage 3: Aggregate
-            groups = await self._aggregator.aggregate(
-                repo,
-                tenant_id=tenant_id,
-                project_id=project_id,
-                filter_project_id=skill_name is not None or project_id is not None,
-            )
-            if skill_name is not None:
-                groups = {
-                    name: group for name, group in groups.items() if group.skill_name == skill_name
-                }
-            result["groups"] = len(groups)
-
-            # Stage 4: Evolve
-            if groups:
-                jobs = await self._engine.evolve_all(
-                    groups,
-                    llm_client,
+                # Stage 3: Aggregate
+                groups = await self._aggregator.aggregate(
                     repo,
                     tenant_id=tenant_id,
                     project_id=project_id,
-                    skill_repository=skill_repo,
-                    skill_version_repository=skill_version_repo,
+                    filter_project_id=skill_name is not None or project_id is not None,
                 )
-                result["jobs"] = len(jobs)
-                result["blocked_by_review"] = self._engine.last_blocked_by_review_count
-                await db.commit()
+                if skill_name is not None:
+                    groups = {
+                        name: group
+                        for name, group in groups.items()
+                        if group.skill_name == skill_name
+                    }
+                result["groups"] = len(groups)
 
-            # Cleanup old sessions
-            cleaned = await repo.cleanup_old_sessions(
-                retention_days=run_config.session_retention_days
-            )
-            if cleaned > 0:
-                await db.commit()
-                logger.info("Cleaned %d old evolution sessions", cleaned)
+                # Stage 4: Evolve
+                if groups:
+                    jobs = await self._engine.evolve_all(
+                        groups,
+                        llm_client,
+                        repo,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        skill_repository=skill_repo,
+                        skill_version_repository=skill_version_repo,
+                    )
+                    result["jobs"] = len(jobs)
+                    result["blocked_by_review"] = self._engine.last_blocked_by_review_count
+                    await db.commit()
+
+                # Cleanup old sessions
+                cleaned = await repo.cleanup_old_sessions(
+                    retention_days=run_config.session_retention_days
+                )
+                if cleaned > 0:
+                    await db.commit()
+                    logger.info("Cleaned %d old evolution sessions", cleaned)
 
         return result
-
-    async def _get_llm_client(
-        self,
-        *,
-        db: AsyncSession,
-        tenant_id: str,
-    ) -> LLMClient:
-        try:
-            return await self._llm_provider_manager.get_llm_client(
-                tenant_id=tenant_id,
-            )
-        except TypeError:
-            return await self._llm_provider_manager.get_llm_client()
-        except RuntimeError:
-            logger.info("No registered LLM client for skill evolution; resolving tenant provider")
-
-        from src.application.services.llm_provider_manager import (
-            OperationType as ManagerOperationType,
-        )
-        from src.application.services.provider_resolution_service import (
-            ProviderResolutionService,
-        )
-        from src.domain.llm_providers.models import OperationType as ProviderOperationType
-        from src.infrastructure.persistence.llm_providers_repository import (
-            SQLAlchemyProviderRepository,
-        )
-
-        repository = SQLAlchemyProviderRepository(session=db)
-        resolver = ProviderResolutionService(repository)
-        provider = await resolver.resolve_provider(
-            tenant_id=tenant_id,
-            operation_type=ProviderOperationType.LLM,
-        )
-        self._llm_provider_manager.register_provider(provider)
-        _ = await self._llm_provider_manager.health_check_all()
-        return await self._llm_provider_manager.get_llm_client(
-            tenant_id=tenant_id,
-            operation=ManagerOperationType.LLM,
-            preferred_provider=provider.provider_type,
-            allow_fallback=False,
-        )
 
     async def _discover_tenants(self) -> list[str]:
         """Discover tenant IDs to run evolution for.
 
-        Scans the sessions table for distinct tenant IDs. Falls back
-        to a single empty-string ID if no sessions exist.
+        Scans the sessions table for distinct non-empty tenant IDs.
         """
         if self._session_factory is None:
             return []
@@ -498,10 +460,10 @@ class EvolutionScheduler:
                     len(tenant_ids),
                     tenant_ids[:10],
                 )
-                return tenant_ids if tenant_ids else [""]
+                return tenant_ids
         except Exception:
             logger.exception("Failed to discover tenants for evolution")
-            return [""]
+            return []
 
 
 async def _load_tenant_config(

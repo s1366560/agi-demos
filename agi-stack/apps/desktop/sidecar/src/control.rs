@@ -24,7 +24,7 @@ use crate::{
     data_migration::migrate_legacy_data,
     local_runtime::{
         browser_bridge, LocalRuntimeConfig, LocalRuntimeService,
-        PlatformPluginControlPlaneReconciler, PlatformPluginControlPlaneReconcilerV2,
+        PlatformPluginControlPlaneReconcilerV2,
     },
     native_host,
     oauth_pending_attempt::{OAuthPendingAttemptBroker, OAuthPendingAttemptRecord},
@@ -99,7 +99,6 @@ struct ControlState {
     oauth_pending_attempts: OAuthPendingAttemptBroker,
     trusted_sessions: TrustedSessionBroker,
     workspace_core: WorkspaceCoreSupervisor,
-    plugin_control_plane: PlatformPluginControlPlaneReconciler,
     plugin_control_plane_v2: PlatformPluginControlPlaneReconcilerV2,
 }
 
@@ -130,8 +129,6 @@ pub(crate) async fn run() -> Result<(), String> {
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
-    let plugin_control_plane =
-        runtime.start_platform_plugin_control_plane(trusted_sessions.clone());
     let plugin_control_plane_v2 =
         runtime.start_platform_plugin_control_plane_v2(trusted_sessions.clone());
     let status = runtime.status();
@@ -163,7 +160,6 @@ pub(crate) async fn run() -> Result<(), String> {
         oauth_pending_attempts,
         trusted_sessions,
         workspace_core,
-        plugin_control_plane,
         plugin_control_plane_v2,
     };
     while let Some(line) = read_bounded_line(&mut input, MAX_REQUEST_BYTES).await? {
@@ -180,7 +176,6 @@ pub(crate) async fn run() -> Result<(), String> {
         write_json_line(&mut output, &response).await?;
     }
     state.workspace_core.shutdown().await;
-    state.plugin_control_plane.shutdown().await;
     state.plugin_control_plane_v2.shutdown().await;
     state.runtime.shutdown().await;
     Ok(())

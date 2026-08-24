@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,24 +13,16 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeKindV2,
     ScopeV2,
 )
-from src.infrastructure.plugins.http_routes import HttpRouteMountError
 from src.infrastructure.plugins.v2.builtin_http_routes import (
     REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
     BuiltinRouteGraphV2,
     build_builtin_route_graph_v2,
 )
-from src.infrastructure.plugins.v2.composer import ProfileDocumentV2, compose_profile_v2
 from src.infrastructure.plugins.v2.http_routes import (
     RoutePublicationV2,
     RouteTableBuilderV2,
     RouteTableRegistryV2,
 )
-from src.infrastructure.plugins.v2.legacy_http_route_bridge import (
-    LegacyHttpRouteRowV2,
-    configured_legacy_http_routes_v2,
-    project_legacy_http_routes_v2,
-)
-from src.infrastructure.plugins.v2.protocol import control_envelope_v2
 from src.infrastructure.plugins.v2.reconciler import PreparedGenerationPublicationV2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2
@@ -38,27 +30,6 @@ from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginPublicationV2,
     PlatformPluginRuntimeHostV2,
 )
-
-
-class HttpRoutePublicationRejectedV2(HttpRouteMountError):
-    """A route generation NACK carrying the durable publication evidence."""
-
-    def __init__(self, publication: PlatformPluginPublicationV2) -> None:
-        self.publication = publication
-        super().__init__(
-            publication.receipt.error_message or "plugin route generation staging failed"
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
-class HttpRouteReconcilePublicationV2:
-    """One successful desired-route generation publication."""
-
-    mounted: int
-    unmounted: int
-    route_publication: RoutePublicationV2
-    graph: BuiltinRouteGraphV2 | None
-    plugin_publication: PlatformPluginPublicationV2 | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -86,71 +57,6 @@ class HttpRoutePublicationCoordinatorV2:
         self._workspace_core_settings = workspace_core_settings
         self._dependency_overrides = dict(dependency_overrides or {})
         self._lock = asyncio.Lock()
-
-    async def reconcile(
-        self,
-        desired_rows: Sequence[Any],
-        *,
-        on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
-    ) -> HttpRouteReconcilePublicationV2:
-        """Publish a new digest only after its private route graph is fully valid."""
-        async with self._lock:
-            distribution = self._host.current_distribution
-            if distribution is None:
-                raise HttpRouteMountError("plugin runtime v2 has no current distribution")
-            current_routes = configured_legacy_http_routes_v2(distribution.snapshot.entries)
-            document = ProfileDocumentV2(
-                profile_id=distribution.snapshot.profile_id,
-                entries=distribution.snapshot.entries,
-            )
-            projected = project_legacy_http_routes_v2(document, desired_rows)
-            requested_routes = configured_legacy_http_routes_v2(projected.entries)
-            mounted, unmounted = _route_change_counts(current_routes, requested_routes)
-            if current_routes == requested_routes:
-                current = self._registry.current
-                if current is None:
-                    raise HttpRouteMountError("plugin route table v2 has no current publication")
-                return HttpRouteReconcilePublicationV2(
-                    mounted=0,
-                    unmounted=0,
-                    route_publication=current,
-                    graph=None,
-                    plugin_publication=None,
-                )
-
-            manifests = {
-                manifest.plugin_id: manifest for manifest in distribution.snapshot.manifests
-            }
-            snapshot = compose_profile_v2(
-                projected,
-                manifests,
-                generation=distribution.descriptor.generation + 1,
-            )
-            envelope = control_envelope_v2(
-                snapshot,
-                version=distribution.envelope.version + 1,
-            )
-            generation_publication = await self._publish_locked(
-                snapshot,
-                envelope,
-            )
-            publication = generation_publication.plugin_publication
-            if not publication.accepted:
-                raise HttpRoutePublicationRejectedV2(publication)
-            if (
-                generation_publication.graph is None
-                or generation_publication.route_publication is None
-            ):
-                raise RuntimeError("accepted plugin route generation has no staged route graph")
-            if on_commit is not None:
-                on_commit(generation_publication.graph)
-            return HttpRouteReconcilePublicationV2(
-                mounted=mounted,
-                unmounted=unmounted,
-                route_publication=generation_publication.route_publication,
-                graph=generation_publication.graph,
-                plugin_publication=publication,
-            )
 
     async def publish_snapshot(
         self,
@@ -220,21 +126,7 @@ class HttpRoutePublicationCoordinatorV2:
         )
 
 
-def _route_change_counts(
-    previous: Sequence[LegacyHttpRouteRowV2],
-    requested: Sequence[LegacyHttpRouteRowV2],
-) -> tuple[int, int]:
-    old = {(row.method, row.path): row for row in previous if row.enabled}
-    new = {(row.method, row.path): row for row in requested if row.enabled}
-    changed = {key for key in old.keys() & new.keys() if old[key] != new[key]}
-    mounted = len(new.keys() - old.keys())
-    unmounted = len(old.keys() - new.keys()) + len(changed)
-    return mounted, unmounted
-
-
 __all__ = [
     "HttpRouteGenerationPublicationV2",
     "HttpRoutePublicationCoordinatorV2",
-    "HttpRoutePublicationRejectedV2",
-    "HttpRouteReconcilePublicationV2",
 ]

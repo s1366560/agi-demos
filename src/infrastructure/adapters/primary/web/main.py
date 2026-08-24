@@ -47,7 +47,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_redis_client,
     initialize_telemetry,
     initialize_websocket_manager,
-    load_desired_http_route_capabilities,
     mount_generation_http_dispatcher_v2,
     shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
@@ -75,7 +74,6 @@ from src.infrastructure.llm.resilience.health_checker import (
     stop_health_checker,
 )
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.plugins.route_loader import RouteRowPatch, install_builtin_routes
 from src.infrastructure.plugins.v2.agent_pool_runtime import (
     default_agent_pool_runtime_config_v2,
 )
@@ -124,10 +122,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
-    desired_http_route_rows = await load_desired_http_route_capabilities(
-        session_factory=async_session_factory,
-    )
-
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
     health_provider_count = await sync_health_checker_providers()
@@ -181,7 +175,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     )
     _ = await initialize_plugin_runtime_v2(
         app,
-        desired_http_route_rows=desired_http_route_rows,
         session_factory=async_session_factory,
         agent_pool_runtime_enabled=settings.agent_pool_enabled,
         agent_pool_runtime_config=default_agent_pool_runtime_config_v2(
@@ -608,23 +601,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # until REST/WS parity and native acceptance are complete.
     mount_generation_http_dispatcher_v2(app)
 
-    # Register builtin route rows from the data-driven baseline
-    # (config/plugin-profiles/builtin-routes.v1.json). The loader replays the
-    # exact registration order and prefixes recorded there; the interleaved
-    # workspace-core helpers mount at their baseline positions.
+    # Workspace Core configuration remains kernel-owned while its routes and
+    # runtime capabilities are contributed by the pinned V2 generation.
     workspace_core_settings = workspace_core_settings or get_workspace_core_settings()
     app.state.workspace_core_settings = workspace_core_settings
-    install_builtin_routes(
-        app,
-        workspace_core_settings=workspace_core_settings,
-        row_patches={
-            "auth": RouteRowPatch(row_id="auth", enabled=False),
-            "workspace-core-runtime": RouteRowPatch(
-                row_id="workspace-core-runtime",
-                enabled=False,
-            ),
-        },
-    )
 
     return app
 
