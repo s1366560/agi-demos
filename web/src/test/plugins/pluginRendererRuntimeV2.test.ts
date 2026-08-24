@@ -260,6 +260,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.project-administration.v1',
       'desktop.routes.runtime-infrastructure.v1',
       'desktop.routes.project-workspace.v1',
+      'desktop.routes.project-discovery.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
@@ -267,6 +268,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.navigation.project-administration.v1',
       'desktop.navigation.runtime-infrastructure.v1',
       'desktop.navigation.project-workspace.v1',
+      'desktop.navigation.project-discovery.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -294,6 +296,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-administration-routes', 'route'],
       ['desktop.runtime-infrastructure-routes', 'route'],
       ['desktop.project-workspace-routes', 'route'],
+      ['desktop.project-discovery-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
@@ -301,6 +304,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-administration-navigation', 'navigation'],
       ['desktop.runtime-infrastructure-navigation', 'navigation'],
       ['desktop.project-workspace-navigation', 'navigation'],
+      ['desktop.project-discovery-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -372,12 +376,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
       'desktop.project-workspace-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
       'desktop.project-workspace-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -420,12 +426,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
       'desktop.project-workspace-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
       'desktop.project-workspace-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -468,12 +476,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
       'desktop.project-workspace-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
       'desktop.project-workspace-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -516,12 +526,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-agent-routes',
       'desktop.runtime-infrastructure-routes',
       'desktop.project-workspace-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.runtime-infrastructure-navigation',
       'desktop.project-workspace-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -564,12 +576,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
       'desktop.project-workspace-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.project-workspace-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -612,14 +626,53 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
+      'desktop.project-discovery-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
+      'desktop.project-discovery-navigation',
       'desktop.default-ui-slots',
     ]);
+    await runtime.close();
+  });
+
+  it('removes project discovery routes and navigation through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const projectDiscoveryEntryIds = new Set([
+      'builtin-desktop-project-discovery-routes',
+      'builtin-desktop-project-discovery-navigation',
+    ]);
+    const projectDiscoveryEntries = candidate.entries.filter(({ entry_id }) =>
+      projectDiscoveryEntryIds.has(entry_id)
+    );
+    if (projectDiscoveryEntries.length !== projectDiscoveryEntryIds.size) {
+      throw new Error('desktop project discovery contribution fixtures are missing');
+    }
+    for (const entry of projectDiscoveryEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+    const contributionIds = registry?.list().map(({ id }) => id);
+
+    expect(receipt.status).toBe('ack');
+    expect(contributionIds).toHaveLength(15);
+    expect(contributionIds).not.toContain('desktop.project-discovery-routes');
+    expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
     await runtime.close();
   });
 

@@ -268,11 +268,18 @@ export type AppRouteRegistryRefs = {
 export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
-export type AppProjectAdministrationRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppProjectAdministrationRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'projectCronJobsRouteBindingRef'
+>;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'configRef' | 'desktopProductionRouteNavigation'
+>;
+export type AppProjectDiscoveryRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'projectSearchRouteBindingRef'
 >;
 
 function createSettingsRouteContent(
@@ -584,7 +591,7 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
 export function createAppProjectAdministrationRouteRegistry(
   refs: AppProjectAdministrationRouteRegistryRefs,
 ) {
-  const { configRef } = refs;
+  const { configRef, projectCronJobsRouteBindingRef } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
@@ -604,6 +611,10 @@ export function createAppProjectAdministrationRouteRegistry(
           });
         },
       }),
+      [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
+        createBinding: (context) =>
+          createChannelsRouteBindingForRuntime(configRef.current, context),
+      }),
       [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceRouteModuleLoader({
         createBinding: (context) => {
           const currentConfig = configRef.current;
@@ -618,6 +629,25 @@ export function createAppProjectAdministrationRouteRegistry(
               initialScope: scope,
             }),
             scope,
+          });
+        },
+      }),
+      [PROJECT_CRON_JOBS_ROUTE_ID]: createProjectCronJobsRouteModuleLoader({
+        createBinding: (_context): ProjectCronJobsRouteBinding => {
+          const current = projectCronJobsRouteBindingRef.current;
+          const currentConfig = current?.config ?? configRef.current;
+          return Object.freeze({
+            api:
+              current?.api ??
+              createDesktopAutomationApi(new DesktopApiClient(currentConfig), currentConfig),
+            scope: Object.freeze({
+              tenantId: currentConfig.tenantId,
+              projectId: currentConfig.projectId,
+            }),
+            projectName: current?.project?.name ?? current?.project?.id ?? null,
+            runCapability: current?.runCapability ?? desktopCapability(null, 'automation_run'),
+            onOpenProjectSettings: current?.onOpenProjectSettings ?? (() => undefined),
+            onOpenConnection: current?.onOpenConnection ?? (() => undefined),
           });
         },
       }),
@@ -740,6 +770,31 @@ export function createAppProjectWorkspaceRouteRegistry(
   });
 }
 
+export function createAppProjectDiscoveryRouteRegistry(refs: AppProjectDiscoveryRouteRegistryRefs) {
+  const { configRef, projectSearchRouteBindingRef } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
+        createBinding: (_context): ProjectSearchRouteBinding => {
+          const current = projectSearchRouteBindingRef.current;
+          const currentConfig = current?.config ?? configRef.current;
+          return Object.freeze({
+            api: current?.api ?? new DesktopApiClient(currentConfig),
+            scope: Object.freeze({
+              tenantId: currentConfig.tenantId,
+              projectId: currentConfig.projectId,
+            }),
+            projectName: current?.project?.name ?? current?.project?.id ?? null,
+            capability: current?.capability ?? desktopCapability(null, PROJECT_SEARCH_ROUTE_ID),
+            capabilityLoading: current?.capabilityLoading ?? true,
+            onRetryCapability: current?.onRetryCapability,
+          });
+        },
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -747,8 +802,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
     configRef,
     desktopProductionRouteLocation,
     desktopProductionRouteNavigation,
-    projectCronJobsRouteBindingRef,
-    projectSearchRouteBindingRef,
     setAuth,
     setSettingsInitialSection,
     setSettingsWindowOpen,
@@ -950,46 +1003,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
       [TENANT_TRUST_POLICIES_ROUTE_ID]: createTenantTrustRouteModuleLoader({
         createBinding: (context) =>
           createTenantTrustRouteBindingForRuntime(configRef.current, context),
-      }),
-      [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
-        createBinding: (context) =>
-          createChannelsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
-        createBinding: (_context): ProjectSearchRouteBinding => {
-          const current = projectSearchRouteBindingRef.current;
-          const currentConfig = current?.config ?? configRef.current;
-          return Object.freeze({
-            api: current?.api ?? new DesktopApiClient(currentConfig),
-            scope: Object.freeze({
-              tenantId: currentConfig.tenantId,
-              projectId: currentConfig.projectId,
-            }),
-            projectName: current?.project?.name ?? current?.project?.id ?? null,
-            capability: current?.capability ?? desktopCapability(null, PROJECT_SEARCH_ROUTE_ID),
-            capabilityLoading: current?.capabilityLoading ?? true,
-            onRetryCapability: current?.onRetryCapability,
-          });
-        },
-      }),
-      [PROJECT_CRON_JOBS_ROUTE_ID]: createProjectCronJobsRouteModuleLoader({
-        createBinding: (_context): ProjectCronJobsRouteBinding => {
-          const current = projectCronJobsRouteBindingRef.current;
-          const currentConfig = current?.config ?? configRef.current;
-          return Object.freeze({
-            api:
-              current?.api ??
-              createDesktopAutomationApi(new DesktopApiClient(currentConfig), currentConfig),
-            scope: Object.freeze({
-              tenantId: currentConfig.tenantId,
-              projectId: currentConfig.projectId,
-            }),
-            projectName: current?.project?.name ?? current?.project?.id ?? null,
-            runCapability: current?.runCapability ?? desktopCapability(null, 'automation_run'),
-            onOpenProjectSettings: current?.onOpenProjectSettings ?? (() => undefined),
-            onOpenConnection: current?.onOpenConnection ?? (() => undefined),
-          });
-        },
       }),
     }),
   });

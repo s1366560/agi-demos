@@ -158,7 +158,7 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
   );
 });
 
-test('project administration V2 route artifact owns only its three native loaders', () => {
+test('project administration V2 route artifact owns its five configuration loaders', () => {
   const projectAdministrationFactoryStart = registrySource.indexOf(
     'export function createAppProjectAdministrationRouteRegistry',
   );
@@ -177,7 +177,9 @@ test('project administration V2 route artifact owns only its three native loader
 
   for (const routeId of [
     'PROJECT_SCHEMA_ROUTE_ID',
+    'PROJECT_CHANNELS_ROUTE_ID',
     'PROJECT_MAINTENANCE_ROUTE_ID',
+    'PROJECT_CRON_JOBS_ROUTE_ID',
     'PROJECT_SETTINGS_ROUTE_ID',
   ]) {
     assert.match(projectAdministrationFactorySource, new RegExp(`\\[${routeId}\\]`));
@@ -227,12 +229,16 @@ test('project workspace V2 route artifact owns only its three native loaders', (
   const projectWorkspaceFactoryStart = registrySource.indexOf(
     'export function createAppProjectWorkspaceRouteRegistry',
   );
+  const projectDiscoveryFactoryStart = registrySource.indexOf(
+    'export function createAppProjectDiscoveryRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(projectWorkspaceFactoryStart, -1);
+  assert.notEqual(projectDiscoveryFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const projectWorkspaceFactorySource = registrySource.slice(
     projectWorkspaceFactoryStart,
-    defaultFactoryStart,
+    projectDiscoveryFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -247,6 +253,27 @@ test('project workspace V2 route artifact owns only its three native loaders', (
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectWorkspaceRouteRegistry/u,
+  );
+});
+
+test('project discovery V2 route artifact owns only its search loader', () => {
+  const projectDiscoveryFactoryStart = registrySource.indexOf(
+    'export function createAppProjectDiscoveryRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(projectDiscoveryFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const projectDiscoveryFactorySource = registrySource.slice(
+    projectDiscoveryFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  assert.match(projectDiscoveryFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
+  assert.doesNotMatch(defaultFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectDiscoveryRouteRegistry/u,
   );
 });
 
