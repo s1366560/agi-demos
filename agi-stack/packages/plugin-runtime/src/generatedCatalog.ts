@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:dd0b81dd19b7444a04a10bf0d41a4aeb50ca84c89521ba91fafc6be119',
-  '40ad21","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:ea5edd02372384192e83131f6fb47003d9b18e5987289a0b2311178cfa',
+  '18d05f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1075,7 +1075,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '"src.infrastructure.plugins.v2.builtin_sandbox_http_routes:builtin_sandbox_http_rout',
   'es_definition_v2","module_ref":"builtin://memstack/http/sandbox-routes","plugin_id":',
   '"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_',
-  'digest":"sha256:49c8fd0720651fe69c4a3166938bc89d5d11a5d297c401fa77f5db5d02bfec2f","a',
+  'digest":"sha256:05fea12cef42eee34c540a3e00e19adaeff9ba24f501cf41a78f160bc6a529c5","a',
   'rtifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_schema_http_rou',
   'tes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-1',
   '2/schema","additionalProperties":false,"properties":{},"type":"object"},"events":{"e',
@@ -1631,4 +1631,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:dd0b81dd19b7444a04a10bf0d41a4aeb50ca84c89521ba91fafc6be11940ad21' as const;
+  'sha256:ea5edd02372384192e83131f6fb47003d9b18e5987289a0b2311178cfa18d05f' as const;

@@ -154,19 +154,12 @@ def _builtin_row_overrides_v2(
         if len(owners) != 1:
             raise ValueError(f"builtin route row {row_id} must have exactly one V2 owner")
         frozen = tuple(claimed)
-        keys = frozenset(
-            (method.upper(), definition.path)
-            for definition in frozen
-            for method in definition.methods
-        )
-
-        def install(app: FastAPI, routes: tuple[RouteContributionV2, ...] = frozen) -> None:
-            install_route_definitions_v2(app, routes)
+        owner_entry_id = next(iter(owners))
 
         overrides[row_id] = BuiltinRouteRowOverride(
             row_id=row_id,
-            route_keys=keys,
-            install=install,
+            owner_entry_id=owner_entry_id,
+            definitions=frozen,
         )
     return overrides
 

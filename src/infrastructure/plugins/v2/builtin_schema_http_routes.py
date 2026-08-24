@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from fastapi import status
+from starlette.responses import Response
 
 from src.application.schemas.schema import (
     EdgeTypeMapResponse,
@@ -52,6 +53,7 @@ def _schema_route_v2(
     name: str,
     response_model: object | None = None,
     status_code: int | None = None,
+    response_class: type[Response] | None = None,
 ) -> RouteDefinitionV2:
     return RouteDefinitionV2(
         owner_entry_id=SCHEMA_HTTP_ROUTES_ENTRY_V2,
@@ -62,6 +64,7 @@ def _schema_route_v2(
         tags=("schema",),
         status_code=status_code,
         response_model=response_model,
+        response_class=response_class,
         replaces_builtin_row_id=SCHEMA_HTTP_ROUTES_ROW_V2,
     )
 
@@ -97,6 +100,7 @@ def schema_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             endpoint=delete_entity_type,
             name="delete_entity_type",
             status_code=status.HTTP_204_NO_CONTENT,
+            response_class=Response,
         ),
         _schema_route_v2(
             path=f"{prefix}/edges",
@@ -125,6 +129,7 @@ def schema_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             endpoint=delete_edge_type,
             name="delete_edge_type",
             status_code=status.HTTP_204_NO_CONTENT,
+            response_class=Response,
         ),
         _schema_route_v2(
             path=f"{prefix}/mappings",
@@ -146,6 +151,7 @@ def schema_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             endpoint=delete_edge_map,
             name="delete_edge_map",
             status_code=status.HTTP_204_NO_CONTENT,
+            response_class=Response,
         ),
     )
 

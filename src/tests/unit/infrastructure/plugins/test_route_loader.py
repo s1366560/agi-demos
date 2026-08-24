@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi import APIRouter
 
+from src.infrastructure.plugins import route_loader as route_loader_module
 from src.infrastructure.plugins.route_inventory import INVENTORY_PATH
 from src.infrastructure.plugins.route_loader import (
     BuiltinRouteRowOverride,
@@ -16,6 +18,11 @@ from src.infrastructure.plugins.route_loader import (
     install_builtin_routes,
     load_builtin_route_rows,
 )
+from src.infrastructure.plugins.v2.builtin_route_contracts import (
+    BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2,
+)
+from src.infrastructure.plugins.v2.builtin_system_http_routes import system_route_definitions_v2
+from src.infrastructure.plugins.v2.builtin_tunnel_http_routes import tunnel_route_definitions_v2
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 
@@ -210,18 +217,34 @@ class TestRouteRowPatches:
 class TestBuiltinRouteRowOverridesV2:
     """Explicit V2 row ownership replaces one complete inventory row in place."""
 
-    _SYSTEM_KEYS = frozenset(
-        {
-            ("GET", "/api/v1/system/features"),
-            ("GET", "/api/v1/system/info"),
-        }
-    )
-    _TUNNEL_KEYS = frozenset(
-        {
-            ("GET", "/api/v1/admin/tunnel/status"),
-            ("WEBSOCKET", "/api/v1/tunnel/connect"),
-        }
-    )
+    @pytest.fixture(autouse=True)
+    def _install_verified_definitions_on_recording_app(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original = route_loader_module.install_route_definitions_v2
+        self._installed_definitions: list[tuple[Any, ...]] = []
+
+        def install(target: object, definitions: tuple[Any, ...]) -> None:
+            self._installed_definitions.append(definitions)
+            if isinstance(target, _RecordingApp):
+                target.calls.append({"override": definitions[0].replaces_builtin_row_id})
+                return
+            original(target, definitions)
+
+        monkeypatch.setattr(route_loader_module, "install_route_definitions_v2", install)
+
+    @staticmethod
+    def _override(
+        row_id: str,
+        definitions: tuple[Any, ...],
+    ) -> BuiltinRouteRowOverride:
+        owner_entry_id = definitions[0].owner_entry_id
+        return BuiltinRouteRowOverride(
+            row_id=row_id,
+            owner_entry_id=owner_entry_id,
+            definitions=definitions,
+        )
 
     def test_complete_override_mounts_at_the_inventory_row_position(self) -> None:
         from src.infrastructure.adapters.primary.web.routers import (
@@ -230,18 +253,16 @@ class TestBuiltinRouteRowOverridesV2:
         )
 
         app = _RecordingApp()
-
-        def mount_override(target: _RecordingApp) -> None:
-            target.calls.append({"override": "system"})
+        definitions = system_route_definitions_v2()
 
         mounted, _ = _install_with_stub_helpers(
             app,
             row_overrides={
                 "system": BuiltinRouteRowOverride(
                     row_id="system",
-                    route_keys=self._SYSTEM_KEYS,
-                    install=mount_override,
-                )
+                    owner_entry_id="builtin-system-http-routes",
+                    definitions=definitions,
+                ),
             },
         )
 
@@ -258,6 +279,58 @@ class TestBuiltinRouteRowOverridesV2:
         )
         assert previous < override < following
         assert "system" in mounted
+        assert len(self._installed_definitions) == 2
+        assert all(installed is definitions for installed in self._installed_definitions)
+
+    def test_v2_override_never_resolves_the_static_inventory_target(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original = route_loader_module._resolve_router
+
+        def reject_system(entry: dict[str, Any]) -> object:
+            if entry.get("row_id") == "system":
+                raise AssertionError("V2-owned rows must not import the static router")
+            return original(entry)
+
+        monkeypatch.setattr(route_loader_module, "_resolve_router", reject_system)
+        app = _RecordingApp()
+
+        mounted, _ = _install_with_stub_helpers(
+            app,
+            row_overrides={
+                "system": self._override(
+                    "system",
+                    system_route_definitions_v2(),
+                ),
+            },
+        )
+
+        assert "system" in mounted
+
+    def test_stale_contract_catalog_fails_before_any_route_mount(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        payload = json.loads(BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2.read_text(encoding="utf-8"))
+        payload["rows"][0]["contract_digest"] = "sha256:" + "0" * 64
+        stale = tmp_path / "stale-route-catalog.json"
+        stale.write_text(json.dumps(payload), encoding="utf-8")
+        app = _RecordingApp()
+
+        with pytest.raises(RouteLoadError, match="contract digest mismatch"):
+            _install_with_stub_helpers(
+                app,
+                route_contract_catalog_path=stale,
+                row_overrides={
+                    "system": self._override(
+                        "system",
+                        system_route_definitions_v2(),
+                    ),
+                },
+            )
+
+        assert app.calls == []
 
     def test_mixed_http_websocket_override_uses_complete_structural_keys(self) -> None:
         app = _RecordingApp()
@@ -265,11 +338,10 @@ class TestBuiltinRouteRowOverridesV2:
         mounted, _ = _install_with_stub_helpers(
             app,
             row_overrides={
-                "tunnel": BuiltinRouteRowOverride(
-                    row_id="tunnel",
-                    route_keys=self._TUNNEL_KEYS,
-                    install=lambda target: target.calls.append({"override": "tunnel"}),
-                )
+                "tunnel": self._override(
+                    "tunnel",
+                    tunnel_route_definitions_v2(),
+                ),
             },
         )
 
@@ -285,8 +357,8 @@ class TestBuiltinRouteRowOverridesV2:
                 row_overrides={
                     "system": BuiltinRouteRowOverride(
                         row_id="system",
-                        route_keys=frozenset({("GET", "/api/v1/system/features")}),
-                        install=lambda _app: None,
+                        owner_entry_id="builtin-system-http-routes",
+                        definitions=system_route_definitions_v2()[:1],
                     )
                 },
             )
@@ -294,27 +366,35 @@ class TestBuiltinRouteRowOverridesV2:
         assert all(call.get("override") != "system" for call in app.calls)
 
     def test_unknown_override_target_is_rejected(self) -> None:
+        definitions = tuple(
+            replace(definition, replaces_builtin_row_id="missing")
+            for definition in system_route_definitions_v2()
+        )
         with pytest.raises(RouteLoadError, match="unknown baseline rows"):
             _install_with_stub_helpers(
                 _RecordingApp(),
                 row_overrides={
                     "missing": BuiltinRouteRowOverride(
                         row_id="missing",
-                        route_keys=self._SYSTEM_KEYS,
-                        install=lambda _app: None,
+                        owner_entry_id="builtin-system-http-routes",
+                        definitions=definitions,
                     )
                 },
             )
 
-    def test_helper_row_cannot_be_overridden_as_an_http_route(self) -> None:
-        with pytest.raises(RouteLoadError, match="include_router"):
+    def test_hybrid_helper_row_cannot_be_overridden_as_routes_only(self) -> None:
+        definitions = tuple(
+            replace(definition, replaces_builtin_row_id="create-pool")
+            for definition in system_route_definitions_v2()
+        )
+        with pytest.raises(RouteLoadError, match="hybrid, not routes-only"):
             _install_with_stub_helpers(
                 _RecordingApp(),
                 row_overrides={
-                    "task-session": BuiltinRouteRowOverride(
-                        row_id="task-session",
-                        route_keys=self._SYSTEM_KEYS,
-                        install=lambda _app: None,
+                    "create-pool": BuiltinRouteRowOverride(
+                        row_id="create-pool",
+                        owner_entry_id="builtin-system-http-routes",
+                        definitions=definitions,
                     )
                 },
             )
@@ -329,8 +409,8 @@ class TestBuiltinRouteRowOverridesV2:
                 row_overrides={
                     "system": BuiltinRouteRowOverride(
                         row_id="system",
-                        route_keys=self._SYSTEM_KEYS,
-                        install=lambda _app: None,
+                        owner_entry_id="builtin-system-http-routes",
+                        definitions=system_route_definitions_v2(),
                     )
                 },
             )

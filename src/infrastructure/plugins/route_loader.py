@@ -19,14 +19,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from starlette.routing import WebSocketRoute
+from fastapi import FastAPI
 
 from .profile import ProfilePatch
 from .route_inventory import INVENTORY_PATH
+from .v2.builtin_route_contracts import (
+    BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2,
+    BuiltinRouteContractCatalogErrorV2,
+    BuiltinRouteContractCatalogV2,
+    load_builtin_route_contract_catalog_v2,
+)
+from .v2.http_routes import RouteContributionV2, install_route_definitions_v2
+from .v2.route_registration import (
+    RouteRegistrationClassificationV2,
+    create_route_contract_app_v2,
+    ordered_route_signatures_v2,
+    route_openapi_digest_v2,
+)
 
 logger = logging.getLogger(__name__)
-
-_WEBSOCKET_ROUTE_KEY_METHOD = "WEBSOCKET"
 
 __all__ = [
     "BuiltinRouteRowOverride",
@@ -85,19 +96,34 @@ class BuiltinRouteRowOverride:
     """One explicit, complete HTTP/WebSocket replacement for an inventory row."""
 
     row_id: str
-    route_keys: frozenset[tuple[str, str]]
-    install: Callable[[Any], None]
+    owner_entry_id: str
+    definitions: tuple[RouteContributionV2, ...]
 
     def __post_init__(self) -> None:
         if not self.row_id.strip():
             raise ValueError("builtin route override row_id must be non-empty")
-        if not self.route_keys:
-            raise ValueError("builtin route override route_keys must be non-empty")
+        if not self.owner_entry_id.strip():
+            raise ValueError("builtin route override owner_entry_id must be non-empty")
+        if not self.definitions:
+            raise ValueError("builtin route override definitions must be non-empty")
+        for definition in self.definitions:
+            if definition.owner_entry_id != self.owner_entry_id:
+                raise ValueError("builtin route override definitions must have exactly one owner")
+            if definition.replaces_builtin_row_id != self.row_id:
+                raise ValueError("builtin route override definitions must replace the declared row")
         for method, path in self.route_keys:
             if method != method.upper() or not method.strip():
                 raise ValueError("builtin route override methods must use canonical uppercase form")
             if not path.startswith("/"):
                 raise ValueError("builtin route override paths must start with /")
+
+    @property
+    def route_keys(self) -> frozenset[tuple[str, str]]:
+        return frozenset(
+            (method.upper(), definition.path)
+            for definition in self.definitions
+            for method in definition.methods
+        )
 
 
 def route_patches_from_profile(
@@ -162,6 +188,7 @@ def install_builtin_routes(
     *,
     workspace_core_settings: object | None = None,
     inventory_path: Path = INVENTORY_PATH,
+    route_contract_catalog_path: Path = BUILTIN_ROUTE_CONTRACT_CATALOG_PATH_V2,
     helper_overrides: Mapping[str, Callable[..., object]] | None = None,
     row_patches: Mapping[str, RouteRowPatch] | None = None,
     row_overrides: Mapping[str, BuiltinRouteRowOverride] | None = None,
@@ -188,6 +215,11 @@ def install_builtin_routes(
     patches = row_patches or {}
     overrides = row_overrides or {}
     helpers = helper_overrides or {}
+    route_contract_catalog = _load_route_contract_catalog_v2(
+        inventory_path=inventory_path,
+        catalog_path=route_contract_catalog_path,
+        required=bool(overrides),
+    )
     mounted: list[str] = []
     for entry in rows:
         if _mount_builtin_route_row(
@@ -197,6 +229,7 @@ def install_builtin_routes(
             helper_overrides=helpers,
             row_patches=patches,
             row_overrides=overrides,
+            route_contract_catalog=route_contract_catalog,
         ):
             mounted.append(cast(str, entry["row_id"]))
     logger.info("Builtin route rows mounted from baseline: %d rows", len(mounted))
@@ -229,6 +262,23 @@ def _validate_route_customizations(
             )
 
 
+def _load_route_contract_catalog_v2(
+    *,
+    inventory_path: Path,
+    catalog_path: Path,
+    required: bool,
+) -> BuiltinRouteContractCatalogV2 | None:
+    if not required:
+        return None
+    try:
+        return load_builtin_route_contract_catalog_v2(
+            catalog_path=catalog_path,
+            inventory_path=inventory_path,
+        )
+    except BuiltinRouteContractCatalogErrorV2 as exc:
+        raise RouteLoadError(f"V2 route contract catalog rejected: {exc}") from exc
+
+
 def _mount_builtin_route_row(
     app: _RouteApp,
     entry: dict[str, Any],
@@ -237,6 +287,7 @@ def _mount_builtin_route_row(
     helper_overrides: Mapping[str, Callable[..., object]],
     row_patches: Mapping[str, RouteRowPatch],
     row_overrides: Mapping[str, BuiltinRouteRowOverride],
+    route_contract_catalog: BuiltinRouteContractCatalogV2 | None,
 ) -> bool:
     row_id = entry.get("row_id")
     if not isinstance(row_id, str) or not row_id:
@@ -247,7 +298,9 @@ def _mount_builtin_route_row(
         return False
     override = row_overrides.get(row_id)
     if override is not None:
-        _mount_v2_row_override(app, entry, override)
+        if route_contract_catalog is None:
+            raise RouteLoadError("V2 route overrides require a validated route contract catalog")
+        _mount_v2_row_override(app, entry, override, route_contract_catalog)
         return True
     if entry.get("kind") == "include_router":
         _mount_inventory_router(app, entry, patch)
@@ -268,25 +321,62 @@ def _mount_v2_row_override(
     app: _RouteApp,
     entry: dict[str, Any],
     override: BuiltinRouteRowOverride,
+    catalog: BuiltinRouteContractCatalogV2,
 ) -> None:
     row_id = override.row_id
-    if entry.get("kind") != "include_router":
-        raise RouteLoadError(f"V2 route override target {row_id} must be an include_router row")
-    router = _resolve_router(entry)
-    expected_keys = _resolved_router_keys(
-        router,
-        row_id=row_id,
-        prefix=cast(str | None, entry.get("prefix")),
+    try:
+        contract = catalog.runtime_row(row_id)
+    except BuiltinRouteContractCatalogErrorV2 as exc:
+        raise RouteLoadError(str(exc)) from exc
+    expected_identity = (
+        entry.get("kind"),
+        entry.get("module"),
+        entry.get("expression"),
+        entry.get("prefix"),
     )
-    if override.route_keys != expected_keys:
+    contract_identity = (
+        contract.inventory_kind,
+        contract.module,
+        contract.expression,
+        contract.prefix,
+    )
+    if contract_identity != expected_identity:
+        raise RouteLoadError(f"V2 route contract owner mismatch for row {row_id}")
+    if contract.classification is not RouteRegistrationClassificationV2.ROUTES_ONLY:
+        raise RouteLoadError(
+            f"V2 route override target {row_id} is {contract.classification.value}, not routes-only"
+        )
+
+    candidate = create_route_contract_app_v2()
+    try:
+        install_route_definitions_v2(candidate, override.definitions)
+    except Exception as exc:
+        raise RouteLoadError(
+            f"V2 override for row {row_id} could not materialize: {type(exc).__name__}"
+        ) from exc
+    actual_signatures = ordered_route_signatures_v2(candidate.router.routes)
+    expected_payloads = tuple(signature.to_payload() for signature in contract.ordered_signatures)
+    actual_payloads = tuple(signature.to_payload() for signature in actual_signatures)
+    if actual_payloads != expected_payloads:
+        expected_keys = frozenset(
+            (method, signature.path)
+            for signature in contract.ordered_signatures
+            for method in signature.methods
+        )
         missing = sorted(expected_keys - override.route_keys)
         unexpected = sorted(override.route_keys - expected_keys)
         detail = (
             f"V2 override for row {row_id} must replace the complete route key set;"
-            f" missing={missing}, unexpected={unexpected}"
+            f" missing={missing}, unexpected={unexpected}, ordered metadata mismatch"
         )
         raise RouteLoadError(detail)
-    override.install(app)
+    actual_openapi_digest = route_openapi_digest_v2(candidate)
+    if actual_openapi_digest != contract.openapi_digest:
+        raise RouteLoadError(
+            f"V2 override for row {row_id} OpenAPI digest mismatch; "
+            f"contract={contract.contract_digest}"
+        )
+    install_route_definitions_v2(cast("FastAPI", app), override.definitions)
 
 
 def _mount_inventory_router(
@@ -320,37 +410,6 @@ def _mount_interleaved_helper(
     if workspace_core_settings is None:
         raise RouteLoadError(f"helper {row_id} requires workspace_core_settings")
     _ = helper(app, workspace_core_settings)
-
-
-def _resolved_router_keys(
-    router: object,
-    *,
-    row_id: str,
-    prefix: str | None,
-) -> frozenset[tuple[str, str]]:
-    routes = getattr(router, "routes", None)
-    if not isinstance(routes, list):
-        raise RouteLoadError(f"route row {row_id} did not resolve to an HTTP router")
-    keys: set[tuple[str, str]] = set()
-    for route in cast(list[object], routes):
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None)
-        if not isinstance(path, str):
-            raise RouteLoadError(
-                f"route row {row_id} contains an unsupported route and cannot use a V2 override"
-            )
-        mounted_path = f"{prefix or ''}{path}"
-        if methods:
-            keys.update((str(method).upper(), mounted_path) for method in methods)
-        elif isinstance(route, WebSocketRoute):
-            keys.add((_WEBSOCKET_ROUTE_KEY_METHOD, mounted_path))
-        else:
-            raise RouteLoadError(
-                f"route row {row_id} contains an unsupported route and cannot use a V2 override"
-            )
-    if not keys:
-        raise RouteLoadError(f"route row {row_id} has no HTTP/WebSocket route keys")
-    return frozenset(keys)
 
 
 def _require_module(entry: dict[str, Any]) -> str:

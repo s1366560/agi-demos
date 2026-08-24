@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import RLock
 from types import MappingProxyType
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.datastructures import Default
 from fastapi.params import Depends as DependsParam
 from fastapi.routing import APIRoute
 from starlette.responses import Response
@@ -21,6 +22,7 @@ from .openapi import build_openapi_schema_v2
 from .runtime import RuntimeV2Error
 
 WEBSOCKET_ROUTE_METHOD_V2 = "WEBSOCKET"
+type ResponseModelFilterV2 = set[int] | set[str] | dict[int, Any] | dict[str, Any]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,11 +38,23 @@ class RouteDefinitionV2:
     tags: tuple[str, ...] = ()
     summary: str | None = None
     description: str | None = None
+    response_description: str = "Successful Response"
+    responses: Mapping[int | str, Mapping[str, Any]] | None = None
     deprecated: bool | None = None
+    operation_id: str | None = None
+    openapi_extra: Mapping[str, Any] | None = None
+    callbacks: tuple[BaseRoute, ...] = ()
     status_code: int | None = None
-    response_model: object | None = None
+    response_model: object = field(default_factory=lambda: Default(None))
+    response_model_include: ResponseModelFilterV2 | None = None
+    response_model_exclude: ResponseModelFilterV2 | None = None
+    response_model_by_alias: bool = True
+    response_model_exclude_unset: bool = False
+    response_model_exclude_defaults: bool = False
+    response_model_exclude_none: bool = False
     response_class: type[Response] | None = None
     route_class_override: type[APIRoute] | None = None
+    generate_unique_id_function: Callable[[APIRoute], str] | None = None
     include_in_schema: bool = True
     replaces_builtin_row_id: str | None = None
 
@@ -287,7 +301,7 @@ def _validate_routes(routes: tuple[RouteContributionV2, ...]) -> None:
             seen.add(key)
 
 
-def install_route_definitions_v2(
+def install_route_definitions_v2(  # noqa: C901
     app: FastAPI,
     definitions: Sequence[RouteContributionV2],
 ) -> None:
@@ -326,6 +340,8 @@ def install_route_definitions_v2(
             response_options["response_class"] = route.response_class
         if route.route_class_override is not None:
             response_options["route_class_override"] = route.route_class_override
+        if route.generate_unique_id_function is not None:
+            response_options["generate_unique_id_function"] = route.generate_unique_id_function
         app.router.add_api_route(
             route.path,
             route.endpoint,
@@ -335,9 +351,24 @@ def install_route_definitions_v2(
             tags=list(route.tags),
             summary=route.summary,
             description=route.description,
+            response_description=route.response_description,
+            responses=(
+                {key: dict(value) for key, value in route.responses.items()}
+                if route.responses is not None
+                else None
+            ),
             deprecated=route.deprecated,
+            operation_id=route.operation_id,
+            openapi_extra=(dict(route.openapi_extra) if route.openapi_extra is not None else None),
+            callbacks=list(route.callbacks) or None,
             status_code=route.status_code,
             response_model=route.response_model,
+            response_model_include=route.response_model_include,
+            response_model_exclude=route.response_model_exclude,
+            response_model_by_alias=route.response_model_by_alias,
+            response_model_exclude_unset=route.response_model_exclude_unset,
+            response_model_exclude_defaults=route.response_model_exclude_defaults,
+            response_model_exclude_none=route.response_model_exclude_none,
             include_in_schema=route.include_in_schema,
             **response_options,
         )

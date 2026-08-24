@@ -2196,7 +2196,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:49c8fd0720651fe69c4a3166938bc89d5d11a5d297c401fa77f5db5d02bfec2f",
+        "digest": "sha256:05fea12cef42eee34c540a3e00e19adaeff9ba24f501cf41a78f160bc6a529c5",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_schema_http_routes.py"
       }
     },
