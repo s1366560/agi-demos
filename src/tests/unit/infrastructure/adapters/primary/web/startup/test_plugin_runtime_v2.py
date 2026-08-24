@@ -66,7 +66,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
     assert route_registry.current is not None
     assert route_registry.current.descriptor == host.manager.current.descriptor
     assert len(route_graph.mounted_row_ids) == 71
-    assert len(route_graph.static_mounted_row_ids) == 4
+    assert len(route_graph.static_mounted_row_ids) == 3
     assert route_graph.v2_owned_row_ids == (
         "auth",
         "workspace-core-static",
@@ -92,6 +92,7 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
         "data-export",
         "maintenance",
         "tasks",
+        "workspace-core",
         "task-session",
         "cron",
         "ai-tools",
@@ -547,7 +548,9 @@ async def test_generation_one_fails_closed_when_desired_path_is_unsafe() -> None
 async def test_generation_one_fails_closed_on_builtin_route_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    path = "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces"
+    path = (
+        "/api/v1/tenants/{tenant_id}/projects/{project_id}/pool/instances/{agent_mode}"
+    )
     monkeypatch.setattr(
         "src.infrastructure.plugins.v2.legacy_http_route_bridge._legacy_inventory",
         lambda: _route_inventory(path=path),

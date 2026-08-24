@@ -173,6 +173,7 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
             "builtin-workspace-core-static-http-routes",
             "workspace-core-static",
         ),
+        ("builtin-workspace-core-http-routes", "workspace-core"),
         (
             "builtin-enhanced-search-http-routes",
             "enhanced-search, enhanced-search-memory",
@@ -263,7 +264,9 @@ async def test_reconcile_failure_keeps_last_good_generation_table_and_fallback(
 async def test_private_graph_conflict_nacks_without_exposing_staged_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    conflicting_path = "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces"
+    conflicting_path = (
+        "/api/v1/tenants/{tenant_id}/projects/{project_id}/pool/instances/{agent_mode}"
+    )
     app, coordinator = await _coordinator(
         monkeypatch,
         inventory=_inventory(path=conflicting_path),

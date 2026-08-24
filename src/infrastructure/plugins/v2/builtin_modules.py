@@ -126,6 +126,7 @@ def builtin_runtime_definitions_v2(
         builtin_task_session_http_routes,
         builtin_tasks_http_routes,
         builtin_websocket_http_routes,
+        builtin_workspace_core_http_routes,
         builtin_workspace_core_static_http_routes,
     )
     from .builtin_admin_dlq_http_routes import builtin_admin_dlq_http_routes_definition_v2
@@ -295,6 +296,7 @@ def builtin_runtime_definitions_v2(
         builtin_data_export_http_routes_definition_v2(),
         builtin_maintenance_http_routes.builtin_maintenance_http_routes_definition_v2(),
         builtin_tasks_http_routes.builtin_tasks_http_routes_definition_v2(),
+        builtin_workspace_core_http_routes.builtin_workspace_core_http_routes_definition_v2(),
         builtin_task_session_http_routes.builtin_task_session_http_routes_definition_v2(),
         builtin_cron_http_routes_definition_v2(),
         builtin_ai_tools_http_routes_definition_v2(),

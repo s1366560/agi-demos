@@ -63,8 +63,9 @@ def test_catalog_covers_authoritative_inventory_in_order(route_catalog) -> None:
 def test_every_existing_v2_owned_row_has_a_routes_only_contract(route_catalog) -> None:
     by_id = {row.row_id: row for row in route_catalog.rows}
 
-    assert len(REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS) == 67
+    assert len(REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS) == 68
     assert "task-session" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
+    assert "workspace-core" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
     assert "workspace-core-static" in REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS
     assert all(
         by_id[row_id].classification is RouteRegistrationClassificationV2.ROUTES_ONLY
