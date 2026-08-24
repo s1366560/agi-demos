@@ -278,12 +278,12 @@ async def test_private_graph_conflict_nacks_without_exposing_staged_generation(
 
     with pytest.raises(
         HttpRoutePublicationRejectedV2,
-        match="conflicts with private graph",
+        match="duplicate v2 route",
     ) as error:
         await coordinator.reconcile((_row(path=conflicting_path),))
 
     assert not error.value.publication.accepted
-    assert error.value.publication.receipt.error_code == "publication_staging_failed"
+    assert error.value.publication.receipt.error_code == "staging_failed"
     assert host.current_distribution is active
     assert registry.current is route_publication
     await host.close()
