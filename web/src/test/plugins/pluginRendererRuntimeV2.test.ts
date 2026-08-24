@@ -256,9 +256,11 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.production.v1',
       'desktop.routes.auxiliary.v1',
       'desktop.routes.project-knowledge.v1',
+      'desktop.routes.project-agent.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
+      'desktop.navigation.project-agent.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -282,9 +284,11 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.production-routes', 'route'],
       ['desktop.auxiliary-routes', 'route'],
       ['desktop.project-knowledge-routes', 'route'],
+      ['desktop.project-agent-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
+      ['desktop.project-agent-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -352,8 +356,10 @@ describe('RendererPluginRuntimeV2', () => {
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.production-routes',
       'desktop.project-knowledge-routes',
+      'desktop.project-agent-routes',
       'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
+      'desktop.project-agent-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -392,8 +398,52 @@ describe('RendererPluginRuntimeV2', () => {
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.production-routes',
       'desktop.auxiliary-routes',
+      'desktop.project-agent-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
+      'desktop.project-agent-navigation',
+      'desktop.default-ui-slots',
+    ]);
+    await runtime.close();
+  });
+
+  it('removes project agent routes and navigation through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const projectAgentEntryIds = new Set([
+      'builtin-desktop-project-agent-routes',
+      'builtin-desktop-project-agent-navigation',
+    ]);
+    const projectAgentEntries = candidate.entries.filter(({ entry_id }) =>
+      projectAgentEntryIds.has(entry_id)
+    );
+    if (projectAgentEntries.length !== projectAgentEntryIds.size) {
+      throw new Error('desktop project agent contribution fixtures are missing');
+    }
+    for (const entry of projectAgentEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+
+    expect(receipt.status).toBe('ack');
+    expect(registry?.list().map(({ id }) => id)).toEqual([
+      'desktop.production-routes',
+      'desktop.auxiliary-routes',
+      'desktop.project-knowledge-routes',
+      'desktop.default-navigation',
+      'desktop.auxiliary-navigation',
+      'desktop.project-knowledge-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();

@@ -212,6 +212,27 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-project-agent-routes
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.project-agent-routes
+        kind: route
+        order: 130
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.routes.project-agent.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-default-navigation
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions
@@ -267,6 +288,27 @@ profile:
           schema_version: 1
           artifact_refs:
             - desktop.navigation.project-knowledge.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-project-agent-navigation
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.project-agent-navigation
+        kind: navigation
+        order: 230
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.navigation.project-agent.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}

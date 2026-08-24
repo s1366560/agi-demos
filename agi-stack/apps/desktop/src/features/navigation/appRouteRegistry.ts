@@ -267,6 +267,7 @@ export type AppRouteRegistryRefs = {
 
 export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -502,6 +503,68 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
             controller: createProjectGraphController({
               authority: currentConfig.mode,
               client: createProjectGraphClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+    }),
+  });
+}
+
+export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteRegistryRefs) {
+  const { configRef } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: createProjectAgentDashboardRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectAgentDashboardController({
+              authority: currentConfig.mode,
+              client: createProjectAgentDashboardClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+      [PROJECT_AGENT_LOGS_ROUTE_ID]: createProjectAgentLogsRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectAgentLogsController({
+              authority: currentConfig.mode,
+              client: createProjectAgentLogsClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+      [PROJECT_AGENT_PATTERNS_ROUTE_ID]: createProjectAgentPatternsRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectAgentPatternsController({
+              authority: currentConfig.mode,
+              client: createProjectAgentPatternsClient(currentConfig),
               initialScope: scope,
             }),
             scope,
@@ -771,60 +834,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             controller: createProjectBlackboardController({
               authority: currentConfig.mode,
               client,
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: createProjectAgentDashboardRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectAgentDashboardController({
-              authority: currentConfig.mode,
-              client: createProjectAgentDashboardClient(currentConfig),
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_AGENT_LOGS_ROUTE_ID]: createProjectAgentLogsRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectAgentLogsController({
-              authority: currentConfig.mode,
-              client: createProjectAgentLogsClient(currentConfig),
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_AGENT_PATTERNS_ROUTE_ID]: createProjectAgentPatternsRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectAgentPatternsController({
-              authority: currentConfig.mode,
-              client: createProjectAgentPatternsClient(currentConfig),
               initialScope: scope,
             }),
             scope,

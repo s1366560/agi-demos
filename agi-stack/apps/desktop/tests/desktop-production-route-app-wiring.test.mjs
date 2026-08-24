@@ -98,12 +98,16 @@ test('project knowledge V2 route artifact owns only its five native loaders', ()
   const projectKnowledgeFactoryStart = registrySource.indexOf(
     'export function createAppProjectKnowledgeRouteRegistry',
   );
+  const projectAgentFactoryStart = registrySource.indexOf(
+    'export function createAppProjectAgentRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(projectKnowledgeFactoryStart, -1);
+  assert.notEqual(projectAgentFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const projectKnowledgeFactorySource = registrySource.slice(
     projectKnowledgeFactoryStart,
-    defaultFactoryStart,
+    projectAgentFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -120,6 +124,33 @@ test('project knowledge V2 route artifact owns only its five native loaders', ()
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectKnowledgeRouteRegistry/u,
+  );
+});
+
+test('project agent V2 route artifact owns only its three native loaders', () => {
+  const projectAgentFactoryStart = registrySource.indexOf(
+    'export function createAppProjectAgentRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(projectAgentFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const projectAgentFactorySource = registrySource.slice(
+    projectAgentFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'PROJECT_AGENT_DASHBOARD_ROUTE_ID',
+    'PROJECT_AGENT_LOGS_ROUTE_ID',
+    'PROJECT_AGENT_PATTERNS_ROUTE_ID',
+  ]) {
+    assert.match(projectAgentFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAgentRouteRegistry/u,
   );
 });
 
