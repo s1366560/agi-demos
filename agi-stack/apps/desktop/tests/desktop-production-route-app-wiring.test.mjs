@@ -191,7 +191,7 @@ test('project administration V2 route artifact owns its five configuration loade
   );
 });
 
-test('runtime infrastructure V2 route artifact owns only its six native loaders', () => {
+test('runtime infrastructure V2 route artifact owns its seven canonical loaders', () => {
   const runtimeInfrastructureFactoryStart = registrySource.indexOf(
     'export function createAppRuntimeInfrastructureRouteRegistry',
   );
@@ -215,6 +215,7 @@ test('runtime infrastructure V2 route artifact owns only its six native loaders'
     'TENANT_DEPLOY_ROUTE_ID',
     'TENANT_INSTANCE_TEMPLATES_ROUTE_ID',
     'TENANT_RUNTIMES_ROUTE_ID',
+    'TENANT_GENES_ROUTE_ID',
   ]) {
     assert.match(runtimeInfrastructureFactorySource, new RegExp(`\\[${routeId}\\]`));
     assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));

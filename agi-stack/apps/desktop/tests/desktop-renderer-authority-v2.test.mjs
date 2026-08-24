@@ -261,6 +261,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.equal(artifacts[0].routeIds.includes("tenant-tenant-overview"), false);
   assert.equal(artifacts[0].routeIds.includes("tenant-tenant-agent-configuration"), false);
   assert.equal(artifacts[0].routeIds.includes("tenant-tenant-plugins"), false);
+  assert.equal(artifacts[0].routeIds.includes("tenant-tenant-genes"), false);
   assert.deepEqual(artifacts[1].routeIds, [
     "project-support",
     "backend-stores",
@@ -339,6 +340,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-clusters",
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
+    "tenant-tenant-genes",
   ]);
   const runtimeInfrastructureRegistry = artifacts[5].createRegistry({
     configRef: { current: {} },
@@ -348,6 +350,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       (routeId) => runtimeInfrastructureRegistry.byId.get(routeId).structuralReadiness,
     ),
     [
+      { status: "ready" },
       { status: "ready" },
       { status: "ready" },
       { status: "ready" },
@@ -486,6 +489,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     false,
   );
   assert.equal(artifacts[11].discoveryRouteIds.includes("tenant-tenant-plugins"), false);
+  assert.equal(artifacts[11].discoveryRouteIds.includes("tenant-tenant-genes"), false);
   assert.deepEqual(artifacts[12].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
@@ -517,6 +521,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-clusters",
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
+    "tenant-tenant-genes",
   ]);
   assert.deepEqual(artifacts[17].discoveryRouteIds, [
     "project-project-overview",

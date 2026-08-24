@@ -743,6 +743,10 @@ export function createAppRuntimeInfrastructureRouteRegistry(
         createBinding: (context) =>
           createUnifiedRuntimesRouteBindingForRuntime(configRef.current, context),
       }),
+      [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantGenesRouteBindingForRuntime(configRef.current, context),
+      }),
     }),
   });
 }
@@ -1003,10 +1007,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             onNavigateBack: desktopProductionRouteNavigation.clearHash,
           });
         },
-      }),
-      [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantGenesRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_EVENTS_ROUTE_ID]: createTenantEventsRouteModuleLoader({
         createBinding: (context) =>
