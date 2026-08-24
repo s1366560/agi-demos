@@ -9,7 +9,10 @@ const {
   createDesktopWorkbenchCapabilityClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
 
-const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const routeIds = Object.freeze([
   'tenant-tenant-patterns',
   'tenant-tenant-acp',
@@ -37,7 +40,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '',
 });
 
-test('remaining Tenant routes bind their typed runtime authorities in App', () => {
+test('remaining Tenant routes bind their typed runtime authorities in the production registry', () => {
   for (const symbol of [
     'createTenantPatternsRouteBindingForRuntime',
     'createTenantAcpRouteBindingForRuntime',
@@ -49,7 +52,7 @@ test('remaining Tenant routes bind their typed runtime authorities in App', () =
     'createTenantSettingsRouteBindingForRuntime',
     'readTenantDecisionRecordsRouteQuery',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
   }
 });
 

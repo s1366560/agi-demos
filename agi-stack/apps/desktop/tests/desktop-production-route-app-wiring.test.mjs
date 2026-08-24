@@ -354,12 +354,16 @@ test('tenant extensions and integrations V2 route artifact owns its six canonica
   const tenantExtensionsIntegrationsFactoryStart = registrySource.indexOf(
     'export function createAppTenantExtensionsIntegrationsRouteRegistry',
   );
+  const tenantGovernanceFactoryStart = registrySource.indexOf(
+    'export function createAppTenantGovernanceRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(tenantExtensionsIntegrationsFactoryStart, -1);
+  assert.notEqual(tenantGovernanceFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const tenantExtensionsIntegrationsFactorySource = registrySource.slice(
     tenantExtensionsIntegrationsFactoryStart,
-    defaultFactoryStart,
+    tenantGovernanceFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -377,6 +381,39 @@ test('tenant extensions and integrations V2 route artifact owns its six canonica
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantExtensionsIntegrationsRouteRegistry/u,
+  );
+});
+
+test('tenant governance V2 route artifact owns its nine canonical loaders', () => {
+  const tenantGovernanceFactoryStart = registrySource.indexOf(
+    'export function createAppTenantGovernanceRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(tenantGovernanceFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const tenantGovernanceFactorySource = registrySource.slice(
+    tenantGovernanceFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'TENANT_USERS_ROUTE_ID',
+    'TENANT_AUDIT_LOGS_ROUTE_ID',
+    'TENANT_EVENTS_ROUTE_ID',
+    'TENANT_DEAD_LETTER_QUEUE_ROUTE_ID',
+    'TENANT_TRUST_POLICIES_ROUTE_ID',
+    'TENANT_DECISION_RECORDS_ROUTE_ID',
+    'TENANT_BILLING_ROUTE_ID',
+    'TENANT_ORGANIZATION_SETTINGS_ROUTE_ID',
+    'TENANT_SETTINGS_ROUTE_ID',
+  ]) {
+    assert.match(tenantGovernanceFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantGovernanceRouteRegistry/u,
   );
 });
 

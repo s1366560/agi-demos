@@ -299,27 +299,6 @@ import { createProjectMemoriesController } from './features/project-knowledge/pr
 import { createProjectMemoriesRouteModuleLoader } from './features/project-knowledge/projectMemoriesRouteModule';
 import { createProjectTeamController } from './features/project-knowledge/projectTeamController';
 import { createProjectTeamRouteModuleLoader } from './features/project-knowledge/projectTeamRouteModule';
-import { createTenantGovernanceRouteModuleLoader } from './features/tenant-admin/tenantGovernanceRouteModule';
-import { createTenantBillingRouteModuleLoader } from './features/tenant-admin/tenantBillingRouteModule';
-import { createTenantAuditRouteModuleLoader } from './features/tenant-admin/tenantAuditRouteModule';
-import { createTenantTrustRouteModuleLoader } from './features/tenant-admin/tenantTrustRouteModule';
-import { readTenantDecisionRecordsRouteQuery } from './features/tenant-admin/tenantDecisionRecordsRouteQuery';
-import {
-  createTenantAuditRouteBindingForRuntime,
-  createTenantBillingRouteBindingForRuntime,
-  createTenantGovernanceRouteBindingForRuntime,
-  createTenantTrustRouteBindingForRuntime,
-} from './features/tenant-admin/tenantAdminRouteRuntime';
-import {
-  createTenantAcpRouteBindingForRuntime,
-  createTenantDecisionRecordsRouteBindingForRuntime,
-  createTenantEventsRouteBindingForRuntime,
-  createTenantGenesRouteBindingForRuntime,
-  createTenantOrganizationSettingsRouteBindingForRuntime,
-  createTenantPatternsRouteBindingForRuntime,
-  createTenantSettingsRouteBindingForRuntime,
-  createTenantWebhooksRouteBindingForRuntime,
-} from './features/tenant-admin/tenantRemainingRouteRuntime';
 import { createChannelsRouteModuleLoader } from './features/settings-routes/channelsRouteModule';
 import { createEvolutionRouteModuleLoader } from './features/settings-routes/evolutionRouteModule';
 import { createTemplatesRouteModuleLoader } from './features/settings-routes/templatesRouteModule';

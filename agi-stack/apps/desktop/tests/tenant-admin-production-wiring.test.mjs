@@ -19,6 +19,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'tenant-tenant-users',
@@ -39,7 +43,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '/workspace',
 });
 
-test('tenant governance routes have real production loader and App bindings', () => {
+test('tenant governance routes have real production route registry bindings', () => {
   assert.deepEqual(
     [
       TENANT_USERS_ROUTE_ID,
@@ -66,14 +70,14 @@ test('tenant governance routes have real production loader and App bindings', ()
     });
   }
 
-  assert.match(appSource, /createTenantGovernanceRouteModuleLoader/u);
-  assert.match(appSource, /createTenantBillingRouteModuleLoader/u);
-  assert.match(appSource, /createTenantAuditRouteModuleLoader/u);
-  assert.match(appSource, /createTenantTrustRouteModuleLoader/u);
-  assert.match(appSource, /createTenantGovernanceRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantBillingRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantAuditRouteBindingForRuntime/u);
-  assert.match(appSource, /createTenantTrustRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantGovernanceRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantBillingRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantAuditRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantTrustRouteModuleLoader/u);
+  assert.match(registrySource, /createTenantGovernanceRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantBillingRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantAuditRouteBindingForRuntime/u);
+  assert.match(registrySource, /createTenantTrustRouteBindingForRuntime/u);
   assert.doesNotMatch(
     appSource,
     /tenant-admin[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,

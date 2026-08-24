@@ -10,6 +10,7 @@ import {
   createAppTenantAgentBuildingRouteRegistry,
   createAppTenantCoreRouteRegistry,
   createAppTenantExtensionsIntegrationsRouteRegistry,
+  createAppTenantGovernanceRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
 import { AGENT_WORKSPACE_ROUTE_ID } from '../features/agent-workspace/agentWorkspaceRouteModule';
@@ -44,8 +45,13 @@ import {
   TENANT_AGENT_BINDINGS_ROUTE_ID,
   TENANT_AGENT_DASHBOARD_ROUTE_ID,
   TENANT_AGENT_DEFINITIONS_ROUTE_ID,
+  TENANT_AUDIT_LOGS_ROUTE_ID,
+  TENANT_BILLING_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_DECISION_RECORDS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_EVOLUTION_ROUTE_ID,
+  TENANT_EVENTS_ROUTE_ID,
   TENANT_GENES_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
   TENANT_INSTANCE_TEMPLATES_ROUTE_ID,
@@ -53,13 +59,17 @@ import {
   TENANT_POOL_ROUTE_ID,
   TENANT_OVERVIEW_ROUTE_ID,
   TENANT_MCP_SERVERS_ROUTE_ID,
+  TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
   TENANT_PLUGINS_ROUTE_ID,
   TENANT_PROVIDERS_ROUTE_ID,
   TENANT_PROJECTS_ROUTE_ID,
   TENANT_RUNTIMES_ROUTE_ID,
+  TENANT_SETTINGS_ROUTE_ID,
   TENANT_SKILLS_ROUTE_ID,
   TENANT_TASKS_ROUTE_ID,
   TENANT_TEMPLATES_ROUTE_ID,
+  TENANT_TRUST_POLICIES_ROUTE_ID,
+  TENANT_USERS_ROUTE_ID,
   TENANT_WEBHOOKS_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
@@ -95,6 +105,8 @@ export const DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.tenant-agent-building.v1';
 export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.tenant-extensions-integrations.v1';
+export const DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.tenant-governance.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
@@ -115,6 +127,8 @@ export const DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.tenant-agent-building.v1';
 export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.tenant-extensions-integrations.v1';
+export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.tenant-governance.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
 const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
@@ -220,6 +234,22 @@ const TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_IDS_V2 = Object.freeze(
     TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
+const TENANT_GOVERNANCE_ROUTE_ID_SET_V2 = new Set<string>([
+  TENANT_USERS_ROUTE_ID,
+  TENANT_AUDIT_LOGS_ROUTE_ID,
+  TENANT_EVENTS_ROUTE_ID,
+  TENANT_DEAD_LETTER_QUEUE_ROUTE_ID,
+  TENANT_TRUST_POLICIES_ROUTE_ID,
+  TENANT_DECISION_RECORDS_ROUTE_ID,
+  TENANT_BILLING_ROUTE_ID,
+  TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
+  TENANT_SETTINGS_ROUTE_ID,
+]);
+const TENANT_GOVERNANCE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
 const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter(
     (routeId) =>
@@ -233,7 +263,8 @@ const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
       !PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId) &&
       !TENANT_CORE_ROUTE_ID_SET_V2.has(routeId) &&
       !TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
+      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId) &&
+      !TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -247,7 +278,8 @@ const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
       !PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId) &&
       !TENANT_CORE_ROUTE_ID_SET_V2.has(routeId) &&
       !TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
+      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId) &&
+      !TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -296,6 +328,11 @@ const TENANT_AGENT_BUILDING_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
 const TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
     TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
@@ -446,6 +483,14 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     ),
   ],
   [
+    DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
+      TENANT_GOVERNANCE_ROUTE_IDS_V2,
+      createAppTenantGovernanceRouteRegistry,
+    ),
+  ],
+  [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
       discoveryRouteIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
@@ -542,6 +587,15 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       id: DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2,
     }),
   ],
   [

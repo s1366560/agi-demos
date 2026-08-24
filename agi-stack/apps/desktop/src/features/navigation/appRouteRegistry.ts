@@ -296,6 +296,10 @@ export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   'configRef'
 > &
   AppSettingsRouteContentRefs;
+export type AppTenantGovernanceRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'desktopProductionRouteLocation'
+>;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -963,14 +967,64 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
   });
 }
 
+export function createAppTenantGovernanceRouteRegistry(
+  refs: AppTenantGovernanceRouteRegistryRefs,
+) {
+  const { configRef, desktopProductionRouteLocation } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantGovernanceRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_AUDIT_LOGS_ROUTE_ID]: createTenantAuditRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantAuditRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_EVENTS_ROUTE_ID]: createTenantEventsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantEventsRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
+        createBinding: (context) =>
+          createDeadLetterQueueRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_TRUST_POLICIES_ROUTE_ID]: createTenantTrustRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantTrustRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_DECISION_RECORDS_ROUTE_ID]: createTenantDecisionRecordsRouteModuleLoader({
+        createBinding: (context) => {
+          const query = readTenantDecisionRecordsRouteQuery(
+            desktopProductionRouteLocation.readHash(),
+          );
+          return createTenantDecisionRecordsRouteBindingForRuntime(
+            {
+              ...configRef.current,
+              workspaceId: query.status === 'ready' ? query.workspaceId : '',
+            },
+            context,
+          );
+        },
+      }),
+      [TENANT_BILLING_ROUTE_ID]: createTenantBillingRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantBillingRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]: createTenantOrganizationSettingsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantOrganizationSettingsRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantSettingsRouteBindingForRuntime(configRef.current, context),
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
-  const {
-    api,
-    configRef,
-    desktopProductionRouteLocation,
-    desktopProductionRouteNavigation,
-    setAuth,
-  } = refs;
+  const { configRef, desktopProductionRouteNavigation, setAuth } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
@@ -1007,52 +1061,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             onNavigateBack: desktopProductionRouteNavigation.clearHash,
           });
         },
-      }),
-      [TENANT_EVENTS_ROUTE_ID]: createTenantEventsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantEventsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_DECISION_RECORDS_ROUTE_ID]: createTenantDecisionRecordsRouteModuleLoader({
-        createBinding: (context) => {
-          const query = readTenantDecisionRecordsRouteQuery(
-            desktopProductionRouteLocation.readHash(),
-          );
-          return createTenantDecisionRecordsRouteBindingForRuntime(
-            {
-              ...configRef.current,
-              workspaceId: query.status === 'ready' ? query.workspaceId : '',
-            },
-            context,
-          );
-        },
-      }),
-      [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]: createTenantOrganizationSettingsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantOrganizationSettingsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantSettingsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
-        createBinding: (context) =>
-          createDeadLetterQueueRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantGovernanceRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_BILLING_ROUTE_ID]: createTenantBillingRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantBillingRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_AUDIT_LOGS_ROUTE_ID]: createTenantAuditRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantAuditRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_TRUST_POLICIES_ROUTE_ID]: createTenantTrustRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantTrustRouteBindingForRuntime(configRef.current, context),
       }),
     }),
   });
