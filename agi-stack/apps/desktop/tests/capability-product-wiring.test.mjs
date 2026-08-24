@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const searchSource = readFileSync(
   new URL('../src/features/search/DesktopSearch.tsx', import.meta.url),
   'utf8',
@@ -12,11 +16,21 @@ const automationsSource = readFileSync(
   'utf8',
 );
 
-test('App composes the capability snapshot into Search and Automation product surfaces', () => {
+test('App projects capabilities into V2 Search and Automation route bindings', () => {
   assert.match(appSource, /createDesktopWorkbenchCapabilityClient/u);
   assert.match(appSource, /useDesktopCapabilitySnapshot/u);
-  assert.match(appSource, /capability=\{searchCapability\}/u);
-  assert.match(appSource, /runCapability=\{automationRunCapability\}/u);
+  assert.match(
+    appSource,
+    /projectSearchRouteBindingRef\.current = Object\.freeze\([\s\S]*capability: projectSearchCapability/u,
+  );
+  assert.match(
+    appSource,
+    /projectCronJobsRouteBindingRef\.current = Object\.freeze\([\s\S]*runCapability: automationRunCapability/u,
+  );
+  assert.match(registrySource, /current\?\.capability/u);
+  assert.match(registrySource, /current\?\.runCapability/u);
+  assert.doesNotMatch(appSource, /capability=\{searchCapability\}/u);
+  assert.doesNotMatch(appSource, /runCapability=\{automationRunCapability\}/u);
 });
 
 test('Search blocks requests until structured availability is declared', () => {

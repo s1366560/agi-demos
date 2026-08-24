@@ -1,7 +1,5 @@
 import {
   type CSSProperties,
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -9,9 +7,8 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Text, Theme } from '@radix-ui/themes';
+import { Theme } from '@radix-ui/themes';
 import {
-  ActivityLogIcon,
   DashboardIcon,
   GearIcon,
   GridIcon,
@@ -284,7 +281,6 @@ import {
   createProvidersRouteBindingForRuntime,
   createSkillsRouteBindingForRuntime,
 } from './features/settings-routes/settingsRouteRuntime';
-import { DesktopSearch } from './features/search/DesktopSearch';
 import { terminalInteractiveCapability as resolveTerminalInteractiveCapability } from './features/sandbox/sandboxRuntimeClient';
 import {
   terminalSessionV2SocketUrl,
@@ -478,11 +474,6 @@ import {
 import { CommandPalette } from './features/navigation/CommandPalette';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
-
-const LazyAutomationsPage = lazy(async () => {
-  const { AutomationsPage } = await import('./features/automations/AutomationsPage');
-  return { default: AutomationsPage };
-});
 
 const emptyConversationTimeline: ConversationTimelineState = {
   conversationId: null,
@@ -1075,7 +1066,6 @@ export function App() {
     },
     [config, desktopCapabilityState.snapshot],
   );
-  const searchCapability = desktopCapability(desktopCapabilityState.snapshot, 'search');
   const projectSearchCapability = desktopCapability(
     desktopCapabilityState.snapshot,
     PROJECT_SEARCH_ROUTE_ID,
@@ -4001,7 +3991,7 @@ export function App() {
   const paneStageClassName =
     activeSection === 'board'
       ? 'pane-stage single-stage my-work-stage'
-      : activeSection === 'home' || activeSection === 'automations' || activeSection === 'search'
+      : activeSection === 'home'
         ? 'pane-stage single-stage auxiliary-stage'
         : 'pane-stage single-stage';
   const configuredProject = useMemo(
@@ -5088,9 +5078,7 @@ export function App() {
   const titlebarPrimaryLabel =
     showRuntimeConfig && activeSection === 'board'
       ? t('myWork.title')
-      : showRuntimeConfig && activeSection === 'automations'
-        ? t('automations.title')
-        : `Session: ${sessionTitle}`;
+      : `Session: ${sessionTitle}`;
   const titlebarRunTimeLabel = activeSidebarRun?.time ?? lastSync;
   useEffect(() => {
     if (!showRuntimeConfig) {
@@ -5957,17 +5945,6 @@ export function App() {
       onSelect: () => switchSection('board'),
     },
     {
-      id: 'automations',
-      kind: 'action',
-      groupId: 'desktop-shell',
-      groupLabel: shellCommandGroup,
-      label: t('automations.title'),
-      description: t('automations.commandDescription'),
-      icon: <ActivityLogIcon />,
-      searchText: `${t('automations.title')} ${t('automations.commandDescription')}`,
-      onSelect: () => switchSection('automations'),
-    },
-    {
       id: 'settings',
       kind: 'settings',
       groupId: 'desktop-shell',
@@ -6402,7 +6379,6 @@ export function App() {
 
   const renderAuxiliaryView = () => (
     <AuxiliaryView
-      section="home"
       userName={auxiliaryUserName}
       runningCount={myWorkCounts.running}
       needsInputCount={myWorkCounts.needs_input + myWorkCounts.needs_approval}
@@ -6411,40 +6387,6 @@ export function App() {
       onOpenMyWork={() => switchSection('board')}
       onRetryMyWork={() => void refreshMyWork()}
     />
-  );
-
-  const renderSearchPage = () => (
-    <DesktopSearch
-      key={`${config.tenantId || 'no-tenant'}:${config.projectId || 'no-project'}`}
-      api={api}
-      tenantId={config.tenantId}
-      projectId={config.projectId}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? null}
-      capability={searchCapability}
-      capabilityLoading={desktopCapabilityState.loading}
-      onRetryCapability={desktopCapabilityState.reload}
-      onOpenProjectSettings={openWorkspaceSettings}
-    />
-  );
-
-  const renderAutomationsPage = () => (
-    <Suspense
-      fallback={
-        <section className="automations-page" aria-busy="true">
-          <Text>{t('automations.loading')}</Text>
-        </section>
-      }
-    >
-      <LazyAutomationsPage
-        key={config.projectId || 'no-project'}
-        api={automationApi}
-        projectId={config.projectId}
-        projectName={selectedProject?.name ?? selectedProject?.id ?? null}
-        runCapability={automationRunCapability}
-        onOpenProjectSettings={openWorkspaceSettings}
-        onOpenConnection={openConnectionSettings}
-      />
-    </Suspense>
   );
 
   const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
@@ -6552,9 +6494,7 @@ export function App() {
     if (activeSection === 'chat') return renderChatPanel();
     if (activeSection === 'board') return renderBoardPanel();
     if (activeSection === 'activity') return renderActivityInbox();
-    if (activeSection === 'automations') return renderAutomationsPage();
     if (activeSection === 'home') return renderNewThreadComposer();
-    if (activeSection === 'search') return renderSearchPage();
     return renderWorkspaceOverview();
   };
 
@@ -6680,10 +6620,7 @@ export function App() {
             activeSection={
               activeSection === 'board'
                 ? 'my-work'
-                : activeSection === 'home' ||
-                    activeSection === 'automations' ||
-                    activeSection === 'search' ||
-                    activeSection === 'activity'
+                : activeSection === 'home' || activeSection === 'activity'
                   ? activeSection
                   : null
             }
@@ -6713,8 +6650,6 @@ export function App() {
             onNavigate={(section) => {
               if (section === 'home') switchSection('home');
               if (section === 'my-work') switchSection('board');
-              if (section === 'automations') switchSection('automations');
-              if (section === 'search') switchSection('search');
               if (section === 'activity') switchSection('activity');
             }}
             onOpenFeatureDirectory={(trigger) => openCommandPalette(trigger)}

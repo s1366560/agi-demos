@@ -8,8 +8,6 @@ const VIEW_TAB_LABEL_KEYS: Record<WorkbenchTabViewSection, string> = {
   workspace: 'workspaceTree.workspaces',
   home: 'nav.home',
   board: 'nav.myWork',
-  automations: 'nav.automations',
-  search: 'nav.search',
   activity: 'sidebar.activity',
 };
 

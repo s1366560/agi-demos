@@ -55,6 +55,7 @@ const factorySource = readFileSync(
   ),
   'utf8',
 );
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
 const routeContext = Object.freeze({
   tenantId: 'tenant-1',
@@ -237,6 +238,7 @@ test('DesktopSearch code loads only behind the production route loader boundary'
     factorySource,
     /import\s+\{\s*DesktopSearch\s*\}\s+from/u,
   );
+  assert.doesNotMatch(appSource, /DesktopSearch|features\/search\/DesktopSearch/u);
 });
 
 function renderRoute(module, context) {

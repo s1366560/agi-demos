@@ -1,18 +1,14 @@
 import {
   DashboardIcon,
-  LightningBoltIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
 import './AuxiliaryView.css';
 
-export type AuxiliarySection = 'home' | 'automations' | 'search';
 export type AuxiliaryMetricStatus = 'loading' | 'error' | 'ready';
 
 type AuxiliaryViewProps = {
-  section: AuxiliarySection;
   userName: string;
   runningCount: number;
   needsInputCount: number;
@@ -22,14 +18,7 @@ type AuxiliaryViewProps = {
   onRetryMyWork: () => void;
 };
 
-const sectionIcons = {
-  home: DashboardIcon,
-  automations: LightningBoltIcon,
-  search: MagnifyingGlassIcon,
-} satisfies Record<AuxiliarySection, typeof DashboardIcon>;
-
 export function AuxiliaryView({
-  section,
   userName,
   runningCount,
   needsInputCount,
@@ -39,24 +28,14 @@ export function AuxiliaryView({
   onRetryMyWork,
 }: AuxiliaryViewProps) {
   const { t } = useI18n();
-  const Icon = sectionIcons[section];
-  const title =
-    section === 'home'
-      ? t('auxiliary.homeTitle', { name: userName })
-      : t(section === 'automations' ? 'nav.automations' : 'nav.search');
+  const title = t('auxiliary.homeTitle', { name: userName });
   const description =
-    section === 'home'
-      ? metricStatus === 'ready'
-        ? t('auxiliary.homeDescription', { running: runningCount, ready: readyCount })
-        : t(
-            metricStatus === 'loading'
-              ? 'auxiliary.metricsLoading'
-              : 'auxiliary.metricsUnavailable',
-          )
+    metricStatus === 'ready'
+      ? t('auxiliary.homeDescription', { running: runningCount, ready: readyCount })
       : t(
-          section === 'automations'
-            ? 'auxiliary.automationsDescription'
-            : 'auxiliary.searchDescription',
+          metricStatus === 'loading'
+            ? 'auxiliary.metricsLoading'
+            : 'auxiliary.metricsUnavailable',
         );
 
   return (
@@ -73,7 +52,7 @@ export function AuxiliaryView({
         aria-label={t('auxiliary.summary')}
       >
         <article className="overview-hero">
-          <Icon aria-hidden />
+          <DashboardIcon aria-hidden />
           <h2>{t('auxiliary.heroTitle')}</h2>
           <p>{t('auxiliary.heroDescription')}</p>
           <button type="button" onClick={onOpenMyWork}>

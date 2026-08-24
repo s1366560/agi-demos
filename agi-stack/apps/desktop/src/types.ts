@@ -18,8 +18,6 @@ export type CredentialKind =
 export type WorkbenchSection =
   | 'workspace'
   | 'home'
-  | 'automations'
-  | 'search'
   | 'chat'
   | 'board'
   | 'activity'

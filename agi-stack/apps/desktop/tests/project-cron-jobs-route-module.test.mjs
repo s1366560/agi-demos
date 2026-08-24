@@ -163,6 +163,10 @@ test('AutomationsPage code loads only behind the production route loader boundar
     appSource,
     /import\s+\{\s*AutomationsPage\s*\}\s+from/u,
   );
+  assert.doesNotMatch(
+    appSource,
+    /LazyAutomationsPage|features\/automations\/AutomationsPage/u,
+  );
 });
 
 test('controlled automation editor restores the exact opening control on close', () => {

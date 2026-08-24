@@ -4,6 +4,14 @@ import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const typesSource = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
+const sidebarSource = readFileSync(
+  new URL('../src/features/navigation/DesktopSidebar.tsx', import.meta.url),
+  'utf8',
+);
+const rendererArtifactCatalogSource = readFileSync(
+  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+  'utf8',
+);
 const auxiliaryViewUrl = new URL(
   '../src/features/navigation/AuxiliaryView.tsx',
   import.meta.url,
@@ -13,18 +21,22 @@ const auxiliaryViewStylesUrl = new URL(
   import.meta.url,
 );
 
-test('Home, Search, and Automations are first-class workbench sections', () => {
+test('only shell-owned views remain first-class workbench sections', () => {
   const workbenchSection =
     typesSource.match(/export type WorkbenchSection =[\s\S]*?;/)?.[0] ?? '';
 
   assert.match(workbenchSection, /'home'/);
-  assert.match(workbenchSection, /'search'/);
-  assert.match(workbenchSection, /'automations'/);
+  assert.match(workbenchSection, /'board'/);
+  assert.match(workbenchSection, /'activity'/);
+  assert.doesNotMatch(workbenchSection, /'search'/);
+  assert.doesNotMatch(workbenchSection, /'automations'/);
 });
 
-test('primary navigation opens section-based auxiliary views', () => {
+test('Search and Automations enter only through V2 route and navigation contributions', () => {
   const navigationHandler =
     appSource.match(/onNavigate=\{\(section\) => \{[\s\S]*?\n\s*\}\}/)?.[0] ?? '';
+  const primaryItems =
+    sidebarSource.match(/const primaryItems = \[[\s\S]*?\] as const;/u)?.[0] ?? '';
   const renderWorkbench =
     appSource.match(
       /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
@@ -32,30 +44,20 @@ test('primary navigation opens section-based auxiliary views', () => {
 
   assert.match(appSource, /from '\.\/features\/navigation\/AuxiliaryView'/);
   assert.match(navigationHandler, /section === 'home'[\s\S]*switchSection\('home'\)/);
-  assert.match(
-    navigationHandler,
-    /section === 'automations'[\s\S]*switchSection\('automations'\)/,
-  );
-  assert.match(navigationHandler, /section === 'search'[\s\S]*switchSection\('search'\)/);
+  assert.doesNotMatch(navigationHandler, /section === '(?:automations|search)'/u);
   assert.doesNotMatch(navigationHandler, /openWorkspaceOverview|openCommandPalette/);
+  assert.doesNotMatch(primaryItems, /id: '(?:automations|search)'/u);
 
   assert.match(renderWorkbench, /activeSection === 'home'/);
-  assert.match(renderWorkbench, /activeSection === 'automations'/);
-  assert.match(renderWorkbench, /activeSection === 'search'/);
-  assert.match(
-    appSource,
-    /lazy\(async \(\) => \{[\s\S]*import\(\s*'\.\/features\/automations\/AutomationsPage'\s*\)/u,
-  );
-  assert.match(appSource, /<LazyAutomationsPage/u);
-  assert.doesNotMatch(
-    appSource,
-    /import\s+\{\s*AutomationsPage\s*\}\s+from/u,
-  );
-  assert.match(appSource, /from '\.\/features\/search\/DesktopSearch'/);
-  assert.match(appSource, /<DesktopSearch/);
-  assert.match(renderWorkbench, /renderSearchPage/);
+  assert.doesNotMatch(renderWorkbench, /activeSection === '(?:automations|search)'/u);
+  assert.doesNotMatch(appSource, /LazyAutomationsPage|renderAutomationsPage/u);
+  assert.doesNotMatch(appSource, /features\/automations\/AutomationsPage/u);
+  assert.doesNotMatch(appSource, /DesktopSearch|renderSearchPage/u);
+  assert.match(appSource, /const routeCommandItems: CommandPaletteItem\[\]/u);
+  assert.match(appSource, /desktopCanonicalNavigationRegistry/u);
+  assert.match(rendererArtifactCatalogSource, /PROJECT_CRON_JOBS_ROUTE_ID/u);
+  assert.match(rendererArtifactCatalogSource, /PROJECT_SEARCH_ROUTE_ID/u);
   assert.match(appSource, /<AuxiliaryView/);
-  assert.match(renderWorkbench, /renderAutomationsPage/);
 });
 
 test('auxiliary navigation uses the shared prototype overview surface', () => {
@@ -65,10 +67,8 @@ test('auxiliary navigation uses the shared prototype overview surface', () => {
 
   const auxiliaryViewSource = readFileSync(auxiliaryViewUrl, 'utf8');
   const auxiliaryViewStyles = readFileSync(auxiliaryViewStylesUrl, 'utf8');
-  assert.match(
-    auxiliaryViewSource,
-    /export type AuxiliarySection = 'home' \| 'automations' \| 'search'/,
-  );
+  assert.doesNotMatch(auxiliaryViewSource, /AuxiliarySection|section:/u);
+  assert.doesNotMatch(auxiliaryViewSource, /LightningBoltIcon|MagnifyingGlassIcon/u);
   assert.match(auxiliaryViewSource, /className="auxiliary-view"/);
   assert.doesNotMatch(auxiliaryViewSource, /<main className="auxiliary-view"/);
   assert.match(auxiliaryViewSource, /onOpenMyWork/);

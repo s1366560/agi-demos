@@ -5,8 +5,8 @@ import type { WorkbenchSection } from '../../types';
  * helper returns new arrays and never mutates its input.
  *
  * Ordering decision: view tabs always come first in the fixed declaration
- * order below (workspace is the landing view, board/automations/search/
- * activity follow the sidebar nav order), conversation tabs append after in
+ * order below (workspace is the landing view and shell-owned views follow the
+ * sidebar nav order), conversation tabs append after in
  * the order they were opened. This keeps the row predictable — views never
  * move, conversations queue up at the trailing edge.
  */
@@ -27,8 +27,6 @@ export const WORKBENCH_VIEW_TAB_ORDER: readonly WorkbenchTabViewSection[] = [
   'workspace',
   'home',
   'board',
-  'automations',
-  'search',
   'activity',
 ];
 
