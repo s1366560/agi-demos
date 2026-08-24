@@ -265,6 +265,8 @@ export type AppRouteRegistryRefs = {
   commitRuntimeConfig: (nextConfig: DesktopRuntimeConfig) => void;
 };
 
+export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+
 function createSettingsRouteContent(
   section: SettingsSection,
   onOpen: () => void,
@@ -358,40 +360,10 @@ export function createAppAuthenticationRouteRegistry(refs: AppRouteRegistryRefs)
   });
 }
 
-export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
-  const {
-    api,
-    authRef,
-    configRef,
-    desktopProductionRouteLocation,
-    desktopProductionRouteNavigation,
-    projectCronJobsRouteBindingRef,
-    projectSearchRouteBindingRef,
-    setAuth,
-    setSettingsInitialSection,
-    setSettingsWindowOpen,
-    settingsRouteCloseNavigationRef,
-  } = refs;
-  const settingsRouteContent = (section: SettingsSection) =>
-    createSettingsRouteContent(
-      section,
-      () => {
-        settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
-        setSettingsInitialSection(section);
-        setSettingsWindowOpen(true);
-      },
-      () => {
-        if (
-          settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
-        ) {
-          settingsRouteCloseNavigationRef.current = null;
-        }
-        setSettingsWindowOpen(false);
-      },
-    );
+export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryRefs) {
+  const { configRef } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
-      [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [BACKEND_STORES_ROUTE_ID]: createBackendStoresRouteModuleLoader({
         createBinding: (context) => {
           const currentConfig = configRef.current;
@@ -433,6 +405,48 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
           });
         },
       }),
+      [PROJECT_SUPPORT_ROUTE_ID]: createProjectSupportRouteModuleLoader({
+        createBinding: (context) =>
+          createProjectSupportRouteBindingForRuntime(configRef.current, context),
+      }),
+    }),
+  });
+}
+
+export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
+  const {
+    api,
+    authRef,
+    configRef,
+    desktopProductionRouteLocation,
+    desktopProductionRouteNavigation,
+    projectCronJobsRouteBindingRef,
+    projectSearchRouteBindingRef,
+    setAuth,
+    setSettingsInitialSection,
+    setSettingsWindowOpen,
+    settingsRouteCloseNavigationRef,
+  } = refs;
+  const settingsRouteContent = (section: SettingsSection) =>
+    createSettingsRouteContent(
+      section,
+      () => {
+        settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
+        setSettingsInitialSection(section);
+        setSettingsWindowOpen(true);
+      },
+      () => {
+        if (
+          settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
+        ) {
+          settingsRouteCloseNavigationRef.current = null;
+        }
+        setSettingsWindowOpen(false);
+      },
+    );
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => {
           const currentConfig = configRef.current;
@@ -862,10 +876,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
       [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
         createBinding: (context) =>
           createChannelsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [PROJECT_SUPPORT_ROUTE_ID]: createProjectSupportRouteModuleLoader({
-        createBinding: (context) =>
-          createProjectSupportRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
         createBinding: (context) =>

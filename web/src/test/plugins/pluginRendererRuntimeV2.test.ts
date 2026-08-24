@@ -254,6 +254,7 @@ describe('RendererPluginRuntimeV2', () => {
   it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
     const knownArtifactRefs = new Set([
       'desktop.routes.production.v1',
+      'desktop.routes.auxiliary.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.ui-slots.default.v1',
@@ -277,6 +278,7 @@ describe('RendererPluginRuntimeV2', () => {
     );
     expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
       ['desktop.production-routes', 'route'],
+      ['desktop.auxiliary-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
@@ -313,18 +315,24 @@ describe('RendererPluginRuntimeV2', () => {
     await runtime.close();
   });
 
-  it('removes auxiliary desktop navigation through its independent profile effect', async () => {
+  it('removes auxiliary desktop routes and navigation through independent profile effects', async () => {
     const runtime = new RendererPluginRuntimeV2(
       'desktop-renderer',
       createDesktopRendererDefinitionsV2()
     );
     await runtime.bootstrap(bootstrapProfile);
     const candidate = structuredClone(bootstrapProfile);
-    const auxiliaryEntry = candidate.entries.find(
-      ({ entry_id }) => entry_id === 'builtin-desktop-auxiliary-navigation'
+    const auxiliaryEntryIds = new Set([
+      'builtin-desktop-auxiliary-routes',
+      'builtin-desktop-auxiliary-navigation',
+    ]);
+    const auxiliaryEntries = candidate.entries.filter(({ entry_id }) =>
+      auxiliaryEntryIds.has(entry_id)
     );
-    if (!auxiliaryEntry) throw new Error('desktop auxiliary navigation fixture is missing');
-    auxiliaryEntry.enabled = false;
+    if (auxiliaryEntries.length !== auxiliaryEntryIds.size) {
+      throw new Error('desktop auxiliary contribution fixtures are missing');
+    }
+    for (const entry of auxiliaryEntries) entry.enabled = false;
     candidate.generation += 1;
     const { digest: _digest, ...unsigned } = candidate;
     candidate.digest = await digestV2(unsigned);

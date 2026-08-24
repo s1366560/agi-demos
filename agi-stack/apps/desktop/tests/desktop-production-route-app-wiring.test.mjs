@@ -7,12 +7,16 @@ const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
+const rendererArtifactCatalogSource = readFileSync(
+  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+  'utf8',
+);
 const routerSource = readFileSync(
   new URL('../src/features/navigation/DesktopProductionRouter.tsx', import.meta.url),
   'utf8',
 );
 
-test('App owns one production route registry with the latest native route bindings', () => {
+test('V2 route factories retain the latest native route bindings', () => {
   assert.match(
     registrySource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -59,7 +63,31 @@ test('App owns one production route registry with the latest native route bindin
   );
 });
 
-test('App wires Project Support through the native scoped Cloud authority', () => {
+test('auxiliary V2 route artifact owns only its three native loaders', () => {
+  const auxiliaryFactoryStart = registrySource.indexOf(
+    'export function createAppAuxiliaryRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(auxiliaryFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const auxiliaryFactorySource = registrySource.slice(auxiliaryFactoryStart, defaultFactoryStart);
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'BACKEND_STORES_ROUTE_ID',
+    'PROJECT_PLAYBOOKS_ROUTE_ID',
+    'PROJECT_SUPPORT_ROUTE_ID',
+  ]) {
+    assert.match(auxiliaryFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppAuxiliaryRouteRegistry/u,
+  );
+});
+
+test('auxiliary V2 route factory wires Project Support through scoped Cloud authority', () => {
   assert.match(
     registrySource,
     /PROJECT_SUPPORT_ROUTE_ID[\s\S]*createProjectSupportRouteModuleLoader\(\{[\s\S]*createProjectSupportRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,

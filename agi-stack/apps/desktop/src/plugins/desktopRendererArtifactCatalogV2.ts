@@ -1,4 +1,5 @@
 import {
+  createAppAuxiliaryRouteRegistry,
   createAppRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
@@ -27,6 +28,7 @@ interface DesktopRendererContributionV2 {
 }
 
 export const DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.production.v1';
+export const DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.auxiliary.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
@@ -35,9 +37,16 @@ const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
 ]);
+const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
+  DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+);
+const AUXILIARY_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => AUXILIARY_ROUTE_ID_SET_V2.has(routeId)),
+);
 const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter(
-    (routeId) => !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId),
+    (routeId) =>
+      !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId) && !AUXILIARY_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -111,6 +120,14 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
       DEFAULT_BUSINESS_ROUTE_IDS_V2,
       createAppRouteRegistry,
+    ),
+  ],
+  [
+    DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
+      AUXILIARY_ROUTE_IDS_V2,
+      createAppAuxiliaryRouteRegistry,
     ),
   ],
   [

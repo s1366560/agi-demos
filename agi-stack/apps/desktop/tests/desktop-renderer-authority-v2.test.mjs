@@ -7,6 +7,7 @@ require.extensions[".css"] = () => {};
 
 const {
   DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
+  DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
@@ -67,6 +68,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
     ]),
     contribution(
+      "desktop.auxiliary-routes",
+      "route",
+      [DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2],
+      110,
+    ),
+    contribution(
       "desktop.default-navigation",
       "navigation",
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2],
@@ -90,21 +97,37 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     artifacts.map(({ id, kind }) => [id, kind]),
     [
       [DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2, "route"],
+      [DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
   assert.equal(typeof artifacts[0].createRegistry, "function");
-  assert.equal(artifacts[1].discoveryRouteIds.includes("backend-stores"), false);
-  assert.deepEqual(artifacts[2].discoveryRouteIds, [
+  assert.equal(artifacts[0].routeIds.includes("backend-stores"), false);
+  assert.deepEqual(artifacts[1].routeIds, [
+    "project-support",
+    "backend-stores",
+    "project-playbooks",
+  ]);
+  const auxiliaryRegistry = artifacts[1].createRegistry({ configRef: { current: {} } });
+  assert.deepEqual(
+    artifacts[1].routeIds.map((routeId) => auxiliaryRegistry.byId.get(routeId).structuralReadiness),
+    [{ status: "ready" }, { status: "ready" }, { status: "ready" }],
+  );
+  assert.equal(
+    auxiliaryRegistry.byId.get("tenant-tenant-overview").structuralReadiness.status,
+    "unavailable",
+  );
+  assert.equal(artifacts[2].discoveryRouteIds.includes("backend-stores"), false);
+  assert.deepEqual(artifacts[3].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
     "project-support",
   ]);
-  assert.equal(artifacts[3].slotDefinitions.length, 2);
+  assert.equal(artifacts[4].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[3].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[4].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );
