@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:6581cd2dd52012868d0a6416b7bc815dc5bc90c482e31121a04d4100599259ef",
+        "digest": "sha256:866722bcb6f599a4aa8271c24b0c012cebd9ea58c827eaea3b8f160b483db1da",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4750,6 +4750,50 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/runtime/skill-evolution-scheduler",
+      "entrypoint": "src.infrastructure.plugins.v2.skill_evolution_runtime:skill_evolution_scheduler_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:runtime.skill-evolution-scheduler",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "llm_clients",
+              "service": "service:llm.tenant-client-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "enabled", "environment_overrides"],
+          "properties": {
+            "strategy": { "const": "periodic-skill-evolution", "type": "string" },
+            "enabled": { "type": "boolean" },
+            "environment_overrides": { "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ff22eed2805f8cac5bac3f54afb79320c7dbd5611ac32c24ce31a1ec2e041617",
+      "artifact": {
+        "digest": "sha256:c803eaaa05314e7b1003a7aac73e686a5fc0143c276c7ef5787d58e0866fc96e",
+        "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/agent/skill-evolution-lifecycle",
       "entrypoint": "src.infrastructure.plugins.v2.agent_lifecycle_runtime:_apply_skill_evolution_lifecycle_v2",
       "targets": [
@@ -4758,7 +4802,13 @@
       "contract": {
         "services": {
           "provides": [],
-          "requires": []
+          "requires": [
+            {
+              "alias": "scheduler",
+              "service": "service:runtime.skill-evolution-scheduler",
+              "version": "1.0.0"
+            }
+          ]
         },
         "events": {
           "emits": [],
@@ -4796,9 +4846,9 @@
           "properties": {}
         }
       },
-      "contract_digest": "sha256:351ae420c1a0c72d7d267ae75b7d6943c62b1be0046b996bc4f9e3fa3c9e2d6f",
+      "contract_digest": "sha256:95503e10028c08a5e8e7996b787978fef5978d70183beed8145f12a9b9f3071d",
       "artifact": {
-        "digest": "sha256:abd6fbe31fdc6043e59a98d9b228b3b088df86c3797b5149bbddce630c5d6bce",
+        "digest": "sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d447362",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
       }
     },
@@ -4863,7 +4913,7 @@
       },
       "contract_digest": "sha256:31b0b61ff6c2abd808c54f9343b46cd4dabac3e69df0b547bd9ca12475ee5fc0",
       "artifact": {
-        "digest": "sha256:abd6fbe31fdc6043e59a98d9b228b3b088df86c3797b5149bbddce630c5d6bce",
+        "digest": "sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d447362",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
       }
     },

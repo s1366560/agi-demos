@@ -687,45 +687,6 @@ class DIContainer:
     def skill_service(self) -> SkillService:
         return self._agent.skill_service()
 
-    def skill_evolution_plugin(self) -> Any:
-        """Get or initialize the skill evolution plugin (cached singleton).
-
-        Wires the plugin with its heavy dependencies (skill service,
-        LLM provider manager, DB session factory) on first access.
-        The hook registration happens separately in the builtin hooks
-        init so that data capture works even before full init.
-        """
-        if self._session_factory is None:
-            return None
-        if self._db is None:
-            logger.info("Skill evolution plugin not initialized: DB-scoped container is required")
-            return None
-
-        from src.infrastructure.agent.plugins.skill_evolution.config import (
-            SkillEvolutionConfig,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            build_skill_evolution_runtime,
-        )
-        from src.infrastructure.plugins.v2.llm_client_service import (
-            lease_tenant_llm_client_v2,
-        )
-
-        config = SkillEvolutionConfig.from_env()
-        if not config.enabled:
-            return None
-
-        try:
-            return build_skill_evolution_runtime(
-                config=config,
-                skill_service=self.skill_service(),
-                llm_client_lease=lease_tenant_llm_client_v2,
-                session_factory=self._session_factory,
-            )
-        except Exception:
-            logger.exception("Failed to initialize skill evolution plugin")
-            return None
-
     def workspace_manager(self) -> Any:
         return self._agent.workspace_manager()
 

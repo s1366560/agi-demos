@@ -106,7 +106,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915, C901, PLR0912
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915, C901
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
@@ -190,19 +190,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
-
-    # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
-    try:
-        async with async_session_factory() as db:
-            plugin = container.with_db(db).skill_evolution_plugin()
-        if plugin is not None:
-            app.state.skill_evolution_plugin = plugin
-            await plugin.on_enable()
-            logger.info("Skill evolution plugin scheduler started")
-        else:
-            logger.info("Skill evolution plugin not started (disabled or missing dependencies)")
-    except Exception:
-        logger.exception("Failed to start skill evolution plugin")
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
@@ -315,16 +302,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     if http_routes is not None:
         http_routes.dispose()
         app.state.platform_plugin_http_routes = None
-
-    # Stop Skill Evolution Plugin scheduler
-    try:
-        plugin = getattr(app.state, "skill_evolution_plugin", None)
-        if plugin is not None:
-            await plugin.on_disable()
-            logger.info("Skill evolution plugin scheduler stopped")
-            app.state.skill_evolution_plugin = None
-    except Exception:
-        logger.exception("Error stopping skill evolution plugin")
 
     # Stop reflection runner
     try:

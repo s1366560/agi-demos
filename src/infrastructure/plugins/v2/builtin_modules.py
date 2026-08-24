@@ -54,6 +54,7 @@ from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
+from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
 from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
 from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_definition_v2
@@ -253,6 +254,7 @@ def builtin_runtime_definitions_v2(
         *artifact_content_gc_definitions_v2(),
         docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
+        skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),

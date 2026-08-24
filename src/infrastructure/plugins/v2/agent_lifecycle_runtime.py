@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from src.infrastructure.agent.memory.runtime import MemoryRuntimeProtocol
 from src.infrastructure.agent.plugins.skill_evolution.plugin import (
@@ -22,10 +22,23 @@ AGENT_SKILL_TOOL_OBSERVED_EVENT_V2 = "agent.skill_tool_observed"
 
 MEMORY_LIFECYCLE_MODULE_V2 = "builtin://memstack/agent/memory-lifecycle"
 SKILL_EVOLUTION_LIFECYCLE_MODULE_V2 = "builtin://memstack/agent/skill-evolution-lifecycle"
+SKILL_EVOLUTION_SCHEDULER_INJECT_V2 = "scheduler"
 
 type WaterfallNextV2 = Callable[[object], Awaitable[object]]
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class _SkillEvolutionSchedulerProtocolV2(Protocol):
+    def schedule_evolution(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
+        reason: str = "manual",
+    ) -> dict[str, Any]: ...
 
 
 def _append_emitted_events(
@@ -200,6 +213,12 @@ def _apply_skill_evolution_lifecycle_v2(
 ) -> None:
     if config:
         raise ValueError("skill evolution lifecycle module does not accept config")
+    scheduler = context.require(SKILL_EVOLUTION_SCHEDULER_INJECT_V2)
+    if not isinstance(scheduler, _SkillEvolutionSchedulerProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_skill_evolution_scheduler",
+            "Skill Evolution lifecycle scheduler inject has an invalid implementation",
+        )
     _ = context.on(AGENT_SKILL_TOOL_OBSERVED_EVENT_V2, _record_skill_evolution_tool)
     _ = context.on(AGENT_AFTER_TURN_COMPLETE_EVENT_V2, _capture_skill_evolution_after_turn)
 
@@ -226,5 +245,6 @@ __all__ = [
     "AGENT_SKILL_TOOL_OBSERVED_EVENT_V2",
     "MEMORY_LIFECYCLE_MODULE_V2",
     "SKILL_EVOLUTION_LIFECYCLE_MODULE_V2",
+    "SKILL_EVOLUTION_SCHEDULER_INJECT_V2",
     "agent_lifecycle_definitions_v2",
 ]

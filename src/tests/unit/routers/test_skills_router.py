@@ -786,7 +786,6 @@ async def test_project_skill_raw_id_routes_require_project_access(
             db=db,
         ),
         "evolution_run": lambda: router.run_skill_evolution(
-            request=SimpleNamespace(),
             skill_id=skill.id,
             tenant={"id": "tenant-1"},
             current_user=current_user,
@@ -1947,19 +1946,13 @@ async def test_run_skill_evolution_queues_single_skill_cycle(
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
     monkeypatch.setattr(
         "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
         _MemorySqlSkillRepository,
     )
 
     response = await router.run_skill_evolution(
-        request=request,
         skill_id=skill.id,
         db=db,
         tenant={"id": "tenant-1"},
@@ -1974,19 +1967,15 @@ async def test_run_skill_evolution_queues_single_skill_cycle(
 
 
 @pytest.mark.unit
-async def test_run_tenant_skill_evolution_queues_tenant_cycle() -> None:
+async def test_run_tenant_skill_evolution_queues_tenant_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
 
     response = await router.run_tenant_skill_evolution(
-        request=request,
         db=SimpleNamespace(),
         tenant={"id": "tenant-1"},
     )
@@ -2007,12 +1996,7 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
     plugin = SimpleNamespace(
         schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
     )
-    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
-        )
-    )
+    monkeypatch.setattr(router, "_skill_evolution_scheduler_v2", lambda: plugin)
     write_guard = AsyncMock(
         side_effect=HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
@@ -2022,7 +2006,6 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
 
     with pytest.raises(HTTPException) as exc_info:
         await router.run_tenant_skill_evolution(
-            request=request,
             db=SimpleNamespace(),
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-1"),
@@ -2033,17 +2016,19 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
 
 
 @pytest.mark.unit
-async def test_run_tenant_skill_evolution_rejects_missing_plugin() -> None:
-    container = SimpleNamespace(skill_evolution_plugin=lambda: None)
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
+async def test_run_tenant_skill_evolution_rejects_missing_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_runtime():
+        raise router.RuntimeV2Error(
+            "service_not_found",
+            "Skill Evolution scheduler is disabled",
         )
-    )
+
+    monkeypatch.setattr(router, "current_skill_evolution_scheduler_v2", missing_runtime)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.run_tenant_skill_evolution(
-            request=request,
             db=SimpleNamespace(),
             tenant={"id": "tenant-1"},
         )

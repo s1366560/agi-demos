@@ -51,6 +51,11 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.skill_evolution_runtime import (
+    SkillEvolutionSchedulerProtocolV2,
+    current_skill_evolution_scheduler_v2,
+)
 from src.infrastructure.skill.markdown_parser import MarkdownParser, SkillMarkdown
 from src.infrastructure.skill.validator import AgentSkillsValidator
 
@@ -75,6 +80,16 @@ ParsedSkillPayload = tuple[
     dict[str, Any] | None,
     str | None,
 ]
+
+
+def _skill_evolution_scheduler_v2() -> SkillEvolutionSchedulerProtocolV2:
+    try:
+        return current_skill_evolution_scheduler_v2()
+    except RuntimeV2Error as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Skill evolution plugin is not available"),
+        ) from error
 
 
 async def _get_selected_skill_tenant_id(
@@ -2549,7 +2564,6 @@ async def _ensure_evolution_job_write_access(
     summary="Run tenant skill evolution now",
 )
 async def run_tenant_skill_evolution(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
@@ -2561,15 +2575,7 @@ async def run_tenant_skill_evolution(
         current_user=current_user,
         tenant_id=tenant_id,
     )
-    container = get_container_with_db(request, db)
-    plugin = container.skill_evolution_plugin()
-    if plugin is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_("Skill evolution plugin is not available"),
-        )
-
-    result = plugin.schedule_evolution(
+    result = _skill_evolution_scheduler_v2().schedule_evolution(
         tenant_id=tenant_id,
         project_id=None,
         skill_name=None,
@@ -2648,7 +2654,6 @@ async def get_skill_evolution(
     summary="Run skill evolution now",
 )
 async def run_skill_evolution(
-    request: Request,
     skill_id: str,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
@@ -2674,15 +2679,7 @@ async def run_skill_evolution(
         skill=skill,
     )
 
-    container = get_container_with_db(request, db)
-    plugin = container.skill_evolution_plugin()
-    if plugin is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_("Skill evolution plugin is not available"),
-        )
-
-    result = plugin.schedule_evolution(
+    result = _skill_evolution_scheduler_v2().schedule_evolution(
         tenant_id=tenant_id,
         project_id=skill.project_id,
         skill_name=skill.name,

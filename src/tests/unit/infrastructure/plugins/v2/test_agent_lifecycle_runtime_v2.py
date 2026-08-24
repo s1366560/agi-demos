@@ -11,6 +11,7 @@ import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.plugins.skill_evolution import plugin as skill_evolution_runtime
+from src.infrastructure.plugins.v2 import skill_evolution_runtime as skill_evolution_runtime_v2
 from src.infrastructure.plugins.v2.agent_lifecycle_runtime import (
     MEMORY_LIFECYCLE_MODULE_V2,
 )
@@ -54,6 +55,17 @@ class _Collector:
         self.payload = dict(payload)
         assert session_factory == "session-factory"
         return []
+
+
+class _SchedulerPlugin:
+    async def on_enable(self) -> None:
+        return None
+
+    async def on_disable(self) -> None:
+        return None
+
+    def schedule_evolution(self, **_kwargs: object) -> dict[str, object]:
+        return {"scheduled": True}
 
 
 def _scope() -> ScopeV2:
@@ -202,6 +214,11 @@ async def test_skill_evolution_attribution_flows_through_v2_events(monkeypatch) 
     monkeypatch.setattr(skill_evolution_runtime, "_scheduler", None)
     skill_evolution_runtime._loaded_skill_names_by_turn.clear()
     skill_evolution_runtime._tool_events_by_turn.clear()
+    monkeypatch.setattr(
+        skill_evolution_runtime_v2,
+        "build_skill_evolution_runtime",
+        lambda **_kwargs: _SchedulerPlugin(),
+    )
 
     dispatcher = PinnedAgentRuntimeDispatcherV2()
     manager = await _manager()
