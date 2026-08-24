@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:c2f0a2bf414a53a4d6eb6e3e992eb6340a46dd9cd233e49c5508f5864e2a50'
-    '75","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:1b1e661e8007297a696ef919ce78bb6005d9962bd4b4a9c9e37e8331b297ad'
+    '28","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -186,8 +186,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'b1be0046b996bc4f9e3fa3c9e2d6f","entrypoint":"src.infrastructure.plugins.v2.agent_lifecyc'
     'le_runtime:_apply_skill_evolution_lifecycle_v2","module_ref":"builtin://memstack/agent/s'
     'kill-evolution-lifecycle","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0"'
-    ',"targets":["python"]},{"artifact_digest":"sha256:aa297db64eead940ffbe67dc962ba744517313'
-    '39a6808c6e9c8f33eab35c4ac3","artifact_source":"repo+python://src/infrastructure/plugins/'
+    ',"targets":["python"]},{"artifact_digest":"sha256:ba9ea8cffab65c2c129dddb99d4558621ca949'
+    '04df564ef2c5d9fe0d19505aac","artifact_source":"repo+python://src/infrastructure/plugins/'
     'v2/darwinian_evolver_capability.py","contract":{"config_schema":{"$schema":"https://json'
     '-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"cache_dir"'
     ':{"minLength":1,"type":"string"},"default_concurrency":{"minimum":1,"type":"integer"},"d'
@@ -212,8 +212,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '8b3c107dd33440c6ccd1b816fff4c","entrypoint":"src.infrastructure.plugins.v2.docker_compos'
     'e_capabilities:_apply_docker_compose_skill_contribution_v2","module_ref":"builtin://mems'
     'tack/agent/skill/docker-compose","plugin_id":"memstack-runtime-kernel","plugin_version":'
-    '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:10a5bfcbf13a24d98d58d57b597a1b2'
-    '0397abdf400982f8d4e730d01d3fc5b39","artifact_source":"repo+python://src/infrastructure/p'
+    '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:bf37d19df402994e0fbf6d7e2ea0af0'
+    '62ac7fb285453afbe5ff48e9f485b5fcc","artifact_source":"repo+python://src/infrastructure/p'
     'lugins/v2/drone_capabilities.py","contract":{"config_schema":{"$schema":"https://json-sc'
     'hema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"source_id":{"'
     'const":"builtin-drone-skill","type":"string"}},"required":["source_id"],"type":"object"}'
@@ -299,8 +299,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '003a65f9b2330ea0b981ae4eee98ab80ff0","entrypoint":"src.infrastructure.plugins.v2.docker_'
     'compose_capabilities:_apply_docker_compose_tool_contribution_v2","module_ref":"builtin:/'
     '/memstack/agent/tool/docker-compose","plugin_id":"memstack-runtime-kernel","plugin_versi'
-    'on":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:10a5bfcbf13a24d98d58d57b597'
-    'a1b20397abdf400982f8d4e730d01d3fc5b39","artifact_source":"repo+python://src/infrastructu'
+    'on":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:bf37d19df402994e0fbf6d7e2ea'
+    '0af062ac7fb285453afbe5ff48e9f485b5fcc","artifact_source":"repo+python://src/infrastructu'
     're/plugins/v2/drone_capabilities.py","contract":{"config_schema":{"$schema":"https://jso'
     'n-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"drone_ser'
     'ver_env":{"minLength":1,"type":"string"},"drone_token_env":{"minLength":1,"type":"string'
@@ -1748,7 +1748,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:c2f0a2bf414a53a4d6eb6e3e992eb6340a46dd9cd233e49c5508f5864e2a5075"
+    "sha256:1b1e661e8007297a696ef919ce78bb6005d9962bd4b4a9c9e37e8331b297ad28"
 )
 # fmt: on
 

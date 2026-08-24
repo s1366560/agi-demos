@@ -4140,7 +4140,7 @@
       },
       "contract_digest": "sha256:1aa9d24dc269fb5e9b7fa00aff99d4e1474c458e8f9d528157c2421908b7431a",
       "artifact": {
-        "digest": "sha256:10a5bfcbf13a24d98d58d57b597a1b20397abdf400982f8d4e730d01d3fc5b39",
+        "digest": "sha256:bf37d19df402994e0fbf6d7e2ea0af062ac7fb285453afbe5ff48e9f485b5fcc",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },
@@ -4386,7 +4386,7 @@
       },
       "contract_digest": "sha256:df128a48eac4a6de212b4780282ec26f0676c150ec55291f6bfbe15a4aea29c7",
       "artifact": {
-        "digest": "sha256:10a5bfcbf13a24d98d58d57b597a1b20397abdf400982f8d4e730d01d3fc5b39",
+        "digest": "sha256:bf37d19df402994e0fbf6d7e2ea0af062ac7fb285453afbe5ff48e9f485b5fcc",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },
@@ -4428,7 +4428,7 @@
       },
       "contract_digest": "sha256:8238d6b42fdfcc0d1a88ec776d310e0c97e9e73ce34a7e5b97ec66168b561554",
       "artifact": {
-        "digest": "sha256:aa297db64eead940ffbe67dc962ba74451731339a6808c6e9c8f33eab35c4ac3",
+        "digest": "sha256:ba9ea8cffab65c2c129dddb99d4558621ca94904df564ef2c5d9fe0d19505aac",
         "source": "repo+python://src/infrastructure/plugins/v2/darwinian_evolver_capability.py"
       }
     },

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:c2f0a2bf414a53a4d6eb6e3e992eb6340a46dd9cd233e49c5508f5864e',
-  '2a5075","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:1b1e661e8007297a696ef919ce78bb6005d9962bd4b4a9c9e37e8331b2',
+  '97ad28","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -212,7 +212,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '.infrastructure.plugins.v2.agent_lifecycle_runtime:_apply_skill_evolution_lifecycle_',
   'v2","module_ref":"builtin://memstack/agent/skill-evolution-lifecycle","plugin_id":"m',
   'emstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di',
-  'gest":"sha256:aa297db64eead940ffbe67dc962ba74451731339a6808c6e9c8f33eab35c4ac3","art',
+  'gest":"sha256:ba9ea8cffab65c2c129dddb99d4558621ca94904df564ef2c5d9fe0d19505aac","art',
   'ifact_source":"repo+python://src/infrastructure/plugins/v2/darwinian_evolver_capabil',
   'ity.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-1',
   '2/schema","additionalProperties":false,"properties":{"cache_dir":{"minLength":1,"typ',
@@ -239,8 +239,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'c","entrypoint":"src.infrastructure.plugins.v2.docker_compose_capabilities:_apply_do',
   'cker_compose_skill_contribution_v2","module_ref":"builtin://memstack/agent/skill/doc',
   'ker-compose","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets',
-  '":["python"]},{"artifact_digest":"sha256:10a5bfcbf13a24d98d58d57b597a1b20397abdf4009',
-  '82f8d4e730d01d3fc5b39","artifact_source":"repo+python://src/infrastructure/plugins/v',
+  '":["python"]},{"artifact_digest":"sha256:bf37d19df402994e0fbf6d7e2ea0af062ac7fb28545',
+  '3afbe5ff48e9f485b5fcc","artifact_source":"repo+python://src/infrastructure/plugins/v',
   '2/drone_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema',
   '.org/draft/2020-12/schema","additionalProperties":false,"properties":{"source_id":{"',
   'const":"builtin-drone-skill","type":"string"}},"required":["source_id"],"type":"obje',
@@ -330,8 +330,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'b981ae4eee98ab80ff0","entrypoint":"src.infrastructure.plugins.v2.docker_compose_capa',
   'bilities:_apply_docker_compose_tool_contribution_v2","module_ref":"builtin://memstac',
   'k/agent/tool/docker-compose","plugin_id":"memstack-runtime-kernel","plugin_version":',
-  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:10a5bfcbf13a24d98d58d57b597',
-  'a1b20397abdf400982f8d4e730d01d3fc5b39","artifact_source":"repo+python://src/infrastr',
+  '"2.0.0","targets":["python"]},{"artifact_digest":"sha256:bf37d19df402994e0fbf6d7e2ea',
+  '0af062ac7fb285453afbe5ff48e9f485b5fcc","artifact_source":"repo+python://src/infrastr',
   'ucture/plugins/v2/drone_capabilities.py","contract":{"config_schema":{"$schema":"htt',
   'ps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties"',
   ':{"drone_server_env":{"minLength":1,"type":"string"},"drone_token_env":{"minLength":',
@@ -1853,4 +1853,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:c2f0a2bf414a53a4d6eb6e3e992eb6340a46dd9cd233e49c5508f5864e2a5075' as const;
+  'sha256:1b1e661e8007297a696ef919ce78bb6005d9962bd4b4a9c9e37e8331b297ad28' as const;

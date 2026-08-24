@@ -120,21 +120,26 @@ async def _dispatch_migrated_event_v2(
     event: str,
     payload: Mapping[str, object],
 ) -> object:
-    dispatch_event = {
-        AGENT_SESSION_START_EVENT_V2: "agent.session.start",
-        AGENT_BEFORE_REQUEST_EVENT_V2: "agent.before_request",
-        TOOLS_AFTER_EXECUTE_EVENT_V2: "tools.after_execute",
-        AGENT_BEFORE_PROMPT_BUILD_EVENT_V2: "agent.before_prompt_build",
-        AGENT_CONTEXT_OVERFLOW_EVENT_V2: "agent.context_overflow",
-        AGENT_AFTER_TURN_COMPLETE_EVENT_V2: "agent.after_turn_complete",
-        AGENT_SKILL_TOOL_OBSERVED_EVENT_V2: "agent.skill_tool_observed",
-    }.get(event)
-    if dispatch_event is None:
+    if event == AGENT_SESSION_START_EVENT_V2:
+        result = await operation.dispatch("agent.session.start", payload)
+    elif event == AGENT_BEFORE_REQUEST_EVENT_V2:
+        result = await operation.dispatch("agent.before_request", payload)
+    elif event == TOOLS_AFTER_EXECUTE_EVENT_V2:
+        result = await operation.dispatch("tools.after_execute", payload)
+    elif event == AGENT_BEFORE_PROMPT_BUILD_EVENT_V2:
+        result = await operation.dispatch("agent.before_prompt_build", payload)
+    elif event == AGENT_CONTEXT_OVERFLOW_EVENT_V2:
+        result = await operation.dispatch("agent.context_overflow", payload)
+    elif event == AGENT_AFTER_TURN_COMPLETE_EVENT_V2:
+        result = await operation.dispatch("agent.after_turn_complete", payload)
+    elif event == AGENT_SKILL_TOOL_OBSERVED_EVENT_V2:
+        result = await operation.dispatch("agent.skill_tool_observed", payload)
+    else:
         raise RuntimeV2Error(
             "undeclared_agent_event",
             f"Agent processor event {event} is not declared by the V2 dispatcher",
         )
-    return await operation.dispatch(dispatch_event, payload)
+    return result
 
 
 def _build_event_payload_v2(

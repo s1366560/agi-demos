@@ -28,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.channel_repository import
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
     Role,
     User,
     UserProject,
@@ -120,6 +121,25 @@ async def verify_tenant_access(
             detail=_("Access denied to tenant"),
         )
     return True
+
+
+async def _resolve_project_tenant_id(  # pyright: ignore[reportUnusedFunction]
+    project_id: str,
+    db: AsyncSession,
+) -> str | None:
+    """Resolve tenant_id without exposing project identifiers in failure logs."""
+    try:
+        result = await db.execute(
+            refresh_select_statement(select(Project.tenant_id).where(Project.id == project_id))
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to resolve tenant_id: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(exc).__name__,
+        )
+        return None
+    return result.scalar_one_or_none()
 
 
 # Pydantic schemas
