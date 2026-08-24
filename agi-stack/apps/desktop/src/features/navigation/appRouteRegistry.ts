@@ -269,6 +269,7 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRe
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -637,6 +638,40 @@ export function createAppProjectAdministrationRouteRegistry(
   });
 }
 
+export function createAppRuntimeInfrastructureRouteRegistry(
+  refs: AppRuntimeInfrastructureRouteRegistryRefs,
+) {
+  const { configRef } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
+        createBinding: (context) =>
+          createRuntimePoolRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_INSTANCES_ROUTE_ID]: createRuntimeInstancesRouteModuleLoader({
+        createBinding: (context) =>
+          createRuntimeInstancesRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_CLUSTERS_ROUTE_ID]: createRuntimeClustersRouteModuleLoader({
+        createBinding: (context) =>
+          createRuntimeClustersRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_DEPLOY_ROUTE_ID]: createRuntimeDeploymentsRouteModuleLoader({
+        createBinding: (context) =>
+          createRuntimeDeploymentsRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]: createInstanceTemplatesRouteModuleLoader({
+        createBinding: (context) =>
+          createInstanceTemplatesRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_RUNTIMES_ROUTE_ID]: createUnifiedRuntimesRouteModuleLoader({
+        createBinding: (context) =>
+          createUnifiedRuntimesRouteBindingForRuntime(configRef.current, context),
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -905,30 +940,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
       [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
         createBinding: (context) =>
           createChannelsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
-        createBinding: (context) =>
-          createRuntimePoolRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_INSTANCES_ROUTE_ID]: createRuntimeInstancesRouteModuleLoader({
-        createBinding: (context) =>
-          createRuntimeInstancesRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_CLUSTERS_ROUTE_ID]: createRuntimeClustersRouteModuleLoader({
-        createBinding: (context) =>
-          createRuntimeClustersRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_DEPLOY_ROUTE_ID]: createRuntimeDeploymentsRouteModuleLoader({
-        createBinding: (context) =>
-          createRuntimeDeploymentsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]: createInstanceTemplatesRouteModuleLoader({
-        createBinding: (context) =>
-          createInstanceTemplatesRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_RUNTIMES_ROUTE_ID]: createUnifiedRuntimesRouteModuleLoader({
-        createBinding: (context) =>
-          createUnifiedRuntimesRouteBindingForRuntime(configRef.current, context),
       }),
       [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
         createBinding: (_context): ProjectSearchRouteBinding => {

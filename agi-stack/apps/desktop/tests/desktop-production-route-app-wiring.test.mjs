@@ -162,12 +162,16 @@ test('project administration V2 route artifact owns only its three native loader
   const projectAdministrationFactoryStart = registrySource.indexOf(
     'export function createAppProjectAdministrationRouteRegistry',
   );
+  const runtimeInfrastructureFactoryStart = registrySource.indexOf(
+    'export function createAppRuntimeInfrastructureRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(projectAdministrationFactoryStart, -1);
+  assert.notEqual(runtimeInfrastructureFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const projectAdministrationFactorySource = registrySource.slice(
     projectAdministrationFactoryStart,
-    defaultFactoryStart,
+    runtimeInfrastructureFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -182,6 +186,36 @@ test('project administration V2 route artifact owns only its three native loader
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAdministrationRouteRegistry/u,
+  );
+});
+
+test('runtime infrastructure V2 route artifact owns only its six native loaders', () => {
+  const runtimeInfrastructureFactoryStart = registrySource.indexOf(
+    'export function createAppRuntimeInfrastructureRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(runtimeInfrastructureFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const runtimeInfrastructureFactorySource = registrySource.slice(
+    runtimeInfrastructureFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'TENANT_POOL_ROUTE_ID',
+    'TENANT_INSTANCES_ROUTE_ID',
+    'TENANT_CLUSTERS_ROUTE_ID',
+    'TENANT_DEPLOY_ROUTE_ID',
+    'TENANT_INSTANCE_TEMPLATES_ROUTE_ID',
+    'TENANT_RUNTIMES_ROUTE_ID',
+  ]) {
+    assert.match(runtimeInfrastructureFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppRuntimeInfrastructureRouteRegistry/u,
   );
 });
 
