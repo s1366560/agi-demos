@@ -15,6 +15,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 const routeIds = Object.freeze([
   'project-agent-dashboard',
   'project-agent-logs',
@@ -55,7 +59,8 @@ test('Project Agent production routes own native loaders and App bindings', asyn
     'createProjectAgentLogsController',
     'createProjectAgentPatternsController',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
+    assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
 });
 

@@ -270,12 +270,6 @@ import {
   shortcutById,
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
-import { createProjectAgentDashboardController } from './features/project-agent/projectAgentDashboardController';
-import { createProjectAgentDashboardRouteModuleLoader } from './features/project-agent/projectAgentDashboardRouteModule';
-import { createProjectAgentLogsController } from './features/project-agent/projectAgentLogsController';
-import { createProjectAgentLogsRouteModuleLoader } from './features/project-agent/projectAgentLogsRouteModule';
-import { createProjectAgentPatternsController } from './features/project-agent/projectAgentPatternsController';
-import { createProjectAgentPatternsRouteModuleLoader } from './features/project-agent/projectAgentPatternsRouteModule';
 import {
   createLocalProjectOverviewClient,
   isCurrentLocalConversationStatusRequest,
@@ -283,25 +277,6 @@ import {
   type LocalConversationStatusSummary,
   type LocalConversationStatusRequest,
 } from './features/project/projectOverviewLocalClient';
-import { createProjectMaintenanceController } from './features/project-administration/projectMaintenanceController';
-import { createProjectMaintenanceRouteModuleLoader } from './features/project-administration/projectMaintenanceRouteModule';
-import { createProjectSchemaController } from './features/project-administration/projectSchemaController';
-import { createProjectSchemaRouteModuleLoader } from './features/project-administration/projectSchemaRouteModule';
-import { createProjectSettingsController } from './features/project-administration/projectSettingsController';
-import { createProjectSettingsRouteModuleLoader } from './features/project-administration/projectSettingsRouteModule';
-import { createProjectCommunitiesController } from './features/project-knowledge/projectCommunitiesController';
-import { createProjectCommunitiesRouteModuleLoader } from './features/project-knowledge/projectCommunitiesRouteModule';
-import { createProjectEntitiesController } from './features/project-knowledge/projectEntitiesController';
-import { createProjectEntitiesRouteModuleLoader } from './features/project-knowledge/projectEntitiesRouteModule';
-import { createProjectGraphController } from './features/project-knowledge/projectGraphController';
-import { createProjectGraphRouteModuleLoader } from './features/project-knowledge/projectGraphRouteModule';
-import { createProjectMemoriesController } from './features/project-knowledge/projectMemoriesController';
-import { createProjectMemoriesRouteModuleLoader } from './features/project-knowledge/projectMemoriesRouteModule';
-import { createProjectTeamController } from './features/project-knowledge/projectTeamController';
-import { createProjectTeamRouteModuleLoader } from './features/project-knowledge/projectTeamRouteModule';
-import { createChannelsRouteModuleLoader } from './features/settings-routes/channelsRouteModule';
-import { createEvolutionRouteModuleLoader } from './features/settings-routes/evolutionRouteModule';
-import { createTemplatesRouteModuleLoader } from './features/settings-routes/templatesRouteModule';
 import {
   createAgentDefinitionsRouteBindingForRuntime,
   createMcpServersRouteBindingForRuntime,
@@ -327,10 +302,7 @@ import {
 } from './features/settings-routes/profileAuxiliaryRoute';
 import { createProfileRouteModuleLoader } from './features/settings-routes/profileRouteModule';
 import {
-  createChannelsRouteBindingForRuntime,
-  createEvolutionRouteBindingForRuntime,
   createProfileRouteBindingForRuntime,
-  createTemplatesRouteBindingForRuntime,
 } from './features/settings-routes/p2ThirdBatchRouteRuntime';
 import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';

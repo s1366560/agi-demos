@@ -21,6 +21,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/settings-routes/nativeRouteHttpClient.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'tenant-tenant-evolution',
@@ -67,10 +71,11 @@ test('P2 third-batch production routes own real loaders while Profile remains ro
     'createEvolutionRouteBindingForRuntime',
     'createChannelsRouteBindingForRuntime',
     'createTemplatesRouteBindingForRuntime',
-    'createProfileRouteBindingForRuntime',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
+    assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
+  assert.match(appSource, /createProfileRouteBindingForRuntime/u);
   assert.doesNotMatch(
     appSource,
     /(?:evolution|channels|templates|profile)[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,

@@ -18,6 +18,10 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRegistry.js');
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const registrySource = readFileSync(
+  new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'project-project-team',
@@ -67,10 +71,11 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     'createProjectCommunitiesController',
     'createProjectGraphController',
   ]) {
-    assert.match(appSource, new RegExp(symbol, 'u'), symbol);
+    assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
+    assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
   assert.doesNotMatch(
-    appSource,
+    registrySource,
     /project-knowledge[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
 });
