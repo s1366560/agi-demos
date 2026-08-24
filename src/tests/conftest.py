@@ -99,6 +99,23 @@ def isolate_llm_health_checker_lifecycle(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(llm_health_runtime, "stop_health_checker", AsyncMock())
 
 
+@pytest.fixture(autouse=True)
+def isolate_docker_event_monitor_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting Docker event streaming."""
+    from src.infrastructure.plugins.v2 import docker_monitor_runtime
+
+    monkeypatch.setattr(
+        docker_monitor_runtime,
+        "start_docker_event_monitor",
+        AsyncMock(return_value=Mock()),
+    )
+    monkeypatch.setattr(
+        docker_monitor_runtime,
+        "stop_docker_event_monitor",
+        AsyncMock(),
+    )
+
+
 # --- Database Fixtures ---
 
 

@@ -5,18 +5,17 @@ from __future__ import annotations
 from inspect import signature
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
-import src.application.services.sandbox_status_sync_service as status_sync_module
-import src.infrastructure.adapters.primary.web.startup.docker as docker_startup_module
-import src.infrastructure.adapters.secondary.sandbox.docker_event_monitor as docker_monitor_module
 from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.containers.infra_container import InfraContainer
 from src.configuration.containers.sandbox_container import SandboxContainer
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers.sandbox import utils as sandbox_utils
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.plugins.v2 import docker_monitor_runtime as docker_runtime_module
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
@@ -87,15 +86,15 @@ def test_lifespan_defers_sandbox_runtime_cleanup_to_generation_effects() -> None
     main_source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(
         encoding="utf-8"
     )
-    docker_source = (_ROOT / "src/infrastructure/adapters/primary/web/startup/docker.py").read_text(
-        encoding="utf-8"
-    )
+    docker_startup = _ROOT / "src/infrastructure/adapters/primary/web/startup/docker.py"
 
     assert "shutdown_sandbox_adapter_singleton" not in main_source
     assert "_sandbox_adapter_instance" not in main_source
     assert "initialize_sandbox_idle_reaper" not in main_source
     assert "shutdown_sandbox_idle_reaper" not in main_source
-    assert "ensure_sandbox_sync" not in docker_source
+    assert "initialize_docker_services" not in main_source
+    assert "shutdown_docker_services" not in main_source
+    assert not docker_startup.exists()
 
 
 async def test_docker_monitor_resolves_event_publisher_for_each_generation(
@@ -121,9 +120,12 @@ async def test_docker_monitor_resolves_event_publisher_for_each_generation(
         callbacks.append(on_status_change)
         return monitor
 
+    start = AsyncMock(side_effect=start_monitor)
+    stop = AsyncMock()
     monkeypatch.setenv("SANDBOX_DOCKER_SERVICES_ENABLED", "true")
-    monkeypatch.setattr(status_sync_module, "SandboxStatusSyncService", TrackedStatusSyncService)
-    monkeypatch.setattr(docker_monitor_module, "start_docker_event_monitor", start_monitor)
+    monkeypatch.setattr(docker_runtime_module, "SandboxStatusSyncService", TrackedStatusSyncService)
+    monkeypatch.setattr(docker_runtime_module, "start_docker_event_monitor", start)
+    monkeypatch.setattr(docker_runtime_module, "stop_docker_event_monitor", stop)
 
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(sandbox_runtime_factory=sandbox_runtime_factory)
@@ -135,12 +137,11 @@ async def test_docker_monitor_resolves_event_publisher_for_each_generation(
         version=77,
     )
     assert first.accepted is True
-    install_process_generation_host_v2(host)
 
     try:
-        assert await docker_startup_module.initialize_docker_services() is monitor
         callback = callbacks.pop()
         assert await callback("project-1", "sandbox-1", "running", "start") is True
+        install_process_generation_host_v2(host)
 
         second = await host.bootstrap(
             profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
@@ -154,6 +155,7 @@ async def test_docker_monitor_resolves_event_publisher_for_each_generation(
         assert len(publishers) == 2
         assert publishers[0] is not publishers[1]
     finally:
-        docker_startup_module._docker_event_monitor = None
         clear_process_generation_host_v2(host)
         await host.close()
+    start.assert_awaited_once()
+    stop.assert_awaited_once_with()

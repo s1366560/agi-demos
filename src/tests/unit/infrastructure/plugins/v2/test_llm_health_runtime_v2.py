@@ -22,6 +22,7 @@ from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+from src.infrastructure.plugins.v2.docker_monitor_runtime import DOCKER_EVENT_MONITOR_MODULE_V2
 from src.infrastructure.plugins.v2.llm_health_runtime import (
     LLM_HEALTH_RUNTIME_MODULE_V2,
     LLM_HEALTH_RUNTIME_SERVICE_V2,
@@ -212,6 +213,7 @@ async def test_llm_health_runtime_rejects_missing_sessions_without_fallback() ->
             in {
                 ARTIFACT_CONTENT_GC_MODULE_V2,
                 ASYNC_SESSION_FACTORY_MODULE_V2,
+                DOCKER_EVENT_MONITOR_MODULE_V2,
             }
             else entry
             for entry in document.entries

@@ -31,6 +31,7 @@ from .channel_adapters import (
     builtin_feishu_channel_adapter_definition_v2,
 )
 from .cron_services import cron_service_definitions_v2
+from .docker_monitor_runtime import docker_event_monitor_definition_v2
 from .engine_services import engine_catalog_definition_v2
 from .event_log_services import event_log_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
@@ -250,6 +251,7 @@ def builtin_runtime_definitions_v2(
         ),
         *mcp_service_definitions_v2(redis_client=sandbox_redis_client),
         *artifact_content_gc_definitions_v2(),
+        docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
         *background_task_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),

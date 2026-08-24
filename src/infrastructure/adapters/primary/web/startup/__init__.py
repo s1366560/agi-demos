@@ -20,7 +20,6 @@ from .channels import (
 )
 from .container import initialize_container
 from .database import initialize_database_schema
-from .docker import initialize_docker_services, shutdown_docker_services
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
 from .llm import initialize_llm_providers
 from .redis import initialize_redis_client
@@ -34,7 +33,6 @@ __all__ = [
     "initialize_channel_manager",
     "initialize_container",
     "initialize_database_schema",
-    "initialize_docker_services",
     "initialize_llm_providers",
     "initialize_redis_client",
     "initialize_telemetry",
@@ -45,6 +43,5 @@ __all__ = [
     "shutdown_autonomy_idle_waker",
     "shutdown_blackboard_outbox_dispatcher",
     "shutdown_channel_manager",
-    "shutdown_docker_services",
     "shutdown_telemetry_services",
 ]

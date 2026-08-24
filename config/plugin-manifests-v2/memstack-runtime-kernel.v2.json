@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:52b31546807406d15e4fe209577d2919a93e80d13d52b79a3cbc6504ea2ba38c",
+        "digest": "sha256:6581cd2dd52012868d0a6416b7bc815dc5bc90c482e31121a04d4100599259ef",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -838,6 +838,50 @@
       "artifact": {
         "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/docker-event-monitor",
+      "entrypoint": "src.infrastructure.plugins.v2.docker_monitor_runtime:docker_event_monitor_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:runtime.docker-event-monitor",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "sandbox",
+              "service": "service:application.sandbox-services",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "enabled", "environment_overrides"],
+          "properties": {
+            "strategy": { "const": "docker-events", "type": "string" },
+            "enabled": { "type": "boolean" },
+            "environment_overrides": { "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9d641e2cf89532547c95c2ca0631fb823632544ce036110781e967718442e8da",
+      "artifact": {
+        "digest": "sha256:14f6aef565521a90cf77d1ddb790dca31e418cd1c0048b2704956e94badc7cad",
+        "source": "repo+python://src/infrastructure/plugins/v2/docker_monitor_runtime.py"
       }
     },
     {

@@ -266,6 +266,24 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: process-boundary
+    - entry_id: builtin-docker-event-monitor
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/docker-event-monitor
+      enabled: true
+      config:
+        strategy: docker-events
+        enabled: true
+        environment_overrides: true
+      inject:
+        sessions: service:persistence.async-session-factory
+        sandbox: service:application.sandbox-services
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-llm-health-checker
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

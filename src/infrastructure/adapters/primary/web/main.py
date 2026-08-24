@@ -41,14 +41,12 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
-    initialize_docker_services,
     initialize_llm_providers,
     initialize_redis_client,
     initialize_telemetry,
     initialize_websocket_manager,
     mount_generation_http_dispatcher_v2,
     shutdown_channel_manager,
-    shutdown_docker_services,
     shutdown_telemetry_services,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
@@ -189,10 +187,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Register WebSocket manager for lifecycle state notifications
     initialize_websocket_manager()
-
-    # Initialize Docker event monitoring. Sandbox discovery belongs to the
-    # generation-owned sandbox Provider effect.
-    await initialize_docker_services()
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
@@ -360,9 +354,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Shutdown channel manager (close all IM connections)
     await shutdown_channel_manager()
-
-    # Stop Docker event monitor
-    await shutdown_docker_services()
 
     # Retire all V2 Fibers. Graph cleanup remains an effect and runs after all
     # request, session, and background workflow leases have drained.
