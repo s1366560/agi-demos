@@ -291,6 +291,11 @@ type AppSettingsRouteContentRefs = Pick<
 >;
 export type AppTenantAgentBuildingRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'> &
   AppSettingsRouteContentRefs;
+export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef'
+> &
+  AppSettingsRouteContentRefs;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -907,6 +912,53 @@ export function createAppTenantAgentBuildingRouteRegistry(
   });
 }
 
+export function createAppTenantExtensionsIntegrationsRouteRegistry(
+  refs: AppTenantExtensionsIntegrationsRouteRegistryRefs,
+) {
+  const { configRef } = refs;
+  const settingsRouteContent = createSettingsRouteContentFactory(refs);
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [TENANT_ACP_ROUTE_ID]: createTenantAcpRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantAcpRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_WEBHOOKS_ROUTE_ID]: createTenantWebhooksRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantWebhooksRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_PROVIDERS_ROUTE_ID]: createProvidersRouteModuleLoader({
+        createBinding: (context) =>
+          createProvidersRouteBindingForRuntime(
+            configRef.current,
+            context,
+            settingsRouteContent('models'),
+          ),
+      }),
+      [TENANT_PLUGINS_ROUTE_ID]: createPluginsRouteModuleLoader({
+        createBinding: (context) =>
+          createPluginsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            settingsRouteContent('plugins'),
+          ),
+      }),
+      [TENANT_MCP_SERVERS_ROUTE_ID]: createMcpServersRouteModuleLoader({
+        createBinding: (context) =>
+          createMcpServersRouteBindingForRuntime(
+            configRef.current,
+            context,
+            settingsRouteContent('mcp'),
+          ),
+      }),
+      [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
+        createBinding: (context) =>
+          createTemplatesRouteBindingForRuntime(configRef.current, context),
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -915,7 +967,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
     desktopProductionRouteNavigation,
     setAuth,
   } = refs;
-  const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
@@ -953,14 +1004,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
           });
         },
       }),
-      [TENANT_ACP_ROUTE_ID]: createTenantAcpRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantAcpRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_WEBHOOKS_ROUTE_ID]: createTenantWebhooksRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantWebhooksRouteBindingForRuntime(configRef.current, context),
-      }),
       [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
         createBinding: (context) =>
           createTenantGenesRouteBindingForRuntime(configRef.current, context),
@@ -990,34 +1033,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
       [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
         createBinding: (context) =>
           createTenantSettingsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_PROVIDERS_ROUTE_ID]: createProvidersRouteModuleLoader({
-        createBinding: (context) =>
-          createProvidersRouteBindingForRuntime(
-            configRef.current,
-            context,
-            settingsRouteContent('models'),
-          ),
-      }),
-      [TENANT_PLUGINS_ROUTE_ID]: createPluginsRouteModuleLoader({
-        createBinding: (context) =>
-          createPluginsRouteBindingForRuntime(
-            configRef.current,
-            context,
-            settingsRouteContent('plugins'),
-          ),
-      }),
-      [TENANT_MCP_SERVERS_ROUTE_ID]: createMcpServersRouteModuleLoader({
-        createBinding: (context) =>
-          createMcpServersRouteBindingForRuntime(
-            configRef.current,
-            context,
-            settingsRouteContent('mcp'),
-          ),
-      }),
-      [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
-        createBinding: (context) =>
-          createTemplatesRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
         createBinding: (context) =>

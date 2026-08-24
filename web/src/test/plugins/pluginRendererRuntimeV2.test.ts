@@ -263,6 +263,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.project-discovery.v1',
       'desktop.routes.tenant-core.v1',
       'desktop.routes.tenant-agent-building.v1',
+      'desktop.routes.tenant-extensions-integrations.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
@@ -273,6 +274,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.navigation.project-discovery.v1',
       'desktop.navigation.tenant-core.v1',
       'desktop.navigation.tenant-agent-building.v1',
+      'desktop.navigation.tenant-extensions-integrations.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -303,6 +305,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-discovery-routes', 'route'],
       ['desktop.tenant-core-routes', 'route'],
       ['desktop.tenant-agent-building-routes', 'route'],
+      ['desktop.tenant-extensions-integrations-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
@@ -313,6 +316,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-discovery-navigation', 'navigation'],
       ['desktop.tenant-core-navigation', 'navigation'],
       ['desktop.tenant-agent-building-navigation', 'navigation'],
+      ['desktop.tenant-extensions-integrations-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -387,6 +391,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
@@ -396,6 +401,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -441,6 +447,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-agent-navigation',
@@ -450,6 +457,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -495,6 +503,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -504,6 +513,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -549,6 +559,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -558,6 +569,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -603,6 +615,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -612,6 +625,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -657,6 +671,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
       'desktop.tenant-agent-building-routes',
+      'desktop.tenant-extensions-integrations-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -666,6 +681,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
       'desktop.tenant-agent-building-navigation',
+      'desktop.tenant-extensions-integrations-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -702,7 +718,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(19);
+    expect(contributionIds).toHaveLength(21);
     expect(contributionIds).not.toContain('desktop.project-discovery-routes');
     expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
     await runtime.close();
@@ -739,7 +755,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(19);
+    expect(contributionIds).toHaveLength(21);
     expect(contributionIds).not.toContain('desktop.tenant-core-routes');
     expect(contributionIds).not.toContain('desktop.tenant-core-navigation');
     await runtime.close();
@@ -776,9 +792,48 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(19);
+    expect(contributionIds).toHaveLength(21);
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-routes');
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-navigation');
+    await runtime.close();
+  });
+
+  it('removes tenant extensions and integrations through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const tenantExtensionsIntegrationsEntryIds = new Set([
+      'builtin-desktop-tenant-extensions-integrations-routes',
+      'builtin-desktop-tenant-extensions-integrations-navigation',
+    ]);
+    const tenantExtensionsIntegrationsEntries = candidate.entries.filter(({ entry_id }) =>
+      tenantExtensionsIntegrationsEntryIds.has(entry_id)
+    );
+    if (tenantExtensionsIntegrationsEntries.length !== tenantExtensionsIntegrationsEntryIds.size) {
+      throw new Error(
+        'desktop tenant extensions and integrations contribution fixtures are missing'
+      );
+    }
+    for (const entry of tenantExtensionsIntegrationsEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+    const contributionIds = registry?.list().map(({ id }) => id);
+
+    expect(receipt.status).toBe('ack');
+    expect(contributionIds).toHaveLength(21);
+    expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-routes');
+    expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-navigation');
     await runtime.close();
   });
 
