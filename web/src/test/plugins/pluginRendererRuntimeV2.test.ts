@@ -253,7 +253,7 @@ describe('RendererPluginRuntimeV2', () => {
 
   it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
     const knownArtifactRefs = new Set([
-      'desktop.routes.production.v1',
+      'desktop.routes.tenant-creation.v1',
       'desktop.routes.auxiliary.v1',
       'desktop.routes.project-knowledge.v1',
       'desktop.routes.project-agent.v1',
@@ -265,7 +265,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.tenant-agent-building.v1',
       'desktop.routes.tenant-extensions-integrations.v1',
       'desktop.routes.tenant-governance.v1',
-      'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
       'desktop.navigation.project-agent.v1',
@@ -297,7 +296,7 @@ describe('RendererPluginRuntimeV2', () => {
       { kind: 'root' }
     );
     expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
-      ['desktop.production-routes', 'route'],
+      ['desktop.tenant-creation-routes', 'route'],
       ['desktop.auxiliary-routes', 'route'],
       ['desktop.project-knowledge-routes', 'route'],
       ['desktop.project-agent-routes', 'route'],
@@ -309,7 +308,6 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.tenant-agent-building-routes', 'route'],
       ['desktop.tenant-extensions-integrations-routes', 'route'],
       ['desktop.tenant-governance-routes', 'route'],
-      ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
       ['desktop.project-agent-navigation', 'navigation'],
@@ -326,7 +324,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     const invalid = structuredClone(bootstrapProfile);
     const routeEntry = invalid.entries.find(
-      ({ entry_id }) => entry_id === 'builtin-desktop-default-routes'
+      ({ entry_id }) => entry_id === 'builtin-desktop-tenant-creation-routes'
     );
     if (!routeEntry) throw new Error('desktop route contribution fixture is missing');
     routeEntry.config.payload = {
@@ -386,7 +384,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
@@ -397,7 +395,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
@@ -444,7 +441,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.auxiliary-routes',
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
@@ -455,7 +452,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
@@ -502,7 +498,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-administration-routes',
@@ -513,7 +509,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-administration-navigation',
@@ -560,7 +555,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -571,7 +566,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
@@ -618,7 +612,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -629,7 +623,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
@@ -676,7 +669,7 @@ describe('RendererPluginRuntimeV2', () => {
 
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
-      'desktop.production-routes',
+      'desktop.tenant-creation-routes',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -687,7 +680,6 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.tenant-agent-building-routes',
       'desktop.tenant-extensions-integrations-routes',
       'desktop.tenant-governance-routes',
-      'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
@@ -734,7 +726,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(23);
+    expect(contributionIds).toHaveLength(22);
     expect(contributionIds).not.toContain('desktop.project-discovery-routes');
     expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
     await runtime.close();
@@ -771,7 +763,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(23);
+    expect(contributionIds).toHaveLength(22);
     expect(contributionIds).not.toContain('desktop.tenant-core-routes');
     expect(contributionIds).not.toContain('desktop.tenant-core-navigation');
     await runtime.close();
@@ -808,7 +800,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(23);
+    expect(contributionIds).toHaveLength(22);
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-routes');
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-navigation');
     await runtime.close();
@@ -847,7 +839,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(23);
+    expect(contributionIds).toHaveLength(22);
     expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-routes');
     expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-navigation');
     await runtime.close();
@@ -884,7 +876,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(23);
+    expect(contributionIds).toHaveLength(22);
     expect(contributionIds).not.toContain('desktop.tenant-governance-routes');
     expect(contributionIds).not.toContain('desktop.tenant-governance-navigation');
     await runtime.close();

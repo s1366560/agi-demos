@@ -1023,7 +1023,7 @@ export function createAppTenantGovernanceRouteRegistry(
   });
 }
 
-export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
+export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs) {
   const { configRef, desktopProductionRouteNavigation, setAuth } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({

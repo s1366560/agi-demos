@@ -57,6 +57,9 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.doesNotMatch(app, /createAppRouteRegistry/u);
   assert.doesNotMatch(app, /CANONICAL_DESKTOP_ROUTE_IDS\.map/u);
   assert.match(artifactCatalog, /createRegistry:\s*\(/u);
+  assert.match(artifactCatalog, /createAppTenantCreationRouteRegistry/u);
+  assert.doesNotMatch(artifactCatalog, /DESKTOP_DEFAULT_(?:ROUTE|NAVIGATION)_ARTIFACT_ID_V2/u);
+  assert.doesNotMatch(artifactCatalog, /desktop\.(?:routes\.production|navigation\.default)\.v1/u);
   assert.match(authority, /artifact\.createRegistry\(refs\)/u);
   assert.match(main, /activateDesktopPluginGenerationRootV2\(\)/u);
   assert.match(main, /root\.unmount\(\)/u);

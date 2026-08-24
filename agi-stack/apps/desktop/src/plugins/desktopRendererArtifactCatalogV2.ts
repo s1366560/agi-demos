@@ -5,12 +5,12 @@ import {
   createAppProjectDiscoveryRouteRegistry,
   createAppProjectKnowledgeRouteRegistry,
   createAppProjectWorkspaceRouteRegistry,
-  createAppRouteRegistry,
   createAppRuntimeInfrastructureRouteRegistry,
   createAppTenantAgentBuildingRouteRegistry,
   createAppTenantCoreRouteRegistry,
   createAppTenantExtensionsIntegrationsRouteRegistry,
   createAppTenantGovernanceRouteRegistry,
+  createAppTenantCreationRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
 import { AGENT_WORKSPACE_ROUTE_ID } from '../features/agent-workspace/agentWorkspaceRouteModule';
@@ -20,8 +20,6 @@ import {
 } from '../features/navigation/desktopCanonicalNavigationCatalog';
 import {
   DESKTOP_PRODUCTION_ROUTE_IDS,
-  DEVICE_APPROVAL_ROUTE_ID,
-  INVITATION_ACCEPTANCE_ROUTE_ID,
   PROJECT_AGENT_DASHBOARD_ROUTE_ID,
   PROJECT_AGENT_LOGS_ROUTE_ID,
   PROJECT_AGENT_PATTERNS_ROUTE_ID,
@@ -40,6 +38,7 @@ import {
   PROJECT_TEAM_ROUTE_ID,
   PROJECT_WORKSPACES_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
+  TENANT_CREATION_ROUTE_ID,
   TENANT_ANALYTICS_ROUTE_ID,
   TENANT_ACP_ROUTE_ID,
   TENANT_AGENT_BINDINGS_ROUTE_ID,
@@ -88,7 +87,7 @@ interface DesktopRendererContributionV2 {
   readonly sourceEntryId: string;
 }
 
-export const DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.production.v1';
+export const DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.tenant-creation.v1';
 export const DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-knowledge.v1';
 export const DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-agent.v1';
@@ -107,7 +106,6 @@ export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.tenant-extensions-integrations.v1';
 export const DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.tenant-governance.v1';
-export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.project-knowledge.v1';
@@ -131,10 +129,7 @@ export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.tenant-governance.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
-const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
-  DEVICE_APPROVAL_ROUTE_ID,
-  INVITATION_ACCEPTANCE_ROUTE_ID,
-]);
+const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
 const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
   DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
 );
@@ -250,38 +245,6 @@ const TENANT_GOVERNANCE_ROUTE_IDS_V2 = Object.freeze(
     TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
-const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
-  DESKTOP_PRODUCTION_ROUTE_IDS.filter(
-    (routeId) =>
-      !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId) &&
-      !AUXILIARY_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId) &&
-      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_CORE_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
-  ),
-);
-const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
-  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(
-    ({ routeId }) =>
-      !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId) &&
-      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_DISCOVERY_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_CORE_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_AGENT_BUILDING_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ID_SET_V2.has(routeId) &&
-      !TENANT_GOVERNANCE_ROUTE_ID_SET_V2.has(routeId),
-  ).map(({ routeId }) => routeId),
-]);
 const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
 ]);
@@ -395,11 +358,11 @@ export class DesktopRendererArtifactErrorV2 extends Error {
 
 const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArtifactV2>([
   [
-    DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
+    DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
     defineDesktopRouteArtifactV2(
-      DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
-      DEFAULT_BUSINESS_ROUTE_IDS_V2,
-      createAppRouteRegistry,
+      DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
+      TENANT_CREATION_ROUTE_IDS_V2,
+      createAppTenantCreationRouteRegistry,
     ),
   ],
   [
@@ -489,15 +452,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       TENANT_GOVERNANCE_ROUTE_IDS_V2,
       createAppTenantGovernanceRouteRegistry,
     ),
-  ],
-  [
-    DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
-    Object.freeze({
-      discoveryRouteIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
-      id: DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
-      kind: 'navigation',
-      routeIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
-    }),
   ],
   [
     DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,

@@ -70,15 +70,17 @@ test('auxiliary V2 route artifact owns only its three native loaders', () => {
   const projectKnowledgeFactoryStart = registrySource.indexOf(
     'export function createAppProjectKnowledgeRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(auxiliaryFactoryStart, -1);
   assert.notEqual(projectKnowledgeFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const auxiliaryFactorySource = registrySource.slice(
     auxiliaryFactoryStart,
     projectKnowledgeFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'BACKEND_STORES_ROUTE_ID',
@@ -86,7 +88,7 @@ test('auxiliary V2 route artifact owns only its three native loaders', () => {
     'PROJECT_SUPPORT_ROUTE_ID',
   ]) {
     assert.match(auxiliaryFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -101,15 +103,17 @@ test('project knowledge V2 route artifact owns only its five native loaders', ()
   const projectAgentFactoryStart = registrySource.indexOf(
     'export function createAppProjectAgentRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(projectKnowledgeFactoryStart, -1);
   assert.notEqual(projectAgentFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const projectKnowledgeFactorySource = registrySource.slice(
     projectKnowledgeFactoryStart,
     projectAgentFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'PROJECT_TEAM_ROUTE_ID',
@@ -119,7 +123,7 @@ test('project knowledge V2 route artifact owns only its five native loaders', ()
     'PROJECT_GRAPH_ROUTE_ID',
   ]) {
     assert.match(projectKnowledgeFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -134,15 +138,17 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
   const projectAdministrationFactoryStart = registrySource.indexOf(
     'export function createAppProjectAdministrationRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(projectAgentFactoryStart, -1);
   assert.notEqual(projectAdministrationFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const projectAgentFactorySource = registrySource.slice(
     projectAgentFactoryStart,
     projectAdministrationFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'PROJECT_AGENT_DASHBOARD_ROUTE_ID',
@@ -150,7 +156,7 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
     'PROJECT_AGENT_PATTERNS_ROUTE_ID',
   ]) {
     assert.match(projectAgentFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -165,15 +171,17 @@ test('project administration V2 route artifact owns its five configuration loade
   const runtimeInfrastructureFactoryStart = registrySource.indexOf(
     'export function createAppRuntimeInfrastructureRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(projectAdministrationFactoryStart, -1);
   assert.notEqual(runtimeInfrastructureFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const projectAdministrationFactorySource = registrySource.slice(
     projectAdministrationFactoryStart,
     runtimeInfrastructureFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'PROJECT_SCHEMA_ROUTE_ID',
@@ -183,7 +191,7 @@ test('project administration V2 route artifact owns its five configuration loade
     'PROJECT_SETTINGS_ROUTE_ID',
   ]) {
     assert.match(projectAdministrationFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -198,15 +206,17 @@ test('runtime infrastructure V2 route artifact owns its seven canonical loaders'
   const projectWorkspaceFactoryStart = registrySource.indexOf(
     'export function createAppProjectWorkspaceRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(runtimeInfrastructureFactoryStart, -1);
   assert.notEqual(projectWorkspaceFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const runtimeInfrastructureFactorySource = registrySource.slice(
     runtimeInfrastructureFactoryStart,
     projectWorkspaceFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'TENANT_POOL_ROUTE_ID',
@@ -218,7 +228,7 @@ test('runtime infrastructure V2 route artifact owns its seven canonical loaders'
     'TENANT_GENES_ROUTE_ID',
   ]) {
     assert.match(runtimeInfrastructureFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -233,15 +243,17 @@ test('project workspace V2 route artifact owns only its three native loaders', (
   const projectDiscoveryFactoryStart = registrySource.indexOf(
     'export function createAppProjectDiscoveryRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(projectWorkspaceFactoryStart, -1);
   assert.notEqual(projectDiscoveryFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const projectWorkspaceFactorySource = registrySource.slice(
     projectWorkspaceFactoryStart,
     projectDiscoveryFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'PROJECT_OVERVIEW_ROUTE_ID',
@@ -249,7 +261,7 @@ test('project workspace V2 route artifact owns only its three native loaders', (
     'PROJECT_BLACKBOARD_ROUTE_ID',
   ]) {
     assert.match(projectWorkspaceFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -264,18 +276,20 @@ test('project discovery V2 route artifact owns only its search loader', () => {
   const tenantCoreFactoryStart = registrySource.indexOf(
     'export function createAppTenantCoreRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(projectDiscoveryFactoryStart, -1);
   assert.notEqual(tenantCoreFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const projectDiscoveryFactorySource = registrySource.slice(
     projectDiscoveryFactoryStart,
     tenantCoreFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   assert.match(projectDiscoveryFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
-  assert.doesNotMatch(defaultFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
+  assert.doesNotMatch(tenantCreationFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectDiscoveryRouteRegistry/u,
@@ -289,15 +303,17 @@ test('tenant core V2 route artifact owns its six canonical loaders', () => {
   const tenantAgentBuildingFactoryStart = registrySource.indexOf(
     'export function createAppTenantAgentBuildingRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(tenantCoreFactoryStart, -1);
   assert.notEqual(tenantAgentBuildingFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const tenantCoreFactorySource = registrySource.slice(
     tenantCoreFactoryStart,
     tenantAgentBuildingFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'AGENT_WORKSPACE_ROUTE_ID',
@@ -308,7 +324,7 @@ test('tenant core V2 route artifact owns its six canonical loaders', () => {
     'TENANT_ANALYTICS_ROUTE_ID',
   ]) {
     assert.match(tenantCoreFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -323,15 +339,17 @@ test('tenant agent building V2 route artifact owns its six canonical loaders', (
   const tenantExtensionsIntegrationsFactoryStart = registrySource.indexOf(
     'export function createAppTenantExtensionsIntegrationsRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(tenantAgentBuildingFactoryStart, -1);
   assert.notEqual(tenantExtensionsIntegrationsFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const tenantAgentBuildingFactorySource = registrySource.slice(
     tenantAgentBuildingFactoryStart,
     tenantExtensionsIntegrationsFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'TENANT_AGENT_DASHBOARD_ROUTE_ID',
@@ -342,7 +360,7 @@ test('tenant agent building V2 route artifact owns its six canonical loaders', (
     'TENANT_PATTERNS_ROUTE_ID',
   ]) {
     assert.match(tenantAgentBuildingFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -357,15 +375,17 @@ test('tenant extensions and integrations V2 route artifact owns its six canonica
   const tenantGovernanceFactoryStart = registrySource.indexOf(
     'export function createAppTenantGovernanceRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(tenantExtensionsIntegrationsFactoryStart, -1);
   assert.notEqual(tenantGovernanceFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const tenantExtensionsIntegrationsFactorySource = registrySource.slice(
     tenantExtensionsIntegrationsFactoryStart,
     tenantGovernanceFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'TENANT_PLUGINS_ROUTE_ID',
@@ -376,7 +396,7 @@ test('tenant extensions and integrations V2 route artifact owns its six canonica
     'TENANT_WEBHOOKS_ROUTE_ID',
   ]) {
     assert.match(tenantExtensionsIntegrationsFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
@@ -388,14 +408,16 @@ test('tenant governance V2 route artifact owns its nine canonical loaders', () =
   const tenantGovernanceFactoryStart = registrySource.indexOf(
     'export function createAppTenantGovernanceRouteRegistry',
   );
-  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
   assert.notEqual(tenantGovernanceFactoryStart, -1);
-  assert.notEqual(defaultFactoryStart, -1);
+  assert.notEqual(tenantCreationFactoryStart, -1);
   const tenantGovernanceFactorySource = registrySource.slice(
     tenantGovernanceFactoryStart,
-    defaultFactoryStart,
+    tenantCreationFactoryStart,
   );
-  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
 
   for (const routeId of [
     'TENANT_USERS_ROUTE_ID',
@@ -409,12 +431,47 @@ test('tenant governance V2 route artifact owns its nine canonical loaders', () =
     'TENANT_SETTINGS_ROUTE_ID',
   ]) {
     assert.match(tenantGovernanceFactorySource, new RegExp(`\\[${routeId}\\]`));
-    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantGovernanceRouteRegistry/u,
   );
+});
+
+test('tenant creation V2 route artifact preserves catalog refresh and navigation semantics', () => {
+  const tenantCreationFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCreationRouteRegistry',
+  );
+  assert.notEqual(tenantCreationFactoryStart, -1);
+  const tenantCreationFactorySource = registrySource.slice(tenantCreationFactoryStart);
+
+  assert.match(tenantCreationFactorySource, /\[TENANT_CREATION_ROUTE_ID\]/u);
+  assert.match(
+    tenantCreationFactorySource,
+    /createBinding:\s*\(\) => \{[\s\S]*const currentConfig = configRef\.current/u,
+  );
+  assert.match(
+    tenantCreationFactorySource,
+    /client:\s*createTenantCreationClient\(currentConfig\)/u,
+  );
+  assert.match(
+    tenantCreationFactorySource,
+    /tenants:\s*\[\.\.\.upsertCreatedTenant\(current\.tenants, created\)\]/u,
+  );
+  assert.match(
+    tenantCreationFactorySource,
+    /await client\.listTenants\(signal\)[\s\S]*if \(signal\.aborted\)[\s\S]*tenants:\s*authoritativeTenants/u,
+  );
+  assert.match(
+    tenantCreationFactorySource,
+    /onNavigateBack:\s*desktopProductionRouteNavigation\.clearHash/u,
+  );
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantCreationRouteRegistry/u,
+  );
+  assert.doesNotMatch(registrySource, /export function createAppRouteRegistry/u);
 });
 
 test('auxiliary V2 route factory wires Project Support through scoped Cloud authority', () => {

@@ -597,7 +597,7 @@ test('command palette derives auxiliary routes from the V2 navigation artifact',
   );
   assert.match(
     rendererArtifactCatalogSource,
-    /discoveryRouteIds:[\s\S]*DESKTOP_NAVIGATION_METADATA\.map/u,
+    /AUXILIARY_NAVIGATION_ROUTE_IDS_V2[\s\S]*DESKTOP_AUXILIARY_NAVIGATION_METADATA\.map/u,
   );
   assert.doesNotMatch(
     commandItems,

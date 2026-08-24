@@ -149,19 +149,19 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-desktop-default-routes
+    - entry_id: builtin-desktop-tenant-creation-routes
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions
       module_ref: builtin://memstack/desktop/renderer-contribution
       enabled: true
       config:
-        id: desktop.production-routes
+        id: desktop.tenant-creation-routes
         kind: route
         order: 100
         payload:
           schema_version: 1
           artifact_refs:
-            - desktop.routes.production.v1
+            - desktop.routes.tenant-creation.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}
@@ -393,27 +393,6 @@ profile:
           schema_version: 1
           artifact_refs:
             - desktop.routes.tenant-governance.v1
-      inject:
-        registry: service:desktop-renderer.renderer-contribution-registry
-      isolate: {}
-      scope:
-        kind: root
-      permissions: []
-      quotas: {}
-      restart_policy: hot-generation
-    - entry_id: builtin-desktop-default-navigation
-      parent_entry_id: builtin-desktop-renderer-contribution-registry
-      plugin_ref: memstack-renderer-contributions
-      module_ref: builtin://memstack/desktop/renderer-contribution
-      enabled: true
-      config:
-        id: desktop.default-navigation
-        kind: navigation
-        order: 200
-        payload:
-          schema_version: 1
-          artifact_refs:
-            - desktop.navigation.default.v1
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}

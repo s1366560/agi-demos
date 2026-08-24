@@ -52,8 +52,8 @@ describe('production protocol-v2 renderer target catalogs', () => {
           { kind: 'root' }
         )
         .list()
-    ).toHaveLength(25);
-    expect(generation.fibers).toHaveLength(27);
+    ).toHaveLength(24);
+    expect(generation.fibers).toHaveLength(26);
     await generation.dispose();
   });
 
