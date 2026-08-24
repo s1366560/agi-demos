@@ -2307,6 +2307,21 @@
       "reason_code": "executable_fixture_supporting_route_not_in_manifest"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/channels/tenants/local/plugins",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/enable",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/channels/tenants/local/plugins/local-workspace/disable",
+      "reason_code": "executable_fixture_retired_plugin_protocol_v1_compatibility_trap"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/channels/tenants/local/plugins/install",
       "reason_code": "executable_fixture_supporting_route_not_in_manifest"
