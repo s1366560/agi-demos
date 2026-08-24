@@ -33,13 +33,13 @@ from src.infrastructure.adapters.primary.web.routers import (
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_detail,
 )
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_client_v2_from_request,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import UserProject
-from src.infrastructure.workspace_core.client import (
-    WorkspaceCoreClient,
-    WorkspaceCoreClientError,
-)
+from src.infrastructure.workspace_core.client import WorkspaceCoreClientError
 
 logger = logging.getLogger(__name__)
 
@@ -192,8 +192,9 @@ async def _proxy_workspace_request(
     request: Request,
     endpoint_values: Mapping[str, Any],
 ) -> Response:
-    client = getattr(request.app.state, "workspace_core_client", None)
-    if not isinstance(client, WorkspaceCoreClient):
+    try:
+        client = workspace_core_client_v2_from_request(request)
+    except (RuntimeError, TypeError):
         return _workspace_core_unavailable()
 
     headers = _proxy_request_headers(request, endpoint_values)

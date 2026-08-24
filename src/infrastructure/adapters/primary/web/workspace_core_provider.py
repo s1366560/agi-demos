@@ -14,6 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_runtime_service_v2_from_request,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
@@ -21,6 +24,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.persistence.llm_providers_models import LLMProvider, TenantProviderMapping
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.workspace_core.autonomy_judge import (
     WorkspaceAutonomyJudgePort,
     WorkspaceAutonomyJudgeRequest,
@@ -119,9 +123,12 @@ async def judge_workspace_context(
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any] | JSONResponse:
     """Resolve an ambiguous Context selection through a structured Agent tool call."""
-    if not _registry_authorized(request, authorization):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _context_judge_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
-    judge = getattr(request.app.state, "workspace_core_context_judge", None)
+    judge = cast("object", runtime.context_judge)
     if not isinstance(judge, WorkspaceContextJudgePort):
         return _context_judge_unavailable()
     try:
@@ -142,9 +149,12 @@ async def judge_workspace_plan(
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any] | JSONResponse:
     """Resolve one subjective Plan transition through a structured Agent tool call."""
-    if not _registry_authorized(request, authorization):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _plan_judge_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
-    judge = getattr(request.app.state, "workspace_core_plan_judge", None)
+    judge = cast("object", runtime.plan_judge)
     if not isinstance(judge, WorkspacePlanJudgePort):
         return _plan_judge_unavailable()
     try:
@@ -165,9 +175,12 @@ async def judge_workspace_autonomy(
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any] | JSONResponse:
     """Resolve one subjective Autonomy tick through a structured Agent tool call."""
-    if not _registry_authorized(request, authorization):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _autonomy_judge_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
-    judge = getattr(request.app.state, "workspace_core_autonomy_judge", None)
+    judge = cast("object", runtime.autonomy_judge)
     if not isinstance(judge, WorkspaceAutonomyJudgePort):
         return _autonomy_judge_unavailable()
     try:
@@ -188,8 +201,10 @@ async def workspace_core_provider_webhook(
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any] | JSONResponse:
     """Accept one structurally validated BCS-to-Provider frame."""
-    settings = getattr(request.app.state, "workspace_core_settings", None)
-    expected_secret = getattr(settings, "provider_webhook_token", None)
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _provider_runtime_unavailable()
+    expected_secret = runtime.settings.provider_webhook_token
     if expected_secret is None or not _authorized(
         authorization,
         expected_secret.get_secret_value(),
@@ -199,7 +214,7 @@ async def workspace_core_provider_webhook(
             content={"detail": _("Unauthorized")},
         )
 
-    adapter = getattr(request.app.state, "workspace_core_provider_adapter", None)
+    adapter = cast("object", runtime.provider_adapter)
     if not isinstance(adapter, AvernetProviderAdapter):
         return JSONResponse(
             status_code=503,
@@ -213,20 +228,22 @@ async def workspace_core_provider_webhook(
     include_in_schema=False,
     response_model=None,
 )
-async def dispatch_workspace_plan(
+async def dispatch_workspace_plan(  # noqa: PLR0911
     dispatch_request: WorkspacePlanDispatchRequest,
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any] | JSONResponse:
     """Translate one fenced Plan outbox action into an idempotent Agent Runtime send."""
-    settings = getattr(request.app.state, "workspace_core_settings", None)
-    expected_secret = getattr(settings, "provider_webhook_token", None)
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _plan_dispatch_unavailable()
+    expected_secret = runtime.settings.provider_webhook_token
     if expected_secret is None or not _authorized(
         authorization,
         expected_secret.get_secret_value(),
     ):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
-    adapter = getattr(request.app.state, "workspace_core_provider_adapter", None)
+    adapter = cast("object", runtime.provider_adapter)
     if not isinstance(adapter, AvernetProviderAdapter):
         return _plan_dispatch_unavailable()
     actor_id = dispatch_request.payload.get("actor_id")
@@ -264,12 +281,10 @@ async def resolve_workspace_agent_definition(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object] | JSONResponse:
     """Resolve one tenant/project-scoped Agent through the external authority."""
-    settings = getattr(request.app.state, "workspace_core_settings", None)
-    configured_token = getattr(settings, "agent_registry_token", None)
-    if configured_token is None or not _authorized(
-        authorization,
-        configured_token.get_secret_value(),
-    ):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _provider_registry_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
 
     try:
@@ -316,7 +331,10 @@ async def resolve_workspace_provider_route(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object] | JSONResponse:
     """Validate one Provider/model pair through the tenant registry authority."""
-    if not _registry_authorized(request, authorization):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _provider_registry_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
     try:
         provider_id = UUID(lookup.provider_id)
@@ -368,7 +386,10 @@ async def resolve_workspace_provider_default(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object] | JSONResponse:
     """Return the explicit tenant default chosen by Provider Registry configuration."""
-    if not _registry_authorized(request, authorization):
+    runtime = _workspace_core_runtime(request)
+    if runtime is None:
+        return _provider_registry_unavailable()
+    if not _registry_authorized(runtime, authorization):
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
     try:
         result = await db.execute(
@@ -498,9 +519,18 @@ def _authorized(authorization: str | None, expected_token: str) -> bool:
     )
 
 
-def _registry_authorized(request: Request, authorization: str | None) -> bool:
-    settings = getattr(request.app.state, "workspace_core_settings", None)
-    configured_token = getattr(settings, "agent_registry_token", None)
+def _workspace_core_runtime(request: Request) -> WorkspaceCoreRuntimeServiceV2 | None:
+    try:
+        return workspace_core_runtime_service_v2_from_request(request)
+    except (RuntimeError, TypeError):
+        return None
+
+
+def _registry_authorized(
+    runtime: WorkspaceCoreRuntimeServiceV2,
+    authorization: str | None,
+) -> bool:
+    configured_token = runtime.settings.agent_registry_token
     return configured_token is not None and _authorized(
         authorization,
         configured_token.get_secret_value(),
@@ -549,6 +579,20 @@ def _plan_dispatch_unavailable() -> JSONResponse:
     return JSONResponse(
         status_code=503,
         content={"detail": _("Workspace Plan dispatch is unavailable")},
+    )
+
+
+def _provider_runtime_unavailable() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": _("Workspace Core Provider is unavailable")},
+    )
+
+
+def _provider_registry_unavailable() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": _("Workspace Core Provider Registry is unavailable")},
     )
 
 

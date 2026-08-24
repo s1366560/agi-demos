@@ -33,6 +33,9 @@ from src.infrastructure.adapters.primary.web.sandbox_application_authority_v2 im
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     workspace_core_unavailable_error,
 )
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_client_v2_from_request,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
 from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
@@ -57,10 +60,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_METADATA_SERVICE_V2,
     pin_agent_turn_operation_v2,
 )
-from src.infrastructure.workspace_core.client import (
-    WorkspaceCoreClient,
-    WorkspaceCoreClientError,
-)
+from src.infrastructure.workspace_core.client import WorkspaceCoreClientError
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -275,9 +275,10 @@ async def _load_workspace_policy_snapshot(
             "read_only",
         )
 
-    client = getattr(request.app.state, "workspace_core_client", None)
-    if not isinstance(client, WorkspaceCoreClient):
-        raise workspace_core_unavailable_error()
+    try:
+        client = workspace_core_client_v2_from_request(request)
+    except (RuntimeError, TypeError) as exc:
+        raise workspace_core_unavailable_error() from exc
     path = (
         f"/api/v1/tenants/{conversation.tenant_id}/projects/{conversation.project_id}"
         f"/workspaces/{workspace_id}/agent-policy"

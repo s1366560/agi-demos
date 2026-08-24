@@ -61,9 +61,7 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     shutdown_plugin_runtime_v2,
 )
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
-    shutdown_workspace_core_runtime,
-    start_workspace_core_runtime,
-    workspace_core_runtime_service_v2_from_app,
+    create_workspace_core_runtime_service_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -81,6 +79,7 @@ from src.infrastructure.plugins.route_loader import RouteRowPatch, install_built
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
 
 logger = logging.getLogger(__name__)
@@ -162,6 +161,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             logger.warning("Sandbox runtime unavailable because Docker is not reachable")
             return None
 
+    workspace_core_settings = getattr(app.state, "workspace_core_settings", None)
+    if not isinstance(workspace_core_settings, WorkspaceCoreSettings):
+        raise RuntimeError("Workspace Core settings are not installed")
+
+    async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
+        return await create_workspace_core_runtime_service_v2(workspace_core_settings)
+
     # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
     # sandbox/workflow resources are created by candidate effects and are not
     # retained by the legacy application container.
@@ -179,7 +185,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         sandbox_runtime_factory=sandbox_runtime_factory,
         sandbox_redis_client=redis_client,
         telemetry_runtime_manager=telemetry_runtime_manager,
-        workspace_core_runtime_factory=lambda: workspace_core_runtime_service_v2_from_app(app),
+        workspace_core_runtime_factory=workspace_core_runtime_factory,
         publication_policy=publication_policy,
     )
     try:
@@ -218,9 +224,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_artifact_content_orphan_gc_worker(
         storage_service=container.storage_service(),
     )
-
-    # Start Avernet recovery only after DB-backed DI services are ready.
-    await start_workspace_core_runtime(app)
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
@@ -346,10 +349,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     if http_routes is not None:
         http_routes.dispose()
         app.state.platform_plugin_http_routes = None
-
-    # Stop new recovery claims and drain all persisted Provider callbacks
-    # before their DB, Redis, and Agent Runtime dependencies are torn down.
-    await shutdown_workspace_core_runtime(app)
 
     # Stop cron job scheduler
     try:
@@ -611,7 +610,13 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     install_builtin_routes(
         app,
         workspace_core_settings=workspace_core_settings,
-        row_patches={"auth": RouteRowPatch(row_id="auth", enabled=False)},
+        row_patches={
+            "auth": RouteRowPatch(row_id="auth", enabled=False),
+            "workspace-core-runtime": RouteRowPatch(
+                row_id="workspace-core-runtime",
+                enabled=False,
+            ),
+        },
     )
 
     return app

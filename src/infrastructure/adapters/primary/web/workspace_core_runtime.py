@@ -5,13 +5,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from src.configuration.workspace_core import WorkspaceCoreSettings
-from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
-    configure_workspace_access_verifier,
+from src.infrastructure.plugins.v2.workspace_core_runtime import (
+    WorkspaceCoreRuntimeServiceV2,
 )
-from src.infrastructure.adapters.primary.web.workspace_core_provider import (
-    router as workspace_core_provider_router,
-)
-from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.workspace_core.agent_runtime_provider import (
     MemStackAgentRuntimeProvider,
 )
@@ -30,10 +26,10 @@ from src.infrastructure.workspace_core.provider import (
 )
 
 
-def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings) -> None:
-    """Install Avernet as the process-wide Workspace authority."""
-    app.state.workspace_core_settings = settings
-    app.include_router(workspace_core_provider_router)
+def _build_workspace_core_runtime_service_v2(
+    settings: WorkspaceCoreSettings,
+) -> WorkspaceCoreRuntimeServiceV2:
+    """Construct one isolated candidate without publishing process authority."""
     client = WorkspaceCoreClient(settings)
     authority = AvernetWorkspaceAuthority(client)
     context_judge = AgentWorkspaceContextJudge()
@@ -54,7 +50,7 @@ def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings
         client,
     )
     access_verifier = AvernetWorkspaceAccessVerifier(client)
-    runtime = WorkspaceCoreRuntimeServiceV2(
+    return WorkspaceCoreRuntimeServiceV2(
         settings=settings,
         client=client,
         authority=authority,
@@ -66,6 +62,46 @@ def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings
         agent_runtime_provider=agent_runtime_provider,
         provider_adapter=provider_adapter,
     )
+
+
+async def create_workspace_core_runtime_service_v2(
+    settings: WorkspaceCoreSettings,
+) -> WorkspaceCoreRuntimeServiceV2:
+    """Create and health-check a generation-owned Workspace Core candidate."""
+    runtime = _build_workspace_core_runtime_service_v2(settings)
+    try:
+        capabilities = await runtime.client.read_public_api_capabilities()
+        require_complete_public_api(capabilities)
+    except Exception:
+        await runtime.dispose()
+        raise
+    return runtime
+
+
+def install_workspace_core_runtime(
+    app: FastAPI,
+    _settings: WorkspaceCoreSettings | None = None,
+) -> None:
+    """Mount only the frozen V1 Provider routes for inventory materialization."""
+    from src.infrastructure.adapters.primary.web.workspace_core_provider import (
+        router as workspace_core_provider_router,
+    )
+
+    app.include_router(workspace_core_provider_router)
+
+
+def install_legacy_workspace_core_runtime(
+    app: FastAPI,
+    settings: WorkspaceCoreSettings,
+) -> None:
+    """Install process-state authority only for isolated V1 compatibility tests."""
+    from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
+        configure_workspace_access_verifier,
+    )
+
+    app.state.workspace_core_settings = settings
+    install_workspace_core_runtime(app, settings)
+    runtime = _build_workspace_core_runtime_service_v2(settings)
     app.state.workspace_core_runtime_service_v2 = runtime
     app.state.workspace_core_client = runtime.client
     app.state.workspace_authority = runtime.authority
@@ -75,16 +111,6 @@ def install_workspace_core_runtime(app: FastAPI, settings: WorkspaceCoreSettings
     app.state.workspace_core_event_sink = runtime.event_sink
     app.state.workspace_core_provider_adapter = runtime.provider_adapter
     configure_workspace_access_verifier(runtime.access_verifier)
-
-
-def workspace_core_runtime_service_v2_from_app(app: FastAPI) -> WorkspaceCoreRuntimeServiceV2:
-    """Resolve the exact static resource set exposed to the V2 shadow Provider."""
-    runtime = getattr(app.state, "workspace_core_runtime_service_v2", None)
-    if runtime is None:
-        raise RuntimeError("Workspace Core runtime service V2 is not installed")
-    if not isinstance(runtime, WorkspaceCoreRuntimeServiceV2):
-        raise TypeError("Workspace Core runtime service V2 has an invalid type")
-    return runtime
 
 
 async def start_workspace_core_runtime(app: FastAPI) -> None:

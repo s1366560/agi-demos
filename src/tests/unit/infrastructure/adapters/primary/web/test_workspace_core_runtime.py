@@ -9,9 +9,12 @@ from fastapi import FastAPI
 
 from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
-    install_workspace_core_runtime,
+    create_workspace_core_runtime_service_v2,
+    install_legacy_workspace_core_runtime,
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
+)
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
     workspace_core_runtime_service_v2_from_app,
 )
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
@@ -40,10 +43,10 @@ def test_avernet_installs_backend_access_verifier() -> None:
     app = FastAPI()
 
     with patch(
-        "src.infrastructure.adapters.primary.web.workspace_core_runtime."
+        "src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler."
         "configure_workspace_access_verifier"
     ) as configure_verifier:
-        install_workspace_core_runtime(
+        install_legacy_workspace_core_runtime(
             app,
             _settings(),
         )
@@ -68,7 +71,7 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
 
     with (
         patch(
-            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
+            "src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler."
             "configure_workspace_access_verifier"
         ),
         patch(
@@ -82,7 +85,7 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
             "src.infrastructure.adapters.primary.web.workspace_core_runtime.AvernetProviderAdapter"
         ) as provider_adapter_type,
     ):
-        install_workspace_core_runtime(app, _settings())
+        install_legacy_workspace_core_runtime(app, _settings())
 
     provider_type.assert_called_once_with(workspace_core_client=app.state.workspace_core_client)
     provider_adapter_type.assert_called_once_with(
@@ -109,6 +112,17 @@ def test_workspace_core_runtime_v2_resolver_rejects_missing_or_invalid_state() -
     app.state.workspace_core_runtime_service_v2 = object()
     with pytest.raises(TypeError, match="invalid type"):
         workspace_core_runtime_service_v2_from_app(app)
+
+
+@pytest.mark.unit
+def test_create_app_does_not_install_static_workspace_core_authority() -> None:
+    from src.infrastructure.adapters.primary.web.main import create_app
+
+    app = create_app(workspace_core_settings=_settings())
+
+    assert getattr(app.state, "workspace_core_runtime_service_v2", None) is None
+    assert getattr(app.state, "workspace_core_client", None) is None
+    assert getattr(app.state, "workspace_authority", None) is None
 
 
 @pytest.mark.unit
@@ -158,5 +172,63 @@ async def test_shutdown_workspace_core_runtime_drains_provider() -> None:
     app.state.workspace_core_provider_adapter = provider_adapter
 
     await shutdown_workspace_core_runtime(app)
+
+    provider_adapter.wait_until_idle.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+async def test_v2_factory_verifies_capabilities_before_returning_runtime() -> None:
+    client = MagicMock(spec=WorkspaceCoreClient)
+    client.read_public_api_capabilities = AsyncMock(return_value=MagicMock())
+    provider_adapter = MagicMock()
+    provider_adapter.wait_until_idle = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime.WorkspaceCoreClient",
+            return_value=client,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime.AvernetProviderAdapter",
+            return_value=provider_adapter,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
+            "require_complete_public_api"
+        ) as require_capabilities,
+    ):
+        runtime = await create_workspace_core_runtime_service_v2(_settings())
+
+    assert runtime.client is client
+    assert runtime.provider_adapter is provider_adapter
+    client.read_public_api_capabilities.assert_awaited_once_with()
+    require_capabilities.assert_called_once_with(client.read_public_api_capabilities.return_value)
+    provider_adapter.wait_until_idle.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_v2_factory_disposes_candidate_when_capability_check_fails() -> None:
+    client = MagicMock(spec=WorkspaceCoreClient)
+    client.read_public_api_capabilities = AsyncMock(return_value=MagicMock())
+    provider_adapter = MagicMock()
+    provider_adapter.wait_until_idle = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime.WorkspaceCoreClient",
+            return_value=client,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime.AvernetProviderAdapter",
+            return_value=provider_adapter,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.workspace_core_runtime."
+            "require_complete_public_api",
+            side_effect=WorkspaceCoreCompatibilityError("incomplete"),
+        ),
+        pytest.raises(WorkspaceCoreCompatibilityError, match="incomplete"),
+    ):
+        await create_workspace_core_runtime_service_v2(_settings())
 
     provider_adapter.wait_until_idle.assert_awaited_once_with()

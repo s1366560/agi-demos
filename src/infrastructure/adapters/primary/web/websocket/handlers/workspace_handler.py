@@ -18,9 +18,13 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.primary.web.websocket.topics import TopicType, get_topic_manager
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_runtime_service_v2_from_current_generation,
+)
 from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus import (
     RedisUnifiedEventBusAdapter,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +39,18 @@ def configure_workspace_access_verifier(verifier: WorkspaceAccessVerifier | None
 
 async def _has_workspace_member(context: MessageContext, workspace_id: str) -> bool:
     """Check whether the current websocket user still belongs to the workspace."""
-    if _workspace_access_verifier is None:
+    verifier: WorkspaceAccessVerifier | None
+    try:
+        verifier = workspace_core_runtime_service_v2_from_current_generation().access_verifier
+    except RuntimeV2Error as exc:
+        if exc.code != "generation_not_pinned":
+            return False
+        verifier = _workspace_access_verifier
+    except TypeError:
         return False
-    return await _workspace_access_verifier.has_access(
+    if verifier is None:
+        return False
+    return await verifier.has_access(
         WorkspaceAccessRequest(
             tenant_id=context.tenant_id,
             user_id=context.user_id,

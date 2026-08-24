@@ -6,6 +6,7 @@ import json
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -23,9 +24,14 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     shutdown_plugin_runtime_v2,
 )
+from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
+    workspace_core_runtime_service_v2_from_current_generation,
+    workspace_core_runtime_service_v2_from_request,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
 )
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import (
     ProfileDocumentV2,
@@ -198,6 +204,28 @@ async def test_disabled_workspace_core_entry_does_not_call_factory_or_publish_se
         generation.resolve(WORKSPACE_CORE_RUNTIME_SERVICE_V2, _ROOT_SCOPE)
     assert error.value.code == "missing_service"
 
+    await host.close()
+
+
+async def test_pinned_generation_missing_workspace_core_never_uses_legacy_app_state() -> None:
+    fallback_runtime = _runtime(_TrackedProviderAdapter())
+    app = FastAPI()
+    app.state.workspace_core_runtime_service_v2 = fallback_runtime
+    app.state.workspace_core_client = fallback_runtime.client
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+
+    assert publication.accepted is True
+    async with pin_generation_v2(host):
+        with pytest.raises(RuntimeV2Error) as error:
+            workspace_core_runtime_service_v2_from_request(cast("Any", SimpleNamespace(app=app)))
+
+    assert error.value.code == "missing_service"
     await host.close()
 
 
@@ -414,14 +442,10 @@ def test_workspace_core_shadow_upgrade_rejects_already_enabled_snapshot() -> Non
     assert error.value.code == "workspace_core_runtime_baseline_not_disabled"
 
 
-async def test_production_factory_activates_workspace_core_shadow_without_switching_authority() -> (
-    None
-):
+async def test_production_factory_makes_workspace_core_the_pinned_generation_authority() -> None:
     adapter = _TrackedProviderAdapter()
     runtime = _runtime(adapter)
-    static_authority = object()
     app = FastAPI()
-    app.state.workspace_authority = static_authority
 
     async def factory() -> WorkspaceCoreRuntimeServiceV2:
         return runtime
@@ -435,7 +459,14 @@ async def test_production_factory_activates_workspace_core_shadow_without_switch
     assert generation is not None
     assert workspace_core_shadow_active_v2(generation.snapshot) is True
     assert generation.resolve(WORKSPACE_CORE_RUNTIME_SERVICE_V2, _ROOT_SCOPE) is runtime
-    assert app.state.workspace_authority is static_authority
+    assert getattr(app.state, "workspace_authority", None) is None
+    assert getattr(app.state, "workspace_core_runtime_service_v2", None) is None
+    with pytest.raises(RuntimeV2Error) as error:
+        workspace_core_runtime_service_v2_from_current_generation()
+    assert error.value.code == "generation_not_pinned"
+
+    async with pin_generation_v2(host):
+        assert workspace_core_runtime_service_v2_from_current_generation() is runtime
 
     await shutdown_plugin_runtime_v2(app)
 
