@@ -23,6 +23,8 @@ const {
   DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_DISCOVERY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2,
+  DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2,
+  DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2,
   resolveDesktopRendererArtifactsV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererArtifactCatalogV2.js");
 const {
@@ -122,6 +124,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       170,
     ),
     contribution(
+      "desktop.tenant-core-routes",
+      "route",
+      [DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2],
+      180,
+    ),
+    contribution(
       "desktop.default-navigation",
       "navigation",
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2],
@@ -170,6 +178,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       270,
     ),
     contribution(
+      "desktop.tenant-core-navigation",
+      "navigation",
+      [DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2],
+      280,
+    ),
+    contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
@@ -188,6 +202,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2, "route"],
+      [DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
@@ -196,6 +211,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_DISCOVERY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_TENANT_CORE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
@@ -209,6 +225,8 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.equal(artifacts[0].routeIds.includes("project-project-channels"), false);
   assert.equal(artifacts[0].routeIds.includes("project-project-search"), false);
   assert.equal(artifacts[0].routeIds.includes("project-project-cron-jobs"), false);
+  assert.equal(artifacts[0].routeIds.includes("agent-workspace-tenant-agent-workspace"), false);
+  assert.equal(artifacts[0].routeIds.includes("tenant-tenant-overview"), false);
   assert.deepEqual(artifacts[1].routeIds, [
     "project-support",
     "backend-stores",
@@ -331,40 +349,67 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     projectDiscoveryRegistry.byId.get("project-project-search").structuralReadiness.status,
     "ready",
   );
-  assert.equal(artifacts[8].discoveryRouteIds.includes("backend-stores"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-team"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-agent-dashboard"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-schema"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("tenant-tenant-pool"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-overview"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-channels"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-search"), false);
-  assert.equal(artifacts[8].discoveryRouteIds.includes("project-project-cron-jobs"), false);
-  assert.deepEqual(artifacts[9].discoveryRouteIds, [
+  assert.deepEqual(artifacts[8].routeIds, [
+    "agent-workspace-tenant-agent-workspace",
+    "tenant-tenant-overview",
+    "tenant-tenant-projects",
+    "tenant-tenant-workspaces",
+    "tenant-tenant-tasks",
+    "tenant-tenant-analytics",
+  ]);
+  const tenantCoreRegistry = artifacts[8].createRegistry({
+    authRef: { current: { tenants: [] } },
+    configRef: { current: {} },
+  });
+  assert.deepEqual(
+    artifacts[8].routeIds.map((routeId) => tenantCoreRegistry.byId.get(routeId).structuralReadiness),
+    [
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+    ],
+  );
+  assert.equal(artifacts[9].discoveryRouteIds.includes("backend-stores"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-team"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-agent-dashboard"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-schema"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("tenant-tenant-pool"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-overview"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-channels"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-search"), false);
+  assert.equal(artifacts[9].discoveryRouteIds.includes("project-project-cron-jobs"), false);
+  assert.equal(
+    artifacts[9].discoveryRouteIds.includes("agent-workspace-tenant-agent-workspace"),
+    false,
+  );
+  assert.deepEqual(artifacts[10].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
     "project-support",
   ]);
-  assert.deepEqual(artifacts[10].discoveryRouteIds, [
+  assert.deepEqual(artifacts[11].discoveryRouteIds, [
     "project-project-team",
     "project-project-memories",
     "project-project-entities",
     "project-project-communities",
     "project-project-graph",
   ]);
-  assert.deepEqual(artifacts[11].discoveryRouteIds, [
+  assert.deepEqual(artifacts[12].discoveryRouteIds, [
     "project-agent-dashboard",
     "project-agent-logs",
     "project-agent-patterns",
   ]);
-  assert.deepEqual(artifacts[12].discoveryRouteIds, [
+  assert.deepEqual(artifacts[13].discoveryRouteIds, [
     "project-project-schema",
     "project-project-channels",
     "project-project-maintenance",
     "project-project-cron-jobs",
     "project-project-settings",
   ]);
-  assert.deepEqual(artifacts[13].discoveryRouteIds, [
+  assert.deepEqual(artifacts[14].discoveryRouteIds, [
     "tenant-tenant-runtimes",
     "tenant-tenant-pool",
     "tenant-tenant-instances",
@@ -372,15 +417,23 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
   ]);
-  assert.deepEqual(artifacts[14].discoveryRouteIds, [
+  assert.deepEqual(artifacts[15].discoveryRouteIds, [
     "project-project-overview",
     "project-project-workspaces",
     "project-blackboard-dynamic-project-blackboard",
   ]);
-  assert.deepEqual(artifacts[15].discoveryRouteIds, ["project-project-search"]);
-  assert.equal(artifacts[16].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[16].discoveryRouteIds, ["project-project-search"]);
+  assert.deepEqual(artifacts[17].discoveryRouteIds, [
+    "agent-workspace-tenant-agent-workspace",
+    "tenant-tenant-overview",
+    "tenant-tenant-projects",
+    "tenant-tenant-workspaces",
+    "tenant-tenant-tasks",
+    "tenant-tenant-analytics",
+  ]);
+  assert.equal(artifacts[18].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[16].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[18].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

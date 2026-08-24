@@ -281,6 +281,7 @@ export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'configRef' | 'projectSearchRouteBindingRef'
 >;
+export type AppTenantCoreRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'authRef' | 'configRef'>;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -795,10 +796,42 @@ export function createAppProjectDiscoveryRouteRegistry(refs: AppProjectDiscovery
   });
 }
 
+export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistryRefs) {
+  const { authRef, configRef } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
+      [TENANT_OVERVIEW_ROUTE_ID]: createTenantOverviewRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantOverviewRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantProjectsRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_WORKSPACES_ROUTE_ID]: createTenantWorkspacesRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantWorkspacesRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_TASKS_ROUTE_ID]: createTenantTasksRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantTasksRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_ANALYTICS_ROUTE_ID]: createTenantAnalyticsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantAnalyticsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            authRef.current.tenants.find((tenant) => tenant.id === context.tenantId)?.plan ?? null,
+          ),
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
-    authRef,
     configRef,
     desktopProductionRouteLocation,
     desktopProductionRouteNavigation,
@@ -826,7 +859,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
     );
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
-      [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => {
           const currentConfig = configRef.current;
@@ -861,18 +893,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             onNavigateBack: desktopProductionRouteNavigation.clearHash,
           });
         },
-      }),
-      [TENANT_OVERVIEW_ROUTE_ID]: createTenantOverviewRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantOverviewRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_ANALYTICS_ROUTE_ID]: createTenantAnalyticsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantAnalyticsRouteBindingForRuntime(
-            configRef.current,
-            context,
-            authRef.current.tenants.find((tenant) => tenant.id === context.tenantId)?.plan ?? null,
-          ),
       }),
       [TENANT_AGENT_DASHBOARD_ROUTE_ID]: createTenantAgentDashboardRouteModuleLoader({
         createBinding: (context) =>
@@ -971,18 +991,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
       [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
         createBinding: (context) =>
           createTemplatesRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantProjectsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_WORKSPACES_ROUTE_ID]: createTenantWorkspacesRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantWorkspacesRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_TASKS_ROUTE_ID]: createTenantTasksRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantTasksRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
         createBinding: (context) =>

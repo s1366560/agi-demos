@@ -260,12 +260,16 @@ test('project discovery V2 route artifact owns only its search loader', () => {
   const projectDiscoveryFactoryStart = registrySource.indexOf(
     'export function createAppProjectDiscoveryRouteRegistry',
   );
+  const tenantCoreFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCoreRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(projectDiscoveryFactoryStart, -1);
+  assert.notEqual(tenantCoreFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const projectDiscoveryFactorySource = registrySource.slice(
     projectDiscoveryFactoryStart,
-    defaultFactoryStart,
+    tenantCoreFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -274,6 +278,33 @@ test('project discovery V2 route artifact owns only its search loader', () => {
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectDiscoveryRouteRegistry/u,
+  );
+});
+
+test('tenant core V2 route artifact owns its six canonical loaders', () => {
+  const tenantCoreFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCoreRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(tenantCoreFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const tenantCoreFactorySource = registrySource.slice(tenantCoreFactoryStart, defaultFactoryStart);
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'AGENT_WORKSPACE_ROUTE_ID',
+    'TENANT_OVERVIEW_ROUTE_ID',
+    'TENANT_PROJECTS_ROUTE_ID',
+    'TENANT_WORKSPACES_ROUTE_ID',
+    'TENANT_TASKS_ROUTE_ID',
+    'TENANT_ANALYTICS_ROUTE_ID',
+  ]) {
+    assert.match(tenantCoreFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantCoreRouteRegistry/u,
   );
 });
 
