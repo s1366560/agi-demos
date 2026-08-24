@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "117dc5e5b3c9cbf20ab5e3a1b9b7ee8a2f72626a",
+  "source_revision": "87a3fd03920d591fe6581b073b9da771697ded9d",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -16,7 +16,7 @@
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1894,
+    "production_dependency_edges": 1890,
     "production_dependency_ownership": 701,
     "production_dependency_sources": 701,
     "production_entry_sources": 2,
@@ -1635,13 +1635,6 @@
       "sha256": "sha256:1ee3f2949c33967cfd473f2a97826cae983cc97171126c6cc6705231b23eeae4"
     },
     {
-      "source_entry": "web/src/components/plugins/PlatformPluginAdmin.tsx",
-      "roles": [
-        "production_dependency"
-      ],
-      "sha256": "sha256:a336def0993ac88cf0fe716e32f1bf789979fe54d6b7248bf657acfbe91e929f"
-    },
-    {
       "source_entry": "web/src/components/plugins/PluginSlotHost.tsx",
       "roles": [
         "production_dependency"
@@ -2459,14 +2452,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:c0848f3d922095cbacbcf6183a781393201fc5615de470f19dff6565909bb7e6"
+      "sha256": "sha256:5054f07c5b04431e4b5b985679ae9b52a55e6882008e78827495d779958e8aa4"
     },
     {
       "source_entry": "web/src/locales/zh-CN.json",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a1837140f1555a05acb0df6878bfe290208f9e5ea36e1e260fba11d65c7949df"
+      "sha256": "sha256:d8569d6797c4f4914d38fc866221711f1ad2cb9cca07d0964cc7c235877bcd7f"
     },
     {
       "source_entry": "web/src/main.tsx",
@@ -2819,6 +2812,13 @@
       "sha256": "sha256:4f1a0a9d0ac9211c7e927316336785ebdbb1b105530480017c0a481f8cd4d8dc"
     },
     {
+      "source_entry": "web/src/pages/tenant/ChannelConfigSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:ff3975dde85c234563f613ba79797c2b33763cb12b2c259e6f731aa671366571"
+    },
+    {
       "source_entry": "web/src/pages/tenant/ChartComponents.tsx",
       "roles": [
         "production_dependency"
@@ -2984,14 +2984,21 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:43bbc14d49450edd664a5e47b8fb4cec42b5d0dec19ee34dc2017f35baea3a4a"
+      "sha256": "sha256:80c18049cf7db21609d550426a6be8c9b8cc58e3d92a3af5b5490d0251360573"
     },
     {
       "source_entry": "web/src/pages/tenant/PluginHub.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:c1d41ee9cd0d644779cef518e7817af65535f9f7b4eaa27a96a3f1a9736995ae"
+      "sha256": "sha256:2f4f1c75f6d2958b1245a85b58bc0bb89be0910915232b704ecafd44b5a2ae9e"
+    },
+    {
+      "source_entry": "web/src/pages/tenant/PluginMarketplaceSection.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:0709c38a1de284256b0cc0313c02b2168e64da7f48e709a1f1ddff27120782b1"
     },
     {
       "source_entry": "web/src/pages/tenant/ProjectList.tsx",
@@ -3313,14 +3320,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:311ff8cb37ba974c197852e0f52253ffc487a1e2afed9bb9d8688f657106dc66"
+      "sha256": "sha256:86befd04f8b59bbf949aa46f17c352527fb381586e36a7beee7434e9e0f1cf31"
     },
     {
       "source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:b5a3ab9cb5152318c9e910b006f8c15feb622d8ee6af957a4d5c9b852b40b26b"
+      "sha256": "sha256:d53e4a15fe74056f1b1c7d9b66c3b365c38eb58a57fc73c4ad489892755ac079"
     },
     {
       "source_entry": "web/src/routes/v2/WebNavigationAuthorityV2.tsx",
@@ -3449,13 +3456,6 @@
       "sha256": "sha256:4ac6617cf5742c43c2e94ef67f28da006ed326ba8c6afc12a500bd70d7eca762"
     },
     {
-      "source_entry": "web/src/services/admin/platformPluginAdminService.ts",
-      "roles": [
-        "production_dependency"
-      ],
-      "sha256": "sha256:36df29e667ac17cfea5d9f16b24719e99c5a008bead4772756a6214bfeaa3d11"
-    },
-    {
       "source_entry": "web/src/services/agent/bindingsService.ts",
       "roles": [
         "production_dependency"
@@ -3572,7 +3572,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fac70dd0c5379423fb1f7c3b53be87093015f3af3fb77d31f45b2464358ea033"
+      "sha256": "sha256:381e17e2c8a8a19c5d6f05c111f6b83435bc7d49d6f7d1f86c93f2db19d100c3"
     },
     {
       "source_entry": "web/src/services/client/ApiError.ts",
@@ -3776,6 +3776,13 @@
         "production_dependency"
       ],
       "sha256": "sha256:5e1d65e88aaf3df6e9055997ccd27b4cde728634d9a9b7e44e4b19d196f12fe9"
+    },
+    {
+      "source_entry": "web/src/services/pluginMarketplaceService.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:0a2a53363cdfc86977f5cc004580f21311c4656c200c4b4a8128f13d446ef1a9"
     },
     {
       "source_entry": "web/src/services/pluginRendererRegistry.ts",
@@ -4532,13 +4539,6 @@
         "production_dependency"
       ],
       "sha256": "sha256:60fcb1ba716f7ae0f70d2a41f3babcd3e37f2d7e6cdf2c975be9c2309996e26a"
-    },
-    {
-      "source_entry": "web/src/utils/pluginCapabilityCounts.ts",
-      "roles": [
-        "production_dependency"
-      ],
-      "sha256": "sha256:e8225a946832b4646b630ea9806a2921d25ddceb895f5d0e742c80a3c4cc46eb"
     },
     {
       "source_entry": "web/src/utils/projectSelectionPersistence.ts",
@@ -12668,11 +12668,6 @@
       "to_source_entry": "web/src/stores/tenant.ts"
     },
     {
-      "from_source_entry": "web/src/components/plugins/PlatformPluginAdmin.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/services/admin/platformPluginAdminService.ts"
-    },
-    {
       "from_source_entry": "web/src/components/plugins/PluginSlotOutlet.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/plugins/PluginSlotHost.tsx"
@@ -15660,27 +15655,12 @@
     {
       "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/components/common/Spinner.tsx"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/pages/tenant/pluginSchemaForm.tsx"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/services/channelService.ts"
+      "to_source_entry": "web/src/services/pluginMarketplaceService.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/stores/tenant.ts"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/PluginDetail.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/utils/channelConfigSanitizers.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
@@ -15690,7 +15670,12 @@
     {
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/components/plugins/PlatformPluginAdmin.tsx"
+      "to_source_entry": "web/src/pages/tenant/ChannelConfigSection.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/pages/tenant/PluginMarketplaceSection.tsx"
     },
     {
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
@@ -15701,6 +15686,11 @@
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/channelService.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/pluginMarketplaceService.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
@@ -15716,16 +15706,6 @@
       "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/channelConfigSanitizers.ts"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/utils/date.ts"
-    },
-    {
-      "from_source_entry": "web/src/pages/tenant/PluginHub.tsx",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/utils/pluginCapabilityCounts.ts"
     },
     {
       "from_source_entry": "web/src/pages/tenant/ProjectList.tsx",
@@ -17263,11 +17243,6 @@
       "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
-      "from_source_entry": "web/src/services/admin/platformPluginAdminService.ts",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/httpClient.ts"
-    },
-    {
       "from_source_entry": "web/src/services/agent/bindingsService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -17566,6 +17541,11 @@
       "from_source_entry": "web/src/services/playbookService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/pluginMarketplaceService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/poolService.ts",
@@ -20693,7 +20673,6 @@
         "web/src/pages/tenant/InstanceSettings.tsx",
         "web/src/pages/tenant/InstanceTemplateList.tsx",
         "web/src/pages/tenant/NewTenant.tsx",
-        "web/src/pages/tenant/PluginDetail.tsx",
         "web/src/pages/tenant/ProjectList.tsx",
         "web/src/pages/tenant/SkillDetail.tsx",
         "web/src/pages/tenant/SkillEvolution.tsx",
@@ -21185,15 +21164,6 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/mcp/useMcpProjectScope.ts"
-    },
-    {
-      "classification": "shared",
-      "owner_source_entries": [
-        "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginHub.tsx"
-      ],
-      "reason_code": "multiple_routed_source_reachability",
-      "source_entry": "web/src/components/plugins/PlatformPluginAdmin.tsx"
     },
     {
       "classification": "shared",
@@ -23077,6 +23047,15 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/PluginHub.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/pages/tenant/ChannelConfigSection.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/tenant/Analytics.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -23297,6 +23276,15 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/pages/tenant/PluginHub.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/PluginHub.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/pages/tenant/PluginMarketplaceSection.tsx"
     },
     {
       "classification": "shared",
@@ -23582,7 +23570,6 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginDetail.tsx",
         "web/src/pages/tenant/PluginHub.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -23892,15 +23879,6 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginHub.tsx"
-      ],
-      "reason_code": "multiple_routed_source_reachability",
-      "source_entry": "web/src/services/admin/platformPluginAdminService.ts"
-    },
-    {
-      "classification": "shared",
-      "owner_source_entries": [
-        "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/tenant/AgentBindings.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -24145,7 +24123,6 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginDetail.tsx",
         "web/src/pages/tenant/PluginHub.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -24641,6 +24618,16 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/services/playbookService.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/PluginDetail.tsx",
+        "web/src/pages/tenant/PluginHub.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/pluginMarketplaceService.ts"
     },
     {
       "classification": "shared",
@@ -25715,7 +25702,6 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginDetail.tsx",
         "web/src/pages/tenant/PluginHub.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -25807,7 +25793,6 @@
         "web/src/pages/tenant/GeneDetail.tsx",
         "web/src/pages/tenant/GenomeDetail.tsx",
         "web/src/pages/tenant/InstanceTemplateList.tsx",
-        "web/src/pages/tenant/PluginHub.tsx",
         "web/src/pages/tenant/ProjectList.tsx",
         "web/src/pages/tenant/SkillDetail.tsx",
         "web/src/pages/tenant/SkillEvolution.tsx",
@@ -25991,15 +25976,6 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/utils/permissions.ts"
-    },
-    {
-      "classification": "shared",
-      "owner_source_entries": [
-        "web/src/layouts/TenantLayout.tsx",
-        "web/src/pages/tenant/PluginHub.tsx"
-      ],
-      "reason_code": "multiple_routed_source_reachability",
-      "source_entry": "web/src/utils/pluginCapabilityCounts.ts"
     },
     {
       "classification": "shared",
@@ -26842,7 +26818,6 @@
     "web/src/components/mcp/styles.ts",
     "web/src/components/mcp/types.ts",
     "web/src/components/mcp/useMcpProjectScope.ts",
-    "web/src/components/plugins/PlatformPluginAdmin.tsx",
     "web/src/components/plugins/PluginSlotHost.tsx",
     "web/src/components/plugins/PluginSlotOutlet.tsx",
     "web/src/components/plugins/PluginToolResultRenderer.tsx",
@@ -27011,6 +26986,7 @@
     "web/src/pages/tenant/AuditLogs.tsx",
     "web/src/pages/tenant/BackendStores.tsx",
     "web/src/pages/tenant/Billing.tsx",
+    "web/src/pages/tenant/ChannelConfigSection.tsx",
     "web/src/pages/tenant/ChartComponents.tsx",
     "web/src/pages/tenant/ClusterDetail.tsx",
     "web/src/pages/tenant/ClusterList.tsx",
@@ -27036,6 +27012,7 @@
     "web/src/pages/tenant/NewTenant.tsx",
     "web/src/pages/tenant/PluginDetail.tsx",
     "web/src/pages/tenant/PluginHub.tsx",
+    "web/src/pages/tenant/PluginMarketplaceSection.tsx",
     "web/src/pages/tenant/ProjectList.tsx",
     "web/src/pages/tenant/ProviderList.tsx",
     "web/src/pages/tenant/SkillDetail.tsx",
@@ -27101,7 +27078,6 @@
     "web/src/routes/v2/webUiSlotAuthorityProjectionV2.ts",
     "web/src/routes/v2/webUiSlotAuthorityStateV2.ts",
     "web/src/services/acpService.ts",
-    "web/src/services/admin/platformPluginAdminService.ts",
     "web/src/services/agent/bindingsService.ts",
     "web/src/services/agent/definitionsService.ts",
     "web/src/services/agent/graph/agentGraphApi.ts",
@@ -27148,6 +27124,7 @@
     "web/src/services/patternService.ts",
     "web/src/services/planService.ts",
     "web/src/services/playbookService.ts",
+    "web/src/services/pluginMarketplaceService.ts",
     "web/src/services/pluginRendererRegistry.ts",
     "web/src/services/poolService.ts",
     "web/src/services/projectAgentService.ts",
@@ -27256,7 +27233,6 @@
     "web/src/utils/modelCatalog.ts",
     "web/src/utils/objectiveProgress.ts",
     "web/src/utils/permissions.ts",
-    "web/src/utils/pluginCapabilityCounts.ts",
     "web/src/utils/projectSelectionPersistence.ts",
     "web/src/utils/sandboxArtifactPath.ts",
     "web/src/utils/sanitize.ts",
