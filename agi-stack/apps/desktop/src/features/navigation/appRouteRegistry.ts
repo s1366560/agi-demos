@@ -282,6 +282,15 @@ export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   'configRef' | 'projectSearchRouteBindingRef'
 >;
 export type AppTenantCoreRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'authRef' | 'configRef'>;
+type AppSettingsRouteContentRefs = Pick<
+  AppRouteRegistryRefs,
+  | 'desktopProductionRouteNavigation'
+  | 'setSettingsInitialSection'
+  | 'setSettingsWindowOpen'
+  | 'settingsRouteCloseNavigationRef'
+>;
+export type AppTenantAgentBuildingRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'> &
+  AppSettingsRouteContentRefs;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -297,6 +306,32 @@ function createSettingsRouteContent(
   }
   NativeSettingsRouteContent.displayName = `NativeSettingsRouteContent:${section}`;
   return NativeSettingsRouteContent;
+}
+
+function createSettingsRouteContentFactory(refs: AppSettingsRouteContentRefs) {
+  const {
+    desktopProductionRouteNavigation,
+    setSettingsInitialSection,
+    setSettingsWindowOpen,
+    settingsRouteCloseNavigationRef,
+  } = refs;
+  return (section: SettingsSection) =>
+    createSettingsRouteContent(
+      section,
+      () => {
+        settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
+        setSettingsInitialSection(section);
+        setSettingsWindowOpen(true);
+      },
+      () => {
+        if (
+          settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
+        ) {
+          settingsRouteCloseNavigationRef.current = null;
+        }
+        setSettingsWindowOpen(false);
+      },
+    );
 }
 
 function createDeviceApprovalRouteLoader(refs: AppRouteRegistryRefs): DesktopRouteModuleLoader {
@@ -829,6 +864,49 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
   });
 }
 
+export function createAppTenantAgentBuildingRouteRegistry(
+  refs: AppTenantAgentBuildingRouteRegistryRefs,
+) {
+  const { configRef } = refs;
+  const settingsRouteContent = createSettingsRouteContentFactory(refs);
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [TENANT_AGENT_DASHBOARD_ROUTE_ID]: createTenantAgentDashboardRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantAgentDashboardRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_AGENT_BINDINGS_ROUTE_ID]: createTenantAgentBindingsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantAgentBindingsRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_AGENT_DEFINITIONS_ROUTE_ID]: createAgentDefinitionsRouteModuleLoader({
+        createBinding: (context) =>
+          createAgentDefinitionsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            settingsRouteContent('agents'),
+          ),
+      }),
+      [TENANT_SKILLS_ROUTE_ID]: createSkillsRouteModuleLoader({
+        createBinding: (context) =>
+          createSkillsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            settingsRouteContent('skills'),
+          ),
+      }),
+      [TENANT_EVOLUTION_ROUTE_ID]: createEvolutionRouteModuleLoader({
+        createBinding: (context) =>
+          createEvolutionRouteBindingForRuntime(configRef.current, context),
+      }),
+      [TENANT_PATTERNS_ROUTE_ID]: createTenantPatternsRouteModuleLoader({
+        createBinding: (context) =>
+          createTenantPatternsRouteBindingForRuntime(configRef.current, context),
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -836,27 +914,8 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
     desktopProductionRouteLocation,
     desktopProductionRouteNavigation,
     setAuth,
-    setSettingsInitialSection,
-    setSettingsWindowOpen,
-    settingsRouteCloseNavigationRef,
   } = refs;
-  const settingsRouteContent = (section: SettingsSection) =>
-    createSettingsRouteContent(
-      section,
-      () => {
-        settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
-        setSettingsInitialSection(section);
-        setSettingsWindowOpen(true);
-      },
-      () => {
-        if (
-          settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
-        ) {
-          settingsRouteCloseNavigationRef.current = null;
-        }
-        setSettingsWindowOpen(false);
-      },
-    );
+  const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
@@ -893,18 +952,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             onNavigateBack: desktopProductionRouteNavigation.clearHash,
           });
         },
-      }),
-      [TENANT_AGENT_DASHBOARD_ROUTE_ID]: createTenantAgentDashboardRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantAgentDashboardRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_AGENT_BINDINGS_ROUTE_ID]: createTenantAgentBindingsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantAgentBindingsRouteBindingForRuntime(configRef.current, context),
-      }),
-      [TENANT_PATTERNS_ROUTE_ID]: createTenantPatternsRouteModuleLoader({
-        createBinding: (context) =>
-          createTenantPatternsRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_ACP_ROUTE_ID]: createTenantAcpRouteModuleLoader({
         createBinding: (context) =>
@@ -951,26 +998,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             context,
             settingsRouteContent('models'),
           ),
-      }),
-      [TENANT_AGENT_DEFINITIONS_ROUTE_ID]: createAgentDefinitionsRouteModuleLoader({
-        createBinding: (context) =>
-          createAgentDefinitionsRouteBindingForRuntime(
-            configRef.current,
-            context,
-            settingsRouteContent('agents'),
-          ),
-      }),
-      [TENANT_SKILLS_ROUTE_ID]: createSkillsRouteModuleLoader({
-        createBinding: (context) =>
-          createSkillsRouteBindingForRuntime(
-            configRef.current,
-            context,
-            settingsRouteContent('skills'),
-          ),
-      }),
-      [TENANT_EVOLUTION_ROUTE_ID]: createEvolutionRouteModuleLoader({
-        createBinding: (context) =>
-          createEvolutionRouteBindingForRuntime(configRef.current, context),
       }),
       [TENANT_PLUGINS_ROUTE_ID]: createPluginsRouteModuleLoader({
         createBinding: (context) =>

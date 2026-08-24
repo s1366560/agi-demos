@@ -262,6 +262,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.project-workspace.v1',
       'desktop.routes.project-discovery.v1',
       'desktop.routes.tenant-core.v1',
+      'desktop.routes.tenant-agent-building.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
@@ -271,6 +272,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.navigation.project-workspace.v1',
       'desktop.navigation.project-discovery.v1',
       'desktop.navigation.tenant-core.v1',
+      'desktop.navigation.tenant-agent-building.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -300,6 +302,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-workspace-routes', 'route'],
       ['desktop.project-discovery-routes', 'route'],
       ['desktop.tenant-core-routes', 'route'],
+      ['desktop.tenant-agent-building-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
@@ -309,6 +312,7 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-workspace-navigation', 'navigation'],
       ['desktop.project-discovery-navigation', 'navigation'],
       ['desktop.tenant-core-navigation', 'navigation'],
+      ['desktop.tenant-agent-building-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -382,6 +386,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
@@ -390,6 +395,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -434,6 +440,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-agent-navigation',
@@ -442,6 +449,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -486,6 +494,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -494,6 +503,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -538,6 +548,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -546,6 +557,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -590,6 +602,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -598,6 +611,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-workspace-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -642,6 +656,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.runtime-infrastructure-routes',
       'desktop.project-discovery-routes',
       'desktop.tenant-core-routes',
+      'desktop.tenant-agent-building-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
@@ -650,6 +665,7 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.runtime-infrastructure-navigation',
       'desktop.project-discovery-navigation',
       'desktop.tenant-core-navigation',
+      'desktop.tenant-agent-building-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -686,7 +702,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(17);
+    expect(contributionIds).toHaveLength(19);
     expect(contributionIds).not.toContain('desktop.project-discovery-routes');
     expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
     await runtime.close();
@@ -723,9 +739,46 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(17);
+    expect(contributionIds).toHaveLength(19);
     expect(contributionIds).not.toContain('desktop.tenant-core-routes');
     expect(contributionIds).not.toContain('desktop.tenant-core-navigation');
+    await runtime.close();
+  });
+
+  it('removes tenant agent building routes and navigation through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const tenantAgentBuildingEntryIds = new Set([
+      'builtin-desktop-tenant-agent-building-routes',
+      'builtin-desktop-tenant-agent-building-navigation',
+    ]);
+    const tenantAgentBuildingEntries = candidate.entries.filter(({ entry_id }) =>
+      tenantAgentBuildingEntryIds.has(entry_id)
+    );
+    if (tenantAgentBuildingEntries.length !== tenantAgentBuildingEntryIds.size) {
+      throw new Error('desktop tenant agent building contribution fixtures are missing');
+    }
+    for (const entry of tenantAgentBuildingEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+    const contributionIds = registry?.list().map(({ id }) => id);
+
+    expect(receipt.status).toBe('ack');
+    expect(contributionIds).toHaveLength(19);
+    expect(contributionIds).not.toContain('desktop.tenant-agent-building-routes');
+    expect(contributionIds).not.toContain('desktop.tenant-agent-building-navigation');
     await runtime.close();
   });
 

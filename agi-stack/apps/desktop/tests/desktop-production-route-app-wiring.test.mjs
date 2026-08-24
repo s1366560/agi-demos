@@ -285,10 +285,17 @@ test('tenant core V2 route artifact owns its six canonical loaders', () => {
   const tenantCoreFactoryStart = registrySource.indexOf(
     'export function createAppTenantCoreRouteRegistry',
   );
+  const tenantAgentBuildingFactoryStart = registrySource.indexOf(
+    'export function createAppTenantAgentBuildingRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(tenantCoreFactoryStart, -1);
+  assert.notEqual(tenantAgentBuildingFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
-  const tenantCoreFactorySource = registrySource.slice(tenantCoreFactoryStart, defaultFactoryStart);
+  const tenantCoreFactorySource = registrySource.slice(
+    tenantCoreFactoryStart,
+    tenantAgentBuildingFactoryStart,
+  );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
   for (const routeId of [
@@ -305,6 +312,36 @@ test('tenant core V2 route artifact owns its six canonical loaders', () => {
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantCoreRouteRegistry/u,
+  );
+});
+
+test('tenant agent building V2 route artifact owns its six canonical loaders', () => {
+  const tenantAgentBuildingFactoryStart = registrySource.indexOf(
+    'export function createAppTenantAgentBuildingRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(tenantAgentBuildingFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const tenantAgentBuildingFactorySource = registrySource.slice(
+    tenantAgentBuildingFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'TENANT_AGENT_DASHBOARD_ROUTE_ID',
+    'TENANT_AGENT_BINDINGS_ROUTE_ID',
+    'TENANT_AGENT_DEFINITIONS_ROUTE_ID',
+    'TENANT_SKILLS_ROUTE_ID',
+    'TENANT_EVOLUTION_ROUTE_ID',
+    'TENANT_PATTERNS_ROUTE_ID',
+  ]) {
+    assert.match(tenantAgentBuildingFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantAgentBuildingRouteRegistry/u,
   );
 });
 
