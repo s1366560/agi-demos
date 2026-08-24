@@ -38,6 +38,8 @@ const INSTALLATION_ID_METADATA_KEY: &str = "installation_id";
 const LOCAL_TRUSTED_SESSION_METADATA_KEY: &str = "local_trusted_session_v1";
 const MAX_TIMELINE_PAGE_LIMIT: usize = 500;
 const LEGACY_TASK_SESSION_RECEIPT_TABLE: &str = "desktop_new_task_sessions_v15";
+const RETIRED_AUTHORITY_TASK_SESSION_RECEIPT_TABLE: &str =
+    "desktop_new_task_sessions_retired_authority";
 const TASK_SESSION_RECEIPT_TABLE_SQL: &str = "CREATE TABLE desktop_new_task_sessions (
        user_id TEXT NOT NULL,
        tenant_id TEXT NOT NULL,
@@ -5009,6 +5011,9 @@ fn migrate_task_session_receipt_scope(connection: &mut Connection) -> Result<(),
 
     if columns.iter().any(|column| column.name == "user_id") {
         validate_scoped_task_session_receipt_schema(&columns)?;
+        if !task_session_receipt_foreign_keys_are_current(connection)? {
+            migrate_retired_task_session_receipt_foreign_keys(connection)?;
+        }
         connection
             .execute_batch(TASK_SESSION_RECEIPT_INDEX_SQL)
             .map_err(|error| error.to_string())?;
@@ -5105,6 +5110,69 @@ fn migrate_task_session_receipt_scope(connection: &mut Connection) -> Result<(),
              CREATE INDEX idx_desktop_new_task_sessions_scope
                ON desktop_new_task_sessions(user_id, tenant_id, project_id, created_at);",
         )
+        .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn task_session_receipt_foreign_keys_are_current(connection: &Connection) -> Result<bool, String> {
+    let mut statement = connection
+        .prepare("PRAGMA foreign_key_list('desktop_new_task_sessions')")
+        .map_err(|error| error.to_string())?;
+    let foreign_keys = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(matches!(
+        foreign_keys.as_slice(),
+        [(table, from, to)]
+            if table == "desktop_conversations"
+                && from == "conversation_id"
+                && to == "id"
+    ))
+}
+
+fn migrate_retired_task_session_receipt_foreign_keys(
+    connection: &mut Connection,
+) -> Result<(), String> {
+    if sqlite_table_exists(connection, RETIRED_AUTHORITY_TASK_SESSION_RECEIPT_TABLE)? {
+        return Err(
+            "retired-authority task session receipt migration table already exists".to_string(),
+        );
+    }
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(
+            "DROP INDEX IF EXISTS idx_desktop_new_task_sessions_scope;
+             ALTER TABLE desktop_new_task_sessions
+               RENAME TO desktop_new_task_sessions_retired_authority;",
+        )
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(TASK_SESSION_RECEIPT_TABLE_SQL)
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(
+            "INSERT INTO desktop_new_task_sessions(
+               user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
+               conversation_id, initial_message_id, response_json, created_at
+             )
+             SELECT user_id, tenant_id, project_id, idempotency_key, payload_hash, workspace_id,
+                    conversation_id, initial_message_id, response_json, created_at
+             FROM desktop_new_task_sessions_retired_authority;
+             DROP TABLE desktop_new_task_sessions_retired_authority;",
+        )
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute_batch(TASK_SESSION_RECEIPT_INDEX_SQL)
         .map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())
 }
@@ -5762,6 +5830,94 @@ mod tests {
             validate_task_session_receipt(&receipt, user_id, tenant_id, project_id)
                 .expect("valid scoped receipt");
         }
+    }
+
+    #[test]
+    fn scoped_task_session_receipt_migration_removes_retired_local_authority_foreign_keys() {
+        let path = std::env::temp_dir().join(format!(
+            "agistack-task-session-receipt-foreign-keys-{}.db",
+            Uuid::new_v4()
+        ));
+        {
+            let store = DesktopSessionStore::open(&path).expect("open current session store");
+            let connection = store.connection().expect("session store connection");
+            insert_scoped_task_session_receipt(
+                &connection,
+                "user-a",
+                "tenant-a",
+                "project-a",
+                "retired-foreign-keys",
+            );
+        }
+        {
+            let connection = Connection::open(&path).expect("open stale session store");
+            connection
+                .execute_batch(
+                    "PRAGMA foreign_keys = OFF;
+                     DROP INDEX idx_desktop_new_task_sessions_scope;
+                     ALTER TABLE desktop_new_task_sessions
+                       RENAME TO desktop_new_task_sessions_current;
+                     CREATE TABLE desktop_new_task_sessions (
+                       user_id TEXT NOT NULL,
+                       tenant_id TEXT NOT NULL,
+                       project_id TEXT NOT NULL,
+                       idempotency_key TEXT NOT NULL,
+                       payload_hash TEXT NOT NULL,
+                       workspace_id TEXT NOT NULL,
+                       conversation_id TEXT NOT NULL UNIQUE,
+                       initial_message_id TEXT NOT NULL UNIQUE,
+                       response_json TEXT NOT NULL,
+                       created_at TEXT NOT NULL,
+                       PRIMARY KEY(user_id, tenant_id, project_id, idempotency_key),
+                       FOREIGN KEY(workspace_id) REFERENCES desktop_workspaces(id),
+                       FOREIGN KEY(conversation_id) REFERENCES desktop_conversations(id),
+                       FOREIGN KEY(initial_message_id) REFERENCES desktop_workspace_messages(id)
+                     );
+                     INSERT INTO desktop_new_task_sessions(
+                       user_id, tenant_id, project_id, idempotency_key, payload_hash,
+                       workspace_id, conversation_id, initial_message_id, response_json,
+                       created_at
+                     )
+                     SELECT user_id, tenant_id, project_id, idempotency_key, payload_hash,
+                            workspace_id, conversation_id, initial_message_id, response_json,
+                            created_at
+                     FROM desktop_new_task_sessions_current;
+                     DROP TABLE desktop_new_task_sessions_current;
+                     CREATE INDEX idx_desktop_new_task_sessions_scope
+                       ON desktop_new_task_sessions(
+                         user_id, tenant_id, project_id, created_at
+                       );
+                     PRAGMA user_version = 28;",
+                )
+                .expect("install stale task session receipt schema");
+        }
+
+        let store = DesktopSessionStore::open(&path).expect("migrate stale session store");
+        let connection = store
+            .connection()
+            .expect("migrated session store connection");
+        let foreign_key_sources = connection
+            .prepare("PRAGMA foreign_key_list('desktop_new_task_sessions')")
+            .expect("prepare task session foreign key inspection")
+            .query_map([], |row| row.get::<_, String>(3))
+            .expect("query task session foreign keys")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect task session foreign keys");
+        assert_eq!(foreign_key_sources, vec!["conversation_id"]);
+        let receipt = query_task_session_receipt(
+            &connection,
+            "user-a",
+            "tenant-a",
+            "project-a",
+            "shared-key",
+        )
+        .expect("query migrated receipt")
+        .expect("migrated receipt");
+        validate_task_session_receipt(&receipt, "user-a", "tenant-a", "project-a")
+            .expect("validate migrated receipt");
+        drop(connection);
+        drop(store);
+        std::fs::remove_file(path).expect("remove migrated session store");
     }
 
     fn timeline_item(id: &str, time_us: i64, counter: i64) -> Value {
