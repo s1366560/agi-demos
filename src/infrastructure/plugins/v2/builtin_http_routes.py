@@ -86,6 +86,7 @@ REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS = frozenset(
         "voice-websocket",
         "websocket",
         "webhooks",
+        "workspace-core-static",
     }
 )
 

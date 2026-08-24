@@ -170,6 +170,10 @@ async def test_publish_snapshot_uses_same_atomic_route_graph_transaction(
     (
         ("builtin-billing-http-routes", "billing"),
         (
+            "builtin-workspace-core-static-http-routes",
+            "workspace-core-static",
+        ),
+        (
             "builtin-enhanced-search-http-routes",
             "enhanced-search, enhanced-search-memory",
         ),

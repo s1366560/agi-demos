@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, cast
 
 from fastapi import APIRouter, FastAPI, Request
@@ -112,6 +112,40 @@ _CONTEXT_HEADER_NAMES = {
 }
 
 
+class WorkspaceCoreProxyRoute(APIRoute):
+    """Preserve a source route contract while streaming execution to Workspace Core."""
+
+    def __init__(
+        self,
+        path: str,
+        endpoint: Callable[..., Any],
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
+        source_endpoint = endpoint
+        super().__init__(path, endpoint, **kwargs)
+
+        async def proxy_endpoint(**endpoint_values: Any) -> Response:  # noqa: ANN401
+            request = cast(Request, endpoint_values[_PROXY_REQUEST_PARAM])
+            return await _proxy_workspace_request(request, endpoint_values)
+
+        proxy_endpoint.__name__ = f"avernet_proxy_{self.name}"
+        proxy_endpoint.__qualname__ = proxy_endpoint.__name__
+        cast(Any, proxy_endpoint).__workspace_contract_module__ = source_endpoint.__module__
+        self.endpoint = proxy_endpoint
+        self.dependant.call = proxy_endpoint
+        self.dependant.request_param_name = _PROXY_REQUEST_PARAM
+        self.dependant.dependencies = [
+            dependency
+            for dependency in self.dependant.dependencies
+            if dependency.call in _PROXY_AUTH_DEPENDENCIES
+        ]
+        self.dependant.body_params.clear()
+        openapi_body_field = self.body_field
+        self.body_field = None
+        self.app = request_response(self.get_route_handler())
+        self.body_field = openapi_body_field
+
+
 def _register_avernet_proxy_routes(
     app: FastAPI,
     source_routers: tuple[APIRouter, ...],
@@ -124,7 +158,7 @@ def _register_avernet_proxy_routes(
 
 
 def _clone_as_avernet_proxy(source: APIRoute, app: FastAPI) -> APIRoute:
-    proxy_route = APIRoute(
+    return WorkspaceCoreProxyRoute(
         source.path,
         source.endpoint,
         response_model=source.response_model,
@@ -152,28 +186,6 @@ def _clone_as_avernet_proxy(source: APIRoute, app: FastAPI) -> APIRoute:
         openapi_extra=source.openapi_extra,
         generate_unique_id_function=source.generate_unique_id_function,
     )
-
-    async def proxy_endpoint(**endpoint_values: Any) -> Response:  # noqa: ANN401
-        request = cast(Request, endpoint_values[_PROXY_REQUEST_PARAM])
-        return await _proxy_workspace_request(request, endpoint_values)
-
-    proxy_endpoint.__name__ = f"avernet_proxy_{source.name}"
-    proxy_endpoint.__qualname__ = proxy_endpoint.__name__
-    cast(Any, proxy_endpoint).__workspace_contract_module__ = source.endpoint.__module__
-    proxy_route.endpoint = proxy_endpoint
-    proxy_route.dependant.call = proxy_endpoint
-    proxy_route.dependant.request_param_name = _PROXY_REQUEST_PARAM
-    proxy_route.dependant.dependencies = [
-        dependency
-        for dependency in proxy_route.dependant.dependencies
-        if dependency.call in _PROXY_AUTH_DEPENDENCIES
-    ]
-    proxy_route.dependant.body_params.clear()
-    openapi_body_field = proxy_route.body_field
-    proxy_route.body_field = None
-    proxy_route.app = request_response(proxy_route.get_route_handler())
-    proxy_route.body_field = openapi_body_field
-    return proxy_route
 
 
 async def _proxy_workspace_request(
