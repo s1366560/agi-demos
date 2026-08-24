@@ -210,16 +210,23 @@ import {
   type ProjectSearchRouteBinding,
 } from '../search/projectSearchRouteModule';
 import { type SettingsSection } from '../settings/SettingsWindow';
-import type { DesktopRouteModuleLoader } from './desktopRouteModule';
+import type { DesktopRouteModule, DesktopRouteModuleLoader } from './desktopRouteModule';
+import {
+  createDesktopRouteRegistry,
+  type DesktopRouteDefinition,
+} from './desktopRouteRegistry';
 import { createAgentDefinitionsRouteModuleLoader } from '../settings-routes/agentDefinitionsRouteModule';
 import { createChannelsRouteModuleLoader } from '../settings-routes/channelsRouteModule';
 import { createEvolutionRouteModuleLoader } from '../settings-routes/evolutionRouteModule';
 import { createMcpServersRouteModuleLoader } from '../settings-routes/mcpServersRouteModule';
 import { createPluginsRouteModuleLoader } from '../settings-routes/pluginsRouteModule';
 import { createProvidersRouteModuleLoader } from '../settings-routes/providersRouteModule';
+import { createProfileRouteModuleLoader } from '../settings-routes/profileRouteModule';
+import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
 import {
   createChannelsRouteBindingForRuntime,
   createEvolutionRouteBindingForRuntime,
+  createProfileRouteBindingForRuntime,
   createTemplatesRouteBindingForRuntime,
 } from '../settings-routes/p2ThirdBatchRouteRuntime';
 import {
@@ -265,7 +272,10 @@ export type AppRouteRegistryRefs = {
   commitRuntimeConfig: (nextConfig: DesktopRuntimeConfig) => void;
 };
 
-export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppAuxiliaryRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'setAuth'
+>;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<
@@ -421,8 +431,8 @@ export function createAppAuthenticationRouteRegistry(refs: AppRouteRegistryRefs)
 }
 
 export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryRefs) {
-  const { configRef } = refs;
-  return createDesktopProductionRouteRegistry({
+  const { configRef, setAuth } = refs;
+  const productionRegistry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [BACKEND_STORES_ROUTE_ID]: createBackendStoresRouteModuleLoader({
         createBinding: (context) => {
@@ -471,6 +481,29 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
       }),
     }),
   });
+  const profileLoader = createProfileRouteModuleLoader({
+    createBinding: () =>
+      createProfileRouteBindingForRuntime(configRef.current, (user) =>
+        setAuth((current) =>
+          current.user?.user_id === user.user_id ? { ...current, user } : current,
+        ),
+      ),
+  });
+  const profileDefinition = {
+    id: PROFILE_ROUTE_ID,
+    path: '/tenant/profile',
+    scope: ['global'],
+    navGroup: 'identity-entry',
+    capability: PROFILE_ROUTE_ID,
+    requiredPermission: [['authenticated']],
+    localPolicy: 'native_equivalent',
+    structuralReadiness: { status: 'ready' },
+    loader: profileLoader,
+  } satisfies DesktopRouteDefinition<DesktopRouteModule>;
+  return createDesktopRouteRegistry([
+    ...productionRegistry.definitions,
+    profileDefinition,
+  ]);
 }
 
 export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledgeRouteRegistryRefs) {

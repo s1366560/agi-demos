@@ -25,6 +25,14 @@ const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
+const settingsSource = readFileSync(
+  new URL('../src/features/settings/SettingsWindow.tsx', import.meta.url),
+  'utf8',
+);
+const profileAuxiliarySource = readFileSync(
+  new URL('../src/features/settings-routes/profileAuxiliaryRoute.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'tenant-tenant-evolution',
@@ -45,7 +53,7 @@ const cloudConfig = Object.freeze({
   workspaceRoot: '/workspace',
 });
 
-test('P2 third-batch production routes own real loaders while Profile remains route-only', () => {
+test('P2 third-batch and Profile loaders are owned by the V2 route registry', () => {
   for (const routeId of ROUTE_IDS) {
     assert.equal(DESKTOP_IMPLEMENTED_ROUTE_IDS.includes(routeId), true, routeId);
   }
@@ -71,11 +79,16 @@ test('P2 third-batch production routes own real loaders while Profile remains ro
     'createEvolutionRouteBindingForRuntime',
     'createChannelsRouteBindingForRuntime',
     'createTemplatesRouteBindingForRuntime',
+    'createProfileRouteModuleLoader',
+    'createProfileRouteBindingForRuntime',
   ]) {
     assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
     assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
-  assert.match(appSource, /createProfileRouteBindingForRuntime/u);
+  assert.match(settingsSource, /rendererRouteRegistry/u);
+  assert.match(settingsSource, /byId\.get\(PROFILE_ROUTE_ID\)\?\.loader/u);
+  assert.match(profileAuxiliarySource, /createProfileGenerationHashLocationPort/u);
+  assert.doesNotMatch(appSource, /matchProfileAuxiliaryRoute|profileAuxiliaryRouteActiveRef/u);
   assert.doesNotMatch(
     appSource,
     /(?:evolution|channels|templates|profile)[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,

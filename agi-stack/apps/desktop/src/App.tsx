@@ -297,13 +297,8 @@ import {
 } from './features/settings/settingsEntryRouting';
 import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
 import {
-  createProfileFilteredHashLocationPort,
-  matchProfileAuxiliaryRoute,
+  createProfileGenerationHashLocationPort,
 } from './features/settings-routes/profileAuxiliaryRoute';
-import { createProfileRouteModuleLoader } from './features/settings-routes/profileRouteModule';
-import {
-  createProfileRouteBindingForRuntime,
-} from './features/settings-routes/p2ThirdBatchRouteRuntime';
 import { latestAgentDefinitionEvent } from './features/settings/agentDefinitionEventModel';
 import { useWorkspaceAgentPolicy } from './features/settings/useWorkspaceAgentPolicy';
 import { useWorkspaceRuntimeProvider } from './features/settings/useWorkspaceRuntimeProvider';
@@ -764,7 +759,6 @@ export function App() {
   const terminalRunScopeKeyRef = useRef('');
   const workbenchRef = useRef<HTMLElement>(null);
   const settingsRouteCloseNavigationRef = useRef<(() => void) | null>(null);
-  const profileAuxiliaryRouteActiveRef = useRef(false);
   const productionRouteRefreshRef = useRef<
     ((nextConfig: DesktopRuntimeConfig, projects: ProjectSummary[]) => Promise<boolean>) | null
   >(null);
@@ -786,7 +780,7 @@ export function App() {
   }> | null>(null);
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
-    () => createProfileFilteredHashLocationPort(desktopBrowserHashLocation),
+    () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
     [desktopBrowserHashLocation],
   );
   const desktopProductionRouteNavigation = useMemo(
@@ -801,43 +795,6 @@ export function App() {
       }),
     [],
   );
-  const profileRouteModuleLoader = useMemo(
-    () =>
-      createProfileRouteModuleLoader({
-        createBinding: () =>
-          createProfileRouteBindingForRuntime(configRef.current, (user) =>
-            setAuth((current) =>
-              current.user?.user_id === user.user_id ? { ...current, user } : current,
-            ),
-          ),
-      }),
-    [],
-  );
-
-  useEffect(() => {
-    const synchronizeProfileRoute = () => {
-      const match = matchProfileAuxiliaryRoute(desktopBrowserHashLocation.readHash());
-      if (!match) {
-        if (profileAuxiliaryRouteActiveRef.current) {
-          profileAuxiliaryRouteActiveRef.current = false;
-          if (
-            settingsRouteCloseNavigationRef.current === desktopProductionRouteNavigation.clearHash
-          ) {
-            settingsRouteCloseNavigationRef.current = null;
-          }
-          setSettingsWindowOpen(false);
-        }
-        return;
-      }
-      profileAuxiliaryRouteActiveRef.current = true;
-      settingsRouteCloseNavigationRef.current = desktopProductionRouteNavigation.clearHash;
-      setSettingsInitialSection('account');
-      if (auth.status === 'signed_in') setSettingsWindowOpen(true);
-    };
-    synchronizeProfileRoute();
-    return desktopBrowserHashLocation.subscribe(synchronizeProfileRoute);
-  }, [auth.status, desktopBrowserHashLocation, desktopProductionRouteNavigation.clearHash]);
-
   useEffect(() => {
     datasetRef.current = dataset;
   }, [dataset]);
@@ -6984,7 +6941,7 @@ export function App() {
           wsError={socket.error}
           runtimeDisabledReason={runtimeDisabledReason}
           agentDefinitionEvent={agentDefinitionEvent}
-          profileRouteLoader={profileRouteModuleLoader}
+          rendererRouteRegistry={desktopProductionRouteRegistry}
           onClose={() => {
             const closeRoute = settingsRouteCloseNavigationRef.current;
             settingsRouteCloseNavigationRef.current = null;

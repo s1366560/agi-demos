@@ -276,11 +276,20 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-support",
     "backend-stores",
     "project-playbooks",
+    "user-profile",
   ]);
-  const auxiliaryRegistry = artifacts[1].createRegistry({ configRef: { current: {} } });
+  const auxiliaryRegistry = artifacts[1].createRegistry({
+    configRef: { current: {} },
+    setAuth: () => undefined,
+  });
   assert.deepEqual(
     artifacts[1].routeIds.map((routeId) => auxiliaryRegistry.byId.get(routeId).structuralReadiness),
-    [{ status: "ready" }, { status: "ready" }, { status: "ready" }],
+    [
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+    ],
   );
   assert.equal(
     auxiliaryRegistry.byId.get("tenant-tenant-overview").structuralReadiness.status,

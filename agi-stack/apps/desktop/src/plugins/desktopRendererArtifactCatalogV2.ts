@@ -75,6 +75,7 @@ import {
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import { PROFILE_ROUTE_ID } from '../features/settings-routes/profileRoutePresentationModel';
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
 type DesktopRendererContributionKindV2 = 'route' | 'navigation' | 'ui-slot';
@@ -134,7 +135,10 @@ const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
   DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
 );
 const AUXILIARY_ROUTE_IDS_V2 = Object.freeze(
-  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => AUXILIARY_ROUTE_ID_SET_V2.has(routeId)),
+  [
+    ...DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => AUXILIARY_ROUTE_ID_SET_V2.has(routeId)),
+    PROFILE_ROUTE_ID,
+  ],
 );
 const PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2 = new Set<string>([
   PROJECT_TEAM_ROUTE_ID,

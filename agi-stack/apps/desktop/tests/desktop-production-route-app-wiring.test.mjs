@@ -63,7 +63,7 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
 });
 
-test('auxiliary V2 route artifact owns only its three native loaders', () => {
+test('auxiliary V2 route artifact owns its three native loaders and Profile route', () => {
   const auxiliaryFactoryStart = registrySource.indexOf(
     'export function createAppAuxiliaryRouteRegistry',
   );
@@ -93,6 +93,15 @@ test('auxiliary V2 route artifact owns only its three native loaders', () => {
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppAuxiliaryRouteRegistry/u,
+  );
+  assert.match(auxiliaryFactorySource, /id:\s*PROFILE_ROUTE_ID/u);
+  assert.match(
+    auxiliaryFactorySource,
+    /createProfileRouteModuleLoader[\s\S]*createProfileRouteBindingForRuntime[\s\S]*id:\s*PROFILE_ROUTE_ID/u,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /createProfileRouteModuleLoader|createProfileRouteBindingForRuntime/u,
   );
 });
 

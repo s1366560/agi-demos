@@ -20,9 +20,11 @@ import type {
   ManagedSubAgent,
   AgentWsEvent,
 } from '../../types';
-import type { DesktopRouteModuleLoader } from '../navigation/desktopRouteModule';
+import type { DesktopRouteModule } from '../navigation/desktopRouteModule';
+import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
+import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
 import { AccountSessionSecurityPage } from './AccountSessionSecurityPage';
 import { BrowserIntegrationSettingsPage } from './BrowserIntegrationSettingsPage';
 import {
@@ -85,7 +87,7 @@ type SettingsWindowProps = {
   wsError: string | null;
   runtimeDisabledReason: string | null;
   agentDefinitionEvent: AgentWsEvent | null;
-  profileRouteLoader?: DesktopRouteModuleLoader;
+  rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -104,7 +106,7 @@ export function SettingsWindow({
   wsError,
   runtimeDisabledReason,
   agentDefinitionEvent,
-  profileRouteLoader,
+  rendererRouteRegistry,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -145,6 +147,7 @@ export function SettingsWindow({
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
+  const profileRouteLoader = rendererRouteRegistry?.byId.get(PROFILE_ROUTE_ID)?.loader;
   const hasAvailableProjects = auth.projects.some(
     (project) => project.tenant_id === config.tenantId,
   );
