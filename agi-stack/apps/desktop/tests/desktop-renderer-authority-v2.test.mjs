@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
 
 const {
+  DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
@@ -72,6 +73,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       200,
     ),
     contribution(
+      "desktop.auxiliary-navigation",
+      "navigation",
+      [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2],
+      210,
+    ),
+    contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
@@ -84,18 +91,20 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     [
       [DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
   assert.equal(typeof artifacts[0].createRegistry, "function");
-  assert.deepEqual(artifacts[1].discoveryRouteIds.slice(-3), [
+  assert.equal(artifacts[1].discoveryRouteIds.includes("backend-stores"), false);
+  assert.deepEqual(artifacts[2].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
     "project-support",
   ]);
-  assert.equal(artifacts[2].slotDefinitions.length, 2);
+  assert.equal(artifacts[3].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[2].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[3].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

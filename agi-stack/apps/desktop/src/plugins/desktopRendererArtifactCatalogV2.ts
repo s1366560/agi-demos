@@ -2,7 +2,10 @@ import {
   createAppRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
-import { DESKTOP_NAVIGATION_METADATA } from '../features/navigation/desktopCanonicalNavigationCatalog';
+import {
+  CANONICAL_DESKTOP_NAVIGATION_METADATA,
+  DESKTOP_AUXILIARY_NAVIGATION_METADATA,
+} from '../features/navigation/desktopCanonicalNavigationCatalog';
 import {
   DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
@@ -25,6 +28,7 @@ interface DesktopRendererContributionV2 {
 
 export const DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.production.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
+export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
 const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
@@ -37,7 +41,10 @@ const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
-  ...DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+]);
+const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
   Object.freeze({
@@ -110,11 +117,20 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
       discoveryRouteIds: Object.freeze(
-        DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+        CANONICAL_DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
       ),
       id: DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: AUXILIARY_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: AUXILIARY_NAVIGATION_ROUTE_IDS_V2,
     }),
   ],
   [

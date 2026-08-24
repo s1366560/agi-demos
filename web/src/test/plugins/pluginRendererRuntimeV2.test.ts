@@ -255,6 +255,7 @@ describe('RendererPluginRuntimeV2', () => {
     const knownArtifactRefs = new Set([
       'desktop.routes.production.v1',
       'desktop.navigation.default.v1',
+      'desktop.navigation.auxiliary.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -277,6 +278,7 @@ describe('RendererPluginRuntimeV2', () => {
     expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
       ['desktop.production-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
+      ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -308,6 +310,38 @@ describe('RendererPluginRuntimeV2', () => {
     });
     expect(receipt.error_message).toContain('desktop_renderer_artifact_unknown');
     expect(runtime.getSnapshot()).toBe(lastGood);
+    await runtime.close();
+  });
+
+  it('removes auxiliary desktop navigation through its independent profile effect', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const auxiliaryEntry = candidate.entries.find(
+      ({ entry_id }) => entry_id === 'builtin-desktop-auxiliary-navigation'
+    );
+    if (!auxiliaryEntry) throw new Error('desktop auxiliary navigation fixture is missing');
+    auxiliaryEntry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+
+    expect(receipt.status).toBe('ack');
+    expect(registry?.list().map(({ id }) => id)).toEqual([
+      'desktop.production-routes',
+      'desktop.default-navigation',
+      'desktop.default-ui-slots',
+    ]);
     await runtime.close();
   });
 
