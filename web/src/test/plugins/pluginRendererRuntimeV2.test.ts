@@ -255,8 +255,10 @@ describe('RendererPluginRuntimeV2', () => {
     const knownArtifactRefs = new Set([
       'desktop.routes.production.v1',
       'desktop.routes.auxiliary.v1',
+      'desktop.routes.project-knowledge.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
+      'desktop.navigation.project-knowledge.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -279,8 +281,10 @@ describe('RendererPluginRuntimeV2', () => {
     expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
       ['desktop.production-routes', 'route'],
       ['desktop.auxiliary-routes', 'route'],
+      ['desktop.project-knowledge-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
+      ['desktop.project-knowledge-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -347,7 +351,49 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.production-routes',
+      'desktop.project-knowledge-routes',
       'desktop.default-navigation',
+      'desktop.project-knowledge-navigation',
+      'desktop.default-ui-slots',
+    ]);
+    await runtime.close();
+  });
+
+  it('removes project knowledge routes and navigation through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const projectKnowledgeEntryIds = new Set([
+      'builtin-desktop-project-knowledge-routes',
+      'builtin-desktop-project-knowledge-navigation',
+    ]);
+    const projectKnowledgeEntries = candidate.entries.filter(({ entry_id }) =>
+      projectKnowledgeEntryIds.has(entry_id)
+    );
+    if (projectKnowledgeEntries.length !== projectKnowledgeEntryIds.size) {
+      throw new Error('desktop project knowledge contribution fixtures are missing');
+    }
+    for (const entry of projectKnowledgeEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+
+    expect(receipt.status).toBe('ack');
+    expect(registry?.list().map(({ id }) => id)).toEqual([
+      'desktop.production-routes',
+      'desktop.auxiliary-routes',
+      'desktop.default-navigation',
+      'desktop.auxiliary-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();

@@ -11,6 +11,8 @@ const {
   DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
+  DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2,
+  DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
   resolveDesktopRendererArtifactsV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererArtifactCatalogV2.js");
 const {
@@ -74,6 +76,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       110,
     ),
     contribution(
+      "desktop.project-knowledge-routes",
+      "route",
+      [DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2],
+      120,
+    ),
+    contribution(
       "desktop.default-navigation",
       "navigation",
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2],
@@ -84,6 +92,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       "navigation",
       [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2],
       210,
+    ),
+    contribution(
+      "desktop.project-knowledge-navigation",
+      "navigation",
+      [DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2],
+      220,
     ),
     contribution(
       "desktop.default-ui-slots",
@@ -98,13 +112,16 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     [
       [DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2, "route"],
+      [DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
   assert.equal(typeof artifacts[0].createRegistry, "function");
   assert.equal(artifacts[0].routeIds.includes("backend-stores"), false);
+  assert.equal(artifacts[0].routeIds.includes("project-project-team"), false);
   assert.deepEqual(artifacts[1].routeIds, [
     "project-support",
     "backend-stores",
@@ -119,15 +136,45 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     auxiliaryRegistry.byId.get("tenant-tenant-overview").structuralReadiness.status,
     "unavailable",
   );
-  assert.equal(artifacts[2].discoveryRouteIds.includes("backend-stores"), false);
-  assert.deepEqual(artifacts[3].discoveryRouteIds, [
+  assert.deepEqual(artifacts[2].routeIds, [
+    "project-project-team",
+    "project-project-memories",
+    "project-project-entities",
+    "project-project-communities",
+    "project-project-graph",
+  ]);
+  const projectKnowledgeRegistry = artifacts[2].createRegistry({
+    configRef: { current: {} },
+  });
+  assert.deepEqual(
+    artifacts[2].routeIds.map(
+      (routeId) => projectKnowledgeRegistry.byId.get(routeId).structuralReadiness,
+    ),
+    [
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+      { status: "ready" },
+    ],
+  );
+  assert.equal(artifacts[3].discoveryRouteIds.includes("backend-stores"), false);
+  assert.equal(artifacts[3].discoveryRouteIds.includes("project-project-team"), false);
+  assert.deepEqual(artifacts[4].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
     "project-support",
   ]);
-  assert.equal(artifacts[4].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[5].discoveryRouteIds, [
+    "project-project-team",
+    "project-project-memories",
+    "project-project-entities",
+    "project-project-communities",
+    "project-project-graph",
+  ]);
+  assert.equal(artifacts[6].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[4].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[6].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

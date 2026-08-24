@@ -1,5 +1,6 @@
 import {
   createAppAuxiliaryRouteRegistry,
+  createAppProjectKnowledgeRouteRegistry,
   createAppRouteRegistry,
   type AppRouteRegistryRefs,
 } from '../features/navigation/appRouteRegistry';
@@ -11,6 +12,11 @@ import {
   DESKTOP_PRODUCTION_ROUTE_IDS,
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
+  PROJECT_COMMUNITIES_ROUTE_ID,
+  PROJECT_ENTITIES_ROUTE_ID,
+  PROJECT_GRAPH_ROUTE_ID,
+  PROJECT_MEMORIES_ROUTE_ID,
+  PROJECT_TEAM_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
@@ -29,8 +35,11 @@ interface DesktopRendererContributionV2 {
 
 export const DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.production.v1';
 export const DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.auxiliary.v1';
+export const DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-knowledge.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
+export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-knowledge.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
 const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
@@ -43,17 +52,36 @@ const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
 const AUXILIARY_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => AUXILIARY_ROUTE_ID_SET_V2.has(routeId)),
 );
+const PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_TEAM_ROUTE_ID,
+  PROJECT_MEMORIES_ROUTE_ID,
+  PROJECT_ENTITIES_ROUTE_ID,
+  PROJECT_COMMUNITIES_ROUTE_ID,
+  PROJECT_GRAPH_ROUTE_ID,
+]);
+const PROJECT_KNOWLEDGE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId)),
+);
 const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter(
     (routeId) =>
-      !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId) && !AUXILIARY_ROUTE_ID_SET_V2.has(routeId),
+      !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId) &&
+      !AUXILIARY_ROUTE_ID_SET_V2.has(routeId) &&
+      !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
-  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(
+    ({ routeId }) => !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
 ]);
 const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...DESKTOP_AUXILIARY_NAVIGATION_METADATA.map(({ routeId }) => routeId),
+]);
+const PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
   Object.freeze({
@@ -131,11 +159,17 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     ),
   ],
   [
+    DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_KNOWLEDGE_ROUTE_IDS_V2,
+      createAppProjectKnowledgeRouteRegistry,
+    ),
+  ],
+  [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
-      discoveryRouteIds: Object.freeze(
-        CANONICAL_DESKTOP_NAVIGATION_METADATA.map(({ routeId }) => routeId),
-      ),
+      discoveryRouteIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
       id: DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
@@ -148,6 +182,15 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       id: DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: AUXILIARY_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2,
     }),
   ],
   [

@@ -67,10 +67,17 @@ test('auxiliary V2 route artifact owns only its three native loaders', () => {
   const auxiliaryFactoryStart = registrySource.indexOf(
     'export function createAppAuxiliaryRouteRegistry',
   );
+  const projectKnowledgeFactoryStart = registrySource.indexOf(
+    'export function createAppProjectKnowledgeRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(auxiliaryFactoryStart, -1);
+  assert.notEqual(projectKnowledgeFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
-  const auxiliaryFactorySource = registrySource.slice(auxiliaryFactoryStart, defaultFactoryStart);
+  const auxiliaryFactorySource = registrySource.slice(
+    auxiliaryFactoryStart,
+    projectKnowledgeFactoryStart,
+  );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
   for (const routeId of [
@@ -84,6 +91,35 @@ test('auxiliary V2 route artifact owns only its three native loaders', () => {
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppAuxiliaryRouteRegistry/u,
+  );
+});
+
+test('project knowledge V2 route artifact owns only its five native loaders', () => {
+  const projectKnowledgeFactoryStart = registrySource.indexOf(
+    'export function createAppProjectKnowledgeRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(projectKnowledgeFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const projectKnowledgeFactorySource = registrySource.slice(
+    projectKnowledgeFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'PROJECT_TEAM_ROUTE_ID',
+    'PROJECT_MEMORIES_ROUTE_ID',
+    'PROJECT_ENTITIES_ROUTE_ID',
+    'PROJECT_COMMUNITIES_ROUTE_ID',
+    'PROJECT_GRAPH_ROUTE_ID',
+  ]) {
+    assert.match(projectKnowledgeFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectKnowledgeRouteRegistry/u,
   );
 });
 
@@ -220,10 +256,7 @@ test('workbench selections release an active native production route before chan
     '\n  const createWorkspaceFromDialog',
     workspaceSelectionStart,
   );
-  const workspaceSelectionSource = appSource.slice(
-    workspaceSelectionStart,
-    workspaceSelectionEnd,
-  );
+  const workspaceSelectionSource = appSource.slice(workspaceSelectionStart, workspaceSelectionEnd);
   const conversationSelectionStart = appSource.indexOf('const selectConversation =');
   const conversationSelectionEnd = appSource.indexOf(
     '\n  const sendChatMessage',
