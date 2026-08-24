@@ -29,6 +29,7 @@ from src.infrastructure.plugins.v2.cron_services import (
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.scheduler import scheduler_service
 
 pytestmark = pytest.mark.unit
 
@@ -148,3 +149,76 @@ async def test_cron_scheduler_calls_are_generation_owned_and_best_effort() -> No
 
     scheduler.register.assert_awaited_once()
     scheduler.unregister.assert_awaited_once_with(job.id)
+
+
+async def test_cron_scheduler_lifecycle_survives_generation_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    start = AsyncMock(return_value=object())
+    sync = AsyncMock()
+    stop = AsyncMock()
+    monkeypatch.setattr(scheduler_service, "start_scheduler", start)
+    monkeypatch.setattr(scheduler_service, "sync_all_jobs", sync)
+    monkeypatch.setattr(scheduler_service, "stop_scheduler", stop)
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=103,
+        version=103,
+    )
+    assert first.accepted is True
+    second = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=104,
+        version=104,
+    )
+
+    assert second.accepted is True
+    start.assert_awaited_once_with()
+    sync.assert_awaited_once_with()
+    stop.assert_not_awaited()
+
+    await host.close()
+    stop.assert_awaited_once_with()
+
+
+async def test_cron_scheduler_sync_failure_cleans_started_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    start = AsyncMock(return_value=object())
+    sync = AsyncMock(side_effect=RuntimeError("cron sync unavailable"))
+    stop = AsyncMock()
+    monkeypatch.setattr(scheduler_service, "start_scheduler", start)
+    monkeypatch.setattr(scheduler_service, "sync_all_jobs", sync)
+    monkeypatch.setattr(scheduler_service, "stop_scheduler", stop)
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=105,
+        version=105,
+    )
+
+    assert publication.accepted is False
+    assert publication.receipt.error_code == "staging_failed"
+    assert host.manager.current is None
+    start.assert_awaited_once_with()
+    sync.assert_awaited_once_with()
+    stop.assert_awaited_once_with()
+
+
+def test_cron_scheduler_is_a_process_boundary_effect() -> None:
+    profile = load_profile_document_v2(_PROFILE_PATH)
+    entry = next(
+        item for item in profile.entries if item.module_ref == CRON_SCHEDULER_GATEWAY_MODULE_V2
+    )
+    source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
+
+    assert entry.restart_policy.value == "process-boundary"
+    assert "await start_scheduler()" not in source
+    assert "await sync_all_jobs()" not in source
+    assert "await stop_scheduler()" not in source

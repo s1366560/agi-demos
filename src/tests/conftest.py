@@ -54,12 +54,22 @@ from src.infrastructure.adapters.secondary.persistence.sql_task_repository impor
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
     SqlUserRepository,
 )
+from src.infrastructure.scheduler import scheduler_service
 
 # Constants
 TEST_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 TEST_TENANT_ID = "550e8400-e29b-41d4-a716-446655440001"
 TEST_PROJECT_ID = "550e8400-e29b-41d4-a716-446655440002"
 TEST_MEMORY_ID = "550e8400-e29b-41d4-a716-446655440003"
+
+
+@pytest.fixture(autouse=True)
+def isolate_cron_scheduler_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests from opening process-global APScheduler infrastructure implicitly."""
+    monkeypatch.setattr(scheduler_service, "start_scheduler", AsyncMock(return_value=object()))
+    monkeypatch.setattr(scheduler_service, "sync_all_jobs", AsyncMock())
+    monkeypatch.setattr(scheduler_service, "stop_scheduler", AsyncMock())
+
 
 # --- Database Fixtures ---
 

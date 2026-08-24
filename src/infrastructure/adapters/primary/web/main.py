@@ -231,19 +231,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         app.state.channel_manager = channel_manager
         logger.info("Channel connection manager initialized")
 
-    # Initialize APScheduler for cron jobs
-    try:
-        from src.infrastructure.scheduler.scheduler_service import (
-            start_scheduler,
-            sync_all_jobs,
-        )
-
-        _ = await start_scheduler()
-        await sync_all_jobs()
-        logger.info("Cron job scheduler initialized")
-    except Exception:
-        logger.exception("Failed to start cron scheduler -- cron jobs disabled")
-
     # Wire the friction → playbook reflection loop. All three calls are
     # best-effort: a failure here disables reflection but never blocks
     # application startup.
@@ -349,14 +336,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     if http_routes is not None:
         http_routes.dispose()
         app.state.platform_plugin_http_routes = None
-
-    # Stop cron job scheduler
-    try:
-        from src.infrastructure.scheduler.scheduler_service import stop_scheduler
-
-        await stop_scheduler()
-    except Exception:
-        logger.exception("Error stopping cron scheduler")
 
     # Stop Skill Evolution Plugin scheduler
     try:

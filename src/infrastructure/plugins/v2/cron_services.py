@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import select
@@ -32,6 +33,7 @@ from .project_tenant_services import (
 )
 from .runtime import (
     ContextV2,
+    EffectResultV2,
     OperationContextV2,
     PluginDefinitionV2,
     RuntimeV2Error,
@@ -50,6 +52,10 @@ CRON_PROVIDER_INJECT_V2 = "provider"
 CRON_PROJECTS_INJECT_V2 = "projects"
 CRON_SCHEDULER_INJECT_V2 = "scheduler"
 _OPERATION_DB_SESSION_SERVICE_V2 = "service:operation.db-session"
+
+type CronSchedulerStartV2 = Callable[[], Awaitable[object]]
+type CronSchedulerSyncV2 = Callable[[], Awaitable[None]]
+type CronSchedulerStopV2 = Callable[[], Awaitable[None]]
 
 
 class CronServiceErrorV2(Exception):
@@ -97,6 +103,47 @@ class BuiltinCronSchedulerGatewayV2:
 
     async def unregister(self, job_id: str) -> None:
         await scheduler_service.unregister_job(job_id)
+
+
+@dataclass(kw_only=True)
+class _CronSchedulerRuntimeManagerV2:
+    """Reference-count the process scheduler across overlapping generations."""
+
+    start: CronSchedulerStartV2
+    sync: CronSchedulerSyncV2
+    stop: CronSchedulerStopV2
+    _generation_references: int = 0
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    async def acquire_generation(self) -> None:
+        """Start and hydrate only for the first staged generation."""
+        async with self._lock:
+            if self._generation_references == 0:
+                started = False
+                try:
+                    _ = await self.start()
+                    started = True
+                    await self.sync()
+                except BaseException:
+                    if started:
+                        try:
+                            await self.stop()
+                        except Exception:
+                            logger.exception("Failed to clean up Cron scheduler candidate")
+                    raise
+            self._generation_references += 1
+
+    async def release_generation(self) -> None:
+        """Stop only after every active or draining generation releases its effect."""
+        async with self._lock:
+            if self._generation_references <= 0:
+                raise RuntimeV2Error(
+                    "cron_scheduler_reference_underflow",
+                    "cron scheduler generation reference count underflow",
+                )
+            self._generation_references -= 1
+            if self._generation_references == 0:
+                await self.stop()
 
 
 @runtime_checkable
@@ -237,16 +284,37 @@ async def remove_cron_schedule_v2(
         logger.debug("Scheduler unavailable while removing Cron job %s", job_id)
 
 
-def _apply_cron_scheduler_gateway_v2(
-    context: ContextV2,
-    config: Mapping[str, Any],
-) -> None:
-    if config.get("strategy") != "builtin-scheduler-bridge":
-        raise ValueError("cron scheduler gateway requires strategy builtin-scheduler-bridge")
-    _ = context.provide(
-        CRON_SCHEDULER_GATEWAY_SERVICE_V2,
-        BuiltinCronSchedulerGatewayV2(),
-        label="cron-scheduler-gateway",
+def cron_scheduler_gateway_definition_v2() -> PluginDefinitionV2:
+    """Bind scheduler startup, hydration, and teardown to V2 generation effects."""
+    runtime = _CronSchedulerRuntimeManagerV2(
+        start=scheduler_service.start_scheduler,
+        sync=scheduler_service.sync_all_jobs,
+        stop=scheduler_service.stop_scheduler,
+    )
+
+    async def apply(context: ContextV2, config: Mapping[str, Any]) -> EffectResultV2:
+        if config.get("strategy") != "builtin-scheduler-bridge":
+            raise ValueError("cron scheduler gateway requires strategy builtin-scheduler-bridge")
+        await runtime.acquire_generation()
+        try:
+            _ = context.provide(
+                CRON_SCHEDULER_GATEWAY_SERVICE_V2,
+                BuiltinCronSchedulerGatewayV2(),
+                label="cron-scheduler-gateway",
+            )
+        except Exception:
+            await runtime.release_generation()
+            raise
+
+        async def dispose() -> None:
+            await runtime.release_generation()
+
+        return dispose
+
+    return PluginDefinitionV2(
+        module_ref=CRON_SCHEDULER_GATEWAY_MODULE_V2,
+        contract_digest=generated_contract_digest_v2(CRON_SCHEDULER_GATEWAY_MODULE_V2),
+        apply=apply,
     )
 
 
@@ -301,11 +369,7 @@ def _apply_cron_application_v2(
 def cron_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
     """Return Cron runtime, persistence Provider, and application Consumer definitions."""
     return (
-        PluginDefinitionV2(
-            module_ref=CRON_SCHEDULER_GATEWAY_MODULE_V2,
-            contract_digest=generated_contract_digest_v2(CRON_SCHEDULER_GATEWAY_MODULE_V2),
-            apply=_apply_cron_scheduler_gateway_v2,
-        ),
+        cron_scheduler_gateway_definition_v2(),
         PluginDefinitionV2(
             module_ref=CRON_PERSISTENCE_PROVIDER_MODULE_V2,
             contract_digest=generated_contract_digest_v2(CRON_PERSISTENCE_PROVIDER_MODULE_V2),
@@ -341,6 +405,7 @@ __all__ = [
     "CronServiceErrorV2",
     "SqlCronPersistenceFactoryV2",
     "SqlCronProjectAccessV2",
+    "cron_scheduler_gateway_definition_v2",
     "cron_service_definitions_v2",
     "remove_cron_schedule_v2",
     "sync_cron_schedule_v2",

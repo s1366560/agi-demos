@@ -1052,7 +1052,7 @@
     },
     {
       "module_ref": "builtin://memstack/runtime/cron-scheduler-gateway",
-      "entrypoint": "src.infrastructure.plugins.v2.cron_services:_apply_cron_scheduler_gateway_v2",
+      "entrypoint": "src.infrastructure.plugins.v2.cron_services:cron_scheduler_gateway_definition_v2",
       "targets": ["python"],
       "contract": {
         "services": {
@@ -1077,7 +1077,7 @@
       },
       "contract_digest": "sha256:335344753d72b9a5fdd98b7c3e2609549f58ae8ceaf8974664ee367b726db2bd",
       "artifact": {
-        "digest": "sha256:820149e0ce63401486675075d43d1139ffc9c95ab5c7d3354272a3ff22b651b8",
+        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -1108,7 +1108,7 @@
       },
       "contract_digest": "sha256:b9abcc3f544083376ebe560026e8ee49b93cad6a929d0047c4f4014925b23a34",
       "artifact": {
-        "digest": "sha256:820149e0ce63401486675075d43d1139ffc9c95ab5c7d3354272a3ff22b651b8",
+        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -1155,7 +1155,7 @@
       },
       "contract_digest": "sha256:ea708193b2db19ae2d5780efdba3472323d18ab7dbe4305bbe0962df719d77a2",
       "artifact": {
-        "digest": "sha256:820149e0ce63401486675075d43d1139ffc9c95ab5c7d3354272a3ff22b651b8",
+        "digest": "sha256:43b5a0a42860c140c8c4b71a0188c0a71e568b77d2cb579554971d1970e9c015",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },

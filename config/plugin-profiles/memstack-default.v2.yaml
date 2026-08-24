@@ -365,7 +365,7 @@ profile:
         kind: root
       permissions: []
       quotas: {}
-      restart_policy: hot-generation
+      restart_policy: process-boundary
     - entry_id: builtin-cron-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
