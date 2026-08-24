@@ -24,6 +24,7 @@ from src.infrastructure.plugins.v2.builtin_http_routes import (
     build_builtin_route_graph_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
 from src.infrastructure.plugins.v2.legacy_http_route_bridge import project_legacy_http_routes_v2
@@ -51,6 +52,12 @@ from src.infrastructure.plugins.v2.target_profiles import (
     production_target_hosts_active_v2,
 )
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeFactoryV2
+from src.infrastructure.plugins.v2.workspace_core_shadow import (
+    activate_workspace_core_shadow_v2,
+    compose_workspace_core_shadow_upgrade_v2,
+    workspace_core_shadow_active_v2,
+)
 
 from .http_route_publication_v2 import HttpRoutePublicationCoordinatorV2
 
@@ -74,6 +81,7 @@ async def initialize_plugin_runtime_v2(
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     sandbox_redis_client: object | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
+    workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
     publication_policy: PlatformPluginPublicationPolicyV2 = DEFAULT_PUBLICATION_POLICY_V2,
 ) -> PlatformPluginRuntimeHostV2:
     """Compose and publish the required initial v2 generation."""
@@ -84,6 +92,7 @@ async def initialize_plugin_runtime_v2(
             sandbox_runtime_factory=sandbox_runtime_factory,
             sandbox_redis_client=sandbox_redis_client,
             telemetry_runtime_manager=telemetry_runtime_manager,
+            workspace_core_runtime_factory=workspace_core_runtime_factory,
         )
     )
     route_registry = RouteTableRegistryV2()
@@ -128,6 +137,7 @@ async def initialize_plugin_runtime_v2(
             durable_distribution=durable_distribution,
             latest_distribution=latest_distribution,
             desired_http_route_rows=desired_http_route_rows,
+            activate_workspace_core_shadow=workspace_core_runtime_factory is not None,
             publication_stager=stage_routes,
         )
         if not publication.accepted:
@@ -191,6 +201,7 @@ async def _publish_startup_generation_v2(
     durable_distribution: Mapping[str, object] | None,
     latest_distribution: Mapping[str, object] | None,
     desired_http_route_rows: Sequence[Any],
+    activate_workspace_core_shadow: bool,
     publication_stager: GenerationPublicationStagerV2,
 ) -> tuple[PlatformPluginPublicationV2, bool]:
     if durable_distribution is None:
@@ -199,8 +210,10 @@ async def _publish_startup_generation_v2(
             manifest_paths=DEFAULT_MANIFEST_V2_PATHS,
             generation=1,
             version=1,
-            profile_projector=lambda document: project_legacy_http_routes_v2(
-                include_production_target_hosts_v2(document), desired_http_route_rows
+            profile_projector=lambda document: _project_startup_profile_v2(
+                document,
+                desired_http_route_rows=desired_http_route_rows,
+                activate_workspace_core_shadow=activate_workspace_core_shadow,
             ),
             publication_stager=publication_stager,
         )
@@ -210,20 +223,46 @@ async def _publish_startup_generation_v2(
         durable_distribution,
         publication_stager=publication_stager,
     )
-    if not publication.accepted or production_target_hosts_active_v2(publication.snapshot):
+    if not publication.accepted:
+        return publication, False
+
+    target_upgrade_required = not production_target_hosts_active_v2(publication.snapshot)
+    workspace_core_upgrade_required = (
+        activate_workspace_core_shadow and not workspace_core_shadow_active_v2(publication.snapshot)
+    )
+    if not target_upgrade_required and not workspace_core_upgrade_required:
         return publication, False
 
     generation, version = _next_startup_publication_v2(publication, latest_distribution)
-    snapshot = compose_production_target_upgrade_v2(
-        publication.snapshot,
-        generation=generation,
-    )
+    snapshot = publication.snapshot
+    if target_upgrade_required:
+        snapshot = compose_production_target_upgrade_v2(
+            snapshot,
+            generation=generation,
+        )
+    if workspace_core_upgrade_required:
+        snapshot = compose_workspace_core_shadow_upgrade_v2(
+            snapshot,
+            generation=generation,
+        )
     upgraded = await host.apply(
         snapshot,
         control_envelope_v2(snapshot, version=version),
         publication_stager=publication_stager,
     )
     return upgraded, True
+
+
+def _project_startup_profile_v2(
+    document: ProfileDocumentV2,
+    *,
+    desired_http_route_rows: Sequence[Any],
+    activate_workspace_core_shadow: bool,
+) -> ProfileDocumentV2:
+    projected = include_production_target_hosts_v2(document)
+    if activate_workspace_core_shadow:
+        projected = activate_workspace_core_shadow_v2(projected)
+    return project_legacy_http_routes_v2(projected, desired_http_route_rows)
 
 
 async def _last_good_distribution_v2(

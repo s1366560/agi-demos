@@ -3,21 +3,33 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
+    ProfileSnapshotV2,
     ScopeKindV2,
     ScopeV2,
+)
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
+    PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import (
     ProfileDocumentV2,
+    compose_profile_v2,
     load_profile_document_v2,
 )
 from src.infrastructure.plugins.v2.protocol import (
@@ -31,6 +43,11 @@ from src.infrastructure.plugins.v2.workspace_core_runtime import (
     WORKSPACE_CORE_RUNTIME_MODULE_V2,
     WORKSPACE_CORE_RUNTIME_SERVICE_V2,
     WorkspaceCoreRuntimeServiceV2,
+)
+from src.infrastructure.plugins.v2.workspace_core_shadow import (
+    WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2,
+    compose_workspace_core_shadow_upgrade_v2,
+    workspace_core_shadow_active_v2,
 )
 
 if TYPE_CHECKING:
@@ -111,6 +128,15 @@ def _profile_entry():
     document = load_profile_document_v2(_PROFILE_PATH)
     return next(
         entry for entry in document.entries if entry.module_ref == WORKSPACE_CORE_RUNTIME_MODULE_V2
+    )
+
+
+def _profile_snapshot() -> ProfileSnapshotV2:
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    return compose_profile_v2(
+        load_profile_document_v2(_PROFILE_PATH),
+        {manifest.plugin_id: manifest},
+        generation=1,
     )
 
 
@@ -332,3 +358,132 @@ def test_workspace_core_v2_primitive_does_not_install_global_access_verifier() -
     )
 
     assert "configure_workspace_access_verifier" not in source
+
+
+def test_workspace_core_shadow_upgrade_rejects_missing_primitive_baseline() -> None:
+    snapshot = _profile_snapshot()
+    snapshot = replace(
+        snapshot,
+        entries=tuple(
+            entry
+            for entry in snapshot.entries
+            if entry.entry_id != WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2
+        ),
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        compose_workspace_core_shadow_upgrade_v2(snapshot, generation=2)
+
+    assert error.value.code == "workspace_core_runtime_entry_missing"
+
+
+def test_workspace_core_shadow_upgrade_rejects_mismatched_primitive_baseline() -> None:
+    snapshot = _profile_snapshot()
+    snapshot = replace(
+        snapshot,
+        entries=tuple(
+            replace(entry, module_ref=f"{WORKSPACE_CORE_RUNTIME_MODULE_V2}/mismatch")
+            if entry.entry_id == WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2
+            else entry
+            for entry in snapshot.entries
+        ),
+    )
+
+    with pytest.raises(RuntimeV2Error) as error:
+        compose_workspace_core_shadow_upgrade_v2(snapshot, generation=2)
+
+    assert error.value.code == "workspace_core_runtime_entry_mismatch"
+
+
+def test_workspace_core_shadow_upgrade_rejects_already_enabled_snapshot() -> None:
+    snapshot = _profile_snapshot()
+    snapshot = replace(
+        snapshot,
+        entries=tuple(
+            replace(entry, enabled=True)
+            if entry.entry_id == WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2
+            else entry
+            for entry in snapshot.entries
+        ),
+    )
+    assert workspace_core_shadow_active_v2(snapshot) is True
+
+    with pytest.raises(RuntimeV2Error) as error:
+        compose_workspace_core_shadow_upgrade_v2(snapshot, generation=2)
+
+    assert error.value.code == "workspace_core_runtime_baseline_not_disabled"
+
+
+async def test_production_factory_activates_workspace_core_shadow_without_switching_authority() -> (
+    None
+):
+    adapter = _TrackedProviderAdapter()
+    runtime = _runtime(adapter)
+    static_authority = object()
+    app = FastAPI()
+    app.state.workspace_authority = static_authority
+
+    async def factory() -> WorkspaceCoreRuntimeServiceV2:
+        return runtime
+
+    host = await initialize_plugin_runtime_v2(
+        app,
+        workspace_core_runtime_factory=factory,
+    )
+
+    generation = host.manager.current
+    assert generation is not None
+    assert workspace_core_shadow_active_v2(generation.snapshot) is True
+    assert generation.resolve(WORKSPACE_CORE_RUNTIME_SERVICE_V2, _ROOT_SCOPE) is runtime
+    assert app.state.workspace_authority is static_authority
+
+    await shutdown_plugin_runtime_v2(app)
+
+    assert adapter.wait_calls == 1
+
+
+async def test_restart_republishes_disabled_primitive_as_active_workspace_core_shadow(
+    db_session: AsyncSession,
+) -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    first_app = FastAPI()
+    first = await initialize_plugin_runtime_v2(
+        first_app,
+        session_factory=session_factory,
+    )
+    first_distribution = first.current_distribution
+    assert first_distribution is not None
+    assert workspace_core_shadow_active_v2(first_distribution.snapshot) is False
+    await first.close()
+
+    adapter = _TrackedProviderAdapter()
+    runtime = _runtime(adapter)
+
+    async def factory() -> WorkspaceCoreRuntimeServiceV2:
+        return runtime
+
+    restarted_app = FastAPI()
+    restarted = await initialize_plugin_runtime_v2(
+        restarted_app,
+        session_factory=session_factory,
+        workspace_core_runtime_factory=factory,
+    )
+
+    restarted_distribution = restarted.current_distribution
+    assert restarted_distribution is not None
+    assert restarted_distribution.descriptor.generation == (
+        first_distribution.descriptor.generation + 1
+    )
+    assert restarted_distribution.envelope.version == (first_distribution.envelope.version + 1)
+    assert workspace_core_shadow_active_v2(restarted_distribution.snapshot) is True
+    assert (
+        await PlatformPluginRepositoryV2(db_session).last_good_distribution("python-api-v2")
+        == restarted_distribution.to_payload()
+    )
+
+    await restarted.close()
+
+    assert adapter.wait_calls == 1

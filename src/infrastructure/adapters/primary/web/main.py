@@ -63,6 +63,7 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
+    workspace_core_runtime_service_v2_from_app,
 )
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -178,6 +179,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         sandbox_runtime_factory=sandbox_runtime_factory,
         sandbox_redis_client=redis_client,
         telemetry_runtime_manager=telemetry_runtime_manager,
+        workspace_core_runtime_factory=lambda: workspace_core_runtime_service_v2_from_app(app),
         publication_policy=publication_policy,
     )
     try:

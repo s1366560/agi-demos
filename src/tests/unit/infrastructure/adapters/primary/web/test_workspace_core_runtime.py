@@ -12,7 +12,9 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
     install_workspace_core_runtime,
     shutdown_workspace_core_runtime,
     start_workspace_core_runtime,
+    workspace_core_runtime_service_v2_from_app,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.workspace_core.autonomy_judge import AgentWorkspaceAutonomyJudge
 from src.infrastructure.workspace_core.client import (
     AvernetWorkspaceAccessVerifier,
@@ -47,7 +49,16 @@ def test_avernet_installs_backend_access_verifier() -> None:
         )
 
     verifier = configure_verifier.call_args.args[0]
+    runtime = app.state.workspace_core_runtime_service_v2
     assert isinstance(verifier, AvernetWorkspaceAccessVerifier)
+    assert isinstance(runtime, WorkspaceCoreRuntimeServiceV2)
+    assert runtime.access_verifier is verifier
+    assert runtime.client is app.state.workspace_core_client
+    assert runtime.authority is app.state.workspace_authority
+    assert runtime.context_judge is app.state.workspace_core_context_judge
+    assert runtime.plan_judge is app.state.workspace_core_plan_judge
+    assert runtime.autonomy_judge is app.state.workspace_core_autonomy_judge
+    assert workspace_core_runtime_service_v2_from_app(app) is runtime
     assert isinstance(app.state.workspace_core_autonomy_judge, AgentWorkspaceAutonomyJudge)
 
 
@@ -81,7 +92,23 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
     )
     assert app.state.workspace_core_event_sink is event_sink_type.return_value
     assert app.state.workspace_core_provider_adapter is provider_adapter_type.return_value
+    runtime = workspace_core_runtime_service_v2_from_app(app)
+    assert runtime.event_sink is event_sink_type.return_value
+    assert runtime.agent_runtime_provider is provider_type.return_value
+    assert runtime.provider_adapter is provider_adapter_type.return_value
     assert getattr(app.state, "workspace_core_runtime_recovery_worker", None) is None
+
+
+@pytest.mark.unit
+def test_workspace_core_runtime_v2_resolver_rejects_missing_or_invalid_state() -> None:
+    app = FastAPI()
+
+    with pytest.raises(RuntimeError, match="is not installed"):
+        workspace_core_runtime_service_v2_from_app(app)
+
+    app.state.workspace_core_runtime_service_v2 = object()
+    with pytest.raises(TypeError, match="invalid type"):
+        workspace_core_runtime_service_v2_from_app(app)
 
 
 @pytest.mark.unit
@@ -121,6 +148,7 @@ async def test_avernet_start_fails_when_capabilities_are_incomplete() -> None:
         pytest.raises(WorkspaceCoreCompatibilityError, match="incomplete"),
     ):
         await start_workspace_core_runtime(app)
+
 
 @pytest.mark.unit
 async def test_shutdown_workspace_core_runtime_drains_provider() -> None:
