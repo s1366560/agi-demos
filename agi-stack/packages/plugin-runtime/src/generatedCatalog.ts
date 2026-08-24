@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:ea5edd02372384192e83131f6fb47003d9b18e5987289a0b2311178cfa',
-  '18d05f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:c48031e6e89abac39a042d907754ea97937bdd0d715a934f3e45adc2da',
+  'e25c66","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1442,8 +1442,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '549f58ae8ceaf8974664ee367b726db2bd","entrypoint":"src.infrastructure.plugins.v2.cron',
   '_services:_apply_cron_scheduler_gateway_v2","module_ref":"builtin://memstack/runtime',
   '/cron-scheduler-gateway","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0',
-  '.0","targets":["python"]},{"artifact_digest":"sha256:9a770134ad0de23e5283dd701d82b03',
-  '1879df3a95fbf8ea541bdd53ab43ceabd","artifact_source":"repo+python://src/infrastructu',
+  '.0","targets":["python"]},{"artifact_digest":"sha256:a669c6948c1c8b1a674cc2ab691f372',
+  '5e3a9e21fbfb4592c4562c9c90d7c1dec","artifact_source":"repo+python://src/infrastructu',
   're/plugins/v2/builtin_modules.py","contract":{"config_schema":{"$schema":"https://js',
   'on-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"prot',
   'ocol_version":{"const":2,"type":"integer"}},"required":["protocol_version"],"type":"',
@@ -1612,18 +1612,28 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'b85002d0191492a7b84aeb1b","entrypoint":"src.infrastructure.plugins.v2.workflow_runti',
   'me:workflow_runtime_definition_v2","module_ref":"builtin://memstack/workflow/asyncio',
   '-runtime","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":[',
-  '"python"]},{"artifact_digest":"sha256:91a995cc34e28241381e7782d099372d818400600b1da3',
-  '35358883d43c3d560e","artifact_source":"repo+python://src/infrastructure/plugins/v2/w',
-  'orkspace_pipeline.py","contract":{"config_schema":{"$schema":"https://json-schema.or',
-  'g/draft/2020-12/schema","additionalProperties":false,"properties":{"provider":{"cons',
-  't":"drone","type":"string"}},"required":["provider"],"type":"object"},"events":{"emi',
-  'ts":[],"handles":[]},"services":{"provides":[{"service":"service:workspace.pipeline-',
-  'provider.drone","version":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:3608c2',
-  'b23d7689c0c611c8c2a82305974c98ba680aa9478fac6e8da91767a138","entrypoint":"src.infras',
-  'tructure.plugins.v2.workspace_pipeline:_apply_workspace_drone_pipeline_provider_v2",',
-  '"module_ref":"builtin://memstack/workspace/pipeline-provider/drone","plugin_id":"mem',
-  'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_versio',
-  'n":2}\n',
+  '"python"]},{"artifact_digest":"sha256:d36953297b1f0c8424775abef23f9767e03f8bee36ea36',
+  'cdfda4491dae879d1a","artifact_source":"repo+python://src/infrastructure/plugins/v2/w',
+  'orkspace_core_runtime.py","contract":{"config_schema":{"$schema":"https://json-schem',
+  'a.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"',
+  'const":"avernet-client","type":"string"}},"required":["strategy"],"type":"object"},"',
+  'events":{"emits":[],"handles":[]},"services":{"provides":[{"service":"service:worksp',
+  'ace-core.runtime","version":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:3566',
+  'e4ba7e2278236b009c2674e8b315aac3e0dd305d57fc89eb08c385bd711d","entrypoint":"src.infr',
+  'astructure.plugins.v2.workspace_core_runtime:workspace_core_runtime_definition_v2","',
+  'module_ref":"builtin://memstack/workspace-core/runtime","plugin_id":"memstack-runtim',
+  'e-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:',
+  '91a995cc34e28241381e7782d099372d818400600b1da335358883d43c3d560e","artifact_source":',
+  '"repo+python://src/infrastructure/plugins/v2/workspace_pipeline.py","contract":{"con',
+  'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPro',
+  'perties":false,"properties":{"provider":{"const":"drone","type":"string"}},"required',
+  '":["provider"],"type":"object"},"events":{"emits":[],"handles":[]},"services":{"prov',
+  'ides":[{"service":"service:workspace.pipeline-provider.drone","version":"1.0.0"}],"r',
+  'equires":[]}},"contract_digest":"sha256:3608c2b23d7689c0c611c8c2a82305974c98ba680aa9',
+  '478fac6e8da91767a138","entrypoint":"src.infrastructure.plugins.v2.workspace_pipeline',
+  ':_apply_workspace_drone_pipeline_provider_v2","module_ref":"builtin://memstack/works',
+  'pace/pipeline-provider/drone","plugin_id":"memstack-runtime-kernel","plugin_version"',
+  ':"2.0.0","targets":["python"]}],"schema_version":2}\n',
 ].join('');
 
 export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
@@ -1631,4 +1641,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:ea5edd02372384192e83131f6fb47003d9b18e5987289a0b2311178cfa18d05f' as const;
+  'sha256:c48031e6e89abac39a042d907754ea97937bdd0d715a934f3e45adc2dae25c66' as const;

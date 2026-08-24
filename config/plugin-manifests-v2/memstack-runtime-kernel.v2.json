@@ -203,7 +203,7 @@
       },
       "contract_digest": "sha256:8e07b222d790e0bd99650295ecc0b478bcd1527b507eaaf27413b9f2611a1a95",
       "artifact": {
-        "digest": "sha256:9a770134ad0de23e5283dd701d82b031879df3a95fbf8ea541bdd53ab43ceabd",
+        "digest": "sha256:a669c6948c1c8b1a674cc2ab691f3725e3a9e21fbfb4592c4562c9c90d7c1dec",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -236,6 +236,37 @@
       "artifact": {
         "digest": "sha256:d0a6bbffe3f80171ac2d3c3252f0a1105a9ea7bfa6c1172edd735937d48da2cf",
         "source": "repo+python://src/infrastructure/plugins/v2/telemetry_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/workspace-core/runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_core_runtime:workspace_core_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:workspace-core.runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "avernet-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3566e4ba7e2278236b009c2674e8b315aac3e0dd305d57fc89eb08c385bd711d",
+      "artifact": {
+        "digest": "sha256:d36953297b1f0c8424775abef23f9767e03f8bee36ea36cdfda4491dae879d1a",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_core_runtime.py"
       }
     },
     {

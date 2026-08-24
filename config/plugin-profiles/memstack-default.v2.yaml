@@ -30,6 +30,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: process-boundary
+    - entry_id: builtin-workspace-core-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workspace-core/runtime
+      enabled: false
+      config:
+        strategy: avernet-client
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-graph-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

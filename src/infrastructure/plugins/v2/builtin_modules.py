@@ -58,6 +58,10 @@ from .tool_set import (
     builtin_tool_set_definition_v2,
 )
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
+from .workspace_core_runtime import (
+    WorkspaceCoreRuntimeFactoryV2,
+    workspace_core_runtime_definition_v2,
+)
 from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
 
@@ -103,6 +107,7 @@ def builtin_runtime_definitions_v2(
     sandbox_redis_client: object | None = None,
     workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
+    workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
@@ -215,6 +220,7 @@ def builtin_runtime_definitions_v2(
             apply=_apply_runtime_boundary,
         ),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
+        workspace_core_runtime_definition_v2(workspace_core_runtime_factory),
         graph_runtime_definition_v2(graph_runtime_factory),
         graph_application_service_definition_v2(),
         *sandbox_service_definitions_v2(
