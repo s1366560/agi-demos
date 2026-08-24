@@ -8,6 +8,7 @@ function source(relativePath) {
 
 test("desktop renderer owns a protocol-v2 generation host through the public fetch seam", () => {
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
+  const host = source("src/plugins/DesktopRendererGenerationHostV2.tsx");
   const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
   const artifactCatalog = source("src/plugins/desktopRendererArtifactCatalogV2.ts");
@@ -36,13 +37,23 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
     bootstrapIndex >= 0 && remoteFetchIndex > bootstrapIndex,
     "local bootstrap must activate before the first remote request",
   );
-  assert.match(app, /useDesktopPluginGenerationV2\(\s*config,\s*identityAuthenticated\s*,?\s*\)/u);
-  assert.match(app, /desktopPluginGenerationV2\.generation/u);
-  assert.match(app, /desktopPluginGenerationV2\.status/u);
-  assert.match(app, /resolveDesktopRendererAuthorityStateV2/u);
-  assert.match(app, /projectDesktopRouteRegistryV2/u);
-  assert.match(app, /projectDesktopNavigationRegistryV2/u);
-  assert.match(app, /DesktopRendererAuthorityContextV2\.Provider/u);
+  assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled\s*,?\s*\)/u);
+  assert.match(host, /resolveDesktopRendererAuthorityStateV2/u);
+  assert.match(host, /projectDesktopRouteRegistryV2/u);
+  assert.match(host, /projectDesktopNavigationRegistryV2/u);
+  assert.match(host, /DesktopRendererGenerationContextV2/u);
+  assert.match(host, /DesktopRendererAuthorityContextV2/u);
+  assert.match(host, /children/u);
+  assert.match(app, /useDesktopRendererGenerationHostV2\(/u);
+  assert.match(app, /DesktopRendererGenerationProviderV2/u);
+  assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
+  assert.match(app, /desktopRendererGenerationV2\.meta\.status/u);
+  assert.match(app, /desktopRendererGenerationV2\.meta\.target/u);
+  assert.doesNotMatch(app, /useDesktopPluginGenerationV2/u);
+  assert.doesNotMatch(app, /resolveDesktopRendererAuthorityStateV2/u);
+  assert.doesNotMatch(app, /projectDesktopRouteRegistryV2/u);
+  assert.doesNotMatch(app, /projectDesktopNavigationRegistryV2/u);
+  assert.doesNotMatch(app, /DesktopRendererAuthorityContextV2/u);
   assert.doesNotMatch(app, /createAppRouteRegistry/u);
   assert.doesNotMatch(app, /CANONICAL_DESKTOP_ROUTE_IDS\.map/u);
   assert.match(artifactCatalog, /createRegistry:\s*\(/u);

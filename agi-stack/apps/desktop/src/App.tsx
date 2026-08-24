@@ -85,14 +85,11 @@ import {
   type ChatWorkflowTarget,
 } from './features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
-import { resolveDesktopRendererAuthorityStateV2 } from './plugins/desktopRendererAuthorityProjectionV2';
+import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
 import {
-  DesktopRendererAuthorityContextV2,
-  isDesktopNavigationRouteEnabledV2,
-  projectDesktopNavigationRegistryV2,
-  projectDesktopRouteRegistryV2,
-} from './plugins/desktopRendererAuthorityStateV2';
-import { useDesktopPluginGenerationV2 } from './plugins/useDesktopPluginGenerationV2';
+  DesktopRendererGenerationProviderV2,
+  useDesktopRendererGenerationHostV2,
+} from './plugins/DesktopRendererGenerationHostV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
@@ -962,15 +959,6 @@ export function App() {
   );
 
   const identityAuthenticated = isIdentityAuthenticated(auth);
-  const desktopPluginGenerationV2 = useDesktopPluginGenerationV2(config, identityAuthenticated);
-  const desktopRendererAuthorityV2 = useMemo(
-    () =>
-      resolveDesktopRendererAuthorityStateV2(
-        desktopPluginGenerationV2.generation,
-        identityAuthenticated,
-      ),
-    [desktopPluginGenerationV2.generation, identityAuthenticated],
-  );
   authRef.current = auth;
   useEffect(() => {
     if (identityAuthenticated && invitationSignInRequested) {
@@ -1016,22 +1004,16 @@ export function App() {
     }),
     [],
   );
-  const desktopProductionRouteRegistry = useMemo(
-    () =>
-      projectDesktopRouteRegistryV2(
-        desktopRendererRouteRefsV2,
-        desktopRendererAuthorityV2,
-      ),
-    [desktopRendererAuthorityV2, desktopRendererRouteRefsV2],
+  const desktopRendererGenerationV2 = useDesktopRendererGenerationHostV2(
+    config,
+    identityAuthenticated,
+    desktopRendererRouteRefsV2,
   );
-  const desktopCanonicalNavigationRegistry = useMemo(
-    () =>
-      projectDesktopNavigationRegistryV2(
-        desktopProductionRouteRegistry,
-        desktopRendererAuthorityV2,
-      ),
-    [desktopProductionRouteRegistry, desktopRendererAuthorityV2],
-  );
+  const {
+    authority: desktopRendererAuthorityV2,
+    navigationRegistry: desktopCanonicalNavigationRegistry,
+    routeRegistry: desktopProductionRouteRegistry,
+  } = desktopRendererGenerationV2.state;
   const automationApi = useMemo(() => createDesktopAutomationApi(api, config), [api, config]);
   const artifactApi = useMemo(() => createHttpDesktopArtifactClient(config), [config]);
   const workbenchCapabilityClient = useMemo(
@@ -6833,7 +6815,7 @@ export function App() {
     selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected');
 
   return (
-    <DesktopRendererAuthorityContextV2.Provider value={desktopRendererAuthorityV2}>
+    <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
       <Theme
         appearance={themeAppearance}
         accentColor="cyan"
@@ -6844,10 +6826,10 @@ export function App() {
       <div
         ref={appShellRef}
         data-plugin-generation-v2={
-          desktopPluginGenerationV2.generation?.snapshot.digest ?? 'unavailable'
+          desktopRendererGenerationV2.meta.digest ?? 'unavailable'
         }
-        data-plugin-generation-v2-status={desktopPluginGenerationV2.status}
-        data-plugin-generation-v2-target="desktop-renderer"
+        data-plugin-generation-v2-status={desktopRendererGenerationV2.meta.status}
+        data-plugin-generation-v2-target={desktopRendererGenerationV2.meta.target}
         className={`app-shell hierarchy-shell runtime-mode ${
           runsInNativeDesktop ? 'desktop-window' : 'browser-window'
         } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
@@ -7153,6 +7135,6 @@ export function App() {
         />
       </div>
       </Theme>
-    </DesktopRendererAuthorityContextV2.Provider>
+    </DesktopRendererGenerationProviderV2>
   );
 }
