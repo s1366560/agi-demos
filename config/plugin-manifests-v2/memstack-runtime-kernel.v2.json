@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:666cb2fa0a8bc0c3031629042389e6f37beba08bac65a36e59019f1a9445bd0c",
+        "digest": "sha256:6eca965bb8897c3af0c56204b70b2f5383fd38c68629a3e1f4854c409bc8686d",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -722,6 +722,122 @@
       "artifact": {
         "digest": "sha256:8fd7c0e25015341d26c849c8cd43dd5444b4a5f9207c3e7cb27bb94d6ffbe91b",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/async-session-factory",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_content_gc_runtime:async_session_factory_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "sqlalchemy-async-sessionmaker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f04be927f8996c45a457afe3e6cb45f23761de4c30387ca1446d6def476a4111",
+      "artifact": {
+        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/storage/object-storage-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_content_gc_runtime:object_storage_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:storage.object-storage",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "s3-settings", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:657cae4d7231d5e75e4fbf8ffc217a7d2333db11ffec875d545202189f80f4b0",
+      "artifact": {
+        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/artifact-content-orphan-gc",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_content_gc_runtime:artifact_content_orphan_gc_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:runtime.artifact-content-orphan-gc",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "storage",
+              "service": "service:storage.object-storage",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "enabled",
+            "poll_interval_seconds",
+            "batch_size",
+            "lease_seconds",
+            "environment_overrides"
+          ],
+          "properties": {
+            "strategy": { "const": "durable-bounded-worker", "type": "string" },
+            "enabled": { "type": "boolean" },
+            "poll_interval_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "batch_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "lease_seconds": { "type": "integer", "minimum": 1 },
+            "environment_overrides": { "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:84adfd2c132bf5d8c6cb7dc62b7d72984d68faebfec51733b98f8677904e798b",
+      "artifact": {
+        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
     {

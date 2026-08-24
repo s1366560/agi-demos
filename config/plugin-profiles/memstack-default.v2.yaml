@@ -217,6 +217,55 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-async-session-factory
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/async-session-factory
+      enabled: true
+      config:
+        strategy: sqlalchemy-async-sessionmaker
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
+    - entry_id: builtin-object-storage-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/storage/object-storage-provider
+      enabled: true
+      config:
+        strategy: s3-settings
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-artifact-content-orphan-gc
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/artifact-content-orphan-gc
+      enabled: true
+      config:
+        strategy: durable-bounded-worker
+        enabled: true
+        poll_interval_seconds: 5.0
+        batch_size: 10
+        lease_seconds: 60
+        environment_overrides: true
+      inject:
+        sessions: service:persistence.async-session-factory
+        storage: service:storage.object-storage
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-background-task-manager
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

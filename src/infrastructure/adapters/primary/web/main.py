@@ -38,7 +38,6 @@ from src.infrastructure.adapters.primary.web.middleware import (
     install_api_access_log_middleware,
 )
 from src.infrastructure.adapters.primary.web.startup import (
-    initialize_artifact_content_orphan_gc_worker,
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
@@ -48,7 +47,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     mount_generation_http_dispatcher_v2,
-    shutdown_artifact_content_orphan_gc_worker,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_telemetry_services,
@@ -220,11 +218,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     except Exception:
         logger.exception("Failed to start skill evolution plugin")
 
-    # Resume bounded cleanup of provisional Artifact objects after process restarts.
-    await initialize_artifact_content_orphan_gc_worker(
-        storage_service=container.storage_service(),
-    )
-
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
     if channel_manager:
@@ -371,9 +364,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         logger.exception("Error tearing down friction/reflection wiring")
 
     await stop_health_checker()
-
-    # Stop Artifact content orphan GC after current bounded work.
-    await shutdown_artifact_content_orphan_gc_worker()
 
     # Shutdown
     logger.info("Shutting down...")

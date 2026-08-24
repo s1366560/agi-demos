@@ -71,6 +71,20 @@ def isolate_cron_scheduler_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(scheduler_service, "stop_scheduler", AsyncMock())
 
 
+@pytest.fixture(autouse=True)
+def isolate_artifact_content_gc_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting a durable database worker."""
+    from src.infrastructure.plugins.v2 import artifact_content_gc_runtime
+
+    worker = Mock(owner_id="artifact-gc-test-isolation")
+    worker.stop = AsyncMock()
+    monkeypatch.setattr(
+        artifact_content_gc_runtime,
+        "ArtifactContentOrphanGcWorker",
+        Mock(return_value=worker),
+    )
+
+
 # --- Database Fixtures ---
 
 

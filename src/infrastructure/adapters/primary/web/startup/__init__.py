@@ -3,10 +3,6 @@
 Contains modular initialization functions for various services.
 """
 
-from .artifact_content_orphan_gc import (
-    initialize_artifact_content_orphan_gc_worker,
-    shutdown_artifact_content_orphan_gc_worker,
-)
 from .autonomy_waker import (
     initialize_autonomy_idle_waker,
     shutdown_autonomy_idle_waker,
@@ -33,7 +29,6 @@ from .websocket import initialize_websocket_manager
 
 __all__ = [
     "get_channel_manager",
-    "initialize_artifact_content_orphan_gc_worker",
     "initialize_autonomy_idle_waker",
     "initialize_blackboard_outbox_dispatcher",
     "initialize_channel_manager",
@@ -47,7 +42,6 @@ __all__ = [
     "mount_generation_http_dispatcher_v2",
     "reload_channel_manager_connections",
     "set_message_router",
-    "shutdown_artifact_content_orphan_gc_worker",
     "shutdown_autonomy_idle_waker",
     "shutdown_blackboard_outbox_dispatcher",
     "shutdown_channel_manager",
