@@ -123,6 +123,7 @@ def builtin_runtime_definitions_v2(
         builtin_plugin_marketplace_http_routes,
         builtin_skills_http_routes,
         builtin_subagents_http_routes,
+        builtin_task_session_http_routes,
         builtin_tasks_http_routes,
         builtin_websocket_http_routes,
     )
@@ -292,6 +293,7 @@ def builtin_runtime_definitions_v2(
         builtin_data_export_http_routes_definition_v2(),
         builtin_maintenance_http_routes.builtin_maintenance_http_routes_definition_v2(),
         builtin_tasks_http_routes.builtin_tasks_http_routes_definition_v2(),
+        builtin_task_session_http_routes.builtin_task_session_http_routes_definition_v2(),
         builtin_cron_http_routes_definition_v2(),
         builtin_ai_tools_http_routes_definition_v2(),
         builtin_background_tasks_http_routes_definition_v2(),
