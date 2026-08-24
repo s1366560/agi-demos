@@ -266,6 +266,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: process-boundary
+    - entry_id: builtin-llm-health-checker
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/llm-health-checker
+      enabled: true
+      config:
+        strategy: resilience-health-checker
+      inject:
+        sessions: service:persistence.async-session-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-background-task-manager
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

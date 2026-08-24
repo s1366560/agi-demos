@@ -22,7 +22,7 @@ from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
-from .llm import initialize_llm_providers, sync_health_checker_providers
+from .llm import initialize_llm_providers
 from .redis import initialize_redis_client
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
 from .websocket import initialize_websocket_manager
@@ -47,5 +47,4 @@ __all__ = [
     "shutdown_channel_manager",
     "shutdown_docker_services",
     "shutdown_telemetry_services",
-    "sync_health_checker_providers",
 ]

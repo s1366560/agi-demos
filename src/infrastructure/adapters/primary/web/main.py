@@ -50,7 +50,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_telemetry_services,
-    sync_health_checker_providers,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
@@ -67,10 +66,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_publicati
     PlatformPluginPublicationPolicyV2,
 )
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
-from src.infrastructure.llm.resilience.health_checker import (
-    start_health_checker,
-    stop_health_checker,
-)
 from src.infrastructure.middleware.rate_limit import limiter
 from src.infrastructure.plugins.v2.agent_pool_runtime import (
     default_agent_pool_runtime_config_v2,
@@ -122,9 +117,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_database_schema()
     # Initialize Default LLM Provider from environment
     await initialize_llm_providers()
-    health_provider_count = await sync_health_checker_providers()
-    await start_health_checker()
-    logger.info("LLM health checker started with %d active providers", health_provider_count)
 
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
@@ -362,8 +354,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         configure_reflection_tool(None)  # type: ignore[arg-type]
     except Exception:
         logger.exception("Error tearing down friction/reflection wiring")
-
-    await stop_health_checker()
 
     # Shutdown
     logger.info("Shutting down...")

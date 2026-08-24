@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:6eca965bb8897c3af0c56204b70b2f5383fd38c68629a3e1f4854c409bc8686d",
+        "digest": "sha256:52b31546807406d15e4fe209577d2919a93e80d13d52b79a3cbc6504ea2ba38c",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -838,6 +838,43 @@
       "artifact": {
         "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/llm-health-checker",
+      "entrypoint": "src.infrastructure.plugins.v2.llm_health_runtime:llm_health_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:runtime.llm-health-checker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "resilience-health-checker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:7dc05c4bd1f85b6c896a911c5803d22d49d3121c20fd4b6eaa57757d87dd30b4",
+      "artifact": {
+        "digest": "sha256:e253088d60be459aaa7da4a6ebf304eb6f8d9e326267ac6dd67940ead32c34f5",
+        "source": "repo+python://src/infrastructure/plugins/v2/llm_health_runtime.py"
       }
     },
     {

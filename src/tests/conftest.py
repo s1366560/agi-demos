@@ -85,6 +85,20 @@ def isolate_artifact_content_gc_lifecycle(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
 
+@pytest.fixture(autouse=True)
+def isolate_llm_health_checker_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep generic V2 profile tests from starting the process health loop."""
+    from src.infrastructure.plugins.v2 import llm_health_runtime
+
+    monkeypatch.setattr(llm_health_runtime, "start_health_checker", AsyncMock())
+    monkeypatch.setattr(
+        llm_health_runtime,
+        "sync_llm_health_checker_providers_v2",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(llm_health_runtime, "stop_health_checker", AsyncMock())
+
+
 # --- Database Fixtures ---
 
 
