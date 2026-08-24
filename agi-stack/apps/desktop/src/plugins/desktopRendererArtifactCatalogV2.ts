@@ -1,5 +1,6 @@
 import {
   createAppAuxiliaryRouteRegistry,
+  createAppProjectAdministrationRouteRegistry,
   createAppProjectAgentRouteRegistry,
   createAppProjectKnowledgeRouteRegistry,
   createAppRouteRegistry,
@@ -20,6 +21,9 @@ import {
   PROJECT_ENTITIES_ROUTE_ID,
   PROJECT_GRAPH_ROUTE_ID,
   PROJECT_MEMORIES_ROUTE_ID,
+  PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_SCHEMA_ROUTE_ID,
+  PROJECT_SETTINGS_ROUTE_ID,
   PROJECT_TEAM_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
 
@@ -41,12 +45,16 @@ export const DESKTOP_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.production.v
 export const DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-knowledge.v1';
 export const DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2 = 'desktop.routes.project-agent.v1';
+export const DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.project-administration.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.project-knowledge.v1';
 export const DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.project-agent.v1';
+export const DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-administration.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
 const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
@@ -77,20 +85,32 @@ const PROJECT_AGENT_ROUTE_ID_SET_V2 = new Set<string>([
 const PROJECT_AGENT_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId)),
 );
+const PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_SCHEMA_ROUTE_ID,
+  PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_SETTINGS_ROUTE_ID,
+]);
+const PROJECT_ADMINISTRATION_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) =>
+    PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
+  ),
+);
 const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter(
     (routeId) =>
       !AUTHENTICATION_KERNEL_ROUTE_IDS_V2.has(routeId) &&
       !AUXILIARY_ROUTE_ID_SET_V2.has(routeId) &&
       !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId),
+      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
+      !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(
     ({ routeId }) =>
       !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
-      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId),
+      !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
+      !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -104,6 +124,11 @@ const PROJECT_KNOWLEDGE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
 const PROJECT_AGENT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
     PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
@@ -198,6 +223,14 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     ),
   ],
   [
+    DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_ADMINISTRATION_ROUTE_IDS_V2,
+      createAppProjectAdministrationRouteRegistry,
+    ),
+  ],
+  [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
       discoveryRouteIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
@@ -231,6 +264,15 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       id: DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: PROJECT_AGENT_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2,
     }),
   ],
   [

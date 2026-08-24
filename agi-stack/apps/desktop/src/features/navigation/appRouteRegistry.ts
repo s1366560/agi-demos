@@ -268,6 +268,7 @@ export type AppRouteRegistryRefs = {
 export type AppAuxiliaryRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppProjectAdministrationRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 
 function createSettingsRouteContent(
   section: SettingsSection,
@@ -575,6 +576,67 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
   });
 }
 
+export function createAppProjectAdministrationRouteRegistry(
+  refs: AppProjectAdministrationRouteRegistryRefs,
+) {
+  const { configRef } = refs;
+  return createDesktopProductionRouteRegistry({
+    implementedLoaders: registerDesktopProductionRouteLoaders({
+      [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectSchemaController({
+              client: createProjectSchemaClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+      [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectMaintenanceController({
+              client: createProjectMaintenanceClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+      [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsRouteModuleLoader({
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectSettingsController({
+              client: createProjectSettingsClient(currentConfig),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
+      }),
+    }),
+  });
+}
+
 export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
   const {
     api,
@@ -834,57 +896,6 @@ export function createAppRouteRegistry(refs: AppRouteRegistryRefs) {
             controller: createProjectBlackboardController({
               authority: currentConfig.mode,
               client,
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectSchemaController({
-              client: createProjectSchemaClient(currentConfig),
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectMaintenanceController({
-              client: createProjectMaintenanceClient(currentConfig),
-              initialScope: scope,
-            }),
-            scope,
-          });
-        },
-      }),
-      [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsRouteModuleLoader({
-        createBinding: (context) => {
-          const currentConfig = configRef.current;
-          const scope = Object.freeze({
-            authority: currentConfig.mode,
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-          });
-          return Object.freeze({
-            controller: createProjectSettingsController({
-              client: createProjectSettingsClient(currentConfig),
               initialScope: scope,
             }),
             scope,

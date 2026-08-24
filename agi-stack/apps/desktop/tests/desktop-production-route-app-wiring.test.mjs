@@ -131,12 +131,16 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
   const projectAgentFactoryStart = registrySource.indexOf(
     'export function createAppProjectAgentRouteRegistry',
   );
+  const projectAdministrationFactoryStart = registrySource.indexOf(
+    'export function createAppProjectAdministrationRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(projectAgentFactoryStart, -1);
+  assert.notEqual(projectAdministrationFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const projectAgentFactorySource = registrySource.slice(
     projectAgentFactoryStart,
-    defaultFactoryStart,
+    projectAdministrationFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -151,6 +155,33 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAgentRouteRegistry/u,
+  );
+});
+
+test('project administration V2 route artifact owns only its three native loaders', () => {
+  const projectAdministrationFactoryStart = registrySource.indexOf(
+    'export function createAppProjectAdministrationRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(projectAdministrationFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const projectAdministrationFactorySource = registrySource.slice(
+    projectAdministrationFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'PROJECT_SCHEMA_ROUTE_ID',
+    'PROJECT_MAINTENANCE_ROUTE_ID',
+    'PROJECT_SETTINGS_ROUTE_ID',
+  ]) {
+    assert.match(projectAdministrationFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAdministrationRouteRegistry/u,
   );
 });
 
