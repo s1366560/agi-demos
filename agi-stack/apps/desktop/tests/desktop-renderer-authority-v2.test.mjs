@@ -19,6 +19,8 @@ const {
   DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2,
+  DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2,
+  DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
   resolveDesktopRendererArtifactsV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererArtifactCatalogV2.js");
 const {
@@ -106,6 +108,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       150,
     ),
     contribution(
+      "desktop.project-workspace-routes",
+      "route",
+      [DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2],
+      160,
+    ),
+    contribution(
       "desktop.default-navigation",
       "navigation",
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2],
@@ -142,6 +150,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       250,
     ),
     contribution(
+      "desktop.project-workspace-navigation",
+      "navigation",
+      [DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2],
+      260,
+    ),
+    contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
@@ -158,12 +172,14 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2, "route"],
+      [DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2, "route"],
       [DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
@@ -173,6 +189,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.equal(artifacts[0].routeIds.includes("project-agent-dashboard"), false);
   assert.equal(artifacts[0].routeIds.includes("project-project-schema"), false);
   assert.equal(artifacts[0].routeIds.includes("tenant-tenant-pool"), false);
+  assert.equal(artifacts[0].routeIds.includes("project-project-overview"), false);
   assert.deepEqual(artifacts[1].routeIds, [
     "project-support",
     "backend-stores",
@@ -259,34 +276,53 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       { status: "ready" },
     ],
   );
-  assert.equal(artifacts[6].discoveryRouteIds.includes("backend-stores"), false);
-  assert.equal(artifacts[6].discoveryRouteIds.includes("project-project-team"), false);
-  assert.equal(artifacts[6].discoveryRouteIds.includes("project-agent-dashboard"), false);
-  assert.equal(artifacts[6].discoveryRouteIds.includes("project-project-schema"), false);
-  assert.equal(artifacts[6].discoveryRouteIds.includes("tenant-tenant-pool"), false);
-  assert.deepEqual(artifacts[7].discoveryRouteIds, [
+  assert.deepEqual(artifacts[6].routeIds, [
+    "project-project-overview",
+    "project-project-workspaces",
+    "project-blackboard-dynamic-project-blackboard",
+  ]);
+  const projectWorkspaceRegistry = artifacts[6].createRegistry({
+    configRef: { current: {} },
+    desktopProductionRouteNavigation: {
+      clearHash: () => undefined,
+      openPath: () => undefined,
+    },
+  });
+  assert.deepEqual(
+    artifacts[6].routeIds.map(
+      (routeId) => projectWorkspaceRegistry.byId.get(routeId).structuralReadiness,
+    ),
+    [{ status: "ready" }, { status: "ready" }, { status: "ready" }],
+  );
+  assert.equal(artifacts[7].discoveryRouteIds.includes("backend-stores"), false);
+  assert.equal(artifacts[7].discoveryRouteIds.includes("project-project-team"), false);
+  assert.equal(artifacts[7].discoveryRouteIds.includes("project-agent-dashboard"), false);
+  assert.equal(artifacts[7].discoveryRouteIds.includes("project-project-schema"), false);
+  assert.equal(artifacts[7].discoveryRouteIds.includes("tenant-tenant-pool"), false);
+  assert.equal(artifacts[7].discoveryRouteIds.includes("project-project-overview"), false);
+  assert.deepEqual(artifacts[8].discoveryRouteIds, [
     "backend-stores",
     "project-playbooks",
     "project-support",
   ]);
-  assert.deepEqual(artifacts[8].discoveryRouteIds, [
+  assert.deepEqual(artifacts[9].discoveryRouteIds, [
     "project-project-team",
     "project-project-memories",
     "project-project-entities",
     "project-project-communities",
     "project-project-graph",
   ]);
-  assert.deepEqual(artifacts[9].discoveryRouteIds, [
+  assert.deepEqual(artifacts[10].discoveryRouteIds, [
     "project-agent-dashboard",
     "project-agent-logs",
     "project-agent-patterns",
   ]);
-  assert.deepEqual(artifacts[10].discoveryRouteIds, [
+  assert.deepEqual(artifacts[11].discoveryRouteIds, [
     "project-project-schema",
     "project-project-maintenance",
     "project-project-settings",
   ]);
-  assert.deepEqual(artifacts[11].discoveryRouteIds, [
+  assert.deepEqual(artifacts[12].discoveryRouteIds, [
     "tenant-tenant-runtimes",
     "tenant-tenant-pool",
     "tenant-tenant-instances",
@@ -294,9 +330,14 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
   ]);
-  assert.equal(artifacts[12].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[13].discoveryRouteIds, [
+    "project-project-overview",
+    "project-project-workspaces",
+    "project-blackboard-dynamic-project-blackboard",
+  ]);
+  assert.equal(artifacts[14].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[12].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[14].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

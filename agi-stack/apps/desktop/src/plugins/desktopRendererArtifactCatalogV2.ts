@@ -3,6 +3,7 @@ import {
   createAppProjectAdministrationRouteRegistry,
   createAppProjectAgentRouteRegistry,
   createAppProjectKnowledgeRouteRegistry,
+  createAppProjectWorkspaceRouteRegistry,
   createAppRouteRegistry,
   createAppRuntimeInfrastructureRouteRegistry,
   type AppRouteRegistryRefs,
@@ -23,9 +24,12 @@ import {
   PROJECT_GRAPH_ROUTE_ID,
   PROJECT_MEMORIES_ROUTE_ID,
   PROJECT_MAINTENANCE_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
+  PROJECT_OVERVIEW_ROUTE_ID,
   PROJECT_SCHEMA_ROUTE_ID,
   PROJECT_SETTINGS_ROUTE_ID,
   PROJECT_TEAM_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
   TENANT_CLUSTERS_ROUTE_ID,
   TENANT_DEPLOY_ROUTE_ID,
   TENANT_INSTANCES_ROUTE_ID,
@@ -56,6 +60,8 @@ export const DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.project-administration.v1';
 export const DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2 =
   'desktop.routes.runtime-infrastructure.v1';
+export const DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2 =
+  'desktop.routes.project-workspace.v1';
 export const DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.default.v1';
 export const DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2 = 'desktop.navigation.auxiliary.v1';
 export const DESKTOP_PROJECT_KNOWLEDGE_NAVIGATION_ARTIFACT_ID_V2 =
@@ -66,6 +72,8 @@ export const DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.project-administration.v1';
 export const DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.runtime-infrastructure.v1';
+export const DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2 =
+  'desktop.navigation.project-workspace.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 
 const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = new Set<string>([
@@ -119,6 +127,14 @@ const RUNTIME_INFRASTRUCTURE_ROUTE_IDS_V2 = Object.freeze(
     RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
+const PROJECT_WORKSPACE_ROUTE_ID_SET_V2 = new Set<string>([
+  PROJECT_OVERVIEW_ROUTE_ID,
+  PROJECT_WORKSPACES_ROUTE_ID,
+  PROJECT_BLACKBOARD_ROUTE_ID,
+]);
+const PROJECT_WORKSPACE_ROUTE_IDS_V2 = Object.freeze(
+  DESKTOP_PRODUCTION_ROUTE_IDS.filter((routeId) => PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId)),
+);
 const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
   DESKTOP_PRODUCTION_ROUTE_IDS.filter(
     (routeId) =>
@@ -127,7 +143,8 @@ const DEFAULT_BUSINESS_ROUTE_IDS_V2 = Object.freeze(
       !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
       !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
       !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId) &&
-      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
+      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId) &&
+      !PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId),
   ),
 );
 const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -136,7 +153,8 @@ const DEFAULT_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
       !PROJECT_KNOWLEDGE_ROUTE_ID_SET_V2.has(routeId) &&
       !PROJECT_AGENT_ROUTE_ID_SET_V2.has(routeId) &&
       !PROJECT_ADMINISTRATION_ROUTE_ID_SET_V2.has(routeId) &&
-      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
+      !RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId) &&
+      !PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const AUXILIARY_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
@@ -160,6 +178,11 @@ const PROJECT_ADMINISTRATION_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
 const RUNTIME_INFRASTRUCTURE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
   ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
     RUNTIME_INFRASTRUCTURE_ROUTE_ID_SET_V2.has(routeId),
+  ).map(({ routeId }) => routeId),
+]);
+const PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2 = Object.freeze([
+  ...CANONICAL_DESKTOP_NAVIGATION_METADATA.filter(({ routeId }) =>
+    PROJECT_WORKSPACE_ROUTE_ID_SET_V2.has(routeId),
   ).map(({ routeId }) => routeId),
 ]);
 const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
@@ -270,6 +293,14 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     ),
   ],
   [
+    DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
+    defineDesktopRouteArtifactV2(
+      DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
+      PROJECT_WORKSPACE_ROUTE_IDS_V2,
+      createAppProjectWorkspaceRouteRegistry,
+    ),
+  ],
+  [
     DESKTOP_DEFAULT_NAVIGATION_ARTIFACT_ID_V2,
     Object.freeze({
       discoveryRouteIds: DEFAULT_NAVIGATION_ROUTE_IDS_V2,
@@ -321,6 +352,15 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       id: DESKTOP_RUNTIME_INFRASTRUCTURE_NAVIGATION_ARTIFACT_ID_V2,
       kind: 'navigation',
       routeIds: RUNTIME_INFRASTRUCTURE_NAVIGATION_ROUTE_IDS_V2,
+    }),
+  ],
+  [
+    DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2,
+    Object.freeze({
+      discoveryRouteIds: PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2,
+      id: DESKTOP_PROJECT_WORKSPACE_NAVIGATION_ARTIFACT_ID_V2,
+      kind: 'navigation',
+      routeIds: PROJECT_WORKSPACE_NAVIGATION_ROUTE_IDS_V2,
     }),
   ],
   [

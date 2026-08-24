@@ -193,12 +193,16 @@ test('runtime infrastructure V2 route artifact owns only its six native loaders'
   const runtimeInfrastructureFactoryStart = registrySource.indexOf(
     'export function createAppRuntimeInfrastructureRouteRegistry',
   );
+  const projectWorkspaceFactoryStart = registrySource.indexOf(
+    'export function createAppProjectWorkspaceRouteRegistry',
+  );
   const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
   assert.notEqual(runtimeInfrastructureFactoryStart, -1);
+  assert.notEqual(projectWorkspaceFactoryStart, -1);
   assert.notEqual(defaultFactoryStart, -1);
   const runtimeInfrastructureFactorySource = registrySource.slice(
     runtimeInfrastructureFactoryStart,
-    defaultFactoryStart,
+    projectWorkspaceFactoryStart,
   );
   const defaultFactorySource = registrySource.slice(defaultFactoryStart);
 
@@ -216,6 +220,33 @@ test('runtime infrastructure V2 route artifact owns only its six native loaders'
   assert.match(
     rendererArtifactCatalogSource,
     /DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppRuntimeInfrastructureRouteRegistry/u,
+  );
+});
+
+test('project workspace V2 route artifact owns only its three native loaders', () => {
+  const projectWorkspaceFactoryStart = registrySource.indexOf(
+    'export function createAppProjectWorkspaceRouteRegistry',
+  );
+  const defaultFactoryStart = registrySource.indexOf('export function createAppRouteRegistry');
+  assert.notEqual(projectWorkspaceFactoryStart, -1);
+  assert.notEqual(defaultFactoryStart, -1);
+  const projectWorkspaceFactorySource = registrySource.slice(
+    projectWorkspaceFactoryStart,
+    defaultFactoryStart,
+  );
+  const defaultFactorySource = registrySource.slice(defaultFactoryStart);
+
+  for (const routeId of [
+    'PROJECT_OVERVIEW_ROUTE_ID',
+    'PROJECT_WORKSPACES_ROUTE_ID',
+    'PROJECT_BLACKBOARD_ROUTE_ID',
+  ]) {
+    assert.match(projectWorkspaceFactorySource, new RegExp(`\\[${routeId}\\]`));
+    assert.doesNotMatch(defaultFactorySource, new RegExp(`\\[${routeId}\\]`));
+  }
+  assert.match(
+    rendererArtifactCatalogSource,
+    /DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectWorkspaceRouteRegistry/u,
   );
 });
 

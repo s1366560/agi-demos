@@ -259,12 +259,14 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.routes.project-agent.v1',
       'desktop.routes.project-administration.v1',
       'desktop.routes.runtime-infrastructure.v1',
+      'desktop.routes.project-workspace.v1',
       'desktop.navigation.default.v1',
       'desktop.navigation.auxiliary.v1',
       'desktop.navigation.project-knowledge.v1',
       'desktop.navigation.project-agent.v1',
       'desktop.navigation.project-administration.v1',
       'desktop.navigation.runtime-infrastructure.v1',
+      'desktop.navigation.project-workspace.v1',
       'desktop.ui-slots.default.v1',
     ]);
     const runtime = new RendererPluginRuntimeV2(
@@ -291,12 +293,14 @@ describe('RendererPluginRuntimeV2', () => {
       ['desktop.project-agent-routes', 'route'],
       ['desktop.project-administration-routes', 'route'],
       ['desktop.runtime-infrastructure-routes', 'route'],
+      ['desktop.project-workspace-routes', 'route'],
       ['desktop.default-navigation', 'navigation'],
       ['desktop.auxiliary-navigation', 'navigation'],
       ['desktop.project-knowledge-navigation', 'navigation'],
       ['desktop.project-agent-navigation', 'navigation'],
       ['desktop.project-administration-navigation', 'navigation'],
       ['desktop.runtime-infrastructure-navigation', 'navigation'],
+      ['desktop.project-workspace-navigation', 'navigation'],
       ['desktop.default-ui-slots', 'ui-slot'],
     ]);
 
@@ -367,11 +371,13 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
+      'desktop.project-workspace-routes',
       'desktop.default-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
+      'desktop.project-workspace-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -413,11 +419,13 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
+      'desktop.project-workspace-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
+      'desktop.project-workspace-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -459,11 +467,13 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-knowledge-routes',
       'desktop.project-administration-routes',
       'desktop.runtime-infrastructure-routes',
+      'desktop.project-workspace-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-administration-navigation',
       'desktop.runtime-infrastructure-navigation',
+      'desktop.project-workspace-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -505,11 +515,13 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
       'desktop.runtime-infrastructure-routes',
+      'desktop.project-workspace-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.runtime-infrastructure-navigation',
+      'desktop.project-workspace-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
@@ -551,11 +563,61 @@ describe('RendererPluginRuntimeV2', () => {
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
+      'desktop.project-workspace-routes',
       'desktop.default-navigation',
       'desktop.auxiliary-navigation',
       'desktop.project-knowledge-navigation',
       'desktop.project-agent-navigation',
       'desktop.project-administration-navigation',
+      'desktop.project-workspace-navigation',
+      'desktop.default-ui-slots',
+    ]);
+    await runtime.close();
+  });
+
+  it('removes project workspace routes and navigation through independent profile effects', async () => {
+    const runtime = new RendererPluginRuntimeV2(
+      'desktop-renderer',
+      createDesktopRendererDefinitionsV2()
+    );
+    await runtime.bootstrap(bootstrapProfile);
+    const candidate = structuredClone(bootstrapProfile);
+    const projectWorkspaceEntryIds = new Set([
+      'builtin-desktop-project-workspace-routes',
+      'builtin-desktop-project-workspace-navigation',
+    ]);
+    const projectWorkspaceEntries = candidate.entries.filter(({ entry_id }) =>
+      projectWorkspaceEntryIds.has(entry_id)
+    );
+    if (projectWorkspaceEntries.length !== projectWorkspaceEntryIds.size) {
+      throw new Error('desktop project workspace contribution fixtures are missing');
+    }
+    for (const entry of projectWorkspaceEntries) entry.enabled = false;
+    candidate.generation += 1;
+    const { digest: _digest, ...unsigned } = candidate;
+    candidate.digest = await digestV2(unsigned);
+
+    const receipt = await runtime.apply(distribution(candidate));
+    const registry = runtime
+      .getSnapshot()
+      ?.resolve<RendererContributionRegistryV2>(DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+        kind: 'root',
+      });
+
+    expect(receipt.status).toBe('ack');
+    expect(registry?.list().map(({ id }) => id)).toEqual([
+      'desktop.production-routes',
+      'desktop.auxiliary-routes',
+      'desktop.project-knowledge-routes',
+      'desktop.project-agent-routes',
+      'desktop.project-administration-routes',
+      'desktop.runtime-infrastructure-routes',
+      'desktop.default-navigation',
+      'desktop.auxiliary-navigation',
+      'desktop.project-knowledge-navigation',
+      'desktop.project-agent-navigation',
+      'desktop.project-administration-navigation',
+      'desktop.runtime-infrastructure-navigation',
       'desktop.default-ui-slots',
     ]);
     await runtime.close();
