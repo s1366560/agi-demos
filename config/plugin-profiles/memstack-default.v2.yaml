@@ -742,6 +742,23 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-channel-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/channel-manager
+      enabled: true
+      config:
+        strategy: generation-resolver-leases
+        strict_startup: true
+      inject:
+        sessions: service:persistence.async-session-factory
+        adapters: service:channel-adapter-resolver
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-engine-catalog
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

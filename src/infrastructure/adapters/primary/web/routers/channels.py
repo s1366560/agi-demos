@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.auth.roles import RoleDefinition
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.startup import get_channel_manager
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
@@ -46,6 +45,7 @@ from src.infrastructure.plugins.v2.channel_adapters import (
     ChannelAdapterMetadataV2,
     ChannelAdapterResolverProtocolV2,
 )
+from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -1118,21 +1118,19 @@ async def create_config(
 
     # Auto-connect if enabled
     if created.enabled:
-        channel_manager = get_channel_manager()
-        if channel_manager:
-            try:
-                await channel_manager.add_connection(created)
-                logger.info(
-                    "[Channels] Auto-connected channel: has_channel_config_id=%s",
-                    bool(created.id),
-                )
-            except Exception as e:
-                logger.warning(
-                    "[Channels] Failed to auto-connect channel: "
-                    "has_channel_config_id=%s error_type=%s",
-                    bool(created.id),
-                    type(e).__name__,
-                )
+        try:
+            channel_runtime = current_channel_runtime_v2()
+            await channel_runtime.add_connection(created)
+            logger.info(
+                "[Channels] Auto-connected channel: has_channel_config_id=%s",
+                bool(created.id),
+            )
+        except Exception as e:
+            logger.warning(
+                "[Channels] Failed to auto-connect channel: has_channel_config_id=%s error_type=%s",
+                bool(created.id),
+                type(e).__name__,
+            )
 
     return to_response(created)
 
@@ -1265,20 +1263,19 @@ async def update_config(
     await db.commit()
 
     # Restart connection if manager is available
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        try:
-            await channel_manager.restart_connection(config_id)
-            logger.info(
-                "[Channels] Restarted connection: has_channel_config_id=%s",
-                bool(config_id),
-            )
-        except Exception as e:
-            logger.warning(
-                "[Channels] Failed to restart connection: has_channel_config_id=%s error_type=%s",
-                bool(config_id),
-                type(e).__name__,
-            )
+    try:
+        channel_runtime = current_channel_runtime_v2()
+        await channel_runtime.restart_connection(config_id)
+        logger.info(
+            "[Channels] Restarted connection: has_channel_config_id=%s",
+            bool(config_id),
+        )
+    except Exception as e:
+        logger.warning(
+            "[Channels] Failed to restart connection: has_channel_config_id=%s error_type=%s",
+            bool(config_id),
+            type(e).__name__,
+        )
 
     return to_response(updated)
 
@@ -1302,20 +1299,19 @@ async def delete_config(
     await verify_project_access(config.project_id, current_user, db, ["owner", "admin"])
 
     # Disconnect channel if connected
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        try:
-            await channel_manager.remove_connection(config_id)
-            logger.info(
-                "[Channels] Disconnected channel: has_channel_config_id=%s",
-                bool(config_id),
-            )
-        except Exception as e:
-            logger.warning(
-                "[Channels] Failed to disconnect channel: has_channel_config_id=%s error_type=%s",
-                bool(config_id),
-                type(e).__name__,
-            )
+    try:
+        channel_runtime = current_channel_runtime_v2()
+        await channel_runtime.remove_connection(config_id)
+        logger.info(
+            "[Channels] Disconnected channel: has_channel_config_id=%s",
+            bool(config_id),
+        )
+    except Exception as e:
+        logger.warning(
+            "[Channels] Failed to disconnect channel: has_channel_config_id=%s error_type=%s",
+            bool(config_id),
+            type(e).__name__,
+        )
 
     deleted = await repo.delete(config_id)
     await db.commit()
@@ -1376,11 +1372,7 @@ async def test_config(
 
 async def _build_channel_adapter_for_test(config: ChannelConfigModel) -> object:
     """Build a plugin channel adapter without starting the long-lived runtime loop."""
-    from src.infrastructure.channels.connection_manager import ChannelConnectionManager
-    from src.infrastructure.plugins.v2.boundary import current_generation_v2
-
-    manager = ChannelConnectionManager()
-    return await manager._create_adapter(config, current_generation_v2())
+    return await current_channel_runtime_v2().build_adapter(config)
 
 
 async def _run_channel_adapter_health_check(adapter: object) -> bool:
@@ -1537,12 +1529,11 @@ async def get_project_channel_observability_summary(
 
     active_connections = 0
     connected_config_ids: list[str] = []
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        for connection in channel_manager.connections.values():
-            if connection.project_id == project_id and connection.status == "connected":
-                active_connections += 1
-                connected_config_ids.append(connection.config_id)
+    channel_runtime = current_channel_runtime_v2()
+    for connection in channel_runtime.connections.values():
+        if connection.project_id == project_id and connection.status == "connected":
+            active_connections += 1
+            connected_config_ids.append(connection.config_id)
 
     return ChannelObservabilitySummaryResponse(
         project_id=project_id,
@@ -1692,20 +1683,19 @@ async def get_connection_status(
     await verify_project_access(config.project_id, current_user, db)
 
     # Get real-time status from connection manager
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        status_data = channel_manager.get_status(config_id)
-        if status_data:
-            return ChannelStatusResponse(
-                config_id=status_data["config_id"],
-                project_id=status_data["project_id"],
-                channel_type=status_data["channel_type"],
-                status=status_data["status"],
-                connected=status_data["connected"],
-                last_heartbeat=status_data.get("last_heartbeat"),
-                last_error=status_data.get("last_error"),
-                reconnect_attempts=status_data.get("reconnect_attempts", 0),
-            )
+    channel_runtime = current_channel_runtime_v2()
+    status_data = channel_runtime.get_status(config_id)
+    if status_data:
+        return ChannelStatusResponse(
+            config_id=status_data["config_id"],
+            project_id=status_data["project_id"],
+            channel_type=status_data["channel_type"],
+            status=status_data["status"],
+            connected=status_data["connected"],
+            last_heartbeat=status_data.get("last_heartbeat"),
+            last_error=status_data.get("last_error"),
+            reconnect_attempts=status_data.get("reconnect_attempts", 0),
+        )
 
     # Fall back to database status if not in connection manager
     return ChannelStatusResponse(
@@ -1753,24 +1743,20 @@ async def list_all_connection_status(
             detail=_("Admin role required"),
         )
 
-    channel_manager = get_channel_manager()
-    if channel_manager:
-        statuses = channel_manager.get_all_status()
-        return [
-            ChannelStatusResponse(
-                config_id=s["config_id"],
-                project_id=s["project_id"],
-                channel_type=s["channel_type"],
-                status=s["status"],
-                connected=s["connected"],
-                last_heartbeat=s.get("last_heartbeat"),
-                last_error=s.get("last_error"),
-                reconnect_attempts=s.get("reconnect_attempts", 0),
-            )
-            for s in statuses
-        ]
-
-    return []
+    statuses = current_channel_runtime_v2().get_all_status()
+    return [
+        ChannelStatusResponse(
+            config_id=s["config_id"],
+            project_id=s["project_id"],
+            channel_type=s["channel_type"],
+            status=s["status"],
+            connected=s["connected"],
+            last_heartbeat=s.get("last_heartbeat"),
+            last_error=s.get("last_error"),
+            reconnect_attempts=s.get("reconnect_attempts", 0),
+        )
+        for s in statuses
+    ]
 
 
 # ------------------------------------------------------------------

@@ -30,6 +30,7 @@ from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
 )
+from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
 from .cron_services import cron_service_definitions_v2
 from .docker_monitor_runtime import docker_event_monitor_definition_v2
 from .engine_services import engine_catalog_definition_v2
@@ -116,6 +117,7 @@ def builtin_runtime_definitions_v2(
     sandbox_redis_client: object | None = None,
     workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
+    channel_runtime_manager: ChannelRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
@@ -262,6 +264,7 @@ def builtin_runtime_definitions_v2(
         *memory_service_definitions_v2(),
         builtin_channel_adapter_catalog_definition_v2(),
         builtin_feishu_channel_adapter_definition_v2(),
+        channel_runtime_definition_v2(channel_runtime_manager),
         engine_catalog_definition_v2(),
         route_table_builder_definition_v2(),
         builtin_auth_http_routes.builtin_auth_http_routes_definition_v2(),

@@ -11,13 +11,6 @@ from .blackboard_outbox import (
     initialize_blackboard_outbox_dispatcher,
     shutdown_blackboard_outbox_dispatcher,
 )
-from .channels import (
-    get_channel_manager,
-    initialize_channel_manager,
-    reload_channel_manager_connections,
-    set_message_router,
-    shutdown_channel_manager,
-)
 from .container import initialize_container
 from .database import initialize_database_schema
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
@@ -27,10 +20,8 @@ from .telemetry import initialize_telemetry, shutdown_telemetry_services
 from .websocket import initialize_websocket_manager
 
 __all__ = [
-    "get_channel_manager",
     "initialize_autonomy_idle_waker",
     "initialize_blackboard_outbox_dispatcher",
-    "initialize_channel_manager",
     "initialize_container",
     "initialize_database_schema",
     "initialize_llm_providers",
@@ -38,10 +29,7 @@ __all__ = [
     "initialize_telemetry",
     "initialize_websocket_manager",
     "mount_generation_http_dispatcher_v2",
-    "reload_channel_manager_connections",
-    "set_message_router",
     "shutdown_autonomy_idle_waker",
     "shutdown_blackboard_outbox_dispatcher",
-    "shutdown_channel_manager",
     "shutdown_telemetry_services",
 ]

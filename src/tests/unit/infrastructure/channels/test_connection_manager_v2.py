@@ -1,20 +1,20 @@
-"""Generation lease coverage for long-lived channel connections."""
+"""Generation resolver lease coverage for long-lived channel connections."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 
-from src.domain.model.channels.message import ChannelConfig
-from src.infrastructure.channels.connection_manager import ChannelConnectionManager
-from src.infrastructure.plugins.v2.boundary import (
-    clear_process_generation_host_v2,
-    install_process_generation_host_v2,
-)
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.channel_runtime import (
+    CHANNEL_RUNTIME_SERVICE_V2,
+    ChannelRuntimeManagerV2,
+    ChannelRuntimeServiceV2,
+)
 from src.infrastructure.plugins.v2.runtime import FiberPhaseV2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
@@ -23,42 +23,60 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
-class _Adapter:
-    def __init__(self, config: ChannelConfig) -> None:
-        self.config = config
-        self.connected = False
+@dataclass(kw_only=True)
+class _ConnectionManager:
+    message_router: Any
+    session_factory: Any
+    connections: dict[str, object] = field(default_factory=dict)
+    start_resolvers: list[object] = field(default_factory=list)
+    candidate_resolvers: list[object] = field(default_factory=list)
+    rebound_resolvers: list[object] = field(default_factory=list)
+    shutdown_count: int = 0
 
-    def on_message(self, _handler: object) -> None:
-        return None
+    async def _capture(self, lease_factory: Any, target: list[object]) -> None:
+        lease = await lease_factory()
+        target.append(lease.resolver)
+        await lease.release()
 
-    async def connect(self) -> None:
-        self.connected = True
+    async def start_all(
+        self,
+        _session_factory: Any = None,
+        *,
+        resolver_lease_factory: Any,
+        strict: bool,
+    ) -> int:
+        assert strict is True
+        await self._capture(resolver_lease_factory, self.start_resolvers)
+        return 0
 
-    async def disconnect(self) -> None:
-        self.connected = False
+    async def preflight_all(self, *, resolver_lease_factory: Any) -> int:
+        await self._capture(resolver_lease_factory, self.candidate_resolvers)
+        return 0
 
+    async def rebind_all(self, *, resolver_lease_factory: Any) -> int:
+        await self._capture(resolver_lease_factory, self.rebound_resolvers)
+        return 0
 
-def _channel_config() -> object:
-    return SimpleNamespace(
-        id="channel-generation-lease",
-        project_id="project-a",
-        channel_type="feishu",
-        enabled=True,
-        app_id="app-id",
-        app_secret="app-secret",
-        encrypt_key=None,
-        verification_token=None,
-        connection_mode="websocket",
-        webhook_port=None,
-        webhook_path=None,
-        domain="feishu",
-        extra_settings={},
-    )
+    async def shutdown_all(self) -> None:
+        self.shutdown_count += 1
 
 
 @pytest.mark.unit
-async def test_channel_connection_lease_keeps_retired_generation_active_until_stop() -> None:
-    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+async def test_channel_runtime_rebinds_after_publish_without_leasing_its_own_generation() -> None:
+    created: list[_ConnectionManager] = []
+
+    def manager_factory(*, message_router: Any, session_factory: Any) -> _ConnectionManager:
+        manager = _ConnectionManager(
+            message_router=message_router,
+            session_factory=session_factory,
+        )
+        created.append(manager)
+        return manager
+
+    runtime = ChannelRuntimeManagerV2(manager_factory=manager_factory)
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(channel_runtime_manager=runtime)
+    )
     first = await host.bootstrap(
         profile_path=_PROFILE_PATH,
         manifest_paths=(_MANIFEST_PATH,),
@@ -68,30 +86,34 @@ async def test_channel_connection_lease_keeps_retired_generation_active_until_st
     assert first.accepted
     previous = host.manager.current
     assert previous is not None
-    manager = ChannelConnectionManager()
-    install_process_generation_host_v2(host)
+    first_service = previous.resolve(
+        CHANNEL_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    assert isinstance(first_service, ChannelRuntimeServiceV2)
 
-    try:
-        with patch(
-            "src.infrastructure.adapters.secondary.channels.channel_plugin_loader.load_channel_module",
-            return_value=SimpleNamespace(FeishuAdapter=_Adapter),
-        ):
-            connection = await manager.add_connection(_channel_config())  # type: ignore[arg-type]
+    second = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=2,
+        version=2,
+    )
 
-        second = await host.bootstrap(
-            profile_path=_PROFILE_PATH,
-            manifest_paths=(_MANIFEST_PATH,),
-            generation=2,
-            version=2,
-        )
-        assert second.accepted
-        assert all(fiber.phase is FiberPhaseV2.ACTIVE for fiber in previous.fibers)
+    assert second.accepted
+    assert all(fiber.phase is FiberPhaseV2.DISPOSED for fiber in previous.fibers)
+    current = host.manager.current
+    assert current is not None
+    current_service = current.resolve(
+        CHANNEL_RUNTIME_SERVICE_V2,
+        ScopeV2(kind=ScopeKindV2.ROOT),
+    )
+    assert isinstance(current_service, ChannelRuntimeServiceV2)
+    assert current_service.generation_token != first_service.generation_token
+    assert len(created) == 1
+    assert len(created[0].start_resolvers) == 1
+    assert len(created[0].candidate_resolvers) == 1
+    assert created[0].rebound_resolvers == created[0].candidate_resolvers
+    assert runtime.connection_leases == 0
 
-        assert await manager.remove_connection(connection.config_id)
-
-        assert all(fiber.phase is FiberPhaseV2.DISPOSED for fiber in previous.fibers)
-    finally:
-        if manager.connections:
-            await manager.shutdown_all()
-        clear_process_generation_host_v2(host)
-        await host.close()
+    await host.close()
+    assert created[0].shutdown_count == 1

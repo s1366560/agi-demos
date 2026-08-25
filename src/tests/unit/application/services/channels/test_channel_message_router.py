@@ -31,6 +31,7 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_agent_turn_operation_v2 as real_pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.channel_runtime import UnavailableChannelRuntimeServiceV2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -69,6 +70,45 @@ def _build_message(*, text: str, raw_data: dict | None = None) -> Message:
         project_id="project-1",
         raw_data=raw_data,
     )
+
+
+@pytest.mark.unit
+async def test_route_channel_message_pins_process_generation_for_complete_boundary() -> None:
+    host = object()
+    events: list[str] = []
+
+    @asynccontextmanager
+    async def pin_generation(target: object) -> AsyncIterator[object]:
+        assert target is host
+        events.append("pin-enter")
+        yield object()
+        events.append("pin-exit")
+
+    async def route_message(_message: Message) -> None:
+        events.append("route")
+
+    router = SimpleNamespace(route_message=route_message)
+    with (
+        patch.object(
+            channel_message_router_module,
+            "current_process_generation_host_v2",
+            return_value=host,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "pin_generation_v2",
+            pin_generation,
+            create=True,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "get_channel_message_router",
+            return_value=router,
+        ),
+    ):
+        await channel_message_router_module.route_channel_message(_build_message(text="hello"))
+
+    assert events == ["pin-enter", "route", "pin-exit"]
 
 
 @pytest.mark.unit
@@ -128,7 +168,7 @@ async def test_send_error_reply_log_omits_error_message(
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.channels.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=manager,
     ):
         await router._send_error_reply(message, error_message)
@@ -160,7 +200,7 @@ async def test_send_error_reply_missing_connection_log_omits_config_id(
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.channels.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=manager,
     ):
         await router._send_error_reply(message, "Sorry, failed")
@@ -187,7 +227,7 @@ async def test_send_error_reply_failure_log_omits_exception_text(
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.channels.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=manager,
     ):
         await router._send_error_reply(message, error_message)
@@ -1785,7 +1825,7 @@ async def test_send_response_marks_outbox_failed_when_connection_missing(
 
     channel_manager = SimpleNamespace(connections={})
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=channel_manager,
     ):
         await router._send_response(message, "conv-1", "reply")
@@ -1809,12 +1849,15 @@ async def test_send_response_marks_outbox_failed_when_manager_missing() -> None:
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
-        return_value=None,
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
+        return_value=UnavailableChannelRuntimeServiceV2(),
     ):
         await router._send_response(message, "conv-1", "reply")
 
-    router._mark_outbox_failed.assert_awaited_once_with("outbox-1", "channel manager unavailable")
+    router._mark_outbox_failed.assert_awaited_once_with(
+        "outbox-1",
+        "channel runtime manager is not installed on this data plane",
+    )
 
 
 @pytest.mark.unit
@@ -1849,7 +1892,7 @@ async def test_send_response_success_log_omits_identifiers(
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=channel_manager,
     ):
         await router._send_response(message, "secret-conversation-id", "private response body")
@@ -1892,7 +1935,7 @@ async def test_send_response_error_log_omits_exception_text(
     )
 
     with patch(
-        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        "src.infrastructure.plugins.v2.channel_runtime.current_channel_runtime_v2",
         return_value=channel_manager,
     ):
         await router._send_response(message, "secret-conversation-id", "private response body")

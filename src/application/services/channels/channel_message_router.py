@@ -25,6 +25,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_METADATA_SERVICE_V2,
     current_process_generation_host_v2,
     pin_agent_turn_operation_v2,
+    pin_generation_v2,
     pin_operation_context_v2,
 )
 from src.infrastructure.plugins.v2.sandbox_projection import (
@@ -1401,7 +1402,7 @@ class ChannelMessageRouter:
         """
         outbox_id: str | None = None
         try:
-            from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+            from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
@@ -1423,14 +1424,9 @@ class ChannelMessageRouter:
                 reply_to=inbound_message_id,
             )
 
-            channel_manager = get_channel_manager()
-            if not channel_manager:
-                if outbox_id:
-                    await self._mark_outbox_failed(outbox_id, "channel manager unavailable")
-                logger.warning("[MessageRouter] No channel manager available")
-                return
+            channel_runtime = current_channel_runtime_v2()
 
-            connection = channel_manager.connections.get(channel_config_id)
+            connection = channel_runtime.connections.get(channel_config_id)
             if not connection:
                 if outbox_id:
                     await self._mark_outbox_failed(outbox_id, "no active connection")
@@ -1506,17 +1502,13 @@ class ChannelMessageRouter:
     def _get_streaming_adapter(self, message: Message) -> ChannelAdapter | None:
         """Return the channel adapter if it supports streaming card updates."""
         try:
-            from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+            from src.infrastructure.plugins.v2.channel_runtime import current_channel_runtime_v2
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
                 return None
 
-            channel_manager = get_channel_manager()
-            if not channel_manager:
-                return None
-
-            connection = channel_manager.connections.get(channel_config_id)
+            connection = current_channel_runtime_v2().connections.get(channel_config_id)
             if not connection:
                 return None
 
@@ -2025,15 +2017,12 @@ class ChannelMessageRouter:
             error_message: Error message to send to user
         """
         try:
-            # Get the channel adapter from connection manager
-            from src.infrastructure.adapters.primary.web.startup.channels import (
-                get_channel_manager,
+            # Get the channel adapter from the pinned generation runtime.
+            from src.infrastructure.plugins.v2.channel_runtime import (
+                current_channel_runtime_v2,
             )
 
-            manager = get_channel_manager()
-            if not manager:
-                logger.warning("[MessageRouter] Channel manager not available for error reply")
-                return
+            channel_runtime = current_channel_runtime_v2()
 
             # Find the connection for this message's channel config
             # Extract channel_config_id from message raw_data
@@ -2044,7 +2033,7 @@ class ChannelMessageRouter:
                 )
                 return
 
-            connection = manager.connections.get(channel_config_id)
+            connection = channel_runtime.connections.get(channel_config_id)
             if not connection or not connection.adapter:
                 logger.warning(
                     "[MessageRouter] Connection not found for error reply: "
@@ -2249,5 +2238,6 @@ async def route_channel_message(message: Message) -> None:
     Args:
         message: The incoming channel message.
     """
-    router = get_channel_message_router()
-    await router.route_message(message)
+    async with pin_generation_v2(current_process_generation_host_v2()):
+        router = get_channel_message_router()
+        await router.route_message(message)

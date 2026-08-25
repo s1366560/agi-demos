@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 from concurrent.futures import Future
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -24,25 +25,12 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class _FakeGenerationLease:
-    def __init__(self, generation: object) -> None:
-        self.generation = generation
+    def __init__(self, resolver: object) -> None:
+        self.resolver = resolver
         self.release_calls = 0
-
-    async def __aenter__(self) -> object:
-        return self.generation
 
     async def release(self) -> None:
         self.release_calls += 1
-
-
-class _FakeGenerationHost:
-    def __init__(self, lease: _FakeGenerationLease) -> None:
-        self.lease = lease
-        self.acquire_calls = 0
-
-    async def acquire(self) -> _FakeGenerationLease:
-        self.acquire_calls += 1
-        return self.lease
 
 
 def _resolver_generation(
@@ -562,9 +550,10 @@ async def test_add_connection_refreshes_closed_main_loop() -> None:
     )
 
     fake_task = SimpleNamespace(done=lambda: False)
-    generation = object()
-    lease = _FakeGenerationLease(generation)
-    host = _FakeGenerationHost(lease)
+    lease = _FakeGenerationLease(object())
+
+    async def acquire_lease() -> _FakeGenerationLease:
+        return lease
 
     def _fake_create_task(coro):
         coro.close()
@@ -573,15 +562,11 @@ async def test_add_connection_refreshes_closed_main_loop() -> None:
     with (
         patch.object(manager, "_create_adapter", new=AsyncMock(return_value=object())),
         patch(
-            "src.infrastructure.channels.connection_manager.current_process_generation_host_v2",
-            return_value=host,
-        ),
-        patch(
             "src.infrastructure.channels.connection_manager.asyncio.create_task",
             side_effect=_fake_create_task,
         ),
     ):
-        await manager.add_connection(config)
+        await manager.add_connection(config, resolver_lease_factory=acquire_lease)
 
     assert manager._main_loop is asyncio.get_running_loop()
     assert config.id in manager.connections
@@ -613,9 +598,10 @@ async def test_add_connection_refreshes_non_running_main_loop() -> None:
     )
 
     fake_task = SimpleNamespace(done=lambda: False)
-    generation = object()
-    lease = _FakeGenerationLease(generation)
-    host = _FakeGenerationHost(lease)
+    lease = _FakeGenerationLease(object())
+
+    async def acquire_lease() -> _FakeGenerationLease:
+        return lease
 
     def _fake_create_task(coro):
         coro.close()
@@ -624,15 +610,11 @@ async def test_add_connection_refreshes_non_running_main_loop() -> None:
     with (
         patch.object(manager, "_create_adapter", new=AsyncMock(return_value=object())),
         patch(
-            "src.infrastructure.channels.connection_manager.current_process_generation_host_v2",
-            return_value=host,
-        ),
-        patch(
             "src.infrastructure.channels.connection_manager.asyncio.create_task",
             side_effect=_fake_create_task,
         ),
     ):
-        await manager.add_connection(config)
+        await manager.add_connection(config, resolver_lease_factory=acquire_lease)
 
     assert manager._main_loop is asyncio.get_running_loop()
     assert config.id in manager.connections
@@ -664,7 +646,7 @@ async def test_create_adapter_prefers_plugin_factory() -> None:
     """Channel adapter creation should use the generation-owned resolver."""
     manager = ChannelConnectionManager()
     plugin_adapter = object()
-    generation, resolver = _resolver_generation(
+    _generation, resolver = _resolver_generation(
         metadata=None,
         build=AsyncMock(return_value=plugin_adapter),
     )
@@ -682,7 +664,7 @@ async def test_create_adapter_prefers_plugin_factory() -> None:
         channel_type="feishu",
     )
 
-    adapter = await manager._create_adapter(config, generation)  # type: ignore[arg-type]
+    adapter = await manager._create_adapter(config, resolver)  # type: ignore[arg-type]
 
     assert adapter is plugin_adapter
     resolver.build.assert_awaited_once()  # type: ignore[attr-defined]
@@ -702,7 +684,7 @@ async def test_create_adapter_decrypts_plugin_secret_paths() -> None:
     from src.infrastructure.security.encryption_service import get_encryption_service
 
     encryption_service = get_encryption_service()
-    generation, _resolver = _resolver_generation(
+    _generation, resolver = _resolver_generation(
         metadata=SimpleNamespace(
             secret_paths=("app_secret", "encrypt_key", "verification_token", "api_token")
         ),
@@ -722,7 +704,7 @@ async def test_create_adapter_decrypts_plugin_secret_paths() -> None:
         channel_type="feishu",
     )
 
-    await manager._create_adapter(config, generation)  # type: ignore[arg-type]
+    await manager._create_adapter(config, resolver)  # type: ignore[arg-type]
 
     channel_config = captured_config["channel_config"]
     assert channel_config.app_secret == "app-secret"
@@ -736,7 +718,7 @@ async def test_create_adapter_decrypts_plugin_secret_paths() -> None:
 async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
     """Manager should fail closed when the generation has no requested adapter."""
     manager = ChannelConnectionManager()
-    generation, _resolver = _resolver_generation(
+    _generation, resolver = _resolver_generation(
         metadata=None,
         build=AsyncMock(
             side_effect=RuntimeV2Error(
@@ -760,7 +742,7 @@ async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await manager._create_adapter(config, generation)  # type: ignore[arg-type]
+        await manager._create_adapter(config, resolver)  # type: ignore[arg-type]
 
     assert error.value.code == "channel_adapter_not_found"
 
@@ -769,9 +751,11 @@ async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
 @pytest.mark.asyncio
 async def test_add_connection_releases_generation_lease_when_adapter_build_fails() -> None:
     manager = ChannelConnectionManager()
-    generation = object()
-    lease = _FakeGenerationLease(generation)
-    host = _FakeGenerationHost(lease)
+    lease = _FakeGenerationLease(object())
+
+    async def acquire_lease() -> _FakeGenerationLease:
+        return lease
+
     config = SimpleNamespace(
         id="cfg-failed-adapter",
         enabled=True,
@@ -780,10 +764,6 @@ async def test_add_connection_releases_generation_lease_when_adapter_build_fails
     )
 
     with (
-        patch(
-            "src.infrastructure.channels.connection_manager.current_process_generation_host_v2",
-            return_value=host,
-        ),
         patch.object(
             manager,
             "_create_adapter",
@@ -796,11 +776,55 @@ async def test_add_connection_releases_generation_lease_when_adapter_build_fails
         ),
         pytest.raises(RuntimeV2Error),
     ):
-        await manager.add_connection(config)  # type: ignore[arg-type]
+        await manager.add_connection(  # type: ignore[arg-type]
+            config,
+            resolver_lease_factory=acquire_lease,
+        )
 
-    assert host.acquire_calls == 1
     assert lease.release_calls == 1
     assert config.id not in manager.connections
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_rebind_all_preserves_last_good_when_candidate_build_fails() -> None:
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    manager = ChannelConnectionManager(session_factory=session_factory)  # type: ignore[arg-type]
+    old_lease = _FakeGenerationLease(object())
+    old_connection = ManagedConnection(
+        config_id="cfg-rebind",
+        project_id="project-a",
+        channel_type="feishu",
+        adapter=object(),
+        _generation_lease=old_lease,
+    )
+    manager.connections[old_connection.config_id] = old_connection
+    candidate_lease = _FakeGenerationLease(object())
+    config = SimpleNamespace(
+        id=old_connection.config_id,
+        enabled=True,
+        project_id=old_connection.project_id,
+        channel_type=old_connection.channel_type,
+    )
+
+    async def acquire_candidate() -> _FakeGenerationLease:
+        return candidate_lease
+
+    manager._list_all_enabled = AsyncMock(return_value=[config])  # type: ignore[method-assign]
+    manager._create_adapter = AsyncMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError("candidate adapter invalid")
+    )
+    manager._update_db_status = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="candidate adapter invalid"):
+        await manager.rebind_all(resolver_lease_factory=acquire_candidate)
+
+    assert manager.connections[old_connection.config_id] is old_connection
+    assert old_lease.release_calls == 0
+    assert candidate_lease.release_calls == 1
 
 
 @pytest.mark.unit
@@ -830,10 +854,10 @@ async def test_connection_loop_releases_generation_lease_after_cleanup() -> None
 
 @pytest.mark.unit
 def test_channel_connection_authority_has_no_v1_plugin_runtime_dependency() -> None:
-    from src.infrastructure.adapters.primary.web.startup import channels as startup_channels
     from src.infrastructure.channels import connection_manager
+    from src.infrastructure.plugins.v2 import channel_runtime
 
-    source = inspect.getsource(connection_manager) + inspect.getsource(startup_channels)
+    source = inspect.getsource(connection_manager) + inspect.getsource(channel_runtime)
 
     assert "get_plugin_registry" not in source
     assert "get_plugin_runtime_manager" not in source

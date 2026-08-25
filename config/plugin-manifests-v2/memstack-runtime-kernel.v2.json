@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:866722bcb6f599a4aa8271c24b0c012cebd9ea58c827eaea3b8f160b483db1da",
+        "digest": "sha256:b2501bc0537c05b142f2a9bd04935899cad25e5c19c1e446257579780806dced",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1999,6 +1999,46 @@
       "artifact": {
         "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/channel-manager",
+      "entrypoint": "src.infrastructure.plugins.v2.channel_runtime:channel_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:runtime.channel-manager", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "adapters",
+              "service": "service:channel-adapter-resolver",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "strict_startup"],
+          "properties": {
+            "strategy": { "const": "generation-resolver-leases", "type": "string" },
+            "strict_startup": { "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:840483a8fbaafca8bb2acd08c2c578c16e33e63f90a9de5d41855abf6168c414",
+      "artifact": {
+        "digest": "sha256:c7783c1778fe4a961ba6dda8de1f2ab95f868660df18050e4bc1456c6216b250",
+        "source": "repo+python://src/infrastructure/plugins/v2/channel_runtime.py"
       }
     },
     {

@@ -10,12 +10,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,6 @@ from src.domain.model.channels.message import (
     ChannelConfig,
     Message,
 )
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
 )
@@ -31,13 +30,11 @@ from src.infrastructure.adapters.secondary.persistence.channel_repository import
     ChannelConfigRepository,
 )
 from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
-from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
 from src.infrastructure.plugins.v2.channel_adapters import (
-    CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
     ChannelAdapterBuildContextV2,
     ChannelAdapterResolverProtocolV2,
 )
-from src.infrastructure.plugins.v2.runtime import GenerationLeaseV2, RuntimeGenerationV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +44,22 @@ INITIAL_RECONNECT_DELAY = 2  # Initial reconnect delay in seconds
 HEALTH_CHECK_INTERVAL = 30  # Health check interval in seconds
 API_PING_CYCLE = 10  # Ping Feishu API every Nth health check cycle
 MAX_RECONNECT_ATTEMPTS = 20  # Max attempts before circuit breaker opens
+
+
+@runtime_checkable
+class ChannelAdapterResolverLeaseProtocolV2(Protocol):
+    """Exact resolver lease retained for one long-lived channel connection."""
+
+    @property
+    def resolver(self) -> ChannelAdapterResolverProtocolV2: ...
+
+    async def release(self) -> None: ...
+
+
+type ChannelAdapterResolverLeaseFactoryV2 = Callable[
+    [], Awaitable[ChannelAdapterResolverLeaseProtocolV2]
+]
+type ChannelSessionFactoryV2 = Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]]
 
 
 class ConnectionStatus(str, Enum):
@@ -85,7 +98,10 @@ class ManagedConnection:
     last_error: str | None = None
     reconnect_attempts: int = 0
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
-    _generation_lease: GenerationLeaseV2 | None = field(default=None, repr=False)
+    _generation_lease: ChannelAdapterResolverLeaseProtocolV2 | None = field(
+        default=None,
+        repr=False,
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -112,31 +128,27 @@ class ChannelConnectionManager:
     - Message routing to the agent system
     - Graceful shutdown
 
-    Usage:
-        manager = ChannelConnectionManager(message_router=my_router)
-        await manager.start_all(async_session_factory)
-
-        # Later, when adding a new config:
-        await manager.add_connection(config_model)
-
-        # On shutdown:
-        await manager.shutdown_all()
+    The V2 channel runtime constructs this process resource and supplies an
+    exact resolver lease for every adapter build or long-lived connection.
     """
 
     def __init__(
         self,
         message_router: Callable[[Message], None] | None = None,
-        session_factory: Callable[[], AsyncSession] | None = None,
+        session_factory: ChannelSessionFactoryV2 | None = None,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2 | None = None,
     ) -> None:
         """Initialize the connection manager.
 
         Args:
             message_router: Optional callback to route incoming messages.
             session_factory: Factory function to create database sessions.
+            resolver_lease_factory: Exact generation resolver lease provider.
         """
         self._connections: dict[str, ManagedConnection] = {}
         self._message_router = message_router
         self._session_factory = session_factory
+        self._resolver_lease_factory = resolver_lease_factory
         self._health_check_task: asyncio.Task[None] | None = None
         self._outbox_worker: OutboxRetryWorker | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
@@ -149,13 +161,18 @@ class ChannelConnectionManager:
 
     async def start_all(
         self,
-        session_factory: Callable[[], AsyncSession] | None = None,
+        session_factory: ChannelSessionFactoryV2 | None = None,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2 | None = None,
+        strict: bool = False,
     ) -> int:
         """Load all enabled configurations and establish connections.
 
         Args:
             session_factory: Factory function to create database sessions.
                 If not provided, uses the factory passed to __init__.
+            resolver_lease_factory: Exact resolver lease provider for this generation.
+            strict: Tear down and fail if any enabled connection cannot be prepared.
 
         Returns:
             Number of connections started.
@@ -166,6 +183,8 @@ class ChannelConnectionManager:
 
         if session_factory:
             self._session_factory = session_factory
+        if resolver_lease_factory is not None:
+            self._resolver_lease_factory = resolver_lease_factory
 
         if self._session_factory is None:
             logger.error("[ChannelManager] No session factory provided")
@@ -194,6 +213,9 @@ class ChannelConnectionManager:
                     type(e).__name__,
                     bool(config.id),
                 )
+                if strict:
+                    await self.shutdown_all()
+                    raise
 
         # Start health check loop
         self._health_check_task = asyncio.create_task(self._health_check_loop())
@@ -209,6 +231,82 @@ class ChannelConnectionManager:
         logger.info(f"[ChannelManager] Started {started}/{len(configs)} connections")
         return started
 
+    async def preflight_all(
+        self,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2,
+    ) -> int:
+        """Build every enabled adapter against a candidate resolver without publishing it."""
+        if self._session_factory is None:
+            raise RuntimeV2Error(
+                "channel_session_factory_unavailable",
+                "channel runtime requires an async session factory",
+            )
+        async with self._session_factory() as session:
+            configs = await self._list_all_enabled(ChannelConfigRepository(session))
+
+        for config in configs:
+            lease = await resolver_lease_factory()
+            adapter: object | None = None
+            try:
+                adapter = await self._create_adapter(config, lease.resolver)
+            finally:
+                if adapter is not None:
+                    await self._dispose_preflight_adapter(adapter)
+                await lease.release()
+        return len(configs)
+
+    async def rebind_all(
+        self,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2,
+    ) -> int:
+        """Reconcile all enabled connections onto one exact replacement resolver."""
+        if self._session_factory is None:
+            raise RuntimeV2Error(
+                "channel_session_factory_unavailable",
+                "channel runtime requires an async session factory",
+            )
+        async with self._session_factory() as session:
+            configs = await self._list_all_enabled(ChannelConfigRepository(session))
+        enabled_by_id = {config.id: config for config in configs}
+        self._resolver_lease_factory = resolver_lease_factory
+
+        for config_id in tuple(self._connections):
+            if config_id not in enabled_by_id:
+                _ = await self.remove_connection(config_id)
+        for config in configs:
+            if config.id not in self._connections:
+                await self.add_connection(
+                    config,
+                    resolver_lease_factory=resolver_lease_factory,
+                )
+                continue
+
+            lease = await resolver_lease_factory()
+            adapter: object | None = None
+            try:
+                adapter = await self._create_adapter(config, lease.resolver)
+                _ = await self.remove_connection(config.id)
+                _ = self._activate_connection(config, adapter, lease)
+            except BaseException:
+                try:
+                    if adapter is not None:
+                        await self._dispose_preflight_adapter(adapter)
+                finally:
+                    await lease.release()
+                raise
+        return len(configs)
+
+    @staticmethod
+    async def _dispose_preflight_adapter(adapter: object) -> None:
+        disconnect = getattr(adapter, "disconnect", None)
+        if not callable(disconnect):
+            return
+        result = disconnect()
+        if isinstance(result, Awaitable):
+            await result
+
     async def _list_all_enabled(self, repo: ChannelConfigRepository) -> list[ChannelConfigModel]:
         """List all enabled configurations."""
         from sqlalchemy import select
@@ -217,7 +315,12 @@ class ChannelConnectionManager:
         result = await repo._session.execute(query)
         return list(result.scalars().all())
 
-    async def add_connection(self, config: ChannelConfigModel) -> ManagedConnection:
+    async def add_connection(
+        self,
+        config: ChannelConfigModel,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2 | None = None,
+    ) -> ManagedConnection:
         """Add and establish a new connection.
 
         Args:
@@ -237,6 +340,27 @@ class ChannelConnectionManager:
 
         logger.info(f"[ChannelManager] Adding connection {config.id} ({config.channel_type})")
 
+        lease_factory = resolver_lease_factory or self._resolver_lease_factory
+        if lease_factory is None:
+            raise RuntimeV2Error(
+                "channel_resolver_lease_unavailable",
+                "channel connection requires an exact generation resolver lease",
+            )
+        generation_lease = await lease_factory()
+        try:
+            adapter = await self._create_adapter(config, generation_lease.resolver)
+            return self._activate_connection(config, adapter, generation_lease)
+        except BaseException:
+            await generation_lease.release()
+            raise
+
+    def _activate_connection(
+        self,
+        config: ChannelConfigModel,
+        adapter: object,
+        generation_lease: ChannelAdapterResolverLeaseProtocolV2,
+    ) -> ManagedConnection:
+        """Schedule one prepared adapter and make it the managed connection."""
         current_loop = asyncio.get_running_loop()
         if (
             self._main_loop is None
@@ -245,34 +369,46 @@ class ChannelConnectionManager:
         ):
             self._main_loop = current_loop
 
-        generation_lease = await current_process_generation_host_v2().acquire()
-        generation = await generation_lease.__aenter__()
+        connection = ManagedConnection(
+            config_id=config.id,
+            project_id=config.project_id,
+            channel_type=config.channel_type,
+            adapter=adapter,
+            status=ConnectionStatus.CONNECTING,
+            _generation_lease=generation_lease,
+        )
+        connection_loop = self._connection_loop(connection, config)
         try:
-            adapter = await self._create_adapter(config, generation)
-            connection = ManagedConnection(
-                config_id=config.id,
-                project_id=config.project_id,
-                channel_type=config.channel_type,
-                adapter=adapter,
-                status=ConnectionStatus.CONNECTING,
-                _generation_lease=generation_lease,
-            )
-            connection_loop = self._connection_loop(connection, config)
-            try:
-                connection.task = asyncio.create_task(connection_loop)
-            except BaseException:
-                connection_loop.close()
-                raise
-            self._connections[config.id] = connection
-            return connection
+            connection.task = asyncio.create_task(connection_loop)
         except BaseException:
-            await generation_lease.release()
+            connection_loop.close()
             raise
+        self._connections[config.id] = connection
+        return connection
+
+    async def build_adapter(
+        self,
+        config: ChannelConfigModel,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2 | None = None,
+    ) -> object:
+        """Build one adapter from an exact resolver without starting a connection loop."""
+        lease_factory = resolver_lease_factory or self._resolver_lease_factory
+        if lease_factory is None:
+            raise RuntimeV2Error(
+                "channel_resolver_lease_unavailable",
+                "channel adapter build requires an exact generation resolver lease",
+            )
+        lease = await lease_factory()
+        try:
+            return await self._create_adapter(config, lease.resolver)
+        finally:
+            await lease.release()
 
     async def _create_adapter(
         self,
         config: ChannelConfigModel,
-        generation: RuntimeGenerationV2,
+        resolver: ChannelAdapterResolverProtocolV2,
     ) -> Any:
         """Create a channel adapter based on configuration.
 
@@ -286,12 +422,8 @@ class ChannelConnectionManager:
             RuntimeV2Error: If no active contribution provides the channel type.
             TypeError: If the active generation exposes an invalid resolver.
         """
-        resolver = generation.resolve(
-            CHANNEL_ADAPTER_RESOLVER_SERVICE_V2,
-            ScopeV2(kind=ScopeKindV2.ROOT),
-        )
         if not isinstance(resolver, ChannelAdapterResolverProtocolV2):
-            raise TypeError("active generation has an invalid channel adapter resolver")
+            raise TypeError("channel generation has an invalid channel adapter resolver")
         metadata = resolver.metadata(config.channel_type)
         secret_paths = self._resolve_secret_paths(metadata)
 
@@ -652,7 +784,12 @@ class ChannelConnectionManager:
 
         return True
 
-    async def restart_connection(self, config_id: str) -> bool:
+    async def restart_connection(
+        self,
+        config_id: str,
+        *,
+        resolver_lease_factory: ChannelAdapterResolverLeaseFactoryV2 | None = None,
+    ) -> bool:
         """Restart a connection (e.g., after config update).
 
         Args:
@@ -686,7 +823,10 @@ class ChannelConnectionManager:
         # Add new connection with fresh config
         if config.enabled:
             try:
-                await self.add_connection(config)
+                await self.add_connection(
+                    config,
+                    resolver_lease_factory=resolver_lease_factory,
+                )
                 return True
             except Exception as e:
                 logger.error(

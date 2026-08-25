@@ -38,6 +38,7 @@ from src.infrastructure.plugins.v2.builtin_http_routes import (
     build_builtin_route_graph_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
 from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
@@ -84,7 +85,7 @@ DEFAULT_MANIFEST_V2_PATHS = (
 DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
-async def initialize_plugin_runtime_v2(
+async def initialize_plugin_runtime_v2(  # noqa: PLR0913
     app: FastAPI,
     *,
     session_factory: Callable[[], Any] | None = None,
@@ -96,6 +97,7 @@ async def initialize_plugin_runtime_v2(
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     sandbox_redis_client: object | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
+    channel_runtime_manager: ChannelRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
     publication_policy: PlatformPluginPublicationPolicyV2 = DEFAULT_PUBLICATION_POLICY_V2,
 ) -> PlatformPluginRuntimeHostV2:
@@ -113,6 +115,7 @@ async def initialize_plugin_runtime_v2(
             sandbox_runtime_factory=sandbox_runtime_factory,
             sandbox_redis_client=sandbox_redis_client,
             telemetry_runtime_manager=telemetry_runtime_manager,
+            channel_runtime_manager=channel_runtime_manager,
             workspace_core_runtime_factory=workspace_core_runtime_factory,
         )
     )

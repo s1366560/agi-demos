@@ -38,7 +38,6 @@ from src.infrastructure.adapters.primary.web.middleware import (
     install_api_access_log_middleware,
 )
 from src.infrastructure.adapters.primary.web.startup import (
-    initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
     initialize_llm_providers,
@@ -46,7 +45,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     mount_generation_http_dispatcher_v2,
-    shutdown_channel_manager,
     shutdown_telemetry_services,
 )
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
@@ -69,6 +67,7 @@ from src.infrastructure.plugins.v2.agent_pool_runtime import (
     default_agent_pool_runtime_config_v2,
 )
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
+from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
@@ -122,6 +121,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         start=initialize_telemetry,
         stop=shutdown_telemetry_services,
     )
+    channel_runtime_manager = ChannelRuntimeManagerV2()
 
     async def graph_runtime_factory() -> GraphStorePort:
         return await _create_generation_graph_runtime(cast("Redis | None", redis_client))
@@ -173,6 +173,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         sandbox_runtime_factory=sandbox_runtime_factory,
         sandbox_redis_client=redis_client,
         telemetry_runtime_manager=telemetry_runtime_manager,
+        channel_runtime_manager=channel_runtime_manager,
         workspace_core_runtime_factory=workspace_core_runtime_factory,
         publication_policy=publication_policy,
     )
@@ -190,12 +191,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
-
-    # Initialize Channel Connection Manager for IM integrations
-    channel_manager = await initialize_channel_manager()
-    if channel_manager:
-        app.state.channel_manager = channel_manager
-        logger.info("Channel connection manager initialized")
 
     # Wire the friction → playbook reflection loop. All three calls are
     # best-effort: a failure here disables reflection but never blocks
@@ -328,9 +323,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Shutdown
     logger.info("Shutting down...")
-
-    # Shutdown channel manager (close all IM connections)
-    await shutdown_channel_manager()
 
     # Retire all V2 Fibers. Graph cleanup remains an effect and runs after all
     # request, session, and background workflow leases have drained.

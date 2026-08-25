@@ -718,7 +718,7 @@ class TestGlobalConnectionStatusAccess:
         ]
 
         with patch(
-            "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+            "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
             return_value=mock_manager,
         ):
             response = await list_all_connection_status(
@@ -766,7 +766,7 @@ class TestGlobalConnectionStatusAccess:
         mock_manager.get_all_status.return_value = []
 
         with patch(
-            "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+            "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
             return_value=mock_manager,
         ):
             response = await list_all_connection_status(
@@ -938,7 +938,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=None,
             ),
         ):
@@ -1000,7 +1000,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
@@ -1068,7 +1068,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
@@ -1221,7 +1221,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=None,
             ),
         ):
@@ -1285,7 +1285,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
@@ -1353,7 +1353,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
@@ -1408,7 +1408,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
@@ -1465,7 +1465,7 @@ class TestPluginSchemaExecution:
                 "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
             ) as mock_repo_class,
             patch(
-                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                "src.infrastructure.adapters.primary.web.routers.channels.current_channel_runtime_v2",
                 return_value=channel_manager,
             ),
         ):
