@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:30dc8f40d498df3e0bd11200136f7921a6ea1a25c8224670e0afe689af063b80",
+        "digest": "sha256:4ddf2bb6832876438e011fa567dae8197f0343836f61c050f9d729ea898d80f9",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -891,6 +891,74 @@
       "artifact": {
         "digest": "sha256:12aa1aaa9070f8137ebde08a7ce4121e18bf171e0bcbd60771a4b31f0131c43b",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/instance-channel-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_channel_services:_apply_instance_channel_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.instance-channel-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:945df53794fab970a8f9c70589f5672a2f3aa464207f40d44e957fc1e438a0a3",
+      "artifact": {
+        "digest": "sha256:18a28cb2ae3bde20d0a837969adff8e7c98aa2316c2f9fcc9d0a80a5f0565de3",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_channel_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/instance-channel-services",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_channel_services:_apply_instance_channel_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.instance-channel-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.instance-channel-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:800c23f67cdb0b6309fe7c44f43653715566e1b511b11e3aa9c2be637cfebc08",
+      "artifact": {
+        "digest": "sha256:18a28cb2ae3bde20d0a837969adff8e7c98aa2316c2f9fcc9d0a80a5f0565de3",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_channel_services.py"
       }
     },
     {

@@ -44,6 +44,7 @@ from .engine_services import engine_catalog_definition_v2
 from .event_log_services import event_log_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
+from .instance_channel_services import instance_channel_service_definitions_v2
 from .instance_file_services import instance_file_service_definitions_v2
 from .llm_client_service import builtin_tenant_llm_client_factory_definition_v2
 from .llm_health_runtime import llm_health_runtime_definition_v2
@@ -270,6 +271,7 @@ def builtin_runtime_definitions_v2(
         *artifact_lifecycle_service_definitions_v2(),
         attachment_application_service_definition_v2(),
         *instance_file_service_definitions_v2(),
+        *instance_channel_service_definitions_v2(),
         docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),

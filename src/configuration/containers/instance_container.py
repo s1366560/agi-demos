@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
-from src.application.services.instance_channel_service import InstanceChannelService
 from src.application.services.instance_service import InstanceService
 from src.application.services.instance_template_service import InstanceTemplateService
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
@@ -18,9 +17,6 @@ from src.domain.ports.repositories.gene_rating_repository import GeneRatingRepos
 from src.domain.ports.repositories.gene_repository import GeneRepository
 from src.domain.ports.repositories.gene_review_repository import GeneReviewRepository
 from src.domain.ports.repositories.genome_repository import GenomeRepository
-from src.domain.ports.repositories.instance_channel_repository import (
-    InstanceChannelRepository,
-)
 from src.domain.ports.repositories.instance_gene_repository import (
     InstanceGeneRepository,
 )
@@ -51,9 +47,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_gene_review_repositor
 )
 from src.infrastructure.adapters.secondary.persistence.sql_genome_repository import (
     SqlGenomeRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_instance_channel_repository import (
-    SqlInstanceChannelRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_instance_gene_repository import (
     SqlInstanceGeneRepository,
@@ -192,13 +185,4 @@ class InstanceContainer:
         """Get InstanceTemplateService for template management operations."""
         return InstanceTemplateService(
             template_repo=self.instance_template_repository(),
-        )
-
-    def instance_channel_repository(self) -> InstanceChannelRepository:
-        assert self._db is not None
-        return SqlInstanceChannelRepository(self._db)
-
-    def instance_channel_service(self) -> InstanceChannelService:
-        return InstanceChannelService(
-            channel_repo=self.instance_channel_repository(),
         )

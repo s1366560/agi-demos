@@ -400,9 +400,6 @@ class DIContainer:
     def instance_template_service(self) -> InstanceTemplateService:
         return self._instance.instance_template_service()
 
-    def instance_channel_service(self) -> Any:
-        return cast(Any, self._instance.instance_channel_service())
-
     # === Infra Container delegates ===
 
     def redis(self) -> redis.Redis | None:
