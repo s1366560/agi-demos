@@ -35,6 +35,7 @@ def minimal_config() -> ProcessorConfig:
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
             implementation=object(),
+            lifecycle_notifier=MagicMock(),
         ),
     )
 

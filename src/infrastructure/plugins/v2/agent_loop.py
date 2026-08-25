@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
+from .agent_lifecycle_notifier import AgentLifecycleNotifierProtocolV2
 from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error, generated_contract_digest_v2
 
 AGENT_LOOP_MODULE_V2 = "builtin://memstack/agent/loop"
 AGENT_LOOP_RESOLVER_SERVICE_V2 = "service:agent-loop-resolver"
+AGENT_LOOP_LIFECYCLE_NOTIFIER_INJECT_V2 = "lifecycle_notifier"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -18,6 +20,15 @@ class AgentLoopSelectionV2:
     plugin_id: str
     scope: str
     implementation: object
+
+
+@runtime_checkable
+class AgentLoopResolverProtocolV2(Protocol):
+    """Stable service contract exposed to Agent-loop Consumers."""
+
+    lifecycle_notifier: AgentLifecycleNotifierProtocolV2
+
+    def resolve(self, provider_id: str, model_id: str) -> AgentLoopSelectionV2: ...
 
 
 class _BuiltinReActLoopV2:
@@ -41,6 +52,7 @@ class BuiltinAgentLoopResolverV2:
     loop_id: str
     plugin_id: str
     implementation: object
+    lifecycle_notifier: AgentLifecycleNotifierProtocolV2
 
     def resolve(self, provider_id: str, model_id: str) -> AgentLoopSelectionV2:
         if not provider_id.strip() or not model_id.strip():
@@ -60,12 +72,19 @@ def _apply_builtin_agent_loop_v2(
     loop_id = config.get("loop_id")
     if loop_id != "builtin-react":
         raise ValueError("builtin agent loop requires loop_id builtin-react")
-    context.provide(
+    lifecycle_notifier = context.require(AGENT_LOOP_LIFECYCLE_NOTIFIER_INJECT_V2)
+    if not isinstance(lifecycle_notifier, AgentLifecycleNotifierProtocolV2):
+        raise RuntimeV2Error(
+            "agent_lifecycle_notifier_invalid",
+            "agent loop lifecycle_notifier does not implement the V2 notification contract",
+        )
+    _ = context.provide(
         AGENT_LOOP_RESOLVER_SERVICE_V2,
         BuiltinAgentLoopResolverV2(
             loop_id=loop_id,
             plugin_id="memstack-kernel",
             implementation=_BuiltinReActLoopV2(),
+            lifecycle_notifier=lifecycle_notifier,
         ),
         label="builtin-agent-loop-resolver",
     )
@@ -80,8 +99,10 @@ def builtin_agent_loop_definition_v2() -> PluginDefinitionV2:
 
 
 __all__ = [
+    "AGENT_LOOP_LIFECYCLE_NOTIFIER_INJECT_V2",
     "AGENT_LOOP_MODULE_V2",
     "AGENT_LOOP_RESOLVER_SERVICE_V2",
+    "AgentLoopResolverProtocolV2",
     "AgentLoopSelectionV2",
     "BuiltinAgentLoopResolverV2",
     "builtin_agent_loop_definition_v2",

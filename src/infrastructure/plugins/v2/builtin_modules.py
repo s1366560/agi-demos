@@ -15,6 +15,10 @@ from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
 )
+from .agent_lifecycle_notifier import (
+    AgentLifecycleConnectionManagerV2,
+    agent_lifecycle_notifier_definition_v2,
+)
 from .agent_lifecycle_runtime import agent_lifecycle_definitions_v2
 from .agent_loop import builtin_agent_loop_definition_v2
 from .agent_runtime_dispatcher import (
@@ -111,6 +115,7 @@ def _apply_runtime_boundary(
 
 def builtin_runtime_definitions_v2(
     *,
+    agent_lifecycle_connection_manager: AgentLifecycleConnectionManagerV2 | None = None,
     agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
@@ -347,6 +352,7 @@ def builtin_runtime_definitions_v2(
         *backend_store_service_definitions_v2(),
         builtin_tenant_llm_client_factory_definition_v2(),
         reflection_runtime_definition_v2(reflection_runtime_manager),
+        agent_lifecycle_notifier_definition_v2(agent_lifecycle_connection_manager),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),

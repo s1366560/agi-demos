@@ -31,6 +31,7 @@ def _builtin_loop_resolver() -> BuiltinAgentLoopResolverV2:
         loop_id="builtin-react",
         plugin_id="memstack-kernel",
         implementation=object(),
+        lifecycle_notifier=MagicMock(),
     )
 
 
@@ -103,12 +104,12 @@ class TestNotifyPluginHookHelper:
             runtime_hook_overrides=[],
         )
 
-    async def test_dispatcher_error_does_not_propagate(self):
-        """Errors inside a non-required hook are caught and logged."""
+    async def test_dispatcher_error_propagates_without_fallback(self):
+        """A generation-owned dispatcher failure is not hidden by a V1 fallback."""
         dispatcher = _make_dispatcher(hook_side_effect=RuntimeError("boom"))
         proc = _make_processor(dispatcher=dispatcher)
-        # Must not raise
-        await proc._notify_plugin_hook("on_error", {"err": "x"})
+        with pytest.raises(RuntimeError, match="boom"):
+            await proc._notify_plugin_hook("on_error", {"err": "x"})
         dispatcher.dispatch.assert_awaited_once()
 
     async def test_v1_registry_and_runtime_overrides_are_not_implicit_fallbacks(self):

@@ -17,7 +17,6 @@ from .generation_http_v2 import mount_generation_http_dispatcher_v2
 from .llm import initialize_llm_providers
 from .redis import initialize_redis_client
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
-from .websocket import initialize_websocket_manager
 
 __all__ = [
     "initialize_autonomy_idle_waker",
@@ -27,7 +26,6 @@ __all__ = [
     "initialize_llm_providers",
     "initialize_redis_client",
     "initialize_telemetry",
-    "initialize_websocket_manager",
     "mount_generation_http_dispatcher_v2",
     "shutdown_autonomy_idle_waker",
     "shutdown_blackboard_outbox_dispatcher",

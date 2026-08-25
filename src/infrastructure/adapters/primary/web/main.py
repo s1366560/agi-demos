@@ -43,7 +43,6 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_telemetry,
-    initialize_websocket_manager,
     mount_generation_http_dispatcher_v2,
     shutdown_telemetry_services,
 )
@@ -51,6 +50,9 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     plugin_runtime_host_v2_from_scope,
     shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+    get_connection_manager,
 )
 from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
     create_workspace_core_runtime_service_v2,
@@ -168,6 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     _ = await initialize_plugin_runtime_v2(
         app,
         session_factory=async_session_factory,
+        agent_lifecycle_connection_manager=get_connection_manager(),
         agent_pool_runtime_enabled=settings.agent_pool_enabled,
         agent_pool_runtime_config=default_agent_pool_runtime_config_v2(
             health_check_interval_seconds=settings.agent_pool_health_check_interval_seconds,
@@ -190,9 +193,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     except Exception:
         await shutdown_plugin_runtime_v2(app)
         raise
-
-    # Register WebSocket manager for lifecycle state notifications
-    initialize_websocket_manager()
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None

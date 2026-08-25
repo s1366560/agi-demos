@@ -20,6 +20,9 @@ from src.domain.model.plugins.generated_v2 import (
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
 )
+from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
+    AgentLifecycleConnectionManagerV2,
+)
 from src.infrastructure.plugins.v2.agent_pool_profile import (
     agent_pool_profile_matches_v2,
     compose_agent_pool_profile_upgrade_v2,
@@ -90,6 +93,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
     app: FastAPI,
     *,
     session_factory: Callable[[], Any] | None = None,
+    agent_lifecycle_connection_manager: AgentLifecycleConnectionManagerV2 | None = None,
     agent_pool_runtime_enabled: bool = False,
     agent_pool_runtime_config: Mapping[str, object] | None = None,
     agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
@@ -111,6 +115,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
     )
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
+            agent_lifecycle_connection_manager=agent_lifecycle_connection_manager,
             agent_pool_runtime_factory=agent_pool_runtime_factory,
             graph_runtime_factory=graph_runtime_factory,
             retrieval_runtime_factory=retrieval_runtime_factory,

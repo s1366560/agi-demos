@@ -1,6 +1,6 @@
 """Tests for final completion gating in SessionProcessor."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -21,6 +21,7 @@ def _processor_config() -> ProcessorConfig:
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
             implementation=object(),
+            lifecycle_notifier=MagicMock(),
         ),
     )
 

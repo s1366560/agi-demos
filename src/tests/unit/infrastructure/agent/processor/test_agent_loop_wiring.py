@@ -124,6 +124,7 @@ class TestAgentLoopWiring:
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
             implementation=loop,
+            lifecycle_notifier=MagicMock(),
         )
         processor = SessionProcessor(
             config=ProcessorConfig(
@@ -144,6 +145,7 @@ class TestAgentLoopWiring:
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
             implementation=loop,
+            lifecycle_notifier=MagicMock(),
         )
         processor = SessionProcessor(
             config=ProcessorConfig(

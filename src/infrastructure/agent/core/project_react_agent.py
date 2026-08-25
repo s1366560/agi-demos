@@ -44,48 +44,35 @@ from typing import Any
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
+    AgentLifecycleNotifierProtocolV2,
+)
+from src.infrastructure.plugins.v2.agent_loop import (
+    AGENT_LOOP_RESOLVER_SERVICE_V2,
+    AgentLoopResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
-# Global reference to the WebSocket connection manager
-# Set by the web application on startup
-_websocket_manager: Any | None = None
 
+def get_websocket_notifier() -> AgentLifecycleNotifierProtocolV2 | None:
+    """Resolve the notifier injected into the Agent loop for this pinned operation."""
+    try:
+        operation = current_operation_context_v2()
+    except RuntimeV2Error as exc:
+        if exc.code == "operation_context_not_pinned":
+            return None
+        raise
 
-def get_websocket_notifier() -> Any | None:
-    """
-    Get the global WebSocket notifier.
-
-    Returns the WebSocketNotifier instance if the connection manager
-    has been registered, otherwise returns None.
-
-    Returns:
-        WebSocketNotifier instance or None
-    """
-    if _websocket_manager is None:
-        return None
-
-    from src.infrastructure.adapters.secondary.websocket_notifier import (
-        WebSocketNotifier,
-    )
-
-    return WebSocketNotifier(_websocket_manager)
-
-
-def register_websocket_manager(manager: Any) -> None:
-    """
-    Register the WebSocket connection manager globally.
-
-    This should be called during application startup to enable
-    lifecycle state notifications.
-
-    Args:
-        manager: ConnectionManager instance from agent_websocket.py
-    """
-    global _websocket_manager
-    _websocket_manager = manager
-    logger.info("[ProjectReActAgent] WebSocket manager registered for lifecycle notifications")
+    resolver = operation.require(AGENT_LOOP_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, AgentLoopResolverProtocolV2):
+        raise RuntimeV2Error(
+            "agent_loop_resolver_invalid",
+            "pinned agent-loop resolver does not implement the V2 service contract",
+        )
+    return resolver.lifecycle_notifier
 
 
 @dataclass
@@ -283,7 +270,7 @@ class ProjectReActAgent:
 
         # Notify initialization started
         if notifier:
-            await notifier.notify_initializing(
+            _ = await notifier.notify_initializing(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
@@ -334,7 +321,7 @@ class ProjectReActAgent:
 
             # Notify error state
             if notifier:
-                await notifier.notify_error(
+                _ = await notifier.notify_error(
                     tenant_id=self.config.tenant_id,
                     project_id=self.config.project_id,
                     error_message=error_message,
@@ -569,7 +556,7 @@ class ProjectReActAgent:
         async def _subagent_lifecycle_hook(event: dict[str, Any]) -> None:
             if not notifier:
                 return
-            await notifier.notify_subagent_lifecycle_event(
+            _ = await notifier.notify_subagent_lifecycle_event(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 event=event,
@@ -684,7 +671,7 @@ class ProjectReActAgent:
 
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_ready(
+            _ = await notifier.notify_ready(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 tool_count=self._status.tool_count,
@@ -952,7 +939,7 @@ class ProjectReActAgent:
 
         # Notify executing state
         if notifier:
-            await notifier.notify_executing(
+            _ = await notifier.notify_executing(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 conversation_id=conversation_id,
@@ -1030,13 +1017,13 @@ class ProjectReActAgent:
             # Notify ready state after completion (or error)
             if notifier:
                 if is_error and error_message:
-                    await notifier.notify_error(
+                    _ = await notifier.notify_error(
                         tenant_id=self.config.tenant_id,
                         project_id=self.config.project_id,
                         error_message=error_message,
                     )
                 else:
-                    await notifier.notify_ready(
+                    _ = await notifier.notify_ready(
                         tenant_id=self.config.tenant_id,
                         project_id=self.config.project_id,
                         tool_count=self._status.tool_count,
@@ -1061,7 +1048,7 @@ class ProjectReActAgent:
         # Notify paused state
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_paused(
+            _ = await notifier.notify_paused(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
@@ -1086,7 +1073,7 @@ class ProjectReActAgent:
         # Notify ready state
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_ready(
+            _ = await notifier.notify_ready(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 tool_count=self._status.tool_count,
@@ -1120,7 +1107,7 @@ class ProjectReActAgent:
         # Notify shutting down state
         notifier = get_websocket_notifier()
         if notifier:
-            await notifier.notify_shutting_down(
+            _ = await notifier.notify_shutting_down(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
