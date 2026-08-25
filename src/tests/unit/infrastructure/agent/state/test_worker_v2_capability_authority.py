@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -47,6 +48,12 @@ def test_worker_has_no_v1_plugin_capability_authority() -> None:
         "_publish_scoped_tool_generation",
     ):
         assert forbidden not in source
+
+
+@pytest.mark.unit
+def test_legacy_workspace_chat_tool_fallback_is_removed() -> None:
+    assert "_add_workspace_chat_tools" not in vars(agent_worker_state)
+    assert importlib.util.find_spec("src.infrastructure.agent.tools.workspace_chat_tool") is None
 
 
 @pytest.mark.unit
@@ -148,7 +155,6 @@ async def test_complete_worker_tool_set_is_cached_by_generation(
     )
     monkeypatch.setattr(agent_worker_state, "_add_sandbox_tools", _noop_async)
     monkeypatch.setattr(agent_worker_state, "_add_skill_loader_tool", _noop_async)
-    monkeypatch.setattr(agent_worker_state, "_add_workspace_chat_tools", _noop_async)
     monkeypatch.setattr(agent_worker_state, "_add_memory_tools", _add_memory)
     monkeypatch.setattr(agent_worker_state, "_add_custom_tools", _add_custom)
     for name in (

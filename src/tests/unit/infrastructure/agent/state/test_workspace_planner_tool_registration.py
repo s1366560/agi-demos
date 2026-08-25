@@ -37,7 +37,6 @@ async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
     for name in (
         "_add_sandbox_tools",
         "_add_skill_loader_tool",
-        "_add_workspace_chat_tools",
     ):
         monkeypatch.setattr(agent_worker_state, name, _async_noop)
 

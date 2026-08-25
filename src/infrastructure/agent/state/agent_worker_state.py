@@ -489,9 +489,6 @@ async def get_or_create_tools(
     # 15. Add Multi-Agent tools (behind feature flag)
     _add_agent_tools(tools, project_id)
 
-    # 16. Add Workspace Chat tools
-    await _add_workspace_chat_tools(tools, tenant_id, project_id)
-
     if cache_key is not None:
         async with _tools_cache_lock:
             _tools_cache[cache_key] = dict(tools)
@@ -1293,16 +1290,6 @@ def _add_session_comm_tools(
         )
     except Exception as e:
         logger.warning("Agent Worker: Failed to add session comm tools: %s", e)
-
-
-async def _add_workspace_chat_tools(
-    tools: dict[str, Any],
-    tenant_id: str,
-    project_id: str,
-) -> None:
-    """Leave Workspace chat registration to the Core-owned tool provider."""
-    del tools, tenant_id, project_id
-    logger.debug("Agent Worker: legacy Python Workspace chat tools are retired")
 
 
 def _add_session_status_tool(

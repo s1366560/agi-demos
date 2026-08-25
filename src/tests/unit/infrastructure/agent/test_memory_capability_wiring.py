@@ -140,10 +140,6 @@ class TestMemoryToolWiring:
                 "src.infrastructure.agent.state.agent_worker_state._add_agent_tools",
                 MagicMock(),
             ),
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_workspace_chat_tools",
-                AsyncMock(return_value=None),
-            ),
         ):
             from src.infrastructure.agent.state.agent_worker_state import get_or_create_tools
 
