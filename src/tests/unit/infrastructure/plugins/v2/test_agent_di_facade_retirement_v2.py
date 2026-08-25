@@ -36,3 +36,23 @@ def test_unused_cross_domain_facades_are_retired_from_top_level_di() -> None:
     }
 
     assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+def test_unused_internal_builder_facades_are_retired_from_top_level_di() -> None:
+    retired_facades = {
+        "api_key_repository",
+        "chat_use_case",
+        "execute_step_use_case",
+        "llm_invoker",
+        "react_loop",
+        "sequence_service",
+        "skill_service",
+        "spawn_manager",
+        "synthesize_results_use_case",
+        "tool_executor",
+        "workflow_learner",
+        "workspace_manager",
+        "workspace_task_session_attempt_service",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))

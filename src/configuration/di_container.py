@@ -12,20 +12,12 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.services.skill_service import SkillService
 from src.application.services.topology_service import TopologyService
-from src.application.services.workflow_learner import WorkflowLearner
 from src.application.services.workspace_message_service import WorkspaceMessageService
-from src.application.services.workspace_task_session_attempt_service import (
-    WorkspaceTaskSessionAttemptService,
-)
 from src.application.use_cases.agent import (
-    ChatUseCase,
     CreateConversationUseCase,
-    ExecuteStepUseCase,
     GetConversationUseCase,
     ListConversationsUseCase,
-    SynthesizeResultsUseCase,
 )
 from src.configuration.config import get_settings
 from src.configuration.containers import (
@@ -35,7 +27,6 @@ from src.configuration.containers import (
     ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.cyber_gene_repository import (
     CyberGeneRepository,
@@ -177,9 +168,6 @@ class DIContainer:
     def user_repository(self) -> UserRepository:
         return self._auth.user_repository()
 
-    def api_key_repository(self) -> APIKeyRepository:
-        return self._auth.api_key_repository()
-
     # === Project Container delegates ===
 
     def workspace_repository(self) -> WorkspaceRepository:
@@ -200,12 +188,6 @@ class DIContainer:
         return cast(
             WorkspaceTaskSessionAttemptRepository,
             self._project.workspace_task_session_attempt_repository(),
-        )
-
-    def workspace_task_session_attempt_service(self) -> WorkspaceTaskSessionAttemptService:
-        return cast(
-            WorkspaceTaskSessionAttemptService,
-            self._project.workspace_task_session_attempt_service(),
         )
 
     # === Workspace V2 (multi-agent orchestrator) ===
@@ -238,9 +220,6 @@ class DIContainer:
 
     def redis(self) -> redis.Redis | None:
         return self._infra.redis()
-
-    def sequence_service(self) -> Any:
-        return self._infra.sequence_service()
 
     def storage_service(self) -> Any:
         return self._infra.storage_service()
@@ -286,15 +265,6 @@ class DIContainer:
     def artifact_service(self) -> Any:
         return self._agent.artifact_service()
 
-    def skill_service(self) -> SkillService:
-        return self._agent.skill_service()
-
-    def workspace_manager(self) -> Any:
-        return self._agent.workspace_manager()
-
-    def spawn_manager(self) -> Any:
-        return self._agent.spawn_manager()
-
     def subagent_run_registry(self) -> Any:
         return self._agent.subagent_run_registry()
 
@@ -316,15 +286,6 @@ class DIContainer:
     def attachment_processor(self) -> Any:
         return self._agent.attachment_processor()
 
-    def llm_invoker(self, llm: LLMClient) -> Any:
-        return self._agent.llm_invoker(llm)
-
-    def tool_executor(self, tools: dict[str, Any]) -> Any:
-        return self._agent.tool_executor(tools)
-
-    def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
-        return self._agent.react_loop(llm, tools)
-
     def message_builder(self) -> Any:
         return self._agent.message_builder()
 
@@ -342,18 +303,6 @@ class DIContainer:
 
     def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
         return self._agent.get_conversation_use_case(llm)
-
-    def chat_use_case(self, llm: LLMClient) -> ChatUseCase:
-        return self._agent.chat_use_case(llm)
-
-    def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
-        return self._agent.execute_step_use_case(llm)
-
-    def synthesize_results_use_case(self, llm: LLMClient) -> SynthesizeResultsUseCase:
-        return self._agent.synthesize_results_use_case(llm)
-
-    def workflow_learner(self) -> WorkflowLearner:
-        return self._agent.workflow_learner()
 
     # === Multi-Agent Services (Phase 1-4) ===
 
