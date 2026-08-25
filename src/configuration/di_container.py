@@ -21,12 +21,9 @@ from src.application.services.workspace_task_session_attempt_service import (
 )
 from src.application.use_cases.agent import (
     ChatUseCase,
-    ComposeToolsUseCase,
     CreateConversationUseCase,
     ExecuteStepUseCase,
-    FindSimilarPattern,
     GetConversationUseCase,
-    LearnPattern,
     ListConversationsUseCase,
     SynthesizeResultsUseCase,
 )
@@ -64,7 +61,6 @@ from src.domain.ports.repositories.workspace.workspace_task_repository import (
 from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repository import (
     WorkspaceTaskSessionAttemptRepository,
 )
-from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -169,12 +165,6 @@ class DIContainer:
             )
         return self._db
 
-    def ai_service_factory(self) -> Any:
-        """Get the AIServiceFactory singleton."""
-        from src.infrastructure.llm.provider_factory import get_ai_service_factory
-
-        return get_ai_service_factory()
-
     # === Properties that stay on the main class ===
 
     @property
@@ -252,17 +242,8 @@ class DIContainer:
     def sequence_service(self) -> Any:
         return self._infra.sequence_service()
 
-    def hitl_message_bus(self) -> HITLMessageBusPort | None:
-        return self._infra.hitl_message_bus()
-
-    def agent_message_bus(self) -> Any:
-        return self._infra.agent_message_bus()
-
     def storage_service(self) -> Any:
         return self._infra.storage_service()
-
-    def distributed_lock_adapter(self) -> Any:
-        return self._infra.distributed_lock_adapter()
 
     # === Agent Container delegates ===
 
@@ -311,9 +292,6 @@ class DIContainer:
     def workspace_manager(self) -> Any:
         return self._agent.workspace_manager()
 
-    def agent_session_registry(self) -> Any:
-        return cast(Any, self._agent.agent_session_registry())
-
     def spawn_manager(self) -> Any:
         return self._agent.spawn_manager()
 
@@ -325,9 +303,6 @@ class DIContainer:
 
     def graph_repository(self) -> Any:
         return cast(Any, self._agent.graph_repository())
-
-    def graph_run_repository(self) -> Any:
-        return cast(Any, self._agent.graph_run_repository())
 
     def graph_orchestrator(self) -> Any:
         return self._agent.graph_orchestrator()
@@ -346,9 +321,6 @@ class DIContainer:
 
     def tool_executor(self, tools: dict[str, Any]) -> Any:
         return self._agent.tool_executor(tools)
-
-    def artifact_extractor(self) -> Any:
-        return self._agent.artifact_extractor()
 
     def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
         return self._agent.react_loop(llm, tools)
@@ -380,17 +352,8 @@ class DIContainer:
     def synthesize_results_use_case(self, llm: LLMClient) -> SynthesizeResultsUseCase:
         return self._agent.synthesize_results_use_case(llm)
 
-    def find_similar_pattern_use_case(self) -> FindSimilarPattern:
-        return self._agent.find_similar_pattern_use_case()
-
-    def learn_pattern_use_case(self) -> LearnPattern:
-        return self._agent.learn_pattern_use_case()
-
     def workflow_learner(self) -> WorkflowLearner:
         return self._agent.workflow_learner()
-
-    def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
-        return self._agent.compose_tools_use_case(llm)
 
     # === Multi-Agent Services (Phase 1-4) ===
 

@@ -19,3 +19,20 @@ def test_unused_agent_repository_facades_are_retired_from_top_level_di() -> None
     }
 
     assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+def test_unused_cross_domain_facades_are_retired_from_top_level_di() -> None:
+    retired_facades = {
+        "agent_message_bus",
+        "agent_session_registry",
+        "ai_service_factory",
+        "artifact_extractor",
+        "compose_tools_use_case",
+        "distributed_lock_adapter",
+        "find_similar_pattern_use_case",
+        "graph_run_repository",
+        "hitl_message_bus",
+        "learn_pattern_use_case",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))
