@@ -3283,7 +3283,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:c2204d8e62684a210c36d58864ebc8aa68f716fb8ff833f461901f851b760b51",
+        "digest": "sha256:358962d86f644e3ffee30b63623d42fdc6bd21ac0f456641a0aa85d250772cd2",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_memories_http_routes.py"
       }
     },
