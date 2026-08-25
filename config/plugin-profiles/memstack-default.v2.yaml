@@ -290,6 +290,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-instance-deploy-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/instance-deploy-provider
+      enabled: true
+      config:
+        strategy: operation-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-instance-deploy-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/instance-deploy-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:persistence.instance-deploy-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-instance-file-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

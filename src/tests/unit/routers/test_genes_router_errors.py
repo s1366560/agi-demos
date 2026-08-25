@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.gene_schemas import (
     GeneCreate,
@@ -18,6 +20,11 @@ from src.application.schemas.gene_schemas import (
 )
 from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
 from src.infrastructure.adapters.primary.web.routers import genes
+from src.infrastructure.adapters.secondary.persistence.models import (
+    InstanceModel,
+    Project,
+    User,
+)
 
 
 class _FailingGeneService:
@@ -58,21 +65,9 @@ class _FailingGeneService:
         raise PermissionError("review secret denied")
 
 
-class _InstanceService:
-    async def get_instance(self, instance_id: str) -> object | None:
-        if instance_id == "missing-instance":
-            return None
-        deleted_at = datetime(2026, 1, 2, tzinfo=UTC) if instance_id == "deleted-instance" else None
-        tenant_id = "tenant-2" if instance_id == "foreign-instance" else "tenant-1"
-        return SimpleNamespace(id=instance_id, tenant_id=tenant_id, deleted_at=deleted_at)
-
-
 class _Container:
     def gene_service(self) -> _FailingGeneService:
         return _FailingGeneService()
-
-    def instance_service(self) -> _InstanceService:
-        return _InstanceService()
 
 
 def _gene_entity(
@@ -416,9 +411,72 @@ def patch_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(genes, "get_container_with_db", lambda _request, _db: _Container())
 
 
+@pytest.fixture
+def _patch_instance_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def ensure_instance_access(
+        _db: object,
+        *,
+        instance_id: str,
+        tenant_id: str,
+        not_found_error: Callable[[], HTTPException] = genes._instance_not_found_error,
+    ) -> None:
+        assert tenant_id == "tenant-1"
+        if instance_id in {"deleted-instance", "foreign-instance", "missing-instance"}:
+            raise not_found_error()
+
+    monkeypatch.setattr(genes, "_ensure_instance_tenant_access", ensure_instance_access)
+
+
 def _tenant_dependency(handler: object) -> object:
     default = inspect.signature(handler).parameters["tenant_id"].default
     return getattr(default, "dependency", None)
+
+
+@pytest.mark.unit
+async def test_instance_tenant_access_filters_tenant_and_deleted_rows(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    active = InstanceModel(
+        id="gene-access-active-instance",
+        name="Active Instance",
+        slug="gene-access-active-instance",
+        tenant_id=test_project_db.tenant_id,
+        service_type="ClusterIP",
+        created_by=test_user.id,
+    )
+    deleted = InstanceModel(
+        id="gene-access-deleted-instance",
+        name="Deleted Instance",
+        slug="gene-access-deleted-instance",
+        tenant_id=test_project_db.tenant_id,
+        service_type="ClusterIP",
+        created_by=test_user.id,
+        deleted_at=datetime.now(UTC),
+    )
+    test_db.add_all([active, deleted])
+    await test_db.commit()
+
+    await genes._ensure_instance_tenant_access(
+        test_db,
+        instance_id=active.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    for instance_id, tenant_id in (
+        (active.id, "foreign-tenant"),
+        (deleted.id, test_project_db.tenant_id),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await genes._ensure_instance_tenant_access(
+                test_db,
+                instance_id=instance_id,
+                tenant_id=tenant_id,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Instance not found"
 
 
 @pytest.mark.unit
@@ -814,6 +872,7 @@ async def test_list_genomes_passes_global_inclusion_to_service(
 @pytest.mark.unit
 async def test_install_gene_includes_access_checked_gene_metadata(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     commit = AsyncMock()
     monkeypatch.setattr(
@@ -866,6 +925,7 @@ async def test_list_genomes_sanitizes_invalid_visibility_filter(
 @pytest.mark.unit
 async def test_install_genome_allows_published_global_genome(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     commit = AsyncMock()
     monkeypatch.setattr(
@@ -1032,7 +1092,9 @@ async def test_update_genome_reports_validation_errors_as_bad_request(
 
 
 @pytest.mark.unit
-async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
+async def test_get_instance_gene_sanitizes_missing_instance_gene_id(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_instance_gene(
             request=SimpleNamespace(),
@@ -1049,6 +1111,7 @@ async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
 @pytest.mark.unit
 async def test_get_instance_gene_hides_deleted_instance_gene(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     monkeypatch.setattr(
         genes,
@@ -1070,7 +1133,9 @@ async def test_get_instance_gene_hides_deleted_instance_gene(
 
 
 @pytest.mark.unit
-async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_found() -> None:
+async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_found(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_instance_gene(
             request=SimpleNamespace(),
@@ -1087,6 +1152,7 @@ async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_fou
 @pytest.mark.unit
 async def test_list_instance_genes_enriches_gene_display_metadata(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     monkeypatch.setattr(
         genes,
@@ -1132,7 +1198,9 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
 
 
 @pytest.mark.unit
-async def test_list_instance_genes_hides_deleted_instance() -> None:
+async def test_list_instance_genes_hides_deleted_instance(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_instance_genes(
             request=SimpleNamespace(),
@@ -1149,7 +1217,9 @@ async def test_list_instance_genes_hides_deleted_instance() -> None:
 
 
 @pytest.mark.unit
-async def test_list_evolution_events_sanitizes_value_errors() -> None:
+async def test_list_evolution_events_sanitizes_value_errors(
+    _patch_instance_access: None,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.list_evolution_events(
             request=SimpleNamespace(),
@@ -1170,6 +1240,7 @@ async def test_list_evolution_events_sanitizes_value_errors() -> None:
 @pytest.mark.unit
 async def test_list_evolution_events_hides_foreign_instance(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     monkeypatch.setattr(
         genes,
@@ -1222,6 +1293,7 @@ async def test_list_evolution_events_hides_foreign_gene(
 @pytest.mark.unit
 async def test_create_evolution_event_hides_foreign_instance(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     monkeypatch.setattr(
         genes,
@@ -1261,6 +1333,7 @@ async def test_get_evolution_event_sanitizes_missing_event_id() -> None:
 @pytest.mark.unit
 async def test_get_evolution_event_hides_foreign_instance(
     monkeypatch: pytest.MonkeyPatch,
+    _patch_instance_access: None,
 ) -> None:
     monkeypatch.setattr(
         genes,

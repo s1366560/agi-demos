@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:480f22455190a167f20d0d9ba7b9af9d57b5ce143e988eaa76269561ae003a08",
+        "digest": "sha256:a2fbf0fdc681973adc0090881d98499682ab2b515e649f598007181a821f6913",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -893,6 +893,74 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/instance-deploy-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_deploy_services:_apply_instance_deploy_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.instance-deploy-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:cfe78e125f46fd3b46c434766b00de4d63f0c89e03dbc4ea115365dfd379298c",
+      "artifact": {
+        "digest": "sha256:058591db8754c3f12ccb05c1baf252da1c4f1eb2c6b282c50bf0dd2f62eda751",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/instance-deploy-services",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_deploy_services:_apply_instance_deploy_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.instance-deploy-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.instance-deploy-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6f4934939d317226e7b1434fc6519e905a25f4d2940a6482c8f74b7eb6128b2b",
+      "artifact": {
+        "digest": "sha256:058591db8754c3f12ccb05c1baf252da1c4f1eb2c6b282c50bf0dd2f62eda751",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/persistence/instance-file-provider",
       "entrypoint": "src.infrastructure.plugins.v2.instance_file_services:_apply_instance_file_provider_v2",
       "targets": ["python"],
@@ -920,7 +988,7 @@
       },
       "contract_digest": "sha256:15221920c0b19482eb6a0c4b9b49a189349c07e5ec7f1dbd1820d3d0cc30e7c8",
       "artifact": {
-        "digest": "sha256:12aa1aaa9070f8137ebde08a7ce4121e18bf171e0bcbd60771a4b31f0131c43b",
+        "digest": "sha256:630055ad01a80cce7477224361646d046284ce70bbebef53d8a9a18859bb15ca",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
       }
     },
@@ -957,7 +1025,7 @@
       },
       "contract_digest": "sha256:e5fd0f702e910f9fd4d4cae18bca8ec3cc644c25f0f3e0c2c5c37024bd4cfe21",
       "artifact": {
-        "digest": "sha256:12aa1aaa9070f8137ebde08a7ce4121e18bf171e0bcbd60771a4b31f0131c43b",
+        "digest": "sha256:630055ad01a80cce7477224361646d046284ce70bbebef53d8a9a18859bb15ca",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
       }
     },

@@ -41,7 +41,11 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import GeneMarketModel, User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import (
+    GeneMarketModel,
+    InstanceModel,
+    User as DBUser,
+)
 from src.infrastructure.i18n import gettext as _
 
 
@@ -439,18 +443,24 @@ def _instance_gene_response(
 
 
 async def _ensure_instance_tenant_access(
-    container: DIContainer,
+    db: AsyncSession,
     *,
     instance_id: str,
     tenant_id: str,
     not_found_error: Callable[[], HTTPException] = _instance_not_found_error,
 ) -> None:
-    instance = await container.instance_service().get_instance(instance_id)
-    if (
-        instance is None
-        or instance.tenant_id != tenant_id
-        or getattr(instance, "deleted_at", None) is not None
-    ):
+    instance_tenant_id = (
+        await db.execute(
+            refresh_select_statement(
+                select(InstanceModel.tenant_id).where(
+                    InstanceModel.id == instance_id,
+                    InstanceModel.tenant_id == tenant_id,
+                    InstanceModel.deleted_at.is_(None),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if instance_tenant_id is None:
         raise not_found_error()
 
 
@@ -499,7 +509,7 @@ def _tenant_entity_matches(
 
 
 async def _ensure_instance_gene_tenant_access(
-    container: DIContainer,
+    db: AsyncSession,
     service: _InstanceGeneLookupService,
     *,
     instance_id: str,
@@ -507,7 +517,7 @@ async def _ensure_instance_gene_tenant_access(
     tenant_id: str,
 ) -> _InstanceScopedEntity:
     await _ensure_instance_tenant_access(
-        container,
+        db,
         instance_id=instance_id,
         tenant_id=tenant_id,
         not_found_error=_instance_gene_not_found_error,
@@ -591,7 +601,7 @@ async def list_genes(
     service = container.gene_service()
     if exclude_installed_instance_id:
         await _ensure_instance_tenant_access(
-            container,
+            db,
             instance_id=exclude_installed_instance_id,
             tenant_id=tenant_id,
         )
@@ -907,9 +917,7 @@ async def install_gene(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_instance_tenant_access(
-            container, instance_id=instance_id, tenant_id=tenant_id
-        )
+        await _ensure_instance_tenant_access(db, instance_id=instance_id, tenant_id=tenant_id)
         gene = await _ensure_gene_tenant_access(
             service,
             gene_id=data.gene_id,
@@ -947,9 +955,7 @@ async def install_genome(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_instance_tenant_access(
-            container, instance_id=instance_id, tenant_id=tenant_id
-        )
+        await _ensure_instance_tenant_access(db, instance_id=instance_id, tenant_id=tenant_id)
         await _ensure_genome_tenant_access(
             service,
             genome_id=genome_id,
@@ -1002,7 +1008,7 @@ async def uninstall_gene(
         container = get_container_with_db(request, db)
         service = container.gene_service()
         await _ensure_instance_gene_tenant_access(
-            container,
+            db,
             service,
             instance_id=instance_id,
             instance_gene_id=instance_gene_id,
@@ -1030,7 +1036,7 @@ async def list_instance_genes(
     """List all genes installed on an agent instance."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    await _ensure_instance_tenant_access(container, instance_id=instance_id, tenant_id=tenant_id)
+    await _ensure_instance_tenant_access(db, instance_id=instance_id, tenant_id=tenant_id)
     (
         instance_genes,
         total,
@@ -1081,7 +1087,7 @@ async def get_instance_gene(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     ig = await _ensure_instance_gene_tenant_access(
-        container,
+        db,
         service,
         instance_id=instance_id,
         instance_gene_id=instance_gene_id,
@@ -1257,7 +1263,7 @@ async def list_evolution_events(
     try:
         if instance_id:
             await _ensure_instance_tenant_access(
-                container,
+                db,
                 instance_id=instance_id,
                 tenant_id=tenant_id,
                 not_found_error=_evolution_event_not_found_error,
@@ -1304,7 +1310,7 @@ async def create_evolution_event(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     await _ensure_instance_tenant_access(
-        container,
+        db,
         instance_id=data.instance_id,
         tenant_id=tenant_id,
         not_found_error=_evolution_event_not_found_error,
@@ -1356,7 +1362,7 @@ async def get_evolution_event(
     if not event:
         raise _evolution_event_not_found_error()
     await _ensure_instance_tenant_access(
-        container,
+        db,
         instance_id=event.instance_id,
         tenant_id=tenant_id,
         not_found_error=_evolution_event_not_found_error,

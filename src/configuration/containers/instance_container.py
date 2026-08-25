@@ -3,11 +3,7 @@
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
-from src.application.services.instance_service import InstanceService
-from src.domain.ports.repositories.cluster_repository import ClusterRepository
-from src.domain.ports.repositories.deploy_record_repository import DeployRecordRepository
 from src.domain.ports.repositories.evolution_event_repository import (
     EvolutionEventRepository,
 )
@@ -17,16 +13,6 @@ from src.domain.ports.repositories.gene_review_repository import GeneReviewRepos
 from src.domain.ports.repositories.genome_repository import GenomeRepository
 from src.domain.ports.repositories.instance_gene_repository import (
     InstanceGeneRepository,
-)
-from src.domain.ports.repositories.instance_member_repository import (
-    InstanceMemberRepository,
-)
-from src.domain.ports.repositories.instance_repository import InstanceRepository
-from src.infrastructure.adapters.secondary.persistence.sql_cluster_repository import (
-    SqlClusterRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_deploy_record_repository import (
-    SqlDeployRecordRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_evolution_event_repository import (
     SqlEvolutionEventRepository,
@@ -46,12 +32,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_genome_repository imp
 from src.infrastructure.adapters.secondary.persistence.sql_instance_gene_repository import (
     SqlInstanceGeneRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_instance_member_repository import (
-    SqlInstanceMemberRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_instance_repository import (
-    SqlInstanceRepository,
-)
 
 
 class InstanceContainer:
@@ -69,32 +49,6 @@ class InstanceContainer:
     ) -> None:
         self._db = db
         self._redis_client = redis_client
-
-    # --- Instance ---
-
-    def instance_repository(self) -> InstanceRepository:
-        """Get InstanceRepository for instance persistence."""
-        assert self._db is not None
-        return SqlInstanceRepository(self._db)
-
-    def instance_member_repository(self) -> InstanceMemberRepository:
-        """Get InstanceMemberRepository for instance membership persistence."""
-        assert self._db is not None
-        return SqlInstanceMemberRepository(self._db)
-
-    # --- Deploy ---
-
-    def deploy_record_repository(self) -> DeployRecordRepository:
-        """Get DeployRecordRepository for deploy record persistence."""
-        assert self._db is not None
-        return SqlDeployRecordRepository(self._db)
-
-    # --- Cluster ---
-
-    def cluster_repository(self) -> ClusterRepository:
-        """Get ClusterRepository for cluster persistence."""
-        assert self._db is not None
-        return SqlClusterRepository(self._db)
 
     # --- Gene ---
 
@@ -131,23 +85,6 @@ class InstanceContainer:
     # =================================================================
     # Service factories
     # =================================================================
-
-    def instance_service(self) -> InstanceService:
-        """Get InstanceService for instance lifecycle operations."""
-        return InstanceService(
-            instance_repo=self.instance_repository(),
-            instance_member_repo=self.instance_member_repository(),
-            deploy_record_repo=self.deploy_record_repository(),
-            cluster_repo=self.cluster_repository(),
-        )
-
-    def deploy_service(self) -> DeployService:
-        """Get DeployService for deployment lifecycle operations."""
-        return DeployService(
-            deploy_record_repo=self.deploy_record_repository(),
-            instance_repo=self.instance_repository(),
-            redis_client=self._redis_client,
-        )
 
     def gene_service(self) -> GeneService:
         """Get GeneService for gene marketplace operations."""

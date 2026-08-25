@@ -15,10 +15,8 @@ from src.application.schemas.instance_schemas import (
     InstanceMemberUpdate,
     InstanceUpdate,
 )
-from src.configuration.di_container import DIContainer
 from src.domain.model.instance.enums import InstanceRole, InstanceStatus, ServiceType
 from src.domain.model.instance.instance import Instance, InstanceMember
-from src.infrastructure.adapters.primary.web.routers import instances as instances_router
 from src.infrastructure.adapters.primary.web.routers.instances import (
     PendingConfigRequest,
     ScaleRequest,
@@ -44,6 +42,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserTenant,
 )
+from src.infrastructure.plugins.v2.instance_deploy_services import (
+    SqlInstanceDeployServiceFactoryV2,
+)
 
 
 @pytest.fixture
@@ -67,8 +68,35 @@ async def managed_instance(
     return instance
 
 
-def _request() -> SimpleNamespace:
-    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=DIContainer())))
+def _authority(
+    *,
+    db: object,
+    user: object,
+    tenant_id: str,
+    instance_service: object | None = None,
+) -> SimpleNamespace:
+    if instance_service is None:
+        operation = SimpleNamespace(require=lambda _service: db)
+        services = SqlInstanceDeployServiceFactoryV2().build(operation)  # type: ignore[arg-type]
+    else:
+        services = SimpleNamespace(
+            instances=instance_service,
+            directory=SimpleNamespace(
+                get_user=AsyncMock(
+                    return_value=SimpleNamespace(
+                        email="member@example.com",
+                        full_name="Member",
+                    )
+                )
+            ),
+        )
+    return SimpleNamespace(
+        db=db,
+        current_user=user,
+        tenant_id=tenant_id,
+        services=services,
+        require_tenant_id=lambda: tenant_id,
+    )
 
 
 async def _latest_deploy(test_db: AsyncSession, instance_id: str) -> DeployRecordModel:
@@ -92,12 +120,13 @@ class TestInstanceRouterAuditFields:
         test_user: User,
     ) -> None:
         await scale_instance(
-            _request(),
             managed_instance.id,
             ScaleRequest(desired_replicas=3),
-            tenant_id=managed_instance.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=_authority(
+                db=test_db,
+                user=test_user,
+                tenant_id=managed_instance.tenant_id,
+            ),
         )
 
         deploy = await _latest_deploy(test_db, managed_instance.id)
@@ -130,16 +159,26 @@ async def test_list_members_returns_paginated_active_members(
         )
         for index in range(4)
     ]
-    test_db.add_all([*users, *members])
+    tenant_memberships = [
+        UserTenant(
+            id=f"instance-member-tenant-row-{index}",
+            user_id=users[index].id,
+            tenant_id=managed_instance.tenant_id,
+        )
+        for index in range(3)
+    ]
+    test_db.add_all([*users, *members, *tenant_memberships])
     await test_db.commit()
 
     response = await list_members(
-        _request(),
         managed_instance.id,
         limit=2,
         offset=0,
-        tenant_id=managed_instance.tenant_id,
-        db=test_db,
+        authority=_authority(
+            db=test_db,
+            user=SimpleNamespace(id="user-a"),
+            tenant_id=managed_instance.tenant_id,
+        ),
     )
 
     assert response.total == 3
@@ -209,17 +248,74 @@ async def test_search_users_only_returns_current_tenant_members(
     await test_db.commit()
 
     results = await search_users(
-        _request(),
         managed_instance.id,
         q="candidate",
         limit=20,
-        tenant_id=managed_instance.tenant_id,
-        db=test_db,
+        authority=_authority(
+            db=test_db,
+            user=SimpleNamespace(id="user-a"),
+            tenant_id=managed_instance.tenant_id,
+        ),
     )
 
     assert [(user.id, user.email) for user in results] == [
         (same_tenant_user.id, same_tenant_user.email)
     ]
+
+
+@pytest.mark.unit
+async def test_add_member_rejects_user_outside_instance_tenant(
+    test_db: AsyncSession,
+    managed_instance: InstanceModel,
+) -> None:
+    foreign_user = User(
+        id="instance-member-foreign-user",
+        email="instance-member-foreign@example.com",
+        hashed_password="hash",
+        full_name="Foreign Member",
+    )
+    foreign_tenant = Tenant(
+        id="instance-member-foreign-tenant",
+        name="Foreign Tenant",
+        slug="instance-member-foreign-tenant",
+        owner_id=foreign_user.id,
+    )
+    test_db.add_all(
+        [
+            foreign_user,
+            foreign_tenant,
+            UserTenant(
+                id="instance-member-foreign-membership",
+                user_id=foreign_user.id,
+                tenant_id=foreign_tenant.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await add_member(
+            managed_instance.id,
+            InstanceMemberCreate(
+                instance_id=managed_instance.id,
+                user_id=foreign_user.id,
+                role=InstanceRole.viewer.value,
+            ),
+            authority=_authority(
+                db=test_db,
+                user=SimpleNamespace(id="user-a"),
+                tenant_id=managed_instance.tenant_id,
+            ),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    result = await test_db.execute(
+        select(InstanceMemberModel).where(
+            InstanceMemberModel.instance_id == managed_instance.id,
+            InstanceMemberModel.user_id == foreign_user.id,
+        )
+    )
+    assert result.scalar_one_or_none() is None
 
 
 class _FailingInstanceService:
@@ -270,14 +366,6 @@ class _FailingInstanceService:
         raise ValueError("Instance instance-secret not found")
 
 
-class _Container:
-    def __init__(self) -> None:
-        self.service = _FailingInstanceService()
-
-    def instance_service(self) -> _FailingInstanceService:
-        return self.service
-
-
 @pytest.mark.unit
 async def test_get_owned_instance_sanitizes_missing_instance() -> None:
     service = SimpleNamespace(get_instance=AsyncMock(return_value=None))
@@ -318,7 +406,6 @@ async def test_get_owned_instance_sanitizes_missing_instance() -> None:
             {
                 "instance_id": "instance-secret",
                 "data": ScaleRequest(desired_replicas=2),
-                "current_user": SimpleNamespace(id="user-current"),
             },
             status.HTTP_404_NOT_FOUND,
             "Instance operation failed",
@@ -327,7 +414,6 @@ async def test_get_owned_instance_sanitizes_missing_instance() -> None:
             restart_instance,
             {
                 "instance_id": "instance-secret",
-                "current_user": SimpleNamespace(id="user-current"),
             },
             status.HTTP_404_NOT_FOUND,
             "Instance operation failed",
@@ -345,7 +431,6 @@ async def test_get_owned_instance_sanitizes_missing_instance() -> None:
             apply_pending_config,
             {
                 "instance_id": "instance-secret",
-                "current_user": SimpleNamespace(id="user-current"),
             },
             status.HTTP_404_NOT_FOUND,
             "Instance operation failed",
@@ -392,15 +477,15 @@ async def test_instance_routes_sanitize_service_value_errors(
     call_args: dict[str, object],
     expected_status: int,
     expected_detail: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(instances_router, "get_container_with_db", lambda *_args: _Container())
-
     with pytest.raises(HTTPException) as exc_info:
         await call(
-            request=SimpleNamespace(),
-            tenant_id="tenant-1",
-            db=SimpleNamespace(commit=AsyncMock(), execute=AsyncMock()),
+            authority=_authority(
+                db=SimpleNamespace(commit=AsyncMock(), execute=AsyncMock()),
+                user=SimpleNamespace(id="user-current"),
+                tenant_id="tenant-1",
+                instance_service=_FailingInstanceService(),
+            ),
             **call_args,
         )
 
@@ -416,11 +501,12 @@ async def test_instance_routes_sanitize_service_value_errors(
         test_user: User,
     ) -> None:
         await restart_instance(
-            _request(),
             managed_instance.id,
-            tenant_id=managed_instance.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=_authority(
+                db=test_db,
+                user=test_user,
+                tenant_id=managed_instance.tenant_id,
+            ),
         )
 
         deploy = await _latest_deploy(test_db, managed_instance.id)
@@ -437,11 +523,12 @@ async def test_instance_routes_sanitize_service_value_errors(
         await test_db.commit()
 
         await apply_pending_config(
-            _request(),
             managed_instance.id,
-            tenant_id=managed_instance.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=_authority(
+                db=test_db,
+                user=test_user,
+                tenant_id=managed_instance.tenant_id,
+            ),
         )
 
         deploy = await _latest_deploy(test_db, managed_instance.id)

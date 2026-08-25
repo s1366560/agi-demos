@@ -48,7 +48,6 @@ def _make_service(
     instance_repo: AsyncMock | None = None,
     deploy_record_repo: AsyncMock | None = None,
     instance_member_repo: AsyncMock | None = None,
-    cluster_repo: AsyncMock | None = None,
 ) -> InstanceService:
     if instance_repo is None:
         instance_repo = AsyncMock()
@@ -56,13 +55,10 @@ def _make_service(
         deploy_record_repo = AsyncMock()
     if instance_member_repo is None:
         instance_member_repo = AsyncMock()
-    if cluster_repo is None:
-        cluster_repo = AsyncMock()
     return InstanceService(
         instance_repo=instance_repo,
         deploy_record_repo=deploy_record_repo,
         instance_member_repo=instance_member_repo,
-        cluster_repo=cluster_repo,
     )
 
 

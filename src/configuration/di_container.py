@@ -14,9 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.application.services.agent_service import AgentService
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
-from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
-from src.application.services.instance_service import InstanceService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
@@ -55,7 +53,6 @@ from src.configuration.containers import (
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
-from src.domain.ports.repositories.deploy_record_repository import DeployRecordRepository
 from src.domain.ports.repositories.evolution_event_repository import (
     EvolutionEventRepository,
 )
@@ -66,10 +63,6 @@ from src.domain.ports.repositories.genome_repository import GenomeRepository
 from src.domain.ports.repositories.instance_gene_repository import (
     InstanceGeneRepository,
 )
-from src.domain.ports.repositories.instance_member_repository import (
-    InstanceMemberRepository,
-)
-from src.domain.ports.repositories.instance_repository import InstanceRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
@@ -346,15 +339,6 @@ class DIContainer:
 
     # === Instance Container delegates ===
 
-    def instance_repository(self) -> InstanceRepository:
-        return self._instance.instance_repository()
-
-    def instance_member_repository(self) -> InstanceMemberRepository:
-        return self._instance.instance_member_repository()
-
-    def deploy_record_repository(self) -> DeployRecordRepository:
-        return self._instance.deploy_record_repository()
-
     def gene_repository(self) -> GeneRepository:
         return self._instance.gene_repository()
 
@@ -372,12 +356,6 @@ class DIContainer:
 
     def evolution_event_repository(self) -> EvolutionEventRepository:
         return self._instance.evolution_event_repository()
-
-    def instance_service(self) -> InstanceService:
-        return self._instance.instance_service()
-
-    def deploy_service(self) -> DeployService:
-        return self._instance.deploy_service()
 
     def gene_service(self) -> GeneService:
         return self._instance.gene_service()

@@ -10,9 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.instance_file_service import InstanceFileService
 from src.application.services.instance_service import InstanceService
-from src.infrastructure.adapters.secondary.persistence.sql_cluster_repository import (
-    SqlClusterRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_deploy_record_repository import (
     SqlDeployRecordRepository,
 )
@@ -79,7 +76,6 @@ class SqlInstanceFileServiceFactoryV2:
                 instance_repo=SqlInstanceRepository(db),
                 instance_member_repo=SqlInstanceMemberRepository(db),
                 deploy_record_repo=SqlDeployRecordRepository(db),
-                cluster_repo=SqlClusterRepository(db),
             ),
             files=InstanceFileService(base_dir=self.base_dir),
         )
