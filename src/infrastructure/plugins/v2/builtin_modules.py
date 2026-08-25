@@ -71,6 +71,7 @@ from .schema_services import schema_service_definitions_v2
 from .search_services import search_service_definition_v2
 from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
+from .shares_services import shares_service_definitions_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
 from .smtp_config_services import smtp_config_service_definitions_v2
@@ -288,6 +289,7 @@ def builtin_runtime_definitions_v2(
         *tenant_agent_config_service_definitions_v2(),
         *audit_service_definitions_v2(),
         *billing_service_definitions_v2(),
+        *shares_service_definitions_v2(),
         *invitation_service_definitions_v2(),
         *smtp_config_service_definitions_v2(),
         *tenant_webhook_service_definitions_v2(),

@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:6613347cdfb9b46e21e3621b83c10310dca73a718195d566d6dff9f288924b83",
+        "digest": "sha256:6c615b8b1eb2dc9f85339d614b5b98680d936809581dac731adb8c4006506ba6",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1304,6 +1304,74 @@
       "artifact": {
         "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/shares-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.shares_services:_apply_shares_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.shares-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:bf428657666dc35d6ef30bf5a19cb2845b4f72d52137a8de97c49aa99a473375",
+      "artifact": {
+        "digest": "sha256:09974e2655969dde05ea87cabd2153f066cd0093dcdc4d2c22b6fb7687bab85a",
+        "source": "repo+python://src/infrastructure/plugins/v2/shares_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/shares-services",
+      "entrypoint": "src.infrastructure.plugins.v2.shares_services:_apply_shares_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.shares-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.shares-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:873a8ae9603479b12e0e69d6a3904e25d025aacf57153e4091663f3099ab0527",
+      "artifact": {
+        "digest": "sha256:09974e2655969dde05ea87cabd2153f066cd0093dcdc4d2c22b6fb7687bab85a",
+        "source": "repo+python://src/infrastructure/plugins/v2/shares_services.py"
       }
     },
     {

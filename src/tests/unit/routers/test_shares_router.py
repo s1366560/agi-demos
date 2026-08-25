@@ -2,11 +2,23 @@
 
 import logging
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.infrastructure.adapters.primary.web.routers import shares as shares_router
+from src.infrastructure.adapters.primary.web.shares_application_authority_v2 import (
+    SharesApplicationAuthorityV2,
+    public_shares_application_authority_dependency_v2,
+    shares_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
@@ -14,6 +26,42 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+from src.infrastructure.plugins.v2.shares_services import (
+    SharesApplicationServicesV2,
+    SharesApplicationServiceV2,
+    SqlSharesPersistenceV2,
+)
+
+
+@pytest.fixture
+def client(test_engine: Any, test_user: User) -> Iterator[TestClient]:
+    """Exercise the production handlers with real operation-scoped V2 services."""
+    app = FastAPI()
+    app.include_router(shares_router.router)
+    sessions = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    def authority(db: AsyncSession, current_user: User | None) -> SharesApplicationAuthorityV2:
+        return SharesApplicationAuthorityV2(
+            operation=cast(Any, SimpleNamespace()),
+            db=db,
+            current_user=current_user,
+            services=SharesApplicationServicesV2(
+                shares=SharesApplicationServiceV2(persistence=SqlSharesPersistenceV2(_session=db))
+            ),
+        )
+
+    async def authenticated_authority():
+        async with sessions() as db:
+            yield authority(db, test_user)
+
+    async def public_authority():
+        async with sessions() as db:
+            yield authority(db, None)
+
+    app.dependency_overrides[shares_application_authority_dependency_v2] = authenticated_authority
+    app.dependency_overrides[public_shares_application_authority_dependency_v2] = public_authority
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestCreateShare:

@@ -1,243 +1,112 @@
+# pyright: reportImportCycles=false
 """Memory sharing API endpoints."""
 
 import logging
-import secrets
-from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
-from typing import Any, cast
-from uuid import uuid4
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    Memory,
-    MemoryShare,
-    Project,
-    User,
-    UserProject,
+from src.infrastructure.adapters.primary.web.shares_application_authority_v2 import (
+    SharesApplicationAuthorityV2,
+    public_shares_application_authority_dependency_v2,
+    shares_application_authority_dependency_v2,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.shares_services import (
+    SharesAccessDeniedV2,
+    SharesDuplicateTargetV2,
+    SharesInvalidExpirationV2,
+    SharesInvalidPermissionLevelV2,
+    SharesInvalidTargetTypeV2,
+    SharesLinkExpiredV2,
+    SharesLinkNotFoundV2,
+    SharesMemoryNotFoundV2,
+    SharesServiceErrorV2,
+    SharesShareNotFoundV2,
+    SharesTargetIdRequiredV2,
+    SharesTargetProjectNotFoundV2,
+    SharesTargetUserNotFoundV2,
+    SharesViewDeniedV2,
+    SharesWrongMemoryV2,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["shares"])
 logger = logging.getLogger(__name__)
 
+_SHARE_HTTP_ERROR_SPECS: dict[type[SharesServiceErrorV2], tuple[int, str]] = {
+    SharesMemoryNotFoundV2: (404, "Memory not found"),
+    SharesAccessDeniedV2: (403, "Access denied"),
+    SharesInvalidTargetTypeV2: (400, "target_type must be 'user' or 'project'"),
+    SharesInvalidPermissionLevelV2: (400, "permission_level must be 'view' or 'edit'"),
+    SharesTargetIdRequiredV2: (400, "target_id is required"),
+    SharesTargetUserNotFoundV2: (404, "Target user not found"),
+    SharesTargetProjectNotFoundV2: (404, "Target project not found"),
+    SharesDuplicateTargetV2: (400, "Memory already shared with this target"),
+    SharesInvalidExpirationV2: (400, "Invalid expires_at format"),
+    SharesShareNotFoundV2: (404, "Share not found"),
+    SharesWrongMemoryV2: (400, "Share does not belong to this memory"),
+    SharesLinkNotFoundV2: (404, "Share link not found"),
+    SharesLinkExpiredV2: (403, "Share link has expired"),
+    SharesViewDeniedV2: (403, "Share link does not allow viewing"),
+}
 
-async def _check_project_admin_access(db: AsyncSession, user_id: str, project_id: str) -> bool:
-    """Check if user has admin/owner access to the project.
 
-    Args:
-        db: Database session
-        user_id: User ID to check
-        project_id: Project ID to check access for
+def _authenticated_user_id(authority: SharesApplicationAuthorityV2) -> str:
+    current_user = authority.current_user
+    if current_user is None:
+        raise RuntimeV2Error(
+            "missing_operation_identity",
+            "authenticated shares operation has no user identity",
+        )
+    return str(current_user.id)
 
-    Returns:
-        True if user is project owner or admin, False otherwise
-    """
-    result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == user_id,
-                UserProject.project_id == project_id,
-                UserProject.role.in_(["owner", "admin"]),
-            )
-        ))
+
+def _share_http_error(error: SharesServiceErrorV2) -> HTTPException:
+    status_code, detail = _SHARE_HTTP_ERROR_SPECS.get(
+        type(error),
+        (400, "Share operation failed"),
     )
-    return result.scalar_one_or_none() is not None
-
-
-def _share_can_view(permissions: object) -> bool:
-    """Return True only for an explicit public view grant."""
-    if not isinstance(permissions, Mapping):
-        return False
-    permissions_map = cast(Mapping[str, object], permissions)
-    return permissions_map.get("view") is True
-
-
-def _new_share_token() -> str:
-    """Generate a high-entropy URL-safe bearer token for public share links."""
-    return secrets.token_urlsafe(32)
-
-
-async def _ensure_share_target_authorized(
-    db: AsyncSession,
-    current_user_id: str,
-    target_type: str,
-    target_id: str,
-) -> None:
-    """Validate that an explicit share target exists and can receive this share."""
-    if target_type == "user":
-        target_user_result = await db.execute(
-            refresh_select_statement(select(User.id).where(User.id == target_id))
-        )
-        if target_user_result.scalar_one_or_none() is None:
-            raise HTTPException(status_code=404, detail=_("Target user not found"))
-        return
-
-    target_project_result = await db.execute(
-        refresh_select_statement(select(Project.id).where(Project.id == target_id))
-    )
-    if target_project_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail=_("Target project not found"))
-    if not await _check_project_admin_access(db, current_user_id, target_id):
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-
-
-async def _find_existing_target_share(
-    db: AsyncSession,
-    memory_id: str,
-    target_type: str,
-    target_id: str,
-) -> MemoryShare | None:
-    """Return an existing explicit target share for duplicate detection."""
-    if target_type == "user":
-        result = await db.execute(
-            refresh_select_statement(select(MemoryShare).where(
-                MemoryShare.memory_id == memory_id,
-                MemoryShare.shared_with_user_id == target_id,
-            ))
-        )
-    else:
-        result = await db.execute(
-            refresh_select_statement(select(MemoryShare).where(
-                MemoryShare.memory_id == memory_id,
-                MemoryShare.shared_with_project_id == target_id,
-            ))
-        )
-    return result.scalar_one_or_none()
-
-
-def _parse_share_expiration(share_data: dict[str, Any]) -> datetime | None:
-    """Parse either absolute or relative share expiration payload fields."""
-    if share_data.get("expires_at"):
-        try:
-            return datetime.fromisoformat(share_data["expires_at"])
-        except (TypeError, ValueError):
-            raise HTTPException(
-                status_code=400,
-                detail=_("Invalid expires_at format"),
-            ) from None
-
-    if "expires_in_days" in share_data:
-        days = share_data["expires_in_days"]
-        if isinstance(days, int) and days > 0:
-            return datetime.now(UTC) + timedelta(days=days)
-
-    return None
+    return HTTPException(status_code=status_code, detail=_(detail))
 
 
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
 async def create_share(
     memory_id: str,
     share_data: dict[str, Any],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    shares_application: SharesApplicationAuthorityV2 = Depends(
+        shares_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    """Create share - strict/lenient payloads, includes memory_id for integration."""
-    memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-    memory = memory_result.scalar_one_or_none()
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-    if memory.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-    target_type = share_data.get("target_type")
-    permission_level = share_data.get("permission_level")
-    target_id = share_data.get("target_id")
-    validated_target_id: str | None = None
-    if target_type:
-        if target_type not in ["user", "project"]:
-            raise HTTPException(status_code=400, detail=_("target_type must be 'user' or 'project'"))
-        if permission_level not in ["view", "edit"]:
-            raise HTTPException(status_code=400, detail=_("permission_level must be 'view' or 'edit'"))
-        if not isinstance(target_id, str) or not target_id.strip():
-            raise HTTPException(status_code=400, detail=_("target_id is required"))
-        validated_target_id = target_id.strip()
-
-        await _ensure_share_target_authorized(
-            db,
-            current_user.id,
-            target_type,
-            validated_target_id,
+    """Create a public or explicitly targeted memory share."""
+    try:
+        result = await shares_application.services.shares.create_share(
+            memory_id=memory_id,
+            user_id=_authenticated_user_id(shares_application),
+            share_data=share_data,
         )
-        if await _find_existing_target_share(db, memory_id, target_type, validated_target_id):
-            raise HTTPException(status_code=400, detail=_("Memory already shared with this target"))
-
-    expires_at = _parse_share_expiration(share_data)
-    share = MemoryShare(
-        id=str(uuid4()),
-        memory_id=memory_id,
-        shared_with_user_id=validated_target_id if target_type == "user" else None,
-        shared_with_project_id=validated_target_id if target_type == "project" else None,
-        share_token=_new_share_token(),
-        shared_by=current_user.id,
-        permissions=share_data.get(
-            "permissions", {"view": True, "edit": permission_level == "edit"}
-        )
-        if permission_level
-        else share_data.get("permissions", {"view": True, "edit": False}),
-        expires_at=expires_at,
-        access_count=0,
-    )
-    db.add(share)
-    await db.commit()
-    return {
-        "id": share.id,
-        "share_token": share.share_token,
-        "memory_id": memory_id,
-        "shared_with_user_id": share.shared_with_user_id,
-        "shared_with_project_id": share.shared_with_project_id,
-        "permissions": share.permissions,
-        "expires_at": share.expires_at.isoformat() if share.expires_at else None,
-        "created_at": share.created_at.isoformat(),
-        "access_count": share.access_count,
-    }
+    except SharesServiceErrorV2 as error:
+        raise _share_http_error(error) from error
+    await shares_application.db.commit()
+    return result
 
 
 @router.get("/memories/{memory_id}/shares")
 async def list_shares(
     memory_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    shares_application: SharesApplicationAuthorityV2 = Depends(
+        shares_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """List all share links for a memory."""
-    # Get memory to verify access
-    memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-    memory = memory_result.scalar_one_or_none()
-
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-
-    # Check access - author OR project admin/owner
-    if memory.author_id != current_user.id:
-        if not await _check_project_admin_access(db, current_user.id, memory.project_id):
-            raise HTTPException(status_code=403, detail=_("Access denied"))
-
-    # Get shares
-    shares_result = await db.execute(
-        refresh_select_statement(select(MemoryShare)
-        .where(MemoryShare.memory_id == memory_id)
-        .order_by(MemoryShare.created_at.desc()))
-    )
-    shares = shares_result.scalars().all()
-
-    return {
-        "shares": [
-            {
-                "id": share.id,
-                "share_token": share.share_token,
-                "permissions": share.permissions,
-                "expires_at": share.expires_at.isoformat() if share.expires_at else None,
-                "created_at": share.created_at.isoformat(),
-                "access_count": share.access_count,
-            }
-            for share in shares
-        ]
-    }
+    try:
+        return await shares_application.services.shares.list_shares(
+            memory_id=memory_id,
+            user_id=_authenticated_user_id(shares_application),
+        )
+    except SharesServiceErrorV2 as error:
+        raise _share_http_error(error) from error
 
 
 @router.delete("/memories/{memory_id}/shares/{share_id}", response_model=None)
@@ -245,98 +114,43 @@ async def delete_share(
     memory_id: str,
     share_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    shares_application: SharesApplicationAuthorityV2 = Depends(
+        shares_application_authority_dependency_v2
+    ),
 ) -> Response | dict[str, Any]:
-    """Delete a share link."""
-    # Get memory to verify access
-    memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-    memory = memory_result.scalar_one_or_none()
+    """Delete a memory share."""
+    user_id = _authenticated_user_id(shares_application)
+    try:
+        await shares_application.services.shares.delete_share(
+            memory_id=memory_id,
+            share_id=share_id,
+            user_id=user_id,
+        )
+    except SharesServiceErrorV2 as error:
+        raise _share_http_error(error) from error
+    await shares_application.db.commit()
+    logger.info("Deleted share %s for memory %s by user %s", share_id, memory_id, user_id)
 
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-
-    # Check access - author OR project admin/owner
-    if memory.author_id != current_user.id:
-        if not await _check_project_admin_access(db, current_user.id, memory.project_id):
-            raise HTTPException(status_code=403, detail=_("Access denied"))
-
-    # Get share
-    share_result = await db.execute(refresh_select_statement(select(MemoryShare).where(MemoryShare.id == share_id)))
-    share = share_result.scalar_one_or_none()
-
-    if not share:
-        raise HTTPException(status_code=404, detail=_("Share not found"))
-
-    if share.memory_id != memory_id:
-        raise HTTPException(status_code=400, detail=_("Share does not belong to this memory"))
-
-    # Delete share
-    await db.delete(share)
-    await db.commit()
-
-    logger.info(f"Deleted share {share_id} for memory {memory_id} by user {current_user.id}")
-
-    # For unit tests using TestClient, return 200 with body; otherwise 204
-    ua = request.headers.get("user-agent", "")
-    if "testclient" in ua or "python-requests" in ua:
+    user_agent = request.headers.get("user-agent", "")
+    if "testclient" in user_agent or "python-requests" in user_agent:
         return {"success": True}
-    from fastapi import Response
-
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/shared/{share_token}")
 async def get_shared_memory(
     share_token: str,
-    db: AsyncSession = Depends(get_db),
+    shares_application: SharesApplicationAuthorityV2 = Depends(
+        public_shares_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    """Access a shared memory via share token (public endpoint)."""
-    # Get share
-    share_result = await db.execute(
-        refresh_select_statement(select(MemoryShare).where(MemoryShare.share_token == share_token))
-    )
-    share = share_result.scalar_one_or_none()
-
-    if not share:
-        raise HTTPException(status_code=404, detail=_("Share link not found"))
-
-    # Check expiration
-    if share.expires_at:
-        exp = share.expires_at
-        if exp.tzinfo is None:
-            exp = exp.replace(tzinfo=UTC)
-        if exp < datetime.now(UTC):
-            raise HTTPException(status_code=403, detail=_("Share link has expired"))
-
-    if not _share_can_view(share.permissions):
-        raise HTTPException(status_code=403, detail=_("Share link does not allow viewing"))
-
-    # Get memory
-    memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == share.memory_id)))
-    memory = memory_result.scalar_one_or_none()
-
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-
-    # Increment access count
-    share.access_count += 1
-    await db.commit()
-
-    logger.info("Shared memory %s accessed via share %s", share.memory_id, share.id)
-
-    # Return memory with share info
-    return {
-        "memory": {
-            "id": memory.id,
-            "title": memory.title,
-            "content": memory.content,
-            "tags": memory.tags,
-            "created_at": memory.created_at.isoformat(),
-            "updated_at": memory.updated_at.isoformat() if memory.updated_at else None,
-        },
-        "share": {
-            "permissions": share.permissions,
-            "expires_at": share.expires_at.isoformat() if share.expires_at else None,
-        },
-    }
+    """Access a shared memory via its public bearer token."""
+    try:
+        result = await shares_application.services.shares.get_shared_memory(
+            share_token=share_token,
+        )
+    except SharesServiceErrorV2 as error:
+        raise _share_http_error(error) from error
+    await shares_application.db.commit()
+    logger.info("Shared memory %s accessed via share %s", result.memory_id, result.share_id)
+    return result.payload
