@@ -17,7 +17,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     verify_api_key_dependency,
 )
-from src.infrastructure.adapters.primary.web.routers import cyber_genes, cyber_objectives
+from src.infrastructure.adapters.primary.web.routers import cyber_genes, cyber_objectives, topology
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
     register_workspace_core_routes,
     register_workspace_core_static_routes,
@@ -288,6 +288,81 @@ async def test_avernet_cyber_objective_routes_proxy_exact_contract_without_legac
         ("PATCH", f"{base}/objective-1"),
         ("DELETE", f"{base}/objective-1"),
         ("POST", f"{base}/objective-1/project-to-task"),
+    ]
+
+
+@pytest.mark.unit
+async def test_avernet_topology_routes_proxy_exact_contract_without_legacy_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "topology-1"})
+        return httpx.Response(200, json={"id": "topology-1"})
+
+    def legacy_service_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("topology proxy touched the retired local service")
+
+    monkeypatch.setattr(topology, "get_topology_service", legacy_service_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/workspaces/workspace-1/topology"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(f"{base}/nodes", json={"node_type": "note"}),
+            await client.get(f"{base}/nodes", params={"limit": 10}),
+            await client.get(f"{base}/nodes/node-1"),
+            await client.patch(f"{base}/nodes/node-1", json={"title": "Updated"}),
+            await client.delete(f"{base}/nodes/node-1"),
+            await client.post(
+                f"{base}/edges",
+                json={"source_node_id": "node-1", "target_node_id": "node-2"},
+            ),
+            await client.get(f"{base}/edges", params={"limit": 20}),
+            await client.get(f"{base}/edges/edge-1"),
+            await client.patch(f"{base}/edges/edge-1", json={"label": "Updated"}),
+            await client.delete(f"{base}/edges/edge-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [
+        201,
+        200,
+        200,
+        200,
+        204,
+        201,
+        200,
+        200,
+        200,
+        204,
+    ]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", f"{base}/nodes"),
+        ("GET", f"{base}/nodes?limit=10"),
+        ("GET", f"{base}/nodes/node-1"),
+        ("PATCH", f"{base}/nodes/node-1"),
+        ("DELETE", f"{base}/nodes/node-1"),
+        ("POST", f"{base}/edges"),
+        ("GET", f"{base}/edges?limit=20"),
+        ("GET", f"{base}/edges/edge-1"),
+        ("PATCH", f"{base}/edges/edge-1"),
+        ("DELETE", f"{base}/edges/edge-1"),
     ]
 
 

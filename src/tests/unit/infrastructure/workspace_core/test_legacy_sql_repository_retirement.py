@@ -57,7 +57,6 @@ def test_legacy_sql_workspace_repositories_fail_closed_without_touching_session(
     "factory_name",
     [
         "topology_repository",
-        "topology_service",
     ],
 )
 def test_project_container_workspace_factories_fail_closed_without_sql(
@@ -71,6 +70,12 @@ def test_project_container_workspace_factories_fail_closed_without_sql(
 
     with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
         getattr(container, factory_name)()
+
+
+@pytest.mark.unit
+def test_topology_static_service_facades_are_removed_after_workspace_core_cutover() -> None:
+    assert "topology_service" not in vars(ProjectContainer)
+    assert "topology_service" not in vars(DIContainer)
 
 
 @pytest.mark.unit

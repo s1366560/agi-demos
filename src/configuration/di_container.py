@@ -12,7 +12,6 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.services.topology_service import TopologyService
 from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.application.use_cases.agent import (
     CreateConversationUseCase,
@@ -156,9 +155,6 @@ class DIContainer:
 
     def topology_repository(self) -> TopologyRepository:
         return cast(TopologyRepository, self._project.topology_repository())
-
-    def topology_service(self) -> TopologyService:
-        return cast(TopologyService, self._project.topology_service())
 
     def workspace_message_service(
         self,

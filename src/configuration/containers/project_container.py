@@ -66,10 +66,6 @@ class ProjectContainer:
         """Reject the retired platform SQL Topology repository."""
         legacy_workspace_runtime_retired("DI topology repository")
 
-    def topology_service(self) -> Never:
-        """Reject the retired platform SQL Topology service."""
-        legacy_workspace_runtime_retired("DI topology service")
-
     def workspace_message_repository(self) -> WorkspaceMessageRepository:
         legacy_workspace_runtime_retired("DI message repository")
 
