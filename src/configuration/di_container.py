@@ -551,15 +551,3 @@ class DIContainer:
         from src.application.services.event_log_service import EventLogService
 
         return EventLogService(self.event_log_repository())
-
-    def webhook_repository(self) -> Any:
-        from src.infrastructure.adapters.secondary.persistence.sql_webhook_repository import (
-            SqlWebhookRepository,
-        )
-
-        return SqlWebhookRepository(self._require_db("webhook_repository"))
-
-    def webhook_service(self) -> Any:
-        from src.application.services.webhook_service import WebhookService
-
-        return WebhookService(self.webhook_repository())

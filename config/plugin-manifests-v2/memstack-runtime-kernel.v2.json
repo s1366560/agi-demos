@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:cdb75826354fd0a031721992ed9786cfc1f3aeebf2163fede3dbb37d7a250ad9",
+        "digest": "sha256:10e7b8a5097a5782496f6f4a3191854d5c81febfe4ef4dcbab0f3452cfeebf04",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1094,6 +1094,74 @@
       "artifact": {
         "digest": "sha256:a0bb6d283caa64eaf7b0af04ca353b0c030b2b6ede00e7305992b7967e8454ea",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_skill_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/tenant-webhook-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.tenant_webhook_services:_apply_tenant_webhook_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.tenant-webhook-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:a9b8870be2c318dd8ea89a1efcf78b597e8b4de469b670f461b424137d25c9a7",
+      "artifact": {
+        "digest": "sha256:32830866e0da86fc02af22a35b3268ed31c8a24c078f8e045e64db802de5e7fb",
+        "source": "repo+python://src/infrastructure/plugins/v2/tenant_webhook_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/tenant-webhook-services",
+      "entrypoint": "src.infrastructure.plugins.v2.tenant_webhook_services:_apply_tenant_webhook_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.tenant-webhook-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.tenant-webhook-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:03cf9e858a21b020004ac0803f9ae6490eb0675baf36e9559dfbce93c64c17ac",
+      "artifact": {
+        "digest": "sha256:32830866e0da86fc02af22a35b3268ed31c8a24c078f8e045e64db802de5e7fb",
+        "source": "repo+python://src/infrastructure/plugins/v2/tenant_webhook_services.py"
       }
     },
     {

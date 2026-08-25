@@ -75,6 +75,7 @@ from .system_prompt import builtin_system_prompt_definition_v2
 from .task_log_services import task_log_service_definitions_v2
 from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_definition_v2
 from .tenant_skill_config_services import tenant_skill_config_service_definitions_v2
+from .tenant_webhook_services import tenant_webhook_service_definitions_v2
 from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
@@ -278,6 +279,7 @@ def builtin_runtime_definitions_v2(
         *cluster_service_definitions_v2(),
         *gene_service_definitions_v2(),
         *tenant_skill_config_service_definitions_v2(),
+        *tenant_webhook_service_definitions_v2(),
         *instance_deploy_service_definitions_v2(redis_client=sandbox_redis_client),
         *instance_file_service_definitions_v2(),
         *instance_channel_service_definitions_v2(),
