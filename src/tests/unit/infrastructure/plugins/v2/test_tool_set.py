@@ -15,7 +15,10 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
 )
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
-from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.builtin_modules import (
+    RUNTIME_BOUNDARY_MODULE_V2,
+    builtin_runtime_definitions_v2,
+)
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import (
@@ -23,9 +26,9 @@ from src.infrastructure.plugins.v2.runtime import (
     LoaderV2,
     RuntimeV2Error,
 )
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.tool_set import (
     TOOL_CONTRIBUTION_MODULE_V2,
+    TOOL_SET_MODULE_V2,
     TOOL_SET_RESOLVER_SERVICE_V2,
     ToolSetCatalogV2,
     ToolSetResolverV2,
@@ -35,6 +38,42 @@ from src.infrastructure.plugins.v2.tool_set import (
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+
+
+def _snapshot(*, generation: int, contribution_enabled: bool = True):
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    document = load_profile_document_v2(_PROFILE_PATH)
+    selected_modules = {
+        RUNTIME_BOUNDARY_MODULE_V2,
+        TOOL_SET_MODULE_V2,
+        TOOL_CONTRIBUTION_MODULE_V2,
+    }
+    entries = tuple(
+        replace(
+            entry,
+            enabled=(
+                contribution_enabled
+                if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
+                else entry.enabled
+            ),
+        )
+        for entry in document.entries
+        if entry.module_ref in selected_modules
+    )
+    return compose_profile_v2(
+        replace(document, entries=entries),
+        {manifest.plugin_id: manifest},
+        generation=generation,
+    )
+
+
+async def _manager(*, generation: int, contribution_enabled: bool = True) -> GenerationManagerV2:
+    runtime_generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(
+        _snapshot(generation=generation, contribution_enabled=contribution_enabled)
+    )
+    manager = GenerationManagerV2()
+    await manager.publish(runtime_generation)
+    return manager
 
 
 class _Tool:
@@ -199,31 +238,28 @@ def test_tool_catalog_rejects_invalid_contribution_result() -> None:
 
 @pytest.mark.unit
 async def test_runtime_consumer_resolves_tools_from_generation_provider() -> None:
-    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
-        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
-        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
-        generation=1,
-        version=1,
-    )
+    manager = await _manager(generation=1)
     agent = _ToolAgent()
     selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
 
-    async with pin_operation_context_v2(
-        host,
-        operation_id="tool-set-consumer",
-        scope=ScopeV2(kind=ScopeKindV2.ROOT),
-    ) as operation:
-        assert isinstance(
-            operation.require(TOOL_SET_RESOLVER_SERVICE_V2),
-            ToolSetResolverV2,
-        )
-        raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="tool-set-consumer",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            assert isinstance(
+                operation.require(TOOL_SET_RESOLVER_SERVICE_V2),
+                ToolSetResolverV2,
+            )
+            raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
+    finally:
+        await manager.close()
 
     assert set(raw_tools) == {"read"}
     assert len(definitions) == 1
-    assert agent.contexts == [selection]
-    await host.close()
+    # Sources contribute their complete set; selection runs once after the merge.
+    assert agent.contexts == [None]
 
 
 @pytest.mark.unit
@@ -236,25 +272,7 @@ def test_agent_tool_source_is_an_explicit_profile_entry() -> None:
 
 @pytest.mark.unit
 async def test_disabling_tool_contribution_removes_tools_without_native_fallback() -> None:
-    document = load_profile_document_v2(_PROFILE_PATH)
-    disabled = replace(
-        document,
-        entries=tuple(
-            replace(entry, enabled=False)
-            if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
-            else entry
-            for entry in document.entries
-        ),
-    )
-    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
-    snapshot = compose_profile_v2(
-        disabled,
-        {manifest.plugin_id: manifest},
-        generation=2,
-    )
-    generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
-    manager = GenerationManagerV2()
-    await manager.publish(generation)
+    manager = await _manager(generation=2, contribution_enabled=False)
     agent = _ToolAgent()
     selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
 

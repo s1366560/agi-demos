@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -29,6 +29,22 @@ from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
 )
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
+from src.infrastructure.plugins.v2.darwinian_evolver_capability import (
+    DARWINIAN_EVOLVER_SKILL_MODULE_V2,
+)
+from src.infrastructure.plugins.v2.docker_compose_capabilities import (
+    DOCKER_COMPOSE_SKILL_MODULE_V2,
+    DOCKER_COMPOSE_TOOL_MODULE_V2,
+)
+from src.infrastructure.plugins.v2.drone_capabilities import (
+    DRONE_SKILL_MODULE_V2,
+    DRONE_TOOL_MODULE_V2,
+)
+from src.infrastructure.plugins.v2.github_capabilities import (
+    GITHUB_SKILL_MODULE_V2,
+    GITHUB_TOOL_MODULE_V2,
+)
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.session_event_log import (
     MODEL_MESSAGE_COMMITTED_EVENT_V2,
@@ -46,6 +62,30 @@ _SCOPE = ScopeV2(
     project_id="project-a",
     session_id="conversation-a",
 )
+_OPTIONAL_AGENT_CAPABILITY_MODULES = frozenset(
+    {
+        GITHUB_TOOL_MODULE_V2,
+        GITHUB_SKILL_MODULE_V2,
+        DOCKER_COMPOSE_TOOL_MODULE_V2,
+        DOCKER_COMPOSE_SKILL_MODULE_V2,
+        DRONE_TOOL_MODULE_V2,
+        DRONE_SKILL_MODULE_V2,
+        DARWINIAN_EVOLVER_SKILL_MODULE_V2,
+    }
+)
+
+
+def _agent_spine_test_profile(document: ProfileDocumentV2) -> ProfileDocumentV2:
+    """Explicitly disable optional capabilities outside this spine scenario."""
+    return replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref in _OPTIONAL_AGENT_CAPABILITY_MODULES
+            else entry
+            for entry in document.entries
+        ),
+    )
 
 
 @dataclass
@@ -150,6 +190,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
         generation=11,
         version=11,
         nonce="agent-spine-integration",
+        profile_projector=_agent_spine_test_profile,
     )
 
     llm_messages: list[list[dict[str, Any]]] = []

@@ -17,6 +17,7 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
     _resolve_agent_capabilities_from_runtime_v2,
 )
 from src.infrastructure.plugins.v2.agent_capabilities import (
+    AGENT_CAPABILITY_MODULE_V2,
     AGENT_CAPABILITY_RESOLVER_SERVICE_V2,
     SKILL_CONTRIBUTION_MODULE_V2,
     SUBAGENT_CONTRIBUTION_MODULE_V2,
@@ -24,7 +25,10 @@ from src.infrastructure.plugins.v2.agent_capabilities import (
     AgentCapabilityResolverV2,
 )
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
-from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.builtin_modules import (
+    RUNTIME_BOUNDARY_MODULE_V2,
+    builtin_runtime_definitions_v2,
+)
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
@@ -33,6 +37,41 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+
+
+def _snapshot(*, generation: int, skill_enabled: bool = True):
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    document = load_profile_document_v2(_PROFILE_PATH)
+    selected_modules = {
+        RUNTIME_BOUNDARY_MODULE_V2,
+        AGENT_CAPABILITY_MODULE_V2,
+        SKILL_CONTRIBUTION_MODULE_V2,
+        SUBAGENT_CONTRIBUTION_MODULE_V2,
+    }
+    entries = tuple(
+        replace(
+            entry,
+            enabled=(
+                skill_enabled if entry.module_ref == SKILL_CONTRIBUTION_MODULE_V2 else entry.enabled
+            ),
+        )
+        for entry in document.entries
+        if entry.module_ref in selected_modules
+    )
+    return compose_profile_v2(
+        replace(document, entries=entries),
+        {manifest.plugin_id: manifest},
+        generation=generation,
+    )
+
+
+async def _manager(*, generation: int, skill_enabled: bool = True) -> GenerationManagerV2:
+    runtime_generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(
+        _snapshot(generation=generation, skill_enabled=skill_enabled)
+    )
+    manager = GenerationManagerV2()
+    await manager.publish(runtime_generation)
+    return manager
 
 
 def _skill(name: str = "skill-a") -> Skill:
@@ -148,31 +187,27 @@ async def test_agent_capability_catalog_rejects_duplicate_names_across_sources()
 
 @pytest.mark.unit
 async def test_runtime_resolves_agent_state_only_through_explicit_contributions() -> None:
-    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
-        profile_path=_PROFILE_PATH,
-        manifest_paths=(_MANIFEST_PATH,),
-        generation=1,
-        version=1,
-    )
+    manager = await _manager(generation=1)
     agent = SimpleNamespace(skills=[_skill()], subagents=[_subagent()])
 
-    async with pin_operation_context_v2(
-        host,
-        operation_id="agent-capability-consumer",
-        scope=ScopeV2(kind=ScopeKindV2.ROOT),
-    ) as operation:
-        resolver = operation.require(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
-        assert isinstance(resolver, AgentCapabilityResolverV2)
-        result = await resolver.resolve(
-            agent=agent,
-            tenant_id="tenant-a",
-            project_id="project-a",
-        )
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="agent-capability-consumer",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            resolver = operation.require(AGENT_CAPABILITY_RESOLVER_SERVICE_V2)
+            assert isinstance(resolver, AgentCapabilityResolverV2)
+            result = await resolver.resolve(
+                agent=agent,
+                tenant_id="tenant-a",
+                project_id="project-a",
+            )
+    finally:
+        await manager.close()
 
     assert result.skills == tuple(agent.skills)
     assert result.subagents == tuple(agent.subagents)
-    await host.close()
 
 
 @pytest.mark.unit
@@ -186,25 +221,7 @@ def test_skill_and_subagent_sources_are_explicit_profile_entries() -> None:
 
 @pytest.mark.unit
 async def test_disabling_skill_contribution_removes_skills_without_native_fallback() -> None:
-    document = load_profile_document_v2(_PROFILE_PATH)
-    disabled = replace(
-        document,
-        entries=tuple(
-            replace(entry, enabled=False)
-            if entry.module_ref == SKILL_CONTRIBUTION_MODULE_V2
-            else entry
-            for entry in document.entries
-        ),
-    )
-    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
-    snapshot = compose_profile_v2(
-        disabled,
-        {manifest.plugin_id: manifest},
-        generation=2,
-    )
-    generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
-    manager = GenerationManagerV2()
-    await manager.publish(generation)
+    manager = await _manager(generation=2, skill_enabled=False)
     agent = SimpleNamespace(skills=[_skill()], subagents=[_subagent()])
 
     try:
