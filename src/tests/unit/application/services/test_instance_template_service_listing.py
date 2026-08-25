@@ -5,8 +5,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
+from src.application.services.instance_template_service import InstanceTemplateService
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
+    SqlInstanceTemplateRepository,
+)
 
 
 def _slug(prefix: str) -> str:
@@ -19,7 +22,9 @@ async def test_list_templates_with_total_filters_before_pagination(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).instance_template_service()
+    service = InstanceTemplateService(
+        template_repo=SqlInstanceTemplateRepository(test_db),
+    )
 
     unpublished = await service.create_template(
         name="Unpublished Template",

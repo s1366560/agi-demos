@@ -17,6 +17,7 @@ from src.application.schemas.gene_schemas import (
     GenomeRatingCreate,
 )
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
+from src.application.services.instance_template_service import InstanceTemplateService
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers import clusters, instance_templates
 from src.infrastructure.adapters.primary.web.routers.clusters import create_cluster
@@ -30,6 +31,9 @@ from src.infrastructure.adapters.primary.web.routers.genes import (
 )
 from src.infrastructure.adapters.primary.web.routers.instance_templates import create_template
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
+    SqlInstanceTemplateRepository,
+)
 
 
 def _request() -> Request:
@@ -81,12 +85,19 @@ class TestMarketplaceAuditFields:
 
         monkeypatch.setattr(instance_templates, "require_tenant_access", allow_access)
 
-        response = await create_template(
-            _request(),
-            InstanceTemplateCreate(name="Audit Template", slug=_slug("template")),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
+        authority = SimpleNamespace(
             db=test_db,
+            current_user=test_user,
+            tenant_id=test_project_db.tenant_id,
+            services=SimpleNamespace(
+                templates=InstanceTemplateService(
+                    template_repo=SqlInstanceTemplateRepository(test_db),
+                )
+            ),
+        )
+        response = await create_template(
+            InstanceTemplateCreate(name="Audit Template", slug=_slug("template")),
+            authority=authority,
         )
 
         assert response.created_by == test_user.id

@@ -7,7 +7,6 @@ from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
-from src.application.services.instance_template_service import InstanceTemplateService
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
 from src.domain.ports.repositories.deploy_record_repository import DeployRecordRepository
 from src.domain.ports.repositories.evolution_event_repository import (
@@ -24,9 +23,6 @@ from src.domain.ports.repositories.instance_member_repository import (
     InstanceMemberRepository,
 )
 from src.domain.ports.repositories.instance_repository import InstanceRepository
-from src.domain.ports.repositories.instance_template_repository import (
-    InstanceTemplateRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_cluster_repository import (
     SqlClusterRepository,
 )
@@ -56,9 +52,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_instance_member_repos
 )
 from src.infrastructure.adapters.secondary.persistence.sql_instance_repository import (
     SqlInstanceRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
-    SqlInstanceTemplateRepository,
 )
 
 
@@ -136,13 +129,6 @@ class InstanceContainer:
         assert self._db is not None
         return SqlGeneReviewRepository(self._db)
 
-    # --- Template ---
-
-    def instance_template_repository(self) -> InstanceTemplateRepository:
-        """Get InstanceTemplateRepository for instance template persistence."""
-        assert self._db is not None
-        return SqlInstanceTemplateRepository(self._db)
-
     # =================================================================
     # Service factories
     # =================================================================
@@ -179,10 +165,4 @@ class InstanceContainer:
             gene_rating_repo=self.gene_rating_repository(),
             evolution_event_repo=self.evolution_event_repository(),
             gene_review_repo=self.gene_review_repository(),
-        )
-
-    def instance_template_service(self) -> InstanceTemplateService:
-        """Get InstanceTemplateService for template management operations."""
-        return InstanceTemplateService(
-            template_repo=self.instance_template_repository(),
         )

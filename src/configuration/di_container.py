@@ -18,7 +18,6 @@ from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
-from src.application.services.instance_template_service import InstanceTemplateService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
@@ -73,9 +72,6 @@ from src.domain.ports.repositories.instance_member_repository import (
     InstanceMemberRepository,
 )
 from src.domain.ports.repositories.instance_repository import InstanceRepository
-from src.domain.ports.repositories.instance_template_repository import (
-    InstanceTemplateRepository,
-)
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
@@ -382,9 +378,6 @@ class DIContainer:
     def evolution_event_repository(self) -> EvolutionEventRepository:
         return self._instance.evolution_event_repository()
 
-    def instance_template_repository(self) -> InstanceTemplateRepository:
-        return self._instance.instance_template_repository()
-
     def instance_service(self) -> InstanceService:
         return self._instance.instance_service()
 
@@ -396,9 +389,6 @@ class DIContainer:
 
     def gene_service(self) -> GeneService:
         return self._instance.gene_service()
-
-    def instance_template_service(self) -> InstanceTemplateService:
-        return self._instance.instance_template_service()
 
     # === Infra Container delegates ===
 

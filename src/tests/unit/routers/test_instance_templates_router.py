@@ -58,17 +58,19 @@ class _FailingTemplateService:
         raise ValueError("Template item item-secret not found")
 
 
-class _Container:
-    def __init__(self) -> None:
-        self.service = _FailingTemplateService()
-
-    def instance_template_service(self) -> _FailingTemplateService:
-        return self.service
-
-
-@pytest.fixture(autouse=True)
-def failing_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
+def _authority(
+    *,
+    service: object,
+    db: object,
+    user: object,
+    tenant_id: str = "tenant-1",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        current_user=user,
+        tenant_id=tenant_id,
+        services=SimpleNamespace(templates=service),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -95,18 +97,19 @@ def user() -> SimpleNamespace:
     return SimpleNamespace(id="user-1")
 
 
+@pytest.fixture
+def authority(db: SimpleNamespace, user: SimpleNamespace) -> SimpleNamespace:
+    return _authority(service=_FailingTemplateService(), db=db, user=user)
+
+
 @pytest.mark.unit
 async def test_create_template_sanitizes_validation_errors(
-    db: SimpleNamespace,
-    user: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.create_template(
-            request=SimpleNamespace(),
             data=InstanceTemplateCreate(name="Template", slug="template"),
-            tenant_id="tenant-1",
-            current_user=user,
-            db=db,
+            authority=authority,
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -117,8 +120,7 @@ async def test_create_template_sanitizes_validation_errors(
 @pytest.mark.unit
 async def test_create_template_requires_tenant_admin_before_mutation(
     monkeypatch: pytest.MonkeyPatch,
-    db: SimpleNamespace,
-    user: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     async def deny_admin(
         *_args: object,
@@ -130,44 +132,36 @@ async def test_create_template_requires_tenant_admin_before_mutation(
 
     with pytest.raises(HTTPException) as exc_info:
         await router.create_template(
-            request=SimpleNamespace(),
             data=InstanceTemplateCreate(name="Template", slug="template"),
-            tenant_id="tenant-1",
-            current_user=user,
-            db=db,
+            authority=authority,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Admin access required"
-    db.commit.assert_not_awaited()
+    authority.db.commit.assert_not_awaited()
 
 
 @pytest.mark.unit
 async def test_create_template_rejects_payload_tenant_mismatch(
-    db: SimpleNamespace,
-    user: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.create_template(
-            request=SimpleNamespace(),
             data=InstanceTemplateCreate(
                 name="Template",
                 slug="template",
                 tenant_id="tenant-2",
             ),
-            tenant_id="tenant-1",
-            current_user=user,
-            db=db,
+            authority=authority,
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Access denied"
-    db.commit.assert_not_awaited()
+    authority.db.commit.assert_not_awaited()
 
 
 @pytest.mark.unit
 async def test_create_template_uses_authenticated_tenant_scope(
-    monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
     user: SimpleNamespace,
 ) -> None:
@@ -194,22 +188,13 @@ async def test_create_template_uses_authenticated_tenant_scope(
 
     service = Service()
 
-    class Container:
-        def instance_template_service(self) -> Service:
-            return service
-
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
-
     response = await router.create_template(
-        request=SimpleNamespace(),
         data=InstanceTemplateCreate(
             name="Template",
             slug="template",
             tenant_id="tenant-1",
         ),
-        tenant_id="tenant-1",
-        current_user=user,
-        db=db,
+        authority=_authority(service=service, db=db, user=user),
     )
 
     assert response.tenant_id == "tenant-1"
@@ -218,15 +203,15 @@ async def test_create_template_uses_authenticated_tenant_scope(
 
 
 @pytest.mark.unit
-async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -> None:
+async def test_list_templates_sanitizes_validation_errors(
+    authority: SimpleNamespace,
+) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.list_templates(
-            request=SimpleNamespace(),
             page=1,
             page_size=20,
             is_published=None,
-            tenant_id="tenant-1",
-            db=db,
+            authority=authority,
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -241,61 +226,43 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
         (
             "update_template",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "data": InstanceTemplateUpdate(name="Updated"),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "delete_template",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "publish_template",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "unpublish_template",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "add_template_item",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "data": TemplateItemCreate(
                     template_id="tmpl-secret",
                     item_slug="gene-a",
                 ),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "remove_template_item",
             {
-                "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "item_id": "item-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
     ],
@@ -303,10 +270,10 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
 async def test_template_routes_sanitize_not_found_value_errors(
     call_name: str,
     call_args: dict[str, object],
-    db: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
-        await getattr(router, call_name)(**call_args, db=db)
+        await getattr(router, call_name)(**call_args, authority=authority)
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     assert exc_info.value.detail == "Template not found"
@@ -315,17 +282,13 @@ async def test_template_routes_sanitize_not_found_value_errors(
 
 @pytest.mark.unit
 async def test_clone_template_sanitizes_create_value_errors(
-    db: SimpleNamespace,
-    user: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.clone_template(
-            request=SimpleNamespace(),
             template_id="tmpl-source",
             data=router.CloneTemplateRequest(new_name="Clone"),
-            tenant_id="tenant-1",
-            current_user=user,
-            db=db,
+            authority=authority,
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -335,7 +298,6 @@ async def test_clone_template_sanitizes_create_value_errors(
 
 @pytest.mark.unit
 async def test_list_template_items_rejects_cross_tenant_template(
-    monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
     class CrossTenantService:
@@ -346,18 +308,14 @@ async def test_list_template_items_rejects_cross_tenant_template(
 
     service = CrossTenantService()
 
-    class Container:
-        def instance_template_service(self) -> CrossTenantService:
-            return service
-
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
-
     with pytest.raises(HTTPException) as exc_info:
         await router.list_template_items(
-            request=SimpleNamespace(),
             template_id="tmpl-other",
-            tenant_id="tenant-1",
-            db=db,
+            authority=_authority(
+                service=service,
+                db=db,
+                user=SimpleNamespace(id="user-1"),
+            ),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -367,7 +325,6 @@ async def test_list_template_items_rejects_cross_tenant_template(
 
 @pytest.mark.unit
 async def test_remove_template_item_passes_route_template_scope(
-    monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
     class ScopedService:
@@ -379,19 +336,14 @@ async def test_remove_template_item_passes_route_template_scope(
 
     service = ScopedService()
 
-    class Container:
-        def instance_template_service(self) -> ScopedService:
-            return service
-
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
-
     await router.remove_template_item(
-        request=SimpleNamespace(),
         template_id="tmpl-owned",
         item_id="item-owned",
-        tenant_id="tenant-1",
-        current_user=SimpleNamespace(id="user-1"),
-        db=db,
+        authority=_authority(
+            service=service,
+            db=db,
+            user=SimpleNamespace(id="user-1"),
+        ),
     )
 
     service.remove_template_item.assert_awaited_once_with("item-owned", template_id="tmpl-owned")

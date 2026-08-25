@@ -7,7 +7,7 @@ for creating instances with predefined settings and gene compositions.
 import logging
 from typing import Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,23 +19,14 @@ from src.application.schemas.instance_template_schemas import (
     TemplateItemCreate,
     TemplateItemResponse,
 )
-from src.configuration.di_container import DIContainer
 from src.domain.model.instance_template.instance_template import InstanceTemplate
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
+from src.infrastructure.adapters.primary.web.instance_template_application_authority_v2 import (
+    InstanceTemplateApplicationAuthorityV2,
+    instance_template_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """Get DI container with database session for the current request."""
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
 
 logger = logging.getLogger(__name__)
 
@@ -125,31 +116,31 @@ async def _get_tenant_template_or_404(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_template(
-    request: Request,
     data: InstanceTemplateCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Create a new instance template."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-        _ensure_request_tenant_matches(data.tenant_id, tenant_id)
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ensure_request_tenant_matches(data.tenant_id, authority.tenant_id)
 
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        template = await service.create_template(
+        template = await authority.services.templates.create_template(
             name=data.name,
             slug=data.slug,
-            created_by=current_user.id,
-            tenant_id=tenant_id,
+            created_by=authority.current_user.id,
+            tenant_id=authority.tenant_id,
             description=data.description,
             icon=data.icon,
             image_version=data.image_version,
             default_config=data.default_config,
         )
-        await db.commit()
+        await authority.db.commit()
 
         logger.info("Template created: %s", template.id)
         return InstanceTemplateResponse.model_validate(template, from_attributes=True)
@@ -165,21 +156,18 @@ async def create_template(
     response_model=InstanceTemplateListResponse,
 )
 async def list_templates(
-    request: Request,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     is_published: bool | None = Query(None, description="Filter by published status"),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateListResponse:
     """List instance templates with pagination."""
     try:
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
         offset = (page - 1) * page_size
-        templates, total = await service.list_templates_with_total(
-            tenant_id=tenant_id,
+        templates, total = await authority.services.templates.list_templates_with_total(
+            tenant_id=authority.tenant_id,
             is_published=is_published,
             limit=page_size,
             offset=offset,
@@ -205,16 +193,17 @@ async def list_templates(
     response_model=InstanceTemplateResponse,
 )
 async def get_template(
-    request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Get a specific instance template by ID."""
-    container = get_container_with_db(request, db)
-    service = container.instance_template_service()
-
-    template = await _get_tenant_template_or_404(service, template_id, tenant_id)
+    template = await _get_tenant_template_or_404(
+        authority.services.templates,
+        template_id,
+        authority.tenant_id,
+    )
 
     return InstanceTemplateResponse.model_validate(template, from_attributes=True)
 
@@ -224,22 +213,25 @@ async def get_template(
     response_model=InstanceTemplateResponse,
 )
 async def update_template(
-    request: Request,
     template_id: str,
     data: InstanceTemplateUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Update an existing instance template."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        template = await service.update_template(
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        template = await authority.services.templates.update_template(
             template_id=template_id,
             name=data.name,
             description=data.description,
@@ -248,7 +240,7 @@ async def update_template(
             default_config=data.default_config,
             is_published=data.is_published,
         )
-        await db.commit()
+        await authority.db.commit()
 
         logger.info("Template updated: %s", template_id)
         return InstanceTemplateResponse.model_validate(template, from_attributes=True)
@@ -265,22 +257,25 @@ async def update_template(
     response_model=None,
 )
 async def delete_template(
-    request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> None:
     """Delete an instance template."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        await service.delete_template(template_id)
-        await db.commit()
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        await authority.services.templates.delete_template(template_id)
+        await authority.db.commit()
 
         logger.info("Template deleted: %s", template_id)
 
@@ -300,22 +295,25 @@ async def delete_template(
     response_model=InstanceTemplateResponse,
 )
 async def publish_template(
-    request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Publish a template to the marketplace."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        template = await service.publish_template(template_id)
-        await db.commit()
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        template = await authority.services.templates.publish_template(template_id)
+        await authority.db.commit()
 
         logger.info("Template published: %s", template_id)
         return InstanceTemplateResponse.model_validate(template, from_attributes=True)
@@ -331,22 +329,25 @@ async def publish_template(
     response_model=InstanceTemplateResponse,
 )
 async def unpublish_template(
-    request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Unpublish a template from the marketplace."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        template = await service.unpublish_template(template_id)
-        await db.commit()
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        template = await authority.services.templates.unpublish_template(template_id)
+        await authority.db.commit()
 
         logger.info("Template unpublished: %s", template_id)
         return InstanceTemplateResponse.model_validate(template, from_attributes=True)
@@ -368,44 +369,47 @@ async def unpublish_template(
     status_code=status.HTTP_201_CREATED,
 )
 async def clone_template(
-    request: Request,
     template_id: str,
     data: CloneTemplateRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> InstanceTemplateResponse:
     """Clone an existing template with a new name."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        source = await _get_tenant_template_or_404(service, template_id, tenant_id)
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        source = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
 
         slug = data.new_name.lower().replace(" ", "-")
-        cloned = await service.create_template(
+        cloned = await authority.services.templates.create_template(
             name=data.new_name,
             slug=slug,
-            created_by=current_user.id,
-            tenant_id=tenant_id,
+            created_by=authority.current_user.id,
+            tenant_id=authority.tenant_id,
             description=source.description,
             icon=source.icon,
             image_version=source.image_version,
             default_config=source.default_config,
         )
 
-        source_items = await service.list_template_items(template_id)
+        source_items = await authority.services.templates.list_template_items(template_id)
         for item in source_items:
-            _created_item = await service.add_template_item(
+            _created_item = await authority.services.templates.add_template_item(
                 template_id=cloned.id,
                 item_type=item.item_type,
                 item_slug=item.item_slug,
                 display_order=item.display_order,
             )
 
-        await db.commit()
+        await authority.db.commit()
 
         logger.info("Template cloned: %s -> %s", template_id, cloned.id)
         return InstanceTemplateResponse.model_validate(cloned, from_attributes=True)
@@ -427,32 +431,36 @@ async def clone_template(
     status_code=status.HTTP_201_CREATED,
 )
 async def add_template_item(
-    request: Request,
     template_id: str,
     data: TemplateItemCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> TemplateItemResponse:
     """Add an item to a template."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
 
         from src.domain.model.instance_template.enums import (
             TemplateItemType,
         )
 
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        item = await service.add_template_item(
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        item = await authority.services.templates.add_template_item(
             template_id=template_id,
             item_type=TemplateItemType(data.item_type),
             item_slug=data.item_slug,
             display_order=data.display_order,
         )
-        await db.commit()
+        await authority.db.commit()
 
         logger.info(
             "Item added to template %s: %s",
@@ -473,23 +481,29 @@ async def add_template_item(
     response_model=None,
 )
 async def remove_template_item(
-    request: Request,
     template_id: str,
     item_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> None:
     """Remove an item from a template."""
     try:
-        await _require_template_admin(db, current_user, tenant_id)
-
-        container = get_container_with_db(request, db)
-        service = container.instance_template_service()
-
-        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-        await service.remove_template_item(item_id, template_id=template_id)
-        await db.commit()
+        await _require_template_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
+        _ = await _get_tenant_template_or_404(
+            authority.services.templates,
+            template_id,
+            authority.tenant_id,
+        )
+        await authority.services.templates.remove_template_item(
+            item_id,
+            template_id=template_id,
+        )
+        await authority.db.commit()
 
         logger.info(
             "Item removed from template %s: %s",
@@ -508,16 +522,17 @@ async def remove_template_item(
     response_model=list[TemplateItemResponse],
 )
 async def list_template_items(
-    request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceTemplateApplicationAuthorityV2 = Depends(
+        instance_template_application_authority_dependency_v2
+    ),
 ) -> list[TemplateItemResponse]:
     """List all items belonging to a template."""
-    container = get_container_with_db(request, db)
-    service = container.instance_template_service()
-
-    _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
-    items = await service.list_template_items(template_id)
+    _ = await _get_tenant_template_or_404(
+        authority.services.templates,
+        template_id,
+        authority.tenant_id,
+    )
+    items = await authority.services.templates.list_template_items(template_id)
 
     return [TemplateItemResponse.model_validate(item, from_attributes=True) for item in items]
