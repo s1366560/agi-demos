@@ -21,12 +21,8 @@ from src.configuration.containers import (
     AgentContainer,
     AuthContainer,
     InfraContainer,
-    ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.repositories.workspace.topology_repository import (
-    TopologyRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -74,10 +70,6 @@ class DIContainer:
 
         # Create sub-containers
         self._auth = AuthContainer(db=db)
-        self._project = ProjectContainer(
-            db=db,
-            user_repository_factory=self._auth.user_repository,
-        )
         # Reuse InfraContainer when provided (e.g. from with_db()) to preserve
         # cached singletons like MCPSandboxAdapter across per-request clones.
         self._infra = _infra or InfraContainer(
@@ -113,11 +105,6 @@ class DIContainer:
     def redis_client(self) -> "redis.Redis | None":
         """Get the Redis client instance."""
         return self._redis_client
-
-    # === Project Container delegates ===
-
-    def topology_repository(self) -> TopologyRepository:
-        return cast(TopologyRepository, self._project.topology_repository())
 
     # === Infra Container delegates ===
 
