@@ -665,26 +665,22 @@ class ReActAgent(
         self,
         *,
         processor: Any,
+        tenant_id: str,
         project_id: str,
         workspace_task: Any | None,
     ) -> None:
         """Build and inject lane JIT guidance for a workspace-scoped session.
 
-        Sources the friction ledger from the process-level singleton wired
-        by :func:`configure_friction_ingest` at app startup, and a
-        SQL-backed playbook repository scoped to a fresh DB session.
+        The exact pinned V2 generation supplies the friction ledger, SQL
+        session boundary, and playbook implementation.
 
         No-op when:
         - no workspace task is bound to the session,
-        - no DB session factory or friction ledger is available,
         - the task's current status has no registered :class:`LaneContract`,
         - any composition step raises (logged + swallowed; this hook must
-          never break the agent loop).
+        never break the agent loop).
         """
         if workspace_task is None:
-            return
-        session_factory = self._session_factory
-        if session_factory is None:
             return
 
         task_status = getattr(workspace_task, "status", None)
@@ -695,42 +691,23 @@ class ReActAgent(
             return
 
         try:
-            from src.application.services.friction_runtime import (
-                get_friction_ledger,
-            )
             from src.application.services.lane_experience_runtime import (
                 inject_lane_jit_context,
             )
-            from src.application.services.lane_experience_service import (
-                LaneExperienceService,
+            from src.infrastructure.plugins.v2.reflection_runtime import (
+                current_reflection_runtime_v2,
             )
-            from src.domain.model.lane_contract import LaneContractRegistry
-            from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
-                SqlPlaybookRepository,
-            )
-
-            ledger = get_friction_ledger()
-            if ledger is None:
-                return
-
-            registry = LaneContractRegistry.default()
-            contract = registry.get(lane_id)
-            if contract is None:
-                return
 
             card_body = getattr(workspace_task, "description", None) or ""
-
-            async with session_factory() as session:
-                service = LaneExperienceService(
-                    friction_ledger=ledger,
-                    playbook_repository=SqlPlaybookRepository(session),
-                )
-                ctx = await service.build(
-                    project_id=project_id,
-                    lane_contract=contract,
-                    card_body=card_body,
-                )
-            await inject_lane_jit_context(processor, ctx)
+            ctx = await current_reflection_runtime_v2().build_lane_jit_context(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                lane_id=lane_id,
+                card_body=card_body,
+            )
+            if ctx is None:
+                return
+            _ = await inject_lane_jit_context(processor, ctx)
         except Exception:
             logger.warning(
                 "lane_jit_guidance injection failed (project=%s, task=%s)",

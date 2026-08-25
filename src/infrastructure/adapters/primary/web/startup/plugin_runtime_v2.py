@@ -51,6 +51,7 @@ from src.infrastructure.plugins.v2.reconciler import (
     GenerationPublicationStagerV2,
     PreparedGenerationPublicationV2,
 )
+from src.infrastructure.plugins.v2.reflection_runtime import ReflectionRuntimeManagerV2
 from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeFactoryV2
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
@@ -98,6 +99,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
     sandbox_redis_client: object | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
     channel_runtime_manager: ChannelRuntimeManagerV2 | None = None,
+    reflection_runtime_manager: ReflectionRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
     publication_policy: PlatformPluginPublicationPolicyV2 = DEFAULT_PUBLICATION_POLICY_V2,
 ) -> PlatformPluginRuntimeHostV2:
@@ -116,6 +118,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
             sandbox_redis_client=sandbox_redis_client,
             telemetry_runtime_manager=telemetry_runtime_manager,
             channel_runtime_manager=channel_runtime_manager,
+            reflection_runtime_manager=reflection_runtime_manager,
             workspace_core_runtime_factory=workspace_core_runtime_factory,
         )
     )

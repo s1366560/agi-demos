@@ -43,6 +43,7 @@ from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
+from .reflection_runtime import ReflectionRuntimeManagerV2, reflection_runtime_definition_v2
 from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
 from .route_effects import route_table_builder_definition_v2
@@ -118,6 +119,7 @@ def builtin_runtime_definitions_v2(
     workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
     telemetry_runtime_manager: TelemetryRuntimeManagerV2 | None = None,
     channel_runtime_manager: ChannelRuntimeManagerV2 | None = None,
+    reflection_runtime_manager: ReflectionRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
@@ -344,6 +346,7 @@ def builtin_runtime_definitions_v2(
         *ai_tool_service_definitions_v2(),
         *backend_store_service_definitions_v2(),
         builtin_tenant_llm_client_factory_definition_v2(),
+        reflection_runtime_definition_v2(reflection_runtime_manager),
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),

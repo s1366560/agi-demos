@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Literal
 
 from src.application.services.reflection_service import ReflectionService
@@ -25,9 +26,15 @@ logger = logging.getLogger(__name__)
 ProjectIdsProvider = Callable[[], Awaitable[list[str]]]
 ReflectionServiceFactory = Callable[[str], Awaitable[ReflectionService | None]]
 ReflectionCompleteEmitter = Callable[
-    [str, list[ReflectionVerdict], Literal["success", "failed", "timeout", "unavailable"], str | None],
+    [
+        str,
+        list[ReflectionVerdict],
+        Literal["success", "failed", "timeout", "unavailable"],
+        str | None,
+    ],
     Awaitable[None],
 ]
+SweepContextFactory = Callable[[], AbstractAsyncContextManager[object]]
 
 
 class ReflectionRunner:
@@ -45,6 +52,7 @@ class ReflectionRunner:
         interval_seconds: float = 600.0,
         per_project_timeout_seconds: float = 60.0,
         completion_emitter: ReflectionCompleteEmitter | None = None,
+        sweep_context_factory: SweepContextFactory | None = None,
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
@@ -55,12 +63,11 @@ class ReflectionRunner:
         self._interval = interval_seconds
         self._timeout = per_project_timeout_seconds
         self._completion_emitter = completion_emitter
+        self._sweep_context_factory = sweep_context_factory
         self._task: asyncio.Task[None] | None = None
         self._running = False
 
-    def configure_completion_emitter(
-        self, emitter: ReflectionCompleteEmitter | None
-    ) -> None:
+    def configure_completion_emitter(self, emitter: ReflectionCompleteEmitter | None) -> None:
         """Update the optional ``reflection_complete`` emitter at runtime."""
         self._completion_emitter = emitter
 
@@ -116,6 +123,13 @@ class ReflectionRunner:
         return self._running
 
     async def _sweep_once(self) -> None:
+        if self._sweep_context_factory is None:
+            await self._sweep_inside_boundary()
+            return
+        async with self._sweep_context_factory():
+            await self._sweep_inside_boundary()
+
+    async def _sweep_inside_boundary(self) -> None:
         try:
             project_ids = await self._project_ids_provider()
         except Exception:
@@ -125,9 +139,7 @@ class ReflectionRunner:
             return
         for project_id in project_ids:
             try:
-                verdicts = await asyncio.wait_for(
-                    self.run_once(project_id), timeout=self._timeout
-                )
+                verdicts = await asyncio.wait_for(self.run_once(project_id), timeout=self._timeout)
             except TimeoutError:
                 logger.warning(
                     "ReflectionRunner: timeout for project %s after %ss",
@@ -136,9 +148,7 @@ class ReflectionRunner:
                 )
                 await self._emit_completion(project_id, [], "timeout", None)
             except Exception:
-                logger.exception(
-                    "ReflectionRunner: project %s failed", project_id
-                )
+                logger.exception("ReflectionRunner: project %s failed", project_id)
                 await self._emit_completion(project_id, [], "failed", "reflection_run_failed")
             else:
                 await self._emit_completion(project_id, verdicts, "success", None)
@@ -172,4 +182,5 @@ __all__ = [
     "ReflectionCompleteEmitter",
     "ReflectionRunner",
     "ReflectionServiceFactory",
+    "SweepContextFactory",
 ]

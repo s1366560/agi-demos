@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:b2501bc0537c05b142f2a9bd04935899cad25e5c19c1e446257579780806dced",
+        "digest": "sha256:9fe62d903fd4be48c3b3f9a8df2069506743ef12edfa1a6761b073512a66ecda",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4110,6 +4110,139 @@
       "artifact": {
         "digest": "sha256:a481491f6b098528bf83e12888c87e7c85ccd8946b5da5f6752399ec756c8818",
         "source": "repo+python://src/infrastructure/plugins/v2/llm_client_service.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/reflection",
+      "entrypoint": "src.infrastructure.plugins.v2.reflection_runtime:reflection_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:runtime.reflection", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "llm_clients",
+              "service": "service:llm.tenant-client-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [
+            {
+              "event": "reflection.complete",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "project_id",
+                  "run_id",
+                  "status",
+                  "source",
+                  "applied_verdict_count",
+                  "applied_actions"
+                ],
+                "properties": {
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "run_id": { "type": "string", "minLength": 1 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["success", "failed", "timeout", "unavailable"]
+                  },
+                  "source": { "type": "string", "enum": ["runner", "tool"] },
+                  "applied_verdict_count": { "type": "integer", "minimum": 0 },
+                  "applied_actions": {
+                    "type": "object",
+                    "additionalProperties": { "type": "integer", "minimum": 0 }
+                  },
+                  "error": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ],
+          "handles": [
+            {
+              "event": "reflection.complete",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "project_id",
+                  "run_id",
+                  "status",
+                  "source",
+                  "applied_verdict_count",
+                  "applied_actions"
+                ],
+                "properties": {
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "run_id": { "type": "string", "minLength": 1 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["success", "failed", "timeout", "unavailable"]
+                  },
+                  "source": { "type": "string", "enum": ["runner", "tool"] },
+                  "applied_verdict_count": { "type": "integer", "minimum": 0 },
+                  "applied_actions": {
+                    "type": "object",
+                    "additionalProperties": { "type": "integer", "minimum": 0 }
+                  },
+                  "error": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ]
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "enabled",
+            "interval_seconds",
+            "per_project_timeout_seconds",
+            "window_minutes",
+            "lane_order"
+          ],
+          "properties": {
+            "strategy": { "const": "periodic-reflection", "type": "string" },
+            "enabled": { "type": "boolean" },
+            "interval_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "per_project_timeout_seconds": { "type": "number", "exclusiveMinimum": 0 },
+            "window_minutes": { "type": "integer", "minimum": 1 },
+            "lane_order": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c2417159a12f33545291297662ebb0b66883b515d434548e15fbc1839c59e7a1",
+      "artifact": {
+        "digest": "sha256:e9ce36c1377bced135a94d1d00d3723d24660b7851f9956d8d3637cb3f7229c4",
+        "source": "repo+python://src/infrastructure/plugins/v2/reflection_runtime.py"
       }
     },
     {

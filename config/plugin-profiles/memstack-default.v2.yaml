@@ -1773,6 +1773,33 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-reflection-runtime
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/runtime/reflection
+      enabled: true
+      config:
+        strategy: periodic-reflection
+        enabled: true
+        interval_seconds: 600
+        per_project_timeout_seconds: 60
+        window_minutes: 1440
+        lane_order:
+          - todo
+          - dispatched
+          - executing
+          - reported
+          - adjudicating
+          - done
+      inject:
+        sessions: service:persistence.async-session-factory
+        llm_clients: service:llm.tenant-client-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: process-boundary
     - entry_id: builtin-agent-loop
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

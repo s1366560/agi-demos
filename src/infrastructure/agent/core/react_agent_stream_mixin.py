@@ -550,6 +550,7 @@ class _StreamAgent(Protocol):
         self,
         *,
         processor: Any,
+        tenant_id: str,
         project_id: str,
         workspace_task: Any,
     ) -> None: ...
@@ -2200,6 +2201,7 @@ class StreamMixin:
         # cannot break the agent loop.
         await self._inject_lane_jit_guidance(
             processor=processor,
+            tenant_id=tenant_id,
             project_id=project_id,
             workspace_task=workspace_root_task,
         )

@@ -15,6 +15,7 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.llm_client_service import TENANT_LLM_CLIENT_FACTORY_MODULE_V2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
+from src.infrastructure.plugins.v2.reflection_runtime import REFLECTION_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.skill_evolution_runtime import (
@@ -187,7 +188,8 @@ async def test_skill_evolution_rejects_missing_llm_client_factory_without_fallba
         document,
         entries=tuple(
             replace(entry, enabled=False)
-            if entry.module_ref == TENANT_LLM_CLIENT_FACTORY_MODULE_V2
+            if entry.module_ref
+            in {TENANT_LLM_CLIENT_FACTORY_MODULE_V2, REFLECTION_RUNTIME_MODULE_V2}
             else entry
             for entry in document.entries
         ),

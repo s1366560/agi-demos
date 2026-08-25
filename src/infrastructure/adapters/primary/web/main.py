@@ -69,6 +69,7 @@ from src.infrastructure.plugins.v2.agent_pool_runtime import (
 from src.infrastructure.plugins.v2.boundary import PluginGenerationMiddlewareV2
 from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeServiceV2
+from src.infrastructure.plugins.v2.reflection_runtime import ReflectionRuntimeManagerV2
 from src.infrastructure.plugins.v2.telemetry_runtime import TelemetryRuntimeManagerV2
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
@@ -105,7 +106,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915, C901
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
@@ -122,6 +123,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         stop=shutdown_telemetry_services,
     )
     channel_runtime_manager = ChannelRuntimeManagerV2()
+    reflection_runtime_manager = (
+        ReflectionRuntimeManagerV2(redis_client=redis_client) if redis_client is not None else None
+    )
 
     async def graph_runtime_factory() -> GraphStorePort:
         return await _create_generation_graph_runtime(cast("Redis | None", redis_client))
@@ -174,6 +178,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         sandbox_redis_client=redis_client,
         telemetry_runtime_manager=telemetry_runtime_manager,
         channel_runtime_manager=channel_runtime_manager,
+        reflection_runtime_manager=reflection_runtime_manager,
         workspace_core_runtime_factory=workspace_core_runtime_factory,
         publication_policy=publication_policy,
     )
@@ -192,104 +197,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
 
-    # Wire the friction → playbook reflection loop. All three calls are
-    # best-effort: a failure here disables reflection but never blocks
-    # application startup.
-    try:
-        from src.application.services.friction_runtime import (
-            configure_friction_ingest,
-        )
-        from src.application.services.reflection_events import (
-            ReflectionCompleteStatus,
-            publish_reflection_complete,
-        )
-        from src.application.services.reflection_factory import (
-            default_in_memory_ledger,
-        )
-        from src.application.services.reflection_service import (
-            ReflectionService,
-        )
-        from src.domain.model.flow.reflection_verdict import ReflectionVerdict
-        from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-        from src.infrastructure.adapters.secondary.cache.redis_friction_ledger import (
-            RedisFrictionLedger,
-        )
-        from src.infrastructure.agent.tools.reflection_tool import (
-            configure_reflection_complete_emitter,
-            configure_reflection_tool,
-        )
-
-        ledger: Any = (
-            RedisFrictionLedger(redis_client)  # type: ignore[arg-type]
-            if redis_client is not None
-            else default_in_memory_ledger()
-        )
-        # Canonical happy-path order; backward moves emit BOUNCE signals.
-        lane_order = (
-            WorkspaceTaskStatus.TODO.value,
-            WorkspaceTaskStatus.DISPATCHED.value,
-            WorkspaceTaskStatus.EXECUTING.value,
-            WorkspaceTaskStatus.REPORTED.value,
-            WorkspaceTaskStatus.ADJUDICATING.value,
-            WorkspaceTaskStatus.DONE.value,
-        )
-        configure_friction_ingest(ledger, lane_order=lane_order)
-
-        async def _reflection_provider(
-            project_id: str,
-        ) -> "ReflectionService | None":
-            """Per-call session-scoped ReflectionService for the agent tool.
-
-            Mirrors the contract used by ``ReflectionRunner``: opens a fresh
-            DB session, builds the SQL-backed service, and returns an object
-            whose ``reflect_window`` commits before returning.
-            """
-            session_factory = container._session_factory
-            if session_factory is None:
-                return None
-            active_session_factory = session_factory
-
-            class _SessionScopedReflection:
-                async def reflect_window(self, pid: str) -> list[ReflectionVerdict]:
-                    async with active_session_factory() as session:
-                        service = await container.reflection_service(pid, session=session)
-                        verdicts = await service.reflect_window(pid)
-                        await session.commit()
-                        return cast("list[ReflectionVerdict]", verdicts)
-
-            del project_id  # service is keyed by reflect_window's argument
-            return cast("ReflectionService", _SessionScopedReflection())
-
-        configure_reflection_tool(_reflection_provider)
-
-        async def _emit_completion(
-            project_id: str,
-            verdicts: list[ReflectionVerdict],
-            status: ReflectionCompleteStatus,
-            error: str | None,
-            run_id: str | None,
-        ) -> None:
-            if redis_client is None:
-                return
-            await publish_reflection_complete(
-                redis_client=cast("Redis", redis_client),
-                project_id=project_id,
-                verdicts=verdicts,
-                status=status,
-                source="tool",
-                run_id=run_id,
-                error=error,
-            )
-
-        configure_reflection_complete_emitter(_emit_completion)
-
-        runner = container.reflection_runner()
-        runner.start()
-        app.state.reflection_runner = runner
-        logger.info("Reflection runtime wired (friction ledger + runner started)")
-    except Exception:
-        logger.exception("Failed to wire reflection runtime -- loop disabled")
-
     yield
 
     # Remove plugin-owned routes before application state services unwind.
@@ -297,29 +204,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     if http_routes is not None:
         http_routes.dispose()
         app.state.platform_plugin_http_routes = None
-
-    # Stop reflection runner
-    try:
-        runner = getattr(app.state, "reflection_runner", None)
-        if runner is not None:
-            await runner.stop()
-            logger.info("Reflection runner stopped")
-    except Exception:
-        logger.exception("Error stopping reflection runner")
-    try:
-        from src.application.services.friction_runtime import (
-            reset_friction_ingest,
-        )
-        from src.infrastructure.agent.tools.reflection_tool import (
-            configure_reflection_complete_emitter,
-            configure_reflection_tool,
-        )
-
-        reset_friction_ingest()
-        configure_reflection_complete_emitter(None)
-        configure_reflection_tool(None)  # type: ignore[arg-type]
-    except Exception:
-        logger.exception("Error tearing down friction/reflection wiring")
 
     # Shutdown
     logger.info("Shutting down...")
