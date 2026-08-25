@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d1'
-    '57","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:398ac0cc38560a39487c35cec83a68652d8e3a84bb4424f5a4ed89ca4c980a'
+    '3f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1453,7 +1453,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '8d4","entrypoint":"src.infrastructure.plugins.v2.builtin_support_http_routes:builtin_sup'
     'port_http_routes_definition_v2","module_ref":"builtin://memstack/http/support-routes","p'
     'lugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"art'
-    'ifact_digest":"sha256:d7ccbee614eb83c71baedfd60ca9f97a57210312a960e427da6bb836360c808c",'
+    'ifact_digest":"sha256:53e063717041738a47a4789dda68319941f4d31c2a1f2b9c4d19b1d71350e4d4",'
     '"artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_system_http_route'
     's.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sche'
     'ma","additionalProperties":false,"properties":{},"type":"object"},"events":{"emits":[],"'
@@ -2220,7 +2220,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d157"
+    "sha256:398ac0cc38560a39487c35cec83a68652d8e3a84bb4424f5a4ed89ca4c980a3f"
 )
 # fmt: on
 

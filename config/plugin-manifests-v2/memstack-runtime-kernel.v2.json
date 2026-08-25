@@ -4830,7 +4830,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:d7ccbee614eb83c71baedfd60ca9f97a57210312a960e427da6bb836360c808c",
+        "digest": "sha256:53e063717041738a47a4789dda68319941f4d31c2a1f2b9c4d19b1d71350e4d4",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_system_http_routes.py"
       }
     },

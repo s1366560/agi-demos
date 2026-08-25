@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28',
-  'b7d157","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:398ac0cc38560a39487c35cec83a68652d8e3a84bb4424f5a4ed89ca4c',
+  '980a3f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1539,7 +1539,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'rc.infrastructure.plugins.v2.builtin_support_http_routes:builtin_support_http_routes',
   '_definition_v2","module_ref":"builtin://memstack/http/support-routes","plugin_id":"m',
   'emstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di',
-  'gest":"sha256:d7ccbee614eb83c71baedfd60ca9f97a57210312a960e427da6bb836360c808c","art',
+  'gest":"sha256:53e063717041738a47a4789dda68319941f4d31c2a1f2b9c4d19b1d71350e4d4","art',
   'ifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_system_http_route',
   's.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/',
   'schema","additionalProperties":false,"properties":{},"type":"object"},"events":{"emi',
@@ -2348,4 +2348,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d157' as const;
+  'sha256:398ac0cc38560a39487c35cec83a68652d8e3a84bb4424f5a4ed89ca4c980a3f' as const;

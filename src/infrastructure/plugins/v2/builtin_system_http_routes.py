@@ -5,12 +5,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from fastapi import Depends
-
-from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.system import (
-    get_system_info as _get_system_info,
-    list_features as _list_features,
+    get_system_info,
+    list_features,
 )
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
@@ -27,20 +24,6 @@ SYSTEM_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/system-routes"
 SYSTEM_HTTP_ROUTES_ROW_V2 = "system"
 
 
-async def list_system_features_v2(
-    _current_user: Any = Depends(get_current_user),  # noqa: ANN401
-) -> list[dict[str, Any]]:
-    """Get list of all features and their enablement status."""
-    return await _list_features(_current_user)
-
-
-async def get_system_info_v2(
-    _current_user: Any = Depends(get_current_user),  # noqa: ANN401
-) -> dict[str, Any]:
-    """Get system info including edition and features."""
-    return await _get_system_info(_current_user)
-
-
 def system_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete, explicitly claimed ``system`` inventory row."""
     return (
@@ -48,7 +31,7 @@ def system_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SYSTEM_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/system/features",
             methods=("GET",),
-            endpoint=list_system_features_v2,
+            endpoint=list_features,
             name="list_features",
             tags=("System",),
             response_model=list[dict[str, Any]],
@@ -58,7 +41,7 @@ def system_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SYSTEM_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/system/info",
             methods=("GET",),
-            endpoint=get_system_info_v2,
+            endpoint=get_system_info,
             name="get_system_info",
             tags=("System",),
             response_model=dict[str, Any],
@@ -104,7 +87,5 @@ __all__ = [
     "SYSTEM_HTTP_ROUTES_MODULE_V2",
     "SYSTEM_HTTP_ROUTES_ROW_V2",
     "builtin_system_http_routes_definition_v2",
-    "get_system_info_v2",
-    "list_system_features_v2",
     "system_route_definitions_v2",
 ]
