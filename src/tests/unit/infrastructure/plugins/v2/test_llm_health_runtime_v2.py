@@ -39,6 +39,10 @@ from src.infrastructure.plugins.v2.llm_health_runtime import (
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.tenant_agent_config_services import (
+    TENANT_AGENT_CONFIG_APPLICATION_MODULE_V2,
+    TENANT_AGENT_CONFIG_PROVIDER_MODULE_V2,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -222,6 +226,8 @@ async def test_llm_health_runtime_rejects_missing_sessions_without_fallback() ->
                 ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
                 ASYNC_SESSION_FACTORY_MODULE_V2,
                 DOCKER_EVENT_MONITOR_MODULE_V2,
+                TENANT_AGENT_CONFIG_APPLICATION_MODULE_V2,
+                TENANT_AGENT_CONFIG_PROVIDER_MODULE_V2,
             }
             else entry
             for entry in document.entries

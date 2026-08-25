@@ -1,6 +1,9 @@
 """Tenant agent configuration revision contract tests."""
 
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +29,35 @@ def _config(*, model: str = "default") -> TenantAgentConfig:
     return TenantAgentConfig.create_default("tenant-1").update_llm_settings(model=model)
 
 
+def _authority_context(
+    *,
+    authority_repository: MagicMock,
+    config_repository: MagicMock | None = None,
+) -> Callable[..., Any]:
+    resolved_configs = config_repository or MagicMock()
+
+    @asynccontextmanager
+    async def context(
+        *,
+        request: Any,
+        current_user: Any,
+        tenant_id: str,
+        db: Any,
+    ) -> AsyncIterator[SimpleNamespace]:
+        del request
+        yield SimpleNamespace(
+            db=db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            services=SimpleNamespace(
+                authority=authority_repository,
+                configs=resolved_configs,
+            ),
+        )
+
+    return context
+
+
 @pytest.mark.unit
 class TestTenantAgentConfigAuthorityRoutes:
     async def test_get_config_includes_authority_revision(self) -> None:
@@ -44,12 +76,12 @@ class TestTenantAgentConfigAuthorityRoutes:
                 AsyncMock(return_value=True),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
-                return_value=config_repository,
-            ),
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
-                return_value=authority_repository,
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "tenant_agent_config_application_authority_context_v2",
+                new=_authority_context(
+                    authority_repository=authority_repository,
+                    config_repository=config_repository,
+                ),
             ),
         ):
             response = await get_tenant_agent_config(
@@ -71,11 +103,13 @@ class TestTenantAgentConfigAuthorityRoutes:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
-                return_value=authority_repository,
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "tenant_agent_config_application_authority_context_v2",
+                new=_authority_context(authority_repository=authority_repository),
             ),
         ):
             response = await get_tenant_agent_config_authority_revision(
+                request=MagicMock(),
                 tenant_id="tenant-1",
                 current_user=SimpleNamespace(id="user-1"),
                 db=MagicMock(),
@@ -107,8 +141,9 @@ class TestTenantAgentConfigAuthorityRoutes:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
-                return_value=authority_repository,
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "tenant_agent_config_application_authority_context_v2",
+                new=_authority_context(authority_repository=authority_repository),
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.config.invalidate_agent_session"
@@ -151,8 +186,9 @@ class TestTenantAgentConfigAuthorityRoutes:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
-                return_value=authority_repository,
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "tenant_agent_config_application_authority_context_v2",
+                new=_authority_context(authority_repository=authority_repository),
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.config.invalidate_agent_session"
@@ -201,8 +237,9 @@ class TestTenantAgentConfigAuthorityRoutes:
                 AsyncMock(),
             ),
             patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigAuthorityRepository",
-                return_value=authority_repository,
+                "src.infrastructure.adapters.primary.web.routers.agent.config."
+                "tenant_agent_config_application_authority_context_v2",
+                new=_authority_context(authority_repository=authority_repository),
             ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.config.invalidate_agent_session"

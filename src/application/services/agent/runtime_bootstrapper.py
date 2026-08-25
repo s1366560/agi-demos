@@ -17,8 +17,6 @@ from pathlib import Path
 from subprocess import DEVNULL
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from sqlalchemy.exc import SQLAlchemyError
-
 from src.configuration.config import Settings
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
@@ -229,36 +227,13 @@ class AgentRuntimeBootstrapper:
 
     @staticmethod
     async def _load_tenant_agent_config(tenant_id: str) -> TenantAgentConfig:
-        """Load tenant agent config for request-scoped runtime policy."""
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-            SqlTenantAgentConfigRepository,
+        """Load runtime policy through the resolver in the pinned V2 generation."""
+        from src.infrastructure.plugins.v2.tenant_agent_config_services import (
+            current_tenant_agent_config_application_resolver_v2,
         )
 
-        session = async_session_factory()
-        try:
-            repo = SqlTenantAgentConfigRepository(session)
-            try:
-                config = await repo.get_by_tenant(tenant_id)
-            except (RuntimeError, SQLAlchemyError) as exc:
-                logger.warning(
-                    "Failed to load tenant agent config for tenant %s; using defaults instead: %s",
-                    tenant_id,
-                    exc,
-                )
-                return TenantAgentConfig.create_default(tenant_id=tenant_id)
-            return config or TenantAgentConfig.create_default(tenant_id=tenant_id)
-        finally:
-            try:
-                await session.close()
-            except (RuntimeError, SQLAlchemyError) as exc:
-                logger.warning(
-                    "Failed to close tenant agent config session for tenant %s: %s",
-                    tenant_id,
-                    exc,
-                )
+        resolver = current_tenant_agent_config_application_resolver_v2(tenant_id)
+        return await resolver.load(tenant_id)
 
     @staticmethod
     async def ensure_spawned_agent_conversation(

@@ -5,8 +5,27 @@ Tests CRUD operations for tenant-level agent configuration
 with proper RBAC enforcement.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
+
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
+
+
+@pytest.fixture(autouse=True)
+async def _tenant_agent_config_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    """Exercise config requests through the production V2 route and service graph."""
+    await initialize_plugin_runtime_v2(test_app)
+    assert "agent" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 @pytest.mark.integration

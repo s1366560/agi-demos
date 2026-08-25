@@ -377,6 +377,36 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-tenant-agent-config-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/tenant-agent-config-provider
+      enabled: true
+      config:
+        strategy: operation-and-generation-session
+      inject:
+        sessions: service:persistence.async-session-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-tenant-agent-config-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/tenant-agent-config-services
+      enabled: true
+      config:
+        strategy: operation-and-runtime-provider
+      inject:
+        provider: service:persistence.tenant-agent-config-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-tenant-webhook-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

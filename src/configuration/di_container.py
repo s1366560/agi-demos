@@ -113,9 +113,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository i
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
     SqlSubAgentTemplateRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-    SqlTenantAgentConfigRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
     SqlToolCompositionRepository,
 )
@@ -388,9 +385,6 @@ class DIContainer:
 
     def hitl_request_repository(self) -> SqlHITLRequestRepository:
         return self._agent.hitl_request_repository()
-
-    def tenant_agent_config_repository(self) -> SqlTenantAgentConfigRepository:
-        return self._agent.tenant_agent_config_repository()
 
     def skill_repository(self) -> SqlSkillRepository:
         return self._agent.skill_repository()

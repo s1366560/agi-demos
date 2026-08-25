@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
@@ -16,13 +17,12 @@ from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.primary.web.tenant_agent_config_application_authority_v2 import (
+    tenant_agent_config_application_authority_context_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_authority_repository import (
-    SqlTenantAgentConfigAuthorityRepository,
     TenantAgentConfigRevisionConflictError,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-    SqlTenantAgentConfigRepository,
 )
 from src.infrastructure.agent.state.agent_session_pool import invalidate_agent_session
 from src.infrastructure.i18n import gettext as _
@@ -31,6 +31,7 @@ from src.infrastructure.plugins.v1_retirement import (
     PLUGIN_PROTOCOL_V1_RETIRED_CODE,
 )
 from src.infrastructure.plugins.v2.boundary import current_generation_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_hook_catalog import runtime_hook_catalog_v2
 
 from .access import has_tenant_admin_access, require_tenant_access
@@ -105,6 +106,30 @@ def _raise_runtime_hook_v1_retired() -> NoReturn:
             "migration_target": PLUGIN_MARKETPLACE_V2_PATH,
         },
     )
+
+
+def _raise_tenant_agent_config_runtime_unavailable(error: RuntimeV2Error) -> NoReturn:
+    """Preserve the structured V2 failure code at the HTTP boundary."""
+    logger.warning("Tenant agent config V2 authority unavailable: code=%s", error.code)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": error.code,
+            "message": _("Tenant agent config service is unavailable"),
+        },
+    ) from error
+
+
+def _raise_tenant_agent_config_persistence_unavailable(error: SQLAlchemyError) -> NoReturn:
+    """Return a stable failure shape without leaking database diagnostics."""
+    logger.exception("Tenant agent config persistence failed")
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "tenant_agent_config_persistence_failed",
+            "message": _("Tenant agent config persistence is unavailable"),
+        },
+    ) from error
 
 
 def _normalize_tool_policy_list(
@@ -195,26 +220,41 @@ async def get_tenant_agent_config(
     All authenticated users can read the configuration (FR-021).
     """
     try:
-        await require_tenant_access(db, current_user, tenant_id)
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
 
-        config_repo = SqlTenantAgentConfigRepository(db)
-        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
+            config = await authority.services.configs.get_by_tenant(authority.tenant_id)
+            if not config:
+                config = TenantAgentConfig.create_default(tenant_id=authority.tenant_id)
 
-        # Get config or return default
-        config = await config_repo.get_by_tenant(tenant_id)
-        if not config:
-            # Return default config
-            config = TenantAgentConfig.create_default(tenant_id=tenant_id)
-
-        can_view_runtime_hook_settings = await has_tenant_admin_access(db, current_user, tenant_id)
-        return _build_config_response(
-            config,
-            authority_revision=await authority_repo.get_revision(tenant_id),
-            redact_runtime_hook_settings=not can_view_runtime_hook_settings,
-        )
+            can_view_runtime_hook_settings = await has_tenant_admin_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
+            return _build_config_response(
+                config,
+                authority_revision=await authority.services.authority.get_revision(
+                    authority.tenant_id
+                ),
+                redact_runtime_hook_settings=not can_view_runtime_hook_settings,
+            )
 
     except HTTPException:
         raise
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except Exception as e:
         logger.error(f"Error getting tenant agent config: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
@@ -225,22 +265,37 @@ async def get_tenant_agent_config(
     response_model=TenantAgentConfigAuthorityRevisionResponse,
 )
 async def get_tenant_agent_config_authority_revision(
+    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to get config revision for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantAgentConfigAuthorityRevisionResponse:
     """Return the current tenant agent configuration authority revision."""
     try:
-        await require_tenant_access(db, current_user, tenant_id)
-        authority_revision = await SqlTenantAgentConfigAuthorityRepository(db).get_revision(
-            tenant_id
-        )
-        return TenantAgentConfigAuthorityRevisionResponse(
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
             tenant_id=tenant_id,
-            authority_revision=authority_revision,
-        )
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+            )
+            authority_revision = await authority.services.authority.get_revision(
+                authority.tenant_id
+            )
+            return TenantAgentConfigAuthorityRevisionResponse(
+                tenant_id=authority.tenant_id,
+                authority_revision=authority_revision,
+            )
     except HTTPException:
         raise
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except Exception as e:
         logger.error(f"Error getting tenant agent config authority revision: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e
@@ -293,86 +348,96 @@ async def update_tenant_agent_config(
     Only tenant admins can modify the configuration (FR-022).
     """
     try:
-        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        if update_request.runtime_hooks is not None:
-            _raise_runtime_hook_v1_retired()
-        authority_repo = SqlTenantAgentConfigAuthorityRepository(db)
+        async with tenant_agent_config_application_authority_context_v2(
+            request=request,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+        ) as authority:
+            await require_tenant_access(
+                authority.db,
+                authority.current_user,
+                authority.tenant_id,
+                require_admin=True,
+            )
+            if update_request.runtime_hooks is not None:
+                _raise_runtime_hook_v1_retired()
 
-        snapshot = await authority_repo.lock_for_update(
-            tenant_id,
-            expected_revision=expected_revision,
-        )
-        config = snapshot.config
-        if not config:
-            config = TenantAgentConfig.create_default(tenant_id=tenant_id)
+            snapshot = await authority.services.authority.lock_for_update(
+                authority.tenant_id,
+                expected_revision=expected_revision,
+            )
+            config = snapshot.config
+            if not config:
+                config = TenantAgentConfig.create_default(tenant_id=authority.tenant_id)
 
-        # Apply updates - collect all parameters
-        llm_model = (
-            update_request.llm_model if update_request.llm_model is not None else config.llm_model
-        )
-        llm_temperature = (
-            update_request.llm_temperature
-            if update_request.llm_temperature is not None
-            else config.llm_temperature
-        )
-        pattern_learning_enabled = (
-            update_request.pattern_learning_enabled
-            if update_request.pattern_learning_enabled is not None
-            else config.pattern_learning_enabled
-        )
-        multi_level_thinking_enabled = (
-            update_request.multi_level_thinking_enabled
-            if update_request.multi_level_thinking_enabled is not None
-            else config.multi_level_thinking_enabled
-        )
-        max_work_plan_steps = (
-            update_request.max_work_plan_steps
-            if update_request.max_work_plan_steps is not None
-            else config.max_work_plan_steps
-        )
-        tool_timeout_seconds = (
-            update_request.tool_timeout_seconds
-            if update_request.tool_timeout_seconds is not None
-            else config.tool_timeout_seconds
-        )
-        enabled_tools = (
-            update_request.enabled_tools
-            if update_request.enabled_tools is not None
-            else list(config.enabled_tools)
-        )
-        disabled_tools = (
-            update_request.disabled_tools
-            if update_request.disabled_tools is not None
-            else list(config.disabled_tools)
-        )
-        enabled_tools, disabled_tools = _validate_tool_policy(enabled_tools, disabled_tools)
-        runtime_hooks = list(config.runtime_hooks)
+            llm_model = (
+                update_request.llm_model
+                if update_request.llm_model is not None
+                else config.llm_model
+            )
+            llm_temperature = (
+                update_request.llm_temperature
+                if update_request.llm_temperature is not None
+                else config.llm_temperature
+            )
+            pattern_learning_enabled = (
+                update_request.pattern_learning_enabled
+                if update_request.pattern_learning_enabled is not None
+                else config.pattern_learning_enabled
+            )
+            multi_level_thinking_enabled = (
+                update_request.multi_level_thinking_enabled
+                if update_request.multi_level_thinking_enabled is not None
+                else config.multi_level_thinking_enabled
+            )
+            max_work_plan_steps = (
+                update_request.max_work_plan_steps
+                if update_request.max_work_plan_steps is not None
+                else config.max_work_plan_steps
+            )
+            tool_timeout_seconds = (
+                update_request.tool_timeout_seconds
+                if update_request.tool_timeout_seconds is not None
+                else config.tool_timeout_seconds
+            )
+            enabled_tools = (
+                update_request.enabled_tools
+                if update_request.enabled_tools is not None
+                else list(config.enabled_tools)
+            )
+            disabled_tools = (
+                update_request.disabled_tools
+                if update_request.disabled_tools is not None
+                else list(config.disabled_tools)
+            )
+            enabled_tools, disabled_tools = _validate_tool_policy(enabled_tools, disabled_tools)
+            runtime_hooks = list(config.runtime_hooks)
 
-        # Create updated config
-        updated_config = TenantAgentConfig(
-            id=config.id,
-            tenant_id=config.tenant_id,
-            config_type=ConfigType.CUSTOM,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            pattern_learning_enabled=pattern_learning_enabled,
-            multi_level_thinking_enabled=multi_level_thinking_enabled,
-            max_work_plan_steps=max_work_plan_steps,
-            tool_timeout_seconds=tool_timeout_seconds,
-            enabled_tools=enabled_tools,
-            disabled_tools=disabled_tools,
-            runtime_hooks=runtime_hooks,
-            created_at=config.created_at,
-            updated_at=datetime.now(UTC),
-        )
+            updated_config = TenantAgentConfig(
+                id=config.id,
+                tenant_id=config.tenant_id,
+                config_type=ConfigType.CUSTOM,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                pattern_learning_enabled=pattern_learning_enabled,
+                multi_level_thinking_enabled=multi_level_thinking_enabled,
+                max_work_plan_steps=max_work_plan_steps,
+                tool_timeout_seconds=tool_timeout_seconds,
+                enabled_tools=enabled_tools,
+                disabled_tools=disabled_tools,
+                runtime_hooks=runtime_hooks,
+                created_at=config.created_at,
+                updated_at=datetime.now(UTC),
+            )
 
-        write = await authority_repo.persist(snapshot, updated_config)
-        await db.commit()
-        invalidate_agent_session(tenant_id=tenant_id)
-        return _build_config_response(
-            write.config,
-            authority_revision=write.authority_revision,
-        )
+            write = await authority.services.authority.persist(snapshot, updated_config)
+            await authority.db.commit()
+            invalidate_agent_session(tenant_id=authority.tenant_id)
+            return _build_config_response(
+                write.config,
+                authority_revision=write.authority_revision,
+            )
 
     except HTTPException:
         raise
@@ -385,6 +450,10 @@ async def update_tenant_agent_config(
                 "authority_revision": e.authority_revision,
             },
         ) from e
+    except RuntimeV2Error as e:
+        _raise_tenant_agent_config_runtime_unavailable(e)
+    except SQLAlchemyError as e:
+        _raise_tenant_agent_config_persistence_unavailable(e)
     except ValueError as e:
         # Validation error from entity
         raise HTTPException(status_code=422, detail=_("Invalid tenant agent config")) from e
