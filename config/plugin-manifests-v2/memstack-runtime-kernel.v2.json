@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:2ae2a1d72c67acfd2403eb0bb2ed03c625c42e64d19ad2c3582991512e865392",
+        "digest": "sha256:5a8f9141b082573e24a3420512a9e62068e18fc7f88c160a786cc8338be01eb8",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1873,6 +1873,74 @@
       "artifact": {
         "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
         "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/task-log-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.task_log_services:_apply_task_log_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.task-log-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:815bb66324f65c2ed9f5023cac799fa2238063142b76d52770333590d981516d",
+      "artifact": {
+        "digest": "sha256:887e219813a3e8f736338f5bcc1d43f2ed4c8fdaddec21bd5c1a599c97717c10",
+        "source": "repo+python://src/infrastructure/plugins/v2/task_log_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/task-log-services",
+      "entrypoint": "src.infrastructure.plugins.v2.task_log_services:_apply_task_log_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.task-log-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repository_provider",
+              "service": "service:persistence.task-log-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:097f7d528aa6e7c127826eee60957216acf1e112cf091f1bbcf7524bf3329ebe",
+      "artifact": {
+        "digest": "sha256:887e219813a3e8f736338f5bcc1d43f2ed4c8fdaddec21bd5c1a599c97717c10",
+        "source": "repo+python://src/infrastructure/plugins/v2/task_log_services.py"
       }
     },
     {

@@ -64,6 +64,7 @@ from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
 from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
+from .task_log_services import task_log_service_definitions_v2
 from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_definition_v2
 from .tool_set import (
     builtin_tool_contribution_definition_v2,
@@ -267,6 +268,7 @@ def builtin_runtime_definitions_v2(
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
+        *task_log_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
         search_service_definition_v2(),

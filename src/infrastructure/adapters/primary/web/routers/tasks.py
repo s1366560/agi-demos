@@ -20,7 +20,6 @@ from src.application.use_cases.task import (
     GetTaskQuery,
     UpdateTaskCommand,
 )
-from src.configuration.di_container import DIContainer
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -28,6 +27,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_api_key_from_header_or_query,
+)
+from src.infrastructure.adapters.primary.web.task_log_application_authority_v2 import (
+    TaskLogApplicationAuthorityV2,
+    task_log_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
     workflow_engine_authority_dependency_v2,
@@ -114,14 +117,6 @@ class RetryPendingResponse(BaseModel):
 class TaskAccessPrincipal:
     id: str
     is_superuser: bool = False
-
-
-# --- FastAPI Dependencies ---
-
-
-async def get_di_container(db: AsyncSession = Depends(get_db)) -> DIContainer:
-    """Get DI container with use cases"""
-    return DIContainer(db)
 
 
 async def get_task_stream_principal(api_key: str) -> TaskAccessPrincipal:
@@ -848,11 +843,13 @@ async def stop_task_endpoint(
     task_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    container: DIContainer = Depends(get_di_container),
+    task_log_application: TaskLogApplicationAuthorityV2 = Depends(
+        task_log_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Stop a running task."""
-    get_use_case = container.get_task_use_case()
-    update_use_case = container.update_task_use_case()
+    get_use_case = task_log_application.services.get_task
+    update_use_case = task_log_application.services.update_task
 
     # Get the task first
     task = await get_use_case.execute(refresh_select_statement(GetTaskQuery(task_id=task_id)))
@@ -1153,8 +1150,10 @@ async def cancel_task_endpoint(
     task_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    container: DIContainer = Depends(get_di_container),
+    task_log_application: TaskLogApplicationAuthorityV2 = Depends(
+        task_log_application_authority_dependency_v2
+    ),
 ) -> Any:
     """Cancel a task (alias for stop)."""
     # Reuse the stop logic
-    return await stop_task_endpoint(task_id, current_user, db, container)
+    return await stop_task_endpoint(task_id, current_user, db, task_log_application)
