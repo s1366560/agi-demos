@@ -27,9 +27,6 @@ from src.configuration.containers import (
     ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.repositories.workspace.cyber_gene_repository import (
-    CyberGeneRepository,
-)
 from src.domain.ports.repositories.workspace.cyber_objective_repository import (
     CyberObjectiveRepository,
 )
@@ -168,9 +165,6 @@ class DIContainer:
 
     def cyber_objective_repository(self) -> CyberObjectiveRepository:
         return cast(CyberObjectiveRepository, self._project.cyber_objective_repository())
-
-    def cyber_gene_repository(self) -> CyberGeneRepository:
-        return cast(CyberGeneRepository, self._project.cyber_gene_repository())
 
     def workspace_message_service(
         self,

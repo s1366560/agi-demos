@@ -73,9 +73,6 @@ class ProjectContainer:
     def cyber_objective_repository(self) -> Never:
         legacy_workspace_runtime_retired("DI cyber objective repository")
 
-    def cyber_gene_repository(self) -> Never:
-        legacy_workspace_runtime_retired("DI cyber gene repository")
-
     def workspace_message_repository(self) -> WorkspaceMessageRepository:
         legacy_workspace_runtime_retired("DI message repository")
 

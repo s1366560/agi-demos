@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     verify_api_key_dependency,
 )
+from src.infrastructure.adapters.primary.web.routers import cyber_genes
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
     register_workspace_core_routes,
     register_workspace_core_static_routes,
@@ -177,6 +178,59 @@ async def test_avernet_proxy_separates_service_and_user_authorization() -> None:
     assert response.status_code == 206
     assert response.json() == {"proxied": True}
     assert response.headers["etag"] == '"revision-7"'
+
+
+@pytest.mark.unit
+async def test_avernet_cyber_gene_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "gene-1"})
+        return httpx.Response(200, json={"id": "gene-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cyber-gene proxy touched the retired DI path")
+
+    monkeypatch.setattr(cyber_genes, "get_container_with_db", legacy_di_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/genes"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"name": "Gene"}),
+            await client.get(base, params={"category": "skill", "limit": 10}),
+            await client.get(f"{base}/gene-1"),
+            await client.patch(f"{base}/gene-1", json={"name": "Updated"}),
+            await client.delete(f"{base}/gene-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [201, 200, 200, 200, 204]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?category=skill&limit=10"),
+        ("GET", f"{base}/gene-1"),
+        ("PATCH", f"{base}/gene-1"),
+        ("DELETE", f"{base}/gene-1"),
+    ]
 
 
 @pytest.mark.unit

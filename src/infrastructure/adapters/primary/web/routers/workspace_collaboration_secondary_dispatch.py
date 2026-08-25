@@ -9,7 +9,6 @@ from typing import TypedDict
 from fastapi import BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.schemas.workspace_cyber_schemas import CyberGeneCreate, CyberGeneUpdate
 from src.application.services.topology_service import TopologyService
 from src.application.services.workspace_collaboration_authority import (
     WorkspaceCollaborationActor,
@@ -18,7 +17,6 @@ from src.application.services.workspace_collaboration_authority import (
 from src.application.services.workspace_service import WorkspaceService
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
-    cyber_genes,
     topology,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_collaboration_payload import (
@@ -77,16 +75,6 @@ async def dispatch_secondary_workspace_mutation(
             payload=command.payload,
             request=request,
             background_tasks=background_tasks,
-            current_user=current_user,
-            db=db,
-        )
-        return True
-    if command.surface == "genes":
-        await _dispatch_gene(
-            actor=actor,
-            action=command.action,
-            payload=command.payload,
-            request=request,
             current_user=current_user,
             db=db,
         )
@@ -194,46 +182,6 @@ async def _dispatch_workspace_roster(
         raise ValueError("workspace roster action is unavailable")
 
 
-async def _dispatch_gene(
-    *,
-    actor: WorkspaceCollaborationActor,
-    action: str,
-    payload: Mapping[str, object],
-    request: Request,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    common: _ScopedRouteArguments = {
-        "tenant_id": actor.tenant_id,
-        "project_id": actor.project_id,
-        "workspace_id": actor.workspace_id,
-        "request": request,
-        "current_user": current_user,
-        "db": db,
-    }
-    if action == "create_gene":
-        await cyber_genes.create_gene(
-            payload=workspace_payload_model(CyberGeneCreate, payload),
-            **common,
-        )
-    elif action == "update_gene":
-        await cyber_genes.update_gene(
-            gene_id=workspace_payload_id(payload, "gene_id"),
-            payload=workspace_payload_model(
-                CyberGeneUpdate,
-                payload,
-                excluded=("gene_id",),
-            ),
-            **common,
-        )
-    elif action == "delete_gene":
-        gene_id = workspace_payload_id(payload, "gene_id")
-        require_workspace_payload_keys(payload, {"gene_id"})
-        await cyber_genes.delete_gene(gene_id=gene_id, **common)
-    else:
-        raise ValueError("gene action is unavailable")
-
-
 async def _dispatch_file(
     *,
     actor: WorkspaceCollaborationActor,
@@ -317,8 +265,10 @@ async def _journal_blackboard_file_delete(
     descendants = []
     try:
         bb_file = await service._file_repo.find_by_id(file_id)
-        if bb_file is not None and bb_file.workspace_id == workspace_id and (
-            bb_file.is_directory and recursive
+        if (
+            bb_file is not None
+            and bb_file.workspace_id == workspace_id
+            and (bb_file.is_directory and recursive)
         ):
             child_path = file_service_module._join_child_path(
                 bb_file.parent_path,
@@ -336,11 +286,7 @@ async def _journal_blackboard_file_delete(
         return
     storage_root = file_service_module.STORAGE_ROOT.resolve()
     workspace_root = (storage_root / workspace_id).resolve()
-    files = [
-        item
-        for item in (bb_file, *descendants)
-        if not item.is_directory and item.storage_key
-    ]
+    files = [item for item in (bb_file, *descendants) if not item.is_directory and item.storage_key]
     for item in files:
         storage_path = (storage_root / workspace_id / item.storage_key).resolve()
 
