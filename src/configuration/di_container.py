@@ -72,14 +72,8 @@ from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
-    SqlAgentExecutionRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
-    SqlExecutionCheckpointRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
@@ -95,12 +89,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository i
 )
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
     SqlSubAgentTemplateRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
-    SqlToolCompositionRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-    SqlToolEnvironmentVariableRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
@@ -309,17 +297,11 @@ class DIContainer:
     def conversation_repository(self) -> SqlConversationRepository:
         return self._agent.conversation_repository()
 
-    def agent_execution_repository(self) -> SqlAgentExecutionRepository:
-        return self._agent.agent_execution_repository()
-
     def tool_execution_record_repository(self) -> SqlToolExecutionRecordRepository:
         return self._agent.tool_execution_record_repository()
 
     def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
         return self._agent.agent_execution_event_repository()
-
-    def execution_checkpoint_repository(self) -> SqlExecutionCheckpointRepository:
-        return self._agent.execution_checkpoint_repository()
 
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         return self._agent.workflow_pattern_repository()
@@ -327,20 +309,11 @@ class DIContainer:
     def context_summary_adapter(self) -> Any:
         return cast(Any, self._agent.context_summary_adapter())
 
-    def tool_composition_repository(self) -> SqlToolCompositionRepository:
-        return self._agent.tool_composition_repository()
-
-    def tool_environment_variable_repository(self) -> SqlToolEnvironmentVariableRepository:
-        return self._agent.tool_environment_variable_repository()
-
     def hitl_request_repository(self) -> SqlHITLRequestRepository:
         return self._agent.hitl_request_repository()
 
     def skill_repository(self) -> SqlSkillRepository:
         return self._agent.skill_repository()
-
-    def skill_version_repository(self) -> Any:
-        return cast(Any, self._agent.skill_version_repository())
 
     def subagent_repository(self) -> SqlSubAgentRepository:
         return self._agent.subagent_repository()
