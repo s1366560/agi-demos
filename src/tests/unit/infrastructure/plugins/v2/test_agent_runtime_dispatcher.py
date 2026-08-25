@@ -142,7 +142,6 @@ async def test_session_processor_does_not_require_v1_registry_for_v2_dispatch() 
     processor = SessionProcessor(
         config=ProcessorConfig(
             model="test-model",
-            plugin_registry=None,
             plugin_event_dispatcher=PinnedAgentRuntimeDispatcherV2(),
         ),
         tools=[],

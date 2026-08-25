@@ -9,6 +9,7 @@ import pytest
 
 from src.infrastructure.agent.core.subagent_runner import SubAgentRunnerDeps
 from src.infrastructure.agent.processor.factory import ProcessorFactory
+from src.infrastructure.agent.processor.processor import ProcessorConfig
 
 _ROOT = Path(__file__).resolve().parents[6]
 _REACT_AGENT_SOURCE = _ROOT / "src/infrastructure/agent/core/react_agent.py"
@@ -21,6 +22,13 @@ def test_processor_factory_has_no_dormant_v1_plugin_dependencies() -> None:
 
     assert "plugin_registry" not in field_names
     assert "plugin_event_dispatcher" not in field_names
+
+
+@pytest.mark.unit
+def test_processor_config_has_no_v1_plugin_registry_surface() -> None:
+    field_names = {field.name for field in fields(ProcessorConfig)}
+
+    assert "plugin_registry" not in field_names
 
 
 @pytest.mark.unit

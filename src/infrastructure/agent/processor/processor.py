@@ -180,8 +180,7 @@ class ProcessorConfig:
     # LLM Client (optional, provides circuit breaker + rate limiter)
     llm_client: Any | None = None
 
-    # Plugin registry (optional, for hook notifications)
-    plugin_registry: Any | None = None
+    # Generation-owned plugin event dispatcher for hook notifications.
     plugin_event_dispatcher: Any | None = None
     runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
     runtime_context: dict[str, Any] = field(default_factory=dict)

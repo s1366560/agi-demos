@@ -330,7 +330,7 @@ class TestRequestScopedConfigSeamForwarding:
                 ToolSelectionContext(),
             )
 
-        assert new_config.plugin_registry is None
+        assert not hasattr(new_config, "plugin_registry")
         assert new_config.plugin_event_dispatcher is dispatcher
         assert new_config.runtime_hook_overrides == []
         assert operation.require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2) is dispatcher

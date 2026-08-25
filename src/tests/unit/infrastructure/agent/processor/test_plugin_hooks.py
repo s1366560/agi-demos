@@ -63,13 +63,12 @@ def _make_tool(name="test_tool", output="ok"):
     )
 
 
-def _make_processor(*, dispatcher=None, registry=None, tools=None):
+def _make_processor(*, dispatcher=None, tools=None):
     """Build a minimal SessionProcessor with an optional V2 dispatcher."""
     config = ProcessorConfig(
         model="test-model",
         provider_id="test-provider",
         loop_resolver=_builtin_loop_resolver(),
-        plugin_registry=registry,
         plugin_event_dispatcher=dispatcher,
         runtime_context={"tenant_id": "tenant-1", "project_id": "project-1"},
     )
@@ -112,12 +111,10 @@ class TestNotifyPluginHookHelper:
             await proc._notify_plugin_hook("on_error", {"err": "x"})
         dispatcher.dispatch.assert_awaited_once()
 
-    async def test_v1_registry_and_runtime_overrides_are_not_implicit_fallbacks(self):
-        """Processor construction must not turn V1 state into an implicit dispatcher."""
-        registry = MagicMock()
+    async def test_runtime_overrides_are_not_an_implicit_dispatcher(self):
+        """Persisted compatibility rows cannot execute without the V2 dispatcher."""
         config = ProcessorConfig(
             model="test-model",
-            plugin_registry=registry,
             runtime_hook_overrides=[
                 {
                     "plugin_name": "__custom__",
@@ -142,14 +139,12 @@ class TestNotifyPluginHookHelper:
             },
         )
 
-        registry.apply_hook.assert_not_called()
         assert proc._response_instructions == []
 
     def test_runtime_hook_context_exposes_workspace_fields(self):
         """Workspace runtime plugins need structured runtime context, not prompt parsing."""
         config = ProcessorConfig(
             model="test-model",
-            plugin_registry=None,
             runtime_context={
                 "tenant_id": "tenant-1",
                 "project_id": "project-1",
@@ -168,7 +163,7 @@ class TestNotifyPluginHookHelper:
 
     def test_runtime_hook_context_exposes_conversation_id(self):
         """Tool hooks need a stable turn key shared with after_turn_complete."""
-        proc = _make_processor(registry=None)
+        proc = _make_processor()
         proc._langfuse_context = {"conversation_id": "conv-1"}
 
         fields = proc._runtime_hook_context_fields()

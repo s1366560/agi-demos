@@ -178,7 +178,7 @@ class TestCreateForSubagent:
         processor = factory.create_for_subagent(inherit_subagent, sample_tools)
 
         assert processor.config.loop_resolver is loop_resolver.return_value
-        assert processor.config.plugin_registry is None
+        assert not hasattr(processor.config, "plugin_registry")
         assert processor.config.plugin_event_dispatcher is runtime_dispatcher.return_value
         assert processor.config.runtime_hook_overrides == []
         assert processor.config.provider_id == "gemini"
