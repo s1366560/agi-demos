@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from inspect import signature
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.application.schemas.tenant import TenantCreate, TenantUpdate
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    project_tenant_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.routers import tenants as tenant_routes
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.v2 import builtin_tenants_http_routes as subject
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
@@ -59,6 +63,43 @@ def test_tenants_row_is_a_complete_explicit_v2_contribution() -> None:
 
 
 @pytest.mark.unit
+def test_tenants_row_registers_generation_owned_handlers_without_static_db_dependencies() -> None:
+    endpoints = {
+        definition.name: definition.endpoint
+        for definition in subject.tenants_route_definitions_v2()
+    }
+    expected = {
+        "create_tenant": tenant_routes.create_tenant,
+        "list_tenants": tenant_routes.list_tenants,
+        "get_tenant": tenant_routes.get_tenant,
+        "update_tenant": tenant_routes.update_tenant,
+        "delete_tenant": tenant_routes.delete_tenant,
+        "add_tenant_member": tenant_routes.add_tenant_member,
+        "add_tenant_member_json": tenant_routes.add_tenant_member_json,
+        "update_tenant_member_role": tenant_routes.update_tenant_member_role,
+        "remove_tenant_member": tenant_routes.remove_tenant_member,
+        "list_tenant_members": tenant_routes.list_tenant_members,
+        "get_tenant_stats": tenant_routes.get_tenant_stats,
+        "get_tenant_analytics": tenant_routes.get_tenant_analytics,
+        "list_gene_policies": tenant_routes.list_gene_policies,
+        "upsert_gene_policy": tenant_routes.upsert_gene_policy,
+        "delete_gene_policy": tenant_routes.delete_gene_policy,
+        "list_registries": tenant_routes.list_registries,
+        "create_registry": tenant_routes.create_registry,
+        "update_registry": tenant_routes.update_registry,
+        "delete_registry": tenant_routes.delete_registry,
+        "test_registry_connection": tenant_routes.test_registry_connection,
+    }
+
+    assert endpoints == expected
+    for endpoint in expected.values():
+        parameters = signature(endpoint).parameters
+        assert "db" not in parameters
+        authority = parameters["project_tenant"]
+        assert authority.default.dependency is project_tenant_authority_dependency_v2
+
+
+@pytest.mark.unit
 def test_tenants_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="tenants-route-parity",
@@ -74,9 +115,7 @@ def test_tenants_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -85,34 +124,23 @@ def test_tenants_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_tenants_v2_before_static_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = object()
-    db = object()
-    calls: list[tuple[str, object, object]] = []
-
-    async def list_handler(
-        tenant_id: str,
-        current_user: object,
-        db_value: object,
-    ) -> list[subject.RegistryResponse]:
-        calls.append((tenant_id, current_user, db_value))
-        return []
+async def test_generation_dispatcher_executes_tenants_v2_before_static_fallback() -> None:
+    rows = MagicMock()
+    rows.scalars.return_value.all.return_value = []
+    db = SimpleNamespace(execute=AsyncMock(return_value=rows))
 
     async def current_user_override() -> object:
-        return user
+        return SimpleNamespace(id="user-1")
 
-    async def db_override() -> object:
-        return db
+    async def project_tenant_override() -> object:
+        return SimpleNamespace(db=db)
 
-    monkeypatch.setattr(subject, "_list_registries", list_handler)
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.tenants_route_definitions_v2(),
         dependency_overrides={
-            subject.get_current_user: current_user_override,
-            get_db: db_override,
+            tenant_routes.get_current_user: current_user_override,
+            project_tenant_authority_dependency_v2: project_tenant_override,
         },
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -150,138 +178,8 @@ async def test_generation_dispatcher_executes_tenants_v2_before_static_fallback(
 
     assert result.status_code == 200
     assert result.json() == []
-    assert calls == [("tenant-1", user, db)]
+    db.execute.assert_awaited_once()
     await host.close()
-
-
-@pytest.mark.unit
-async def test_tenants_v2_handlers_preserve_tenant_member_and_analytics_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    create_body = TenantCreate(name="Tenant")
-    update_body = TenantUpdate(name="Updated")
-    add_member_body = subject.AddMemberRequest(user_id="member-1", role="viewer")
-    update_member_body = subject.UpdateMemberRoleRequest(role="admin")
-    request = object()
-    user = object()
-    db = object()
-    project_tenant = object()
-    result = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    def handler(name: str, value: object = result) -> Any:
-        async def call(*args: object) -> object:
-            calls.append((name, args))
-            return value
-
-        return call
-
-    monkeypatch.setattr(subject, "_create_tenant", handler("create"))
-    monkeypatch.setattr(subject, "_list_tenants", handler("list"))
-    monkeypatch.setattr(subject, "_get_tenant", handler("get"))
-    monkeypatch.setattr(subject, "_update_tenant", handler("update"))
-    monkeypatch.setattr(subject, "_delete_tenant", handler("delete", None))
-    monkeypatch.setattr(subject, "_add_tenant_member", handler("add-member"))
-    monkeypatch.setattr(subject, "_add_tenant_member_json", handler("add-member-json"))
-    monkeypatch.setattr(subject, "_update_tenant_member_role", handler("update-member"))
-    monkeypatch.setattr(subject, "_remove_tenant_member", handler("remove-member", None))
-    monkeypatch.setattr(subject, "_list_tenant_members", handler("list-members"))
-    monkeypatch.setattr(subject, "_get_tenant_stats", handler("stats"))
-    monkeypatch.setattr(subject, "_get_tenant_analytics", handler("analytics"))
-
-    assert await subject.create_tenant_v2(create_body, user, db) is result
-    assert await subject.list_tenants_v2(2, 25, "needle", user, project_tenant) is result
-    assert await subject.get_tenant_v2("tenant-1", user, db) is result
-    assert await subject.update_tenant_v2("tenant-1", update_body, user, db) is result
-    assert await subject.delete_tenant_v2("tenant-1", user, db) is None
-    assert await subject.add_tenant_member_v2("tenant-1", "member-1", "viewer", user, db) is result
-    assert await subject.add_tenant_member_json_v2("tenant-1", add_member_body, user, db) is result
-    assert (
-        await subject.update_tenant_member_role_v2(
-            "tenant-1", "member-1", update_member_body, user, db
-        )
-        is result
-    )
-    assert await subject.remove_tenant_member_v2("tenant-1", "member-1", user, db) is None
-    assert await subject.list_tenant_members_v2("tenant-1", request, user, db) is result
-    assert await subject.get_tenant_stats_v2("tenant-1", user, db) is result
-    assert await subject.get_tenant_analytics_v2("tenant-1", "90d", 15, user, db) is result
-
-    assert calls == [
-        ("create", (create_body, user, db)),
-        ("list", (2, 25, "needle", user, project_tenant)),
-        ("get", ("tenant-1", user, db)),
-        ("update", ("tenant-1", update_body, user, db)),
-        ("delete", ("tenant-1", user, db)),
-        ("add-member", ("tenant-1", "member-1", "viewer", user, db)),
-        ("add-member-json", ("tenant-1", add_member_body, user, db)),
-        ("update-member", ("tenant-1", "member-1", update_member_body, user, db)),
-        ("remove-member", ("tenant-1", "member-1", user, db)),
-        ("list-members", ("tenant-1", request, user, db)),
-        ("stats", ("tenant-1", user, db)),
-        ("analytics", ("tenant-1", "90d", 15, user, db)),
-    ]
-
-
-@pytest.mark.unit
-async def test_tenants_v2_handlers_preserve_gene_policy_and_registry_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    gene_body = subject.GenePolicyRequest(
-        policy_key="memory-policy",
-        policy_value={"enabled": True},
-    )
-    registry_body = subject.RegistryRequest(
-        name="registry",
-        registry_type="docker",
-        url="https://registry.example.com",
-    )
-    user = object()
-    db = object()
-    result = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    def handler(name: str, value: object = result) -> Any:
-        async def call(*args: object) -> object:
-            calls.append((name, args))
-            return value
-
-        return call
-
-    monkeypatch.setattr(subject, "_list_gene_policies", handler("list-gene-policies"))
-    monkeypatch.setattr(subject, "_upsert_gene_policy", handler("upsert-gene-policy"))
-    monkeypatch.setattr(subject, "_delete_gene_policy", handler("delete-gene-policy", None))
-    monkeypatch.setattr(subject, "_list_registries", handler("list-registries"))
-    monkeypatch.setattr(subject, "_create_registry", handler("create-registry"))
-    monkeypatch.setattr(subject, "_update_registry", handler("update-registry"))
-    monkeypatch.setattr(subject, "_delete_registry", handler("delete-registry", None))
-    monkeypatch.setattr(subject, "_test_registry_connection", handler("test-registry"))
-
-    assert await subject.list_gene_policies_v2("tenant-1", user, db) is result
-    assert (
-        await subject.upsert_gene_policy_v2("tenant-1", "memory-policy", gene_body, user, db)
-        is result
-    )
-    assert await subject.delete_gene_policy_v2("tenant-1", "memory-policy", user, db) is None
-    assert await subject.list_registries_v2("tenant-1", user, db) is result
-    assert await subject.create_registry_v2("tenant-1", registry_body, user, db) is result
-    assert (
-        await subject.update_registry_v2("tenant-1", "registry-1", registry_body, user, db)
-        is result
-    )
-    assert await subject.delete_registry_v2("tenant-1", "registry-1", user, db) is None
-    assert await subject.test_registry_connection_v2("tenant-1", "registry-1", user, db) is result
-
-    assert calls == [
-        ("list-gene-policies", ("tenant-1", user, db)),
-        ("upsert-gene-policy", ("tenant-1", "memory-policy", gene_body, user, db)),
-        ("delete-gene-policy", ("tenant-1", "memory-policy", user, db)),
-        ("list-registries", ("tenant-1", user, db)),
-        ("create-registry", ("tenant-1", registry_body, user, db)),
-        ("update-registry", ("tenant-1", "registry-1", registry_body, user, db)),
-        ("delete-registry", ("tenant-1", "registry-1", user, db)),
-        ("test-registry", ("tenant-1", "registry-1", user, db)),
-    ]
 
 
 @pytest.mark.unit

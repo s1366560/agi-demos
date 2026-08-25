@@ -3138,7 +3138,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:1c07edb8aae612dab8af52cb9900346dc4a8f42eb862225c675d3263a4529d12",
+        "digest": "sha256:c50aea9bea4c23f51429c46fa4e1802d12a5cac51e649090a91a757876ad43d7",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_tenants_http_routes.py"
       }
     },

@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:8a53aff53c7367e7e40dbb3367739e1baaaf4a5200ee6ae0c81bfa03d1eac2",
-    "a8\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:2bd8529f5a3084a82ce50fb6f221f7790dd84e6940cae59a7d94441c8b2df8",
+    "68\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1499,8 +1499,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "src.infrastructure.plugins.v2.builtin_tenant_webhooks_http_routes:builtin_tenant_webhook",
     "s_http_routes_definition_v2\",\"module_ref\":\"builtin://memstack/http/tenant-webhooks-route",
     "s\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},",
-    "{\"artifact_digest\":\"sha256:1c07edb8aae612dab8af52cb9900346dc4a8f42eb862225c675d3263a4529",
-    "d12\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/builtin_tenants_http",
+    "{\"artifact_digest\":\"sha256:c50aea9bea4c23f51429c46fa4e1802d12a5cac51e649090a91a757876ad4",
+    "3d7\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/builtin_tenants_http",
     "_routes.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-1",
     "2/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"events\":{\"emits",
     "\":[],\"handles\":[]},\"services\":{\"provides\":[],\"requires\":[{\"alias\":\"route_table\",\"service",
@@ -2217,4 +2217,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:8a53aff53c7367e7e40dbb3367739e1baaaf4a5200ee6ae0c81bfa03d1eac2a8";
+    "sha256:2bd8529f5a3084a82ce50fb6f221f7790dd84e6940cae59a7d94441c8b2df868";

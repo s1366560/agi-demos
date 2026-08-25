@@ -27,7 +27,6 @@ from src.infrastructure.adapters.primary.web.routers.projects import (
     _lock_project_delete_scopes,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     OrgGenePolicyModel,
@@ -180,9 +179,10 @@ class UpdateMemberRoleRequest(BaseModel):
 async def create_tenant(
     tenant_data: TenantCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> TenantResponse:
     """Create a new tenant."""
+    db = project_tenant.db
     # Create tenant
     tenant_id = str(uuid4())
     tenant = Tenant(
@@ -273,9 +273,10 @@ async def list_tenants(
 async def get_tenant(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> TenantResponse:
     """Get tenant by ID or slug."""
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(Tenant).where(or_(Tenant.id == tenant_id, Tenant.slug == tenant_id))
@@ -305,9 +306,10 @@ async def update_tenant(
     tenant_id: str,
     tenant_data: TenantUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> TenantResponse:
     """Update tenant."""
+    db = project_tenant.db
     # Check if user is owner
     result = await db.execute(
         refresh_select_statement(
@@ -335,9 +337,10 @@ async def update_tenant(
 async def delete_tenant(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
     """Delete tenant."""
+    db = project_tenant.db
     tenant, project_ids = await _lock_tenant_delete_scope(
         db,
         tenant_id=tenant_id,
@@ -362,9 +365,10 @@ async def add_tenant_member(
     user_id: str,
     role: str = Query("member", description="Member role"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Add member to tenant."""
+    db = project_tenant.db
     # Validate role set
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
@@ -424,9 +428,10 @@ async def add_tenant_member_json(
     tenant_id: str,
     body: AddMemberRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Add member to tenant (JSON body version to match frontend)."""
+    db = project_tenant.db
     role = body.role or "member"
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
@@ -488,9 +493,10 @@ async def update_tenant_member_role(
     user_id: str,
     body: UpdateMemberRoleRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Update an existing tenant member role."""
+    db = project_tenant.db
     role = body.role
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
@@ -539,9 +545,10 @@ async def remove_tenant_member(
     tenant_id: str,
     user_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
     """Remove member from tenant."""
+    db = project_tenant.db
     # Existence-first with invalid id 422
     result = await db.execute(
         refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
@@ -589,9 +596,10 @@ async def list_tenant_members(
     tenant_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """List tenant members."""
+    db = project_tenant.db
     # Check if user has access to tenant
     user_tenant_result = await db.execute(
         refresh_select_statement(
@@ -641,9 +649,10 @@ async def list_tenant_members(
 async def get_tenant_stats(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Get tenant statistics for the overview dashboard."""
+    db = project_tenant.db
     # Check access
     user_tenant_result = await db.execute(
         refresh_select_statement(
@@ -831,7 +840,7 @@ async def get_tenant_analytics(
         description="Maximum number of projects returned for the storage distribution chart",
     ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """
     Get analytics data for tenant dashboard charts.
@@ -841,6 +850,7 @@ async def get_tenant_analytics(
         - projectStorage: Per-project storage distribution
         - summary: Quick stats
     """
+    db = project_tenant.db
     # Verify user belongs to tenant
     user_tenant_result = await db.execute(
         refresh_select_statement(
@@ -1021,8 +1031,9 @@ class GenePolicyResponse(BaseModel):
 async def list_gene_policies(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> list[GenePolicyResponse]:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(OrgGenePolicyModel)
@@ -1056,8 +1067,9 @@ async def upsert_gene_policy(
     policy_key: str,
     body: GenePolicyRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> GenePolicyResponse:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(OrgGenePolicyModel).where(
@@ -1106,8 +1118,9 @@ async def delete_gene_policy(
     tenant_id: str,
     policy_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(OrgGenePolicyModel).where(
@@ -1175,8 +1188,9 @@ def _registry_to_response(row: RegistryConfigModel) -> RegistryResponse:
 async def list_registries(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> list[RegistryResponse]:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(RegistryConfigModel).where(
@@ -1196,8 +1210,9 @@ async def create_registry(
     tenant_id: str,
     body: RegistryRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RegistryResponse:
+    db = project_tenant.db
     row = RegistryConfigModel(
         id=str(uuid4()),
         tenant_id=tenant_id,
@@ -1220,8 +1235,9 @@ async def update_registry(
     registry_id: str,
     body: RegistryRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RegistryResponse:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(RegistryConfigModel).where(
@@ -1255,8 +1271,9 @@ async def delete_registry(
     tenant_id: str,
     registry_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(RegistryConfigModel).where(
@@ -1286,8 +1303,9 @@ async def test_registry_connection(
     tenant_id: str,
     registry_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> TestConnectionResponse:
+    db = project_tenant.db
     result = await db.execute(
         refresh_select_statement(
             select(RegistryConfigModel).where(
