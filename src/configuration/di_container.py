@@ -12,8 +12,6 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.services.blackboard_file_service import BlackboardFileService
-from src.application.services.blackboard_service import BlackboardService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
 from src.application.services.topology_service import TopologyService
@@ -45,12 +43,6 @@ from src.configuration.containers import (
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 from src.domain.ports.repositories.user_repository import UserRepository
-from src.domain.ports.repositories.workspace.blackboard_file_repository import (
-    BlackboardFileRepository,
-)
-from src.domain.ports.repositories.workspace.blackboard_repository import (
-    BlackboardRepository,
-)
 from src.domain.ports.repositories.workspace.cyber_gene_repository import (
     CyberGeneRepository,
 )
@@ -234,18 +226,6 @@ class DIContainer:
 
     def workspace_agent_repository(self) -> WorkspaceAgentRepository:
         return self._project.workspace_agent_repository()
-
-    def blackboard_repository(self) -> BlackboardRepository:
-        return cast(BlackboardRepository, self._project.blackboard_repository())
-
-    def blackboard_service(self) -> BlackboardService:
-        return cast(BlackboardService, self._project.blackboard_service())
-
-    def blackboard_file_repository(self) -> BlackboardFileRepository:
-        return cast(BlackboardFileRepository, self._project.blackboard_file_repository())
-
-    def blackboard_file_service(self) -> BlackboardFileService:
-        return cast(BlackboardFileService, self._project.blackboard_file_service())
 
     def workspace_task_repository(self) -> WorkspaceTaskRepository:
         return self._project.workspace_task_repository()

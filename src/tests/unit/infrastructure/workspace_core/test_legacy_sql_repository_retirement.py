@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.configuration.containers.project_container import ProjectContainer
+from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
     LegacyWorkspaceAgentRepository,
 )
@@ -55,10 +56,6 @@ def test_legacy_sql_workspace_repositories_fail_closed_without_touching_session(
 @pytest.mark.parametrize(
     "factory_name",
     [
-        "blackboard_repository",
-        "blackboard_service",
-        "blackboard_file_repository",
-        "blackboard_file_service",
         "topology_repository",
         "topology_service",
         "cyber_objective_repository",
@@ -76,3 +73,16 @@ def test_project_container_workspace_factories_fail_closed_without_sql(
 
     with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
         getattr(container, factory_name)()
+
+
+@pytest.mark.unit
+def test_blackboard_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
+        "blackboard_repository",
+        "blackboard_service",
+        "blackboard_file_repository",
+        "blackboard_file_service",
+    }
+
+    assert retired_facades.isdisjoint(vars(ProjectContainer))
+    assert retired_facades.isdisjoint(vars(DIContainer))

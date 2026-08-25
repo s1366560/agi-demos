@@ -48,22 +48,6 @@ class ProjectContainer:
         """Get WorkspaceAgentRepository for workspace-agent relation persistence."""
         legacy_workspace_runtime_retired("DI agent repository")
 
-    def blackboard_repository(self) -> Never:
-        """Reject the retired platform SQL Blackboard repository."""
-        legacy_workspace_runtime_retired("DI blackboard repository")
-
-    def blackboard_service(self) -> Never:
-        """Reject the retired platform SQL Blackboard service."""
-        legacy_workspace_runtime_retired("DI blackboard service")
-
-    def blackboard_file_repository(self) -> Never:
-        """Reject the retired platform SQL Blackboard file repository."""
-        legacy_workspace_runtime_retired("DI blackboard file repository")
-
-    def blackboard_file_service(self) -> Never:
-        """Reject the retired platform SQL Blackboard file service."""
-        legacy_workspace_runtime_retired("DI blackboard file service")
-
     def workspace_task_repository(self) -> WorkspaceTaskRepository:
         """Get WorkspaceTaskRepository for workspace task persistence."""
         legacy_workspace_runtime_retired("DI task repository")
