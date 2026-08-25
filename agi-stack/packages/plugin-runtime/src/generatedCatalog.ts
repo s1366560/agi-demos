@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:c1733622bfe6331065e2201aced247d6b30707a32d4298a3375f45a04f',
-  'c56801","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:6510f6b2c4c3587650539844a63d46e273acc78cb504996ac5afe5a8df',
+  'e095a1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1230,7 +1230,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '.infrastructure.plugins.v2.builtin_graph_http_routes:builtin_graph_http_routes_defin',
   'ition_v2","module_ref":"builtin://memstack/http/graph-routes","plugin_id":"memstack-',
   'runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"s',
-  'ha256:559f388247de8ae892f215f318475f542022efd81a3f76ac7fb35ded548e5e06","artifact_so',
+  'ha256:f56a446c0760a0ec15f9b824b4d4234c8e11cec18480eefb1101aed7b3a602a8","artifact_so',
   'urce":"repo+python://src/infrastructure/plugins/v2/builtin_graph_stores_http_routes.',
   'py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sc',
   'hema","additionalProperties":false,"properties":{},"type":"object"},"events":{"emits',
@@ -2348,4 +2348,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:c1733622bfe6331065e2201aced247d6b30707a32d4298a3375f45a04fc56801' as const;
+  'sha256:6510f6b2c4c3587650539844a63d46e273acc78cb504996ac5afe5a8dfe095a1' as const;

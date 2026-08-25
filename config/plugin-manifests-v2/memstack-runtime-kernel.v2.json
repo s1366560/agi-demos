@@ -3341,7 +3341,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:559f388247de8ae892f215f318475f542022efd81a3f76ac7fb35ded548e5e06",
+        "digest": "sha256:f56a446c0760a0ec15f9b824b4d4234c8e11cec18480eefb1101aed7b3a602a8",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_graph_stores_http_routes.py"
       }
     },

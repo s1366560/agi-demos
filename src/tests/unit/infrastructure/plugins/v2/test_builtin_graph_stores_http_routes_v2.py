@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from inspect import signature
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -11,6 +13,10 @@ from fastapi import FastAPI
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
+    backend_store_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.routers import graph_stores as graph_store_routes
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
@@ -45,6 +51,29 @@ def test_graph_stores_row_is_a_complete_explicit_v2_contribution() -> None:
 
 
 @pytest.mark.unit
+def test_graph_stores_row_registers_generation_owned_handlers_without_forwarding_wrappers() -> None:
+    endpoints = {
+        definition.name: definition.endpoint
+        for definition in subject.graph_stores_route_definitions_v2()
+    }
+    expected = {
+        "list_store_types": graph_store_routes.list_store_types,
+        "test_store_raw": graph_store_routes.test_store_raw,
+        "create_store": graph_store_routes.create_store,
+        "list_stores": graph_store_routes.list_stores,
+        "get_store": graph_store_routes.get_store,
+        "update_store": graph_store_routes.update_store,
+        "delete_store": graph_store_routes.delete_store,
+        "test_store_by_id": graph_store_routes.test_store_by_id,
+    }
+
+    assert endpoints == expected
+    for endpoint in expected.values():
+        backend_store = signature(endpoint).parameters["backend_store"]
+        assert backend_store.default.dependency is backend_store_authority_dependency_v2
+
+
+@pytest.mark.unit
 def test_graph_stores_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="graph-stores-route-parity",
@@ -60,9 +89,7 @@ def test_graph_stores_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -71,34 +98,24 @@ def test_graph_stores_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_graph_stores_v2_before_static_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = object()
-    backend_store = object()
-    calls: list[tuple[object, object]] = []
-    response: dict[str, Any] = {"success": True, "data": [{"type": "neo4j"}]}
-
-    async def list_handler(
-        current_user: object,
-        backend_store_value: object,
-    ) -> dict[str, Any]:
-        calls.append((current_user, backend_store_value))
-        return response
+async def test_generation_dispatcher_executes_graph_stores_v2_before_static_fallback() -> None:
+    store_types = [{"type": "neo4j"}]
+    graph_service = SimpleNamespace(list_store_types=MagicMock(return_value=store_types))
+    backend_store = SimpleNamespace(services=SimpleNamespace(graph_service=graph_service))
+    response = {"success": True, "data": store_types}
 
     async def current_user_override() -> object:
-        return user
+        return SimpleNamespace(id="user-1")
 
     async def backend_store_override() -> object:
         return backend_store
 
-    monkeypatch.setattr(subject, "_list_store_types", list_handler)
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.graph_stores_route_definitions_v2(),
         dependency_overrides={
-            subject.get_current_user: current_user_override,
-            subject.backend_store_authority_dependency_v2: backend_store_override,
+            graph_store_routes.get_current_user: current_user_override,
+            backend_store_authority_dependency_v2: backend_store_override,
         },
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -136,153 +153,8 @@ async def test_generation_dispatcher_executes_graph_stores_v2_before_static_fall
 
     assert result.status_code == 200
     assert result.json() == response
-    assert calls == [(user, backend_store)]
+    graph_service.list_store_types.assert_called_once_with()
     await host.close()
-
-
-@pytest.mark.unit
-async def test_graph_stores_v2_handlers_preserve_all_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    create_body = subject.StoreCreateRequest(name="Primary graph")
-    update_body = subject.StoreUpdateRequest(name="Updated graph")
-    test_body = subject.StoreTestRequest(
-        engine_type="neo4j",
-        connection_config={"uri": "bolt://graph.invalid"},
-    )
-    user = object()
-    backend_store = object()
-    result = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    def handler(name: str, value: object = result) -> Any:
-        async def call(*args: object) -> object:
-            calls.append((name, args))
-            return value
-
-        return call
-
-    monkeypatch.setattr(subject, "_list_store_types", handler("types"))
-    monkeypatch.setattr(subject, "_test_store_raw", handler("test-raw"))
-    monkeypatch.setattr(subject, "_create_store", handler("create"))
-    monkeypatch.setattr(subject, "_list_stores", handler("list"))
-    monkeypatch.setattr(subject, "_get_store", handler("get"))
-    monkeypatch.setattr(subject, "_update_store", handler("update"))
-    monkeypatch.setattr(subject, "_delete_store", handler("delete", None))
-    monkeypatch.setattr(subject, "_test_store_by_id", handler("test-by-id"))
-
-    assert await subject.list_store_types_v2(user, backend_store) is result
-    assert (
-        await subject.test_store_raw_v2(
-            test_body,
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-    assert (
-        await subject.create_store_v2(
-            create_body,
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-    assert (
-        await subject.list_stores_v2(
-            "tenant-query",
-            25,
-            10,
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-    assert (
-        await subject.get_store_v2(
-            "store-1",
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-    assert (
-        await subject.update_store_v2(
-            "store-1",
-            update_body,
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-    assert (
-        await subject.delete_store_v2(
-            "store-1",
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is None
-    )
-    assert (
-        await subject.test_store_by_id_v2(
-            "store-1",
-            "tenant-query",
-            "tenant-fallback",
-            user,
-            backend_store,
-        )
-        is result
-    )
-
-    assert calls == [
-        ("types", (user, backend_store)),
-        (
-            "test-raw",
-            (test_body, "tenant-query", "tenant-fallback", user, backend_store),
-        ),
-        (
-            "create",
-            (create_body, "tenant-query", "tenant-fallback", user, backend_store),
-        ),
-        (
-            "list",
-            ("tenant-query", 25, 10, "tenant-fallback", user, backend_store),
-        ),
-        (
-            "get",
-            ("store-1", "tenant-query", "tenant-fallback", user, backend_store),
-        ),
-        (
-            "update",
-            (
-                "store-1",
-                update_body,
-                "tenant-query",
-                "tenant-fallback",
-                user,
-                backend_store,
-            ),
-        ),
-        (
-            "delete",
-            ("store-1", "tenant-query", "tenant-fallback", user, backend_store),
-        ),
-        (
-            "test-by-id",
-            ("store-1", "tenant-query", "tenant-fallback", user, backend_store),
-        ),
-    ]
 
 
 @pytest.mark.unit

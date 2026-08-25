@@ -5,30 +5,18 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from fastapi import Depends, Query, status
+from fastapi import status
 
-from src.infrastructure.adapters.primary.web.backend_store_authority_v2 import (
-    BackendStoreAuthorityV2,
-    backend_store_authority_dependency_v2,
-)
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
-)
 from src.infrastructure.adapters.primary.web.routers.graph_stores import (
-    StoreCreateRequest,
-    StoreTestRequest,
-    StoreUpdateRequest,
-    create_store as _create_store,
-    delete_store as _delete_store,
-    get_store as _get_store,
-    list_store_types as _list_store_types,
-    list_stores as _list_stores,
-    test_store_by_id as _test_store_by_id,
-    test_store_raw as _test_store_raw,
-    update_store as _update_store,
+    create_store,
+    delete_store,
+    get_store,
+    list_store_types,
+    list_stores,
+    test_store_by_id,
+    test_store_raw,
+    update_store,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
@@ -42,129 +30,6 @@ from .runtime import (
 GRAPH_STORES_HTTP_ROUTES_ENTRY_V2 = "builtin-graph-stores-http-routes"
 GRAPH_STORES_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/graph-stores-routes"
 GRAPH_STORES_HTTP_ROUTES_ROW_V2 = "graph-stores"
-
-
-async def list_store_types_v2(
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _list_store_types(current_user, backend_store)
-
-
-async def test_store_raw_v2(
-    request: StoreTestRequest,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _test_store_raw(
-        request,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def create_store_v2(
-    request: StoreCreateRequest,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _create_store(
-        request,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def list_stores_v2(
-    tenant_id: str | None = Query(None),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _list_stores(
-        tenant_id,
-        limit,
-        offset,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def get_store_v2(
-    store_id: str,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _get_store(
-        store_id,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def update_store_v2(
-    store_id: str,
-    request: StoreUpdateRequest,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _update_store(
-        store_id,
-        request,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def delete_store_v2(
-    store_id: str,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> None:
-    return await _delete_store(
-        store_id,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
-
-
-async def test_store_by_id_v2(
-    store_id: str,
-    tenant_id: str | None = Query(None),
-    fallback_tenant_id: str = Depends(get_current_user_tenant),
-    current_user: User = Depends(get_current_user),
-    backend_store: BackendStoreAuthorityV2 = Depends(backend_store_authority_dependency_v2),
-) -> dict[str, Any]:
-    return await _test_store_by_id(
-        store_id,
-        tenant_id,
-        fallback_tenant_id,
-        current_user,
-        backend_store,
-    )
 
 
 def _graph_stores_route_v2(
@@ -197,21 +62,21 @@ def graph_stores_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         _graph_stores_route_v2(
             path=f"{collection_path}/types",
             methods=("GET",),
-            endpoint=list_store_types_v2,
+            endpoint=list_store_types,
             name="list_store_types",
             response_model=dict[str, Any],
         ),
         _graph_stores_route_v2(
             path=f"{collection_path}/test",
             methods=("POST",),
-            endpoint=test_store_raw_v2,
+            endpoint=test_store_raw,
             name="test_store_raw",
             response_model=dict[str, Any],
         ),
         _graph_stores_route_v2(
             path=collection_path,
             methods=("POST",),
-            endpoint=create_store_v2,
+            endpoint=create_store,
             name="create_store",
             status_code=status.HTTP_201_CREATED,
             response_model=dict[str, Any],
@@ -219,35 +84,35 @@ def graph_stores_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         _graph_stores_route_v2(
             path=collection_path,
             methods=("GET",),
-            endpoint=list_stores_v2,
+            endpoint=list_stores,
             name="list_stores",
             response_model=dict[str, Any],
         ),
         _graph_stores_route_v2(
             path=item_path,
             methods=("GET",),
-            endpoint=get_store_v2,
+            endpoint=get_store,
             name="get_store",
             response_model=dict[str, Any],
         ),
         _graph_stores_route_v2(
             path=item_path,
             methods=("PUT",),
-            endpoint=update_store_v2,
+            endpoint=update_store,
             name="update_store",
             response_model=dict[str, Any],
         ),
         _graph_stores_route_v2(
             path=item_path,
             methods=("DELETE",),
-            endpoint=delete_store_v2,
+            endpoint=delete_store,
             name="delete_store",
             status_code=status.HTTP_204_NO_CONTENT,
         ),
         _graph_stores_route_v2(
             path=f"{item_path}/test",
             methods=("POST",),
-            endpoint=test_store_by_id_v2,
+            endpoint=test_store_by_id,
             name="test_store_by_id",
             response_model=dict[str, Any],
         ),
@@ -290,17 +155,6 @@ __all__ = [
     "GRAPH_STORES_HTTP_ROUTES_ENTRY_V2",
     "GRAPH_STORES_HTTP_ROUTES_MODULE_V2",
     "GRAPH_STORES_HTTP_ROUTES_ROW_V2",
-    "StoreCreateRequest",
-    "StoreTestRequest",
-    "StoreUpdateRequest",
     "builtin_graph_stores_http_routes_definition_v2",
-    "create_store_v2",
-    "delete_store_v2",
-    "get_store_v2",
     "graph_stores_route_definitions_v2",
-    "list_store_types_v2",
-    "list_stores_v2",
-    "test_store_by_id_v2",
-    "test_store_raw_v2",
-    "update_store_v2",
 ]
