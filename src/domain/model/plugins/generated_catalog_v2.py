@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:6510f6b2c4c3587650539844a63d46e273acc78cb504996ac5afe5a8dfe095'
-    'a1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf905322'
+    '5c","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1356,8 +1356,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '","entrypoint":"src.infrastructure.plugins.v2.builtin_reflection_http_routes:builtin_ref'
     'lection_http_routes_definition_v2","module_ref":"builtin://memstack/http/reflection-rout'
     'es","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}'
-    ',{"artifact_digest":"sha256:f5ed2aee2632d29436390e12cc4c01669847efe91fcf15b6c5fa83c06374'
-    'fc26","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_retrieval_s'
+    ',{"artifact_digest":"sha256:05000ed2ead2aaad82593cb158c7c0b07260d488eb90a6f294a3b329af3d'
+    '3135","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_retrieval_s'
     'tores_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/dr'
     'aft/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"event'
     's":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alias":"route_table'
@@ -2220,7 +2220,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:6510f6b2c4c3587650539844a63d46e273acc78cb504996ac5afe5a8dfe095a1"
+    "sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf9053225c"
 )
 # fmt: on
 

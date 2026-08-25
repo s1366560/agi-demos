@@ -3370,7 +3370,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:f5ed2aee2632d29436390e12cc4c01669847efe91fcf15b6c5fa83c06374fc26",
+        "digest": "sha256:05000ed2ead2aaad82593cb158c7c0b07260d488eb90a6f294a3b329af3d3135",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_retrieval_stores_http_routes.py"
       }
     },
