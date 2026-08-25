@@ -17,7 +17,12 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     verify_api_key_dependency,
 )
-from src.infrastructure.adapters.primary.web.routers import cyber_genes, cyber_objectives, topology
+from src.infrastructure.adapters.primary.web.routers import (
+    cyber_genes,
+    cyber_objectives,
+    topology,
+    workspace_chat,
+)
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
     register_workspace_core_routes,
     register_workspace_core_static_routes,
@@ -364,6 +369,70 @@ async def test_avernet_topology_routes_proxy_exact_contract_without_legacy_servi
         ("PATCH", f"{base}/edges/edge-1"),
         ("DELETE", f"{base}/edges/edge-1"),
     ]
+
+
+@pytest.mark.unit
+async def test_avernet_workspace_chat_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "POST":
+            return httpx.Response(
+                201,
+                json={
+                    "id": "message-1",
+                    "workspace_id": "workspace-1",
+                    "sender_id": "user-1",
+                    "sender_type": "human",
+                    "content": "Hello Core",
+                    "mentions": ["agent-1"],
+                    "parent_message_id": None,
+                    "metadata": {},
+                    "created_at": "2026-08-26T00:00:00Z",
+                },
+            )
+        return httpx.Response(200, json={"items": []})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("workspace chat proxy touched the retired local DI path")
+
+    monkeypatch.setattr(workspace_chat, "get_message_service", legacy_di_trap, raising=False)
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(
+                base,
+                json={"content": "Hello Core", "mentions": ["agent-1"]},
+            ),
+            await client.get(base, params={"limit": 25, "before": "message-9"}),
+            await client.get(f"{base}/mentions/agent-1", params={"limit": 10}),
+        ]
+
+    assert [response.status_code for response in responses] == [201, 200, 200]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?limit=25&before=message-9"),
+        ("GET", f"{base}/mentions/agent-1?limit=10"),
+    ]
+    assert observed[0][2] == b'{"content":"Hello Core","mentions":["agent-1"]}'
 
 
 @pytest.mark.unit

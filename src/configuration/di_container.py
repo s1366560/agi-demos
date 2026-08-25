@@ -5,14 +5,12 @@ the exact same public interface for all callers.
 """
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.application.use_cases.agent import (
     CreateConversationUseCase,
     GetConversationUseCase,
@@ -155,14 +153,6 @@ class DIContainer:
 
     def topology_repository(self) -> TopologyRepository:
         return cast(TopologyRepository, self._project.topology_repository())
-
-    def workspace_message_service(
-        self,
-        workspace_event_publisher: (
-            Callable[[str, str, dict[str, Any]], Awaitable[None]] | None
-        ) = None,
-    ) -> WorkspaceMessageService:
-        return self._project.workspace_message_service(workspace_event_publisher)
 
     # === Infra Container delegates ===
 

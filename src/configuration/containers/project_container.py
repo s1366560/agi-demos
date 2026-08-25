@@ -1,20 +1,16 @@
 """DI sub-container for project domain."""
 
-from collections.abc import Awaitable, Callable
-from typing import Any, Never
+from collections.abc import Callable
+from typing import Never
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
 from src.domain.ports.repositories.workspace.workspace_member_repository import (
     WorkspaceMemberRepository,
-)
-from src.domain.ports.repositories.workspace.workspace_message_repository import (
-    WorkspaceMessageRepository,
 )
 from src.domain.ports.repositories.workspace.workspace_repository import (
     WorkspaceRepository,
@@ -65,22 +61,3 @@ class ProjectContainer:
     def topology_repository(self) -> Never:
         """Reject the retired platform SQL Topology repository."""
         legacy_workspace_runtime_retired("DI topology repository")
-
-    def workspace_message_repository(self) -> WorkspaceMessageRepository:
-        legacy_workspace_runtime_retired("DI message repository")
-
-    def workspace_message_service(
-        self,
-        workspace_event_publisher: (
-            Callable[[str, str, dict[str, Any]], Awaitable[None]] | None
-        ) = None,
-    ) -> WorkspaceMessageService:
-        """Get WorkspaceMessageService for chat message operations."""
-        user_repo = self._user_repository_factory() if self._user_repository_factory else None
-        return WorkspaceMessageService(
-            message_repo=self.workspace_message_repository(),
-            member_repo=self.workspace_member_repository(),
-            agent_repo=self.workspace_agent_repository(),
-            workspace_event_publisher=workspace_event_publisher,
-            user_repo=user_repo,
-        )

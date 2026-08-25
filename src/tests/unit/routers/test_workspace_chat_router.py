@@ -1,135 +1,112 @@
-"""Tests for workspace chat router contract publishing."""
+"""Tests for the retired Python workspace chat execution path."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
-
 import pytest
-from fastapi import BackgroundTasks, HTTPException, status
+from fastapi import HTTPException, status
 
-from src.application.services.workspace_surface_contract import (
-    HOSTED,
-    NON_AUTHORITATIVE,
-    SENSING_CAPABLE,
-    SIGNAL_ROLE_KEY,
-    SURFACE_BOUNDARY_KEY,
-)
 
-# NOTE: the workspace chat HTTP routes are cloned as Avernet Core proxies
-# (see workspace_core_routes.py), so end-to-end POST/GET flows no longer
-# execute the Python handlers in-process and cannot be exercised with the
-# in-memory test client. The router is still covered at the function level
-# below: error sanitization, the editor guard, and the hosted/sensing event
-# contract applied by the message-service publisher wiring.
+class _AccessTrap:
+    def __getattribute__(self, name: str) -> object:
+        raise AssertionError(f"retired workspace chat handler accessed {name}")
+
+
+def _assert_workspace_core_unavailable(exc: HTTPException) -> None:
+    assert exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc.detail == {
+        "code": "WORKSPACE_CORE_UNAVAILABLE",
+        "reason": "workspace_core_unavailable",
+        "detail": "Workspace Core is unavailable",
+    }
 
 
 @pytest.mark.unit
 class TestWorkspaceChatRouter:
-    def test_map_error_sanitizes_internal_errors(self):
+    def test_module_keeps_contract_schemas_without_local_service_helpers(self) -> None:
         from src.infrastructure.adapters.primary.web.routers import workspace_chat
 
-        exc = workspace_chat._map_error(RuntimeError("internal chat backend secret"))
+        assert {
+            "SendMessageRequest",
+            "MessageResponse",
+            "MessageListResponse",
+        }.issubset(vars(workspace_chat))
+        assert {
+            "WorkspaceMessageService",
+            "WorkspaceMessage",
+            "MessageSenderType",
+            "get_message_service",
+            "get_db",
+            "require_workspace_access",
+            "_publish_pending_chat_events_after_failure",
+            "_map_error",
+            "_to_response",
+            "_fire_mention_routing",
+        }.isdisjoint(vars(workspace_chat))
 
-        assert exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert exc.detail == "Internal server error"
-        assert "internal" not in exc.detail
-
-    def test_map_error_sanitizes_permission_errors(self):
+    async def test_send_message_fails_closed_without_local_di(self) -> None:
         from src.infrastructure.adapters.primary.web.routers import workspace_chat
-
-        exc = workspace_chat._map_error(PermissionError("workspace chat secret denied"))
-
-        assert exc.status_code == status.HTTP_403_FORBIDDEN
-        assert exc.detail == "Access denied"
-
-    def test_map_error_sanitizes_not_found_value_errors(self):
-        from src.infrastructure.adapters.primary.web.routers import workspace_chat
-
-        exc = workspace_chat._map_error(ValueError("message msg-secret not found"))
-
-        assert exc.status_code == status.HTTP_404_NOT_FOUND
-        assert exc.detail == "Workspace message not found"
-
-    def test_map_error_sanitizes_bad_request_value_errors(self):
-        from src.infrastructure.adapters.primary.web.routers import workspace_chat
-
-        exc = workspace_chat._map_error(ValueError("secret message payload invalid"))
-
-        assert exc.status_code == status.HTTP_400_BAD_REQUEST
-        assert exc.detail == "Invalid workspace chat request"
-
-    @pytest.mark.asyncio
-    async def test_send_message_requires_workspace_editor(self, monkeypatch):
-        from src.infrastructure.adapters.primary.web.routers import workspace_chat
-
-        async def deny_without_editor(
-            _db,
-            _current_user,
-            _tenant_id,
-            _project_id,
-            _workspace_id,
-            *,
-            require_editor: bool = False,
-        ) -> None:
-            assert require_editor is True
-            raise HTTPException(status_code=403, detail="Workspace editor access required")
-
-        monkeypatch.setattr(workspace_chat, "require_workspace_access", deny_without_editor)
 
         with pytest.raises(HTTPException) as exc_info:
             await workspace_chat.send_message(
                 tenant_id="tenant-1",
                 project_id="project-1",
                 workspace_id="workspace-1",
-                payload=workspace_chat.SendMessageRequest(content="Viewer write attempt"),
-                request=SimpleNamespace(),
-                background_tasks=BackgroundTasks(),
-                current_user=SimpleNamespace(id="user-1", email="viewer@example.com"),
-                db=AsyncMock(),
+                payload=workspace_chat.SendMessageRequest(content="Hello"),
+                current_user=_AccessTrap(),
             )
 
-        assert exc_info.value.status_code == 403
-        assert exc_info.value.detail == "Workspace editor access required"
+        _assert_workspace_core_unavailable(exc_info.value)
 
-    @pytest.mark.asyncio
-    async def test_chat_event_publisher_applies_hosted_sensing_contract(self, monkeypatch):
-        """The chat publisher wiring must stamp hosted/non-authoritative metadata."""
+    async def test_list_messages_fails_closed_without_local_di(self) -> None:
         from src.infrastructure.adapters.primary.web.routers import workspace_chat
 
-        publish_mock = AsyncMock()
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.workspace_events."
-            "publish_workspace_event_with_retry",
-            publish_mock,
-        )
+        with pytest.raises(HTTPException) as exc_info:
+            await workspace_chat.list_messages(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                limit=50,
+                before=None,
+                current_user=_AccessTrap(),
+            )
 
-        captured: dict[str, object] = {}
+        _assert_workspace_core_unavailable(exc_info.value)
 
-        class _FakeContainer:
-            redis_client = object()  # non-None so the publisher is wired
+    async def test_get_mentions_fails_closed_without_local_di(self) -> None:
+        from src.infrastructure.adapters.primary.web.routers import workspace_chat
 
-            def with_db(self, _db: object) -> _FakeContainer:
-                return self
+        with pytest.raises(HTTPException) as exc_info:
+            await workspace_chat.get_mentions(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                target_id="agent-1",
+                limit=50,
+                current_user=_AccessTrap(),
+            )
 
-            def workspace_message_service(self, workspace_event_publisher):
-                captured["publisher"] = workspace_event_publisher
-                return SimpleNamespace()
+        _assert_workspace_core_unavailable(exc_info.value)
 
-        request = SimpleNamespace(
-            app=SimpleNamespace(state=SimpleNamespace(container=_FakeContainer()))
-        )
 
-        workspace_chat.get_message_service(request, db=object())
+@pytest.mark.unit
+def test_workspace_chat_contract_models_remain_stable() -> None:
+    from src.infrastructure.adapters.primary.web.routers import workspace_chat
 
-        publisher = captured["publisher"]
-        assert publisher is not None
-        await publisher("ws-1", "workspace_message_created", {"message": {"id": "m-1"}})
-
-        publish_kwargs = publish_mock.await_args.kwargs
-        assert publish_kwargs["workspace_id"] == "ws-1"
-        assert publish_kwargs["metadata"][SURFACE_BOUNDARY_KEY] == HOSTED
-        assert publish_kwargs["metadata"]["authority_class"] == NON_AUTHORITATIVE
-        assert publish_kwargs["metadata"][SIGNAL_ROLE_KEY] == SENSING_CAPABLE
-        assert publish_kwargs["payload"][SURFACE_BOUNDARY_KEY] == HOSTED
-        assert publish_kwargs["payload"][SIGNAL_ROLE_KEY] == SENSING_CAPABLE
+    assert set(workspace_chat.SendMessageRequest.model_fields) == {
+        "content",
+        "sender_type",
+        "parent_message_id",
+        "mentions",
+    }
+    assert set(workspace_chat.MessageResponse.model_fields) == {
+        "id",
+        "workspace_id",
+        "sender_id",
+        "sender_type",
+        "content",
+        "mentions",
+        "parent_message_id",
+        "metadata",
+        "created_at",
+    }
+    assert set(workspace_chat.MessageListResponse.model_fields) == {"items"}
