@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:b1670e7a23b8143f2d8f6df6e386bdcebf090d251022381a20d366c7bb561b54",
+        "digest": "sha256:30dc8f40d498df3e0bd11200136f7921a6ea1a25c8224670e0afe689af063b80",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -822,6 +822,75 @@
       "artifact": {
         "digest": "sha256:86e1c0e45ac4d9a70f39217b136e1246c15c60172c603ab87430e103e84e64b7",
         "source": "repo+python://src/infrastructure/plugins/v2/attachment_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/instance-file-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_file_services:_apply_instance_file_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.instance-file-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "base_dir"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" },
+            "base_dir": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "contract_digest": "sha256:15221920c0b19482eb6a0c4b9b49a189349c07e5ec7f1dbd1820d3d0cc30e7c8",
+      "artifact": {
+        "digest": "sha256:12aa1aaa9070f8137ebde08a7ce4121e18bf171e0bcbd60771a4b31f0131c43b",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/instance-file-services",
+      "entrypoint": "src.infrastructure.plugins.v2.instance_file_services:_apply_instance_file_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.instance-file-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.instance-file-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e5fd0f702e910f9fd4d4cae18bca8ec3cc644c25f0f3e0c2c5c37024bd4cfe21",
+      "artifact": {
+        "digest": "sha256:12aa1aaa9070f8137ebde08a7ce4121e18bf171e0bcbd60771a4b31f0131c43b",
+        "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
       }
     },
     {

@@ -7,7 +7,6 @@ from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_channel_service import InstanceChannelService
-from src.application.services.instance_file_service import InstanceFileService
 from src.application.services.instance_service import InstanceService
 from src.application.services.instance_template_service import InstanceTemplateService
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
@@ -194,9 +193,6 @@ class InstanceContainer:
         return InstanceTemplateService(
             template_repo=self.instance_template_repository(),
         )
-
-    def instance_file_service(self) -> InstanceFileService:
-        return InstanceFileService()
 
     def instance_channel_repository(self) -> InstanceChannelRepository:
         assert self._db is not None

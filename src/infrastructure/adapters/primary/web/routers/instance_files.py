@@ -11,21 +11,15 @@ from fastapi import (
     Depends,
     Form,
     HTTPException,
-    Request,
     UploadFile,
     status,
 )
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.instance_file_service import (
-    InstanceFileService,
-)
-from src.configuration.di_container import DIContainer
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user_tenant,
-    get_db,
+from src.infrastructure.adapters.primary.web.instance_file_application_authority_v2 import (
+    InstanceFileApplicationAuthorityV2,
+    instance_file_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.http_headers import (
     content_disposition_attachment,
@@ -35,10 +29,6 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/instances", tags=["Instance Files"])
-
-
-def _get_file_service() -> InstanceFileService:
-    return InstanceFileService()
 
 
 def _file_not_found_error() -> HTTPException:
@@ -62,22 +52,12 @@ def _file_conflict_error() -> HTTPException:
     )
 
 
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """Get DI container with database session for the current request."""
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
-
 async def _ensure_instance_file_access(
-    request: Request,
-    db: AsyncSession,
+    authority: InstanceFileApplicationAuthorityV2,
     instance_id: str,
-    tenant_id: str,
 ) -> None:
-    container = get_container_with_db(request, db)
-    service = container.instance_service()
-    instance = await service.get_instance(instance_id)
-    if instance is None or getattr(instance, "tenant_id", None) != tenant_id:
+    instance = await authority.services.instance.get_instance(instance_id)
+    if instance is None or getattr(instance, "tenant_id", None) != authority.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Instance not found"),
@@ -94,12 +74,12 @@ class CreateFileRequest(BaseModel):
 @router.get("/{instance_id}/files")
 async def list_files(
     instance_id: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     tree = await svc.list_tree(instance_id)
     return {"tree": [asdict(n) for n in tree]}
 
@@ -108,12 +88,12 @@ async def list_files(
 async def preview_file(
     instance_id: str,
     file_path: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     try:
         content = await svc.read_content(instance_id, file_path)
     except FileNotFoundError as exc:
@@ -127,13 +107,13 @@ async def preview_file(
 async def download_file(
     instance_id: str,
     file_path: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> Response:
     """Download a file as binary."""
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     try:
         data, filename, mime = await svc.read_bytes(instance_id, file_path)
     except FileNotFoundError as exc:
@@ -151,12 +131,12 @@ async def download_file(
 async def create_file(
     instance_id: str,
     body: CreateFileRequest,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     try:
         node = await svc.create(instance_id, body.path, body.type)
     except FileExistsError as exc:
@@ -169,14 +149,14 @@ async def create_file(
 @router.post("/{instance_id}/files/upload")
 async def upload_file(
     instance_id: str,
-    request: Request,
     file: UploadFile,
     directory: str = Form(""),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     content = await file.read()
     filename = file.filename or "unnamed"
     try:
@@ -193,13 +173,13 @@ async def upload_file(
 async def delete_file(
     instance_id: str,
     file_path: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: InstanceFileApplicationAuthorityV2 = Depends(
+        instance_file_application_authority_dependency_v2
+    ),
 ) -> None:
     """Delete a file or folder."""
-    await _ensure_instance_file_access(request, db, instance_id, tenant_id)
-    svc = _get_file_service()
+    await _ensure_instance_file_access(authority, instance_id)
+    svc = authority.services.files
     try:
         await svc.delete(instance_id, file_path)
     except FileNotFoundError as exc:
