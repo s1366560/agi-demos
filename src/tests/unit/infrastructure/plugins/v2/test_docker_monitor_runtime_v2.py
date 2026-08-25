@@ -14,6 +14,9 @@ from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
     ARTIFACT_CONTENT_GC_MODULE_V2,
     ASYNC_SESSION_FACTORY_MODULE_V2,
 )
+from src.infrastructure.plugins.v2.artifact_content_services import (
+    ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.docker_monitor_runtime import (
@@ -188,6 +191,7 @@ async def test_docker_monitor_rejects_missing_sessions_without_fallback() -> Non
             replace(entry, enabled=False)
             if entry.module_ref
             in {
+                ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
                 ARTIFACT_CONTENT_GC_MODULE_V2,
                 ASYNC_SESSION_FACTORY_MODULE_V2,
             }

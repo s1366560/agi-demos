@@ -282,6 +282,22 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: process-boundary
+    - entry_id: builtin-artifact-content-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/artifact-content-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        sessions: service:persistence.async-session-factory
+        storage: service:storage.object-storage
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-docker-event-monitor
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

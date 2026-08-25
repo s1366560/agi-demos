@@ -45,16 +45,17 @@ from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
 from src.domain.ports.repositories.artifact_content_authority_repository import (
     ArtifactContentScope,
 )
+from src.infrastructure.adapters.primary.web.artifact_content_application_authority_v2 import (
+    ArtifactContentApplicationAuthorityV2,
+    artifact_content_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
     ArtifactContentCommitReconciler,
 )
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
-from src.infrastructure.adapters.secondary.persistence.sql_artifact_content_authority import (
-    SqlArtifactContentAuthorityRepository,
-)
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -208,32 +209,21 @@ def get_artifact_service() -> ArtifactService:
 
 
 def get_artifact_content_authority_service(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+    artifact_content_application: ArtifactContentApplicationAuthorityV2 = Depends(
+        artifact_content_application_authority_dependency_v2
+    ),
 ) -> ArtifactContentAuthorityService:
-    """Build the cloud content authority from the request-scoped DB container."""
-    container = request.app.state.container.with_db(db)
-    storage_service = container.storage_service()
-    reconciler = ArtifactContentCommitReconciler(
-        session_factory=async_session_factory,
-        storage_service=storage_service,
-    )
-    return ArtifactContentAuthorityService(
-        repository=SqlArtifactContentAuthorityRepository(db),
-        storage_service=storage_service,
-        orphan_recorder=reconciler.record_pending,
-    )
+    """Resolve content authority from the pinned generation operation."""
+    return artifact_content_application.services.content
 
 
 def get_artifact_content_commit_reconciler(
-    request: Request,
+    artifact_content_application: ArtifactContentApplicationAuthorityV2 = Depends(
+        artifact_content_application_authority_dependency_v2
+    ),
 ) -> ArtifactContentCommitReconciler:
-    """Build a reconciler that never reuses a failed request transaction."""
-    container = request.app.state.container
-    return ArtifactContentCommitReconciler(
-        session_factory=async_session_factory,
-        storage_service=container.storage_service(),
-    )
+    """Resolve the fresh-session reconciler from the same operation authority."""
+    return artifact_content_application.services.reconciler
 
 
 async def verify_project_access(project_id: str, user: User, db: AsyncSession) -> None:

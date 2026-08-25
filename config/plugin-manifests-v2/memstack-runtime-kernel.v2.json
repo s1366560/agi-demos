@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:5a8f9141b082573e24a3420512a9e62068e18fc7f88c160a786cc8338be01eb8",
+        "digest": "sha256:ba9ac4513c1ac74b6c7d2a5956c11aaa3f28db48b20a8888fc531edf077cb809",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -876,6 +876,48 @@
       "artifact": {
         "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/artifact-content-services",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_content_services:artifact_content_application_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.artifact-content-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "storage",
+              "service": "service:storage.object-storage",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ee2d130d68957fabd0a2efbf24c857168e5cbad98c650eae45f9d1d6875f7ca9",
+      "artifact": {
+        "digest": "sha256:37afa965ee98fc6cec4b3ce7bbd91b9de9d11ee481cc54010517a8cea2ad765a",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_services.py"
       }
     },
     {
