@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
+from src.domain.events.agent_events import AgentArtifactCreatedEvent
 
 
 class TestSandboxEventPublisher:
@@ -236,6 +237,79 @@ class TestSandboxEventPublisher:
         call_args = mock_event_bus.stream_add.call_args
         # Check maxlen parameter
         assert call_args[1].get("maxlen") == 1000
+
+    @pytest.mark.asyncio
+    async def test_publish_domain_event_fans_out_to_sandbox_and_agent_streams(
+        self,
+        publisher,
+        mock_event_bus,
+    ):
+        """Artifact events use one public publisher seam for both durable streams."""
+        mock_event_bus.stream_add.side_effect = ["sandbox-msg", "agent-msg"]
+        event = AgentArtifactCreatedEvent(
+            artifact_id="artifact-1",
+            sandbox_id="sandbox-1",
+            filename="report.txt",
+            mime_type="text/plain",
+            category="document",
+            size_bytes=12,
+        )
+
+        result = await publisher.publish_domain_event(
+            "project-1",
+            event,
+            conversation_id="conversation-1",
+        )
+
+        assert result == "sandbox-msg"
+        assert mock_event_bus.stream_add.await_count == 2
+        sandbox_call, agent_call = mock_event_bus.stream_add.await_args_list
+        assert sandbox_call.args[0] == "sandbox:events:project-1"
+        assert sandbox_call.kwargs["maxlen"] == 1000
+        sandbox_payload = sandbox_call.args[1]
+        assert sandbox_payload["type"] == "artifact_created"
+        assert sandbox_payload["project_id"] == "project-1"
+        assert "conversation_id" not in sandbox_payload["data"]
+
+        assert agent_call.args[0] == "agent:events:conversation-1"
+        assert agent_call.kwargs["maxlen"] == 1000
+        agent_payload = agent_call.args[1]
+        assert agent_payload["type"] == "artifact_created"
+        assert agent_payload["conversation_id"] == "conversation-1"
+        assert agent_payload["data"]["conversation_id"] == "conversation-1"
+        assert isinstance(agent_payload["event_time_us"], int)
+        assert [call.args[0] for call in mock_event_bus.publish.await_args_list] == [
+            "sandbox:events:project-1",
+            "agent:events:conversation-1",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_agent_stream_failure_does_not_undo_sandbox_publication(
+        self,
+        publisher,
+        mock_event_bus,
+        caplog,
+    ):
+        """The durable sandbox publication remains authoritative on fan-out failure."""
+        mock_event_bus.stream_add.side_effect = ["sandbox-msg", RuntimeError("agent unavailable")]
+        event = AgentArtifactCreatedEvent(
+            artifact_id="artifact-1",
+            sandbox_id="sandbox-1",
+            filename="report.txt",
+            mime_type="text/plain",
+            category="document",
+            size_bytes=12,
+        )
+
+        result = await publisher.publish_domain_event(
+            "project-1",
+            event,
+            conversation_id="conversation-1",
+        )
+
+        assert result == "sandbox-msg"
+        assert mock_event_bus.stream_add.await_count == 2
+        assert "Failed to publish domain event to agent stream" in caplog.text
 
     @pytest.mark.asyncio
     async def test_all_sandbox_event_types_supported(self):

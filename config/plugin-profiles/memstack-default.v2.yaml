@@ -298,6 +298,40 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-artifact-event-publisher
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/events/artifact-publisher
+      enabled: true
+      config:
+        strategy: sandbox-and-agent-streams
+      inject:
+        sandbox: service:application.sandbox-services
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-artifact-lifecycle-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/artifact-lifecycle-services
+      enabled: true
+      config:
+        strategy: generation-owned-provider
+        bucket_prefix: artifacts
+        url_expiration_seconds: 604800
+      inject:
+        sessions: service:persistence.async-session-factory
+        storage: service:storage.object-storage
+        events: service:events.artifact-publisher
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-docker-event-monitor
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

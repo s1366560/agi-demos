@@ -94,7 +94,6 @@ def artifacts_client(
     artifact_service_mock,
     artifact_content_authority_mock,
     artifact_content_commit_reconciler_mock,
-    monkeypatch,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(artifacts_router.router)
@@ -113,7 +112,7 @@ def artifacts_client(
     app.dependency_overrides[artifacts_router.get_artifact_content_commit_reconciler] = (
         lambda: artifact_content_commit_reconciler_mock
     )
-    monkeypatch.setattr(artifacts_router, "_artifact_service", artifact_service_mock)
+    app.dependency_overrides[artifacts_router.get_artifact_service] = lambda: artifact_service_mock
     return TestClient(app)
 
 

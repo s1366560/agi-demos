@@ -1,10 +1,12 @@
+# pyright: reportMissingSuperCall=false
 """Sandbox Event Publisher Service.
 
 Publishes sandbox lifecycle and status events to Redis streams.
 """
 
 import logging
-from typing import Any
+import time
+from typing import Any, cast
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
@@ -38,6 +40,19 @@ class SandboxEventPublisher:
             event_bus: RedisEventBusAdapter instance (optional for testing)
         """
         self._event_bus = event_bus
+
+    async def publish_domain_event(
+        self,
+        project_id: str,
+        event: AgentDomainEvent,
+        *,
+        conversation_id: str | None = None,
+    ) -> str:
+        """Publish one typed event to sandbox and, when scoped, Agent streams."""
+        message_id = await self._publish(project_id, event)
+        if conversation_id:
+            _ = await self._publish_agent_stream(conversation_id, event)
+        return message_id
 
     async def publish_sandbox_created(
         self,
@@ -289,10 +304,58 @@ class SandboxEventPublisher:
         message_id = await self._event_bus.stream_add(stream_key, event_data, maxlen=1000)
 
         # Also publish to Pub/Sub for real-time
-        await self._event_bus.publish(stream_key, event_data)
+        _ = await self._event_bus.publish(stream_key, event_data)
 
         logger.info(
-            f"[SandboxEvent] Published {event.event_type.value} "
-            f"to {stream_key} (msg_id={message_id})"
+            "[SandboxEvent] Published %s to %s (msg_id=%s)",
+            event.event_type.value,
+            stream_key,
+            message_id,
         )
         return message_id
+
+    async def _publish_agent_stream(
+        self,
+        conversation_id: str,
+        event: AgentDomainEvent,
+    ) -> str:
+        """Best-effort fan-out to the Agent stream without mutating sandbox payloads."""
+        if not self._event_bus:
+            logger.warning("Event bus not available, skipping Agent event")
+            return ""
+        try:
+            event_dict: dict[str, Any] = dict(event.to_event_dict())
+            raw_data = event_dict.get("data")
+            event_data: dict[str, Any] = {}
+            if isinstance(raw_data, dict):
+                event_data.update(cast("dict[str, Any]", raw_data))
+            event_data["conversation_id"] = conversation_id
+            stream_event_payload: dict[str, Any] = {
+                "type": event_dict.get("type", "unknown"),
+                "event_time_us": time.time_ns() // 1_000,
+                "event_counter": 0,
+                "data": event_data,
+                "timestamp": event_dict.get("timestamp", ""),
+                "conversation_id": conversation_id,
+                "message_id": "",
+            }
+            stream_key = f"agent:events:{conversation_id}"
+            message_id = await self._event_bus.stream_add(
+                stream_key,
+                stream_event_payload,
+                maxlen=1000,
+            )
+            _ = await self._event_bus.publish(stream_key, stream_event_payload)
+            logger.info(
+                "[SandboxEvent] Published %s to %s (msg_id=%s)",
+                event.event_type.value,
+                stream_key,
+                message_id,
+            )
+            return message_id
+        except Exception:
+            logger.warning(
+                "Failed to publish domain event to agent stream",
+                exc_info=True,
+            )
+            return ""

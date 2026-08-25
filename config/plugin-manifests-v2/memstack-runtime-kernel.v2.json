@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:ba9ac4513c1ac74b6c7d2a5956c11aaa3f28db48b20a8888fc531edf077cb809",
+        "digest": "sha256:b1670e7a23b8143f2d8f6df6e386bdcebf090d251022381a20d366c7bb561b54",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -918,6 +918,92 @@
       "artifact": {
         "digest": "sha256:37afa965ee98fc6cec4b3ce7bbd91b9de9d11ee481cc54010517a8cea2ad765a",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/events/artifact-publisher",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_lifecycle_services:_apply_artifact_event_publisher_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:events.artifact-publisher",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sandbox",
+              "service": "service:application.sandbox-services",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "sandbox-and-agent-streams", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:fe937d04efb3364419e75cd4d6b565f449ccb2beca152bc138be58999beab685",
+      "artifact": {
+        "digest": "sha256:357ab38a115ecec3a375c20ab74af75dcc73534ace34622c715ada34925e99b5",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/artifact-lifecycle-services",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_lifecycle_services:_apply_artifact_lifecycle_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.artifact-lifecycle-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "storage",
+              "service": "service:storage.object-storage",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "events",
+              "service": "service:events.artifact-publisher",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "bucket_prefix", "url_expiration_seconds"],
+          "properties": {
+            "strategy": { "const": "generation-owned-provider", "type": "string" },
+            "bucket_prefix": { "type": "string", "minLength": 1 },
+            "url_expiration_seconds": { "type": "integer", "minimum": 1 }
+          }
+        }
+      },
+      "contract_digest": "sha256:02067b17c9d73b469696b6b0901252903f6944a4c3b4655ba8d8a0f870edd276",
+      "artifact": {
+        "digest": "sha256:357ab38a115ecec3a375c20ab74af75dcc73534ace34622c715ada34925e99b5",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
       }
     },
     {

@@ -49,6 +49,10 @@ from src.infrastructure.adapters.primary.web.artifact_content_application_author
     ArtifactContentApplicationAuthorityV2,
     artifact_content_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.primary.web.artifact_lifecycle_application_authority_v2 import (
+    ArtifactLifecycleApplicationAuthorityV2,
+    artifact_lifecycle_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
@@ -184,28 +188,14 @@ router = APIRouter(
     route_class=ArtifactContentBodyLimitRoute,
 )
 
-# Singleton artifact service
-_artifact_service: ArtifactService | None = None
 
-
-def get_artifact_service() -> ArtifactService:
-    """Get or create the artifact service singleton."""
-    global _artifact_service
-
-    if _artifact_service is None:
-        from src.infrastructure.adapters.primary.web.startup.container import (
-            get_app_container,
-        )
-
-        container = get_app_container()
-        if container is None:
-            raise RuntimeError("Application container is not initialized")
-        _artifact_service = container.artifact_service()
-
-    service = _artifact_service
-    if service is None:
-        raise RuntimeError("Artifact service initialization failed")
-    return service
+def get_artifact_service(
+    artifact_lifecycle_application: ArtifactLifecycleApplicationAuthorityV2 = Depends(
+        artifact_lifecycle_application_authority_dependency_v2
+    ),
+) -> ArtifactService:
+    """Resolve Artifact lifecycle authority from the pinned generation."""
+    return artifact_lifecycle_application.artifact
 
 
 def get_artifact_content_authority_service(
@@ -328,6 +318,7 @@ async def list_artifacts(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of artifacts to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactService = Depends(get_artifact_service),
 ) -> ArtifactListResponse:
     """
     List artifacts for a project.
@@ -335,7 +326,6 @@ async def list_artifacts(
     Supports filtering by category (image, video, audio, etc.) and tool execution ID.
     Returns artifacts sorted by creation time, newest first.
     """
-    service = get_artifact_service()
     await verify_project_access(project_id, current_user, db)
 
     # Validate category if provided
@@ -402,11 +392,11 @@ async def get_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactService = Depends(get_artifact_service),
 ) -> ArtifactResponse:
     """
     Get a single artifact by ID.
     """
-    service = get_artifact_service()
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
@@ -603,13 +593,13 @@ async def refresh_artifact_url(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactService = Depends(get_artifact_service),
 ) -> RefreshUrlResponse:
     """
     Refresh the presigned URL for an artifact.
 
     Use this when the current URL has expired or is about to expire.
     """
-    service = get_artifact_service()
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
@@ -721,13 +711,13 @@ async def delete_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    service: ArtifactService = Depends(get_artifact_service),
 ) -> dict[str, Any]:
     """
     Delete an artifact.
 
     This removes the artifact from storage and marks it as deleted.
     """
-    service = get_artifact_service()
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:

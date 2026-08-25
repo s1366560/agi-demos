@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -85,51 +84,6 @@ from src.infrastructure.agent.context.window_manager import ContextWindowManager
 from src.infrastructure.agent.orchestration import AgentSessionRegistry
 
 logger = logging.getLogger(__name__)
-
-
-async def _publish_to_agent_stream(
-    event_bus: Any,
-    conversation_id: str,
-    event: Any,
-) -> None:
-    """Publish a domain event to the agent chat SSE stream.
-
-    This allows events produced outside the ReAct actor loop
-    (e.g. background artifact uploads) to reach the frontend
-    via the same ``agent:events:{conversation_id}`` Redis stream
-    that the SSE endpoint reads.
-    """
-    try:
-        event_dict: dict[str, Any] = dict(event.to_event_dict())
-        event_data = event_dict.get("data", {})
-        if isinstance(event_data, dict):
-            event_data["conversation_id"] = conversation_id
-
-        stream_event_payload: dict[str, Any] = {
-            "type": event_dict.get("type", "unknown"),
-            "event_time_us": int(time.time() * 1_000_000),
-            "event_counter": 0,
-            "data": event_data,
-            "timestamp": event_dict.get("timestamp", ""),
-            "conversation_id": conversation_id,
-            "message_id": "",
-        }
-
-        stream_key = f"agent:events:{conversation_id}"
-
-        await event_bus.stream_add(stream_key, stream_event_payload, maxlen=1000)
-        await event_bus.publish(stream_key, stream_event_payload)
-
-        logger.info(
-            "[AgentContainer] Published %s to %s",
-            event_dict.get("type"),
-            stream_key,
-        )
-    except Exception:
-        logger.warning(
-            "[AgentContainer] Failed to publish event to agent stream",
-            exc_info=True,
-        )
 
 
 class AgentContainer:
@@ -334,32 +288,11 @@ class AgentContainer:
         )
 
         sandbox_event_pub = current_sandbox_application_services_v2().event_publisher
-        event_publisher = None
-        if sandbox_event_pub._event_bus:
-
-            async def publish_event(
-                project_id: str,
-                event: Any,
-                *,
-                conversation_id: str | None = None,
-            ) -> None:
-                # Always publish to sandbox stream
-                await sandbox_event_pub._publish(project_id, event)
-                # Also publish to agent chat stream so the
-                # frontend SSE receives artifact_ready/error.
-                if conversation_id:
-                    await _publish_to_agent_stream(
-                        sandbox_event_pub._event_bus,
-                        conversation_id,
-                        event,
-                    )
-
-            event_publisher = publish_event
 
         assert storage_service is not None
         return ArtifactService(
             storage_service=storage_service,
-            event_publisher=event_publisher,
+            event_publisher=sandbox_event_pub.publish_domain_event,
             artifact_repository=SqlArtifactRepository(self._session_factory),
             bucket_prefix="artifacts",
             url_expiration_seconds=7 * 24 * 3600,
