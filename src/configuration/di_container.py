@@ -15,7 +15,6 @@ from src.application.services.agent_service import AgentService
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
 from src.application.services.cluster_service import ClusterService
-from src.application.services.cron_service import CronJobService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
@@ -50,7 +49,6 @@ from src.configuration.config import get_settings
 from src.configuration.containers import (
     AgentContainer,
     AuthContainer,
-    CronContainer,
     InfraContainer,
     InstanceContainer,
     ProjectContainer,
@@ -186,7 +184,6 @@ class DIContainer:
         # Create sub-containers
         self._auth = AuthContainer(db=db)
         self._task = TaskContainer(db=db)
-        self._cron = CronContainer(db=db)
         self._project = ProjectContainer(
             db=db,
             user_repository_factory=self._auth.user_repository,
@@ -286,11 +283,6 @@ class DIContainer:
 
     def update_task_use_case(self) -> UpdateTaskUseCase:
         return self._task.update_task_use_case()
-
-    # === Cron Container delegates ===
-
-    def cron_job_service(self) -> CronJobService:
-        return self._cron.cron_job_service()
 
     # === Project Container delegates ===
 

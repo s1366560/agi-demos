@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.di_container import DIContainer
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -222,3 +223,15 @@ def test_cron_scheduler_is_a_process_boundary_effect() -> None:
     assert "await start_scheduler()" not in source
     assert "await sync_all_jobs()" not in source
     assert "await stop_scheduler()" not in source
+
+
+def test_cron_static_di_authority_is_retired() -> None:
+    container_source = (_ROOT / "src/configuration/di_container.py").read_text(encoding="utf-8")
+    package_source = (_ROOT / "src/configuration/containers/__init__.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "cron_job_service" not in vars(DIContainer)
+    assert "CronContainer" not in container_source
+    assert "CronContainer" not in package_source
+    assert not (_ROOT / "src/configuration/containers/cron_container.py").exists()
