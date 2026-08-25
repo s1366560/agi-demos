@@ -46,7 +46,6 @@ from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import 
     project_tenant_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Memory,
@@ -728,9 +727,10 @@ async def update_project(
 async def delete_project(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
     """Delete project."""
+    db = project_tenant.db
     # Use project_id directly
     # Check if user is owner
     user_project_result = await db.execute(
@@ -762,9 +762,10 @@ async def add_project_member(
     project_id: str,
     body: AddProjectMemberRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Add member to project."""
+    db = project_tenant.db
     # No explicit header 401 check; rely on role permission checks
     # Validate role
     role = body.role or "member"
@@ -837,9 +838,10 @@ async def update_project_member(
     user_id: str,
     member_data: ProjectMemberUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """Update project member role."""
+    db = project_tenant.db
     # Use project_id directly
     role = member_data.role
 
@@ -896,9 +898,10 @@ async def remove_project_member(
     project_id: str,
     user_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> None:
     """Remove member from project."""
+    db = project_tenant.db
     # Use project_id directly
     # Check if current user is owner or admin
     user_project_result = await db.execute(
@@ -945,9 +948,10 @@ async def remove_project_member(
 async def list_project_members(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> dict[str, Any]:
     """List project members."""
+    db = project_tenant.db
     # Use project_id directly
     # Existence check first
     project_result = await db.execute(
@@ -1053,10 +1057,11 @@ async def _build_recent_activity(db: AsyncSession, project_id: str) -> list[dict
 async def get_project_stats(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> ProjectStats:
     """Get project statistics for the dashboard."""
+    db = project_tenant.db
     # Use project_id directly
     try:
         # Check if user has access to project
@@ -1172,10 +1177,11 @@ async def get_trending_entities(
     project_id: str,
     limit: int = Query(default=10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
     graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> TrendingResponse:
     """Get trending entities in a project's knowledge graph."""
+    db = project_tenant.db
     try:
         # Verify project access
         access = await db.execute(
@@ -1237,9 +1243,10 @@ async def get_recent_skills(
     project_id: str,
     limit: int = Query(default=5, ge=1, le=20),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    project_tenant: ProjectTenantAuthorityV2 = Depends(project_tenant_authority_dependency_v2),
 ) -> RecentSkillsResponse:
     """Get recently used skills/tools in a project."""
+    db = project_tenant.db
     try:
         # Verify project access
         access = await db.execute(

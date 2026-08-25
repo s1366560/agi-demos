@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from inspect import signature
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.application.schemas.project import (
-    ProjectCreate,
-    ProjectMemberUpdate,
-    ProjectUpdate,
-)
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.project_tenant_authority_v2 import (
+    project_tenant_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.routers import projects as project_routes
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.v2 import builtin_projects_http_routes as subject
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
@@ -55,6 +55,44 @@ def test_projects_row_is_a_complete_explicit_v2_contribution() -> None:
 
 
 @pytest.mark.unit
+def test_projects_row_registers_generation_owned_handlers_without_static_db_dependencies() -> None:
+    endpoints = {
+        definition.name: definition.endpoint
+        for definition in subject.projects_route_definitions_v2()
+    }
+    expected = {
+        "create_project": project_routes.create_project,
+        "list_projects": project_routes.list_projects,
+        "get_project": project_routes.get_project,
+        "update_project": project_routes.update_project,
+        "delete_project": project_routes.delete_project,
+        "add_project_member": project_routes.add_project_member,
+        "update_project_member": project_routes.update_project_member,
+        "remove_project_member": project_routes.remove_project_member,
+        "list_project_members": project_routes.list_project_members,
+        "get_project_stats": project_routes.get_project_stats,
+        "get_trending_entities": project_routes.get_trending_entities,
+        "get_recent_skills": project_routes.get_recent_skills,
+    }
+
+    assert endpoints == expected
+    for endpoint_name in (
+        "delete_project",
+        "add_project_member",
+        "update_project_member",
+        "remove_project_member",
+        "list_project_members",
+        "get_project_stats",
+        "get_trending_entities",
+        "get_recent_skills",
+    ):
+        parameters = signature(expected[endpoint_name]).parameters
+        assert "db" not in parameters
+        authority = parameters["project_tenant"]
+        assert authority.default.dependency is project_tenant_authority_dependency_v2
+
+
+@pytest.mark.unit
 def test_projects_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="projects-route-parity",
@@ -70,9 +108,7 @@ def test_projects_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -81,36 +117,26 @@ def test_projects_row_preserves_route_order_and_openapi() -> None:
 
 
 @pytest.mark.unit
-async def test_generation_dispatcher_executes_projects_v2_before_static_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = object()
-    db = object()
-    calls: list[tuple[str, int, object, object]] = []
-    response = subject.RecentSkillsResponse(skills=[])
-
-    async def recent_skills_handler(
-        project_id: str,
-        limit: int,
-        current_user: object,
-        db_value: object,
-    ) -> subject.RecentSkillsResponse:
-        calls.append((project_id, limit, current_user, db_value))
-        return response
+async def test_generation_dispatcher_executes_projects_v2_before_static_fallback() -> None:
+    access_result = MagicMock()
+    access_result.scalar_one_or_none.return_value = object()
+    skills_result = MagicMock()
+    skills_result.fetchall.return_value = []
+    db = SimpleNamespace(execute=AsyncMock(side_effect=[access_result, skills_result]))
+    response = project_routes.RecentSkillsResponse(skills=[])
 
     async def current_user_override() -> object:
-        return user
+        return SimpleNamespace(id="user-1")
 
-    async def db_override() -> object:
-        return db
+    async def project_tenant_override() -> object:
+        return SimpleNamespace(db=db)
 
-    monkeypatch.setattr(subject, "_get_recent_skills", recent_skills_handler)
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.projects_route_definitions_v2(),
         dependency_overrides={
-            subject.get_current_user: current_user_override,
-            get_db: db_override,
+            project_routes.get_current_user: current_user_override,
+            project_tenant_authority_dependency_v2: project_tenant_override,
         },
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -148,106 +174,8 @@ async def test_generation_dispatcher_executes_projects_v2_before_static_fallback
 
     assert result.status_code == 200
     assert result.json() == response.model_dump(mode="json")
-    assert calls == [("project-1", 7, user, db)]
+    assert db.execute.await_count == 2
     await host.close()
-
-
-@pytest.mark.unit
-async def test_projects_v2_handlers_preserve_all_authority_and_database_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    create_body = ProjectCreate(name="Project", tenant_id="tenant-1")
-    update_body = ProjectUpdate(name="Updated")
-    add_member_body = subject.AddProjectMemberRequest(user_id="member-1", role="viewer")
-    update_member_body = ProjectMemberUpdate(role="admin")
-    user = object()
-    db = object()
-    graph_store = object()
-    project_tenant = object()
-    backend_store = object()
-    result = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    def handler(name: str, value: object = result) -> Any:
-        async def call(*args: object) -> object:
-            calls.append((name, args))
-            return value
-
-        return call
-
-    monkeypatch.setattr(subject, "_create_project", handler("create"))
-    monkeypatch.setattr(subject, "_list_projects", handler("list"))
-    monkeypatch.setattr(subject, "_get_project", handler("get"))
-    monkeypatch.setattr(subject, "_update_project", handler("update"))
-    monkeypatch.setattr(subject, "_delete_project", handler("delete", None))
-    monkeypatch.setattr(subject, "_add_project_member", handler("add-member"))
-    monkeypatch.setattr(subject, "_update_project_member", handler("update-member"))
-    monkeypatch.setattr(subject, "_remove_project_member", handler("remove-member", None))
-    monkeypatch.setattr(subject, "_list_project_members", handler("list-members"))
-    monkeypatch.setattr(subject, "_get_project_stats", handler("stats"))
-    monkeypatch.setattr(subject, "_get_trending_entities", handler("trending"))
-    monkeypatch.setattr(subject, "_get_recent_skills", handler("recent-skills"))
-
-    assert await subject.create_project_v2(create_body, user, backend_store) is result
-    assert (
-        await subject.list_projects_v2(
-            "tenant-1",
-            2,
-            25,
-            "needle",
-            "private",
-            "owner-1",
-            user,
-            graph_store,
-            project_tenant,
-            backend_store,
-        )
-        is result
-    )
-    assert await subject.get_project_v2("project-1", "tenant-1", user, backend_store) is result
-    assert await subject.update_project_v2("project-1", update_body, user, backend_store) is result
-    assert await subject.delete_project_v2("project-1", user, db) is None
-    assert await subject.add_project_member_v2("project-1", add_member_body, user, db) is result
-    assert (
-        await subject.update_project_member_v2(
-            "project-1", "member-1", update_member_body, user, db
-        )
-        is result
-    )
-    assert await subject.remove_project_member_v2("project-1", "member-1", user, db) is None
-    assert await subject.list_project_members_v2("project-1", user, db) is result
-    assert await subject.get_project_stats_v2("project-1", user, db, graph_store) is result
-    assert await subject.get_trending_entities_v2("project-1", 7, user, db, graph_store) is result
-    assert await subject.get_recent_skills_v2("project-1", 6, user, db) is result
-
-    assert calls == [
-        ("create", (create_body, user, backend_store)),
-        (
-            "list",
-            (
-                "tenant-1",
-                2,
-                25,
-                "needle",
-                "private",
-                "owner-1",
-                user,
-                graph_store,
-                project_tenant,
-                backend_store,
-            ),
-        ),
-        ("get", ("project-1", "tenant-1", user, backend_store)),
-        ("update", ("project-1", update_body, user, backend_store)),
-        ("delete", ("project-1", user, db)),
-        ("add-member", ("project-1", add_member_body, user, db)),
-        ("update-member", ("project-1", "member-1", update_member_body, user, db)),
-        ("remove-member", ("project-1", "member-1", user, db)),
-        ("list-members", ("project-1", user, db)),
-        ("stats", ("project-1", user, db, graph_store)),
-        ("trending", ("project-1", 7, user, db, graph_store)),
-        ("recent-skills", ("project-1", 6, user, db)),
-    ]
 
 
 @pytest.mark.unit
