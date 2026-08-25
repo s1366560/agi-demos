@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:67ec9638d2804bcad4fb77a9d4baf05a816c326a5dcf7b378c2cc533fd61c616",
+        "digest": "sha256:6613347cdfb9b46e21e3621b83c10310dca73a718195d566d6dff9f288924b83",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1236,6 +1236,74 @@
       "artifact": {
         "digest": "sha256:95a9e056c00bf92e700d7a8d33ca4f25b38ad0dfb57373c7bb68206aa4069f0b",
         "source": "repo+python://src/infrastructure/plugins/v2/audit_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/billing-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.billing_services:_apply_billing_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.billing-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:2390139880f8fcf586e35494cd45cee5ef1f424e285a010d5bbde71b48dae88b",
+      "artifact": {
+        "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
+        "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/billing-services",
+      "entrypoint": "src.infrastructure.plugins.v2.billing_services:_apply_billing_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.billing-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.billing-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b24aa25b2711be8734c6b36445a1d657fbf4d02c663a449a02920a7fcabe4465",
+      "artifact": {
+        "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
+        "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
     {
@@ -4773,7 +4841,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:62b9bc109a0eeaec2c754680e4fa34391ea28654d451f8123922ec116f40a9fa",
+        "digest": "sha256:d695607ab4c730631671cfdaf3fab58f7869871ba3262a6bbda94b5f28c62c05",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_billing_http_routes.py"
       }
     },

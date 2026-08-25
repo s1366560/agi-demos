@@ -34,6 +34,7 @@ from .attachment_services import attachment_application_service_definition_v2
 from .audit_services import audit_service_definitions_v2
 from .backend_store_services import backend_store_service_definitions_v2
 from .background_task_services import background_task_service_definitions_v2
+from .billing_services import billing_service_definitions_v2
 from .channel_adapters import (
     builtin_channel_adapter_catalog_definition_v2,
     builtin_feishu_channel_adapter_definition_v2,
@@ -286,6 +287,7 @@ def builtin_runtime_definitions_v2(
         *tenant_skill_config_service_definitions_v2(),
         *tenant_agent_config_service_definitions_v2(),
         *audit_service_definitions_v2(),
+        *billing_service_definitions_v2(),
         *invitation_service_definitions_v2(),
         *smtp_config_service_definitions_v2(),
         *tenant_webhook_service_definitions_v2(),
