@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.tenant.event_log import EventLog
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -170,3 +171,8 @@ async def test_event_log_application_delegates_exact_tenant_query() -> None:
         page_size=7,
     )
     query.get_event_types.assert_awaited_once_with("tenant-a")
+
+
+def test_static_event_log_accessors_are_retired_after_v2_cutover() -> None:
+    assert not hasattr(DIContainer, "event_log_repository")
+    assert not hasattr(DIContainer, "event_log_service")

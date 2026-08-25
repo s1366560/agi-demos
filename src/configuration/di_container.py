@@ -537,17 +537,3 @@ class DIContainer:
 
     def default_context_engine(self, window_manager: Any | None = None) -> Any:
         return self._agent.default_context_engine(window_manager)
-
-    # === Event Log & Webhooks ===
-
-    def event_log_repository(self) -> Any:
-        from src.infrastructure.adapters.secondary.persistence.sql_event_log_repository import (
-            SqlEventLogRepository,
-        )
-
-        return SqlEventLogRepository(self._require_db("event_log_repository"))
-
-    def event_log_service(self) -> Any:
-        from src.application.services.event_log_service import EventLogService
-
-        return EventLogService(self.event_log_repository())

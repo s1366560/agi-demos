@@ -16,22 +16,10 @@ from src.configuration.di_container import DIContainer
 
 @pytest.mark.unit
 class TestRequireDbGuard:
-    def test_event_log_repository_without_db_raises(self) -> None:
-        container = DIContainer(db=None)
-        with pytest.raises(RuntimeError, match="event_log_repository.*with_db"):
-            container.event_log_repository()
-
-    def test_webhook_repository_without_db_raises(self) -> None:
-        container = DIContainer(db=None)
-        with pytest.raises(RuntimeError, match="webhook_repository.*with_db"):
-            container.webhook_repository()
-
     def test_require_db_returns_session_when_present(self) -> None:
         sentinel = object()
         container = DIContainer(db=None)
-        # Exercising via the helper directly avoids needing a real session
-        # (the providers above already cover the not-None happy path through
-        # their existing integration tests).
+        # Exercising the helper directly avoids needing a real session.
         container._db = sentinel  # type: ignore[assignment]
         assert container._require_db("dummy") is sentinel
 
