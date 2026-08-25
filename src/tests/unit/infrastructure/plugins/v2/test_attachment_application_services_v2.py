@@ -10,6 +10,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.attachment_service import AttachmentService
+from src.configuration.containers.agent_container import AgentContainer
+from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
     OBJECT_STORAGE_PROVIDER_MODULE_V2,
@@ -84,6 +86,13 @@ def test_attachment_consumer_is_an_explicit_profile_entry() -> None:
     assert ordered_modules.index(OBJECT_STORAGE_PROVIDER_MODULE_V2) < ordered_modules.index(
         ATTACHMENT_APPLICATION_MODULE_V2
     )
+
+
+def test_static_attachment_constructors_are_retired_after_v2_cutover() -> None:
+    retired_constructors = {"attachment_repository", "attachment_service"}
+
+    assert retired_constructors.isdisjoint(vars(AgentContainer))
+    assert retired_constructors.isdisjoint(vars(DIContainer))
 
 
 async def test_missing_storage_provider_is_rejected_without_di_fallback() -> None:

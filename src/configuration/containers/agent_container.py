@@ -231,31 +231,6 @@ class AgentContainer:
             channel_router=ChannelRouter(),
         )
 
-    # === Attachment & Artifact ===
-
-    def attachment_repository(self) -> Any:
-        """Get AttachmentRepository for attachment persistence."""
-        from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
-            SqlAttachmentRepository,
-        )
-
-        assert self._db is not None
-        return SqlAttachmentRepository(self._db)
-
-    def attachment_service(self) -> Any:
-        """Get AttachmentService for file upload handling."""
-        from src.application.services.attachment_service import AttachmentService
-
-        storage_service = self._storage_service_factory() if self._storage_service_factory else None
-        assert storage_service is not None
-        assert self._settings is not None
-        return AttachmentService(
-            storage_service=storage_service,
-            attachment_repository=self.attachment_repository(),
-            upload_max_size_llm_mb=self._settings.upload_max_size_llm_mb,
-            upload_max_size_sandbox_mb=self._settings.upload_max_size_sandbox_mb,
-        )
-
     def artifact_service(self) -> Any:
         """Get ArtifactService for managing tool output artifacts."""
         from src.application.services.artifact_service import ArtifactService

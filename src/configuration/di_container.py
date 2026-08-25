@@ -357,12 +357,6 @@ class DIContainer:
     def binding_router(self) -> Any:
         return self._agent.binding_router()
 
-    def attachment_repository(self) -> Any:
-        return self._agent.attachment_repository()
-
-    def attachment_service(self) -> Any:
-        return self._agent.attachment_service()
-
     def artifact_service(self) -> Any:
         return self._agent.artifact_service()
 
