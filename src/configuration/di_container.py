@@ -35,7 +35,6 @@ from src.configuration.containers import (
     AgentContainer,
     AuthContainer,
     InfraContainer,
-    InstanceContainer,
     ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
@@ -122,7 +121,6 @@ class DIContainer:
             db=db,
             user_repository_factory=self._auth.user_repository,
         )
-        self._instance = InstanceContainer(db=db, redis_client=redis_client)
         # Reuse InfraContainer when provided (e.g. from with_db()) to preserve
         # cached singletons like MCPSandboxAdapter across per-request clones.
         self._infra = _infra or InfraContainer(

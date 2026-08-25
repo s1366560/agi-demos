@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.containers.instance_container import InstanceContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -128,7 +127,5 @@ async def test_application_resolver_requires_an_operation_db_session() -> None:
 
 
 def test_static_instance_template_accessors_are_retired_after_v2_cutover() -> None:
-    assert not hasattr(InstanceContainer, "instance_template_repository")
-    assert not hasattr(InstanceContainer, "instance_template_service")
     assert not hasattr(DIContainer, "instance_template_repository")
     assert not hasattr(DIContainer, "instance_template_service")

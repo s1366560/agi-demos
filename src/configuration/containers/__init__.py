@@ -7,13 +7,11 @@ while the main DIContainer delegates to them via composition.
 from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.containers.auth_container import AuthContainer
 from src.configuration.containers.infra_container import InfraContainer
-from src.configuration.containers.instance_container import InstanceContainer
 from src.configuration.containers.project_container import ProjectContainer
 
 __all__ = [
     "AgentContainer",
     "AuthContainer",
     "InfraContainer",
-    "InstanceContainer",
     "ProjectContainer",
 ]

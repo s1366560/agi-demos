@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.containers.instance_container import InstanceContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -148,7 +147,6 @@ def test_static_instance_and_deploy_accessors_are_retired_after_v2_cutover() -> 
         "instance_service",
         "deploy_service",
     ):
-        assert not hasattr(InstanceContainer, accessor)
         assert not hasattr(DIContainer, accessor)
 
 

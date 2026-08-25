@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.containers.instance_container import InstanceContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -149,7 +148,6 @@ def test_static_gene_accessors_are_retired_after_v2_cutover() -> None:
         "gene_review_repository",
         "gene_service",
     ):
-        assert not hasattr(InstanceContainer, accessor)
         assert not hasattr(DIContainer, accessor)
 
 
