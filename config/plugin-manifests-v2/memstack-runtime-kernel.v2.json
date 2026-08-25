@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:8c730c1f4397e1ad7b7e5a618108cee880e39ac37f72811409cea835cd7bf784",
+        "digest": "sha256:be70436d6ac9a8bee09a7c6fd22cef3ec94c444621aeb6fea36a05b87fc53136",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1168,6 +1168,74 @@
       "artifact": {
         "digest": "sha256:b9a4fac609823e0504894128bbc2fae86495ed70d39c449713d8a08b7306b713",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_agent_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/audit-query-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.audit_services:_apply_audit_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.audit-query-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:5af4d89a066184766b2c61b9f833d857c15c5a441e21e34779930288f3d1c996",
+      "artifact": {
+        "digest": "sha256:95a9e056c00bf92e700d7a8d33ca4f25b38ad0dfb57373c7bb68206aa4069f0b",
+        "source": "repo+python://src/infrastructure/plugins/v2/audit_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/audit-query-services",
+      "entrypoint": "src.infrastructure.plugins.v2.audit_services:_apply_audit_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.audit-query-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.audit-query-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8bb38c56563976d879fd30368d2d3c2668ea085e9539a8f117dff79bc582655c",
+      "artifact": {
+        "digest": "sha256:95a9e056c00bf92e700d7a8d33ca4f25b38ad0dfb57373c7bb68206aa4069f0b",
+        "source": "repo+python://src/infrastructure/plugins/v2/audit_services.py"
       }
     },
     {

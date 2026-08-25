@@ -1,17 +1,34 @@
 """Unit tests for audit router runtime hook query surfaces."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from src.domain.model.audit.audit_entry import AuditEntry
+from src.infrastructure.adapters.primary.web.audit_application_authority_v2 import (
+    AuditApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers.audit import (
     export_audit_logs,
     get_runtime_hook_audit_summary,
     list_runtime_hook_audit_logs,
 )
+
+
+def _authority(service: MagicMock) -> AuditApplicationAuthorityV2:
+    return cast(
+        AuditApplicationAuthorityV2,
+        SimpleNamespace(
+            db=MagicMock(),
+            current_user=MagicMock(),
+            tenant_id="tenant-1",
+            services=SimpleNamespace(query=service),
+        ),
+    )
 
 
 def _sample_audit_entry() -> AuditEntry:
@@ -38,20 +55,12 @@ async def test_list_runtime_hook_audit_logs_returns_filtered_entries() -> None:
     service = MagicMock()
     service.list_runtime_hook_entries = AsyncMock(return_value=([_sample_audit_entry()], 1))
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
-            AsyncMock(),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit._build_service",
-            return_value=service,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
+        AsyncMock(),
     ):
         response = await list_runtime_hook_audit_logs(
-            tenant_id="tenant-1",
-            current_user=MagicMock(),
-            db=MagicMock(),
+            audit_application=_authority(service),
             hook_name="before_response",
             executor_kind="script",
             hook_family="mutating",
@@ -80,20 +89,12 @@ async def test_get_runtime_hook_audit_summary_returns_aggregate_counts() -> None
         }
     )
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
-            AsyncMock(),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit._build_service",
-            return_value=service,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
+        AsyncMock(),
     ):
         response = await get_runtime_hook_audit_summary(
-            tenant_id="tenant-1",
-            current_user=MagicMock(),
-            db=MagicMock(),
+            audit_application=_authority(service),
             executor_kind="script",
             isolation_mode="sandbox",
         )
@@ -110,20 +111,12 @@ async def test_export_audit_logs_uses_runtime_hook_filters() -> None:
     service.list_runtime_hook_entries = AsyncMock(return_value=([_sample_audit_entry()], 1))
     service.list_entries_filtered = AsyncMock()
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
-            AsyncMock(),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit._build_service",
-            return_value=service,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
+        AsyncMock(),
     ):
         response = await export_audit_logs(
-            tenant_id="tenant-1",
-            current_user=MagicMock(),
-            db=MagicMock(),
+            audit_application=_authority(service),
             export_format="json",
             action="runtime_hook.custom_execution_succeeded",
             hook_name="before_response",
@@ -155,20 +148,12 @@ async def test_export_audit_logs_uses_generic_filters() -> None:
     start_time = datetime(2026, 4, 15, tzinfo=UTC)
     end_time = datetime(2026, 4, 16, tzinfo=UTC)
 
-    with (
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
-            AsyncMock(),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.routers.audit._build_service",
-            return_value=service,
-        ),
+    with patch(
+        "src.infrastructure.adapters.primary.web.routers.audit.require_tenant_access",
+        AsyncMock(),
     ):
         response = await export_audit_logs(
-            tenant_id="tenant-1",
-            current_user=MagicMock(),
-            db=MagicMock(),
+            audit_application=_authority(service),
             export_format="csv",
             action="tenant.updated",
             resource_type="tenant",
@@ -206,9 +191,7 @@ async def test_runtime_hook_audit_routes_require_tenant_access() -> None:
         pytest.raises(HTTPException, match="forbidden") as exc_info,
     ):
         await list_runtime_hook_audit_logs(
-            tenant_id="tenant-1",
-            current_user=MagicMock(),
-            db=MagicMock(),
+            audit_application=_authority(MagicMock()),
         )
 
     assert exc_info.value.status_code == 403

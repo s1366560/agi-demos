@@ -35,6 +35,18 @@ def test_audit_row_is_a_complete_explicit_v2_contribution() -> None:
     assert {definition.replaces_builtin_row_id for definition in definitions} == {"audit"}
 
 
+def test_audit_row_registers_production_handlers_without_forwarding_wrappers() -> None:
+    definitions = subject.audit_route_definitions_v2()
+
+    assert tuple(definition.endpoint for definition in definitions) == (
+        subject.list_audit_logs,
+        subject.list_audit_logs_filtered,
+        subject.list_runtime_hook_audit_logs,
+        subject.export_audit_logs,
+        subject.get_runtime_hook_audit_summary,
+    )
+
+
 def test_audit_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="audit-route-parity",
@@ -50,9 +62,7 @@ def test_audit_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
