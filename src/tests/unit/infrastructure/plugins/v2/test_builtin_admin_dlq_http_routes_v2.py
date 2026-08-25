@@ -6,6 +6,7 @@ import pytest
 
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.routers import admin_dlq as admin_dlq_router
 from src.infrastructure.plugins.v2 import builtin_admin_dlq_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 
@@ -43,6 +44,22 @@ def test_admin_dlq_row_is_a_complete_explicit_v2_contribution() -> None:
     assert {definition.replaces_builtin_row_id for definition in definitions} == {"admin-dlq"}
 
 
+def test_admin_dlq_row_registers_production_handlers_without_forwarding_wrappers() -> None:
+    definitions = subject.admin_dlq_route_definitions_v2()
+
+    assert tuple(definition.endpoint for definition in definitions) == (
+        admin_dlq_router.list_messages,
+        admin_dlq_router.get_message,
+        admin_dlq_router.retry_message,
+        admin_dlq_router.retry_messages,
+        admin_dlq_router.discard_message,
+        admin_dlq_router.discard_messages,
+        admin_dlq_router.get_stats,
+        admin_dlq_router.cleanup_expired,
+        admin_dlq_router.cleanup_resolved,
+    )
+
+
 def test_admin_dlq_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="admin-dlq-route-parity",
@@ -58,9 +75,7 @@ def test_admin_dlq_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )

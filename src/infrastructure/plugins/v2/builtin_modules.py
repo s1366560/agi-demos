@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .admin_dlq_services import admin_dlq_service_definitions_v2
 from .agent_capabilities import (
     builtin_agent_capability_definition_v2,
     builtin_skill_contribution_v2,
@@ -59,6 +60,7 @@ from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
+from .redis_runtime import redis_runtime_definition_v2
 from .reflection_runtime import ReflectionRuntimeManagerV2, reflection_runtime_definition_v2
 from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
@@ -262,6 +264,7 @@ def builtin_runtime_definitions_v2(
             contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
         ),
+        redis_runtime_definition_v2(sandbox_redis_client),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         workspace_core_runtime_definition_v2(workspace_core_runtime_factory),
         graph_runtime_definition_v2(graph_runtime_factory),
@@ -287,6 +290,7 @@ def builtin_runtime_definitions_v2(
         *gene_service_definitions_v2(),
         *tenant_skill_config_service_definitions_v2(),
         *tenant_agent_config_service_definitions_v2(),
+        *admin_dlq_service_definitions_v2(),
         *audit_service_definitions_v2(),
         *billing_service_definitions_v2(),
         *shares_service_definitions_v2(),

@@ -251,8 +251,39 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:6c615b8b1eb2dc9f85339d614b5b98680d936809581dac731adb8c4006506ba6",
+        "digest": "sha256:e51478fbd80bbe4285545766bc1993718477bd94619b403362c8c15107598d60",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/redis-client",
+      "entrypoint": "src.infrastructure.plugins.v2.redis_runtime:_apply_redis_runtime_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "process-shared-projection", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:66834005a34a1fcca7b0a55f7ce28e99851fe8e78701970066d26174d1f873ca",
+      "artifact": {
+        "digest": "sha256:cdd38da7b22a24060d8c3dab1caae2685bf3b79e0950520d297cf8e5239cfce3",
+        "source": "repo+python://src/infrastructure/plugins/v2/redis_runtime.py"
       }
     },
     {
@@ -1168,6 +1199,80 @@
       "artifact": {
         "digest": "sha256:b9a4fac609823e0504894128bbc2fae86495ed70d39c449713d8a08b7306b713",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_agent_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/messaging/admin-dlq-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.admin_dlq_services:_apply_admin_dlq_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:messaging.admin-dlq-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-redis-adapter", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:410d41b6c89ce334ee4a4ab768ce818abc9e3d6288d1a36dab73f2d7e9e3a7c3",
+      "artifact": {
+        "digest": "sha256:06a68c893158029425b37296428c815caf17c5a87f805af26d912d271db9aabe",
+        "source": "repo+python://src/infrastructure/plugins/v2/admin_dlq_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/admin-dlq-services",
+      "entrypoint": "src.infrastructure.plugins.v2.admin_dlq_services:_apply_admin_dlq_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.admin-dlq-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:messaging.admin-dlq-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:36893d0fc69dc12402fee0fcb348da21c66ae24ca79fb2f8e95cf3b552b3bb2b",
+      "artifact": {
+        "digest": "sha256:06a68c893158029425b37296428c815caf17c5a87f805af26d912d271db9aabe",
+        "source": "repo+python://src/infrastructure/plugins/v2/admin_dlq_services.py"
       }
     },
     {
