@@ -10,7 +10,6 @@ from src.configuration.containers.infra_container import InfraContainer
 from src.configuration.containers.instance_container import InstanceContainer
 from src.configuration.containers.project_container import ProjectContainer
 from src.configuration.containers.sandbox_container import SandboxContainer
-from src.configuration.containers.task_container import TaskContainer
 
 __all__ = [
     "AgentContainer",
@@ -19,5 +18,4 @@ __all__ = [
     "InstanceContainer",
     "ProjectContainer",
     "SandboxContainer",
-    "TaskContainer",
 ]

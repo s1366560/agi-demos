@@ -1,9 +1,10 @@
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -11,6 +12,10 @@ from src.application.services.auth_service_v2 import AuthService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.main import create_app
 from src.infrastructure.adapters.primary.web.routers import tasks as tasks_router
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     APIKey as DBAPIKey,
     Memory,
@@ -21,8 +26,37 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 app = create_app()
 
 
+@pytest.fixture
+async def _tasks_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    """Exercise task requests through the production V2 route graph."""
+    await initialize_plugin_runtime_v2(test_app)
+    assert "tasks" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+
+
+@pytest.fixture
+async def _anonymous_tasks_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    """Publish the task route graph without the authenticated test override."""
+    original_override = test_app.dependency_overrides.pop(get_current_user, None)
+    await initialize_plugin_runtime_v2(test_app)
+    assert "tasks" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
+        if original_override is not None:
+            test_app.dependency_overrides[get_current_user] = original_override
+
+
 @pytest.mark.asyncio
-async def test_tasks_endpoints(authenticated_async_client, test_db: AsyncSession):
+async def test_tasks_endpoints(
+    authenticated_async_client,
+    test_db: AsyncSession,
+    _tasks_v2_runtime: None,
+):
     client: AsyncClient = authenticated_async_client
 
     now = datetime.now(UTC)
@@ -94,7 +128,10 @@ async def test_tasks_endpoints(authenticated_async_client, test_db: AsyncSession
 
 
 @pytest.mark.asyncio
-async def test_task_stream_requires_authorization(async_client: AsyncClient):
+async def test_task_stream_requires_authorization(
+    async_client: AsyncClient,
+    _tasks_v2_runtime: None,
+):
     response = await async_client.get("/api/v1/tasks/t1/stream")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -108,6 +145,7 @@ async def test_task_stream_accepts_authorized_header(
     test_user,
     test_project_db,
     monkeypatch: pytest.MonkeyPatch,
+    _tasks_v2_runtime: None,
 ):
     stream_session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
@@ -145,16 +183,12 @@ async def test_task_stream_accepts_authorized_header(
 
 
 @pytest.mark.asyncio
-async def test_task_stats_requires_authentication(test_app):
-    original_override = test_app.dependency_overrides.pop(get_current_user, None)
-    try:
-        async with AsyncClient(
-            transport=ASGITransport(app=test_app), base_url="http://test"
-        ) as client:
-            response = await client.get("/api/v1/tasks/stats")
-    finally:
-        if original_override is not None:
-            test_app.dependency_overrides[get_current_user] = original_override
+async def test_task_stats_requires_authentication(
+    test_app: FastAPI,
+    _anonymous_tasks_v2_runtime: None,
+):
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.get("/api/v1/tasks/stats")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -289,6 +323,7 @@ async def test_task_stream_rejects_unowned_project_task(
     test_project_db,
     another_user,
     monkeypatch: pytest.MonkeyPatch,
+    _tasks_v2_runtime: None,
 ):
     stream_session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False

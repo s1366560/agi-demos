@@ -14,15 +14,6 @@ class TestDIContainer:
     """Test cases for DIContainer dependency injection."""
 
     @pytest.mark.asyncio
-    async def test_create_task_use_case(self, test_db):
-        """Test creating task use case."""
-        container = DIContainer(test_db)
-        use_case = container.create_task_use_case()
-
-        assert use_case is not None
-        assert use_case._task_repo is not None
-
-    @pytest.mark.asyncio
     async def test_scoped_container_reuses_application_infrastructure(self, test_db):
         """Request clones reuse singleton infrastructure without graph state."""
         container = DIContainer(redis_client=Mock())

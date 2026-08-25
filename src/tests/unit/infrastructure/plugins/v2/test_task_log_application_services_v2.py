@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
@@ -74,6 +75,20 @@ def test_task_log_consumer_uses_an_explicit_repository_alias() -> None:
     assert ordered_modules.index(TASK_LOG_REPOSITORY_PROVIDER_MODULE_V2) < ordered_modules.index(
         TASK_LOG_APPLICATION_MODULE_V2
     )
+
+
+def test_static_task_container_and_di_facades_are_retired_after_v2_cutover() -> None:
+    retired_accessors = {
+        "task_repository",
+        "task_service",
+        "create_task_use_case",
+        "get_task_use_case",
+        "list_tasks_use_case",
+        "update_task_use_case",
+    }
+
+    assert retired_accessors.isdisjoint(vars(DIContainer))
+    assert not (_ROOT / "src/configuration/containers/task_container.py").exists()
 
 
 async def test_missing_task_log_repository_provider_is_rejected_without_di_fallback() -> None:

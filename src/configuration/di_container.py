@@ -16,7 +16,6 @@ from src.application.services.blackboard_file_service import BlackboardFileServi
 from src.application.services.blackboard_service import BlackboardService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
-from src.application.services.task_service import TaskService
 from src.application.services.topology_service import TopologyService
 from src.application.services.workflow_learner import WorkflowLearner
 from src.application.services.workspace_message_service import WorkspaceMessageService
@@ -34,12 +33,6 @@ from src.application.use_cases.agent import (
     ListConversationsUseCase,
     SynthesizeResultsUseCase,
 )
-from src.application.use_cases.task import (
-    CreateTaskUseCase,
-    GetTaskUseCase,
-    ListTasksUseCase,
-    UpdateTaskUseCase,
-)
 from src.configuration.config import get_settings
 from src.configuration.containers import (
     AgentContainer,
@@ -48,11 +41,9 @@ from src.configuration.containers import (
     InstanceContainer,
     ProjectContainer,
     SandboxContainer,
-    TaskContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
-from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
     BlackboardFileRepository,
@@ -153,7 +144,6 @@ class DIContainer:
 
         # Create sub-containers
         self._auth = AuthContainer(db=db)
-        self._task = TaskContainer(db=db)
         self._project = ProjectContainer(
             db=db,
             user_repository_factory=self._auth.user_repository,
@@ -233,26 +223,6 @@ class DIContainer:
 
     def api_key_repository(self) -> APIKeyRepository:
         return self._auth.api_key_repository()
-
-    # === Task Container delegates ===
-
-    def task_repository(self) -> TaskRepository:
-        return self._task.task_repository()
-
-    def task_service(self) -> TaskService:
-        return self._task.task_service()
-
-    def create_task_use_case(self) -> CreateTaskUseCase:
-        return self._task.create_task_use_case()
-
-    def get_task_use_case(self) -> GetTaskUseCase:
-        return self._task.get_task_use_case()
-
-    def list_tasks_use_case(self) -> ListTasksUseCase:
-        return self._task.list_tasks_use_case()
-
-    def update_task_use_case(self) -> UpdateTaskUseCase:
-        return self._task.update_task_use_case()
 
     # === Project Container delegates ===
 
