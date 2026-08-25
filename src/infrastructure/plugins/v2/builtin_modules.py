@@ -72,6 +72,7 @@ from .selection_judge import builtin_plugin_selection_judge_definition_v2
 from .session_event_log import builtin_session_event_log_definition_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
+from .smtp_config_services import smtp_config_service_definitions_v2
 from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
 from .task_log_services import task_log_service_definitions_v2
@@ -286,6 +287,7 @@ def builtin_runtime_definitions_v2(
         *tenant_agent_config_service_definitions_v2(),
         *audit_service_definitions_v2(),
         *invitation_service_definitions_v2(),
+        *smtp_config_service_definitions_v2(),
         *tenant_webhook_service_definitions_v2(),
         *instance_deploy_service_definitions_v2(redis_client=sandbox_redis_client),
         *instance_file_service_definitions_v2(),

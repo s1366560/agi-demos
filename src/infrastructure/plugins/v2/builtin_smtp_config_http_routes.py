@@ -5,23 +5,15 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from fastapi import Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import status
 
-from src.application.schemas.smtp_schemas import (
-    SmtpConfigCreate,
-    SmtpConfigResponse,
-    SmtpTestRequest,
-)
-from src.domain.model.auth.user import User
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.application.schemas.smtp_schemas import SmtpConfigResponse
 from src.infrastructure.adapters.primary.web.routers.smtp_config import (
-    delete_smtp_config as _delete_smtp_config,
-    get_smtp_config as _get_smtp_config,
-    test_smtp_config as _test_smtp_config,
-    upsert_smtp_config as _upsert_smtp_config,
+    delete_smtp_config,
+    get_smtp_config,
+    test_smtp_config,
+    upsert_smtp_config,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
@@ -37,40 +29,6 @@ SMTP_CONFIG_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/smtp-config-routes"
 SMTP_CONFIG_HTTP_ROUTES_ROW_V2 = "smtp-config"
 
 
-async def get_smtp_config_v2(
-    tenant_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> SmtpConfigResponse | None:
-    return await _get_smtp_config(tenant_id, current_user, db)
-
-
-async def upsert_smtp_config_v2(
-    tenant_id: str,
-    body: SmtpConfigCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> SmtpConfigResponse:
-    return await _upsert_smtp_config(tenant_id, body, current_user, db)
-
-
-async def delete_smtp_config_v2(
-    tenant_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    await _delete_smtp_config(tenant_id, current_user, db)
-
-
-async def test_smtp_config_v2(
-    tenant_id: str,
-    body: SmtpTestRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-    return await _test_smtp_config(tenant_id, body, current_user, db)
-
-
 def smtp_config_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete, explicitly claimed ``smtp-config`` inventory row."""
     return (
@@ -78,7 +36,7 @@ def smtp_config_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SMTP_CONFIG_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenants/{tenant_id}/smtp-config",
             methods=("GET",),
-            endpoint=get_smtp_config_v2,
+            endpoint=get_smtp_config,
             name="get_smtp_config",
             tags=("smtp-config",),
             response_model=SmtpConfigResponse | None,
@@ -88,7 +46,7 @@ def smtp_config_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SMTP_CONFIG_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenants/{tenant_id}/smtp-config",
             methods=("PUT",),
-            endpoint=upsert_smtp_config_v2,
+            endpoint=upsert_smtp_config,
             name="upsert_smtp_config",
             tags=("smtp-config",),
             response_model=SmtpConfigResponse,
@@ -98,7 +56,7 @@ def smtp_config_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SMTP_CONFIG_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenants/{tenant_id}/smtp-config",
             methods=("DELETE",),
-            endpoint=delete_smtp_config_v2,
+            endpoint=delete_smtp_config,
             name="delete_smtp_config",
             tags=("smtp-config",),
             status_code=status.HTTP_204_NO_CONTENT,
@@ -108,7 +66,7 @@ def smtp_config_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=SMTP_CONFIG_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenants/{tenant_id}/smtp-config/test",
             methods=("POST",),
-            endpoint=test_smtp_config_v2,
+            endpoint=test_smtp_config,
             name="test_smtp_config",
             tags=("smtp-config",),
             status_code=status.HTTP_200_OK,
@@ -155,9 +113,5 @@ __all__ = [
     "SMTP_CONFIG_HTTP_ROUTES_MODULE_V2",
     "SMTP_CONFIG_HTTP_ROUTES_ROW_V2",
     "builtin_smtp_config_http_routes_definition_v2",
-    "delete_smtp_config_v2",
-    "get_smtp_config_v2",
     "smtp_config_route_definitions_v2",
-    "test_smtp_config_v2",
-    "upsert_smtp_config_v2",
 ]

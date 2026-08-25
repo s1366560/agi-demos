@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:be70436d6ac9a8bee09a7c6fd22cef3ec94c444621aeb6fea36a05b87fc53136",
+        "digest": "sha256:67ec9638d2804bcad4fb77a9d4baf05a816c326a5dcf7b378c2cc533fd61c616",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1304,6 +1304,74 @@
       "artifact": {
         "digest": "sha256:e17d6a42b9a801ec509f3695ed53dbda6579a609cb04ee3a9250abe5d6a3bdeb",
         "source": "repo+python://src/infrastructure/plugins/v2/invitation_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/smtp-config-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.smtp_config_services:_apply_smtp_config_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.smtp-config-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e8de69c40869ac61fbfd49db561f2c9f8cdd4560c165f2309a4564acb70b8c51",
+      "artifact": {
+        "digest": "sha256:3134a0e7a76816f94c45dfbd232342ba6a751589a010120c9a7ebfa51d130915",
+        "source": "repo+python://src/infrastructure/plugins/v2/smtp_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/smtp-config-services",
+      "entrypoint": "src.infrastructure.plugins.v2.smtp_config_services:_apply_smtp_config_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.smtp-config-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.smtp-config-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b24d9cb8aa528960d8bfdfb2cf6d14deb2e76f65e385d6f212573b650a78a662",
+      "artifact": {
+        "digest": "sha256:3134a0e7a76816f94c45dfbd232342ba6a751589a010120c9a7ebfa51d130915",
+        "source": "repo+python://src/infrastructure/plugins/v2/smtp_config_services.py"
       }
     },
     {
@@ -4879,7 +4947,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:e4bd718a0bdaf3ec96c52b010ec57e6648000c54bac060c9a9507a8715638d32",
+        "digest": "sha256:44e949cc250498b92b207176598b1160a20586ae623bbc4668e903ece8fabfb9",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_smtp_config_http_routes.py"
       }
     },
