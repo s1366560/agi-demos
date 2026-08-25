@@ -23,10 +23,3 @@ class TestDIContainer:
         assert scoped_container._db is test_db
         assert scoped_container._infra is container._infra
         assert not hasattr(scoped_container, "_graph_service")
-
-    @pytest.mark.asyncio
-    async def test_workspace_orchestrator_is_retired_when_scoped_with_db(self, test_db):
-        scoped_container = DIContainer().with_db(test_db)
-
-        with pytest.raises(RuntimeError, match="Avernet Workspace Core"):
-            scoped_container.workspace_orchestrator()

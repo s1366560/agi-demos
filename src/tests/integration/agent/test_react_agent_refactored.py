@@ -22,7 +22,6 @@ class TestRefactoredArchitectureIntegration:
         converter2 = get_event_converter()
         assert converter1 is converter2
 
-
     def test_attachment_processor_singleton(self):
         """Test AttachmentProcessor singleton pattern."""
         from src.infrastructure.agent.attachment.processor import (
@@ -69,34 +68,12 @@ class TestRefactoredArchitectureIntegration:
         assert extractor is not None
         assert isinstance(extractor, ArtifactExtractor)
 
-
     def test_react_loop_class_exists(self):
         """Test ReActLoop class exists."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
 
         assert ReActLoop is not None
         assert hasattr(ReActLoop, "run")
-
-
-@pytest.mark.integration
-class TestDIContainerIntegration:
-    """Test DI container properly creates all agent components."""
-
-    def test_di_container_creates_event_converter(self):
-        """Test DIContainer.event_converter() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        converter = container.event_converter()
-        assert converter is not None
-
-    def test_di_container_creates_attachment_processor(self):
-        """Test DIContainer.attachment_processor() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        processor = container.attachment_processor()
-        assert processor is not None
 
 
 @pytest.mark.integration

@@ -76,3 +76,28 @@ def test_orphaned_agent_constructors_are_retired_from_agent_container() -> None:
     }
 
     assert retired_constructors.isdisjoint(vars(AgentContainer))
+
+
+def test_unused_runtime_helper_facades_are_retired_from_top_level_di() -> None:
+    retired_facades = {
+        "_require_db",
+        "agent_router_service",
+        "attachment_injector",
+        "attachment_processor",
+        "context_facade",
+        "default_context_engine",
+        "default_message_router",
+        "event_converter",
+        "fork_merge_service",
+        "layered_tool_policy_service",
+        "message_binding_repository",
+        "message_builder",
+        "redis_agent_credential_scope",
+        "redis_agent_namespace",
+        "span_service",
+        "storage_service",
+        "user_repository",
+        "workspace_orchestrator",
+    }
+
+    assert retired_facades.isdisjoint(vars(DIContainer))

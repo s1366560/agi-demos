@@ -27,7 +27,6 @@ from src.configuration.containers import (
     ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.cyber_gene_repository import (
     CyberGeneRepository,
 )
@@ -76,7 +75,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
 )
-from src.infrastructure.agent.context.window_manager import ContextWindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +98,6 @@ class DIContainer:
         self._redis_client = redis_client
         self._session_factory = session_factory
         self._settings = get_settings()
-        self._workspace_v2_orchestrator: Any | None = None
 
         # Create sub-containers
         self._auth = AuthContainer(db=db)
@@ -137,36 +134,12 @@ class DIContainer:
             _infra=self._infra,
         )
 
-    def _require_db(self, provider_name: str) -> AsyncSession:
-        """Return ``self._db`` or raise a clear error.
-
-        The global ``app.state.container`` is constructed without a session
-        (it carries singletons only). Callers that need DB-backed services
-        must obtain a request-scoped clone via ``container.with_db(db)``.
-
-        This helper turns a downstream
-        ``AttributeError: 'NoneType' has no attribute 'execute'`` into a
-        descriptive ``RuntimeError`` at the call site.
-        """
-        if self._db is None:
-            raise RuntimeError(
-                f"DIContainer.{provider_name}() requires a db session. "
-                "Use container.with_db(db) (or get_container_with_db("
-                "request, db)) before resolving this service."
-            )
-        return self._db
-
     # === Properties that stay on the main class ===
 
     @property
     def redis_client(self) -> "redis.Redis | None":
         """Get the Redis client instance."""
         return self._redis_client
-
-    # === Auth Container delegates ===
-
-    def user_repository(self) -> UserRepository:
-        return self._auth.user_repository()
 
     # === Project Container delegates ===
 
@@ -189,12 +162,6 @@ class DIContainer:
             WorkspaceTaskSessionAttemptRepository,
             self._project.workspace_task_session_attempt_repository(),
         )
-
-    # === Workspace V2 (multi-agent orchestrator) ===
-
-    def workspace_orchestrator(self) -> Any:
-        """Reject the retired platform-owned Workspace Plan V2 orchestrator."""
-        raise RuntimeError("Workspace Plan V2 orchestration is owned by Avernet Workspace Core")
 
     def topology_repository(self) -> TopologyRepository:
         return cast(TopologyRepository, self._project.topology_repository())
@@ -220,9 +187,6 @@ class DIContainer:
 
     def redis(self) -> redis.Redis | None:
         return self._infra.redis()
-
-    def storage_service(self) -> Any:
-        return self._infra.storage_service()
 
     # === Agent Container delegates ===
 
@@ -280,21 +244,6 @@ class DIContainer:
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
-    def event_converter(self) -> Any:
-        return self._agent.event_converter()
-
-    def attachment_processor(self) -> Any:
-        return self._agent.attachment_processor()
-
-    def message_builder(self) -> Any:
-        return self._agent.message_builder()
-
-    def attachment_injector(self) -> Any:
-        return self._agent.attachment_injector()
-
-    def context_facade(self, window_manager: ContextWindowManager | None = None) -> Any:
-        return self._agent.context_facade(window_manager)
-
     def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:
         return self._agent.create_conversation_use_case(llm)
 
@@ -303,32 +252,3 @@ class DIContainer:
 
     def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
         return self._agent.get_conversation_use_case(llm)
-
-    # === Multi-Agent Services (Phase 1-4) ===
-
-    def span_service(self) -> Any:
-        return self._agent.span_service()
-
-    def fork_merge_service(self) -> Any:
-        return self._agent.fork_merge_service()
-
-    def layered_tool_policy_service(self) -> Any:
-        return self._agent.layered_tool_policy_service()
-
-    def default_message_router(self) -> Any:
-        return self._agent.default_message_router()
-
-    def message_binding_repository(self) -> Any:
-        return self._agent.message_binding_repository()
-
-    def agent_router_service(self) -> Any:
-        return self._agent.agent_router_service()
-
-    def redis_agent_namespace(self) -> Any:
-        return self._agent.redis_agent_namespace()
-
-    def redis_agent_credential_scope(self) -> Any:
-        return self._agent.redis_agent_credential_scope()
-
-    def default_context_engine(self, window_manager: Any | None = None) -> Any:
-        return self._agent.default_context_engine(window_manager)
