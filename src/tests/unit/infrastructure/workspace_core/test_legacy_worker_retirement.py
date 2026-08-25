@@ -110,12 +110,21 @@ async def test_retired_workspace_workers_never_start(
 
 def test_startup_package_does_not_export_retired_recovery_workers() -> None:
     source = inspect.getsource(startup)
+    assert "initialize_blackboard_outbox_dispatcher" not in source
     assert "initialize_attempt_recovery" not in source
     assert "initialize_task_execution_session_recovery" not in source
+    assert "shutdown_blackboard_outbox_dispatcher" not in source
     assert "shutdown_attempt_recovery" not in source
     assert "shutdown_task_execution_session_recovery" not in source
     assert "initialize_workspace_plan_outbox_worker" not in source
     assert "shutdown_workspace_plan_outbox_worker" not in source
+
+
+def test_retired_blackboard_outbox_has_no_static_startup_module() -> None:
+    retired_startup = (
+        REPO_ROOT / "src/infrastructure/adapters/primary/web/startup/blackboard_outbox.py"
+    )
+    assert not retired_startup.exists()
 
 
 def test_retired_workspace_plan_outbox_does_not_import_legacy_worker_graph() -> None:
