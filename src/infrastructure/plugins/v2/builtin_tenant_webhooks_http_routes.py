@@ -5,21 +5,15 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from fastapi import Depends, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import status
 
-from src.domain.model.auth.user import User
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.tenant_webhooks import (
-    WebhookCreateRequest,
     WebhookResponse,
-    WebhookUpdateRequest,
-    create_webhook as _create_webhook,
-    delete_webhook as _delete_webhook,
-    list_webhooks as _list_webhooks,
-    update_webhook as _update_webhook,
+    create_webhook,
+    delete_webhook,
+    list_webhooks,
+    update_webhook,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
@@ -35,44 +29,6 @@ TENANT_WEBHOOKS_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/tenant-webhooks
 TENANT_WEBHOOKS_HTTP_ROUTES_ROW_V2 = "tenant-webhooks"
 
 
-async def create_webhook_v2(
-    tenant_id: str,
-    body: WebhookCreateRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> WebhookResponse:
-    return await _create_webhook(tenant_id, body, request, current_user, db)
-
-
-async def list_webhooks_v2(
-    tenant_id: str,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[WebhookResponse]:
-    return await _list_webhooks(tenant_id, request, current_user, db)
-
-
-async def update_webhook_v2(
-    webhook_id: str,
-    body: WebhookUpdateRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> WebhookResponse:
-    return await _update_webhook(webhook_id, body, request, current_user, db)
-
-
-async def delete_webhook_v2(
-    webhook_id: str,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    await _delete_webhook(webhook_id, request, current_user, db)
-
-
 def tenant_webhooks_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete, explicitly claimed ``tenant-webhooks`` inventory row."""
     return (
@@ -80,7 +36,7 @@ def tenant_webhooks_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=TENANT_WEBHOOKS_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenant-webhooks/{tenant_id}",
             methods=("POST",),
-            endpoint=create_webhook_v2,
+            endpoint=create_webhook,
             name="create_webhook",
             tags=("Webhooks",),
             response_model=WebhookResponse,
@@ -90,7 +46,7 @@ def tenant_webhooks_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=TENANT_WEBHOOKS_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenant-webhooks/{tenant_id}",
             methods=("GET",),
-            endpoint=list_webhooks_v2,
+            endpoint=list_webhooks,
             name="list_webhooks",
             tags=("Webhooks",),
             response_model=list[WebhookResponse],
@@ -100,7 +56,7 @@ def tenant_webhooks_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=TENANT_WEBHOOKS_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenant-webhooks/{webhook_id}",
             methods=("PUT",),
-            endpoint=update_webhook_v2,
+            endpoint=update_webhook,
             name="update_webhook",
             tags=("Webhooks",),
             response_model=WebhookResponse,
@@ -110,7 +66,7 @@ def tenant_webhooks_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             owner_entry_id=TENANT_WEBHOOKS_HTTP_ROUTES_ENTRY_V2,
             path="/api/v1/tenant-webhooks/{webhook_id}",
             methods=("DELETE",),
-            endpoint=delete_webhook_v2,
+            endpoint=delete_webhook,
             name="delete_webhook",
             tags=("Webhooks",),
             status_code=status.HTTP_204_NO_CONTENT,
@@ -156,9 +112,5 @@ __all__ = [
     "TENANT_WEBHOOKS_HTTP_ROUTES_MODULE_V2",
     "TENANT_WEBHOOKS_HTTP_ROUTES_ROW_V2",
     "builtin_tenant_webhooks_http_routes_definition_v2",
-    "create_webhook_v2",
-    "delete_webhook_v2",
-    "list_webhooks_v2",
     "tenant_webhooks_route_definitions_v2",
-    "update_webhook_v2",
 ]

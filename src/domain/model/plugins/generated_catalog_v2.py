@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf905322'
-    '5c","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d1'
+    '57","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1492,8 +1492,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ucture.plugins.v2.builtin_tenant_skill_configs_http_routes:builtin_tenant_skill_configs_'
     'http_routes_definition_v2","module_ref":"builtin://memstack/http/tenant-skill-configs-ro'
     'utes","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"'
-    ']},{"artifact_digest":"sha256:ed3b11c9f7ff52384b34c6bc184f98977959aadb1e3ee0b665f1379a31'
-    'd63561","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_tenant_we'
+    ']},{"artifact_digest":"sha256:edb74f37a892baa16146f0f741bf677604d03bcb28a563907c8eaefe07'
+    'cf3567","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_tenant_we'
     'bhooks_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/d'
     'raft/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"even'
     'ts":{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alias":"route_tabl'
@@ -2220,7 +2220,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf9053225c"
+    "sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d157"
 )
 # fmt: on
 

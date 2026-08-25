@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf90',
-  '53225c","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28',
+  'b7d157","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1580,7 +1580,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '_skill_configs_http_routes:builtin_tenant_skill_configs_http_routes_definition_v2","',
   'module_ref":"builtin://memstack/http/tenant-skill-configs-routes","plugin_id":"memst',
   'ack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest',
-  '":"sha256:ed3b11c9f7ff52384b34c6bc184f98977959aadb1e3ee0b665f1379a31d63561","artifac',
+  '":"sha256:edb74f37a892baa16146f0f741bf677604d03bcb28a563907c8eaefe07cf3567","artifac',
   't_source":"repo+python://src/infrastructure/plugins/v2/builtin_tenant_webhooks_http_',
   'routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/202',
   '0-12/schema","additionalProperties":false,"properties":{},"type":"object"},"events":',
@@ -2348,4 +2348,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:5cd301cba1c5c439b4c33b4f506dc2817390b64ed50cf14c141c59bf9053225c' as const;
+  'sha256:1aaffe859ac53ff6a6aa3c9ad51c40ec1ac167188d99db798c6eb20f28b7d157' as const;

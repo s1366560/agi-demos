@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from inspect import signature
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -11,16 +17,13 @@ from fastapi import FastAPI
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.tenant_webhooks import (
-    WebhookCreateRequest,
-    WebhookResponse,
-    WebhookUpdateRequest,
+from src.domain.model.tenant.webhook import Webhook
+from src.infrastructure.adapters.primary.web.routers import (
+    tenant_webhooks as tenant_webhook_routes,
 )
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.plugins.v2 import builtin_tenant_webhooks_http_routes as subject
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
@@ -48,6 +51,28 @@ def test_tenant_webhooks_row_is_a_complete_explicit_v2_contribution() -> None:
 
 
 @pytest.mark.unit
+def test_tenant_webhooks_row_registers_generation_owned_handlers_without_wrappers() -> None:
+    endpoints = {
+        definition.name: definition.endpoint
+        for definition in subject.tenant_webhooks_route_definitions_v2()
+    }
+    expected = {
+        "create_webhook": tenant_webhook_routes.create_webhook,
+        "list_webhooks": tenant_webhook_routes.list_webhooks,
+        "update_webhook": tenant_webhook_routes.update_webhook,
+        "delete_webhook": tenant_webhook_routes.delete_webhook,
+    }
+
+    assert endpoints == expected
+    for endpoint in expected.values():
+        parameters = signature(endpoint).parameters
+        assert (
+            parameters["current_user"].default.dependency is tenant_webhook_routes.get_current_user
+        )
+        assert parameters["db"].default.dependency is tenant_webhook_routes.get_db
+
+
+@pytest.mark.unit
 def test_tenant_webhooks_row_preserves_route_order_and_openapi() -> None:
     descriptor = PluginGenerationDescriptorV2(
         profile_id="tenant-webhooks-route-parity",
@@ -63,9 +88,7 @@ def test_tenant_webhooks_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -78,30 +101,37 @@ async def test_generation_dispatcher_executes_tenant_webhooks_v2_before_static_f
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = datetime(2026, 8, 22, tzinfo=UTC)
-    user = object()
-    db = object()
-    calls: list[tuple[str, object, object, object]] = []
+    user = SimpleNamespace(id="user-1")
+    db = SimpleNamespace()
+    webhook = Webhook(
+        id="v2-webhook",
+        tenant_id="tenant-1",
+        name="V2",
+        url="https://example.com/v2",
+        secret="redacted-by-handler",
+        events=["memory.created"],
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    webhook_service = SimpleNamespace(list_webhooks=AsyncMock(return_value=[webhook]))
+    require_tenant_access = AsyncMock()
+    context_calls: list[tuple[object, object, str | None, str]] = []
 
-    async def list_handler(
-        tenant_id: str,
-        request: object,
+    @asynccontextmanager
+    async def authority_context(
+        *,
+        request: Any,
         current_user: object,
-        db_value: object,
-    ) -> list[WebhookResponse]:
-        calls.append((tenant_id, request, current_user, db_value))
-        return [
-            WebhookResponse(
-                id="v2-webhook",
-                tenant_id=tenant_id,
-                name="V2",
-                url="https://example.com/v2",
-                secret=None,
-                events=["memory.created"],
-                is_active=True,
-                created_at=now,
-                updated_at=now,
-            )
-        ]
+        db: object,
+        tenant_id: str | None,
+    ) -> AsyncIterator[object]:
+        context_calls.append((current_user, db, tenant_id, request.url.path))
+        yield SimpleNamespace(
+            db=db,
+            current_user=current_user,
+            services=SimpleNamespace(webhooks=webhook_service),
+        )
 
     async def current_user_override() -> object:
         return user
@@ -109,13 +139,22 @@ async def test_generation_dispatcher_executes_tenant_webhooks_v2_before_static_f
     async def db_override() -> object:
         return db
 
-    monkeypatch.setattr(subject, "_list_webhooks", list_handler)
+    monkeypatch.setattr(
+        tenant_webhook_routes,
+        "tenant_webhook_application_authority_context_v2",
+        authority_context,
+    )
+    monkeypatch.setattr(
+        tenant_webhook_routes,
+        "require_tenant_access",
+        require_tenant_access,
+    )
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.tenant_webhooks_route_definitions_v2(),
         dependency_overrides={
-            get_current_user: current_user_override,
-            get_db: db_override,
+            tenant_webhook_routes.get_current_user: current_user_override,
+            tenant_webhook_routes.get_db: db_override,
         },
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -152,141 +191,16 @@ async def test_generation_dispatcher_executes_tenant_webhooks_v2_before_static_f
 
     assert response.status_code == 200
     assert response.json()[0]["id"] == "v2-webhook"
-    assert len(calls) == 1
-    assert calls[0][0] == "tenant-1"
-    assert calls[0][2:] == (user, db)
+    assert response.json()[0]["secret"] is None
+    assert context_calls == [(user, db, "tenant-1", "/api/v1/tenant-webhooks/tenant-1")]
+    require_tenant_access.assert_awaited_once_with(
+        db,
+        user,
+        "tenant-1",
+        require_admin=True,
+    )
+    webhook_service.list_webhooks.assert_awaited_once_with("tenant-1")
     await host.close()
-
-
-@pytest.mark.unit
-async def test_tenant_webhooks_v2_handlers_delegate_without_static_router_mount(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = datetime(2026, 8, 22, tzinfo=UTC)
-    create_body = WebhookCreateRequest(
-        name="Deploy",
-        url="https://example.com/create",
-        events=["memory.created"],
-        is_active=True,
-    )
-    update_body = WebhookUpdateRequest(
-        name="Deploy updated",
-        url="https://example.com/update",
-        events=["memory.updated"],
-        is_active=False,
-    )
-    created = WebhookResponse(
-        id="webhook-1",
-        tenant_id="tenant-1",
-        name=create_body.name,
-        url=create_body.url,
-        secret="secret-on-create",
-        events=create_body.events,
-        is_active=create_body.is_active,
-        created_at=now,
-        updated_at=now,
-    )
-    listed = [created.model_copy(update={"secret": None})]
-    updated = created.model_copy(
-        update={
-            "name": update_body.name,
-            "url": update_body.url,
-            "secret": None,
-            "events": update_body.events,
-            "is_active": update_body.is_active,
-        }
-    )
-    request = object()
-    user = object()
-    db = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    async def create_handler(
-        tenant_id: str,
-        body: WebhookCreateRequest,
-        request_value: object,
-        current_user: object,
-        db_value: object,
-    ) -> WebhookResponse:
-        calls.append(("create", (tenant_id, body, request_value, current_user, db_value)))
-        return created
-
-    async def list_handler(
-        tenant_id: str,
-        request_value: object,
-        current_user: object,
-        db_value: object,
-    ) -> list[WebhookResponse]:
-        calls.append(("list", (tenant_id, request_value, current_user, db_value)))
-        return listed
-
-    async def update_handler(
-        webhook_id: str,
-        body: WebhookUpdateRequest,
-        request_value: object,
-        current_user: object,
-        db_value: object,
-    ) -> WebhookResponse:
-        calls.append(("update", (webhook_id, body, request_value, current_user, db_value)))
-        return updated
-
-    async def delete_handler(
-        webhook_id: str,
-        request_value: object,
-        current_user: object,
-        db_value: object,
-    ) -> None:
-        calls.append(("delete", (webhook_id, request_value, current_user, db_value)))
-
-    monkeypatch.setattr(subject, "_create_webhook", create_handler)
-    monkeypatch.setattr(subject, "_list_webhooks", list_handler)
-    monkeypatch.setattr(subject, "_update_webhook", update_handler)
-    monkeypatch.setattr(subject, "_delete_webhook", delete_handler)
-
-    assert (
-        await subject.create_webhook_v2(
-            tenant_id="tenant-1",
-            body=create_body,
-            request=request,
-            current_user=user,
-            db=db,
-        )
-        == created
-    )
-    assert (
-        await subject.list_webhooks_v2(
-            tenant_id="tenant-1",
-            request=request,
-            current_user=user,
-            db=db,
-        )
-        == listed
-    )
-    assert (
-        await subject.update_webhook_v2(
-            webhook_id="webhook-1",
-            body=update_body,
-            request=request,
-            current_user=user,
-            db=db,
-        )
-        == updated
-    )
-    assert (
-        await subject.delete_webhook_v2(
-            webhook_id="webhook-1",
-            request=request,
-            current_user=user,
-            db=db,
-        )
-        is None
-    )
-    assert calls == [
-        ("create", ("tenant-1", create_body, request, user, db)),
-        ("list", ("tenant-1", request, user, db)),
-        ("update", ("webhook-1", update_body, request, user, db)),
-        ("delete", ("webhook-1", request, user, db)),
-    ]
 
 
 @pytest.mark.unit

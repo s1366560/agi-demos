@@ -4801,7 +4801,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:ed3b11c9f7ff52384b34c6bc184f98977959aadb1e3ee0b665f1379a31d63561",
+        "digest": "sha256:edb74f37a892baa16146f0f741bf677604d03bcb28a563907c8eaefe07cf3567",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_tenant_webhooks_http_routes.py"
       }
     },
