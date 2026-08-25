@@ -303,9 +303,7 @@ def test_genes_row_preserves_static_get_order_openapi_and_recursive_dependencies
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -313,21 +311,21 @@ def test_genes_row_preserves_static_get_order_openapi_and_recursive_dependencies
     assert _dependency_signatures(claimed_app) == _dependency_signatures(legacy_app)
     assert _dependency_counter(claimed_app, recursive=False) == Counter(
         {
-            "_get_selected_gene_admin_tenant_id": 14,
-            "_get_selected_gene_tenant_id": 15,
-            "get_current_user": 6,
-            "get_db": 29,
+            "gene_admin_application_authority_dependency_v2": 14,
+            "gene_application_authority_dependency_v2": 15,
         }
     )
     assert _dependency_counter(claimed_app, recursive=True) == Counter(
         {
+            "gene_admin_application_authority_dependency_v2": 14,
+            "gene_application_authority_dependency_v2": 15,
             "_get_selected_gene_admin_tenant_id": 14,
             "_get_selected_gene_tenant_id": 15,
-            "get_api_key_from_header": 64,
-            "get_current_user": 64,
+            "get_api_key_from_header": 87,
+            "get_current_user": 87,
             "get_current_user_tenant": 29,
-            "get_db": 215,
-            "verify_api_key_dependency": 64,
+            "get_db": 261,
+            "verify_api_key_dependency": 87,
         }
     )
     assert claimed.v2_owned_row_ids == ("genes",)

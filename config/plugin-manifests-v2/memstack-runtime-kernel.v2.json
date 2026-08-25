@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:a2fbf0fdc681973adc0090881d98499682ab2b515e649f598007181a821f6913",
+        "digest": "sha256:35bfd7e5f5846d2a98f2b1d764a5bc816f6b30c7d26b50342076cb39ac83fdfb",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -958,6 +958,74 @@
       "artifact": {
         "digest": "sha256:058591db8754c3f12ccb05c1baf252da1c4f1eb2c6b282c50bf0dd2f62eda751",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/gene-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.gene_services:_apply_gene_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.gene-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:797c5c53cf30397f469d0f25106088adb32c671c46ab28c7fb6df30e15f68c07",
+      "artifact": {
+        "digest": "sha256:4dfa2cf952f268b7a45c6203375f895bf884397f23c138e1c4ff43945d975c3d",
+        "source": "repo+python://src/infrastructure/plugins/v2/gene_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/gene-services",
+      "entrypoint": "src.infrastructure.plugins.v2.gene_services:_apply_gene_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.gene-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.gene-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:dd8f2757cf16ebfa6cb31cb0843fcb681978bcfdd332ff86f8021c5bc092bfd9",
+      "artifact": {
+        "digest": "sha256:4dfa2cf952f268b7a45c6203375f895bf884397f23c138e1c4ff43945d975c3d",
+        "source": "repo+python://src/infrastructure/plugins/v2/gene_services.py"
       }
     },
     {

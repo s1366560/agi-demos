@@ -5,7 +5,6 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.cluster_schemas import ClusterCreate
@@ -19,7 +18,9 @@ from src.application.schemas.gene_schemas import (
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
 from src.application.services.cluster_service import ClusterService
 from src.application.services.instance_template_service import InstanceTemplateService
-from src.configuration.di_container import DIContainer
+from src.infrastructure.adapters.primary.web.gene_application_authority_v2 import (
+    GeneApplicationAuthorityV2,
+)
 from src.infrastructure.adapters.primary.web.routers import clusters, instance_templates
 from src.infrastructure.adapters.primary.web.routers.clusters import create_cluster
 from src.infrastructure.adapters.primary.web.routers.genes import (
@@ -38,12 +39,28 @@ from src.infrastructure.adapters.secondary.persistence.sql_cluster_repository im
 from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
     SqlInstanceTemplateRepository,
 )
+from src.infrastructure.plugins.v2.gene_services import SqlGeneServiceFactoryV2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
 
 
-def _request() -> Request:
+def _gene_authority(
+    *,
+    db: AsyncSession,
+    tenant_id: str,
+    current_user: User,
+) -> GeneApplicationAuthorityV2:
+    operation = cast(
+        OperationContextV2,
+        SimpleNamespace(require=lambda _service: db),
+    )
     return cast(
-        Request,
-        SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=DIContainer()))),
+        GeneApplicationAuthorityV2,
+        SimpleNamespace(
+            db=db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            services=SqlGeneServiceFactoryV2().build(operation),
+        ),
     )
 
 
@@ -121,16 +138,17 @@ class TestMarketplaceAuditFields:
         test_user: User,
     ) -> None:
         response = await create_gene(
-            _request(),
             GeneCreate(
                 name="Audit Gene",
                 slug=_slug("gene"),
                 source_ref="github:org/repo/gene",
                 parent_gene_id="parent-gene-1",
             ),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=_gene_authority(
+                db=test_db,
+                tenant_id=test_project_db.tenant_id,
+                current_user=test_user,
+            ),
         )
 
         assert response.created_by == test_user.id
@@ -145,11 +163,12 @@ class TestMarketplaceAuditFields:
         test_user: User,
     ) -> None:
         response = await create_genome(
-            _request(),
             GenomeCreate(name="Audit Genome", slug=_slug("genome")),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=_gene_authority(
+                db=test_db,
+                tenant_id=test_project_db.tenant_id,
+                current_user=test_user,
+            ),
         )
 
         assert response.created_by == test_user.id
@@ -161,21 +180,20 @@ class TestMarketplaceAuditFields:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        gene = await create_gene(
-            _request(),
-            GeneCreate(name="Rated Gene", slug=_slug("rated-gene")),
+        authority = _gene_authority(
+            db=test_db,
             tenant_id=test_project_db.tenant_id,
             current_user=test_user,
-            db=test_db,
+        )
+        gene = await create_gene(
+            GeneCreate(name="Rated Gene", slug=_slug("rated-gene")),
+            authority=authority,
         )
 
         response = await rate_gene(
-            _request(),
             gene.id,
             GeneRatingCreate(rating=5, comment="Useful"),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=authority,
         )
 
         assert response.user_id == test_user.id
@@ -188,21 +206,20 @@ class TestMarketplaceAuditFields:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        genome = await create_genome(
-            _request(),
-            GenomeCreate(name="Rated Genome", slug=_slug("rated-genome")),
+        authority = _gene_authority(
+            db=test_db,
             tenant_id=test_project_db.tenant_id,
             current_user=test_user,
-            db=test_db,
+        )
+        genome = await create_genome(
+            GenomeCreate(name="Rated Genome", slug=_slug("rated-genome")),
+            authority=authority,
         )
 
         response = await rate_genome(
-            _request(),
             genome.id,
             GenomeRatingCreate(rating=4, comment="Works"),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=authority,
         )
 
         assert response.user_id == test_user.id
@@ -215,31 +232,27 @@ class TestMarketplaceAuditFields:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        gene = await create_gene(
-            _request(),
-            GeneCreate(name="Reviewed Gene", slug=_slug("reviewed-gene")),
+        authority = _gene_authority(
+            db=test_db,
             tenant_id=test_project_db.tenant_id,
             current_user=test_user,
-            db=test_db,
+        )
+        gene = await create_gene(
+            GeneCreate(name="Reviewed Gene", slug=_slug("reviewed-gene")),
+            authority=authority,
         )
 
         review = await create_gene_review(
-            _request(),
             gene.id,
             GeneReviewCreate(rating=5, content="Solid capability."),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=authority,
         )
 
         assert review.user_id == test_user.id
         assert review.user_id != test_project_db.tenant_id
 
         await delete_gene_review(
-            _request(),
             gene.id,
             review.id,
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
-            db=test_db,
+            authority=authority,
         )

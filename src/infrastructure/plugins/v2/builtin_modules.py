@@ -43,6 +43,7 @@ from .cron_services import cron_service_definitions_v2
 from .docker_monitor_runtime import docker_event_monitor_definition_v2
 from .engine_services import engine_catalog_definition_v2
 from .event_log_services import event_log_service_definitions_v2
+from .gene_services import gene_service_definitions_v2
 from .graph_application_services import graph_application_service_definition_v2
 from .graph_runtime import GraphRuntimeFactoryV2, graph_runtime_definition_v2
 from .instance_channel_services import instance_channel_service_definitions_v2
@@ -274,6 +275,7 @@ def builtin_runtime_definitions_v2(
         *artifact_lifecycle_service_definitions_v2(),
         attachment_application_service_definition_v2(),
         *cluster_service_definitions_v2(),
+        *gene_service_definitions_v2(),
         *instance_deploy_service_definitions_v2(redis_client=sandbox_redis_client),
         *instance_file_service_definitions_v2(),
         *instance_channel_service_definitions_v2(),

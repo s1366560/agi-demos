@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.application.services.agent_service import AgentService
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
-from src.application.services.gene_service import GeneService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
@@ -53,16 +52,6 @@ from src.configuration.containers import (
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
-from src.domain.ports.repositories.evolution_event_repository import (
-    EvolutionEventRepository,
-)
-from src.domain.ports.repositories.gene_rating_repository import GeneRatingRepository
-from src.domain.ports.repositories.gene_repository import GeneRepository
-from src.domain.ports.repositories.gene_review_repository import GeneReviewRepository
-from src.domain.ports.repositories.genome_repository import GenomeRepository
-from src.domain.ports.repositories.instance_gene_repository import (
-    InstanceGeneRepository,
-)
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.blackboard_file_repository import (
@@ -336,29 +325,6 @@ class DIContainer:
         ) = None,
     ) -> WorkspaceMessageService:
         return self._project.workspace_message_service(workspace_event_publisher)
-
-    # === Instance Container delegates ===
-
-    def gene_repository(self) -> GeneRepository:
-        return self._instance.gene_repository()
-
-    def genome_repository(self) -> GenomeRepository:
-        return self._instance.genome_repository()
-
-    def instance_gene_repository(self) -> InstanceGeneRepository:
-        return self._instance.instance_gene_repository()
-
-    def gene_rating_repository(self) -> GeneRatingRepository:
-        return self._instance.gene_rating_repository()
-
-    def gene_review_repository(self) -> GeneReviewRepository:
-        return self._instance.gene_review_repository()
-
-    def evolution_event_repository(self) -> EvolutionEventRepository:
-        return self._instance.evolution_event_repository()
-
-    def gene_service(self) -> GeneService:
-        return self._instance.gene_service()
 
     # === Infra Container delegates ===
 

@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import cast
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
+from src.application.services.gene_service import GeneService
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.plugins.v2.gene_services import SqlGeneServiceFactoryV2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
+
+
+def _gene_service(db: AsyncSession) -> GeneService:
+    operation = cast(
+        OperationContextV2,
+        SimpleNamespace(require=lambda _service: db),
+    )
+    return SqlGeneServiceFactoryV2().build(operation).genes
 
 
 @pytest.mark.unit
@@ -13,7 +26,7 @@ async def test_rate_gene_updates_persisted_average_rating(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     gene = await service.create_gene(
         name="Rated Gene",
         slug="rated-gene",
@@ -40,7 +53,7 @@ async def test_rate_genome_updates_persisted_average_rating(
     test_project_db: Project,
     test_user: User,
 ) -> None:
-    service = DIContainer().with_db(test_db).gene_service()
+    service = _gene_service(test_db)
     genome = await service.create_genome(
         name="Rated Genome",
         slug="rated-genome",
