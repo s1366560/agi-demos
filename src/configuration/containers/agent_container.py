@@ -65,9 +65,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_rep
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_tenant_skill_config_repository import (
-    SqlTenantSkillConfigRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
     SqlToolCompositionRepository,
 )
@@ -202,11 +199,6 @@ class AgentContainer:
         """Get SqlSkillVersionRepository for skill version persistence."""
         assert self._db is not None
         return SqlSkillVersionRepository(self._db)
-
-    def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
-        """Get SqlTenantSkillConfigRepository for tenant skill config persistence."""
-        assert self._db is not None
-        return SqlTenantSkillConfigRepository(self._db)
 
     def subagent_repository(self) -> SqlSubAgentRepository:
         """Get SqlSubAgentRepository for subagent persistence."""

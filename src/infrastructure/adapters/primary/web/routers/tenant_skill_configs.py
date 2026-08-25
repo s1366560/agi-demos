@@ -6,30 +6,27 @@ allowing tenants to disable or override system skills.
 """
 
 import logging
-from datetime import UTC
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
 from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.primary.web.tenant_skill_config_application_authority_v2 import (
+    TenantSkillConfigApplicationAuthorityV2,
+    tenant_skill_config_application_authority_context_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """Get DI container with database session for the current request."""
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +50,22 @@ async def _get_selected_tenant_id(
 
     await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
     return selected_tenant_id
+
+
+async def tenant_skill_config_application_authority_dependency_v2(
+    request: Request,
+    tenant_id: str = Depends(_get_selected_tenant_id),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[TenantSkillConfigApplicationAuthorityV2]:
+    """Yield tenant-authorized services from the pinned generation."""
+    async with tenant_skill_config_application_authority_context_v2(
+        request=request,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        db=db,
+    ) as authority:
+        yield authority
 
 
 # === Pydantic Models ===
@@ -132,17 +145,17 @@ def _invalid_skill_config_request_error() -> HTTPException:
 
 @router.get("/", response_model=TenantSkillConfigListResponse)
 async def list_tenant_skill_configs(
-    request: Request,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> TenantSkillConfigListResponse:
     """
     List all skill configurations for the current tenant.
 
     Returns all disabled and overridden system skills.
     """
-    container = get_container_with_db(request, db)
-    repo = container.tenant_skill_config_repository()
+    tenant_id = authority.tenant_id
+    repo = authority.services.configs
 
     configs = await repo.list_by_tenant(tenant_id)
     total = await repo.count_by_tenant(tenant_id)
@@ -155,18 +168,18 @@ async def list_tenant_skill_configs(
 
 @router.get("/{system_skill_name}", response_model=TenantSkillConfigResponse)
 async def get_tenant_skill_config(
-    request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> TenantSkillConfigResponse:
     """
     Get a specific tenant skill configuration.
 
     Returns the config for a specific system skill.
     """
-    container = get_container_with_db(request, db)
-    repo = container.tenant_skill_config_repository()
+    tenant_id = authority.tenant_id
+    repo = authority.services.configs
 
     config = await repo.get_by_tenant_and_skill(tenant_id, system_skill_name)
     if not config:
@@ -182,10 +195,10 @@ async def get_tenant_skill_config(
     "/disable", response_model=TenantSkillConfigResponse, status_code=status.HTTP_201_CREATED
 )
 async def disable_system_skill(
-    request: Request,
     data: DisableSkillRequest,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> TenantSkillConfigResponse:
     """
     Disable a system skill for this tenant.
@@ -193,15 +206,13 @@ async def disable_system_skill(
     The system skill will not be loaded for this tenant.
     """
     try:
-        container = get_container_with_db(request, db)
-        repo = container.tenant_skill_config_repository()
+        tenant_id = authority.tenant_id
+        repo = authority.services.configs
 
         # Check if config already exists
         existing = await repo.get_by_tenant_and_skill(tenant_id, data.system_skill_name)
         if existing:
             # Update existing config
-            from datetime import datetime
-
             existing.action = TenantSkillAction.DISABLE
             existing.override_skill_id = None
             existing.updated_at = datetime.now(UTC)
@@ -214,7 +225,7 @@ async def disable_system_skill(
             )
             config = await repo.create(config)
 
-        await db.commit()
+        await authority.db.commit()
 
         logger.info(f"System skill disabled: {data.system_skill_name} for tenant {tenant_id}")
         return config_to_response(config)
@@ -227,10 +238,10 @@ async def disable_system_skill(
     "/override", response_model=TenantSkillConfigResponse, status_code=status.HTTP_201_CREATED
 )
 async def override_system_skill(
-    request: Request,
     data: OverrideSkillRequest,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> TenantSkillConfigResponse:
     """
     Override a system skill with a tenant skill.
@@ -238,9 +249,9 @@ async def override_system_skill(
     The specified tenant skill will be used instead of the system skill.
     """
     try:
-        container = get_container_with_db(request, db)
-        repo = container.tenant_skill_config_repository()
-        skill_repo = container.skill_repository()
+        tenant_id = authority.tenant_id
+        repo = authority.services.configs
+        skill_repo = authority.services.skills
 
         # Verify override skill exists and belongs to this tenant
         override_skill = await skill_repo.get_by_id(data.override_skill_id)
@@ -259,8 +270,6 @@ async def override_system_skill(
         existing = await repo.get_by_tenant_and_skill(tenant_id, data.system_skill_name)
         if existing:
             # Update existing config
-            from datetime import datetime
-
             existing.action = TenantSkillAction.OVERRIDE
             existing.override_skill_id = data.override_skill_id
             existing.updated_at = datetime.now(UTC)
@@ -274,7 +283,7 @@ async def override_system_skill(
             )
             config = await repo.create(config)
 
-        await db.commit()
+        await authority.db.commit()
 
         logger.info(
             f"System skill overridden: {data.system_skill_name} -> {data.override_skill_id} "
@@ -290,18 +299,18 @@ async def override_system_skill(
 
 @router.post("/enable", status_code=status.HTTP_204_NO_CONTENT)
 async def enable_system_skill(
-    request: Request,
     data: EnableSkillRequest,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> None:
     """
     Re-enable a previously disabled or overridden system skill.
 
     Removes the tenant configuration, restoring default behavior.
     """
-    container = get_container_with_db(request, db)
-    repo = container.tenant_skill_config_repository()
+    tenant_id = authority.tenant_id
+    repo = authority.services.configs
 
     # Check if config exists
     existing = await repo.get_by_tenant_and_skill(tenant_id, data.system_skill_name)
@@ -312,25 +321,25 @@ async def enable_system_skill(
         )
 
     await repo.delete_by_tenant_and_skill(tenant_id, data.system_skill_name)
-    await db.commit()
+    await authority.db.commit()
 
     logger.info(f"System skill enabled: {data.system_skill_name} for tenant {tenant_id}")
 
 
 @router.delete("/{system_skill_name}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tenant_skill_config(
-    request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> None:
     """
     Delete a tenant skill configuration.
 
     Same as enabling - removes any disable/override config.
     """
-    container = get_container_with_db(request, db)
-    repo = container.tenant_skill_config_repository()
+    tenant_id = authority.tenant_id
+    repo = authority.services.configs
 
     # Check if config exists
     existing = await repo.get_by_tenant_and_skill(tenant_id, system_skill_name)
@@ -340,26 +349,26 @@ async def delete_tenant_skill_config(
             detail=_("Skill configuration not found"),
         )
 
-    await repo.delete(existing.id)
-    await db.commit()
+    _deleted = await repo.delete(existing.id)
+    await authority.db.commit()
 
     logger.info(f"Tenant skill config deleted: {system_skill_name} for tenant {tenant_id}")
 
 
 @router.get("/status/{system_skill_name}")
 async def get_skill_status(
-    request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(_get_selected_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    authority: TenantSkillConfigApplicationAuthorityV2 = Depends(
+        tenant_skill_config_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get the status of a system skill for this tenant.
 
     Returns whether the skill is enabled, disabled, or overridden.
     """
-    container = get_container_with_db(request, db)
-    repo = container.tenant_skill_config_repository()
+    tenant_id = authority.tenant_id
+    repo = authority.services.configs
 
     config = await repo.get_by_tenant_and_skill(tenant_id, system_skill_name)
 

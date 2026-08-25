@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:35bfd7e5f5846d2a98f2b1d764a5bc816f6b30c7d26b50342076cb39ac83fdfb",
+        "digest": "sha256:cdb75826354fd0a031721992ed9786cfc1f3aeebf2163fede3dbb37d7a250ad9",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1026,6 +1026,74 @@
       "artifact": {
         "digest": "sha256:4dfa2cf952f268b7a45c6203375f895bf884397f23c138e1c4ff43945d975c3d",
         "source": "repo+python://src/infrastructure/plugins/v2/gene_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/tenant-skill-config-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.tenant_skill_config_services:_apply_tenant_skill_config_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.tenant-skill-config-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:2eaea539b577954fdfeee227c44724fc380d3fd4a50a4f2370e17a7585debcd2",
+      "artifact": {
+        "digest": "sha256:a0bb6d283caa64eaf7b0af04ca353b0c030b2b6ede00e7305992b7967e8454ea",
+        "source": "repo+python://src/infrastructure/plugins/v2/tenant_skill_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/tenant-skill-config-services",
+      "entrypoint": "src.infrastructure.plugins.v2.tenant_skill_config_services:_apply_tenant_skill_config_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.tenant-skill-config-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.tenant-skill-config-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6234bc8b3bda0ce65169d7d8ce5a3fa4e8f2c9069b60359f1310a672ee4db1b5",
+      "artifact": {
+        "digest": "sha256:a0bb6d283caa64eaf7b0af04ca353b0c030b2b6ede00e7305992b7967e8454ea",
+        "source": "repo+python://src/infrastructure/plugins/v2/tenant_skill_config_services.py"
       }
     },
     {

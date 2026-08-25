@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.tenant_skill_config import TenantSkillConfig
 from src.infrastructure.adapters.primary.web.routers import tenant_skill_configs as router
+from src.infrastructure.adapters.primary.web.tenant_skill_config_application_authority_v2 import (
+    TenantSkillConfigApplicationAuthorityV2,
+)
+from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.plugins.v2.tenant_skill_config_services import (
+    TenantSkillConfigApplicationServicesV2,
+)
 
 
 class _FailingTenantSkillConfigRepository:
@@ -31,25 +40,27 @@ class _PresentSkillRepository:
         return SimpleNamespace(tenant_id="tenant-1")
 
 
-class _Container:
-    def __init__(self, *, skill_exists: bool = False) -> None:
-        self.skill_exists = skill_exists
-
-    def tenant_skill_config_repository(self) -> _FailingTenantSkillConfigRepository:
-        return _FailingTenantSkillConfigRepository()
-
-    def skill_repository(self) -> _MissingSkillRepository | _PresentSkillRepository:
-        return _PresentSkillRepository() if self.skill_exists else _MissingSkillRepository()
-
-
-@pytest.fixture(autouse=True)
-def failing_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
-
-
 @pytest.fixture
 def db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock())
+
+
+def _authority(
+    *,
+    db: SimpleNamespace,
+    skill_exists: bool = False,
+) -> TenantSkillConfigApplicationAuthorityV2:
+    skills = _PresentSkillRepository() if skill_exists else _MissingSkillRepository()
+    return TenantSkillConfigApplicationAuthorityV2(
+        operation=cast(Any, SimpleNamespace()),
+        db=cast(AsyncSession, db),
+        current_user=cast(User, SimpleNamespace(id="user-1")),
+        tenant_id="tenant-1",
+        services=TenantSkillConfigApplicationServicesV2(
+            configs=cast(Any, _FailingTenantSkillConfigRepository()),
+            skills=cast(Any, skills),
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -111,21 +122,14 @@ async def test_tenant_skill_config_routes_sanitize_value_errors(
     call_name: str,
     data: object,
     db: SimpleNamespace,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    if call_name == "override_system_skill":
-        monkeypatch.setattr(
-            router,
-            "get_container_with_db",
-            lambda *_args: _Container(skill_exists=True),
-        )
-
     with pytest.raises(HTTPException) as exc_info:
         await getattr(router, call_name)(
-            request=SimpleNamespace(),
             data=data,
-            tenant_id="tenant-1",
-            db=db,
+            authority=_authority(
+                db=db,
+                skill_exists=call_name == "override_system_skill",
+            ),
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -139,13 +143,11 @@ async def test_override_system_skill_sanitizes_missing_override_skill(
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.override_system_skill(
-            request=SimpleNamespace(),
             data=router.OverrideSkillRequest(
                 system_skill_name="system-skill",
                 override_skill_id="override-secret",
             ),
-            tenant_id="tenant-1",
-            db=db,
+            authority=_authority(db=db),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
