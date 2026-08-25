@@ -16,8 +16,6 @@ from src.application.services.agent_service import AgentService
 from src.application.services.skill_service import SkillService
 from src.application.services.workflow_learner import WorkflowLearner
 from src.application.use_cases.agent import (
-    ChatUseCase,
-    ComposeToolsUseCase,
     CreateConversationUseCase,
     ExecuteStepUseCase,
     FindSimilarPattern,
@@ -53,20 +51,11 @@ from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_reposito
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SqlSkillRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-    SqlSkillVersionRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
     SqlSubAgentRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
     SqlSubAgentTemplateRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
-    SqlToolCompositionRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-    SqlToolEnvironmentVariableRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
@@ -106,13 +95,11 @@ class AgentContainer:
         self._sequence_service_factory = sequence_service_factory
         self._agent_message_bus_factory = agent_message_bus_factory
         self._skill_service_instance: SkillService | None = None
-        self._workspace_manager_instance: Any | None = None
         self._agent_session_registry_instance: AgentSessionRegistry | None = None
         self._spawn_manager_instance: Any | None = None
         self._agent_orchestrator_instance: Any | None = None
         self._subagent_run_registry_instance: Any | None = None
         self._spawn_validator_instance: Any | None = None
-        self._announce_service_instance: Any | None = None
         self._control_channel_instance: Any | None = None
         self._graph_orchestrator_instance: Any | None = None
         self._span_service_instance: Any | None = None
@@ -167,16 +154,6 @@ class AgentContainer:
             summary_adapter=self.context_summary_adapter(),
         )
 
-    def tool_composition_repository(self) -> SqlToolCompositionRepository:
-        """Get SqlToolCompositionRepository for tool composition persistence."""
-        assert self._db is not None
-        return SqlToolCompositionRepository(self._db)
-
-    def tool_environment_variable_repository(self) -> SqlToolEnvironmentVariableRepository:
-        """Get SqlToolEnvironmentVariableRepository for tool env var persistence."""
-        assert self._db is not None
-        return SqlToolEnvironmentVariableRepository(self._db)
-
     def hitl_request_repository(self) -> SqlHITLRequestRepository:
         """Get SqlHITLRequestRepository for HITL request persistence."""
         assert self._db is not None
@@ -186,11 +163,6 @@ class AgentContainer:
         """Get SqlSkillRepository for skill persistence."""
         assert self._db is not None
         return SqlSkillRepository(self._db)
-
-    def skill_version_repository(self) -> SqlSkillVersionRepository:
-        """Get SqlSkillVersionRepository for skill version persistence."""
-        assert self._db is not None
-        return SqlSkillVersionRepository(self._db)
 
     def subagent_repository(self) -> SqlSubAgentRepository:
         """Get SqlSubAgentRepository for subagent persistence."""
@@ -288,35 +260,6 @@ class AgentContainer:
         )
         return self._skill_service_instance
 
-    # === Workspace Manager ===
-
-    def workspace_manager(self) -> Any:
-        """Get WorkspaceManager for loading persona/soul workspace files (cached singleton)."""
-        if self._workspace_manager_instance is not None:
-            return self._workspace_manager_instance
-
-        from pathlib import Path
-
-        from src.infrastructure.agent.workspace.manager import WorkspaceManager
-
-        settings = self._settings
-        enabled = settings.workspace_enabled if settings else True
-        workspace_dir = settings.workspace_dir if settings else "/workspace/.memstack/workspace"
-        tenant_workspace_dir_str = settings.tenant_workspace_dir if settings else ""
-        max_per_file = settings.workspace_max_chars_per_file if settings else 20000
-        max_total = settings.workspace_max_chars_total if settings else 150000
-
-        self._workspace_manager_instance = WorkspaceManager(
-            workspace_dir=Path(workspace_dir),
-            tenant_workspace_dir=Path(tenant_workspace_dir_str)
-            if tenant_workspace_dir_str
-            else None,
-            max_chars_per_file=max_per_file,
-            max_chars_total=max_total,
-            enabled=enabled,
-        )
-        return self._workspace_manager_instance
-
     def agent_session_registry(self) -> AgentSessionRegistry:
         """Get AgentSessionRegistry singleton (in-memory, no DB dependency)."""
         if self._agent_session_registry_instance is not None:
@@ -397,23 +340,6 @@ class AgentContainer:
         )
         return self._spawn_validator_instance
 
-    def announce_service(self) -> Any:
-        """Get AnnounceService singleton."""
-        if self._announce_service_instance is not None:
-            return self._announce_service_instance
-        from src.domain.model.agent.announce_config import AnnounceConfig
-        from src.infrastructure.agent.subagent.announce_service import AnnounceService
-
-        assert self._redis_client is not None, "redis_client is required for AnnounceService"
-        config = (
-            AnnounceConfig.from_settings(self._settings) if self._settings else AnnounceConfig()
-        )
-        self._announce_service_instance = AnnounceService(
-            redis_client=self._redis_client,
-            config=config,
-        )
-        return self._announce_service_instance
-
     def control_channel(self) -> Any:
         """Get ControlChannel singleton for steer/kill/pause/resume signals."""
         if self._control_channel_instance is not None:
@@ -427,24 +353,6 @@ class AgentContainer:
             redis_client=self._redis_client,
         )
         return self._control_channel_instance
-
-    def orphan_sweeper(self, tracker: Any = None) -> Any:
-        """Create OrphanSweeper for a given state tracker.
-
-        Not a singleton -- each BackgroundExecutor may have its own tracker.
-        """
-        from src.infrastructure.agent.subagent.orphan_sweeper import OrphanSweeper
-
-        timeout_seconds = (
-            getattr(self._settings, "AGENT_SUBAGENT_TERMINAL_RETENTION_SECONDS", 300)
-            if self._settings
-            else 300
-        )
-        return OrphanSweeper(
-            tracker=tracker,
-            redis_client=self._redis_client,
-            timeout_seconds=timeout_seconds,
-        )
 
     def agent_orchestrator(self) -> Any:
         """Get AgentOrchestrator singleton for multi-agent coordination."""
@@ -556,33 +464,6 @@ class AgentContainer:
         from src.infrastructure.agent.attachment.processor import get_attachment_processor
 
         return get_attachment_processor()
-
-    def llm_invoker(self, llm: LLMClient) -> Any:
-        """Get LLMInvoker for LLM invocation with streaming."""
-        from src.infrastructure.agent.llm.invoker import get_llm_invoker
-
-        return get_llm_invoker()
-
-    def tool_executor(self, tools: dict[str, Any]) -> Any:
-        """Get ToolExecutor for tool execution with permission checking."""
-        from src.infrastructure.agent.tools.executor import get_tool_executor
-
-        return get_tool_executor()
-
-    def artifact_extractor(self) -> Any:
-        """Get ArtifactExtractor for extracting artifacts from tool results."""
-        from src.infrastructure.agent.artifact.extractor import get_artifact_extractor
-
-        return get_artifact_extractor()
-
-    def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
-        """Get ReActLoop for core reasoning loop."""
-        from src.infrastructure.agent.core.react_loop import ReActLoop
-
-        return ReActLoop(
-            llm_invoker=self.llm_invoker(llm),
-            tool_executor=self.tool_executor(tools),
-        )
 
     # === Context Management ===
 
@@ -712,10 +593,6 @@ class AgentContainer:
         """Get GetConversationUseCase with dependencies injected."""
         return GetConversationUseCase(self._conversation_agent_service(llm))
 
-    def chat_use_case(self, llm: LLMClient) -> ChatUseCase:
-        """Get ChatUseCase with dependencies injected."""
-        return ChatUseCase(self.agent_service(llm))
-
     # === Multi-Level Thinking Use Cases ===
 
     def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
@@ -780,11 +657,4 @@ class AgentContainer:
             learn_pattern=self.learn_pattern_use_case(),
             find_similar_pattern=self.find_similar_pattern_use_case(),
             repository=self.workflow_pattern_repository(),
-        )
-
-    def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
-        """Get ComposeToolsUseCase for tool composition."""
-        return ComposeToolsUseCase(
-            composition_repository=self.tool_composition_repository(),
-            available_tools={},
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.di_container import DIContainer
 
 pytestmark = pytest.mark.unit
@@ -56,3 +57,22 @@ def test_unused_internal_builder_facades_are_retired_from_top_level_di() -> None
     }
 
     assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+def test_orphaned_agent_constructors_are_retired_from_agent_container() -> None:
+    retired_constructors = {
+        "announce_service",
+        "artifact_extractor",
+        "chat_use_case",
+        "compose_tools_use_case",
+        "llm_invoker",
+        "orphan_sweeper",
+        "react_loop",
+        "skill_version_repository",
+        "tool_composition_repository",
+        "tool_environment_variable_repository",
+        "tool_executor",
+        "workspace_manager",
+    }
+
+    assert retired_constructors.isdisjoint(vars(AgentContainer))
