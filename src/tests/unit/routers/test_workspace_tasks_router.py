@@ -1,113 +1,144 @@
-from datetime import UTC, datetime
+"""Regression coverage for Workspace Core-owned task route contracts."""
 
-from src.domain.model.workspace.workspace_task import (
-    WorkspaceTask,
-    WorkspaceTaskStatus,
-)
-from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
-    _to_http_error,
-    _to_response,
-)
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
+
+import pytest
+from fastapi import HTTPException, status
+
+from src.infrastructure.adapters.primary.web.routers import workspace_tasks
 
 
-def test_to_response_projects_current_attempt_fields() -> None:
-    task = WorkspaceTask(
-        id="task-1",
-        workspace_id="ws-1",
-        title="Run attempt",
-        created_by="user-1",
-        status=WorkspaceTaskStatus.IN_PROGRESS,
-        metadata={
-            "current_attempt_id": "attempt-1",
-            "current_attempt_number": 2,
-            "current_attempt_conversation_id": "conv-1",
-            "current_attempt_worker_binding_id": "binding-1",
-            "current_attempt_worker_agent_id": "agent-1",
-            "last_attempt_status": "rejected",
-            "pending_leader_adjudication": True,
-            "last_worker_report_type": "completed",
-            "last_worker_report_summary": "Worker delivered the checklist",
-            "last_worker_report_artifacts": ["artifact:1", "", 3],
-            "last_worker_report_verifications": ["verification:1", None],
-        },
-        created_at=datetime.now(UTC),
+class _AccessTrap:
+    def __getattribute__(self, name: str) -> object:
+        raise AssertionError(f"retired workspace task handler accessed {name}")
+
+
+def _handler_cases() -> list[tuple[str, dict[str, Any]]]:
+    task = {"task_id": "task-1"}
+    return [
+        (
+            "create_workspace_task",
+            {"body": workspace_tasks.WorkspaceTaskCreateRequest(title="Task")},
+        ),
+        (
+            "list_workspace_tasks",
+            {"status_filter": None, "limit": 50, "offset": 0},
+        ),
+        ("get_workspace_task", task),
+        ("get_workspace_task_experience", task),
+        ("get_workspace_task_execution_session", task),
+        (
+            "apply_workspace_task_recovery_action",
+            {
+                **task,
+                "body": workspace_tasks.TaskRecoveryActionRequest(action="retry_launch"),
+            },
+        ),
+        (
+            "update_workspace_task",
+            {**task, "body": workspace_tasks.WorkspaceTaskUpdateRequest(title="Updated")},
+        ),
+        ("delete_workspace_task", task),
+        (
+            "assign_workspace_task_to_agent",
+            {
+                **task,
+                "body": workspace_tasks.AssignAgentRequest(workspace_agent_id="binding-1"),
+            },
+        ),
+        ("unassign_workspace_task_from_agent", task),
+        ("claim_workspace_task", task),
+        ("start_workspace_task", task),
+        ("block_workspace_task", task),
+        ("complete_workspace_task", task),
+    ]
+
+
+@pytest.mark.unit
+def test_workspace_task_module_keeps_contract_schemas_without_local_di() -> None:
+    assert {
+        "WorkspaceTaskCreateRequest",
+        "WorkspaceTaskUpdateRequest",
+        "AssignAgentRequest",
+        "WorkspaceTaskResponse",
+        "WorkspaceTaskExperienceResponse",
+        "TaskExecutionSessionResponse",
+        "TaskRecoveryActionRequest",
+        "TaskRecoveryActionResponse",
+    }.issubset(vars(workspace_tasks))
+    assert {
+        "DIContainer",
+        "WorkspaceTaskService",
+        "WorkspaceTaskCommandService",
+        "WorkspaceTaskExperienceService",
+        "WorkspaceTaskEventPublisher",
+        "TaskExecutionSessionMonitor",
+        "get_db",
+        "get_container_with_db",
+        "_get_workspace_task_service",
+        "_get_workspace_task_command_service",
+        "_get_workspace_task_experience_service",
+        "_get_task_execution_session_monitor",
+        "_get_workspace_task_event_publisher",
+        "_to_response",
+        "_to_http_error",
+        "_publish_task_execution_session_event",
+        "_publish_recovery_result_events",
+    }.isdisjoint(vars(workspace_tasks))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("handler_name", "extra"), _handler_cases())
+async def test_legacy_workspace_task_handlers_fail_closed_without_local_di(
+    handler_name: str,
+    extra: dict[str, Any],
+) -> None:
+    handler = cast(
+        Callable[..., Awaitable[object]],
+        getattr(workspace_tasks, handler_name),
     )
+    kwargs: dict[str, Any] = {
+        "workspace_id": "workspace-1",
+        "request": _AccessTrap(),
+        "current_user": _AccessTrap(),
+        "db": _AccessTrap(),
+        **extra,
+    }
 
-    response = _to_response(task)
+    with pytest.raises(HTTPException) as exc_info:
+        await handler(**kwargs)
 
-    assert response.current_attempt_id == "attempt-1"
-    assert response.current_attempt_number == 2
-    assert response.current_attempt_conversation_id == "conv-1"
-    assert response.current_attempt_worker_binding_id == "binding-1"
-    assert response.current_attempt_worker_agent_id == "agent-1"
-    assert response.last_attempt_status == "rejected"
-    assert response.pending_leader_adjudication is True
-    assert response.last_worker_report_type == "completed"
-    assert response.last_worker_report_summary == "Worker delivered the checklist"
-    assert response.last_worker_report_artifacts == ["artifact:1"]
-    assert response.last_worker_report_verifications == ["verification:1"]
-
-
-def test_to_http_error_sanitizes_permission_errors() -> None:
-    error = _to_http_error(PermissionError("workspace secret permission denied"))
-
-    assert error.status_code == 403
-    assert error.detail == "Access denied"
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc_info.value.detail == {
+        "code": "WORKSPACE_CORE_UNAVAILABLE",
+        "reason": "workspace_core_unavailable",
+        "detail": "Workspace Core is unavailable",
+    }
 
 
-def test_to_http_error_exposes_safe_workspace_leader_permission_errors() -> None:
-    error = _to_http_error(PermissionError("Only workspace plan leader authority may block task"))
-
-    assert error.status_code == 403
-    assert error.detail == "Only workspace plan leader authority may perform this action"
-
-
-def test_to_http_error_exposes_safe_root_goal_permission_errors() -> None:
-    error = _to_http_error(
-        PermissionError("Root goal must leave todo before a child task enters in_progress")
-    )
-
-    assert error.status_code == 403
-    assert error.detail == "Root goal must leave todo before a child task enters in_progress"
-
-
-def test_to_http_error_exposes_safe_worker_authority_permission_errors() -> None:
-    error = _to_http_error(
-        PermissionError(
-            "Autonomy execution task transitions require leader or assigned worker authority"
-        )
-    )
-
-    assert error.status_code == 403
-    assert (
-        error.detail
-        == "Autonomy execution task transitions require leader or assigned worker authority"
-    )
-
-
-def test_to_http_error_sanitizes_not_found_value_errors() -> None:
-    error = _to_http_error(ValueError("task task-secret not found"))
-
-    assert error.status_code == 404
-    assert error.detail == "Workspace task not found"
-
-
-def test_to_http_error_sanitizes_bad_request_value_errors() -> None:
-    error = _to_http_error(ValueError("secret task transition invalid"))
-
-    assert error.status_code == 400
-    assert error.detail == "Invalid workspace task request"
-
-
-def test_to_http_error_exposes_safe_workspace_binding_value_errors() -> None:
-    error = _to_http_error(ValueError("Workspace agent binding does not belong to workspace"))
-
-    assert error.status_code == 400
-    assert error.detail == "Workspace agent binding does not belong to workspace"
-
-
-def test_to_http_error_exposes_safe_transition_value_errors() -> None:
-    error = _to_http_error(ValueError("Cannot transition task status from todo to done"))
-
-    assert error.status_code == 400
-    assert error.detail == "Cannot transition task status from todo to done"
+@pytest.mark.unit
+def test_workspace_task_contract_models_remain_stable() -> None:
+    assert set(workspace_tasks.WorkspaceTaskCreateRequest.model_fields) == {
+        "title",
+        "description",
+        "assignee_user_id",
+        "metadata",
+        "preferred_language",
+        "priority",
+        "estimated_effort",
+        "blocker_reason",
+    }
+    assert set(workspace_tasks.TaskRecoveryActionResponse.model_fields) == {
+        "workspace_id",
+        "task_id",
+        "action",
+        "status",
+        "message",
+        "conversation_id",
+        "attempt_id",
+        "outbox_id",
+        "session",
+    }

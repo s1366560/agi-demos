@@ -36,12 +36,6 @@ from src.domain.ports.repositories.workspace.workspace_member_repository import 
 from src.domain.ports.repositories.workspace.workspace_repository import (
     WorkspaceRepository,
 )
-from src.domain.ports.repositories.workspace.workspace_task_repository import (
-    WorkspaceTaskRepository,
-)
-from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repository import (
-    WorkspaceTaskSessionAttemptRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -139,17 +133,6 @@ class DIContainer:
 
     def workspace_agent_repository(self) -> WorkspaceAgentRepository:
         return self._project.workspace_agent_repository()
-
-    def workspace_task_repository(self) -> WorkspaceTaskRepository:
-        return self._project.workspace_task_repository()
-
-    def workspace_task_session_attempt_repository(
-        self,
-    ) -> WorkspaceTaskSessionAttemptRepository:
-        return cast(
-            WorkspaceTaskSessionAttemptRepository,
-            self._project.workspace_task_session_attempt_repository(),
-        )
 
     def topology_repository(self) -> TopologyRepository:
         return cast(TopologyRepository, self._project.topology_repository())

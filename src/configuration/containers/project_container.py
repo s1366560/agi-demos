@@ -15,9 +15,6 @@ from src.domain.ports.repositories.workspace.workspace_member_repository import 
 from src.domain.ports.repositories.workspace.workspace_repository import (
     WorkspaceRepository,
 )
-from src.domain.ports.repositories.workspace.workspace_task_repository import (
-    WorkspaceTaskRepository,
-)
 from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
 
@@ -43,20 +40,6 @@ class ProjectContainer:
     def workspace_agent_repository(self) -> WorkspaceAgentRepository:
         """Get WorkspaceAgentRepository for workspace-agent relation persistence."""
         legacy_workspace_runtime_retired("DI agent repository")
-
-    def workspace_task_repository(self) -> WorkspaceTaskRepository:
-        """Get WorkspaceTaskRepository for workspace task persistence."""
-        legacy_workspace_runtime_retired("DI task repository")
-
-    def workspace_task_session_attempt_repository(
-        self,
-    ) -> Never:
-        """Reject the retired platform SQL Workspace attempt repository."""
-        legacy_workspace_runtime_retired("DI attempt repository")
-
-    def workspace_task_session_attempt_service(self) -> Never:
-        """Reject the retired platform SQL Workspace attempt service."""
-        legacy_workspace_runtime_retired("DI attempt service")
 
     def topology_repository(self) -> Never:
         """Reject the retired platform SQL Topology repository."""
