@@ -300,21 +300,20 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
     assert claimed.table.openapi_snapshot(descriptor).schema["openapi"].startswith("3.")
     assert _dependency_signatures(claimed_app) == _dependency_signatures(legacy_app)
     assert Counter(_immediate_dependency_ids(claimed_app)) == {
-        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 97,
+        "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 92,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 31,
         "src.infrastructure.adapters.primary.web.project_tenant_authority_v2.project_tenant_authority_dependency_v2": 6,
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router._get_selected_binding_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 93,
+        "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 88,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 

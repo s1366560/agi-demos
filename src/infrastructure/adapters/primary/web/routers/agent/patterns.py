@@ -10,16 +10,14 @@ Provides CRUD operations for workflow patterns:
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.auth.user import User
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
+from src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2 import (
+    WorkflowPatternApplicationAuthorityV2,
+    workflow_pattern_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project as DBProject,
     UserProject as DBUserProject,
@@ -35,7 +33,6 @@ from .schemas import (
     ResetPatternsResponse,
     WorkflowPatternResponse,
 )
-from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +45,6 @@ router = APIRouter()
 )
 async def list_project_shared_patterns(
     project_id: str,
-    request: Request,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     min_success_rate: float | None = Query(
@@ -57,10 +53,13 @@ async def list_project_shared_patterns(
         le=1,
         description="Minimum success rate filter",
     ),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    pattern_application: WorkflowPatternApplicationAuthorityV2 = Depends(
+        workflow_pattern_application_authority_dependency_v2
+    ),
 ) -> ProjectPatternsListResponse:
     """List tenant-shared patterns available to an explicitly authorized project member."""
+    db = pattern_application.db
+    current_user = pattern_application.current_user
     project_result = await db.execute(
         refresh_select_statement(select(DBProject.tenant_id).where(DBProject.id == project_id))
     )
@@ -88,8 +87,7 @@ async def list_project_shared_patterns(
         raise HTTPException(status_code=403, detail=_("Project access required"))
 
     try:
-        container = get_container_with_db(request, db)
-        pattern_repo = container.workflow_pattern_repository()
+        pattern_repo = pattern_application.services.repository
         all_patterns = await pattern_repo.list_by_tenant(tenant_id)
         if min_success_rate is not None:
             all_patterns = [
@@ -140,15 +138,15 @@ def _pattern_response(pattern: Any) -> WorkflowPatternResponse:  # noqa: ANN401
 
 @router.get("/workflows/patterns", response_model=PatternsListResponse)
 async def list_patterns(
-    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to filter patterns"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     min_success_rate: float | None = Query(
         None, ge=0, le=1, description="Minimum success rate filter"
     ),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    pattern_application: WorkflowPatternApplicationAuthorityV2 = Depends(
+        workflow_pattern_application_authority_dependency_v2
+    ),
 ) -> PatternsListResponse:
     """
     List workflow patterns for a tenant (T080).
@@ -156,12 +154,12 @@ async def list_patterns(
     Patterns are tenant-scoped and shared across all projects within the tenant.
     Non-admin users have read-only access (FR-019).
     """
+    db = pattern_application.db
+    current_user = pattern_application.current_user
     try:
         await require_tenant_access(db, current_user, tenant_id)
 
-        assert request is not None
-        container = get_container_with_db(request, db)
-        pattern_repo = container.workflow_pattern_repository()
+        pattern_repo = pattern_application.services.repository
 
         # Get all patterns for tenant
         all_patterns = await pattern_repo.list_by_tenant(tenant_id)
@@ -217,20 +215,20 @@ async def list_patterns(
 @router.get("/workflows/patterns/{pattern_id}", response_model=WorkflowPatternResponse)
 async def get_pattern(
     pattern_id: str,
-    request: Request,
     tenant_id: str = Query(..., description="Tenant ID for authorization"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    pattern_application: WorkflowPatternApplicationAuthorityV2 = Depends(
+        workflow_pattern_application_authority_dependency_v2
+    ),
 ) -> WorkflowPatternResponse:
     """
     Get a workflow pattern by ID (T081).
     """
+    db = pattern_application.db
+    current_user = pattern_application.current_user
     try:
         await require_tenant_access(db, current_user, tenant_id)
 
-        assert request is not None
-        container = get_container_with_db(request, db)
-        pattern_repo = container.workflow_pattern_repository()
+        pattern_repo = pattern_application.services.repository
 
         pattern = await pattern_repo.get_by_id(pattern_id)
 
@@ -274,20 +272,20 @@ async def get_pattern(
 @router.delete("/workflows/patterns/{pattern_id}", status_code=200)
 async def delete_pattern(
     pattern_id: str,
-    request: Request,
     tenant_id: str = Query(..., description="Tenant ID for authorization"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    pattern_application: WorkflowPatternApplicationAuthorityV2 = Depends(
+        workflow_pattern_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Delete a workflow pattern by ID (T082) - Admin only.
     """
+    db = pattern_application.db
+    current_user = pattern_application.current_user
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
 
-        assert request is not None
-        container = get_container_with_db(request, db)
-        pattern_repo = container.workflow_pattern_repository()
+        pattern_repo = pattern_application.services.repository
 
         # Check if pattern exists
         pattern = await pattern_repo.get_by_id(pattern_id)
@@ -300,6 +298,7 @@ async def delete_pattern(
         deleted = await pattern_repo.delete(pattern_id)
         if not deleted:
             raise HTTPException(status_code=404, detail=_("Pattern not found"))
+        await db.commit()
 
         return {"message": "Pattern deleted successfully", "pattern_id": pattern_id}
 
@@ -312,20 +311,20 @@ async def delete_pattern(
 
 @router.post("/workflows/patterns/reset", response_model=ResetPatternsResponse)
 async def reset_patterns(
-    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to reset patterns for"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    pattern_application: WorkflowPatternApplicationAuthorityV2 = Depends(
+        workflow_pattern_application_authority_dependency_v2
+    ),
 ) -> ResetPatternsResponse:
     """
     Reset/delete all workflow patterns for a tenant (T083) - Admin only.
     """
+    db = pattern_application.db
+    current_user = pattern_application.current_user
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
 
-        assert request is not None
-        container = get_container_with_db(request, db)
-        pattern_repo = container.workflow_pattern_repository()
+        pattern_repo = pattern_application.services.repository
 
         # Get all patterns for tenant
         all_patterns = await pattern_repo.list_by_tenant(tenant_id)
@@ -336,6 +335,7 @@ async def reset_patterns(
             deleted = await pattern_repo.delete(pattern.id)
             if deleted:
                 deleted_count += 1
+        await db.commit()
 
         return ResetPatternsResponse(
             deleted_count=deleted_count,

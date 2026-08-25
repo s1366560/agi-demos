@@ -81,6 +81,7 @@ from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
 )
+from .workflow_pattern_services import workflow_pattern_service_definitions_v2
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
 from .workspace_core_runtime import (
     WorkspaceCoreRuntimeFactoryV2,
@@ -373,6 +374,7 @@ def builtin_runtime_definitions_v2(
         *schema_service_definitions_v2(),
         *notification_service_definitions_v2(),
         *event_log_service_definitions_v2(),
+        *workflow_pattern_service_definitions_v2(),
         *support_ticket_service_definitions_v2(),
         *ai_tool_service_definitions_v2(),
         *backend_store_service_definitions_v2(),

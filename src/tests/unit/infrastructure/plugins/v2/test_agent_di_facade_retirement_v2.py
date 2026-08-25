@@ -17,6 +17,7 @@ def test_unused_agent_repository_facades_are_retired_from_top_level_di() -> None
         "skill_version_repository",
         "tool_composition_repository",
         "tool_environment_variable_repository",
+        "workflow_pattern_repository",
     }
 
     assert retired_facades.isdisjoint(vars(DIContainer))

@@ -18,16 +18,20 @@ class FailingPatternRepository:
     delete = AsyncMock(side_effect=RuntimeError("internal pattern delete secret"))
 
 
-def _request_with_pattern_repo() -> MagicMock:
-    request = MagicMock()
-    return request
-
-
-def _patch_pattern_repo(monkeypatch: pytest.MonkeyPatch, repo: object) -> None:
-    monkeypatch.setattr(
-        patterns_router,
-        "get_container_with_db",
-        lambda _request, _db: SimpleNamespace(workflow_pattern_repository=lambda: repo),
+def _pattern_authority(
+    repository: object,
+    *,
+    db: object | None = None,
+    current_user: object | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db if db is not None else SimpleNamespace(),
+        current_user=(
+            current_user
+            if current_user is not None
+            else SimpleNamespace(id="user-1", is_admin=False)
+        ),
+        services=SimpleNamespace(repository=repository),
     )
 
 
@@ -55,42 +59,40 @@ def _pattern(**overrides: Any) -> SimpleNamespace:
     [
         (
             lambda: patterns_router.list_patterns(
-                request=_request_with_pattern_repo(),
                 tenant_id="tenant-1",
                 page=1,
                 page_size=20,
                 min_success_rate=None,
-                current_user=SimpleNamespace(id="user-1", is_admin=False),
-                db=SimpleNamespace(),
+                pattern_application=_pattern_authority(FailingPatternRepository()),
             ),
             "Failed to list patterns",
         ),
         (
             lambda: patterns_router.get_pattern(
                 pattern_id="pattern-1",
-                request=_request_with_pattern_repo(),
                 tenant_id="tenant-1",
-                current_user=SimpleNamespace(id="user-1", is_admin=False),
-                db=SimpleNamespace(),
+                pattern_application=_pattern_authority(FailingPatternRepository()),
             ),
             "Failed to get pattern",
         ),
         (
             lambda: patterns_router.delete_pattern(
                 pattern_id="pattern-1",
-                request=_request_with_pattern_repo(),
                 tenant_id="tenant-1",
-                current_user=SimpleNamespace(id="user-1", is_admin=True),
-                db=SimpleNamespace(),
+                pattern_application=_pattern_authority(
+                    FailingPatternRepository(),
+                    current_user=SimpleNamespace(id="user-1", is_admin=True),
+                ),
             ),
             "Failed to delete pattern",
         ),
         (
             lambda: patterns_router.reset_patterns(
-                request=_request_with_pattern_repo(),
                 tenant_id="tenant-1",
-                current_user=SimpleNamespace(id="user-1", is_admin=True),
-                db=SimpleNamespace(),
+                pattern_application=_pattern_authority(
+                    FailingPatternRepository(),
+                    current_user=SimpleNamespace(id="user-1", is_admin=True),
+                ),
             ),
             "Failed to reset patterns",
         ),
@@ -102,7 +104,6 @@ async def test_pattern_routes_sanitize_internal_errors(
     expected_detail: str,
 ) -> None:
     monkeypatch.setattr(patterns_router, "require_tenant_access", AsyncMock())
-    _patch_pattern_repo(monkeypatch, FailingPatternRepository())
 
     with pytest.raises(HTTPException) as exc_info:
         await call()
@@ -121,17 +122,18 @@ async def test_list_patterns_uses_requested_tenant_access(
     require_access = AsyncMock()
     db = SimpleNamespace()
     current_user = SimpleNamespace(id="user-1")
-    _patch_pattern_repo(monkeypatch, repo)
     monkeypatch.setattr(patterns_router, "require_tenant_access", require_access)
 
     response = await patterns_router.list_patterns(
-        request=_request_with_pattern_repo(),
         tenant_id="tenant-2",
         page=1,
         page_size=20,
         min_success_rate=None,
-        current_user=current_user,
-        db=db,
+        pattern_application=_pattern_authority(
+            repo,
+            db=db,
+            current_user=current_user,
+        ),
     )
 
     assert response.total == 1
@@ -152,16 +154,17 @@ async def test_project_patterns_derives_tenant_and_requires_both_memberships(
     membership_result = MagicMock()
     membership_result.scalar_one_or_none.return_value = "membership-1"
     db.execute.side_effect = [project_result, membership_result]
-    _patch_pattern_repo(monkeypatch, repo)
 
     response = await patterns_router.list_project_shared_patterns(
         project_id="project-1",
-        request=_request_with_pattern_repo(),
         page=1,
         page_size=20,
         min_success_rate=None,
-        current_user=SimpleNamespace(id="user-1"),
-        db=db,
+        pattern_application=_pattern_authority(
+            repo,
+            db=db,
+            current_user=SimpleNamespace(id="user-1"),
+        ),
     )
 
     assert response.project_id == "project-1"
@@ -183,17 +186,18 @@ async def test_project_patterns_rejects_missing_project_membership(
     membership_result = MagicMock()
     membership_result.scalar_one_or_none.return_value = None
     db.execute.side_effect = [project_result, membership_result]
-    _patch_pattern_repo(monkeypatch, repo)
 
     with pytest.raises(HTTPException) as exc_info:
         await patterns_router.list_project_shared_patterns(
             project_id="project-1",
-            request=_request_with_pattern_repo(),
             page=1,
             page_size=20,
             min_success_rate=None,
-            current_user=SimpleNamespace(id="user-1"),
-            db=db,
+            pattern_application=_pattern_authority(
+                repo,
+                db=db,
+                current_user=SimpleNamespace(id="user-1"),
+            ),
         )
 
     assert exc_info.value.status_code == 403
@@ -210,17 +214,18 @@ async def test_delete_pattern_requires_admin_for_requested_tenant(
         delete=AsyncMock(),
     )
     require_access = AsyncMock()
-    db = SimpleNamespace()
+    db = SimpleNamespace(commit=AsyncMock())
     current_user = SimpleNamespace(id="user-1")
-    _patch_pattern_repo(monkeypatch, repo)
     monkeypatch.setattr(patterns_router, "require_tenant_access", require_access)
 
     result = await patterns_router.delete_pattern(
         pattern_id="pattern-1",
-        request=_request_with_pattern_repo(),
         tenant_id="tenant-2",
-        current_user=current_user,
-        db=db,
+        pattern_application=_pattern_authority(
+            repo,
+            db=db,
+            current_user=current_user,
+        ),
     )
 
     assert result == {"message": "Pattern deleted successfully", "pattern_id": "pattern-1"}
@@ -231,6 +236,48 @@ async def test_delete_pattern_requires_admin_for_requested_tenant(
         require_admin=True,
     )
     repo.delete.assert_awaited_once_with("pattern-1")
+    db.commit.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_reset_patterns_commits_all_tenant_deletions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patterns = [
+        _pattern(id="pattern-1", tenant_id="tenant-2"),
+        _pattern(id="pattern-2", tenant_id="tenant-2"),
+    ]
+    repo = SimpleNamespace(
+        list_by_tenant=AsyncMock(return_value=patterns),
+        delete=AsyncMock(return_value=True),
+    )
+    require_access = AsyncMock()
+    db = SimpleNamespace(commit=AsyncMock())
+    current_user = SimpleNamespace(id="user-1")
+    monkeypatch.setattr(patterns_router, "require_tenant_access", require_access)
+
+    result = await patterns_router.reset_patterns(
+        tenant_id="tenant-2",
+        pattern_application=_pattern_authority(
+            repo,
+            db=db,
+            current_user=current_user,
+        ),
+    )
+
+    assert result.deleted_count == 2
+    assert result.tenant_id == "tenant-2"
+    require_access.assert_awaited_once_with(
+        db,
+        current_user,
+        "tenant-2",
+        require_admin=True,
+    )
+    repo.delete.assert_any_await("pattern-1")
+    repo.delete.assert_any_await("pattern-2")
+    assert repo.delete.await_count == 2
+    db.commit.assert_awaited_once_with()
 
 
 @pytest.mark.unit
@@ -242,16 +289,16 @@ async def test_delete_pattern_hides_patterns_outside_requested_tenant(
         get_by_id=AsyncMock(return_value=_pattern(tenant_id="other-tenant")),
         delete=AsyncMock(),
     )
-    _patch_pattern_repo(monkeypatch, repo)
     monkeypatch.setattr(patterns_router, "require_tenant_access", AsyncMock())
 
     with pytest.raises(HTTPException) as exc_info:
         await patterns_router.delete_pattern(
             pattern_id="pattern-1",
-            request=_request_with_pattern_repo(),
             tenant_id="tenant-2",
-            current_user=SimpleNamespace(id="user-1"),
-            db=SimpleNamespace(),
+            pattern_application=_pattern_authority(
+                repo,
+                current_user=SimpleNamespace(id="user-1"),
+            ),
         )
 
     assert exc_info.value.status_code == 404

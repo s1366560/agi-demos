@@ -72,9 +72,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_rep
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
-    SqlWorkflowPatternRepository,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +195,6 @@ class DIContainer:
 
     def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
         return self._agent.agent_execution_event_repository()
-
-    def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
-        return self._agent.workflow_pattern_repository()
 
     def context_summary_adapter(self) -> Any:
         return cast(Any, self._agent.context_summary_adapter())

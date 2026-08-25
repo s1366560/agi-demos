@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:4c90a996fa94b049742d4459d7d12cb452fe63a8109d2d021872c94985e89d14",
+        "digest": "sha256:731c0b12e18bbda98d93217cd805ceefb8224021c22d99c969ab7f2c533f1630",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2411,6 +2411,74 @@
       "artifact": {
         "digest": "sha256:ceaeb45e2a302b9d6c72cdca8098e8907e0283d3a1fbd5c4e865b2120c3234f2",
         "source": "repo+python://src/infrastructure/plugins/v2/event_log_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/workflow-pattern-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.workflow_pattern_services:_apply_workflow_pattern_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.workflow-pattern-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:95ebe640237af1161a7517e077209590f3ecd4c8a5afdbd6aa4b649ab5895f76",
+      "artifact": {
+        "digest": "sha256:274a3552031a08448758ee9df1a94e83a5c7114e888fd8d7e8d9a857ad23651a",
+        "source": "repo+python://src/infrastructure/plugins/v2/workflow_pattern_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/workflow-pattern-services",
+      "entrypoint": "src.infrastructure.plugins.v2.workflow_pattern_services:_apply_workflow_pattern_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.workflow-pattern-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.workflow-pattern-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:0f896c2054e1a5e3bbf9c229af0e1a9637049d0dc6e85efc1a7c8ae547131729",
+      "artifact": {
+        "digest": "sha256:274a3552031a08448758ee9df1a94e83a5c7114e888fd8d7e8d9a857ad23651a",
+        "source": "repo+python://src/infrastructure/plugins/v2/workflow_pattern_services.py"
       }
     },
     {
