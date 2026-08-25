@@ -3,10 +3,6 @@
 Contains modular initialization functions for various services.
 """
 
-from .autonomy_waker import (
-    initialize_autonomy_idle_waker,
-    shutdown_autonomy_idle_waker,
-)
 from .container import initialize_container
 from .database import initialize_database_schema
 from .generation_http_v2 import mount_generation_http_dispatcher_v2
@@ -15,13 +11,11 @@ from .redis import initialize_redis_client
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
 
 __all__ = [
-    "initialize_autonomy_idle_waker",
     "initialize_container",
     "initialize_database_schema",
     "initialize_llm_providers",
     "initialize_redis_client",
     "initialize_telemetry",
     "mount_generation_http_dispatcher_v2",
-    "shutdown_autonomy_idle_waker",
     "shutdown_telemetry_services",
 ]
