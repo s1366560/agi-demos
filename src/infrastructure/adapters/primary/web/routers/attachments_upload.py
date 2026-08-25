@@ -7,7 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any, Self, cast
+from typing import Any, Self
 
 from fastapi import (
     APIRouter,
@@ -31,51 +31,31 @@ from src.domain.model.agent.attachment import (
     AttachmentPurpose,
     AttachmentStatus,
 )
-from src.domain.ports.services.storage_service_port import PartUploadResult, StorageServicePort
+from src.domain.ports.services.storage_service_port import PartUploadResult
+from src.infrastructure.adapters.primary.web.attachment_application_authority_v2 import (
+    AttachmentApplicationAuthorityV2,
+    attachment_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
-from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
-    SqlAttachmentRepository,
-)
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/attachments", tags=["attachments"])
 
-# Cached storage service (stateless, can be reused)
-_storage_service: StorageServicePort | None = None
-
-
-def _get_storage_service() -> StorageServicePort:
-    """Get or create the storage service singleton (stateless)."""
-    global _storage_service
-    if _storage_service is None:
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        _storage_service = cast(StorageServicePort, container.storage_service())
-    return _storage_service
-
 
 async def get_attachment_service(
-    session: AsyncSession = Depends(get_db),
+    attachment_application: AttachmentApplicationAuthorityV2 = Depends(
+        attachment_application_authority_dependency_v2
+    ),
 ) -> AttachmentService:
-    """Get attachment service with per-request database session."""
-    from src.configuration.config import get_settings
-
-    settings = get_settings()
-    repository = SqlAttachmentRepository(session)
-    return AttachmentService(
-        storage_service=_get_storage_service(),
-        attachment_repository=repository,
-        upload_max_size_llm_mb=settings.upload_max_size_llm_mb,
-        upload_max_size_sandbox_mb=settings.upload_max_size_sandbox_mb,
-    )
+    """Resolve the request-owned attachment service from the pinned generation."""
+    return attachment_application.service
 
 
 # === Request/Response Models ===

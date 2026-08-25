@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:093bdc716d58fb16f310bfbb9a1dc3169be4d6a9f83c983c98bdb975d41d4adc",
+        "digest": "sha256:2ae2a1d72c67acfd2403eb0bb2ed03c625c42e64d19ad2c3582991512e865392",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -784,6 +784,44 @@
       "artifact": {
         "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/attachment-services",
+      "entrypoint": "src.infrastructure.plugins.v2.attachment_services:attachment_application_service_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.attachment-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "storage",
+              "service": "service:storage.object-storage",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy", "limits_from_settings"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" },
+            "limits_from_settings": { "const": true, "type": "boolean" }
+          }
+        }
+      },
+      "contract_digest": "sha256:1183410adc1ae23124d2d863e93d3b7fa9c05e8221ba267b631a457a7e82572b",
+      "artifact": {
+        "digest": "sha256:86e1c0e45ac4d9a70f39217b136e1246c15c60172c603ab87430e103e84e64b7",
+        "source": "repo+python://src/infrastructure/plugins/v2/attachment_services.py"
       }
     },
     {
