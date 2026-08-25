@@ -326,6 +326,7 @@ def test_manifest_fixes_lifecycle_event_modes_and_loop_injection() -> None:
 @pytest.mark.unit
 def test_static_websocket_registration_authority_is_retired() -> None:
     startup_root = _ROOT / "src/infrastructure/adapters/primary/web/startup"
+    legacy_notifier = _ROOT / "src/infrastructure/adapters/secondary/websocket_notifier.py"
     main_source = (_ROOT / "src/infrastructure/adapters/primary/web/main.py").read_text(
         encoding="utf-8"
     )
@@ -333,6 +334,7 @@ def test_static_websocket_registration_authority_is_retired() -> None:
     assert "register_websocket_manager" not in vars(project_react_agent)
     assert "_websocket_manager" not in vars(project_react_agent)
     assert not (startup_root / "websocket.py").exists()
+    assert not legacy_notifier.exists()
     assert "initialize_websocket_manager" not in (startup_root / "__init__.py").read_text(
         encoding="utf-8"
     )

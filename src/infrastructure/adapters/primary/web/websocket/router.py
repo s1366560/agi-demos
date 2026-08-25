@@ -261,7 +261,7 @@ async def get_dispatcher_stats() -> dict[str, Any]:
 # =============================================================================
 
 
-# Export manager for use in other modules (e.g., websocket_notifier.py)
+# Export the manager for target-local generation services.
 def get_ws_connection_manager() -> ConnectionManager:
     """Get the global connection manager instance for external use."""
     return get_connection_manager()

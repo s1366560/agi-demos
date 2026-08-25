@@ -1,22 +1,25 @@
 """
-Unit tests for ProjectReActAgent WebSocketNotifier integration.
+Unit tests for ProjectReActAgent V2 lifecycle-notifier integration.
 
 Tests TDD: RED phase - These tests should fail before implementation.
 """
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.configuration.config import get_settings
-from src.infrastructure.adapters.secondary.websocket_notifier import (
-    WebSocketNotifier,
-)
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
+    AGENT_LIFECYCLE_CHANGED_EVENT_V2,
+    AGENT_SUBAGENT_LIFECYCLE_EVENT_V2,
+    AgentLifecycleNotifierV2,
+)
+from src.infrastructure.plugins.v2.runtime import ContextV2, RuntimeV2Error
 
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
@@ -27,9 +30,14 @@ class MockConnectionManager:
     """Mock ConnectionManager for testing."""
 
     def __init__(self) -> None:
-        self.broadcast_calls = []
+        self.broadcast_calls: list[dict[str, Any]] = []
 
-    async def broadcast_to_project(self, tenant_id: str, project_id: str, message: dict) -> int:
+    async def broadcast_to_project(
+        self,
+        tenant_id: str,
+        project_id: str,
+        message: dict[str, Any],
+    ) -> int:
         """Mock broadcast that records calls."""
         self.broadcast_calls.append(
             {
@@ -41,6 +49,50 @@ class MockConnectionManager:
         return 1
 
 
+class _RecordingLifecycleContext:
+    """Minimal event surface used to observe ProjectReActAgent contract calls."""
+
+    def __init__(self, manager: MockConnectionManager) -> None:
+        self.manager = manager
+
+    async def dispatch(self, event: str, payload: object) -> tuple[int, ...]:
+        row = cast("dict[str, Any]", payload)
+        if event == AGENT_LIFECYCLE_CHANGED_EVENT_V2:
+            message = {
+                "type": "lifecycle_state_change",
+                "tenant_id": row["tenant_id"],
+                "project_id": row["project_id"],
+                "data": {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"tenant_id", "project_id", "timestamp"}
+                },
+                "timestamp": row["timestamp"],
+            }
+        elif event == AGENT_SUBAGENT_LIFECYCLE_EVENT_V2:
+            message = {
+                "type": "subagent_lifecycle",
+                "tenant_id": row["tenant_id"],
+                "project_id": row["project_id"],
+                "data": dict(cast("dict[str, Any]", row["event"])),
+                "timestamp": row["timestamp"],
+            }
+        else:
+            raise AssertionError(f"unexpected lifecycle event {event}")
+        count = await self.manager.broadcast_to_project(
+            tenant_id=cast("str", row["tenant_id"]),
+            project_id=cast("str", row["project_id"]),
+            message=message,
+        )
+        return (count,)
+
+
+class _RecordingAgentLifecycleNotifier(AgentLifecycleNotifierV2):
+    @property
+    def _manager(self) -> MockConnectionManager:
+        return cast("_RecordingLifecycleContext", self.context).manager
+
+
 @pytest.fixture
 def mock_manager():
     """Fixture for mock connection manager."""
@@ -49,8 +101,9 @@ def mock_manager():
 
 @pytest.fixture
 def mock_notifier(mock_manager):
-    """Fixture for mock WebSocketNotifier."""
-    return WebSocketNotifier(mock_manager)
+    """Fixture for the V2 notifier using a recording event context."""
+    context = _RecordingLifecycleContext(mock_manager)
+    return _RecordingAgentLifecycleNotifier(context=cast("ContextV2", context))
 
 
 @pytest.fixture
@@ -103,7 +156,7 @@ def mock_session_context():
 
 class TestProjectReActAgentLifecycleNotifications:
     """
-    Test suite for ProjectReActAgent lifecycle WebSocket notifications.
+    Test suite for ProjectReActAgent generation-owned lifecycle notifications.
 
     Tests that lifecycle state changes are properly broadcast via WebSocket.
     """
