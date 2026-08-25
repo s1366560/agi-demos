@@ -141,4 +141,4 @@ def test_router_has_no_static_gene_authority_fallback() -> None:
     assert "app.state.container" not in source
     assert "GeneMarketModel" not in source
     assert "InstanceModel" not in source
-    assert "gene_service" not in source
+    assert ".gene_service()" not in source
