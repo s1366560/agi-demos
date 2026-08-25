@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:731c0b12e18bbda98d93217cd805ceefb8224021c22d99c969ab7f2c533f1630",
+        "digest": "sha256:8c730c1f4397e1ad7b7e5a618108cee880e39ac37f72811409cea835cd7bf784",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1168,6 +1168,74 @@
       "artifact": {
         "digest": "sha256:b9a4fac609823e0504894128bbc2fae86495ed70d39c449713d8a08b7306b713",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_agent_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/invitation-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.invitation_services:_apply_invitation_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.invitation-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:39a0e2613f217b24727a10602aaafe29da2ab8b5faa888457ee7094d5ba4ab3b",
+      "artifact": {
+        "digest": "sha256:e17d6a42b9a801ec509f3695ed53dbda6579a609cb04ee3a9250abe5d6a3bdeb",
+        "source": "repo+python://src/infrastructure/plugins/v2/invitation_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/invitation-services",
+      "entrypoint": "src.infrastructure.plugins.v2.invitation_services:_apply_invitation_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.invitation-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.invitation-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e91771853ef71a46c07c5eb4aa883f132831a2996b8043ba4681f355989a5016",
+      "artifact": {
+        "digest": "sha256:e17d6a42b9a801ec509f3695ed53dbda6579a609cb04ee3a9250abe5d6a3bdeb",
+        "source": "repo+python://src/infrastructure/plugins/v2/invitation_services.py"
       }
     },
     {
@@ -4946,7 +5014,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:4222afdc86e4fa3045780882c4be2d91157d4e0b0eab2d960d35bdf61a455887",
+        "digest": "sha256:ecbf0218218b74447fa66d71155a2a17be81efa3985a0d16dc8f270ee04f3d49",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_invitations_http_routes.py"
       }
     },
@@ -4975,7 +5043,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:b471bba9d1d1482f11fb4595f8035b8cf87ee37663fa435d878a25e38b9132ed",
+        "digest": "sha256:0daddcc49d4726d06875c1f7e0bb765980589d02c02e77c24b1d520a21a80ae2",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_invitations_public_http_routes.py"
       }
     },

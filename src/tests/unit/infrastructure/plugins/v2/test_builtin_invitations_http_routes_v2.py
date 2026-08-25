@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from starlette.requests import Request
 
-from src.application.schemas.invitation_schemas import (
-    CreateInvitationRequest,
-    InvitationListResponse,
-    InvitationResponse,
-)
+from src.application.schemas.invitation_schemas import InvitationListResponse
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers import invitations as invitation_router
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
@@ -44,6 +44,11 @@ def test_invitations_row_is_a_complete_explicit_v2_contribution() -> None:
         subject.INVITATIONS_HTTP_ROUTES_ENTRY_V2
     }
     assert {definition.replaces_builtin_row_id for definition in definitions} == {"invitations"}
+    assert tuple(definition.endpoint for definition in definitions) == (
+        invitation_router.create_invitation,
+        invitation_router.list_pending_invitations,
+        invitation_router.cancel_invitation,
+    )
 
 
 @pytest.mark.unit
@@ -62,9 +67,7 @@ def test_invitations_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -78,18 +81,40 @@ async def test_generation_dispatcher_executes_invitations_v2_before_static_fallb
 ) -> None:
     user = object()
     db = object()
-    calls: list[tuple[str, object, object, int, int]] = []
+    calls: list[tuple[object, ...]] = []
     response = InvitationListResponse(items=[], total=0, limit=25, offset=5)
 
-    async def list_handler(
-        tenant_id: str,
-        current_user: object,
-        db_value: object,
-        limit: int,
-        offset: int,
-    ) -> InvitationListResponse:
-        calls.append((tenant_id, current_user, db_value, limit, offset))
-        return response
+    class InvitationService:
+        async def list_pending(
+            self,
+            tenant_id: str,
+            *,
+            limit: int,
+            offset: int,
+        ) -> tuple[list[object], int]:
+            calls.append(("list", tenant_id, limit, offset))
+            return [], 0
+
+    @asynccontextmanager
+    async def authority_context(**kwargs: object):
+        request = cast(Request, kwargs["request"])
+        calls.append(
+            (
+                "authority",
+                kwargs["tenant_id"],
+                kwargs["current_user"],
+                kwargs["db"],
+                request.scope["route"].path,
+            )
+        )
+        yield SimpleNamespace(
+            db=kwargs["db"],
+            current_user=kwargs["current_user"],
+            services=SimpleNamespace(invitations=InvitationService()),
+        )
+
+    async def allow_admin(*args: object) -> None:
+        calls.append(("admin", *args))
 
     async def current_user_override() -> object:
         return user
@@ -97,7 +122,12 @@ async def test_generation_dispatcher_executes_invitations_v2_before_static_fallb
     async def db_override() -> object:
         return db
 
-    monkeypatch.setattr(subject, "_list_pending_invitations", list_handler)
+    monkeypatch.setattr(
+        invitation_router,
+        "invitation_application_authority_context_v2",
+        authority_context,
+    )
+    monkeypatch.setattr(invitation_router, "_require_invitation_admin", allow_admin)
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.invitations_route_definitions_v2(),
@@ -143,95 +173,32 @@ async def test_generation_dispatcher_executes_invitations_v2_before_static_fallb
 
     assert result.status_code == 200
     assert result.json() == response.model_dump(mode="json")
-    assert calls == [("tenant-1", user, db, 25, 5)]
+    assert calls == [
+        (
+            "authority",
+            "tenant-1",
+            user,
+            db,
+            "/api/v1/tenants/{tenant_id}/invitations",
+        ),
+        ("admin", db, user, "tenant-1"),
+        ("list", "tenant-1", 25, 5),
+    ]
     await host.close()
 
 
 @pytest.mark.unit
-async def test_invitations_v2_handlers_delegate_without_static_router_mount(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = datetime(2026, 8, 22, tzinfo=UTC)
-    body = CreateInvitationRequest(email="invitee@example.com", role="member")
-    created = InvitationResponse(
-        id="invitation-1",
-        tenant_id="tenant-1",
-        email=str(body.email),
-        role=body.role,
-        status="pending",
-        invited_by="owner-1",
-        expires_at=now,
-        created_at=now,
+async def test_invitations_v2_handlers_delegate_without_static_router_mount() -> None:
+    definitions = subject.invitations_route_definitions_v2()
+
+    assert tuple(definition.endpoint for definition in definitions) == (
+        invitation_router.create_invitation,
+        invitation_router.list_pending_invitations,
+        invitation_router.cancel_invitation,
     )
-    listed = InvitationListResponse(items=[created], total=1, limit=25, offset=5)
-    user = object()
-    db = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    async def create_handler(
-        tenant_id: str,
-        request_body: CreateInvitationRequest,
-        current_user: object,
-        db_value: object,
-    ) -> InvitationResponse:
-        calls.append(("create", (tenant_id, request_body, current_user, db_value)))
-        return created
-
-    async def list_handler(
-        tenant_id: str,
-        current_user: object,
-        db_value: object,
-        limit: int,
-        offset: int,
-    ) -> InvitationListResponse:
-        calls.append(("list", (tenant_id, current_user, db_value, limit, offset)))
-        return listed
-
-    async def cancel_handler(
-        tenant_id: str,
-        invitation_id: str,
-        current_user: object,
-        db_value: object,
-    ) -> None:
-        calls.append(("cancel", (tenant_id, invitation_id, current_user, db_value)))
-
-    monkeypatch.setattr(subject, "_create_invitation", create_handler)
-    monkeypatch.setattr(subject, "_list_pending_invitations", list_handler)
-    monkeypatch.setattr(subject, "_cancel_invitation", cancel_handler)
-
-    assert (
-        await subject.create_invitation_v2(
-            tenant_id="tenant-1",
-            body=body,
-            current_user=user,
-            db=db,
-        )
-        == created
-    )
-    assert (
-        await subject.list_pending_invitations_v2(
-            tenant_id="tenant-1",
-            current_user=user,
-            db=db,
-            limit=25,
-            offset=5,
-        )
-        == listed
-    )
-    assert (
-        await subject.cancel_invitation_v2(
-            tenant_id="tenant-1",
-            invitation_id="invitation-1",
-            current_user=user,
-            db=db,
-        )
-        is None
-    )
-    assert calls == [
-        ("create", ("tenant-1", body, user, db)),
-        ("list", ("tenant-1", user, db, 25, 5)),
-        ("cancel", ("tenant-1", "invitation-1", user, db)),
-    ]
+    assert not hasattr(subject, "create_invitation_v2")
+    assert not hasattr(subject, "list_pending_invitations_v2")
+    assert not hasattr(subject, "cancel_invitation_v2")
 
 
 @pytest.mark.unit

@@ -50,6 +50,7 @@ from .instance_channel_services import instance_channel_service_definitions_v2
 from .instance_deploy_services import instance_deploy_service_definitions_v2
 from .instance_file_services import instance_file_service_definitions_v2
 from .instance_template_services import instance_template_service_definitions_v2
+from .invitation_services import invitation_service_definitions_v2
 from .llm_client_service import builtin_tenant_llm_client_factory_definition_v2
 from .llm_health_runtime import llm_health_runtime_definition_v2
 from .mcp_services import mcp_service_definitions_v2
@@ -282,6 +283,7 @@ def builtin_runtime_definitions_v2(
         *gene_service_definitions_v2(),
         *tenant_skill_config_service_definitions_v2(),
         *tenant_agent_config_service_definitions_v2(),
+        *invitation_service_definitions_v2(),
         *tenant_webhook_service_definitions_v2(),
         *instance_deploy_service_definitions_v2(redis_client=sandbox_redis_client),
         *instance_file_service_definitions_v2(),

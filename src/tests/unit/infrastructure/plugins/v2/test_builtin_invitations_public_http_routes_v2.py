@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from starlette.requests import Request
 
-from src.application.schemas.invitation_schemas import (
-    AcceptInvitationRequest,
-    InvitationResponse,
-    InvitationVerifyResponse,
-)
+from src.application.schemas.invitation_schemas import InvitationVerifyResponse
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.routers import invitations as invitation_router
 from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
     mount_generation_http_dispatcher_v2,
 )
@@ -44,6 +45,10 @@ def test_invitations_public_row_is_a_complete_explicit_v2_contribution() -> None
     assert {definition.replaces_builtin_row_id for definition in definitions} == {
         "invitations-public"
     }
+    assert tuple(definition.endpoint for definition in definitions) == (
+        invitation_router.verify_invitation,
+        invitation_router.accept_invitation,
+    )
 
 
 @pytest.mark.unit
@@ -62,9 +67,7 @@ def test_invitations_public_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -76,18 +79,41 @@ def test_invitations_public_row_preserves_route_order_and_openapi() -> None:
 async def test_generation_dispatcher_executes_public_invitations_v2_before_static_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db = object()
-    calls: list[tuple[str, object]] = []
+    db = SimpleNamespace(commit=AsyncMock())
+    calls: list[tuple[object, ...]] = []
     response = InvitationVerifyResponse(valid=False)
 
-    async def verify_handler(token: str, db_value: object) -> InvitationVerifyResponse:
-        calls.append((token, db_value))
-        return response
+    class InvitationService:
+        async def validate_token(self, token: str) -> None:
+            calls.append(("verify", token))
+            return None
+
+    @asynccontextmanager
+    async def authority_context(**kwargs: object):
+        request = cast(Request, kwargs["request"])
+        calls.append(
+            (
+                "authority",
+                kwargs["tenant_id"],
+                kwargs["current_user"],
+                kwargs["db"],
+                request.scope["route"].path,
+            )
+        )
+        yield SimpleNamespace(
+            db=kwargs["db"],
+            current_user=kwargs["current_user"],
+            services=SimpleNamespace(invitations=InvitationService()),
+        )
 
     async def db_override() -> object:
         return db
 
-    monkeypatch.setattr(subject, "_verify_invitation", verify_handler)
+    monkeypatch.setattr(
+        invitation_router,
+        "invitation_application_authority_context_v2",
+        authority_context,
+    )
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=subject.invitations_public_route_definitions_v2(),
@@ -127,67 +153,30 @@ async def test_generation_dispatcher_executes_public_invitations_v2_before_stati
 
     assert result.status_code == 200
     assert result.json() == response.model_dump(mode="json")
-    assert calls == [("opaque-token", db)]
+    assert calls == [
+        (
+            "authority",
+            None,
+            None,
+            db,
+            "/api/v1/invitations/verify/{token}",
+        ),
+        ("verify", "opaque-token"),
+    ]
+    db.commit.assert_awaited_once_with()
     await host.close()
 
 
 @pytest.mark.unit
-async def test_public_invitations_v2_handlers_delegate_without_static_router_mount(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = datetime(2026, 8, 22, tzinfo=UTC)
-    body = AcceptInvitationRequest(display_name="Invitee")
-    verified = InvitationVerifyResponse(
-        valid=True,
-        email="invitee@example.com",
-        tenant_id="tenant-1",
-        role="member",
-        expires_at=now,
+async def test_public_invitations_v2_handlers_delegate_without_static_router_mount() -> None:
+    definitions = subject.invitations_public_route_definitions_v2()
+
+    assert tuple(definition.endpoint for definition in definitions) == (
+        invitation_router.verify_invitation,
+        invitation_router.accept_invitation,
     )
-    accepted = InvitationResponse(
-        id="invitation-1",
-        tenant_id="tenant-1",
-        email="invitee@example.com",
-        role="member",
-        status="accepted",
-        invited_by="owner-1",
-        expires_at=now,
-        created_at=now,
-    )
-    user = object()
-    db = object()
-    calls: list[tuple[str, tuple[object, ...]]] = []
-
-    async def verify_handler(token: str, db_value: object) -> InvitationVerifyResponse:
-        calls.append(("verify", (token, db_value)))
-        return verified
-
-    async def accept_handler(
-        token: str,
-        request_body: AcceptInvitationRequest,
-        current_user: object,
-        db_value: object,
-    ) -> InvitationResponse:
-        calls.append(("accept", (token, request_body, current_user, db_value)))
-        return accepted
-
-    monkeypatch.setattr(subject, "_verify_invitation", verify_handler)
-    monkeypatch.setattr(subject, "_accept_invitation", accept_handler)
-
-    assert await subject.verify_invitation_v2(token="opaque-token", db=db) == verified
-    assert (
-        await subject.accept_invitation_v2(
-            token="opaque-token",
-            body=body,
-            current_user=user,
-            db=db,
-        )
-        == accepted
-    )
-    assert calls == [
-        ("verify", ("opaque-token", db)),
-        ("accept", ("opaque-token", body, user, db)),
-    ]
+    assert not hasattr(subject, "verify_invitation_v2")
+    assert not hasattr(subject, "accept_invitation_v2")
 
 
 @pytest.mark.unit
