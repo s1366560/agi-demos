@@ -27,9 +27,6 @@ from src.configuration.containers import (
     ProjectContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.ports.repositories.workspace.cyber_objective_repository import (
-    CyberObjectiveRepository,
-)
 from src.domain.ports.repositories.workspace.topology_repository import (
     TopologyRepository,
 )
@@ -162,9 +159,6 @@ class DIContainer:
 
     def topology_service(self) -> TopologyService:
         return cast(TopologyService, self._project.topology_service())
-
-    def cyber_objective_repository(self) -> CyberObjectiveRepository:
-        return cast(CyberObjectiveRepository, self._project.cyber_objective_repository())
 
     def workspace_message_service(
         self,

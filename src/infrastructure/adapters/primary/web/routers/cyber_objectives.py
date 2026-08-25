@@ -1,12 +1,11 @@
+"""Workspace Core-owned cyber-objective HTTP contract declarations."""
+
 from __future__ import annotations
 
-import logging
-from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_cyber_schemas import (
     CyberObjectiveCreate,
@@ -14,36 +13,13 @@ from src.application.schemas.workspace_cyber_schemas import (
     CyberObjectiveResponse,
     CyberObjectiveUpdate,
 )
-from src.application.services.workspace_agent_autonomy import (
-    build_projected_objective_root_metadata,
-)
-from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
-from src.application.services.workspace_task_event_publisher import WorkspaceTaskEventPublisher
-from src.application.services.workspace_task_service import WorkspaceTaskService
-from src.domain.model.workspace.cyber_objective import (
-    CyberObjective,
-    CyberObjectiveType,
-)
+from src.domain.model.workspace.cyber_objective import CyberObjectiveType
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.agent.utils import (
-    get_container_with_db,
+from src.infrastructure.adapters.primary.web.routers.workspace_tasks import WorkspaceTaskResponse
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
 )
-from src.infrastructure.adapters.primary.web.routers.workspace_access import (
-    require_workspace_access,
-)
-from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
-    schedule_autonomy_tick,
-)
-from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
-    WorkspaceTaskResponse,
-    _to_response as _task_to_response,
-)
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
-from src.infrastructure.i18n import gettext as _
-
-logger = logging.getLogger(__name__)
 
 PreferredLanguage = Literal["en-US", "zh-CN"]
 
@@ -60,100 +36,6 @@ router = APIRouter(
 )
 
 
-def _get_workspace_task_service(request: Request, db: AsyncSession) -> WorkspaceTaskService:
-    container = get_container_with_db(request, db)
-    return WorkspaceTaskService(
-        workspace_repo=container.workspace_repository(),
-        workspace_member_repo=container.workspace_member_repository(),
-        workspace_agent_repo=container.workspace_agent_repository(),
-        workspace_task_repo=container.workspace_task_repository(),
-    )
-
-
-def _get_workspace_task_command_service(
-    request: Request, db: AsyncSession
-) -> WorkspaceTaskCommandService:
-    return WorkspaceTaskCommandService(_get_workspace_task_service(request, db))
-
-
-def _get_workspace_task_event_publisher(request: Request) -> WorkspaceTaskEventPublisher:
-    return WorkspaceTaskEventPublisher(request.app.state.container.redis())
-
-
-def _to_response(obj: CyberObjective) -> CyberObjectiveResponse:
-    return CyberObjectiveResponse(
-        id=obj.id,
-        workspace_id=obj.workspace_id,
-        title=obj.title,
-        description=obj.description,
-        obj_type=obj.obj_type,
-        parent_id=obj.parent_id,
-        progress=obj.progress,
-        created_by=obj.created_by,
-        created_at=obj.created_at,
-        updated_at=obj.updated_at,
-    )
-
-
-async def _ensure_objective_root_task(
-    *,
-    request: Request,
-    db: AsyncSession,
-    workspace_id: str,
-    current_user: User,
-    objective: CyberObjective,
-) -> list[tuple[str, str]]:
-    container = get_container_with_db(request, db)
-    task_repo = container.workspace_task_repository()
-    existing_task = await task_repo.find_root_by_objective_id(workspace_id, objective.id)
-    if existing_task is not None:
-        return []
-
-    command_service = _get_workspace_task_command_service(request, db)
-    event_publisher = _get_workspace_task_event_publisher(request)
-    metadata = build_projected_objective_root_metadata(objective)
-    user_pref = getattr(current_user, "preferred_language", None)
-    if isinstance(user_pref, str) and user_pref in {"en-US", "zh-CN"}:
-        metadata[PREFERRED_LANGUAGE] = user_pref
-    task = await command_service.create_task(
-        workspace_id=workspace_id,
-        actor_user_id=current_user.id,
-        title=objective.title,
-        description=objective.description,
-        metadata=metadata,
-    )
-    await db.commit()
-    try:
-        await event_publisher.publish_pending_events(command_service.consume_pending_events())
-    except Exception:
-        logger.exception(
-            "Failed to publish auto-projected objective workspace task events",
-            extra={"workspace_id": workspace_id, "objective_id": objective.id, "task_id": task.id},
-        )
-    return command_service.consume_pending_autonomy_ticks()
-
-
-async def _auto_trigger_objective_execution(
-    *,
-    request: Request,
-    db: AsyncSession,
-    workspace_id: str,
-    current_user: User,
-    objective: CyberObjective,
-) -> None:
-    pending_ticks = await _ensure_objective_root_task(
-        request=request,
-        db=db,
-        workspace_id=workspace_id,
-        current_user=current_user,
-        objective=objective,
-    )
-    if not pending_ticks:
-        pending_ticks = [(workspace_id, current_user.id)]
-    for tick_workspace_id, tick_actor_user_id in pending_ticks:
-        schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
-
-
 @router.post(
     "",
     response_model=CyberObjectiveResponse,
@@ -164,45 +46,9 @@ async def create_objective(
     project_id: str,
     workspace_id: str,
     payload: CyberObjectiveCreate,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    repo = container.cyber_objective_repository()
-    objective = CyberObjective(
-        workspace_id=workspace_id,
-        title=payload.title,
-        description=payload.description,
-        obj_type=payload.obj_type,
-        parent_id=payload.parent_id,
-        progress=payload.progress,
-        created_by=current_user.id,
-    )
-    saved = await repo.save(objective)
-    await db.commit()
-    try:
-        await _auto_trigger_objective_execution(
-            request=request,
-            db=db,
-            workspace_id=workspace_id,
-            current_user=current_user,
-            objective=saved,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to auto-trigger workspace objective execution",
-            extra={"workspace_id": workspace_id, "objective_id": saved.id},
-        )
-    return _to_response(saved)
+    raise workspace_core_unavailable_error()
 
 
 @router.get("", response_model=CyberObjectiveListResponse)
@@ -210,29 +56,13 @@ async def list_objectives(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
-    request: Request,
     obj_type: CyberObjectiveType | None = None,
     parent_id: str | None = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveListResponse:
-    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
-    container = get_container_with_db(request, db)
-    repo = container.cyber_objective_repository()
-    obj_type_str = obj_type.value if obj_type is not None else None
-    items = await repo.find_by_workspace(
-        workspace_id=workspace_id,
-        obj_type=obj_type_str,
-        parent_id=parent_id,
-        limit=limit,
-        offset=offset,
-    )
-    return CyberObjectiveListResponse(
-        items=[_to_response(item) for item in items],
-        total=len(items),
-    )
+    raise workspace_core_unavailable_error()
 
 
 @router.get("/{objective_id}", response_model=CyberObjectiveResponse)
@@ -241,20 +71,9 @@ async def get_objective(
     project_id: str,
     workspace_id: str,
     objective_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
-    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
-    container = get_container_with_db(request, db)
-    repo = container.cyber_objective_repository()
-    obj = await repo.find_by_id(objective_id)
-    if obj is None or obj.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Objective not found"),
-        )
-    return _to_response(obj)
+    raise workspace_core_unavailable_error()
 
 
 @router.patch("/{objective_id}", response_model=CyberObjectiveResponse)
@@ -264,40 +83,9 @@ async def update_objective(
     workspace_id: str,
     objective_id: str,
     payload: CyberObjectiveUpdate,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    repo = container.cyber_objective_repository()
-    obj = await repo.find_by_id(objective_id)
-    if obj is None or obj.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Objective not found"),
-        )
-    if payload.title is not None:
-        obj.title = payload.title
-    if payload.description is not None:
-        obj.description = payload.description
-    if payload.obj_type is not None:
-        obj.obj_type = payload.obj_type
-    if payload.parent_id is not None:
-        obj.parent_id = payload.parent_id
-    if payload.progress is not None:
-        obj.progress = payload.progress
-    obj.updated_at = datetime.now(UTC)
-    saved = await repo.save(obj)
-    await db.commit()
-    return _to_response(saved)
+    raise workspace_core_unavailable_error()
 
 
 @router.delete(
@@ -309,28 +97,9 @@ async def delete_objective(
     project_id: str,
     workspace_id: str,
     objective_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> None:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    repo = container.cyber_objective_repository()
-    obj = await repo.find_by_id(objective_id)
-    if obj is None or obj.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Objective not found"),
-        )
-    await repo.delete(objective_id)
-    await db.commit()
+    raise workspace_core_unavailable_error()
 
 
 @router.post(
@@ -343,92 +112,7 @@ async def project_objective_to_task(
     project_id: str,
     workspace_id: str,
     objective_id: str,
-    request: Request,
-    response: Response,
     body: ProjectObjectiveToTaskRequest | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    await require_workspace_access(
-        db,
-        current_user,
-        tenant_id,
-        project_id,
-        workspace_id,
-        require_editor=True,
-    )
-    container = get_container_with_db(request, db)
-    objective_repo = container.cyber_objective_repository()
-    task_repo = container.workspace_task_repository()
-    task_service = _get_workspace_task_service(request, db)
-    objective = await objective_repo.find_by_id(objective_id)
-    if objective is None or objective.workspace_id != workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Objective not found"),
-        )
-
-    try:
-        await task_service.list_tasks(
-            workspace_id=workspace_id,
-            actor_user_id=current_user.id,
-            limit=1,
-            offset=0,
-        )
-    except PermissionError as exc:
-        detail = _("Access denied")
-        if str(exc) == "User must be a workspace member":
-            detail = _("User must be a workspace member")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Workspace task not found"),
-        ) from exc
-
-    existing_task = await task_repo.find_root_by_objective_id(workspace_id, objective_id)
-    if existing_task is not None:
-        response.status_code = status.HTTP_200_OK
-        return _task_to_response(existing_task)
-
-    command_service = _get_workspace_task_command_service(request, db)
-    event_publisher = _get_workspace_task_event_publisher(request)
-    try:
-        metadata = build_projected_objective_root_metadata(objective)
-        if body is not None and body.preferred_language is not None:
-            metadata[PREFERRED_LANGUAGE] = body.preferred_language
-        else:
-            user_pref = getattr(current_user, "preferred_language", None)
-            if isinstance(user_pref, str) and user_pref in {"en-US", "zh-CN"}:
-                metadata[PREFERRED_LANGUAGE] = user_pref
-        task = await command_service.create_task(
-            workspace_id=workspace_id,
-            actor_user_id=current_user.id,
-            title=objective.title,
-            description=objective.description,
-            metadata=metadata,
-        )
-        await db.commit()
-    except Exception as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Failed to project objective to task"),
-        ) from exc
-    try:
-        await event_publisher.publish_pending_events(command_service.consume_pending_events())
-    except Exception:
-        logger.exception(
-            "Failed to publish projected objective workspace task events",
-            extra={"workspace_id": workspace_id, "objective_id": objective_id},
-        )
-    for tick_workspace_id, tick_actor_user_id in command_service.consume_pending_autonomy_ticks():
-        try:
-            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
-        except Exception:
-            logger.warning(
-                "schedule_autonomy_tick failed after manual objective projection",
-                exc_info=True,
-                extra={"workspace_id": tick_workspace_id, "objective_id": objective_id},
-            )
-    return _task_to_response(task)
+    raise workspace_core_unavailable_error()

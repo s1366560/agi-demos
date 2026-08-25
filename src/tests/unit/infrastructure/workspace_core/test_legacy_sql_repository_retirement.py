@@ -58,7 +58,6 @@ def test_legacy_sql_workspace_repositories_fail_closed_without_touching_session(
     [
         "topology_repository",
         "topology_service",
-        "cyber_objective_repository",
     ],
 )
 def test_project_container_workspace_factories_fail_closed_without_sql(
@@ -72,6 +71,12 @@ def test_project_container_workspace_factories_fail_closed_without_sql(
 
     with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
         getattr(container, factory_name)()
+
+
+@pytest.mark.unit
+def test_cyber_objective_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    assert "cyber_objective_repository" not in vars(ProjectContainer)
+    assert "cyber_objective_repository" not in vars(DIContainer)
 
 
 @pytest.mark.unit
