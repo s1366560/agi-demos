@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict
 from enum import Enum
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -318,18 +319,24 @@ def desired_bundle_set_v2_to_payload(desired: DesiredBundleSetV2) -> dict[str, A
     return cast(dict[str, Any], _json_value(asdict(desired)))
 
 
+@cache
 def _schema() -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(_SCHEMA_PATH.read_text(encoding="utf-8")))
 
 
-def _validate_schema(definition_name: str, payload: object) -> None:
+@cache
+def _schema_validator(definition_name: str) -> jsonschema.Draft202012Validator:
     schema = _schema()
     scoped_schema = {
         "$schema": schema["$schema"],
         "$defs": schema["$defs"],
         "$ref": f"#/$defs/{definition_name}",
     }
-    validator = jsonschema.Draft202012Validator(scoped_schema)
+    return jsonschema.Draft202012Validator(scoped_schema)
+
+
+def _validate_schema(definition_name: str, payload: object) -> None:
+    validator = _schema_validator(definition_name)
     errors = sorted(
         validator.iter_errors(cast(Any, payload)),
         key=lambda item: list(item.absolute_path),
@@ -647,6 +654,23 @@ def _validate_contract_schema(
     context: str,
     require_object: bool = False,
 ) -> None:
+    schema_bytes = canonical_json_v2(schema)
+    _validate_contract_schema_cached(
+        schema_bytes,
+        context=context,
+        require_object=require_object,
+    )
+
+
+@lru_cache(maxsize=8192)
+def _validate_contract_schema_cached(
+    schema_bytes: bytes,
+    *,
+    context: str,
+    require_object: bool,
+) -> None:
+    """Validate each exact public schema once per process; failures are not cached."""
+    schema = cast("dict[str, Any]", json.loads(schema_bytes))
     if schema.get("$schema") != JSON_SCHEMA_DIALECT_V2:
         _fail("invalid_contract_schema", f"{context} must declare JSON Schema draft 2020-12")
     if require_object and schema.get("type") != "object":
