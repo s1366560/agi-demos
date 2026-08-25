@@ -30,17 +30,23 @@ class _FailingClusterService:
         raise ValueError("Cluster cluster-secret not found")
 
 
-class _Container:
-    def __init__(self) -> None:
-        self.service = _FailingClusterService()
-
-    def cluster_service(self) -> _FailingClusterService:
-        return self.service
-
-
-@pytest.fixture(autouse=True)
-def failing_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
+def _authority(
+    *,
+    service: object,
+    db: object,
+    user: object,
+    runner_pools: object | None = None,
+    tenant_id: str = "tenant-1",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        db=db,
+        current_user=user,
+        tenant_id=tenant_id,
+        services=SimpleNamespace(
+            clusters=service,
+            runner_pools=runner_pools or SimpleNamespace(),
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +68,16 @@ def db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock())
 
 
+@pytest.fixture
+def user() -> SimpleNamespace:
+    return SimpleNamespace(id="user-1")
+
+
+@pytest.fixture
+def authority(db: SimpleNamespace, user: SimpleNamespace) -> SimpleNamespace:
+    return _authority(service=_FailingClusterService(), db=db, user=user)
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("call_name", "call_args"),
@@ -69,42 +85,31 @@ def db() -> SimpleNamespace:
         (
             "get_cluster",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
-                "tenant_id": "tenant-1",
             },
         ),
         (
             "update_cluster",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
                 "data": ClusterUpdate(name="Updated"),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "delete_cluster",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "get_cluster_health",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
-                "tenant_id": "tenant-1",
             },
         ),
         (
             "update_health_status",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
                 "data": router.HealthStatusUpdate(
                     health_status="unreachable",
@@ -115,8 +120,6 @@ def db() -> SimpleNamespace:
                     total_memory_gb=16,
                     used_memory_gb=2,
                 ),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
     ],
@@ -124,10 +127,10 @@ def db() -> SimpleNamespace:
 async def test_cluster_routes_sanitize_not_found_errors(
     call_name: str,
     call_args: dict[str, object],
-    db: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     with pytest.raises(HTTPException) as exc_info:
-        await getattr(router, call_name)(**call_args, db=db)
+        await getattr(router, call_name)(**call_args, authority=authority)
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     assert exc_info.value.detail == "Cluster not found"
@@ -141,35 +144,25 @@ async def test_cluster_routes_sanitize_not_found_errors(
         (
             "create_cluster",
             {
-                "request": SimpleNamespace(),
                 "data": ClusterCreate(name="Cluster"),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "update_cluster",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
                 "data": ClusterUpdate(name="Updated"),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "delete_cluster",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
             "update_health_status",
             {
-                "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
                 "data": router.HealthStatusUpdate(
                     health_status="unreachable",
@@ -180,8 +173,6 @@ async def test_cluster_routes_sanitize_not_found_errors(
                     total_memory_gb=16,
                     used_memory_gb=2,
                 ),
-                "tenant_id": "tenant-1",
-                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
     ],
@@ -190,7 +181,7 @@ async def test_cluster_write_routes_require_admin_before_mutation(
     monkeypatch: pytest.MonkeyPatch,
     call_name: str,
     call_args: dict[str, object],
-    db: SimpleNamespace,
+    authority: SimpleNamespace,
 ) -> None:
     async def deny_admin(
         *_args: object,
@@ -201,17 +192,17 @@ async def test_cluster_write_routes_require_admin_before_mutation(
     monkeypatch.setattr(router, "require_tenant_access", deny_admin)
 
     with pytest.raises(HTTPException) as exc_info:
-        await getattr(router, call_name)(**call_args, db=db)
+        await getattr(router, call_name)(**call_args, authority=authority)
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "Admin access required"
-    db.commit.assert_not_awaited()
+    authority.db.commit.assert_not_awaited()
 
 
 @pytest.mark.unit
 async def test_list_clusters_returns_full_total(
-    monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
+    user: SimpleNamespace,
 ) -> None:
     page_cluster = SimpleNamespace(
         id="cluster-page-1",
@@ -237,18 +228,10 @@ async def test_list_clusters_returns_full_total(
         ) -> tuple[list[object], int]:
             return [page_cluster], 21
 
-    class Container:
-        def cluster_service(self) -> ClusterService:
-            return ClusterService()
-
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
-
     response = await router.list_clusters(
-        request=SimpleNamespace(),
-        tenant_id="tenant-1",
-        db=db,
         page=2,
         page_size=1,
+        authority=_authority(service=ClusterService(), db=db, user=user),
     )
 
     assert len(response.clusters) == 1

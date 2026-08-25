@@ -38,6 +38,7 @@ from .channel_adapters import (
     builtin_feishu_channel_adapter_definition_v2,
 )
 from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
+from .cluster_services import cluster_service_definitions_v2
 from .cron_services import cron_service_definitions_v2
 from .docker_monitor_runtime import docker_event_monitor_definition_v2
 from .engine_services import engine_catalog_definition_v2
@@ -271,6 +272,7 @@ def builtin_runtime_definitions_v2(
         artifact_content_application_definition_v2(),
         *artifact_lifecycle_service_definitions_v2(),
         attachment_application_service_definition_v2(),
+        *cluster_service_definitions_v2(),
         *instance_file_service_definitions_v2(),
         *instance_channel_service_definitions_v2(),
         *instance_template_service_definitions_v2(),

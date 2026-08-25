@@ -4,7 +4,7 @@ import logging
 from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,31 +23,19 @@ from src.application.schemas.cluster_schemas import (
     ClusterUpdate,
 )
 from src.configuration.config import get_settings
-from src.configuration.di_container import DIContainer
 from src.domain.model.cluster.cluster import Cluster
 from src.domain.model.cluster.enums import ClusterStatus
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
+from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
+    ClusterApplicationAuthorityV2,
+    cluster_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
-from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     ACPRunnerInstanceModel,
     ACPRunnerPoolModel,
     User as DBUser,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_acp_runner_repository import (
-    ACPRunnerRepository,
-)
 from src.infrastructure.i18n import gettext as _
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """Get DI container with database session for the current request."""
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
 
 logger = logging.getLogger(__name__)
 
@@ -161,15 +149,14 @@ def _pool_response(
 
 
 async def _require_cluster_for_tenant(
-    request: Request,
-    db: AsyncSession,
+    authority: ClusterApplicationAuthorityV2,
     *,
     cluster_id: str,
-    tenant_id: str,
 ) -> Cluster:
-    container = get_container_with_db(request, db)
-    service = container.cluster_service()
-    cluster = await service.get_cluster(cluster_id, tenant_id=tenant_id)
+    cluster = await authority.services.clusters.get_cluster(
+        cluster_id,
+        tenant_id=authority.tenant_id,
+    )
     if not cluster:
         raise _cluster_not_found_error()
     return cluster
@@ -207,28 +194,27 @@ class HealthStatusUpdate(BaseModel):
     status_code=status.HTTP_201_CREATED,
 )
 async def create_cluster(
-    request: Request,
     data: ClusterCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterResponse:
     """Create a new cluster."""
     try:
-        await _require_cluster_admin(db, current_user, tenant_id)
+        await _require_cluster_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
 
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        result = await service.create_cluster(
+        result = await authority.services.clusters.create_cluster(
             name=data.name,
-            tenant_id=tenant_id,
-            created_by=current_user.id,
+            tenant_id=authority.tenant_id,
+            created_by=authority.current_user.id,
             compute_provider=data.compute_provider,
             proxy_endpoint=data.proxy_endpoint,
             provider_config=data.provider_config,
             credentials_encrypted=data.credentials_encrypted,
         )
-        await db.commit()
+        await authority.db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
@@ -239,19 +225,15 @@ async def create_cluster(
 
 @router.get("/", response_model=ClusterListResponse)
 async def list_clusters(
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterListResponse:
     """List clusters for the current tenant."""
     try:
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
         offset = (page - 1) * page_size
-        clusters, total = await service.list_clusters_with_total(
-            tenant_id=tenant_id,
+        clusters, total = await authority.services.clusters.list_clusters_with_total(
+            tenant_id=authority.tenant_id,
             limit=page_size,
             offset=offset,
         )
@@ -272,15 +254,14 @@ async def list_clusters(
 @router.get("/{cluster_id}", response_model=ClusterResponse)
 async def get_cluster(
     cluster_id: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterResponse:
     """Get a cluster by ID."""
     try:
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
+        result = await authority.services.clusters.get_cluster(
+            cluster_id,
+            tenant_id=authority.tenant_id,
+        )
         if not result:
             raise _cluster_not_found_error()
         return ClusterResponse.model_validate(result, from_attributes=True)
@@ -294,28 +275,27 @@ async def get_cluster(
 @router.put("/{cluster_id}", response_model=ClusterResponse)
 async def update_cluster(
     cluster_id: str,
-    request: Request,
     data: ClusterUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterResponse:
     """Update a cluster."""
     try:
-        await _require_cluster_admin(db, current_user, tenant_id)
+        await _require_cluster_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
 
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        result = await service.update_cluster(
+        result = await authority.services.clusters.update_cluster(
             cluster_id=cluster_id,
             name=data.name,
             compute_provider=data.compute_provider,
             proxy_endpoint=data.proxy_endpoint,
             provider_config=data.provider_config,
             credentials_encrypted=data.credentials_encrypted,
-            tenant_id=tenant_id,
+            tenant_id=authority.tenant_id,
         )
-        await db.commit()
+        await authority.db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
         raise _cluster_not_found_error() from e
@@ -333,19 +313,21 @@ async def update_cluster(
 )
 async def delete_cluster(
     cluster_id: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> None:
     """Delete a cluster."""
     try:
-        await _require_cluster_admin(db, current_user, tenant_id)
+        await _require_cluster_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
 
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        await service.delete_cluster(cluster_id, tenant_id=tenant_id)
-        await db.commit()
+        await authority.services.clusters.delete_cluster(
+            cluster_id,
+            tenant_id=authority.tenant_id,
+        )
+        await authority.db.commit()
     except ValueError as e:
         raise _cluster_not_found_error() from e
     except HTTPException:
@@ -361,15 +343,14 @@ async def delete_cluster(
 )
 async def list_cluster_acp_runner_pools(
     cluster_id: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> list[ACPRunnerPoolResponse]:
     """List ACP runner pools attached to a cluster."""
-    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
-    repo = ACPRunnerRepository(db)
-    pools = await repo.list_pools_by_cluster(tenant_id=tenant_id, cluster_id=cluster_id)
-    instances = await repo.list_instances_by_tenant(tenant_id)
+    _cluster = await _require_cluster_for_tenant(authority, cluster_id=cluster_id)
+    pools, instances = await authority.services.runner_pools.list_for_cluster(
+        tenant_id=authority.tenant_id,
+        cluster_id=cluster_id,
+    )
     return [_pool_response(pool, instances) for pool in pools]
 
 
@@ -380,21 +361,24 @@ async def list_cluster_acp_runner_pools(
 )
 async def create_cluster_acp_runner_pool(
     cluster_id: str,
-    request: Request,
     data: ACPRunnerPoolCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ACPRunnerPoolResponse:
     """Create an ACP runner pool attached to a cluster."""
-    await _require_cluster_admin(db, current_user, tenant_id)
-    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
-    repo = ACPRunnerRepository(db)
-    existing = await repo.get_pool_by_tenant_key(tenant_id=tenant_id, pool_key=data.pool_key)
+    await _require_cluster_admin(
+        authority.db,
+        authority.current_user,
+        authority.tenant_id,
+    )
+    _cluster = await _require_cluster_for_tenant(authority, cluster_id=cluster_id)
+    existing = await authority.services.runner_pools.get_by_tenant_key(
+        tenant_id=authority.tenant_id,
+        pool_key=data.pool_key,
+    )
     if existing is not None:
         raise HTTPException(status_code=409, detail=_("ACP runner pool already exists"))
-    pool = await repo.create_pool(
-        tenant_id=tenant_id,
+    pool = await authority.services.runner_pools.create(
+        tenant_id=authority.tenant_id,
         cluster_id=cluster_id,
         pool_key=data.pool_key,
         name=data.name,
@@ -403,9 +387,9 @@ async def create_cluster_acp_runner_pool(
         labels=data.labels,
         capacity_policy=data.capacity_policy,
         scheduling_policy=data.scheduling_policy,
-        created_by=current_user.id,
+        created_by=authority.current_user.id,
     )
-    await db.commit()
+    await authority.db.commit()
     return _pool_response(pool, [])
 
 
@@ -416,24 +400,24 @@ async def create_cluster_acp_runner_pool(
 async def update_cluster_acp_runner_pool(
     cluster_id: str,
     pool_key: str,
-    request: Request,
     data: ACPRunnerPoolUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ACPRunnerPoolResponse:
     """Update an ACP runner pool attached to a cluster."""
-    await _require_cluster_admin(db, current_user, tenant_id)
-    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
-    repo = ACPRunnerRepository(db)
-    pool = await repo.get_pool_by_cluster_key(
-        tenant_id=tenant_id,
+    await _require_cluster_admin(
+        authority.db,
+        authority.current_user,
+        authority.tenant_id,
+    )
+    _cluster = await _require_cluster_for_tenant(authority, cluster_id=cluster_id)
+    pool = await authority.services.runner_pools.get_by_cluster_key(
+        tenant_id=authority.tenant_id,
         cluster_id=cluster_id,
         pool_key=pool_key,
     )
     if pool is None:
         raise HTTPException(status_code=404, detail=_("ACP runner pool not found"))
-    pool = await repo.update_pool(
+    pool = await authority.services.runner_pools.update(
         pool,
         name=data.name,
         mode=data.mode,
@@ -442,8 +426,8 @@ async def update_cluster_acp_runner_pool(
         capacity_policy=data.capacity_policy,
         scheduling_policy=data.scheduling_policy,
     )
-    await db.commit()
-    instances = await repo.list_instances_by_pool(pool.id)
+    await authority.db.commit()
+    instances = await authority.services.runner_pools.list_instances(pool.id)
     return _pool_response(pool, instances)
 
 
@@ -454,30 +438,30 @@ async def update_cluster_acp_runner_pool(
 async def create_cluster_acp_runner_registration_token(
     cluster_id: str,
     pool_key: str,
-    request: Request,
     data: ACPRunnerTokenRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ACPRunnerTokenResponse:
     """Create a plaintext registration token shown once to tenant admins."""
-    await _require_cluster_admin(db, current_user, tenant_id)
-    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
-    repo = ACPRunnerRepository(db)
-    pool = await repo.get_pool_by_cluster_key(
-        tenant_id=tenant_id,
+    await _require_cluster_admin(
+        authority.db,
+        authority.current_user,
+        authority.tenant_id,
+    )
+    _cluster = await _require_cluster_for_tenant(authority, cluster_id=cluster_id)
+    pool = await authority.services.runner_pools.get_by_cluster_key(
+        tenant_id=authority.tenant_id,
         cluster_id=cluster_id,
         pool_key=pool_key,
     )
     if pool is None:
         raise HTTPException(status_code=404, detail=_("ACP runner pool not found"))
-    token_row, token = await repo.create_registration_token(
+    token_row, token = await authority.services.runner_pools.create_registration_token(
         pool=pool,
-        created_by=current_user.id,
+        created_by=authority.current_user.id,
         name=data.name,
         expires_in_hours=data.expires_in_hours,
     )
-    await db.commit()
+    await authority.db.commit()
     connect_url = _runner_connect_url()
     return ACPRunnerTokenResponse(
         token=token,
@@ -493,15 +477,14 @@ async def create_cluster_acp_runner_registration_token(
 )
 async def get_cluster_health(
     cluster_id: str,
-    request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterHealthResponse:
     """Get the latest cluster health snapshot."""
     try:
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
+        result = await authority.services.clusters.get_cluster(
+            cluster_id,
+            tenant_id=authority.tenant_id,
+        )
         if not result:
             raise _cluster_not_found_error()
         return _cluster_health_response(result)
@@ -518,19 +501,18 @@ async def get_cluster_health(
 )
 async def update_health_status(
     cluster_id: str,
-    request: Request,
     data: HealthStatusUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
-    current_user: DBUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    authority: ClusterApplicationAuthorityV2 = Depends(cluster_application_authority_dependency_v2),
 ) -> ClusterResponse:
     """Update cluster health status."""
     try:
-        await _require_cluster_admin(db, current_user, tenant_id)
+        await _require_cluster_admin(
+            authority.db,
+            authority.current_user,
+            authority.tenant_id,
+        )
 
-        container = get_container_with_db(request, db)
-        service = container.cluster_service()
-        result = await service.update_health_status(
+        result = await authority.services.clusters.update_health_status(
             cluster_id=cluster_id,
             status=ClusterStatus.connected,
             health_status=data.health_status,
@@ -540,9 +522,9 @@ async def update_health_status(
             used_cpu=data.used_cpu,
             total_memory_gb=data.total_memory_gb,
             used_memory_gb=data.used_memory_gb,
-            tenant_id=tenant_id,
+            tenant_id=authority.tenant_id,
         )
-        await db.commit()
+        await authority.db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
         raise _cluster_not_found_error() from e

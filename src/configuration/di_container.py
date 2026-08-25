@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.application.services.agent_service import AgentService
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
-from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
@@ -56,7 +55,6 @@ from src.configuration.containers import (
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
-from src.domain.ports.repositories.cluster_repository import ClusterRepository
 from src.domain.ports.repositories.deploy_record_repository import DeployRecordRepository
 from src.domain.ports.repositories.evolution_event_repository import (
     EvolutionEventRepository,
@@ -357,9 +355,6 @@ class DIContainer:
     def deploy_record_repository(self) -> DeployRecordRepository:
         return self._instance.deploy_record_repository()
 
-    def cluster_repository(self) -> ClusterRepository:
-        return self._instance.cluster_repository()
-
     def gene_repository(self) -> GeneRepository:
         return self._instance.gene_repository()
 
@@ -383,9 +378,6 @@ class DIContainer:
 
     def deploy_service(self) -> DeployService:
         return self._instance.deploy_service()
-
-    def cluster_service(self) -> ClusterService:
-        return self._instance.cluster_service()
 
     def gene_service(self) -> GeneService:
         return self._instance.gene_service()

@@ -17,6 +17,7 @@ from src.application.schemas.gene_schemas import (
     GenomeRatingCreate,
 )
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
+from src.application.services.cluster_service import ClusterService
 from src.application.services.instance_template_service import InstanceTemplateService
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers import clusters, instance_templates
@@ -31,6 +32,9 @@ from src.infrastructure.adapters.primary.web.routers.genes import (
 )
 from src.infrastructure.adapters.primary.web.routers.instance_templates import create_template
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.sql_cluster_repository import (
+    SqlClusterRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_instance_template_repository import (
     SqlInstanceTemplateRepository,
 )
@@ -62,12 +66,19 @@ class TestMarketplaceAuditFields:
 
         monkeypatch.setattr(clusters, "require_tenant_access", allow_access)
 
-        response = await create_cluster(
-            _request(),
-            ClusterCreate(name=f"Cluster {_slug('audit')}"),
-            tenant_id=test_project_db.tenant_id,
-            current_user=test_user,
+        authority = SimpleNamespace(
             db=test_db,
+            current_user=test_user,
+            tenant_id=test_project_db.tenant_id,
+            services=SimpleNamespace(
+                clusters=ClusterService(
+                    cluster_repo=SqlClusterRepository(test_db),
+                )
+            ),
+        )
+        response = await create_cluster(
+            ClusterCreate(name=f"Cluster {_slug('audit')}"),
+            authority=authority,
         )
 
         assert response.created_by == test_user.id

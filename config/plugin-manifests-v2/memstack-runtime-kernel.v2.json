@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:ca324c2f8240e205ff2818f2f5cabfcf1da4abaf53e91d6802ff0b105eb72f00",
+        "digest": "sha256:480f22455190a167f20d0d9ba7b9af9d57b5ce143e988eaa76269561ae003a08",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -822,6 +822,74 @@
       "artifact": {
         "digest": "sha256:86e1c0e45ac4d9a70f39217b136e1246c15c60172c603ab87430e103e84e64b7",
         "source": "repo+python://src/infrastructure/plugins/v2/attachment_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/cluster-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.cluster_services:_apply_cluster_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.cluster-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9a38e3615185d337f154cbbea40254edd2785871efc0c3a2d3aa7d54eb421281",
+      "artifact": {
+        "digest": "sha256:a9d65d2290a76019f68b3fb9b1df294a665338b4049d40d17829673107549b56",
+        "source": "repo+python://src/infrastructure/plugins/v2/cluster_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/cluster-services",
+      "entrypoint": "src.infrastructure.plugins.v2.cluster_services:_apply_cluster_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.cluster-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.cluster-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c6926310c8e49a59d6dba9bc17b02eb50fa132f456633718de318617da9994f4",
+      "artifact": {
+        "digest": "sha256:a9d65d2290a76019f68b3fb9b1df294a665338b4049d40d17829673107549b56",
+        "source": "repo+python://src/infrastructure/plugins/v2/cluster_services.py"
       }
     },
     {

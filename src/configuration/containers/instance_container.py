@@ -3,7 +3,6 @@
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.cluster_service import ClusterService
 from src.application.services.deploy_service import DeployService
 from src.application.services.gene_service import GeneService
 from src.application.services.instance_service import InstanceService
@@ -148,12 +147,6 @@ class InstanceContainer:
             deploy_record_repo=self.deploy_record_repository(),
             instance_repo=self.instance_repository(),
             redis_client=self._redis_client,
-        )
-
-    def cluster_service(self) -> ClusterService:
-        """Get ClusterService for cluster management operations."""
-        return ClusterService(
-            cluster_repo=self.cluster_repository(),
         )
 
     def gene_service(self) -> GeneService:
