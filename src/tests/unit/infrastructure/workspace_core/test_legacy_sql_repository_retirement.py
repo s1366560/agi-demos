@@ -102,6 +102,18 @@ def test_workspace_task_static_di_facades_are_removed_after_workspace_core_cutov
 
 
 @pytest.mark.unit
+def test_workspace_lifecycle_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
+    retired_facades = {
+        "workspace_repository",
+        "workspace_member_repository",
+        "workspace_agent_repository",
+    }
+
+    assert retired_facades.isdisjoint(vars(ProjectContainer))
+    assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+@pytest.mark.unit
 def test_cyber_objective_static_di_facades_are_removed_after_workspace_core_cutover() -> None:
     assert "cyber_objective_repository" not in vars(ProjectContainer)
     assert "cyber_objective_repository" not in vars(DIContainer)

@@ -23,6 +23,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     topology,
     workspace_chat,
     workspace_tasks,
+    workspaces,
 )
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
     register_workspace_core_routes,
@@ -533,6 +534,109 @@ async def test_avernet_workspace_task_routes_proxy_exact_contract_without_legacy
         ("POST", f"{task}/block"),
         ("POST", f"{task}/complete"),
     ]
+
+
+@pytest.mark.unit
+async def test_avernet_workspace_lifecycle_routes_proxy_exact_contract_without_legacy_di(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[tuple[str, str, bytes]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.append((request.method, request.url.raw_path.decode(), await request.aread()))
+        assert request.headers["x-memstack-tenant-id"] == "tenant-1"
+        assert request.headers["x-memstack-project-id"] == "project-1"
+        if request.url.path != base:
+            assert request.headers["x-memstack-workspace-id"] == "workspace-1"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": "workspace-1"})
+        if request.method == "GET" and request.url.path in {base, members, agents}:
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={"id": "workspace-1"})
+
+    def legacy_di_trap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("workspace proxy touched the retired local DI path")
+
+    monkeypatch.setattr(workspaces, "get_workspace_service", legacy_di_trap, raising=False)
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.workspace_core_routes.async_session_factory",
+        lambda: _FakeMembershipSessionFactory("owner"),
+    )
+    app = FastAPI()
+    _override_proxy_dependencies(app)
+    app.state.workspace_core_client = WorkspaceCoreClient(
+        _avernet_settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    register_workspace_core_routes(app)
+    base = "/api/v1/tenants/tenant-1/projects/project-1/workspaces"
+    workspace = f"{base}/workspace-1"
+    members = f"{workspace}/members"
+    agents = f"{workspace}/agents"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://gateway.test",
+    ) as client:
+        responses = [
+            await client.post(base, json={"name": "Workspace"}),
+            await client.get(base, params={"limit": 10, "offset": 2}),
+            await client.get(workspace),
+            await client.get(f"{workspace}/collaboration/capabilities"),
+            await client.patch(workspace, json={"name": "Updated"}),
+            await client.delete(workspace),
+            await client.get(members, params={"limit": 20, "offset": 3}),
+            await client.post(members, json={"user_id": "user-2", "role": "editor"}),
+            await client.patch(f"{members}/user-2", json={"role": "viewer"}),
+            await client.delete(f"{members}/user-2"),
+            await client.get(
+                agents,
+                params={"active_only": True, "limit": 30, "offset": 4},
+            ),
+            await client.post(agents, json={"agent_id": "agent-1"}),
+            await client.patch(
+                f"{agents}/binding-1",
+                json={"display_name": "Updated"},
+            ),
+            await client.delete(f"{agents}/binding-1"),
+        ]
+
+    assert [response.status_code for response in responses] == [
+        201,
+        200,
+        200,
+        200,
+        200,
+        204,
+        200,
+        201,
+        200,
+        204,
+        200,
+        201,
+        200,
+        204,
+    ]
+    assert [(method, path) for method, path, _body in observed] == [
+        ("POST", base),
+        ("GET", f"{base}?limit=10&offset=2"),
+        ("GET", workspace),
+        ("GET", f"{workspace}/collaboration/capabilities"),
+        ("PATCH", workspace),
+        ("DELETE", workspace),
+        ("GET", f"{members}?limit=20&offset=3"),
+        ("POST", members),
+        ("PATCH", f"{members}/user-2"),
+        ("DELETE", f"{members}/user-2"),
+        ("GET", f"{agents}?active_only=true&limit=30&offset=4"),
+        ("POST", agents),
+        ("PATCH", f"{agents}/binding-1"),
+        ("DELETE", f"{agents}/binding-1"),
+    ]
+    assert observed[0][2] == b'{"name":"Workspace"}'
 
 
 @pytest.mark.unit

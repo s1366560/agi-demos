@@ -27,15 +27,6 @@ from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.workspace.topology_repository import (
     TopologyRepository,
 )
-from src.domain.ports.repositories.workspace.workspace_agent_repository import (
-    WorkspaceAgentRepository,
-)
-from src.domain.ports.repositories.workspace.workspace_member_repository import (
-    WorkspaceMemberRepository,
-)
-from src.domain.ports.repositories.workspace.workspace_repository import (
-    WorkspaceRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -124,15 +115,6 @@ class DIContainer:
         return self._redis_client
 
     # === Project Container delegates ===
-
-    def workspace_repository(self) -> WorkspaceRepository:
-        return self._project.workspace_repository()
-
-    def workspace_member_repository(self) -> WorkspaceMemberRepository:
-        return self._project.workspace_member_repository()
-
-    def workspace_agent_repository(self) -> WorkspaceAgentRepository:
-        return self._project.workspace_agent_repository()
 
     def topology_repository(self) -> TopologyRepository:
         return cast(TopologyRepository, self._project.topology_repository())

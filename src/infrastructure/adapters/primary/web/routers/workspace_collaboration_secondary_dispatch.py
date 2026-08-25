@@ -13,7 +13,6 @@ from src.application.services.workspace_collaboration_authority import (
     WorkspaceCollaborationActor,
     WorkspaceCollaborationMutationCommand,
 )
-from src.application.services.workspace_service import WorkspaceService
 from src.infrastructure.adapters.primary.web.routers import (
     blackboard,
 )
@@ -34,9 +33,9 @@ class _RosterRouteArguments(TypedDict):
     project_id: str
     workspace_id: str
     background_tasks: BackgroundTasks
+    request: Request
     current_user: User
     db: AsyncSession
-    workspace_service: WorkspaceService
 
 
 class _ScopedRouteArguments(TypedDict):
@@ -104,15 +103,14 @@ async def _dispatch_workspace_roster(
 ) -> None:
     from src.infrastructure.adapters.primary.web.routers import workspaces
 
-    service = workspaces.get_workspace_service(request, db)
     common: _RosterRouteArguments = {
         "tenant_id": actor.tenant_id,
         "project_id": actor.project_id,
         "workspace_id": actor.workspace_id,
         "background_tasks": background_tasks,
+        "request": request,
         "current_user": current_user,
         "db": db,
-        "workspace_service": service,
     }
     if action == "bind_agent":
         await workspaces.bind_workspace_agent(
@@ -298,7 +296,7 @@ async def _dispatch_workspace_settings(
         workspace_id=actor.workspace_id,
         payload=workspace_payload_model(workspaces.WorkspaceUpdateRequest, payload),
         background_tasks=background_tasks,
+        request=request,
         current_user=current_user,
         db=db,
-        workspace_service=workspaces.get_workspace_service(request, db),
     )
