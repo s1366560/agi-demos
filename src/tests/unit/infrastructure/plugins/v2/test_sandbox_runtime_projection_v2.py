@@ -11,7 +11,6 @@ import pytest
 
 from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.containers.infra_container import InfraContainer
-from src.configuration.containers.sandbox_container import SandboxContainer
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers.sandbox import utils as sandbox_utils
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -71,13 +70,26 @@ def test_web_sandbox_singleton_state_and_manual_shutdown_are_removed() -> None:
     assert "shutdown_sandbox_adapter_singleton" not in vars(sandbox_utils)
 
 
+def test_legacy_sandbox_subcontainer_is_retired() -> None:
+    from src.configuration import containers
+
+    assert "SandboxContainer" not in vars(containers)
+    assert not (_ROOT / "src/configuration/containers/sandbox_container.py").exists()
+
+
 def test_static_sandbox_root_facades_and_callback_injection_are_removed() -> None:
+    retired_facades = {
+        "dependency_orchestrator",
+        "project_sandbox_repository",
+        "sandbox_orchestrator",
+        "sandbox_resource",
+    }
+
     assert "sandbox_adapter" not in vars(InfraContainer)
     assert "sandbox_event_publisher" not in vars(InfraContainer)
     assert "sandbox_adapter" not in vars(DIContainer)
     assert "sandbox_event_publisher" not in vars(DIContainer)
-    assert "sandbox_adapter_factory" not in signature(SandboxContainer).parameters
-    assert "sandbox_event_publisher_factory" not in signature(SandboxContainer).parameters
+    assert retired_facades.isdisjoint(vars(DIContainer))
     assert "sandbox_orchestrator_factory" not in signature(AgentContainer).parameters
     assert "sandbox_event_publisher_factory" not in signature(AgentContainer).parameters
 

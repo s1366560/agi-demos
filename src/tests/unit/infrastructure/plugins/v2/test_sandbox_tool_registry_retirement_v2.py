@@ -19,16 +19,12 @@ def test_sandbox_tool_registry_has_no_static_di_authority() -> None:
             "src/infrastructure/adapters/primary/web/routers/sandbox/tools.py",
         )
     )
-    static_composition_sources = tuple(
-        (_ROOT / relative_path).read_text(encoding="utf-8")
-        for relative_path in (
-            "src/configuration/containers/sandbox_container.py",
-            "src/configuration/di_container.py",
-        )
-    )
+    sandbox_container_path = _ROOT / "src/configuration/containers/sandbox_container.py"
+    di_source = (_ROOT / "src/configuration/di_container.py").read_text(encoding="utf-8")
 
     assert all("DIContainer" not in source for source in router_sources)
-    assert all("sandbox_tool_registry" not in source for source in static_composition_sources)
+    assert not sandbox_container_path.exists()
+    assert "sandbox_tool_registry" not in di_source
 
 
 def test_sandbox_tool_registry_is_projected_from_the_pinned_generation() -> None:

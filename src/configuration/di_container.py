@@ -12,7 +12,6 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.skill_service import SkillService
 from src.application.services.topology_service import TopologyService
 from src.application.services.workflow_learner import WorkflowLearner
@@ -38,7 +37,6 @@ from src.configuration.containers import (
     InfraContainer,
     InstanceContainer,
     ProjectContainer,
-    SandboxContainer,
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
@@ -68,7 +66,6 @@ from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repo
     WorkspaceTaskSessionAttemptRepository,
 )
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
-from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
 )
@@ -77,9 +74,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_reposito
 )
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-    SqlProjectSandboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SqlSkillRepository,
@@ -134,12 +128,6 @@ class DIContainer:
         self._infra = _infra or InfraContainer(
             redis_client=redis_client,
             settings=self._settings,
-        )
-        self._sandbox = SandboxContainer(
-            db=db,
-            redis_client=redis_client,
-            settings=self._settings,
-            distributed_lock_factory=self._infra.distributed_lock_adapter,
         )
         self._agent = AgentContainer(
             db=db,
@@ -277,20 +265,6 @@ class DIContainer:
 
     def distributed_lock_adapter(self) -> Any:
         return self._infra.distributed_lock_adapter()
-
-    # === Sandbox Container delegates ===
-
-    def project_sandbox_repository(self) -> SqlProjectSandboxRepository:
-        return self._sandbox.project_sandbox_repository()
-
-    def sandbox_orchestrator(self) -> SandboxOrchestrator:
-        return self._sandbox.sandbox_orchestrator()
-
-    def sandbox_resource(self) -> SandboxResourcePort:
-        return self._sandbox.sandbox_resource()
-
-    def dependency_orchestrator(self) -> Any:
-        return self._sandbox.dependency_orchestrator()
 
     # === Agent Container delegates ===
 
