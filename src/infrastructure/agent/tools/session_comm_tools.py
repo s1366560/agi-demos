@@ -4,29 +4,39 @@ Three tools that let agents discover peer sessions, read their
 history, and send messages -- enabling multi-agent collaboration
 within the same project scope.
 
-Uses the ``@tool_define`` decorator pattern with module-level DI
-via ``configure_session_comm()``.
+Worker contributions bind a fresh database session to each invocation.
+``configure_session_comm()`` remains as a compatibility fallback for direct callers.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.application.services.session_comm_service import (
     SessionCommService,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Module-level DI state
+# Generation-bound runtime with module-level compatibility fallback
 # ---------------------------------------------------------------------------
 
+type SessionCommSessionFactory = Callable[[], AbstractAsyncContextManager[Any]]
+
+_session_comm_runtime: ContextVar[SessionCommService | None] = ContextVar(
+    f"{__name__}.session_comm_runtime",
+    default=None,
+)
 _session_comm_service: SessionCommService | None = None
 
 
@@ -42,11 +52,13 @@ def configure_session_comm(service: SessionCommService) -> None:
 
 def _svc() -> SessionCommService:
     """Return the configured service or raise."""
-    if _session_comm_service is None:
+    runtime_service = _session_comm_runtime.get()
+    service = runtime_service if runtime_service is not None else _session_comm_service
+    if service is None:
         raise RuntimeError(
             "session_comm tools not configured -- call configure_session_comm() first"
         )
-    return _session_comm_service
+    return service
 
 
 def _json(data: Any) -> str:
@@ -269,3 +281,66 @@ async def sessions_send_tool(
             output=_json({"error": f"Failed to send message: {exc}"}),
             is_error=True,
         )
+
+
+def _build_session_comm_service(session: Any) -> SessionCommService:
+    """Build repositories and the application service for one invocation."""
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+        SqlAgentExecutionEventRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+        SqlConversationRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_message_repository import (
+        SqlMessageRepository,
+    )
+
+    return SessionCommService(
+        conversation_repo=SqlConversationRepository(session),
+        message_repo=SqlMessageRepository(session),
+        agent_execution_event_repo=SqlAgentExecutionEventRepository(session),
+    )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSessionCommExecutor:
+    template: ToolInfo
+    session_factory: SessionCommSessionFactory
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        async with self.session_factory() as session:
+            token = _session_comm_runtime.set(_build_session_comm_service(session))
+            try:
+                result = await self.template.execute(ctx, **kwargs)
+                if isinstance(result, ToolResult) and result.is_error:
+                    await session.rollback()
+                else:
+                    await session.commit()
+                return result
+            except BaseException:
+                await session.rollback()
+                raise
+            finally:
+                _session_comm_runtime.reset(token)
+
+
+def make_session_comm_tools(
+    *,
+    session_factory: SessionCommSessionFactory,
+) -> dict[str, ToolInfo]:
+    """Return peer-session ToolInfos bound to one generation's session factory."""
+    templates = (
+        sessions_list_tool,
+        sessions_history_tool,
+        sessions_send_tool,
+    )
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundSessionCommExecutor(
+                template=template,
+                session_factory=session_factory,
+            ),
+        )
+        for template in templates
+    }

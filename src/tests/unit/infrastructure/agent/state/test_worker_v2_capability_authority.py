@@ -433,6 +433,50 @@ def test_worker_skill_installer_binds_project_without_global_mutation(
 
 
 @pytest.mark.unit
+def test_worker_session_comm_uses_bound_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = object()
+    bound_tools = {
+        "peer_sessions_list": object(),
+        "peer_sessions_history": object(),
+        "peer_sessions_send": object(),
+    }
+    captured: dict[str, object] = {}
+
+    def _make_session_comm_tools(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return bound_tools
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker session comm must not mutate module-level runtime state")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.session_comm_tools.make_session_comm_tools",
+        _make_session_comm_tools,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.session_comm_tools.configure_session_comm",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_session_comm_tools(
+        tools,
+        project_id="project-a",
+        redis_client=object(),
+    )
+
+    assert tools == bound_tools
+    assert captured == {"session_factory": session_factory}
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

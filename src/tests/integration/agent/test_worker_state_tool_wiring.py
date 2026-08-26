@@ -145,15 +145,13 @@ class TestSessionCommToolsWiring:
     """Tests for _add_session_comm_tools adding tools to the dict."""
 
     async def test_session_comm_tools_added(self) -> None:
-        """Tools are added to the dict after configure_session_comm.
+        """Tools are added from the generation-bound factory.
 
-        Arrange: Patch imports to provide mock objects.
+        Arrange: Patch the session factory and bound tool factory.
         Act: Call _add_session_comm_tools.
         Assert: Three tool keys present in tools dict.
         """
-        # Arrange
-        mock_session = MagicMock()
-        mock_session_factory = MagicMock(return_value=mock_session)
+        mock_session_factory = MagicMock()
 
         mock_list_tool = MagicMock()
         mock_list_tool.name = "peer_sessions_list"
@@ -161,47 +159,24 @@ class TestSessionCommToolsWiring:
         mock_history_tool.name = "peer_sessions_history"
         mock_send_tool = MagicMock()
         mock_send_tool.name = "peer_sessions_send"
-        mock_configure = MagicMock()
-        mock_service_cls = MagicMock()
+        mock_bound_factory = MagicMock(
+            return_value={
+                mock_list_tool.name: mock_list_tool,
+                mock_history_tool.name: mock_history_tool,
+                mock_send_tool.name: mock_send_tool,
+            }
+        )
 
         tools: dict[str, Any] = {}
 
         with (
             patch(
-                "src.application.services.session_comm_service.SessionCommService",
-                mock_service_cls,
-            ),
-            patch(
                 "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
                 mock_session_factory,
             ),
             patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_conversation_repository.SqlConversationRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository.SqlAgentExecutionEventRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_message_repository.SqlMessageRepository",
-                create=True,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.configure_session_comm",
-                mock_configure,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_list_tool",
-                mock_list_tool,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_history_tool",
-                mock_history_tool,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.session_comm_tools.sessions_send_tool",
-                mock_send_tool,
+                "src.infrastructure.agent.tools.session_comm_tools.make_session_comm_tools",
+                mock_bound_factory,
             ),
         ):
             # The function uses lazy imports, so we import here
@@ -217,8 +192,7 @@ class TestSessionCommToolsWiring:
         assert "peer_sessions_history" in tools
         assert "peer_sessions_send" in tools
         assert len(tools) == 3
-        assert mock_service_cls.call_args is not None
-        assert "agent_execution_event_repo" in mock_service_cls.call_args.kwargs
+        mock_bound_factory.assert_called_once_with(session_factory=mock_session_factory)
 
     async def test_session_comm_tools_graceful_failure(self) -> None:
         """Import failure is caught silently; tools dict unchanged.
@@ -230,13 +204,9 @@ class TestSessionCommToolsWiring:
         # Arrange
         tools: dict[str, Any] = {}
 
-        # Patch sys.modules so the lazy import inside
-        # _add_session_comm_tools raises ImportError.
-        with patch.dict(
-            "sys.modules",
-            {
-                "src.application.services.session_comm_service": None,
-            },
+        with patch(
+            "src.infrastructure.agent.tools.session_comm_tools.make_session_comm_tools",
+            side_effect=RuntimeError("factory unavailable"),
         ):
             import src.infrastructure.agent.state.agent_worker_state as mod
 

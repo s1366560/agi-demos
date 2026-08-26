@@ -1093,47 +1093,17 @@ def _add_session_comm_tools(
     project_id: str,
     redis_client: Any,
 ) -> None:
-    """Configure and register peer agent session communication tools.
-
-    Uses the module-level DI pattern (``configure_session_comm``) to inject
-    a ``SessionCommService`` backed by per-request DB repositories, then
-    adds the three peer session comm tool functions to the tool dictionary.
-    """
+    """Add generation-bound peer agent session communication tools."""
     try:
-        from src.application.services.session_comm_service import SessionCommService
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as comm_session_factory,
         )
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-            SqlAgentExecutionEventRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_message_repository import (
-            SqlMessageRepository,
-        )
         from src.infrastructure.agent.tools.session_comm_tools import (
-            configure_session_comm,
-            sessions_history_tool,
-            sessions_list_tool,
-            sessions_send_tool,
+            make_session_comm_tools,
         )
 
-        session = comm_session_factory()
-        conversation_repo = SqlConversationRepository(session)
-        event_repo = SqlAgentExecutionEventRepository(session)
-        message_repo = SqlMessageRepository(session)
-
-        service = SessionCommService(
-            conversation_repo=conversation_repo,
-            message_repo=message_repo,
-            agent_execution_event_repo=event_repo,
-        )
-        configure_session_comm(service)
-        tools[sessions_list_tool.name] = sessions_list_tool
-        tools[sessions_history_tool.name] = sessions_history_tool
-        tools[sessions_send_tool.name] = sessions_send_tool
+        _ = redis_client
+        tools.update(make_session_comm_tools(session_factory=comm_session_factory))
         logger.info(
             "Agent Worker: Peer session comm tools added for project %s",
             project_id,
