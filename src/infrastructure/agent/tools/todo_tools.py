@@ -12,6 +12,8 @@ import json
 import logging
 import uuid
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, cast
 
@@ -25,7 +27,7 @@ from src.domain.model.workspace.workspace_task import (
     WorkspaceTaskStatus,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_LEADER,
@@ -208,6 +210,19 @@ def _workspace_task_to_todo(task: WorkspaceTask) -> dict[str, Any]:
 # @tool_define version of TodoReadTool
 # ---------------------------------------------------------------------------
 
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class TodoToolRuntime:
+    """Persistence dependency captured by one generation's todo tools."""
+
+    session_factory: Callable[..., Any]
+
+
+_todo_tool_runtime: ContextVar[TodoToolRuntime | None] = ContextVar(
+    f"{__name__}.todo_tool_runtime",
+    default=None,
+)
+
 _todoread_session_factory: Callable[..., Any] | None = None
 
 
@@ -220,6 +235,11 @@ def configure_todoread(
     """
     global _todoread_session_factory
     _todoread_session_factory = session_factory
+
+
+def _current_todoread_session_factory() -> Callable[..., Any] | None:
+    runtime = _todo_tool_runtime.get()
+    return runtime.session_factory if runtime is not None else _todoread_session_factory
 
 
 @tool_define(
@@ -256,7 +276,8 @@ async def todoread_tool(
     status: str | None = None,
 ) -> ToolResult:
     """Read the task list for the current conversation."""
-    if _todoread_session_factory is None:
+    session_factory = _current_todoread_session_factory()
+    if session_factory is None:
         return ToolResult(
             output=json.dumps({"error": "Task storage not configured", "todos": []}),
             is_error=True,
@@ -265,7 +286,7 @@ async def todoread_tool(
     conversation_id = ctx.conversation_id or ctx.session_id
     workspace_markers = _workspace_authority_markers(ctx)
 
-    async with _todoread_session_factory() as session:
+    async with session_factory() as session:
         if workspace_markers is not None:
             from src.infrastructure.workspace_core.legacy_runtime import (
                 legacy_workspace_runtime_retired,
@@ -325,6 +346,11 @@ def configure_todowrite(
     """
     global _todowrite_session_factory
     _todowrite_session_factory = session_factory
+
+
+def _current_todowrite_session_factory() -> Callable[..., Any] | None:
+    runtime = _todo_tool_runtime.get()
+    return runtime.session_factory if runtime is not None else _todowrite_session_factory
 
 
 async def _todowrite_handle_update(
@@ -954,7 +980,8 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
     todo_id: str | None = None,
 ) -> ToolResult:
     """Write or update the task list for the current conversation."""
-    if _todowrite_session_factory is None:
+    session_factory = _current_todowrite_session_factory()
+    if session_factory is None:
         return ToolResult(
             output=json.dumps({"error": "Task storage not configured"}),
             is_error=True,
@@ -993,7 +1020,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
             )
         )
 
-    async with _todowrite_session_factory() as session:
+    async with session_factory() as session:
         if workspace_markers is None:
             repo = SqlAgentTaskRepository(session)
 
@@ -1362,3 +1389,28 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
 # =============================================================================
 # TODOWRITE TOOL
 # =============================================================================
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundTodoExecutor:
+    template: ToolInfo
+    runtime: TodoToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _todo_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _todo_tool_runtime.reset(token)
+
+
+def make_todo_tools(*, session_factory: Callable[..., Any]) -> dict[str, ToolInfo]:
+    """Return todo ToolInfos bound to one generation's persistence dependency."""
+    runtime = TodoToolRuntime(session_factory=session_factory)
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundTodoExecutor(template=template, runtime=runtime),
+        )
+        for template in (todoread_tool, todowrite_tool)
+    }

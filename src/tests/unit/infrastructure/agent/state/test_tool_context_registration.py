@@ -10,46 +10,49 @@ class TestToolContextRegistration:
     """Verify tool setup helpers actually expose configured tools to context."""
 
     def test_add_todo_tools_adds_todoread_and_todowrite(self, monkeypatch: pytest.MonkeyPatch):
-        """Todo helper should configure and inject todoread/todowrite into tools dict."""
+        """Todo helper should inject operation-bound todoread/todowrite definitions."""
         from src.infrastructure.agent.state import agent_worker_state as worker_state
 
         fake_session_factory = object()
-        registry = {
+        bound_tools = {
             "todoread": SimpleNamespace(name="todoread"),
             "todowrite": SimpleNamespace(name="todowrite"),
         }
-        configured: dict[str, object] = {}
+        captured: dict[str, object] = {}
 
-        def _fake_configure_todoread(*, session_factory: object) -> None:
-            configured["todoread_session_factory"] = session_factory
+        def _fake_make_todo_tools(*, session_factory: object) -> dict[str, object]:
+            captured["session_factory"] = session_factory
+            return bound_tools
 
-        def _fake_configure_todowrite(*, session_factory: object) -> None:
-            configured["todowrite_session_factory"] = session_factory
+        def _forbidden(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("worker todo tools must not use global configuration or registry")
 
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             fake_session_factory,
         )
         monkeypatch.setattr(
+            "src.infrastructure.agent.tools.todo_tools.make_todo_tools",
+            _fake_make_todo_tools,
+        )
+        monkeypatch.setattr(
             "src.infrastructure.agent.tools.todo_tools.configure_todoread",
-            _fake_configure_todoread,
+            _forbidden,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.todo_tools.configure_todowrite",
-            _fake_configure_todowrite,
+            _forbidden,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
-            lambda: registry,
+            _forbidden,
         )
 
         tools: dict[str, object] = {}
         worker_state._add_todo_tools(tools, project_id="project-1")
 
-        assert configured["todoread_session_factory"] is fake_session_factory
-        assert configured["todowrite_session_factory"] is fake_session_factory
-        assert tools["todoread"] is registry["todoread"]
-        assert tools["todowrite"] is registry["todowrite"]
+        assert captured["session_factory"] is fake_session_factory
+        assert tools == bound_tools
 
     def test_add_register_mcp_server_tool_adds_tool_to_context(
         self,

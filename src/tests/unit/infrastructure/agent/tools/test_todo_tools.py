@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 import pytest
 
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.todo_tools import todoread_tool, todowrite_tool
+from src.infrastructure.agent.tools.todo_tools import (
+    make_todo_tools,
+    todoread_tool,
+    todowrite_tool,
+)
 from src.infrastructure.workspace_core.legacy_runtime import LegacyWorkspaceRuntimeRetiredError
 
 
@@ -107,6 +112,65 @@ class TestTodoReadTool:
                     }
                 )
             )
+
+    async def test_bound_factories_isolate_concurrent_reads(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        class _BoundSession(_DummySession):
+            def __init__(self, marker: str, *, wait: bool) -> None:
+                self.marker = marker
+                self.wait = wait
+
+        class _Task:
+            def __init__(self, marker: str) -> None:
+                self.marker = marker
+                self.priority = type("Priority", (), {"value": "medium"})()
+                self.order_index = 0
+
+            def to_dict(self) -> dict[str, str]:
+                return {"id": self.marker}
+
+        class _FakeRepo:
+            def __init__(self, session: _BoundSession) -> None:
+                self._session = session
+
+            async def find_by_conversation(
+                self,
+                _conversation_id: str,
+                status: str | None = None,
+            ) -> list[_Task]:
+                del status
+                if self._session.wait:
+                    first_entered.set()
+                    await release_first.wait()
+                else:
+                    await first_entered.wait()
+                    release_first.set()
+                return [_Task(self._session.marker)]
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
+            "SqlAgentTaskRepository",
+            _FakeRepo,
+        )
+        first_tools = make_todo_tools(
+            session_factory=lambda: _BoundSession("generation-a", wait=True)
+        )
+        second_tools = make_todo_tools(
+            session_factory=lambda: _BoundSession("generation-b", wait=False)
+        )
+
+        first_task = asyncio.create_task(first_tools["todoread"].execute(_make_ctx()))
+        await first_entered.wait()
+        second_result = await second_tools["todoread"].execute(_make_ctx())
+        first_result = await first_task
+
+        assert json.loads(first_result.output)["todos"] == [{"id": "generation-a"}]
+        assert json.loads(second_result.output)["todos"] == [{"id": "generation-b"}]
 
 
 class TestTodoWriteTool:

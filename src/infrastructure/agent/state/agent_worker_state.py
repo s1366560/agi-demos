@@ -750,17 +750,9 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as todo_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.todo_tools import (
-            configure_todoread,
-            configure_todowrite,
-        )
+        from src.infrastructure.agent.tools.todo_tools import make_todo_tools
 
-        configure_todoread(session_factory=todo_session_factory)
-        configure_todowrite(session_factory=todo_session_factory)
-        registry = get_registered_tools()
-        tools["todoread"] = registry["todoread"]
-        tools["todowrite"] = registry["todowrite"]
+        tools.update(make_todo_tools(session_factory=todo_session_factory))
         logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
