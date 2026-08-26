@@ -235,7 +235,7 @@ test('workbench mounts the tab bar above a dedicated content layer', () => {
   // The router subtree stays intact inside the content layer.
   assert.match(
     appSource,
-    /<div className="workbench-content">[\s\S]*?<DesktopProductionRouter/,
+    /<div className="workbench-content">[\s\S]*?<DesktopRendererProductionRouterV2/,
   );
   assert.match(appSource, /className="workbench-layout"/);
 });

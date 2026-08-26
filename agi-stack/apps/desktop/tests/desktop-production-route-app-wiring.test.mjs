@@ -598,8 +598,8 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
 });
 
 test('production routing wraps the existing workbench tree without keying or remounting it', () => {
-  const routerStart = appSource.lastIndexOf('<DesktopProductionRouter');
-  const routerEnd = appSource.indexOf('</DesktopProductionRouter>', routerStart);
+  const routerStart = appSource.lastIndexOf('<DesktopRendererProductionRouterV2');
+  const routerEnd = appSource.indexOf('</DesktopRendererProductionRouterV2>', routerStart);
   const routedWorkbench =
     routerStart >= 0 && routerEnd > routerStart ? appSource.slice(routerStart, routerEnd) : '';
 
@@ -650,7 +650,7 @@ test('anonymous unknown routes are handled natively before the login gate', () =
   assert.ok(anonymousGate > forcedPasswordGate);
   assert.match(
     anonymousSource,
-    /<DesktopProductionRouter[\s\S]*<LoginScreen[\s\S]*<\/DesktopProductionRouter>/u,
+    /<DesktopRendererProductionRouterV2[\s\S]*<LoginScreen[\s\S]*<\/DesktopRendererProductionRouterV2>/u,
   );
   assert.match(
     anonymousSource,
