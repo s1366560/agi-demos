@@ -6,6 +6,7 @@ import pytest
 
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.routers import tunnel as tunnel_router
 from src.infrastructure.plugins.v2 import builtin_tunnel_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.http_routes import (
@@ -48,9 +49,7 @@ def test_tunnel_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
@@ -63,3 +62,10 @@ def test_tunnel_module_definition_uses_generated_contract_binding() -> None:
 
     assert definition.module_ref == subject.TUNNEL_HTTP_ROUTES_MODULE_V2
     assert definition.contract_digest.startswith("sha256:")
+
+
+def test_tunnel_contribution_preserves_the_v2_authority_handler_identity() -> None:
+    connect, status = subject.tunnel_route_definitions_v2()
+
+    assert connect.endpoint is tunnel_router.tunnel_connect
+    assert status.endpoint is tunnel_router.tunnel_status

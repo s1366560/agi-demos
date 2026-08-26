@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:e51478fbd80bbe4285545766bc1993718477bd94619b403362c8c15107598d60",
+        "digest": "sha256:a53b97fb1a32a4312ac6cf410e7f3d4e2176e6f22df945f24a8509379bc37c06",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1273,6 +1273,77 @@
       "artifact": {
         "digest": "sha256:06a68c893158029425b37296428c815caf17c5a87f805af26d912d271db9aabe",
         "source": "repo+python://src/infrastructure/plugins/v2/admin_dlq_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/runtime/tunnel-connection-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.tunnel_services:_apply_tunnel_connection_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:tunnel.connection-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": {
+              "const": "generation-connection-registry",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8681328fb24f5029a8130505e7ef3ceaf3d5553fa9c06842ba4f1ed572ec2747",
+      "artifact": {
+        "digest": "sha256:0ba3c94bb1b9b824c7d69dcae00de27259c5513f673c69f5d2958e7602270234",
+        "source": "repo+python://src/infrastructure/plugins/v2/tunnel_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/tunnel-services",
+      "entrypoint": "src.infrastructure.plugins.v2.tunnel_services:_apply_tunnel_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.tunnel-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:tunnel.connection-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:42e22cb84ccae1488bb8a6f344ea8a671b0a63dc4c83f56b25270c877bf2daa7",
+      "artifact": {
+        "digest": "sha256:0ba3c94bb1b9b824c7d69dcae00de27259c5513f673c69f5d2958e7602270234",
+        "source": "repo+python://src/infrastructure/plugins/v2/tunnel_services.py"
       }
     },
     {

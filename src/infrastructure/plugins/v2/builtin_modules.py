@@ -88,6 +88,7 @@ from .tool_set import (
     builtin_tool_contribution_definition_v2,
     builtin_tool_set_definition_v2,
 )
+from .tunnel_services import tunnel_service_definitions_v2
 from .workflow_pattern_services import workflow_pattern_service_definitions_v2
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
 from .workspace_core_runtime import (
@@ -291,6 +292,7 @@ def builtin_runtime_definitions_v2(
         *tenant_skill_config_service_definitions_v2(),
         *tenant_agent_config_service_definitions_v2(),
         *admin_dlq_service_definitions_v2(),
+        *tunnel_service_definitions_v2(),
         *audit_service_definitions_v2(),
         *billing_service_definitions_v2(),
         *shares_service_definitions_v2(),
