@@ -731,17 +731,11 @@ def _add_system_api_tool(
 def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
     """Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)."""
     try:
-        from src.infrastructure.agent.tools.clarification import configure_clarification
-        from src.infrastructure.agent.tools.decision import configure_decision
-        from src.infrastructure.agent.tools.define import get_registered_tools
+        from src.infrastructure.agent.tools.clarification import clarification_tool
+        from src.infrastructure.agent.tools.decision import decision_tool
 
-        # hitl_handler is injected later by the processor/session; pass None for now
-        configure_clarification(hitl_handler=None)
-        configure_decision(hitl_handler=None)
-
-        registry = get_registered_tools()
-        tools["ask_clarification"] = registry["ask_clarification"]
-        tools["request_decision"] = registry["request_decision"]
+        tools["ask_clarification"] = clarification_tool
+        tools["request_decision"] = decision_tool
         logger.info(
             f"Agent Worker: Human-in-the-loop tools (ask_clarification, request_decision) "
             f"added for project {project_id}"
@@ -795,17 +789,13 @@ def _add_model_awareness_tools(
 ) -> None:
     """Configure model-awareness tool for listing currently usable chat models."""
     try:
-        from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.model_availability_tool import (
             list_available_models_tool,
             switch_model_next_turn_tool,
         )
 
-        _ = list_available_models_tool
-        _ = switch_model_next_turn_tool
-        registry = get_registered_tools()
-        tools["list_available_models"] = registry["list_available_models"]
-        tools["switch_model_next_turn"] = registry["switch_model_next_turn"]
+        tools["list_available_models"] = list_available_models_tool
+        tools["switch_model_next_turn"] = switch_model_next_turn_tool
         logger.info(
             "Agent Worker: model awareness tools configured for tenant %s, project %s",
             tenant_id,

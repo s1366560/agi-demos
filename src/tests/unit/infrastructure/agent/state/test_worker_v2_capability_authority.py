@@ -334,3 +334,65 @@ async def test_builtin_web_search_runtime_isolated_between_generations(
 
     assert "generation-a" in first_result.output
     assert "generation-b" in second_result.output
+
+
+@pytest.mark.unit
+def test_worker_hitl_tools_use_declared_tool_infos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker HITL tools must not use global configuration or registry lookup")
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.clarification.configure_clarification",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.decision.configure_decision",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.define.get_registered_tools",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_hitl_tools(tools, project_id="project-a")
+
+    from src.infrastructure.agent.tools.clarification import clarification_tool
+    from src.infrastructure.agent.tools.decision import decision_tool
+
+    assert tools == {
+        "ask_clarification": clarification_tool,
+        "request_decision": decision_tool,
+    }
+
+
+@pytest.mark.unit
+def test_worker_model_awareness_tools_use_declared_tool_infos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker model tools must not use global registry lookup")
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.define.get_registered_tools",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_model_awareness_tools(
+        tools,
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+
+    from src.infrastructure.agent.tools.model_availability_tool import (
+        list_available_models_tool,
+        switch_model_next_turn_tool,
+    )
+
+    assert tools == {
+        "list_available_models": list_available_models_tool,
+        "switch_model_next_turn": switch_model_next_turn_tool,
+    }
