@@ -486,26 +486,18 @@ async def _get_or_create_builtin_tools(
     generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
     """Build the base tools before the complete generation tool set is cached."""
-    from src.infrastructure.agent.tools.clarification import configure_clarification
-    from src.infrastructure.agent.tools.decision import configure_decision
-    from src.infrastructure.agent.tools.define import get_registered_tools
+    from src.infrastructure.agent.tools.clarification import clarification_tool
+    from src.infrastructure.agent.tools.decision import decision_tool
+    from src.infrastructure.agent.tools.web_scrape import web_scrape_tool
+    from src.infrastructure.agent.tools.web_search import make_web_search_tool
 
     _ = generation_descriptor
     async with _tools_cache_lock:
-        from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
-        from src.infrastructure.agent.tools.web_search import configure_web_search
-
-        configure_web_search(redis_client=redis_client)
-        configure_web_scrape()
-        configure_clarification(hitl_handler=None)
-        configure_decision(hitl_handler=None)
-
-        registry = get_registered_tools()
         tools = {
-            "web_search": registry["web_search"],
-            "web_scrape": registry["web_scrape"],
-            "ask_clarification": registry["ask_clarification"],
-            "request_decision": registry["request_decision"],
+            "web_search": make_web_search_tool(redis_client=redis_client),
+            "web_scrape": web_scrape_tool,
+            "ask_clarification": clarification_tool,
+            "request_decision": decision_tool,
         }
         logger.info(
             "Agent Worker: Base tool set built for project %s",

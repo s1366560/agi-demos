@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -198,40 +200,8 @@ async def test_complete_worker_tool_set_is_cached_by_generation(
 
 
 @pytest.mark.unit
-async def test_builtin_tool_builder_does_not_publish_partial_generation_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_builtin_tool_builder_does_not_publish_partial_generation_cache() -> None:
     descriptor = _descriptor()
-    marker = object()
-
-    def _noop(*_args: object, **_kwargs: object) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.clarification.configure_clarification",
-        _noop,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.decision.configure_decision",
-        _noop,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.web_scrape.configure_web_scrape",
-        _noop,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.web_search.configure_web_search",
-        _noop,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.define.get_registered_tools",
-        lambda: {
-            "web_search": marker,
-            "web_scrape": marker,
-            "ask_clarification": marker,
-            "request_decision": marker,
-        },
-    )
 
     tools = await agent_worker_state._get_or_create_builtin_tools(
         "project-a",
@@ -246,3 +216,121 @@ async def test_builtin_tool_builder_does_not_publish_partial_generation_cache(
         "request_decision",
     }
     assert agent_worker_state._tools_cache == {}
+
+
+@pytest.mark.unit
+async def test_builtin_tool_builder_does_not_use_global_registry_or_configurators(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker base tools must not use process-global configuration")
+
+    for target in (
+        "src.infrastructure.agent.tools.clarification.configure_clarification",
+        "src.infrastructure.agent.tools.decision.configure_decision",
+        "src.infrastructure.agent.tools.web_scrape.configure_web_scrape",
+        "src.infrastructure.agent.tools.web_search.configure_web_search",
+        "src.infrastructure.agent.tools.define.get_registered_tools",
+    ):
+        monkeypatch.setattr(target, _forbidden)
+
+    tools = await agent_worker_state._get_or_create_builtin_tools(
+        "project-a",
+        redis_client=None,
+        generation_descriptor=_descriptor(),
+    )
+
+    assert set(tools) == {
+        "web_search",
+        "web_scrape",
+        "ask_clarification",
+        "request_decision",
+    }
+
+
+@pytest.mark.unit
+async def test_builtin_web_search_runtime_isolated_between_generations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+
+    class _CachedRedis:
+        def __init__(self, title: str, *, wait: bool) -> None:
+            self._title = title
+            self._wait = wait
+
+        async def get(self, _key: str) -> str:
+            if self._wait:
+                first_entered.set()
+                await release_first.wait()
+            else:
+                await first_entered.wait()
+                release_first.set()
+            return json.dumps(
+                {
+                    "query": "shared query",
+                    "results": [
+                        {
+                            "title": self._title,
+                            "url": "https://example.com",
+                            "content": "cached content",
+                            "score": 1.0,
+                        }
+                    ],
+                    "total_results": 1,
+                    "timestamp": "2026-08-26T00:00:00+00:00",
+                }
+            )
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.web_search.get_settings",
+        lambda: SimpleNamespace(
+            tavily_api_key="test-key",
+            tavily_search_depth="basic",
+        ),
+    )
+    first_tools = await agent_worker_state._get_or_create_builtin_tools(
+        "project-a",
+        redis_client=_CachedRedis("generation-a", wait=True),
+        generation_descriptor=_descriptor(),
+    )
+    second_tools = await agent_worker_state._get_or_create_builtin_tools(
+        "project-b",
+        redis_client=_CachedRedis("generation-b", wait=False),
+        generation_descriptor=PluginGenerationDescriptorV2(
+            profile_id="memstack-default-v2",
+            generation=8,
+            digest="b" * 64,
+        ),
+    )
+
+    from src.infrastructure.agent.tools.context import ToolContext
+
+    first_task = asyncio.create_task(
+        first_tools["web_search"].execute(
+            ToolContext(
+                session_id="session-a",
+                message_id="message-a",
+                call_id="call-a",
+                agent_name="agent-a",
+                conversation_id="conversation-a",
+            ),
+            query="shared query",
+        )
+    )
+    await first_entered.wait()
+    second_result = await second_tools["web_search"].execute(
+        ToolContext(
+            session_id="session-b",
+            message_id="message-b",
+            call_id="call-b",
+            agent_name="agent-b",
+            conversation_id="conversation-b",
+        ),
+        query="shared query",
+    )
+    first_result = await first_task
+
+    assert "generation-a" in first_result.output
+    assert "generation-b" in second_result.output
