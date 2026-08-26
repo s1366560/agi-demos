@@ -217,6 +217,7 @@ class TestCustomToolLoader:
         assert isinstance(tools["test_custom_tool"], ToolInfo)
         assert tools["test_custom_tool"].description == "A test custom tool"
         assert tools["test_custom_tool"].permission == "read"
+        assert "custom" in tools["test_custom_tool"].tags
 
         # Check diagnostics
         info_diags = [d for d in diagnostics if d.level == "info"]

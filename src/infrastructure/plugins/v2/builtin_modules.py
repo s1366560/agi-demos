@@ -13,6 +13,7 @@ from .agent_capabilities import (
     builtin_skill_contribution_v2,
     builtin_subagent_contribution_v2,
 )
+from .agent_custom_tools import builtin_agent_custom_tool_contribution_definition_v2
 from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
@@ -432,6 +433,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_model_awareness_tool_contribution_definition_v2(),
         builtin_agent_system_api_tool_contribution_definition_v2(),
         builtin_agent_canvas_tool_contribution_definition_v2(),
+        builtin_agent_custom_tool_contribution_definition_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),
         builtin_agent_definition_contribution_v2(),

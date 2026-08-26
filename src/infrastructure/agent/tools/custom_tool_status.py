@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
     },
     permission=None,
     category="diagnostics",
+    tags=frozenset({"custom"}),
 )
 async def custom_tools_status(ctx: ToolContext) -> ToolResult:
     """Return custom tool loading diagnostics for the current project."""

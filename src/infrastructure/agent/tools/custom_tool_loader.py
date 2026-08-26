@@ -24,7 +24,7 @@ import importlib.util
 import logging
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -175,6 +175,7 @@ class CustomToolLoader:
                         continue
                     info = modified
 
+                info = replace(info, tags=info.tags | frozenset({"custom"}))
                 if self._sandbox_mode:
                     info = self._wrap_as_sandbox_tool(info, file_path)
                 all_tools[name] = info

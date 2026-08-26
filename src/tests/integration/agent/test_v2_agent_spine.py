@@ -26,6 +26,7 @@ from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig
 from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.agent.tools.clarification import make_clarification_tool
+from src.infrastructure.agent.tools.custom_tool_status import custom_tools_status
 from src.infrastructure.agent.tools.decision import make_decision_tool
 from src.infrastructure.agent.tools.memory_tools import (
     memory_create_tool,
@@ -310,6 +311,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                     memory_delete_tool.name: memory_delete_tool,
                     _SYSTEM_API_TOOL.name: _SYSTEM_API_TOOL,
                     **_CANVAS_TOOLS,
+                    custom_tools_status.name: custom_tools_status,
                 },
                 skills=[_skill()],
                 subagents=[_subagent()],
@@ -344,6 +346,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             assert (
                 raw_tools["memory_search"] is memory_search_tool
                 and raw_tools[_SYSTEM_API_TOOL.name] is _SYSTEM_API_TOOL
+                and raw_tools[custom_tools_status.name] is custom_tools_status
             )
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools

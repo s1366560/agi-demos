@@ -24,6 +24,14 @@ type ToolContributionDisposerV2 = Callable[[], None | Awaitable[None]]
 type ToolContributionV2 = Callable[..., object]
 
 
+def normalized_tool_tags_v2(tool: object) -> frozenset[str]:
+    """Return validated static source tags declared by one prepared tool."""
+    raw_tags: object = getattr(tool, "tags", frozenset())
+    if not isinstance(raw_tags, (set, frozenset, tuple, list)):
+        return frozenset()
+    return frozenset(tag.strip() for tag in raw_tags if isinstance(tag, str) and tag.strip())
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolSetV2:
     """Immutable complete tool view resolved from one pinned generation."""
@@ -202,6 +210,7 @@ def _agent_owned_tools_v2(
     agent: object,
     selection_context: object | None,
     excluded_tool_names: frozenset[str] = frozenset(),
+    excluded_tool_tags: frozenset[str] = frozenset(),
 ) -> ToolSetV2:
     get_current_tools = getattr(agent, "_get_current_tools", None)
     if not callable(get_current_tools):
@@ -229,11 +238,17 @@ def _agent_owned_tools_v2(
         )
     tools = cast("Mapping[str, Any]", raw_tools)
     definitions = raw_definitions
-    filtered_tools = {name: tool for name, tool in tools.items() if name not in excluded_tool_names}
+    tag_excluded_names = {
+        name
+        for name, tool in tools.items()
+        if excluded_tool_tags.intersection(normalized_tool_tags_v2(tool))
+    }
+    excluded_names = excluded_tool_names | tag_excluded_names
+    filtered_tools = {name: tool for name, tool in tools.items() if name not in excluded_names}
     filtered_definitions = tuple(
         definition
         for definition in definitions
-        if getattr(definition, "name", None) not in excluded_tool_names
+        if getattr(definition, "name", None) not in excluded_names
     )
     return ToolSetV2(
         tools=MappingProxyType(filtered_tools),
@@ -302,6 +317,14 @@ def _apply_tool_contribution_v2(
     )
     if len(excluded_tool_names) != len(excluded_tools):
         raise ValueError("agent-owned tool contribution has invalid excluded_tools")
+    excluded_tags = config.get("excluded_tags")
+    if not isinstance(excluded_tags, Sequence) or isinstance(excluded_tags, (str, bytes)):
+        raise ValueError("agent-owned tool contribution requires excluded_tags")
+    excluded_tool_tags = frozenset(
+        tag.strip() for tag in excluded_tags if isinstance(tag, str) and tag.strip()
+    )
+    if len(excluded_tool_tags) != len(excluded_tags):
+        raise ValueError("agent-owned tool contribution has invalid excluded_tags")
     catalog = context.require("catalog")
     if not isinstance(catalog, ToolSetCatalogProtocolV2):
         raise RuntimeV2Error(
@@ -314,6 +337,7 @@ def _apply_tool_contribution_v2(
             agent=kwargs["agent"],
             selection_context=kwargs.get("selection_context"),
             excluded_tool_names=excluded_tool_names,
+            excluded_tool_tags=excluded_tool_tags,
         )
 
     return catalog.register_tools(source_id, contribution)

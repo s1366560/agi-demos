@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:40410ee67e279a4a90df0dc432a0ce9f6efe574905ca02f36e9e1612d9849fc9",
+        "digest": "sha256:ce0729746263ef2edcba705a670e46000d1eb7ba440e110bcbf559d1f1e442d8",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6781,7 +6781,7 @@
       },
       "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:364b14ec18502dbe3f7302f248d081ede33ae798d389d085959e2f118db3bddc",
+        "digest": "sha256:d7fb416826192ef0367eea83e7d1d278f5e8357a7c62c0f8e9ca97aafc7225c2",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
@@ -6805,7 +6805,7 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["source_id", "strategy", "excluded_tools"],
+          "required": ["source_id", "strategy", "excluded_tools", "excluded_tags"],
           "properties": {
             "source_id": { "const": "agent-owned-tools", "type": "string" },
             "strategy": { "const": "agent-runtime-state", "type": "string" },
@@ -6813,13 +6813,18 @@
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "uniqueItems": true
+            },
+            "excluded_tags": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
             }
           }
         }
       },
-      "contract_digest": "sha256:ea364a56ce1c188ef6ee9dca3ac8175a937c7e6a65baeb4af9fef4a0c317708e",
+      "contract_digest": "sha256:98e2b14555c9d50d1f02beff5e28b170f4cbdfd4191dcbb46e833e919c27f520",
       "artifact": {
-        "digest": "sha256:364b14ec18502dbe3f7302f248d081ede33ae798d389d085959e2f118db3bddc",
+        "digest": "sha256:d7fb416826192ef0367eea83e7d1d278f5e8357a7c62c0f8e9ca97aafc7225c2",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
@@ -6856,6 +6861,46 @@
       "artifact": {
         "digest": "sha256:8c0a22ef52a4266d8718c59095b074199fa64d130a13bf346aaf5bebbab634aa",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_canvas_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/custom",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_custom_tools:_apply_agent_custom_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "source_tag", "required_tool"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-custom-tools",
+              "type": "string"
+            },
+            "source_tag": { "const": "custom", "type": "string" },
+            "required_tool": {
+              "const": "custom_tools_status",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:5aa2066d4eaea2d096a867061f49a6080c4af68abece7017d6f4a1b526c54f5d",
+      "artifact": {
+        "digest": "sha256:92bd84c33e76f70539a0b06036e08e1f28db1718396acbdad72e40d0efc2aa7a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_custom_tools.py"
       }
     },
     {
