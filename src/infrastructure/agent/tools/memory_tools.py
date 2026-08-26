@@ -17,16 +17,37 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 _memory_create_background_tasks: set[asyncio.Task[None]] = set()
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class MemoryToolRuntime:
+    """Dependencies captured by one generation's memory tools."""
+
+    session_factory: Callable[..., Any] | None
+    graph_service: Any
+    chunk_search: Any
+    project_id: str
+    tenant_id: str
+    embedding_service: Any = None
+    user_id: str = ""
+
+
+_memory_tool_runtime: ContextVar[MemoryToolRuntime | None] = ContextVar(
+    f"{__name__}.memory_tool_runtime",
+    default=None,
+)
 
 
 async def _execute_memory_get(
@@ -135,6 +156,13 @@ def configure_memory_search(
     _memory_project_id = project_id
 
 
+def _current_memory_search_runtime() -> tuple[Any, Any, str]:
+    runtime = _memory_tool_runtime.get()
+    if runtime is not None:
+        return runtime.chunk_search, runtime.graph_service, runtime.project_id
+    return _memory_chunk_search, _memory_graph_service, _memory_project_id
+
+
 def _format_citations(results: list[dict[str, Any]]) -> None:
     """Add citation strings to result dicts, in-place."""
     for r in results:
@@ -171,12 +199,15 @@ async def _search_graph_for_tool(
     results: list[dict[str, Any]],
     query: str,
     max_results: int,
+    *,
+    graph_service: Any,
+    project_id: str,
 ) -> None:
     """Search knowledge graph and append results in-place."""
-    if _memory_graph_service is None:
+    if graph_service is None:
         return
     try:
-        graph_results = await _memory_graph_service.search(query, project_id=_memory_project_id)
+        graph_results = await graph_service.search(query, project_id=project_id)
         for gr in graph_results[: max_results - len(results)]:
             content, score, uid, created = _extract_graph_fields(gr)
             if content:
@@ -241,7 +272,8 @@ async def memory_search_tool(
 ) -> ToolResult:
     """Search project memory using hybrid retrieval."""
     _ = ctx  # reserved for future use
-    if _memory_chunk_search is None:
+    chunk_search, graph_service, project_id = _current_memory_search_runtime()
+    if chunk_search is None:
         return ToolResult(
             output=json.dumps({"error": "Memory search not configured"}),
             is_error=True,
@@ -257,9 +289,9 @@ async def memory_search_tool(
 
     # Search memory chunks via hybrid search
     try:
-        chunk_results = await _memory_chunk_search.search(
+        chunk_results = await chunk_search.search(
             query=query,
-            project_id=_memory_project_id,
+            project_id=project_id,
             limit=max_results,
             category=category,
         )
@@ -277,8 +309,14 @@ async def memory_search_tool(
         logger.warning("Memory chunk search failed error_type=%s", type(e).__name__)
 
     # Also search knowledge graph if available
-    if _memory_graph_service and len(results) < max_results:
-        await _search_graph_for_tool(results, query, max_results)
+    if graph_service and len(results) < max_results:
+        await _search_graph_for_tool(
+            results,
+            query,
+            max_results,
+            graph_service=graph_service,
+            project_id=project_id,
+        )
 
     # Format citations
     _format_citations(results)
@@ -317,6 +355,13 @@ def configure_memory_get(
     _memget_project_id = project_id
 
 
+def _current_memory_get_runtime() -> tuple[Callable[..., Any] | None, str]:
+    runtime = _memory_tool_runtime.get()
+    if runtime is not None:
+        return runtime.session_factory, runtime.project_id
+    return _memget_session_factory, _memget_project_id
+
+
 @tool_define(
     name="memory_get",
     description=(
@@ -345,20 +390,21 @@ async def memory_get_tool(
 ) -> ToolResult:
     """Retrieve full content of a memory entry by source_id."""
     _ = ctx  # reserved for future use
+    session_factory, project_id = _current_memory_get_runtime()
     if not source_id:
         return ToolResult(
             output=json.dumps({"error": "source_id parameter is required"}),
             is_error=True,
         )
 
-    if _memget_session_factory is None:
+    if session_factory is None:
         return ToolResult(
             output=json.dumps({"error": "Memory storage not available"}),
             is_error=True,
         )
 
     try:
-        data = await _execute_memory_get(_memget_session_factory, _memget_project_id, source_id)
+        data = await _execute_memory_get(session_factory, project_id, source_id)
         is_err = "error" in data
         return ToolResult(
             output=json.dumps(data, ensure_ascii=False, default=str),
@@ -405,6 +451,21 @@ def configure_memory_create(
     _memcreate_project_id = project_id
     _memcreate_tenant_id = tenant_id
     _memcreate_user_id = user_id
+
+
+def _current_memory_write_runtime() -> MemoryToolRuntime:
+    runtime = _memory_tool_runtime.get()
+    if runtime is not None:
+        return runtime
+    return MemoryToolRuntime(
+        session_factory=_memcreate_session_factory,
+        graph_service=_memcreate_graph_service,
+        chunk_search=_memory_chunk_search,
+        project_id=_memcreate_project_id,
+        tenant_id=_memcreate_tenant_id,
+        embedding_service=_memcreate_embedding_service,
+        user_id=_memcreate_user_id,
+    )
 
 
 def _schedule_memory_create_background_sync(
@@ -604,7 +665,7 @@ async def _execute_memory_create(
             user_id=user_id or "agent",
             category=category,
             tags=tags,
-            embedding_service=embedding_service or _memcreate_embedding_service,
+            embedding_service=embedding_service,
         )
 
         logger.info("memory_create: created memory")
@@ -679,7 +740,8 @@ async def memory_create_tool(
     tags: list[str] | None = None,
 ) -> ToolResult:
     """Create a new memory entry in the project knowledge base."""
-    user_id = ctx.user_id or ""
+    runtime = _current_memory_write_runtime()
+    user_id = ctx.user_id or runtime.user_id
     if not content:
         return ToolResult(
             output=json.dumps({"error": "content parameter is required"}),
@@ -696,11 +758,12 @@ async def memory_create_tool(
         title=title,
         category=category,
         tags=tags or [],
-        session_factory=_memcreate_session_factory,
-        graph_service=_memcreate_graph_service,
-        project_id=ctx.project_id or _memcreate_project_id,
-        tenant_id=_memcreate_tenant_id,
+        session_factory=runtime.session_factory,
+        graph_service=runtime.graph_service,
+        project_id=ctx.project_id or runtime.project_id,
+        tenant_id=runtime.tenant_id,
         user_id=user_id,
+        embedding_service=runtime.embedding_service,
     )
 
     is_error = '"error"' in result
@@ -721,6 +784,7 @@ async def _execute_memory_update(
     metadata: dict[str, Any] | None,
     session_factory: Callable[..., Any] | None,
     graph_service: Any,
+    embedding_service: Any = None,
 ) -> str:
     """Shared implementation for memory_update tool."""
     if not session_factory or not graph_service:
@@ -777,7 +841,7 @@ async def _execute_memory_update(
                         "tags": memory.tags,
                         "source": "agent_tool",
                     },
-                    embedding_service=_memcreate_embedding_service,
+                    embedding_service=embedding_service,
                 )
                 await session.commit()
         except Exception as chunk_err:
@@ -864,6 +928,7 @@ async def memory_update_tool(
 ) -> ToolResult:
     """Update an existing memory entry in the project knowledge base."""
     _ = ctx  # reserved for future use
+    runtime = _current_memory_write_runtime()
     if not memory_id:
         return ToolResult(
             output=json.dumps({"error": "memory_id parameter is required"}),
@@ -876,8 +941,9 @@ async def memory_update_tool(
         content=content,
         tags=tags,
         metadata=metadata,
-        session_factory=_memcreate_session_factory,
-        graph_service=_memcreate_graph_service,
+        session_factory=runtime.session_factory,
+        graph_service=runtime.graph_service,
+        embedding_service=runtime.embedding_service,
     )
 
     is_error = '"error"' in result
@@ -989,6 +1055,7 @@ async def memory_delete_tool(
 ) -> ToolResult:
     """Delete a memory entry from the project knowledge base."""
     _ = ctx  # reserved for future use
+    runtime = _current_memory_write_runtime()
     if not memory_id:
         return ToolResult(
             output=json.dumps({"error": "memory_id parameter is required"}),
@@ -997,9 +1064,55 @@ async def memory_delete_tool(
 
     result = await _execute_memory_delete(
         memory_id=memory_id,
-        session_factory=_memcreate_session_factory,
-        graph_service=_memcreate_graph_service,
+        session_factory=runtime.session_factory,
+        graph_service=runtime.graph_service,
     )
 
     is_error = '"error"' in result
     return ToolResult(output=result, is_error=is_error)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundMemoryToolExecutor:
+    template: ToolInfo
+    runtime: MemoryToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _memory_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _memory_tool_runtime.reset(token)
+
+
+def make_memory_tools(
+    *,
+    tenant_id: str,
+    project_id: str,
+    graph_service: Any,
+    chunk_search: Any,
+    session_factory: Callable[..., Any] | None,
+    embedding_service: Any = None,
+) -> dict[str, ToolInfo]:
+    """Return memory ToolInfos bound to one generation's dependencies."""
+    runtime = MemoryToolRuntime(
+        session_factory=session_factory,
+        graph_service=graph_service,
+        chunk_search=chunk_search,
+        project_id=project_id,
+        tenant_id=tenant_id,
+        embedding_service=embedding_service,
+    )
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundMemoryToolExecutor(template=template, runtime=runtime),
+        )
+        for template in (
+            memory_search_tool,
+            memory_get_tool,
+            memory_create_tool,
+            memory_update_tool,
+            memory_delete_tool,
+        )
+    }

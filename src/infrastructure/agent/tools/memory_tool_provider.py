@@ -28,14 +28,7 @@ def build_memory_tools(
         return {}
 
     from src.infrastructure.agent.tools.memory_tools import (
-        configure_memory_create,
-        configure_memory_get,
-        configure_memory_search,
-        memory_create_tool,
-        memory_delete_tool,
-        memory_get_tool,
-        memory_search_tool,
-        memory_update_tool,
+        make_memory_tools,
     )
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
     from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
@@ -51,37 +44,22 @@ def build_memory_tools(
         else None
     )
 
-    configure_memory_get(
-        session_factory=session_factory,
-        project_id=project_id,
+    chunk_search = (
+        ChunkHybridSearch(
+            cast("EmbeddingService", cached_embedding),
+            session_factory,
+        )
+        if cached_embedding is not None
+        else None
     )
-    configure_memory_create(
+    return make_memory_tools(
+        tenant_id=tenant_id,
+        project_id=project_id,
         session_factory=session_factory,
         graph_service=graph_service,
-        project_id=project_id,
-        tenant_id=tenant_id,
+        chunk_search=chunk_search,
         embedding_service=cached_embedding,
     )
-    configure_memory_search(
-        chunk_search=(
-            ChunkHybridSearch(
-                cast("EmbeddingService", cached_embedding),
-                session_factory,
-            )
-            if cached_embedding is not None
-            else None
-        ),
-        graph_service=graph_service,
-        project_id=project_id,
-    )
-
-    return {
-        "memory_search": memory_search_tool,
-        "memory_get": memory_get_tool,
-        "memory_create": memory_create_tool,
-        "memory_update": memory_update_tool,
-        "memory_delete": memory_delete_tool,
-    }
 
 
 __all__ = ["build_memory_tools"]
