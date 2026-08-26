@@ -18,6 +18,8 @@ Architecture (LEGACY - Redis-based, deprecated):
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.infrastructure.agent.hitl.utils import (
@@ -26,7 +28,7 @@ from src.infrastructure.agent.hitl.utils import (
     scope_hitl_handler as _scope_hitl_handler,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "clarification_tool",
     "configure_clarification",
+    "make_clarification_tool",
 ]
 
 
@@ -47,6 +50,19 @@ __all__ = [
 _clarification_hitl_handler: Any = None
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ClarificationToolRuntime:
+    """HITL dependency captured by one generation's clarification tool."""
+
+    hitl_handler: Any
+
+
+_clarification_tool_runtime: ContextVar[ClarificationToolRuntime | None] = ContextVar(
+    f"{__name__}.clarification_tool_runtime",
+    default=None,
+)
+
+
 def configure_clarification(hitl_handler: Any) -> None:
     """Configure the HITL handler used by the clarification tool.
 
@@ -54,6 +70,11 @@ def configure_clarification(hitl_handler: Any) -> None:
     """
     global _clarification_hitl_handler
     _clarification_hitl_handler = hitl_handler
+
+
+def _current_clarification_hitl_handler() -> Any:
+    runtime = _clarification_tool_runtime.get()
+    return runtime.hitl_handler if runtime is not None else _clarification_hitl_handler
 
 
 def _build_clarification_request_id(
@@ -134,7 +155,8 @@ async def clarification_tool(
     context: str = "",
 ) -> ToolResult:
     """Ask the user a clarifying question and wait for response."""
-    if _clarification_hitl_handler is None:
+    base_hitl_handler = _current_clarification_hitl_handler()
+    if base_hitl_handler is None:
         return ToolResult(
             output=("HITL handler not configured. Cannot request user clarification."),
             is_error=True,
@@ -156,9 +178,9 @@ async def clarification_tool(
     safe_context = sanitize_hitl_text(context)
     hitl_context: dict[str, Any] | None = {"info": safe_context} if safe_context else None
     hitl_handler = _scope_hitl_handler(
-        _clarification_hitl_handler,
-        tenant_id=ctx.tenant_id or getattr(_clarification_hitl_handler, "tenant_id", ""),
-        project_id=ctx.project_id or getattr(_clarification_hitl_handler, "project_id", None),
+        base_hitl_handler,
+        tenant_id=ctx.tenant_id or getattr(base_hitl_handler, "tenant_id", ""),
+        project_id=ctx.project_id or getattr(base_hitl_handler, "project_id", None),
         conversation_id=ctx.conversation_id,
         message_id=ctx.message_id,
     )
@@ -197,4 +219,29 @@ async def clarification_tool(
             "question": safe_question,
             "answer": safe_answer,
         },
+    )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundClarificationToolExecutor:
+    template: ToolInfo
+    runtime: ClarificationToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _clarification_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _clarification_tool_runtime.reset(token)
+
+
+def make_clarification_tool(*, hitl_handler: Any) -> ToolInfo:
+    """Return a clarification ToolInfo bound to one generation's HITL handler."""
+    runtime = ClarificationToolRuntime(hitl_handler=hitl_handler)
+    return replace(
+        clarification_tool,
+        execute=_BoundClarificationToolExecutor(
+            template=clarification_tool,
+            runtime=runtime,
+        ),
     )

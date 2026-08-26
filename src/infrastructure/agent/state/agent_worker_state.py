@@ -483,8 +483,8 @@ async def _get_or_create_builtin_tools(
     generation_descriptor: PluginGenerationDescriptorV2 | None = None,
 ) -> dict[str, Any]:
     """Build the base tools before the complete generation tool set is cached."""
-    from src.infrastructure.agent.tools.clarification import clarification_tool
-    from src.infrastructure.agent.tools.decision import decision_tool
+    from src.infrastructure.agent.tools.clarification import make_clarification_tool
+    from src.infrastructure.agent.tools.decision import make_decision_tool
     from src.infrastructure.agent.tools.web_scrape import web_scrape_tool
     from src.infrastructure.agent.tools.web_search import make_web_search_tool
 
@@ -493,8 +493,8 @@ async def _get_or_create_builtin_tools(
         tools = {
             "web_search": make_web_search_tool(redis_client=redis_client),
             "web_scrape": web_scrape_tool,
-            "ask_clarification": clarification_tool,
-            "request_decision": decision_tool,
+            "ask_clarification": make_clarification_tool(hitl_handler=None),
+            "request_decision": make_decision_tool(hitl_handler=None),
         }
         logger.info(
             "Agent Worker: Base tool set built for project %s",
@@ -716,11 +716,11 @@ def _add_system_api_tool(
 def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
     """Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)."""
     try:
-        from src.infrastructure.agent.tools.clarification import clarification_tool
-        from src.infrastructure.agent.tools.decision import decision_tool
+        from src.infrastructure.agent.tools.clarification import make_clarification_tool
+        from src.infrastructure.agent.tools.decision import make_decision_tool
 
-        tools["ask_clarification"] = clarification_tool
-        tools["request_decision"] = decision_tool
+        tools["ask_clarification"] = make_clarification_tool(hitl_handler=None)
+        tools["request_decision"] = make_decision_tool(hitl_handler=None)
         logger.info(
             f"Agent Worker: Human-in-the-loop tools (ask_clarification, request_decision) "
             f"added for project {project_id}"

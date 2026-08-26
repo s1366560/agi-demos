@@ -15,6 +15,7 @@ import pytest
 from src.domain.model.agent.skill.skill_source import SkillSource
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.state import agent_session_pool, agent_worker_state
+from src.infrastructure.agent.tools.define import ToolInfo
 
 _ROOT = Path(__file__).resolve().parents[6]
 _WORKER_SOURCE = _ROOT / "src/infrastructure/agent/state/agent_worker_state.py"
@@ -634,10 +635,16 @@ def test_worker_hitl_tools_use_declared_tool_infos(
     from src.infrastructure.agent.tools.clarification import clarification_tool
     from src.infrastructure.agent.tools.decision import decision_tool
 
-    assert tools == {
+    assert set(tools) == {"ask_clarification", "request_decision"}
+    for name, template in {
         "ask_clarification": clarification_tool,
         "request_decision": decision_tool,
-    }
+    }.items():
+        bound_tool = tools[name]
+        assert isinstance(bound_tool, ToolInfo)
+        assert bound_tool.name == template.name
+        assert bound_tool.parameters == template.parameters
+        assert bound_tool.execute is not template.execute
 
 
 @pytest.mark.unit

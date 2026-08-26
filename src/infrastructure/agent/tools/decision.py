@@ -18,6 +18,8 @@ Architecture (LEGACY - Redis-based, deprecated):
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.infrastructure.agent.hitl.utils import (
@@ -26,7 +28,7 @@ from src.infrastructure.agent.hitl.utils import (
     scope_hitl_handler as _scope_hitl_handler,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "configure_decision",
     "decision_tool",
+    "make_decision_tool",
 ]
 
 
@@ -47,6 +50,19 @@ __all__ = [
 _decision_hitl_handler: Any = None
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class DecisionToolRuntime:
+    """HITL dependency captured by one generation's decision tool."""
+
+    hitl_handler: Any
+
+
+_decision_tool_runtime: ContextVar[DecisionToolRuntime | None] = ContextVar(
+    f"{__name__}.decision_tool_runtime",
+    default=None,
+)
+
+
 def configure_decision(hitl_handler: Any) -> None:
     """Configure the HITL handler used by the decision tool.
 
@@ -54,6 +70,11 @@ def configure_decision(hitl_handler: Any) -> None:
     """
     global _decision_hitl_handler
     _decision_hitl_handler = hitl_handler
+
+
+def _current_decision_hitl_handler() -> Any:
+    runtime = _decision_tool_runtime.get()
+    return runtime.hitl_handler if runtime is not None else _decision_hitl_handler
 
 
 def _build_decision_request_id(
@@ -200,7 +221,8 @@ async def decision_tool(
     max_selections: int | None = None,
 ) -> ToolResult:
     """Request a decision from the user and wait for response."""
-    if _decision_hitl_handler is None:
+    base_hitl_handler = _current_decision_hitl_handler()
+    if base_hitl_handler is None:
         return ToolResult(
             output=("HITL handler not configured. Cannot request user decisions."),
             is_error=True,
@@ -231,9 +253,9 @@ async def decision_tool(
 
     hitl_context: dict[str, Any] | None = {"info": safe_context} if safe_context else None
     hitl_handler = _scope_hitl_handler(
-        _decision_hitl_handler,
-        tenant_id=ctx.tenant_id or getattr(_decision_hitl_handler, "tenant_id", ""),
-        project_id=ctx.project_id or getattr(_decision_hitl_handler, "project_id", None),
+        base_hitl_handler,
+        tenant_id=ctx.tenant_id or getattr(base_hitl_handler, "tenant_id", ""),
+        project_id=ctx.project_id or getattr(base_hitl_handler, "project_id", None),
         conversation_id=ctx.conversation_id,
         message_id=ctx.message_id,
     )
@@ -284,4 +306,29 @@ async def decision_tool(
             "options": safe_options,
             "decision": safe_decision,
         },
+    )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundDecisionToolExecutor:
+    template: ToolInfo
+    runtime: DecisionToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _decision_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _decision_tool_runtime.reset(token)
+
+
+def make_decision_tool(*, hitl_handler: Any) -> ToolInfo:
+    """Return a decision ToolInfo bound to one generation's HITL handler."""
+    runtime = DecisionToolRuntime(hitl_handler=hitl_handler)
+    return replace(
+        decision_tool,
+        execute=_BoundDecisionToolExecutor(
+            template=decision_tool,
+            runtime=runtime,
+        ),
     )
