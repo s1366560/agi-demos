@@ -14,6 +14,7 @@ from starlette.requests import Request
 
 from src.infrastructure.adapters.primary.web.artifact_lifecycle_application_authority_v2 import (
     ArtifactLifecycleApplicationAuthorityV2,
+    _route_template,
     artifact_lifecycle_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers import artifacts
@@ -37,19 +38,36 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[7]
 
 
-def _request() -> Request:
-    return Request(
-        {
-            "type": "http",
-            "app": FastAPI(),
-            "headers": [],
-            "method": "GET",
-            "path": "/api/v1/artifacts",
-            "query_string": b"project_id=project-a",
-            "scheme": "http",
-            "server": ("test", 80),
-        }
+def _request(
+    *,
+    path: str = "/api/v1/artifacts",
+    route_template: str | None = "/api/v1/artifacts",
+) -> Request:
+    scope: dict[str, Any] = {
+        "type": "http",
+        "app": FastAPI(),
+        "headers": [],
+        "method": "GET",
+        "path": path,
+        "query_string": b"project_id=project-a",
+        "scheme": "http",
+        "server": ("test", 80),
+    }
+    if route_template is not None:
+        scope["route"] = SimpleNamespace(path=route_template)
+    return Request(scope)
+
+
+def test_unresolved_route_template_never_records_raw_artifact_id() -> None:
+    request = _request(
+        path="/api/v1/artifacts/artifact-sensitive-id",
+        route_template=None,
     )
+
+    route_template = _route_template(request)
+
+    assert route_template == "-"
+    assert "artifact-sensitive-id" not in route_template
 
 
 async def test_authority_uses_pinned_generation_and_operation_metadata() -> None:
