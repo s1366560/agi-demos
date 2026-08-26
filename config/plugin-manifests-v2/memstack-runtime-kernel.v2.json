@@ -2237,7 +2237,7 @@
     },
     {
       "module_ref": "builtin://memstack/events/artifact-publisher",
-      "entrypoint": "src.infrastructure.plugins.v2.artifact_lifecycle_services:_apply_artifact_event_publisher_v2",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_events:_apply_artifact_event_publisher_v2",
       "targets": ["python"],
       "contract": {
         "services": {
@@ -2255,7 +2255,434 @@
             }
           ]
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [
+            {
+              "event": "artifact.created",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "mime_type",
+                      "category",
+                      "size_bytes",
+                      "url",
+                      "preview_url",
+                      "source_tool",
+                      "source_path"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_created", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "mime_type": { "type": "string", "minLength": 1 },
+                      "category": { "type": "string", "minLength": 1 },
+                      "size_bytes": { "type": "integer", "minimum": 0 },
+                      "url": { "type": ["string", "null"] },
+                      "preview_url": { "type": ["string", "null"] },
+                      "source_tool": { "type": ["string", "null"] },
+                      "source_path": { "type": ["string", "null"] }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifact.ready",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "mime_type",
+                      "category",
+                      "size_bytes",
+                      "url",
+                      "preview_url",
+                      "source_tool",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_ready", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "mime_type": { "type": "string", "minLength": 1 },
+                      "category": { "type": "string", "minLength": 1 },
+                      "size_bytes": { "type": "integer", "minimum": 0 },
+                      "url": { "type": "string" },
+                      "preview_url": { "type": ["string", "null"] },
+                      "source_tool": { "type": ["string", "null"] },
+                      "metadata": { "type": "object", "additionalProperties": true }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifact.error",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "error"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_error", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "error": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifacts.batch",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "artifacts",
+                      "source_tool"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifacts_batch", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "artifacts": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "filename",
+                            "mime_type",
+                            "category",
+                            "size_bytes",
+                            "url",
+                            "preview_url",
+                            "source_tool",
+                            "metadata"
+                          ],
+                          "properties": {
+                            "id": { "type": "string", "minLength": 1 },
+                            "filename": { "type": "string", "minLength": 1 },
+                            "mime_type": { "type": "string", "minLength": 1 },
+                            "category": { "type": "string", "minLength": 1 },
+                            "size_bytes": { "type": "integer", "minimum": 0 },
+                            "url": { "type": ["string", "null"] },
+                            "preview_url": { "type": ["string", "null"] },
+                            "source_tool": { "type": ["string", "null"] },
+                            "metadata": { "type": "object", "additionalProperties": true }
+                          }
+                        }
+                      },
+                      "source_tool": { "type": ["string", "null"] }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ],
+          "handles": [
+            {
+              "event": "artifact.created",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "mime_type",
+                      "category",
+                      "size_bytes",
+                      "url",
+                      "preview_url",
+                      "source_tool",
+                      "source_path"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_created", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "mime_type": { "type": "string", "minLength": 1 },
+                      "category": { "type": "string", "minLength": 1 },
+                      "size_bytes": { "type": "integer", "minimum": 0 },
+                      "url": { "type": ["string", "null"] },
+                      "preview_url": { "type": ["string", "null"] },
+                      "source_tool": { "type": ["string", "null"] },
+                      "source_path": { "type": ["string", "null"] }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifact.ready",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "mime_type",
+                      "category",
+                      "size_bytes",
+                      "url",
+                      "preview_url",
+                      "source_tool",
+                      "metadata"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_ready", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "mime_type": { "type": "string", "minLength": 1 },
+                      "category": { "type": "string", "minLength": 1 },
+                      "size_bytes": { "type": "integer", "minimum": 0 },
+                      "url": { "type": "string" },
+                      "preview_url": { "type": ["string", "null"] },
+                      "source_tool": { "type": ["string", "null"] },
+                      "metadata": { "type": "object", "additionalProperties": true }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifact.error",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "artifact_id",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "filename",
+                      "error"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifact_error", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "artifact_id": { "type": "string", "minLength": 1 },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "filename": { "type": "string", "minLength": 1 },
+                      "error": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            },
+            {
+              "event": "artifacts.batch",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["conversation_id", "event", "project_id"],
+                "properties": {
+                  "conversation_id": { "type": ["string", "null"] },
+                  "event": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event_type",
+                      "timestamp",
+                      "sandbox_id",
+                      "tool_execution_id",
+                      "artifacts",
+                      "source_tool"
+                    ],
+                    "properties": {
+                      "event_type": { "const": "artifacts_batch", "type": "string" },
+                      "timestamp": { "type": "number" },
+                      "sandbox_id": { "type": ["string", "null"] },
+                      "tool_execution_id": { "type": ["string", "null"] },
+                      "artifacts": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "filename",
+                            "mime_type",
+                            "category",
+                            "size_bytes",
+                            "url",
+                            "preview_url",
+                            "source_tool",
+                            "metadata"
+                          ],
+                          "properties": {
+                            "id": { "type": "string", "minLength": 1 },
+                            "filename": { "type": "string", "minLength": 1 },
+                            "mime_type": { "type": "string", "minLength": 1 },
+                            "category": { "type": "string", "minLength": 1 },
+                            "size_bytes": { "type": "integer", "minimum": 0 },
+                            "url": { "type": ["string", "null"] },
+                            "preview_url": { "type": ["string", "null"] },
+                            "source_tool": { "type": ["string", "null"] },
+                            "metadata": { "type": "object", "additionalProperties": true }
+                          }
+                        }
+                      },
+                      "source_tool": { "type": ["string", "null"] }
+                    }
+                  },
+                  "project_id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ]
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -2266,10 +2693,10 @@
           }
         }
       },
-      "contract_digest": "sha256:fe937d04efb3364419e75cd4d6b565f449ccb2beca152bc138be58999beab685",
+      "contract_digest": "sha256:8a50c9e69c135c79556ada240540ce4f35cb67263d5ca2f2e3b7abe625323841",
       "artifact": {
-        "digest": "sha256:d772e86b8f792eb3e06d58dc0d7d041651490a987c6bfde5cf2aca094ba982ba",
-        "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
+        "digest": "sha256:bec31210e3d455050c36fa6d6531983db4c6c93293d4454529df096f95a2d4c2",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_events.py"
       }
     },
     {
@@ -2354,7 +2781,7 @@
       },
       "contract_digest": "sha256:9d80add3b4e3eb34a3e48af543ffe2bee03f1dd9ebc38a72dae25861f5d4ccf2",
       "artifact": {
-        "digest": "sha256:d772e86b8f792eb3e06d58dc0d7d041651490a987c6bfde5cf2aca094ba982ba",
+        "digest": "sha256:a105276315578732aa4f0375e0c041d994b6f8c95448f720ad41e7b84b2de8e5",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
       }
     },

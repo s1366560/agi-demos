@@ -6,13 +6,10 @@ import json
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.domain.events.agent_events import AgentArtifactCreatedEvent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.repositories.artifact_repository import ArtifactRepositoryPort
 from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
@@ -39,7 +36,7 @@ from src.infrastructure.plugins.v2.artifact_lifecycle_services import (
     ARTIFACT_LIFECYCLE_PROVIDER_INJECT_V2,
     ARTIFACT_LIFECYCLE_STORAGE_INJECT_V2,
     ArtifactLifecycleApplicationServiceV2,
-    SandboxArtifactEventPublisherV2,
+    TypedArtifactEventPublisherV2,
     artifact_lifecycle_service_definitions_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
@@ -55,7 +52,6 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 from src.infrastructure.plugins.v2.sandbox_runtime import (
     SANDBOX_APPLICATION_MODULE_V2,
     SANDBOX_APPLICATION_SERVICE_V2,
-    SandboxApplicationResolverProtocolV2,
 )
 
 pytestmark = pytest.mark.unit
@@ -88,7 +84,7 @@ async def test_generation_owns_one_durable_artifact_service() -> None:
             assert isinstance(provider, SqlArtifactLifecyclePersistenceFactoryV2)
             assert provider.sessions is sessions
             assert isinstance(storage, ObjectStorageServiceV2)
-            assert isinstance(events, SandboxArtifactEventPublisherV2)
+            assert isinstance(events, TypedArtifactEventPublisherV2)
             assert lifecycle.artifact._storage is storage.storage_service
             assert lifecycle.artifact._repository._session_factory is sessions.factory
             assert lifecycle.artifact._event_publisher.__self__ is events
@@ -151,37 +147,6 @@ async def test_profile_selected_fake_persistence_provider_drives_the_consumer() 
         assert provider.calls == 1
     finally:
         await generation.dispose()
-
-
-async def test_event_provider_uses_only_the_public_sandbox_publisher_seam() -> None:
-    public_publisher = SimpleNamespace(publish_domain_event=AsyncMock(return_value="msg-1"))
-    sandbox_resolver = SimpleNamespace(
-        resolve=Mock(return_value=SimpleNamespace(event_publisher=public_publisher))
-    )
-    publisher = SandboxArtifactEventPublisherV2(
-        sandbox=cast(SandboxApplicationResolverProtocolV2, sandbox_resolver)
-    )
-    event = AgentArtifactCreatedEvent(
-        artifact_id="artifact-1",
-        sandbox_id="sandbox-1",
-        filename="report.txt",
-        mime_type="text/plain",
-        category="document",
-        size_bytes=12,
-    )
-
-    await publisher.publish(
-        "project-1",
-        event,
-        conversation_id="conversation-1",
-    )
-
-    public_publisher.publish_domain_event.assert_awaited_once_with(
-        "project-1",
-        event,
-        conversation_id="conversation-1",
-    )
-    assert not hasattr(publisher, "_event_bus")
 
 
 def test_profile_declares_event_and_lifecycle_provider_aliases() -> None:
