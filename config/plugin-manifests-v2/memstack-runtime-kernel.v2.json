@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:cd5ddff80fbd100193d7327cd9d8d302f7e24abf0cf4762d77d1d82ad173b1dc",
+        "digest": "sha256:3f054356c5e63086fa8fa02161280b5abf1a19e55159a14d1792630a1ddb446e",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6926,6 +6926,41 @@
       "artifact": {
         "digest": "sha256:9b0f67f61575b295673bce554b12afc19a0a1a0fd86316a0059904aa1eaf92d0",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_model_awareness_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/system-api",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_system_api_tool:_apply_agent_system_api_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-system-api-tool",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:606f4420f80ef82dd1e8072e384100cc9e2e824e672078a995a3a6b3ff63c9cb",
+      "artifact": {
+        "digest": "sha256:fe3d06b4d2ab21279c627f2f285177fe6b4bfaeb742a1ad9d1879e97c797ab93",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_system_api_tool.py"
       }
     },
     {

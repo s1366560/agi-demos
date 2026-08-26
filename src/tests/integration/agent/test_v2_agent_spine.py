@@ -33,6 +33,7 @@ from src.infrastructure.agent.tools.memory_tools import (
     memory_update_tool,
 )
 from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
+from src.infrastructure.agent.tools.system_api import make_system_api_tool
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -202,6 +203,17 @@ _MODEL_AWARENESS_TOOLS = make_model_awareness_tools(
 )
 
 
+def _system_api_client_factory(**_kwargs: object) -> object:
+    return object()
+
+
+_SYSTEM_API_TOOL = make_system_api_tool(
+    openapi_schema_provider=dict,
+    base_url="http://127.0.0.1:8000",
+    client_factory=_system_api_client_factory,
+)
+
+
 @pytest.mark.integration
 async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
     monkeypatch: pytest.MonkeyPatch,
@@ -293,6 +305,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                     memory_create_tool.name: memory_create_tool,
                     memory_update_tool.name: memory_update_tool,
                     memory_delete_tool.name: memory_delete_tool,
+                    _SYSTEM_API_TOOL.name: _SYSTEM_API_TOOL,
                 },
                 skills=[_skill()],
                 subagents=[_subagent()],
@@ -322,7 +335,10 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                 and raw_tools["request_decision"] is decision
             )
             assert all(raw_tools[name] is tool for name, tool in _MODEL_AWARENESS_TOOLS.items())
-            assert raw_tools["memory_search"] is memory_search_tool
+            assert (
+                raw_tools["memory_search"] is memory_search_tool
+                and raw_tools[_SYSTEM_API_TOOL.name] is _SYSTEM_API_TOOL
+            )
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools
             assert [skill.name for skill in capabilities.skills] == ["echo-skill"]

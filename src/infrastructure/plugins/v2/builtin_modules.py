@@ -38,6 +38,7 @@ from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
 )
+from .agent_system_api_tool import builtin_agent_system_api_tool_contribution_definition_v2
 from .agent_worker_runtime import agent_worker_runtime_definition_v2
 from .ai_tool_services import ai_tool_service_definitions_v2
 from .artifact_content_gc_runtime import artifact_content_gc_definitions_v2
@@ -428,6 +429,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),
         builtin_agent_model_awareness_tool_contribution_definition_v2(),
+        builtin_agent_system_api_tool_contribution_definition_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),
         builtin_agent_definition_contribution_v2(),
