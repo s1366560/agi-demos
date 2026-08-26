@@ -1,8 +1,8 @@
 """Cron job management tool -- allows the agent to manage scheduled tasks.
 
 Provides CRUD operations on cron jobs plus manual triggering and run history.
-Uses the ``@tool_define`` decorator pattern with module-level DI via
-``configure_cron_tool()``.
+Worker contributions bind a session factory to each generation; the
+``configure_cron_tool()`` path remains for direct-call compatibility.
 
 Ported from OpenClaw's cron-tool.ts, adapted for MemStack's DDD + Hexagonal
 Architecture.
@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from src.application.schemas.cron import (
@@ -32,17 +34,21 @@ from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
 from src.domain.model.cron.value_objects import ConversationMode
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Module-level DI state
+# Generation-bound runtime with module-level compatibility fallback
 # ---------------------------------------------------------------------------
 
 _cron_session_factory: Callable[..., Any] | None = None
+_cron_session_runtime: ContextVar[Callable[..., Any] | None] = ContextVar(
+    f"{__name__}.cron_session_runtime",
+    default=None,
+)
 
 
 def configure_cron_tool(
@@ -63,9 +69,11 @@ def configure_cron_tool(
 
 def _get_session_factory() -> Callable[..., Any]:
     """Return the configured session factory or raise."""
-    if _cron_session_factory is None:
+    runtime_factory = _cron_session_runtime.get()
+    session_factory = runtime_factory if runtime_factory is not None else _cron_session_factory
+    if session_factory is None:
         raise RuntimeError("cron tool not configured -- call configure_cron_tool() first")
-    return _cron_session_factory
+    return session_factory
 
 
 def _build_service(session: Any) -> CronJobService:
@@ -865,3 +873,27 @@ async def cron_tool(  # noqa: PLR0911
             output=_json({"error": f"Cron tool error: {exc}"}),
             is_error=True,
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundCronExecutor:
+    template: ToolInfo
+    session_factory: Callable[..., Any]
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _cron_session_runtime.set(self.session_factory)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _cron_session_runtime.reset(token)
+
+
+def make_cron_tool(*, session_factory: Callable[..., Any]) -> ToolInfo:
+    """Return the cron ToolInfo bound to one generation's session factory."""
+    return replace(
+        cron_tool,
+        execute=_BoundCronExecutor(
+            template=cron_tool,
+            session_factory=session_factory,
+        ),
+    )

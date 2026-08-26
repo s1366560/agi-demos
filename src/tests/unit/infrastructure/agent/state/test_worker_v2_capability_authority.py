@@ -513,6 +513,42 @@ def test_worker_session_status_uses_bound_factory(
 
 
 @pytest.mark.unit
+def test_worker_cron_uses_bound_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = object()
+    marker = object()
+    captured: dict[str, object] = {}
+
+    def _make_cron_tool(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return marker
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker cron must not mutate module-level runtime state")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.cron_tool.make_cron_tool",
+        _make_cron_tool,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.cron_tool.configure_cron_tool",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_cron_tool(tools, project_id="project-a")
+
+    assert tools["cron"] is marker
+    assert captured == {"session_factory": session_factory}
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -118,3 +119,70 @@ async def test_job_actions_reject_cross_project_job_ids(
     service.trigger_manual_run.assert_not_awaited()
     service.list_runs.assert_not_awaited()
     session.commit.assert_not_awaited()
+
+
+async def test_bound_cron_factories_are_isolated_during_interleaved_awaits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.agent.tools.cron_tool import (
+        configure_cron_tool,
+        make_cron_tool,
+    )
+
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    exits: dict[str, int] = {"a": 0, "b": 0, "legacy": 0}
+
+    @asynccontextmanager
+    async def _session(label: str):
+        try:
+            yield SimpleNamespace(label=label)
+        finally:
+            exits[label] += 1
+
+    class _Service:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.count_calls = 0
+
+        async def count_jobs(self, _project_id: str, *, include_disabled: bool) -> int:
+            self.count_calls += 1
+            if self.count_calls == 1:
+                if self.label == "a":
+                    first_entered.set()
+                    await release_first.wait()
+                elif self.label == "b":
+                    await first_entered.wait()
+                    release_first.set()
+                    await asyncio.sleep(0)
+            totals = {"a": (2, 1), "b": (5, 3)}
+            total, enabled = totals[self.label]
+            return total if include_disabled else enabled
+
+        async def list_jobs(
+            self,
+            _project_id: str,
+            *,
+            include_disabled: bool,
+            limit: int,
+        ) -> list[object]:
+            _ = include_disabled, limit
+            return []
+
+    monkeypatch.setattr(
+        cron_tool_module,
+        "_build_service",
+        lambda session: _Service(session.label),
+    )
+    tool_a = make_cron_tool(session_factory=lambda: _session("a"))
+    tool_b = make_cron_tool(session_factory=lambda: _session("b"))
+    configure_cron_tool(session_factory=lambda: _session("legacy"))
+
+    result_a, result_b = await asyncio.gather(
+        tool_a.execute(_make_ctx(project_id="project-a"), action="status"),
+        tool_b.execute(_make_ctx(project_id="project-b"), action="status"),
+    )
+
+    assert result_a.metadata == {"total": 2, "enabled": 1}
+    assert result_b.metadata == {"total": 5, "enabled": 3}
+    assert exits == {"a": 1, "b": 1, "legacy": 0}

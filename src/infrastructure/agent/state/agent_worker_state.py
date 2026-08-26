@@ -1140,22 +1140,16 @@ def _add_cron_tool(
     tools: dict[str, Any],
     project_id: str,
 ) -> None:
-    """Configure and register the cron job management tool.
-
-    Uses the session-factory DI pattern: each tool invocation creates its
-    own DB session, builds repos/service, does work, commits, and closes.
-    """
+    """Add a generation-bound cron job management tool."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
+            async_session_factory as cron_session_factory,
         )
         from src.infrastructure.agent.tools.cron_tool import (
-            configure_cron_tool,
-            cron_tool,
+            make_cron_tool,
         )
 
-        configure_cron_tool(session_factory=async_session_factory)
-        tools[cron_tool.name] = cron_tool
+        tools["cron"] = make_cron_tool(session_factory=cron_session_factory)
         logger.info(
             "Agent Worker: Cron tool added for project %s",
             project_id,
