@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:3f054356c5e63086fa8fa02161280b5abf1a19e55159a14d1792630a1ddb446e",
+        "digest": "sha256:40410ee67e279a4a90df0dc432a0ce9f6efe574905ca02f36e9e1612d9849fc9",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6821,6 +6821,41 @@
       "artifact": {
         "digest": "sha256:364b14ec18502dbe3f7302f248d081ede33ae798d389d085959e2f118db3bddc",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/canvas",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_canvas_tools:_apply_agent_canvas_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-canvas-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:7b2d77250586cce57d88f89fb77f1c374bd27ed3e95a21909f0c5b34909d88e2",
+      "artifact": {
+        "digest": "sha256:8c0a22ef52a4266d8718c59095b074199fa64d130a13bf346aaf5bebbab634aa",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_canvas_tools.py"
       }
     },
     {

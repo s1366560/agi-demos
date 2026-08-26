@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .admin_dlq_services import admin_dlq_service_definitions_v2
+from .agent_canvas_tools import builtin_agent_canvas_tool_contribution_definition_v2
 from .agent_capabilities import (
     builtin_agent_capability_definition_v2,
     builtin_skill_contribution_v2,
@@ -430,6 +431,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_memory_tool_contribution_definition_v2(),
         builtin_agent_model_awareness_tool_contribution_definition_v2(),
         builtin_agent_system_api_tool_contribution_definition_v2(),
+        builtin_agent_canvas_tool_contribution_definition_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),
         builtin_agent_definition_contribution_v2(),

@@ -13,6 +13,8 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.actor import execution
+from src.infrastructure.agent.canvas.manager import CanvasManager
+from src.infrastructure.agent.canvas.tools import make_canvas_tools
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.core.react_agent_stream_mixin import (
@@ -212,6 +214,7 @@ _SYSTEM_API_TOOL = make_system_api_tool(
     base_url="http://127.0.0.1:8000",
     client_factory=_system_api_client_factory,
 )
+_CANVAS_TOOLS = make_canvas_tools(manager=CanvasManager())
 
 
 @pytest.mark.integration
@@ -306,6 +309,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                     memory_update_tool.name: memory_update_tool,
                     memory_delete_tool.name: memory_delete_tool,
                     _SYSTEM_API_TOOL.name: _SYSTEM_API_TOOL,
+                    **_CANVAS_TOOLS,
                 },
                 skills=[_skill()],
                 subagents=[_subagent()],
@@ -334,7 +338,9 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                 raw_tools["ask_clarification"] is clarification
                 and raw_tools["request_decision"] is decision
             )
-            assert all(raw_tools[name] is tool for name, tool in _MODEL_AWARENESS_TOOLS.items())
+            assert all(
+                raw_tools[name] is tool for name, tool in _MODEL_AWARENESS_TOOLS.items()
+            ) and all(raw_tools[name] is tool for name, tool in _CANVAS_TOOLS.items())
             assert (
                 raw_tools["memory_search"] is memory_search_tool
                 and raw_tools[_SYSTEM_API_TOOL.name] is _SYSTEM_API_TOOL

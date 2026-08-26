@@ -2640,6 +2640,10 @@ profile:
           - list_available_models
           - switch_model_next_turn
           - system_api
+          - canvas_create
+          - canvas_create_interactive
+          - canvas_delete
+          - canvas_update
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
@@ -2700,6 +2704,21 @@ profile:
       enabled: true
       config:
         source_id: builtin-agent-system-api-tool
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-canvas-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/canvas
+      enabled: true
+      config:
+        source_id: builtin-agent-canvas-tools
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
