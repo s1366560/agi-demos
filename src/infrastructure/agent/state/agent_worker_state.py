@@ -656,11 +656,10 @@ def _add_skill_sync_tool(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as sync_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.skill_sync import configure_skill_sync
+        from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
 
         sandbox_id = _find_sandbox_id(tools)
-        configure_skill_sync(
+        tools["skill_sync"] = make_skill_sync_tool(
             tenant_id=tenant_id,
             project_id=project_id,
             sandbox_adapter=sandbox_adapter,
@@ -668,8 +667,6 @@ def _add_skill_sync_tool(
             session_factory=sync_session_factory,
             skill_loader_tool=tools.get("skill_loader"),
         )
-        registry = get_registered_tools()
-        tools["skill_sync"] = registry["skill_sync"]
         logger.info(f"Agent Worker: SkillSyncTool added for tenant {tenant_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")

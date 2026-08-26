@@ -396,3 +396,60 @@ def test_worker_model_awareness_tools_use_declared_tool_infos(
         "list_available_models": list_available_models_tool,
         "switch_model_next_turn": switch_model_next_turn_tool,
     }
+
+
+@pytest.mark.unit
+def test_worker_skill_sync_uses_bound_tool_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = object()
+    captured: dict[str, object] = {}
+
+    def _make_skill_sync_tool(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return marker
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker skill sync must not use global configuration or registry")
+
+    session_factory = object()
+    sandbox_adapter = object()
+    skill_loader_tool = SimpleNamespace(name="skill_loader", sandbox_id="sandbox-a")
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.skill_sync.make_skill_sync_tool",
+        _make_skill_sync_tool,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.skill_sync.configure_skill_sync",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.define.get_registered_tools",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        agent_worker_state,
+        "current_mcp_sandbox_adapter_v2",
+        lambda: sandbox_adapter,
+    )
+
+    tools: dict[str, object] = {"skill_loader": skill_loader_tool}
+    agent_worker_state._add_skill_sync_tool(
+        tools,
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+
+    assert tools["skill_sync"] is marker
+    assert captured == {
+        "tenant_id": "tenant-a",
+        "project_id": "project-a",
+        "sandbox_adapter": sandbox_adapter,
+        "sandbox_id": "sandbox-a",
+        "session_factory": session_factory,
+        "skill_loader_tool": skill_loader_tool,
+    }

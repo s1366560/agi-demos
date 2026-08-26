@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,23 @@ TOOL_DESCRIPTION = (
 
 
 
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SkillSyncRuntime:
+    """Dependencies captured by one generation's skill-sync contribution."""
+
+    tenant_id: str | None
+    project_id: str | None
+    sandbox_adapter: Any | None
+    sandbox_id: str | None
+    session_factory: Callable[..., Any] | None
+    skill_loader_tool: Any | None
+
+
+_skill_sync_runtime: ContextVar[SkillSyncRuntime | None] = ContextVar(
+    f"{__name__}.skill_sync_runtime",
+    default=None,
+)
 
 _skill_sync_tenant_id: str | None = None
 _skill_sync_project_id: str | None = None
@@ -67,6 +86,20 @@ def configure_skill_sync(
     _skill_sync_sandbox_id = sandbox_id
     _skill_sync_session_factory = session_factory
     _skill_sync_skill_loader_tool = skill_loader_tool
+
+
+def _current_skill_sync_runtime() -> SkillSyncRuntime:
+    runtime = _skill_sync_runtime.get()
+    if runtime is not None:
+        return runtime
+    return SkillSyncRuntime(
+        tenant_id=_skill_sync_tenant_id,
+        project_id=_skill_sync_project_id,
+        sandbox_adapter=_skill_sync_sandbox_adapter,
+        sandbox_id=_skill_sync_sandbox_id,
+        session_factory=_skill_sync_session_factory,
+        skill_loader_tool=_skill_sync_skill_loader_tool,
+    )
 
 
 def _skill_sync_invalidate_caches(
@@ -122,6 +155,8 @@ async def _skill_sync_execute_sync(
     skill_path: str | None,
     change_summary: str | None,
     ctx: ToolContext,
+    *,
+    runtime: SkillSyncRuntime,
 ) -> ToolResult:
     """Execute the core skill sync operation (DB + sandbox)."""
     from src.application.services.skill_reverse_sync import SkillReverseSync
@@ -133,26 +168,26 @@ async def _skill_sync_execute_sync(
     )
     from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
 
-    assert _skill_sync_session_factory is not None
-    assert _skill_sync_sandbox_adapter is not None
-    assert _skill_sync_sandbox_id is not None
-    assert _skill_sync_tenant_id is not None
+    assert runtime.session_factory is not None
+    assert runtime.sandbox_adapter is not None
+    assert runtime.sandbox_id is not None
+    assert runtime.tenant_id is not None
 
-    async with _skill_sync_session_factory() as db_session:
+    async with runtime.session_factory() as db_session:
         skill_repo = SqlSkillRepository(db_session)
         version_repo = SqlSkillVersionRepository(db_session)
         reverse_sync = SkillReverseSync(
             skill_repository=skill_repo,
             skill_version_repository=version_repo,
-            host_project_path=resolve_project_base_path(_skill_sync_project_id or ""),
+            host_project_path=resolve_project_base_path(runtime.project_id or ""),
         )
 
         result = await reverse_sync.sync_from_sandbox(
             skill_name=skill_name,
-            tenant_id=_skill_sync_tenant_id,
-            sandbox_adapter=_skill_sync_sandbox_adapter,
-            sandbox_id=_skill_sync_sandbox_id,
-            project_id=_skill_sync_project_id,
+            tenant_id=runtime.tenant_id,
+            sandbox_adapter=runtime.sandbox_adapter,
+            sandbox_id=runtime.sandbox_id,
+            project_id=runtime.project_id,
             change_summary=change_summary,
             created_by="agent",
             skill_path=skill_path,
@@ -168,17 +203,17 @@ async def _skill_sync_execute_sync(
 
     lifecycle_result = _skill_sync_invalidate_caches(
         skill_name=skill_name,
-        tenant_id=_skill_sync_tenant_id,
-        project_id=_skill_sync_project_id,
-        skill_loader_tool=_skill_sync_skill_loader_tool,
+        tenant_id=runtime.tenant_id,
+        project_id=runtime.project_id,
+        skill_loader_tool=runtime.skill_loader_tool,
     )
     await ctx.emit(
         {
             "type": "toolset_changed",
             "data": {
                 "source": TOOL_NAME,
-                "tenant_id": _skill_sync_tenant_id,
-                "project_id": _skill_sync_project_id,
+                "tenant_id": runtime.tenant_id,
+                "project_id": runtime.project_id,
                 "skill_name": skill_name,
                 "lifecycle": lifecycle_result,
             },
@@ -240,6 +275,7 @@ async def skill_sync_tool(
     change_summary: str | None = None,
 ) -> ToolResult:
     """Sync a skill from the sandbox to the system."""
+    runtime = _current_skill_sync_runtime()
     skill_name = skill_name.strip()
     if not skill_name:
         return ToolResult(
@@ -248,17 +284,17 @@ async def skill_sync_tool(
         )
 
     # Validate prerequisites
-    if not _skill_sync_sandbox_adapter:
+    if not runtime.sandbox_adapter:
         return ToolResult(
             output="No sandbox adapter available. Sandbox may not be initialized.",
             is_error=True,
         )
-    if not _skill_sync_sandbox_id:
+    if not runtime.sandbox_id:
         return ToolResult(
             output="No sandbox ID available. Sandbox may not be attached.",
             is_error=True,
         )
-    if not _skill_sync_session_factory:
+    if not runtime.session_factory:
         return ToolResult(
             output="Database session factory not available.",
             is_error=True,
@@ -270,6 +306,7 @@ async def skill_sync_tool(
             skill_path,
             change_summary,
             ctx,
+            runtime=runtime,
         )
     except Exception as e:
         logger.error(
@@ -282,3 +319,40 @@ async def skill_sync_tool(
             output=f"Skill sync failed: {e}",
             is_error=True,
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSkillSyncExecutor:
+    template: ToolInfo
+    runtime: SkillSyncRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _skill_sync_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _skill_sync_runtime.reset(token)
+
+
+def make_skill_sync_tool(
+    *,
+    tenant_id: str,
+    project_id: str | None = None,
+    sandbox_adapter: Any | None = None,
+    sandbox_id: str | None = None,
+    session_factory: Callable[..., Any] | None = None,
+    skill_loader_tool: Any | None = None,
+) -> ToolInfo:
+    """Return a skill-sync ToolInfo bound to one generation dependency set."""
+    runtime = SkillSyncRuntime(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        sandbox_adapter=sandbox_adapter,
+        sandbox_id=sandbox_id,
+        session_factory=session_factory,
+        skill_loader_tool=skill_loader_tool,
+    )
+    return replace(
+        skill_sync_tool,
+        execute=_BoundSkillSyncExecutor(template=skill_sync_tool, runtime=runtime),
+    )
