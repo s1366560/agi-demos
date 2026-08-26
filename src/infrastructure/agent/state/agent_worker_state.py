@@ -794,28 +794,27 @@ def _add_register_mcp_server_tool(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure register_mcp_server @tool_define tool."""
+    """Bind register_mcp_server to one generation's runtime dependencies."""
     sandbox_adapter = current_mcp_sandbox_adapter_v2()
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.register_mcp_server import (
-            configure_register_mcp_server_tool,
+        from src.infrastructure.agent.tools.register_mcp_server import register_mcp_server_tool
+        from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+            make_register_mcp_server_tool,
         )
 
         sandbox_id_for_tools = _find_sandbox_id(tools, project_id=project_id)
 
-        configure_register_mcp_server_tool(
+        tools["register_mcp_server"] = make_register_mcp_server_tool(
+            template=register_mcp_server_tool,
             session_factory=app_session_factory,
             tenant_id=tenant_id,
             project_id=project_id,
             sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id_for_tools,
         )
-        registry = get_registered_tools()
-        tools["register_mcp_server"] = registry["register_mcp_server"]
         logger.info(f"Agent Worker: register_mcp_server configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")

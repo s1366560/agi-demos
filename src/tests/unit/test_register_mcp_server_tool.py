@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -411,3 +413,106 @@ class TestRegisterMCPServerTool:
         """New API uses ToolContext for events; fresh ctx has no events."""
         ctx = _make_ctx()
         assert ctx.consume_pending_events() == []
+
+
+@pytest.mark.unit
+async def test_bound_tools_isolate_runtime_during_interleaved_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each bound tool must retain its generation dependencies across awaits."""
+    from src.infrastructure.agent.tools import register_mcp_server as register_module
+    from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+        make_register_mcp_server_tool,
+    )
+    from src.infrastructure.agent.tools.result import ToolResult
+
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    observed: dict[str, list[tuple[object, str, str, object, str]]] = {}
+
+    def _snapshot() -> tuple[object, str, str, object, str]:
+        runtime = register_module._current_register_mcp_server_runtime()
+        assert runtime.sandbox_adapter is not None
+        assert runtime.sandbox_id is not None
+        return (
+            runtime.session_factory,
+            runtime.tenant_id,
+            runtime.project_id,
+            runtime.sandbox_adapter,
+            runtime.sandbox_id,
+        )
+
+    async def _fake_execute_core(
+        _ctx: ToolContext,
+        server_name: str,
+        _server_type: str,
+        _config_json: str,
+        _transport_config: dict[str, Any],
+    ) -> ToolResult:
+        observed.setdefault(server_name, []).append(_snapshot())
+        if server_name == "generation-a":
+            first_entered.set()
+            await release_first.wait()
+        else:
+            await first_entered.wait()
+            release_first.set()
+            await asyncio.sleep(0)
+        observed[server_name].append(_snapshot())
+        return ToolResult(output=server_name)
+
+    monkeypatch.setattr(register_module, "_register_mcp_execute_core", _fake_execute_core)
+
+    session_factory_a = object()
+    session_factory_b = object()
+    adapter_a = SimpleNamespace()
+    adapter_b = SimpleNamespace()
+    tool_a = make_register_mcp_server_tool(
+        template=register_module.register_mcp_server_tool,
+        session_factory=session_factory_a,
+        tenant_id="tenant-a",
+        project_id="project-a",
+        sandbox_adapter=adapter_a,
+        sandbox_id="sandbox-a",
+    )
+    tool_b = make_register_mcp_server_tool(
+        template=register_module.register_mcp_server_tool,
+        session_factory=session_factory_b,
+        tenant_id="tenant-b",
+        project_id="project-b",
+        sandbox_adapter=adapter_b,
+        sandbox_id="sandbox-b",
+    )
+
+    await asyncio.gather(
+        tool_a.execute(
+            _make_ctx(),
+            server_name="generation-a",
+            server_type="stdio",
+            command="python",
+        ),
+        tool_b.execute(
+            _make_ctx(),
+            server_name="generation-b",
+            server_type="stdio",
+            command="python",
+        ),
+    )
+
+    expected_a = (
+        session_factory_a,
+        "tenant-a",
+        "project-a",
+        adapter_a,
+        "sandbox-a",
+    )
+    expected_b = (
+        session_factory_b,
+        "tenant-b",
+        "project-b",
+        adapter_b,
+        "sandbox-b",
+    )
+    assert observed == {
+        "generation-a": [expected_a, expected_a],
+        "generation-b": [expected_b, expected_b],
+    }

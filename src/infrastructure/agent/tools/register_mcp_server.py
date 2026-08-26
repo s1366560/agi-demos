@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 from src.domain.events.agent_events import AgentMCPAppRegisteredEvent
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+    RegisterMCPServerRuntime,
+    register_mcp_server_runtime as _register_mcp_server_runtime,
+)
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -56,6 +60,7 @@ TOOL_DESCRIPTION = (
 # Module-level DI references
 # ---------------------------------------------------------------------------
 
+
 _register_mcp_session_factory: Any | None = None
 _register_mcp_tenant_id: str = ""
 _register_mcp_project_id: str = ""
@@ -71,7 +76,7 @@ def configure_register_mcp_server_tool(
     sandbox_adapter: SandboxPort | None = None,
     sandbox_id: str | None = None,
 ) -> None:
-    """Configure module-level DI for register_mcp_server_tool."""
+    """Configure legacy module-level fallback dependencies for the tool."""
     global _register_mcp_session_factory
     global _register_mcp_tenant_id
     global _register_mcp_project_id
@@ -82,6 +87,19 @@ def configure_register_mcp_server_tool(
     _register_mcp_project_id = project_id
     _register_mcp_sandbox_adapter = sandbox_adapter
     _register_mcp_sandbox_id = sandbox_id
+
+
+def _current_register_mcp_server_runtime() -> RegisterMCPServerRuntime:
+    runtime = _register_mcp_server_runtime.get()
+    if runtime is not None:
+        return runtime
+    return RegisterMCPServerRuntime(
+        session_factory=_register_mcp_session_factory,
+        tenant_id=_register_mcp_tenant_id,
+        project_id=_register_mcp_project_id,
+        sandbox_adapter=_register_mcp_sandbox_adapter,
+        sandbox_id=_register_mcp_sandbox_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +148,7 @@ def _register_mcp_validate_params(
     url: str,
 ) -> str | None:
     """Validate register_mcp_server parameters. Returns error string or None."""
+    runtime = _current_register_mcp_server_runtime()
     if not server_name:
         return "Error: server_name is required."
     if server_type not in ("stdio", "sse", "http", "websocket"):
@@ -141,7 +160,7 @@ def _register_mcp_validate_params(
         return "Error: 'command' is required for stdio servers."
     if server_type in ("sse", "http", "websocket") and not url:
         return f"Error: 'url' is required for {server_type} servers."
-    if not _register_mcp_sandbox_adapter or not _register_mcp_sandbox_id:
+    if not runtime.sandbox_adapter or not runtime.sandbox_id:
         return (
             "Error: Sandbox not available. This tool requires a running sandbox with MCP support."
         )
@@ -153,8 +172,9 @@ def _register_mcp_normalize_transport_config(
     transport_config: dict[str, Any],
 ) -> dict[str, Any]:
     """Normalize transport config paths using sandbox adapter metadata when available."""
-    adapter = _register_mcp_sandbox_adapter
-    sandbox_id = _register_mcp_sandbox_id
+    runtime = _current_register_mcp_server_runtime()
+    adapter = runtime.sandbox_adapter
+    sandbox_id = runtime.sandbox_id
     if not adapter or not sandbox_id:
         return transport_config
 
@@ -185,8 +205,9 @@ def _register_mcp_resolve_runtime_transport_config(
 ) -> dict[str, Any]:
     """Use the adapter's runtime-normalized config when it is available."""
     resolved_transport_config = fallback_transport_config
-    adapter = _register_mcp_sandbox_adapter
-    sandbox_id = _register_mcp_sandbox_id
+    runtime = _current_register_mcp_server_runtime()
+    adapter = runtime.sandbox_adapter
+    sandbox_id = runtime.sandbox_id
     if (
         adapter
         and sandbox_id
@@ -224,8 +245,9 @@ async def _register_mcp_install_and_start(
     config_json: str,
 ) -> str | None:
     """Install and start the MCP server via sandbox. Returns error string or None."""
-    adapter = cast("SandboxPort", _register_mcp_sandbox_adapter)
-    sid = cast(str, _register_mcp_sandbox_id)
+    runtime = _current_register_mcp_server_runtime()
+    adapter = cast("SandboxPort", runtime.sandbox_adapter)
+    sid = cast(str, runtime.sandbox_id)
 
     install_result = await adapter.call_tool(
         sandbox_id=sid,
@@ -269,8 +291,9 @@ async def _register_mcp_discover_tools(
     server_name: str,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Discover tools from the MCP server. Returns (tools, error_or_none)."""
-    adapter = cast("SandboxPort", _register_mcp_sandbox_adapter)
-    sid = cast(str, _register_mcp_sandbox_id)
+    runtime = _current_register_mcp_server_runtime()
+    adapter = cast("SandboxPort", runtime.sandbox_adapter)
+    sid = cast(str, runtime.sandbox_id)
 
     discover_result = await adapter.call_tool(
         sandbox_id=sid,
@@ -301,7 +324,8 @@ async def _register_mcp_persist_server(
     transport_config: dict[str, Any],
 ) -> str | None:
     """Persist MCPServer to DB. Returns server_id or None."""
-    if not _register_mcp_session_factory:
+    runtime = _current_register_mcp_server_runtime()
+    if not runtime.session_factory:
         logger.warning("Cannot persist MCPServer '%s': no session_factory", server_name)
         return None
 
@@ -310,9 +334,9 @@ async def _register_mcp_persist_server(
     )
 
     try:
-        async with _register_mcp_session_factory() as session:
+        async with runtime.session_factory() as session:
             repo = SqlMCPServerRepository(session)
-            existing = await repo.get_by_name(project_id=_register_mcp_project_id, name=server_name)
+            existing = await repo.get_by_name(project_id=runtime.project_id, name=server_name)
             if existing:
                 await _register_mcp_update_existing_server(
                     repo, session, existing, server_type, transport_config, server_name
@@ -355,9 +379,10 @@ async def _register_mcp_create_new_server(
     transport_config: dict[str, Any],
 ) -> str:
     """Create a new MCPServer DB record. Returns server_id."""
+    runtime = _current_register_mcp_server_runtime()
     server_id: str = await repo.create(
-        tenant_id=_register_mcp_tenant_id,
-        project_id=_register_mcp_project_id,
+        tenant_id=runtime.tenant_id,
+        project_id=runtime.project_id,
         name=server_name,
         description=f"Agent-registered MCP server ({server_type})",
         server_type=server_type,
@@ -380,7 +405,8 @@ async def _register_mcp_update_discovered_tools(
     tools: list[dict[str, Any]],
 ) -> None:
     """Update discovered tools on the MCPServer DB record."""
-    if not _register_mcp_session_factory:
+    runtime = _current_register_mcp_server_runtime()
+    if not runtime.session_factory:
         return
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
@@ -388,7 +414,7 @@ async def _register_mcp_update_discovered_tools(
     )
 
     try:
-        async with _register_mcp_session_factory() as session:
+        async with runtime.session_factory() as session:
             repo = SqlMCPServerRepository(session)
             await repo.update_discovered_tools(
                 server_id=server_id,
@@ -416,6 +442,7 @@ async def _register_mcp_detect_apps(
     tools: list[dict[str, Any]],
 ) -> list[str]:
     """Detect tools with UI metadata, persist as MCP Apps, emit events."""
+    runtime = _current_register_mcp_server_runtime()
     app_tools: list[str] = []
     for t in tools:
         meta = t.get("_meta", {}) or {}
@@ -426,7 +453,7 @@ async def _register_mcp_detect_apps(
         tool_name = t.get("name", "unknown")
         app_tools.append(tool_name)
         app_id = ""
-        if _register_mcp_session_factory:
+        if runtime.session_factory:
             try:
                 app_id = await _register_mcp_persist_app(
                     server_name=server_name,
@@ -457,6 +484,7 @@ async def _register_mcp_persist_app(
     ui_metadata: dict[str, Any],
 ) -> str:
     """Persist an MCP App to the database. Returns app ID."""
+    runtime = _current_register_mcp_server_runtime()
     from src.domain.model.mcp.app import (
         MCPApp,
         MCPAppSource,
@@ -470,8 +498,8 @@ async def _register_mcp_persist_app(
     server_id = await _register_mcp_lookup_server_id(server_name)
 
     app = MCPApp(
-        project_id=_register_mcp_project_id,
-        tenant_id=_register_mcp_tenant_id,
+        project_id=runtime.project_id,
+        tenant_id=runtime.tenant_id,
         server_id=server_id,
         server_name=server_name,
         tool_name=tool_name,
@@ -485,10 +513,10 @@ async def _register_mcp_persist_app(
         status=MCPAppStatus.DISCOVERED,
     )
 
-    if _register_mcp_session_factory is None:
+    if runtime.session_factory is None:
         msg = "session_factory is required to persist MCP apps"
         raise RuntimeError(msg)
-    async with _register_mcp_session_factory() as session:
+    async with runtime.session_factory() as session:
         repo = SqlMCPAppRepository(session)
         await repo.save(app)
         await session.commit()
@@ -497,7 +525,8 @@ async def _register_mcp_persist_app(
 
 async def _register_mcp_lookup_server_id(server_name: str) -> str | None:
     """Look up the MCPServer entity ID by name."""
-    if not _register_mcp_session_factory:
+    runtime = _current_register_mcp_server_runtime()
+    if not runtime.session_factory:
         return None
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
@@ -505,9 +534,9 @@ async def _register_mcp_lookup_server_id(server_name: str) -> str | None:
     )
 
     try:
-        async with _register_mcp_session_factory() as session:
+        async with runtime.session_factory() as session:
             repo = SqlMCPServerRepository(session)
-            entity = await repo.get_by_name(project_id=_register_mcp_project_id, name=server_name)
+            entity = await repo.get_by_name(project_id=runtime.project_id, name=server_name)
             if entity:
                 logger.debug("Found MCPServer entity for %s: id=%s", server_name, entity.id)
                 return entity.id
@@ -538,6 +567,7 @@ async def _register_mcp_emit_events(
             Included in the toolset_changed event so the processor can inject
             them directly without waiting for a cache repopulation round-trip.
     """
+    runtime = _current_register_mcp_server_runtime()
     from src.domain.events.agent_events import AgentToolsUpdatedEvent
     from src.infrastructure.agent.tools.self_modifying_lifecycle import (
         SelfModifyingLifecycleOrchestrator,
@@ -545,7 +575,7 @@ async def _register_mcp_emit_events(
 
     await ctx.emit(
         AgentToolsUpdatedEvent(
-            project_id=_register_mcp_project_id,
+            project_id=runtime.project_id,
             tool_names=namespaced_tool_names,
             server_name=server_name,
             requires_refresh=True,
@@ -559,21 +589,21 @@ async def _register_mcp_emit_events(
 
     lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
         source=TOOL_NAME,
-        tenant_id=_register_mcp_tenant_id,
-        project_id=_register_mcp_project_id,
+        tenant_id=runtime.tenant_id,
+        project_id=runtime.project_id,
         clear_tool_definitions=True,
         expected_tool_names=namespaced_tool_names,
         metadata={"server_name": server_name},
     )
     logger.info(
         "register_mcp_server lifecycle completed for project %s: %s",
-        _register_mcp_project_id,
+        runtime.project_id,
         lifecycle_result["cache_invalidation"],
     )
     event_data: dict[str, Any] = {
         "source": TOOL_NAME,
-        "project_id": _register_mcp_project_id,
-        "tenant_id": _register_mcp_tenant_id,
+        "project_id": runtime.project_id,
+        "tenant_id": runtime.tenant_id,
         "server_name": server_name,
         "tool_names": namespaced_tool_names,
         "lifecycle": lifecycle_result,
