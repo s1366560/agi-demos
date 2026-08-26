@@ -339,6 +339,7 @@ class ProjectAgentActor:
                     return
 
                 async with self._admit_plugin_turn(request) as operation:
+                    await self._ensure_agent_orchestrator_v2()
                     await self._ensure_agent_initialized_v2(operation)
                     distribution = self._plugin_admission_v2.host.distribution_for_generation(
                         operation.generation
@@ -509,6 +510,7 @@ class ProjectAgentActor:
                         },
                     },
                 ) as operation:
+                    await self._ensure_agent_orchestrator_v2()
                     await self._ensure_agent_initialized_v2(
                         operation,
                         agent=resume_agent,
@@ -608,6 +610,169 @@ class ProjectAgentActor:
             + f":{self._lease_owner_suffix}"
         )
 
+    async def _ensure_agent_orchestrator_v2(self) -> None:
+        """Build the actor orchestrator from the exact admitted V2 registry."""
+        settings = get_settings()
+        if not settings.multi_agent_enabled:
+            return
+
+        from src.infrastructure.agent.state.agent_worker_state import (
+            get_agent_orchestrator,
+            get_redis_client,
+            set_agent_orchestrator,
+        )
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_runtime_services_v2,
+        )
+
+        try:
+            async with self._bootstrap_lock:
+                run_registry = current_agent_worker_runtime_services_v2().subagent_run_registry
+                current_orchestrator = get_agent_orchestrator()
+                if (
+                    getattr(self, "_agent_orchestrator_run_registry_v2", None) is run_registry
+                    and getattr(self, "_agent_orchestrator_v2", None) is current_orchestrator
+                ):
+                    return
+
+                from src.application.services.agent.runtime_bootstrapper import (
+                    AgentRuntimeBootstrapper,
+                )
+                from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
+                    RedisAgentMessageBusAdapter,
+                )
+                from src.infrastructure.adapters.secondary.persistence.database import (
+                    async_session_factory,
+                )
+                from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
+                    SqlAgentRegistryRepository,
+                )
+                from src.infrastructure.agent.orchestration.orchestrator import (
+                    AgentOrchestrator,
+                    SessionTurnExecutionRequest,
+                    SpawnExecutionRequest,
+                )
+                from src.infrastructure.agent.orchestration.session_registry import (
+                    AgentSessionRegistry,
+                )
+                from src.infrastructure.agent.orchestration.spawn_manager import (
+                    SpawnManager,
+                )
+                from src.infrastructure.plugins.v2.boundary import (
+                    OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+                    current_operation_context_v2,
+                )
+
+                def _pinned_distribution() -> tuple[
+                    dict[str, str | int],
+                    dict[str, Any],
+                ]:
+                    operation = current_operation_context_v2()
+                    descriptor = operation.descriptor.to_payload()
+                    value = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+                    if not isinstance(value, dict):
+                        raise RuntimeV2Error(
+                            "invalid_plugin_distribution",
+                            "plugin operation distribution must be an object",
+                        )
+                    distribution = dict(value)
+                    if distribution.get("descriptor") != descriptor:
+                        raise RuntimeV2Error(
+                            "plugin_distribution_mismatch",
+                            "plugin operation distribution does not match the pinned generation",
+                        )
+                    return descriptor, distribution
+
+                async def _spawn_executor(request: SpawnExecutionRequest) -> None:
+                    generation, distribution = _pinned_distribution()
+                    conversation = await AgentRuntimeBootstrapper.ensure_spawned_agent_conversation(
+                        child_session_id=request.child_session_id,
+                        parent_session_id=request.parent_session_id,
+                        project_id=request.project_id,
+                        tenant_id=request.tenant_id,
+                        user_id=request.user_id,
+                        parent_agent_id=request.parent_agent_id,
+                        child_agent_id=request.child_agent_id,
+                        child_agent_name=request.child_agent_name,
+                        mode=request.mode.value,
+                    )
+                    tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
+                        conversation.tenant_id
+                    )
+                    await self.chat(
+                        ProjectChatRequest(
+                            conversation_id=conversation.id,
+                            message_id=str(uuid.uuid4()),
+                            user_message=request.message,
+                            user_id=conversation.user_id,
+                            conversation_context=[],
+                            plan_mode=conversation.is_in_plan_mode,
+                            agent_id=request.child_agent_id,
+                            tenant_agent_config=tenant_agent_config.to_dict(),
+                            parent_session_id=request.parent_session_id,
+                            plugin_generation=generation,
+                            plugin_distribution=distribution,
+                        )
+                    )
+
+                async def _session_turn_executor(
+                    request: SessionTurnExecutionRequest,
+                ) -> None:
+                    generation, distribution = _pinned_distribution()
+                    conversation = await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
+                        child_session_id=request.child_session_id,
+                        project_id=request.project_id,
+                        tenant_id=request.tenant_id,
+                    )
+                    tenant_agent_config = await AgentRuntimeBootstrapper._load_tenant_agent_config(
+                        conversation.tenant_id
+                    )
+                    await self.chat(
+                        ProjectChatRequest(
+                            conversation_id=conversation.id,
+                            message_id=str(uuid.uuid4()),
+                            user_message=request.message,
+                            user_id=conversation.user_id,
+                            conversation_context=[],
+                            plan_mode=conversation.is_in_plan_mode,
+                            agent_id=request.child_agent_id,
+                            tenant_agent_config=tenant_agent_config.to_dict(),
+                            parent_session_id=conversation.parent_conversation_id,
+                            plugin_generation=generation,
+                            plugin_distribution=distribution,
+                        )
+                    )
+
+                db_session = async_session_factory()
+                redis = await get_redis_client()
+                session_registry = AgentSessionRegistry()
+                orchestrator = AgentOrchestrator(
+                    agent_registry=SqlAgentRegistryRepository(db_session),
+                    session_registry=session_registry,
+                    spawn_manager=SpawnManager(
+                        session_registry=session_registry,
+                        run_registry=run_registry,
+                    ),
+                    message_bus=RedisAgentMessageBusAdapter(redis),
+                    db_session=db_session,
+                    spawn_executor=_spawn_executor,
+                    session_turn_executor=_session_turn_executor,
+                )
+                self._agent_orchestrator_v2 = orchestrator
+                self._agent_orchestrator_run_registry_v2 = run_registry
+                set_agent_orchestrator(orchestrator)
+                logger.info(
+                    "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"
+                )
+        except RuntimeV2Error:
+            raise
+        except Exception as e:
+            logger.warning(
+                "[ProjectAgentActor] AgentOrchestrator init failed "
+                "(multi-agent tools disabled): %s",
+                e,
+            )
+
     async def _bootstrap_runtime(self) -> None:
         if self._bootstrapped:
             return
@@ -615,8 +780,6 @@ class ProjectAgentActor:
         async with self._bootstrap_lock:
             if self._bootstrapped:
                 return  # type: ignore[unreachable]
-
-            settings = get_settings()
 
             try:
                 await initialize_default_llm_providers()
@@ -629,150 +792,5 @@ class ProjectAgentActor:
             except Exception as e:
                 logger.error(f"[ProjectAgentActor] Graph service init failed: {e}")
                 raise
-
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_agent_orchestrator,
-                set_agent_orchestrator,
-            )
-
-            if not get_agent_orchestrator() and settings.multi_agent_enabled:
-                try:
-                    from src.application.services.agent.runtime_bootstrapper import (
-                        AgentRuntimeBootstrapper,
-                    )
-                    from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
-                        RedisAgentMessageBusAdapter,
-                    )
-                    from src.infrastructure.adapters.secondary.persistence.database import (
-                        async_session_factory,
-                    )
-                    from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-                        SqlAgentRegistryRepository,
-                    )
-                    from src.infrastructure.agent.orchestration.orchestrator import (
-                        AgentOrchestrator,
-                        SessionTurnExecutionRequest,
-                        SpawnExecutionRequest,
-                    )
-                    from src.infrastructure.agent.orchestration.session_registry import (
-                        AgentSessionRegistry,
-                    )
-                    from src.infrastructure.agent.orchestration.spawn_manager import (
-                        SpawnManager,
-                    )
-                    from src.infrastructure.agent.state.agent_worker_state import (
-                        get_redis_client,
-                    )
-                    from src.infrastructure.agent.subagent.run_registry import (
-                        get_shared_subagent_run_registry,
-                    )
-
-                    _db_session = async_session_factory()
-                    _redis = await get_redis_client()
-                    _session_registry = AgentSessionRegistry()
-                    _run_registry = get_shared_subagent_run_registry(
-                        persistence_path=getattr(
-                            settings, "agent_subagent_run_registry_path", None
-                        ),
-                        postgres_persistence_dsn=getattr(
-                            settings, "agent_subagent_run_postgres_dsn", None
-                        ),
-                        sqlite_persistence_path=getattr(
-                            settings, "agent_subagent_run_sqlite_path", None
-                        ),
-                        redis_cache_url=getattr(
-                            settings, "agent_subagent_run_redis_cache_url", None
-                        ),
-                        redis_cache_ttl_seconds=(
-                            getattr(settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
-                        ),
-                        terminal_retention_seconds=(
-                            settings.agent_subagent_terminal_retention_seconds
-                        ),
-                    )
-
-                    async def _spawn_executor(request: SpawnExecutionRequest) -> None:
-                        conversation = (
-                            await AgentRuntimeBootstrapper.ensure_spawned_agent_conversation(
-                                child_session_id=request.child_session_id,
-                                parent_session_id=request.parent_session_id,
-                                project_id=request.project_id,
-                                tenant_id=request.tenant_id,
-                                user_id=request.user_id,
-                                parent_agent_id=request.parent_agent_id,
-                                child_agent_id=request.child_agent_id,
-                                child_agent_name=request.child_agent_name,
-                                mode=request.mode.value,
-                            )
-                        )
-                        tenant_agent_config = (
-                            await AgentRuntimeBootstrapper._load_tenant_agent_config(
-                                conversation.tenant_id
-                            )
-                        )
-                        await self.chat(
-                            ProjectChatRequest(
-                                conversation_id=conversation.id,
-                                message_id=str(uuid.uuid4()),
-                                user_message=request.message,
-                                user_id=conversation.user_id,
-                                conversation_context=[],
-                                plan_mode=conversation.is_in_plan_mode,
-                                agent_id=request.child_agent_id,
-                                tenant_agent_config=tenant_agent_config.to_dict(),
-                                parent_session_id=request.parent_session_id,
-                            )
-                        )
-
-                    async def _session_turn_executor(
-                        request: SessionTurnExecutionRequest,
-                    ) -> None:
-                        conversation = (
-                            await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
-                                child_session_id=request.child_session_id,
-                                project_id=request.project_id,
-                                tenant_id=request.tenant_id,
-                            )
-                        )
-                        tenant_agent_config = (
-                            await AgentRuntimeBootstrapper._load_tenant_agent_config(
-                                conversation.tenant_id
-                            )
-                        )
-                        await self.chat(
-                            ProjectChatRequest(
-                                conversation_id=conversation.id,
-                                message_id=str(uuid.uuid4()),
-                                user_message=request.message,
-                                user_id=conversation.user_id,
-                                conversation_context=[],
-                                plan_mode=conversation.is_in_plan_mode,
-                                agent_id=request.child_agent_id,
-                                tenant_agent_config=tenant_agent_config.to_dict(),
-                                parent_session_id=conversation.parent_conversation_id,
-                            )
-                        )
-
-                    _orchestrator = AgentOrchestrator(
-                        agent_registry=SqlAgentRegistryRepository(_db_session),
-                        session_registry=_session_registry,
-                        spawn_manager=SpawnManager(
-                            session_registry=_session_registry,
-                            run_registry=_run_registry,
-                        ),
-                        message_bus=RedisAgentMessageBusAdapter(_redis),
-                        db_session=_db_session,
-                        spawn_executor=_spawn_executor,
-                        session_turn_executor=_session_turn_executor,
-                    )
-                    set_agent_orchestrator(_orchestrator)
-                    logger.info(
-                        "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[ProjectAgentActor] AgentOrchestrator init failed "
-                        f"(multi-agent tools disabled): {e}"
-                    )
 
             self._bootstrapped = True

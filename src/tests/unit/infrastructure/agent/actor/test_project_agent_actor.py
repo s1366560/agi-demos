@@ -15,6 +15,10 @@ from src.infrastructure.agent.actor.types import (
     ProjectChatRequest,
     ProjectChatResult,
 )
+from src.infrastructure.agent.orchestration.orchestrator import (
+    SessionTurnExecutionRequest,
+    SpawnExecutionRequest,
+)
 from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -213,4 +217,175 @@ async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -
         call(force_refresh=False),
         call(force_refresh=True),
     ]
+    await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
+async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
+    actor = _actor_instance()
+    run_registry = object()
+    current_services = MagicMock(return_value=SimpleNamespace(subagent_run_registry=run_registry))
+    set_orchestrator = MagicMock()
+    spawn_manager = MagicMock(return_value="spawn-manager")
+    orchestrator = MagicMock(return_value="agent-orchestrator")
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="memstack-default-v2",
+        generation=7,
+        digest="a" * 64,
+    )
+    distribution = {
+        "descriptor": descriptor.to_payload(),
+        "snapshot": {"profile_id": descriptor.profile_id},
+        "envelope": {"version": 7, "nonce": "publication-7"},
+    }
+    operation = SimpleNamespace(
+        descriptor=descriptor,
+        require=MagicMock(return_value=distribution),
+    )
+
+    with (
+        patch(
+            "src.infrastructure.agent.actor.project_agent_actor.get_settings",
+            return_value=SimpleNamespace(multi_agent_enabled=True),
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_runtime_services_v2",
+            current_services,
+        ),
+        patch(
+            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            return_value=None,
+        ),
+        patch(
+            "src.infrastructure.agent.state.agent_worker_state.set_agent_orchestrator",
+            set_orchestrator,
+        ),
+        patch(
+            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+            new=AsyncMock(return_value="redis-client"),
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value="db-session",
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_registry."
+            "SqlAgentRegistryRepository",
+            return_value="agent-registry",
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus."
+            "RedisAgentMessageBusAdapter",
+            return_value="message-bus",
+        ),
+        patch(
+            "src.infrastructure.agent.orchestration.session_registry.AgentSessionRegistry",
+            return_value="session-registry",
+        ),
+        patch(
+            "src.infrastructure.agent.orchestration.spawn_manager.SpawnManager",
+            spawn_manager,
+        ),
+        patch(
+            "src.infrastructure.agent.orchestration.orchestrator.AgentOrchestrator",
+            orchestrator,
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+    ):
+        await actor._ensure_agent_orchestrator_v2()
+
+    current_services.assert_called_once_with()
+    spawn_manager.assert_called_once_with(
+        session_registry="session-registry",
+        run_registry=run_registry,
+    )
+    assert orchestrator.call_args.kwargs["spawn_executor"] is not None
+    assert orchestrator.call_args.kwargs["session_turn_executor"] is not None
+    set_orchestrator.assert_called_once_with("agent-orchestrator")
+
+    conversation = SimpleNamespace(
+        id="child-session",
+        tenant_id="tenant-a",
+        user_id="user-a",
+        is_in_plan_mode=False,
+        parent_conversation_id="parent-session",
+    )
+    actor.chat = AsyncMock()
+
+    with (
+        patch(
+            "src.application.services.agent.runtime_bootstrapper."
+            "AgentRuntimeBootstrapper.ensure_spawned_agent_conversation",
+            new=AsyncMock(return_value=conversation),
+        ),
+        patch(
+            "src.application.services.agent.runtime_bootstrapper."
+            "AgentRuntimeBootstrapper.load_spawned_agent_conversation",
+            new=AsyncMock(return_value=conversation),
+        ),
+        patch(
+            "src.application.services.agent.runtime_bootstrapper."
+            "AgentRuntimeBootstrapper._load_tenant_agent_config",
+            new=AsyncMock(return_value=SimpleNamespace(to_dict=lambda: {"mode": "test"})),
+        ),
+    ):
+        await orchestrator.call_args.kwargs["spawn_executor"](
+            SpawnExecutionRequest(
+                parent_agent_id="parent-agent",
+                child_agent_id="child-agent",
+                child_agent_name="Child",
+                child_session_id="child-session",
+                parent_session_id="parent-session",
+                project_id="project-a",
+                tenant_id="tenant-a",
+                user_id="user-a",
+                message="spawn",
+            )
+        )
+        await orchestrator.call_args.kwargs["session_turn_executor"](
+            SessionTurnExecutionRequest(
+                child_agent_id="child-agent",
+                child_session_id="child-session",
+                project_id="project-a",
+                tenant_id="tenant-a",
+                message="continue",
+            )
+        )
+
+    child_requests = [call.args[0] for call in actor.chat.await_args_list]
+    assert [request.plugin_generation for request in child_requests] == [
+        descriptor.to_payload(),
+        descriptor.to_payload(),
+    ]
+    assert [request.plugin_distribution for request in child_requests] == [
+        distribution,
+        distribution,
+    ]
+    await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
+async def test_actor_orchestrator_propagates_runtime_v2_errors() -> None:
+    actor = _actor_instance()
+    error = RuntimeV2Error("missing_service", "worker runtime is unavailable")
+
+    with (
+        patch(
+            "src.infrastructure.agent.actor.project_agent_actor.get_settings",
+            return_value=SimpleNamespace(multi_agent_enabled=True),
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_runtime_services_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as raised,
+    ):
+        await actor._ensure_agent_orchestrator_v2()
+
+    assert raised.value is error
     await actor._plugin_admission_v2.close()

@@ -14,7 +14,7 @@ from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBoot
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
-from src.infrastructure.agent.actor import local_chat_worker
+from src.infrastructure.agent.actor import local_chat_worker, project_agent_actor
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2 import agent_worker_runtime
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
@@ -195,6 +195,27 @@ def test_local_runtime_bootstrap_occurs_inside_the_generation_admission() -> Non
         assert source.index("async with admission.admit(") < source.index(
             "_ensure_local_runtime_bootstrapped()"
         )
+
+
+def test_ray_actor_orchestrator_bootstrap_occurs_inside_generation_admission() -> None:
+    process_bootstrap_source = getsource(project_agent_actor.ProjectAgentActor._bootstrap_runtime)
+    orchestrator_source = getsource(
+        project_agent_actor.ProjectAgentActor._ensure_agent_orchestrator_v2
+    )
+    assert "get_shared_subagent_run_registry" not in process_bootstrap_source
+    assert "get_shared_subagent_run_registry" not in orchestrator_source
+    assert "current_agent_worker_runtime_services_v2" in orchestrator_source
+    assert "except RuntimeV2Error:" in orchestrator_source
+
+    chat_source = getsource(project_agent_actor.ProjectAgentActor._run_chat)
+    assert chat_source.index("async with self._admit_plugin_turn(") < chat_source.index(
+        "_ensure_agent_orchestrator_v2("
+    )
+
+    resume_source = getsource(project_agent_actor.ProjectAgentActor._resume_continue_request)
+    assert resume_source.index("async with self._plugin_admission_v2.admit(") < (
+        resume_source.index("_ensure_agent_orchestrator_v2(")
+    )
 
 
 def test_agent_worker_sandbox_factory_reports_docker_unavailability_as_optional(
