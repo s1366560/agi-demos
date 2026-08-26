@@ -23,6 +23,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant as DBUserTenant,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.subagent_run_registry_projection import (
+    current_subagent_run_registry_v2,
+)
 
 from .access import (
     _get_user_id,
@@ -41,7 +44,6 @@ from .schemas import (
     TenantSubAgentRunListResponse,
     TraceChainResponse,
 )
-from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +93,9 @@ async def _get_conversation(
     conversation_id: str,
 ) -> DBConversation | None:
     """Load one conversation row for trace authorization."""
-    result = await db.execute(refresh_select_statement(select(DBConversation).where(DBConversation.id == conversation_id)))
+    result = await db.execute(
+        refresh_select_statement(select(DBConversation).where(DBConversation.id == conversation_id))
+    )
     return result.scalar_one_or_none()
 
 
@@ -183,10 +187,15 @@ async def _list_accessible_project_conversation_ids(
         .where(DBConversation.project_id == project_id)
         .order_by(desc(DBConversation.updated_at), desc(DBConversation.created_at))
     )
-    can_view_project_team = global_admin or project_role in {"owner", "admin"} or tenant_role in {
-        "owner",
-        "admin",
-    }
+    can_view_project_team = (
+        global_admin
+        or project_role in {"owner", "admin"}
+        or tenant_role
+        in {
+            "owner",
+            "admin",
+        }
+    )
     if not can_view_project_team:
         query = query.where(DBConversation.user_id == current_user_id)
 
@@ -227,8 +236,7 @@ async def get_project_active_run_count(
 ) -> ProjectActiveRunCountResponse:
     """Return the active SubAgent run count for one authorized project."""
     try:
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
         conversation_ids = await _list_accessible_project_conversation_ids(
             db, current_user, project_id
         )
@@ -267,8 +275,7 @@ async def list_project_runs(
 ) -> ProjectSubAgentRunListResponse:
     """Return recent redacted SubAgent runs for one authorized project."""
     try:
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
         conversation_ids = await _list_accessible_project_conversation_ids(
             db, current_user, project_id
         )
@@ -301,8 +308,7 @@ async def get_tenant_active_run_count(
     db: AsyncSession = Depends(get_db),
 ) -> TenantActiveRunCountResponse:
     try:
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         conversation_ids = await _list_accessible_tenant_conversation_ids(
             db, current_user, tenant_id
@@ -340,8 +346,7 @@ async def list_tenant_runs(
     db: AsyncSession = Depends(get_db),
 ) -> TenantSubAgentRunListResponse:
     try:
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         statuses = parse_statuses(status)
         conversation_ids = await _list_accessible_tenant_conversation_ids(
@@ -376,8 +381,7 @@ async def get_active_run_count(
     db: AsyncSession = Depends(get_db),
 ) -> ActiveRunCountResponse:
     try:
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         if conversation_id:
             conversation = await _get_accessible_conversation(db, current_user, conversation_id)
@@ -417,8 +421,7 @@ async def list_runs(
 ) -> SubAgentRunListResponse:
     try:
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         statuses = parse_statuses(status)
         matching_runs: list[SubAgentRun]
@@ -465,8 +468,7 @@ async def get_trace_chain(
 ) -> TraceChainResponse:
     try:
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         matching_chain = registry.list_trace_runs(
             conversation.id,
@@ -509,8 +511,7 @@ async def get_descendants(
 ) -> DescendantTreeResponse:
     try:
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         matching_descendants: list[SubAgentRun] = registry.list_descendant_runs(
             conversation.id,
@@ -546,8 +547,7 @@ async def get_run(
 ) -> SubAgentRunResponse:
     try:
         conversation = await _get_accessible_conversation(db, current_user, conversation_id)
-        container = get_container_with_db(request, db)
-        registry = container.subagent_run_registry()
+        registry = current_subagent_run_registry_v2()
 
         run = registry.get_run(conversation.id, run_id)
         if run is None:

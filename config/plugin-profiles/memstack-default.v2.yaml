@@ -1615,6 +1615,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-subagent-run-registry
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/subagent-run-registry
+      enabled: true
+      config:
+        strategy: settings-shared
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-agent-http-routes
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1623,6 +1637,7 @@ profile:
       config: {}
       inject:
         route_table: service:http.route-table-builder
+        subagent_runs: service:agent.subagent-run-registry
       isolate: {}
       scope:
         kind: root

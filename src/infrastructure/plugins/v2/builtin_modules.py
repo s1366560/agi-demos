@@ -78,6 +78,10 @@ from .shares_services import shares_service_definitions_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
 from .smtp_config_services import smtp_config_service_definitions_v2
+from .subagent_run_registry_service import (
+    SubAgentRunRegistryFactoryV2,
+    subagent_run_registry_definition_v2,
+)
 from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
 from .task_log_services import task_log_service_definitions_v2
@@ -150,6 +154,7 @@ def builtin_runtime_definitions_v2(
     channel_runtime_manager: ChannelRuntimeManagerV2 | None = None,
     reflection_runtime_manager: ReflectionRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
+    subagent_run_registry_factory: SubAgentRunRegistryFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
@@ -280,6 +285,7 @@ def builtin_runtime_definitions_v2(
             redis_client=sandbox_redis_client,
         ),
         agent_worker_runtime_definition_v2(),
+        subagent_run_registry_definition_v2(subagent_run_registry_factory),
         agent_pool_runtime.agent_pool_runtime_definition_v2(agent_pool_runtime_factory),
         *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,

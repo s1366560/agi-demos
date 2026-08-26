@@ -146,9 +146,6 @@ class DIContainer:
     def binding_router(self) -> Any:
         return self._agent.binding_router()
 
-    def subagent_run_registry(self) -> Any:
-        return self._agent.subagent_run_registry()
-
     def agent_orchestrator(self) -> Any:
         return self._agent.agent_orchestrator()
 

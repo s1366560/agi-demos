@@ -14,6 +14,7 @@ from fastapi.routing import APIRoute
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.routers.agent import router as legacy_agent_router
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2 import builtin_agent_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 from src.infrastructure.plugins.v2.http_routes import (
@@ -219,13 +220,18 @@ class _RecordingBuilder(RouteTableBuilderV2):
 class _FakeContext:
     def __init__(self, builder: RouteTableBuilderV2, *, teardown: bool) -> None:
         self.builder = builder
+        self.registry = SubAgentRunRegistry()
         self.teardown = teardown
         self.required_services: list[str] = []
         self.effect_labels: list[str] = []
 
     def require(self, service: str) -> object:
         self.required_services.append(service)
-        return self.builder
+        if service == ROUTE_TABLE_BUILDER_INJECT_V2:
+            return self.builder
+        if service == subject.AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2:
+            return self.registry
+        raise AssertionError(f"unexpected service request: {service}")
 
     async def effect(
         self,
@@ -335,7 +341,10 @@ async def test_agent_route_effect_teardown_disposes_all_contributions_in_lifo_or
     expected = [name for _method, _path, name in _EXPECTED_ROUTES]
     assert builder.registered == expected
     assert builder.disposed == list(reversed(expected))
-    assert context.required_services == [ROUTE_TABLE_BUILDER_INJECT_V2]
+    assert context.required_services == [
+        ROUTE_TABLE_BUILDER_INJECT_V2,
+        subject.AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2,
+    ]
     assert context.effect_labels == [subject.AGENT_HTTP_ROUTES_ENTRY_V2]
 
 
@@ -349,5 +358,8 @@ async def test_agent_route_partial_setup_disposes_contributions_in_lifo_order() 
 
     assert builder.registered == ["list_commands", "create_conversation", "list_conversations"]
     assert builder.disposed == list(reversed(builder.registered))
-    assert context.required_services == [ROUTE_TABLE_BUILDER_INJECT_V2]
+    assert context.required_services == [
+        ROUTE_TABLE_BUILDER_INJECT_V2,
+        subject.AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2,
+    ]
     assert context.effect_labels == [subject.AGENT_HTTP_ROUTES_ENTRY_V2]

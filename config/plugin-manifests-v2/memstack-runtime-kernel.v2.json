@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:24ca2747d7cf5daa425f49b4c7e495475b56d3d5d24de2d1fb7ee56e6c632365",
+        "digest": "sha256:c7cc4065efc402938f6160e5e9652b2141b6c7ca0ab0a7b5642307e8b0b644fe",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4439,6 +4439,37 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/agent/subagent-run-registry",
+      "entrypoint": "src.infrastructure.plugins.v2.subagent_run_registry_service:subagent_run_registry_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.subagent-run-registry",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "settings-shared", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:568933aa717c88b00bafc3a2a482f47503aabcb930c5cd812acc202df73044b3",
+      "artifact": {
+        "digest": "sha256:b239e3235054bf29359a999469c77f8e0e726ec46323f3f439d1dc5b84cd7199",
+        "source": "repo+python://src/infrastructure/plugins/v2/subagent_run_registry_service.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/http/agent-routes",
       "entrypoint": "src.infrastructure.plugins.v2.builtin_agent_http_routes:builtin_agent_http_routes_definition_v2",
       "targets": ["python"],
@@ -4449,6 +4480,11 @@
             {
               "alias": "route_table",
               "service": "service:http.route-table-builder",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "subagent_runs",
+              "service": "service:agent.subagent-run-registry",
               "version": "1.0.0"
             }
           ]
@@ -4461,9 +4497,9 @@
           "properties": {}
         }
       },
-      "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
+      "contract_digest": "sha256:a86b36ff716fcadb1f9913e34ead253cdfcc9fe5cced9e756adb103126529833",
       "artifact": {
-        "digest": "sha256:7a2d003c4ec2ffd5daa732558da83737d9e71ba83fe881190a9df62ea6a0b0e9",
+        "digest": "sha256:e15757ee24b33d521c71bc5656f59a81616640737e4ef448df4ad10055896d55",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_agent_http_routes.py"
       }
     },

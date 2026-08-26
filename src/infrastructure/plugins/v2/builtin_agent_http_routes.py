@@ -31,6 +31,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
     tools,
     trace_router as trace,
 )
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from .route_effects import ROUTE_TABLE_BUILDER_INJECT_V2
@@ -40,10 +41,12 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
+from .subagent_run_registry_service import SUBAGENT_RUN_REGISTRY_SERVICE_V2
 
 AGENT_HTTP_ROUTES_ENTRY_V2 = "builtin-agent-http-routes"
 AGENT_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/agent-routes"
 AGENT_HTTP_ROUTES_ROW_V2 = "agent"
+AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2 = "subagent_runs"
 _AGENT_PREFIX_V2 = "/api/v1/agent"
 
 type AgentRouteSpecV2 = tuple[Callable[..., Any], object | None, str, str]
@@ -435,6 +438,12 @@ def builtin_agent_http_routes_definition_v2() -> PluginDefinitionV2:
                 "invalid_route_table_builder",
                 "route_table inject is not a protocol v2 route table builder",
             )
+        subagent_runs = context.require(AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2)
+        if not isinstance(subagent_runs, SubAgentRunRegistry):
+            raise RuntimeV2Error(
+                "invalid_subagent_run_registry_service",
+                f"{SUBAGENT_RUN_REGISTRY_SERVICE_V2} has an invalid implementation",
+            )
 
         async def setup() -> tuple[Callable[[], Awaitable[None]], ...]:
             disposers: list[Callable[[], Awaitable[None]]] = []
@@ -460,6 +469,7 @@ __all__ = [
     "AGENT_HTTP_ROUTES_ENTRY_V2",
     "AGENT_HTTP_ROUTES_MODULE_V2",
     "AGENT_HTTP_ROUTES_ROW_V2",
+    "AGENT_HTTP_SUBAGENT_RUNS_INJECT_V2",
     "agent_route_definitions_v2",
     "builtin_agent_http_routes_definition_v2",
 ]
