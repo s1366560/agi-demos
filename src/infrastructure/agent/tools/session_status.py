@@ -1,8 +1,8 @@
 """Session status tool -- shows a status card for the current conversation.
 
 Displays conversation metadata (title, mode, message count, timestamps)
-and agent identity. Uses the ``@tool_define`` decorator pattern with
-module-level DI via ``configure_session_status()``.
+and agent identity. Worker contributions bind a scoped repository to each
+invocation; ``configure_session_status()`` remains as a direct-call fallback.
 
 Inspired by OpenClaw's session-status-tool.ts, adapted for MemStack's
 DDD + Hexagonal Architecture.
@@ -12,6 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,16 +24,22 @@ from src.domain.ports.repositories.agent_repository import (
     ConversationRepository,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Module-level DI state
+# Generation-bound runtime with module-level compatibility fallback
 # ---------------------------------------------------------------------------
 
+type SessionStatusSessionFactory = Callable[[], AbstractAsyncContextManager[Any]]
+
+_session_status_runtime: ContextVar[ConversationRepository | None] = ContextVar(
+    f"{__name__}.session_status_runtime",
+    default=None,
+)
 _conversation_repo: ConversationRepository | None = None
 
 
@@ -47,11 +57,13 @@ def configure_session_status(
 
 def _repo() -> ConversationRepository:
     """Return the configured repository or raise."""
-    if _conversation_repo is None:
+    runtime_repo = _session_status_runtime.get()
+    repository = runtime_repo if runtime_repo is not None else _conversation_repo
+    if repository is None:
         raise RuntimeError(
             "session_status tool not configured -- call configure_session_status() first"
         )
-    return _conversation_repo
+    return repository
 
 
 def _json(data: Any) -> str:
@@ -194,4 +206,41 @@ async def session_status_tool(
             "mode": conversation.current_mode.value,
             "message_count": conversation.message_count,
         },
+    )
+
+
+def _build_conversation_repo(session: Any) -> ConversationRepository:
+    """Build the conversation repository for one invocation."""
+    from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+        SqlConversationRepository,
+    )
+
+    return SqlConversationRepository(session)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSessionStatusExecutor:
+    template: ToolInfo
+    session_factory: SessionStatusSessionFactory
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        async with self.session_factory() as session:
+            token = _session_status_runtime.set(_build_conversation_repo(session))
+            try:
+                return await self.template.execute(ctx, **kwargs)
+            finally:
+                _session_status_runtime.reset(token)
+
+
+def make_session_status_tool(
+    *,
+    session_factory: SessionStatusSessionFactory,
+) -> ToolInfo:
+    """Return a session-status ToolInfo bound to one generation's session factory."""
+    return replace(
+        session_status_tool,
+        execute=_BoundSessionStatusExecutor(
+            template=session_status_tool,
+            session_factory=session_factory,
+        ),
     )

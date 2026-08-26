@@ -1116,29 +1116,18 @@ def _add_session_status_tool(
     tools: dict[str, Any],
     project_id: str,
 ) -> None:
-    """Configure and register the session_status tool.
-
-    Uses the module-level DI pattern (``configure_session_status``) to inject
-    a ``ConversationRepository``, then adds the session_status tool function
-    to the tool dictionary.
-    """
+    """Add a generation-bound session_status tool."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as status_session_factory,
         )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
         from src.infrastructure.agent.tools.session_status import (
-            configure_session_status,
-            session_status_tool,
+            make_session_status_tool,
         )
 
-        session = status_session_factory()
-        conversation_repo = SqlConversationRepository(session)
-
-        configure_session_status(conversation_repo=conversation_repo)
-        tools[session_status_tool.name] = session_status_tool
+        tools["session_status"] = make_session_status_tool(
+            session_factory=status_session_factory,
+        )
         logger.info(
             "Agent Worker: Session status tool added for project %s",
             project_id,

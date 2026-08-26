@@ -477,6 +477,42 @@ def test_worker_session_comm_uses_bound_factory(
 
 
 @pytest.mark.unit
+def test_worker_session_status_uses_bound_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_factory = object()
+    marker = object()
+    captured: dict[str, object] = {}
+
+    def _make_session_status_tool(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return marker
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker session status must not mutate module-level runtime state")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.session_status.make_session_status_tool",
+        _make_session_status_tool,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.session_status.configure_session_status",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_session_status_tool(tools, project_id="project-a")
+
+    assert tools["session_status"] is marker
+    assert captured == {"session_factory": session_factory}
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
