@@ -1,27 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-XFCE Window Manager Configuration for XFCE 4.20
 
-Optimized for VNC remote desktop with Greybird theme
--->
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
-    <property name="show_app_icon" type="bool" value="true"/>
-    <property name="show_decorations" type="bool" value="true"/>
     <property name="theme" type="string" value="Greybird"/>
     <property name="title_alignment" type="string" value="center"/>
     <property name="title_font" type="string" value="Noto Sans Bold 10"/>
-    <property name="borderless_maximize" type="bool" value="true"/>
-    <!-- Mouse focus settings for better remote desktop experience -->
-    <property name="focus_hint" type="bool" value="true"/>
-    <property name="raise_on_focus" type="bool" value="false"/>
+    <property name="button_layout" type="string" value="O|HMC"/>
+    <property name="click_to_focus" type="bool" value="true"/>
     <property name="raise_on_click" type="bool" value="true"/>
-    <!-- Easy window snapping -->
-    <property name="snap_to_resist" type="bool" value="true"/>
-    <property name="snap_width" type="int" value="10"/>
-    <!-- Workspace settings -->
-    <property name="workspace_count" type="int" value="2"/>
+    <property name="raise_on_focus" type="bool" value="false"/>
+    <property name="borderless_maximize" type="bool" value="false"/>
+    <property name="use_compositing" type="bool" value="false"/>
+    <property name="workspace_count" type="int" value="1"/>
   </property>
-  <!-- Keyboard shortcuts -->
-  <property name="cycles_visible" type="bool" value="true"/>
 </channel>

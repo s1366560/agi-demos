@@ -5,7 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = (ROOT / "Dockerfile").read_text()
 ENTRYPOINT = (ROOT / "scripts" / "entrypoint.sh").read_text()
 XSTARTUP = (ROOT / "docker" / "kasmvnc-configs" / "xstartup").read_text()
-OPENBOX_MENU = (ROOT / "docker" / "openbox-configs" / "menu.xml").read_text()
+XFCE_CONFIG_DIR = ROOT / "docker" / "xfce-configs"
+XFCE_PANEL = (XFCE_CONFIG_DIR / "xfce4-panel.xml").read_text()
+XFCE_DESKTOP = (XFCE_CONFIG_DIR / "xfce4-desktop.xml").read_text()
+XFCE_WINDOW_MANAGER = (XFCE_CONFIG_DIR / "xfwm4.xml").read_text()
 COMPOSE = (ROOT / "docker-compose.yml").read_text()
 SECCOMP_PROFILE = json.loads((ROOT / "docker" / "seccomp-profile.json").read_text())
 
@@ -72,6 +75,7 @@ def test_final_image_contains_only_runtime_payloads() -> None:
         "golang-go",
         "kde-plasma",
         "libreoffice",
+        "openbox",
         "openjdk",
         "pandoc",
         "puppeteer",
@@ -94,7 +98,15 @@ def test_chromium_and_desktop_runtime_dependencies_are_explicit() -> None:
         "gstreamer1.0-plugins-good",
         "gstreamer1.0-tools",
         "gstreamer1.0-x",
-        "openbox",
+        "adwaita-icon-theme",
+        "greybird-gtk-theme",
+        "thunar",
+        "xfce4-panel",
+        "xfce4-session",
+        "xfce4-settings",
+        "xfce4-terminal",
+        "xfdesktop4",
+        "xfwm4",
         "x11-utils",
         "x11-xserver-utils",
         "xauth",
@@ -132,8 +144,8 @@ def test_shared_graphical_environment_is_baked_into_the_image() -> None:
         "DISPLAY=:1",
         "XAUTHORITY=/home/sandbox/.Xauthority",
         "XDG_SESSION_TYPE=x11",
-        "XDG_CURRENT_DESKTOP=Openbox",
-        "DESKTOP_SESSION=openbox",
+        "XDG_CURRENT_DESKTOP=XFCE",
+        "DESKTOP_SESSION=xfce",
         "XDG_RUNTIME_DIR=/run/user/10001",
         "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/10001/bus",
         "SKY_CUA_SERVICE_PATH=/opt/sky-cua/bin/sky-cua-service",
@@ -168,6 +180,9 @@ def test_entrypoint_orders_the_session_before_mcp_and_terminal() -> None:
     assert "XTEST" in ENTRYPOINT
     assert "MIT-SHM" in ENTRYPOINT
     assert "_NET_SUPPORTING_WM_CHECK" in ENTRYPOINT
+    assert "Name: Xfwm4" in ENTRYPOINT
+    assert "pgrep -x xfce4-panel" in ENTRYPOINT
+    assert "pgrep -x xfdesktop" in ENTRYPOINT
     assert "extension-*.sock" in ENTRYPOINT
 
 
@@ -228,6 +243,18 @@ def test_chromium_uses_the_fixed_extension_and_native_host() -> None:
         assert contract in ENTRYPOINT
 
 
+def test_chromium_window_is_restored_from_persisted_minimized_state() -> None:
+    start_body = ENTRYPOINT.split("start_chromium() {", maxsplit=1)[1].split(
+        "start_mcp_server() {", maxsplit=1
+    )[0]
+
+    assert 'restore_chromium_window "${chromium_window_id}"' in start_body
+    assert 'wmctrl -i -R "${window_id}"' in ENTRYPOINT
+    assert 'wmctrl -i -r "${window_id}" -b add,maximized_vert,maximized_horz' in ENTRYPOINT
+    assert "Map State: IsViewable" in ENTRYPOINT
+    assert start_body.index("restore_chromium_window") < start_body.index("extension-*.sock")
+
+
 def test_entrypoint_recovers_only_chromium_profile_lock_artifacts() -> None:
     body = main_body()
 
@@ -238,16 +265,31 @@ def test_entrypoint_recovers_only_chromium_profile_lock_artifacts() -> None:
     assert 'rm -f -- "${lock_path}"' in ENTRYPOINT
 
 
-def test_xstartup_and_menu_are_openbox_only() -> None:
-    assert "exec openbox" in XSTARTUP
+def test_xstartup_runs_a_minimal_xfce_session_on_the_shared_bus() -> None:
+    assert "exec startxfce4" in XSTARTUP
+    assert "XDG_CURRENT_DESKTOP=XFCE" in XSTARTUP
+    assert "DESKTOP_SESSION=xfce" in XSTARTUP
+    assert "dbus-launch" not in XSTARTUP
     assert "dbus-daemon" not in XSTARTUP
+    assert "openbox" not in XSTARTUP.lower()
     assert "plasmashell" not in XSTARTUP
-
-    assert "Chromium" in OPENBOX_MENU
-    assert "xterm" in OPENBOX_MENU
     assert "/workspace/Downloads" in XSTARTUP
-    for removed in ["Dolphin", "Firefox", "Google Chrome", "Kate", "Konsole", "LibreOffice"]:
-        assert removed not in OPENBOX_MENU
+
+
+def test_xfce_configuration_is_minimal_and_baked_into_the_image() -> None:
+    assert "COPY docker/xfce-configs/" in DOCKERFILE
+    assert "/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/" in DOCKERFILE
+    assert ".config/xfce4/xfconf/xfce-perchannel-xml" in ENTRYPOINT
+
+    for plugin in ["applicationsmenu", "tasklist", "separator", "systray", "clock"]:
+        assert f'value="{plugin}"' in XFCE_PANEL
+    for unavailable_plugin in ["pulseaudio", "power-manager-plugin", "notification-plugin"]:
+        assert unavailable_plugin not in XFCE_PANEL
+
+    assert "show-home" in XFCE_DESKTOP
+    assert "show-filesystem" in XFCE_DESKTOP
+    assert "use_compositing" in XFCE_WINDOW_MANAGER
+    assert 'value="false"' in XFCE_WINDOW_MANAGER
 
 
 def test_no_portal_systemd_or_host_x11_mount_is_introduced() -> None:

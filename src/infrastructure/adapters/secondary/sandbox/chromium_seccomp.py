@@ -9,6 +9,7 @@ from typing import Any, cast
 
 _PROFILE_RESOURCE = "chromium_seccomp_profile.json"
 _REQUIRED_USER_NAMESPACE_SYSCALLS = frozenset({"clone", "setns", "unshare"})
+_REQUIRED_X11_SHARED_MEMORY_SYSCALLS = frozenset({"shmget", "shmat", "shmctl", "shmdt"})
 
 
 @lru_cache(maxsize=1)
@@ -25,7 +26,8 @@ def _chromium_seccomp_profile_json() -> str:
         if rule.get("action") == "SCMP_ACT_ALLOW"
         for name in cast("list[str]", rule.get("names", []))
     }
-    missing = _REQUIRED_USER_NAMESPACE_SYSCALLS - allowed_syscalls
+    required_syscalls = _REQUIRED_USER_NAMESPACE_SYSCALLS | _REQUIRED_X11_SHARED_MEMORY_SYSCALLS
+    missing = required_syscalls - allowed_syscalls
     if missing:
         missing_names = ", ".join(sorted(missing))
         raise RuntimeError(f"Chromium seccomp profile is missing syscalls: {missing_names}")

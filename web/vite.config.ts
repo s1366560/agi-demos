@@ -33,6 +33,11 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
+    fs: {
+      // Shared workspace packages live outside web/, so Vite must be allowed
+      // to serve them after resolving the aliases above.
+      allow: [path.resolve(__dirname, '..')],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

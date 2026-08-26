@@ -565,6 +565,70 @@ class MCPSandboxAdapter(SandboxPort):
             labels=labels,
         )
 
+    async def _refresh_cached_instance_from_container(
+        self,
+        instance: MCPSandboxInstance,
+        container: Any,
+    ) -> None:
+        """Refresh cached service coordinates from the current Docker container.
+
+        Multiple adapter instances can cache the same sandbox. If another instance
+        rebuilds its container, Docker's live port mappings and capability token are
+        authoritative over this process's stale cache.
+        """
+        labels = container.labels if isinstance(container.labels, dict) else {}
+        label_mcp, label_desktop, label_terminal = self._extract_ports_from_labels(labels)
+        actual_mcp, actual_desktop, actual_terminal = self._extract_actual_ports(container)
+
+        old_ports = (instance.mcp_port, instance.desktop_port, instance.terminal_port)
+        mcp_port = actual_mcp if actual_mcp is not None else label_mcp
+        desktop_port = actual_desktop if actual_desktop is not None else label_desktop
+        terminal_port = actual_terminal if actual_terminal is not None else label_terminal
+        new_ports = (
+            mcp_port if mcp_port is not None else instance.mcp_port,
+            desktop_port if desktop_port is not None else instance.desktop_port,
+            terminal_port if terminal_port is not None else instance.terminal_port,
+        )
+
+        auth_token = instance.mcp_auth_token
+        attrs = container.attrs if isinstance(container.attrs, dict) else {}
+        container_config = attrs.get("Config")
+        if isinstance(container_config, dict) and isinstance(container_config.get("Env"), list):
+            auth_token = self._extract_mcp_auth_token(container)
+
+        websocket_url, desktop_url, terminal_url = self._build_urls_from_ports(
+            instance.id,
+            *new_ports,
+        )
+        coordinates_changed = old_ports != new_ports or instance.mcp_auth_token != auth_token
+        stale_client = instance.mcp_client if coordinates_changed else None
+        if stale_client is not None:
+            instance.mcp_client = None
+
+        instance.mcp_port, instance.desktop_port, instance.terminal_port = new_ports
+        instance.mcp_auth_token = auth_token
+        instance.websocket_url = websocket_url
+        instance.endpoint = websocket_url
+        instance.desktop_url = desktop_url
+        instance.terminal_url = terminal_url
+        if labels:
+            instance.labels = labels
+
+        if old_ports != new_ports:
+            async with self._port_allocation_lock:
+                self._release_ports_unsafe([port for port in old_ports if port is not None])
+                self._track_ports(*new_ports)
+
+        if stale_client is not None:
+            try:
+                await stale_client.disconnect()
+            except Exception:
+                logger.warning(
+                    "Failed to disconnect stale MCP client for sandbox %s",
+                    instance.id,
+                    exc_info=True,
+                )
+
     @staticmethod
     def _generate_mcp_auth_token() -> str:
         """Generate an unguessable per-sandbox capability token."""
@@ -1799,6 +1863,7 @@ class MCPSandboxAdapter(SandboxPort):
                     "created": SandboxStatus.CREATING,
                 }
                 instance.status = status_map.get(container.status, SandboxStatus.ERROR)
+                await self._refresh_cached_instance_from_container(instance, container)
 
             except NotFound:
                 del self._active_sandboxes[sandbox_id]

@@ -163,3 +163,5 @@ web/vite.config.d.ts
 
 # JiuwenSwarm runtime file operation logs
 .agent_history/
+
+.ua/

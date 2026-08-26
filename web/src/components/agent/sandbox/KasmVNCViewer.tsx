@@ -267,8 +267,14 @@ export function KasmVNCViewer({
   // Connect on mount and when wsUrl changes
   useEffect(() => {
     if (!wsUrl) return;
-    connectRFB();
+    // RFB defers its own connection with setTimeout. Defer construction too so
+    // React StrictMode can cancel the discarded mount before it creates a
+    // second WebSocket and canvas.
+    const connectTimer = setTimeout(() => {
+      connectRFB();
+    }, 0);
     return () => {
+      clearTimeout(connectTimer);
       clearReconnectTimer();
       intentionalDisconnectRef.current = true;
       safeDisconnect(rfbRef.current);

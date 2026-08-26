@@ -4,7 +4,7 @@
 **Last Updated**: 2026-08-21
 **Last checked against code**: 2026-08-21
 
-Common issues and solutions for the Openbox/X11 sandbox desktop served over KasmVNC.
+Common issues and solutions for the Xfce/X11 sandbox desktop served over KasmVNC.
 
 ---
 
@@ -31,7 +31,7 @@ Common issues and solutions for the Openbox/X11 sandbox desktop served over Kasm
 **Diagnosis**:
 ```bash
 # Check the lightweight desktop and browser runtime
-docker exec <container> command -v openbox chromium
+docker exec <container> sh -lc 'command -v startxfce4 xfwm4 xfce4-panel xfdesktop chromium'
 
 # Check KasmVNC process (X server binary is Xkasmvnc)
 docker exec <container> ps aux | grep -E "Xkasmvnc|vncserver"
@@ -42,14 +42,15 @@ docker exec <container> netstat -tln | grep 6080
 
 **Solutions**:
 
-1. **Rebuild the Openbox/X11 + KasmVNC image**:
+1. **Rebuild the Xfce/X11 + KasmVNC image**:
    ```bash
    docker build -t sandbox-mcp-server .
    ```
 
 2. **Verify installation**:
    ```bash
-   docker run --rm sandbox-mcp-server sh -lc 'command -v openbox chromium vncserver'
+   docker run --rm sandbox-mcp-server \
+     sh -lc 'command -v startxfce4 xfwm4 xfce4-panel xfdesktop chromium vncserver'
    ```
 
 3. **Check logs**:
@@ -112,8 +113,8 @@ docker exec <container> ls -la /tmp/.X11-unix/
 
 **Diagnosis**:
 ```bash
-# Check Openbox and Chromium session processes
-docker exec <container> ps aux | grep -E "openbox|chromium"
+# Check Xfce and Chromium session processes
+docker exec <container> ps aux | grep -E "xfce4-session|xfwm4|xfce4-panel|xfdesktop|chromium"
 
 # Check CPU usage
 docker exec <container> top
@@ -597,8 +598,9 @@ docker ps -a
 docker stats
 docker logs <container> --tail 100
 
-# Desktop info (KasmVNC + Openbox/X11)
-docker exec <container> ps aux | grep -E "Xkasmvnc|openbox|chromium|vncserver"
+# Desktop info (KasmVNC + Xfce/X11)
+docker exec <container> \
+  ps aux | grep -E "Xkasmvnc|xfce4-session|xfwm4|xfce4-panel|xfdesktop|chromium|vncserver"
 docker exec <container> df -h
 docker exec <container> free -h
 
@@ -620,7 +622,7 @@ netstat -tlnp | grep -E "8765|7681|6080"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Desktop components not installed" | Openbox / KasmVNC missing | Rebuild image |
+| "Desktop components not installed" | Xfce / KasmVNC missing | Rebuild image |
 | "Connection refused" | Port not mapped | Add `-p 6080:6080` |
 | "KasmVNC failed to start within timeout" | Display conflict or missing deps | Check `/tmp/kasmvnc.log`, change display number |
 | "Cannot allocate memory" | OOM | Increase memory limit |
@@ -642,7 +644,7 @@ docker logs -f <container>
 
 # Restart services
 docker restart <container>
-docker exec <container> openbox --reconfigure
+docker exec -u 10001:10001 <container> xfce4-panel --restart
 
 # Clean up
 docker exec <container> rm -rf /tmp/.X11-unix/*

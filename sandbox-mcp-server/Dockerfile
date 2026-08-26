@@ -105,7 +105,7 @@ ARG TTYD_VERSION=1.7.7
 ARG TARGETARCH
 
 LABEL org.opencontainers.image.title="MemStack Sandbox MCP Server" \
-      org.opencontainers.image.description="Openbox/X11 sandbox with sky-cua and Chromium" \
+      org.opencontainers.image.description="Xfce/X11 sandbox with sky-cua and Chromium" \
       org.opencontainers.image.vendor="MemStack" \
       org.opencontainers.image.version="sky-cua-0.3.1"
 
@@ -128,8 +128,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \
     XAUTHORITY=/home/sandbox/.Xauthority \
     XDG_SESSION_TYPE=x11 \
-    XDG_CURRENT_DESKTOP=Openbox \
-    DESKTOP_SESSION=openbox \
+    XDG_CURRENT_DESKTOP=XFCE \
+    DESKTOP_SESSION=xfce \
     XDG_RUNTIME_DIR=/run/user/10001 \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/10001/bus \
     NO_AT_BRIDGE=0 \
@@ -156,6 +156,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         at-spi2-core \
+        adwaita-icon-theme \
         bash \
         ca-certificates \
         curl \
@@ -169,6 +170,7 @@ RUN apt-get update \
         fonts-noto-cjk \
         fonts-noto-color-emoji \
         git \
+        greybird-gtk-theme \
         gstreamer1.0-plugins-base \
         gstreamer1.0-plugins-good \
         gstreamer1.0-tools \
@@ -210,12 +212,12 @@ RUN apt-get update \
         mesa-vulkan-drivers \
         nano \
         net-tools \
-        openbox \
         procps \
         python3 \
         shared-mime-info \
         ssl-cert \
         sudo \
+        thunar \
         x11-utils \
         x11-xserver-utils \
         xauth \
@@ -226,6 +228,12 @@ RUN apt-get update \
         xsel \
         xterm \
         wmctrl \
+        xfce4-panel \
+        xfce4-session \
+        xfce4-settings \
+        xfce4-terminal \
+        xfdesktop4 \
+        xfwm4 \
     && case "${TARGETARCH}" in \
         amd64) \
             KASM_ARCH=amd64; \
@@ -276,7 +284,7 @@ RUN groupadd --gid 10001 sandbox \
         /run/user/10001/sky-cua/sessions \
         /home/sandbox/.config \
         /home/sandbox/.config/chromium \
-        /home/sandbox/.config/openbox \
+        /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml \
         /home/sandbox/.vnc \
     && touch /home/sandbox/.vnc/.de-was-selected \
     && chown sandbox:sandbox /home/sandbox/.vnc/.de-was-selected
@@ -314,8 +322,7 @@ RUN chromium_path="$(find /opt/ms-playwright -type f -path '*/chrome-linux*/chro
     && chown root:root "${sandbox_path}" \
     && chmod 4755 "${sandbox_path}"
 
-COPY docker/openbox-configs/rc.xml /etc/xdg/openbox/rc.xml
-COPY docker/openbox-configs/menu.xml /etc/xdg/openbox/menu.xml
+COPY docker/xfce-configs/*.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
 COPY docker/kasmvnc-configs/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
 COPY docker/kasmvnc-configs/xstartup /etc/kasmvnc/xstartup.template
 COPY docker/seccomp-profile.json /opt/seccomp/default.json
@@ -324,9 +331,9 @@ COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 
 RUN chmod 0440 /etc/sudoers.d/sandbox \
     && chmod 0755 /etc/kasmvnc/xstartup.template /usr/local/bin/sandbox-entrypoint.sh \
-    && cp /etc/xdg/openbox/rc.xml /home/sandbox/.config/openbox/rc.xml \
-    && cp /etc/xdg/openbox/menu.xml /home/sandbox/.config/openbox/menu.xml \
-    && chown -R sandbox:sandbox /home/sandbox/.config/openbox \
+    && cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/*.xml \
+        /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/ \
+    && chown -R sandbox:sandbox /home/sandbox/.config/xfce4 \
     && fc-cache -f
 
 WORKDIR /workspace

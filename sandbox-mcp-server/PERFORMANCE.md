@@ -4,7 +4,7 @@
 **Last Updated**: 2026-08-21
 **Last checked against code**: 2026-08-21
 
-Optimization guide for the Openbox/X11 sky-cua sandbox served over KasmVNC.
+Optimization guide for the Xfce/X11 sky-cua sandbox served over KasmVNC.
 
 ---
 
@@ -192,7 +192,7 @@ docker exec <container> ps aux --sort=-%mem | head -10
 ```
 
 **Reduce memory usage**:
-- Keep the default Openbox session and avoid adding a compositor or full desktop suite
+- Keep the minimal Xfce package set and leave Xfwm4 compositing disabled
 - Keep Chromium tabs and extensions to the minimum needed by the task
 - Lower resolution (1280x720 via `change_resolution`)
 - Limit concurrent sessions:
@@ -284,15 +284,16 @@ websockify to tune.
 
 ## Desktop Optimization
 
-### Openbox and Chromium Configuration
+### Xfce and Chromium Configuration
 
-The image runs Openbox without a compositor. The canonical menu and keyboard configuration is
-baked into `/etc/xdg/openbox/` and copied into `~/.config/openbox/` when the container starts.
+The image runs Xfce with Xfwm4 compositing disabled. The canonical session, panel, desktop, window
+manager, and theme channels are baked into `/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/` and copied
+into `~/.config/xfce4/xfconf/xfce-perchannel-xml/` when the container starts.
 Chromium is launched once per sandbox against the project-scoped profile mounted at
 `/home/sandbox/.config/chromium`.
 
 Do not add desktop autostart entries that race the entrypoint. The required order is session D-Bus,
-AT-SPI, KasmVNC/Openbox, X11 readiness, native-host manifest, Chromium bridge, then MCP and ttyd.
+AT-SPI, KasmVNC/Xfce, X11 readiness, native-host manifest, Chromium bridge, then MCP and ttyd.
 
 Keep `/dev/shm` at 1 GiB (the `SANDBOX_SHM_SIZE` default). Chromium deliberately does not use
 `--disable-dev-shm-usage`; reducing shared memory can cause renderer or capture instability.
@@ -459,10 +460,11 @@ tcpdump -i any -n 'tcp port 6080' -w kasmvnc.pcap
 # Analyze with Wireshark
 ```
 
-**Profile Openbox and Chromium performance**:
+**Profile Xfce and Chromium performance**:
 ```bash
 # Check desktop and browser processes
-docker exec <container> ps aux | grep -E "openbox|chromium"
+docker exec <container> \
+  ps aux | grep -E "xfce4-session|xfwm4|xfce4-panel|xfdesktop|chromium"
 
 # Monitor X11 traffic
 docker exec <container> xrestop -display :1

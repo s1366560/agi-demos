@@ -26,6 +26,7 @@ def test_profile_is_default_deny_multi_arch_and_matches_image_policy() -> None:
         for name in rule["names"]
     }
     assert {"clone", "setns", "unshare"} <= allowed
+    assert {"shmget", "shmat", "shmctl", "shmdt"} <= allowed
 
     repository_root = Path(__file__).resolve().parents[7]
     image_profile = json.loads(

@@ -8,7 +8,7 @@ A WebSocket-based MCP (Model Context Protocol) server for sandbox file system op
 - **File Operations**: read, write, edit, glob, grep
 - **Bash Execution**: Secure command execution
 - **Web Terminal**: Browser-based terminal access via ttyd
-- **Computer Use Desktop**: Openbox/X11 with KasmVNC, AT-SPI, and sky-cua
+- **Computer Use Desktop**: Minimal Xfce/X11 with KasmVNC, AT-SPI, and sky-cua
 - **Browser Automation**: Pinned Chromium with the sky-cua extension and native host
 - **Docker Ready**: Isolated sandbox environment
 - **Web Development Runtime**: Python 3.12, Node.js 22, and pnpm 11.15.1
@@ -131,7 +131,7 @@ After starting the container:
 
 | Tool | Description |
 |------|-------------|
-| `start_desktop` | Start the Openbox/X11 remote desktop (KasmVNC) |
+| `start_desktop` | Start the Xfce/X11 remote desktop (KasmVNC) |
 | `stop_desktop` | Stop remote desktop |
 | `get_desktop_status` | Get desktop status and connection URL |
 | `restart_desktop` | Restart desktop with new config |
@@ -201,7 +201,7 @@ open https://localhost:6080
 
 ### Desktop Features
 
-- **Openbox/X11 Desktop**: Lightweight EWMH window management on KasmVNC's real X11 display
+- **Xfce/X11 Desktop**: Xfwm4, panel, desktop, terminal, and file manager on KasmVNC's real X11 display
 - **sky-cua Desktop and Browser Surfaces**: Screenshot, XTEST input, AT-SPI semantics, and Chromium tab control
 - **Pinned Chromium**: Playwright 1.57.0 Chromium with the pinned sky-cua extension and native host
 - **KasmVNC** (all-in-one): A single process provides X server + VNC server + WebSocket server + built-in web client
@@ -305,7 +305,7 @@ asyncio.run(main())
 ├──────────────────────┬──────────────────────────────────┤
 │   ttyd               │   KasmVNC :1 (all-in-one)        │
 │   (shell access)     │   ├─ X server (built-in)         │
-│                      │   ├─ Openbox + Chromium          │
+│                      │   ├─ Xfce + Chromium             │
 │                      │   └─ VNC + WebSocket + web       │
 │                      │      client on port 6080         │
 ├──────────────────────┴──────────────────────────────────┤
@@ -346,8 +346,10 @@ Pre-installed in the sandbox:
 ### Desktop Won't Start
 
 ```bash
-# Check Openbox, X11, and the browser bridge
+# Check Xfce, X11, and the browser bridge
 docker exec <container> wmctrl -m
+docker exec <container> pgrep -a -x xfce4-panel
+docker exec <container> pgrep -a -x xfdesktop
 docker exec <container> xdpyinfo -display :1 -queryExtensions
 docker exec <container> find /run/user/10001/sky-cua/browser -name 'extension-*.sock'
 
@@ -380,12 +382,12 @@ curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
 
 ## Default CUA Image
 
-The default image is an Openbox/X11 Computer Use and web-development runtime. It intentionally
+The default image is a minimal Xfce/X11 Computer Use and web-development runtime. It intentionally
 does not include the former KDE applications, Firefox, Java, Go, Rust, Bun, LibreOffice, Pandoc,
 or duplicate Chrome/Puppeteer browser payloads.
 
 Key changes:
-- Openbox replaces the heavier desktop stack
+- Xfce provides a visible panel, desktop, terminal, and file manager while keeping compositing disabled
 - Earlier TigerVNC/x11vnc + noVNC + websockify stack → KasmVNC (single process)
 - Chromium state persists in a project-scoped named volume across sandbox replacement
 - sky-cua receives the same X11, D-Bus, and AT-SPI session environment as the main MCP server
@@ -443,6 +445,7 @@ MIT License - See LICENSE file for details
 
 ## Version History
 
+- **v3.1** (2026-08-21): Minimal Xfce/X11 desktop on the Chromium sky-cua runtime
 - **v3.0** (2026-08-21): Openbox/X11 + Chromium sky-cua runtime
 - **v2.0** (2026-01-28): KDE Plasma + KasmVNC desktop migration (superseded)
 - **v1.0** (2025-01-15): Initial release with LXDE desktop

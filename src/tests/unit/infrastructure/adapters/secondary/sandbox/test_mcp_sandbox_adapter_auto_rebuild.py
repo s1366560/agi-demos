@@ -77,6 +77,111 @@ class TestSandboxAutoRebuild:
     """Test sandbox auto-rebuild when container is killed."""
 
     @pytest.mark.asyncio
+    async def test_get_sandbox_refreshes_cross_process_container_coordinates(
+        self,
+        adapter,
+        mock_docker,
+        mock_mcp_client,
+    ):
+        """A cached instance must follow a container rebuilt by another adapter."""
+        sandbox_id = "mcp-sandbox-cross-process"
+        instance = MCPSandboxInstance(
+            id=sandbox_id,
+            status=SandboxStatus.RUNNING,
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
+            project_path="/tmp/test_project",
+            endpoint="ws://localhost:18765",
+            websocket_url="ws://localhost:18765",
+            mcp_port=18765,
+            desktop_port=16080,
+            terminal_port=17681,
+            mcp_client=mock_mcp_client,
+            mcp_auth_token="stale-capability",
+        )
+        adapter._active_sandboxes[sandbox_id] = instance
+        adapter._used_ports.update({18765, 16080, 17681})
+
+        rebuilt_container = MagicMock()
+        rebuilt_container.status = "running"
+        rebuilt_container.ports = {
+            "8765/tcp": [{"HostPort": "18766"}],
+            "6080/tcp": [{"HostPort": "16081"}],
+            "7681/tcp": [{"HostPort": "17682"}],
+        }
+        rebuilt_container.labels = {
+            "memstack.sandbox": "true",
+            "memstack.sandbox.id": sandbox_id,
+            # Labels can lag Docker's authoritative port mappings.
+            "memstack.sandbox.mcp_port": "18765",
+            "memstack.sandbox.desktop_port": "16080",
+            "memstack.sandbox.terminal_port": "17681",
+        }
+        rebuilt_container.attrs = {
+            "Config": {"Env": ["MCP_STATIC_TOKEN=fresh-capability"]},
+            "Mounts": [],
+        }
+        mock_docker.containers.get = Mock(return_value=rebuilt_container)
+
+        refreshed = await adapter.get_sandbox(sandbox_id)
+
+        assert refreshed is instance
+        assert refreshed.mcp_port == 18766
+        assert refreshed.desktop_port == 16081
+        assert refreshed.terminal_port == 17682
+        assert refreshed.mcp_auth_token == "fresh-capability"
+        assert refreshed.endpoint == refreshed.websocket_url
+        assert refreshed.websocket_url == "ws://localhost:18766"
+        assert refreshed.desktop_url == "https://localhost:16081"
+        assert refreshed.terminal_url == "ws://localhost:17682"
+        assert refreshed.mcp_client is None
+        mock_mcp_client.disconnect.assert_awaited_once_with()
+        assert not ({18765, 16080, 17681} & adapter._used_ports)
+        assert {18766, 16081, 17682} <= adapter._used_ports
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_falls_back_to_labels_without_erasing_cached_ports(
+        self,
+        adapter,
+        mock_docker,
+    ):
+        """Incomplete Docker mocks and metadata must not replace known ports with None."""
+        sandbox_id = "mcp-sandbox-partial-metadata"
+        instance = MCPSandboxInstance(
+            id=sandbox_id,
+            status=SandboxStatus.RUNNING,
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
+            project_path="/tmp/test_project",
+            endpoint="ws://localhost:18765",
+            websocket_url="ws://localhost:18765",
+            mcp_port=18765,
+            desktop_port=16080,
+            terminal_port=17681,
+            mcp_auth_token="cached-capability",
+        )
+        adapter._active_sandboxes[sandbox_id] = instance
+
+        rebuilt_container = MagicMock()
+        rebuilt_container.status = "running"
+        rebuilt_container.ports = {}
+        rebuilt_container.labels = {
+            "memstack.sandbox.mcp_port": "18767",
+            "memstack.sandbox.terminal_port": "17683",
+        }
+        rebuilt_container.attrs = {}
+        mock_docker.containers.get = Mock(return_value=rebuilt_container)
+
+        refreshed = await adapter.get_sandbox(sandbox_id)
+
+        assert refreshed is instance
+        assert refreshed.mcp_port == 18767
+        assert refreshed.desktop_port == 16080
+        assert refreshed.terminal_port == 17683
+        assert refreshed.mcp_auth_token == "cached-capability"
+        assert refreshed.websocket_url == "ws://localhost:18767"
+        assert refreshed.desktop_url == "https://localhost:16080"
+        assert refreshed.terminal_url == "ws://localhost:17683"
+
+    @pytest.mark.asyncio
     async def test_is_recently_active_handles_naive_last_activity(self, adapter):
         """Should tolerate legacy naive timestamps when checking recent activity."""
         sandbox_id = "mcp-sandbox-naive-activity"
@@ -433,7 +538,9 @@ class TestSandboxAutoRebuild:
         with (
             patch.object(adapter, "health_check", AsyncMock(return_value=False)),
             patch.object(adapter, "container_exists", AsyncMock(return_value=True)),
-            patch.object(adapter, "_attempt_sandbox_rebuild", AsyncMock(return_value=False)) as rebuild,
+            patch.object(
+                adapter, "_attempt_sandbox_rebuild", AsyncMock(return_value=False)
+            ) as rebuild,
             patch.object(adapter, "connect_mcp", AsyncMock(return_value=True)) as reconnect,
             patch("asyncio.sleep", AsyncMock()) as sleep_mock,
         ):

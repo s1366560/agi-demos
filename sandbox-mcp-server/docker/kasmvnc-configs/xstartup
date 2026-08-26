@@ -7,17 +7,19 @@ export DISPLAY="${DISPLAY:-:1}"
 export XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/10001}"
 export XDG_SESSION_TYPE=x11
-export XDG_CURRENT_DESKTOP=Openbox
-export DESKTOP_SESSION=openbox
+export XDG_CURRENT_DESKTOP=XFCE
+export DESKTOP_SESSION=xfce
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/10001/bus}"
 export XDG_CONFIG_HOME="${HOME}/.config"
 export XDG_CACHE_HOME="${HOME}/.cache"
 export XDG_DATA_HOME="${HOME}/.local/share"
 export XDG_STATE_HOME="${HOME}/.local/state"
+export XDG_MENU_PREFIX=xfce-
 
 mkdir -p \
-    "${XDG_CONFIG_HOME}/openbox" \
+    "${XDG_CONFIG_HOME}/xfce4/xfconf/xfce-perchannel-xml" \
     "${XDG_CACHE_HOME}" \
+    "${XDG_CACHE_HOME}/sessions" \
     "${XDG_DATA_HOME}" \
     "${XDG_STATE_HOME}" \
     "${HOME}/Desktop" \
@@ -27,12 +29,12 @@ mkdir -p \
 # persists login/configuration state separately and must not become a file store.
 xdg-user-dirs-update --set DOWNLOAD /workspace/Downloads
 
-cp /etc/xdg/openbox/rc.xml "${XDG_CONFIG_HOME}/openbox/rc.xml"
-cp /etc/xdg/openbox/menu.xml "${XDG_CONFIG_HOME}/openbox/menu.xml"
+cp -n /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/*.xml \
+    "${XDG_CONFIG_HOME}/xfce4/xfconf/xfce-perchannel-xml/"
 
 xset s off 2>/dev/null || true
 xset -dpms 2>/dev/null || true
 xset s noblank 2>/dev/null || true
-xsetroot -solid '#20242b' -cursor_name left_ptr 2>/dev/null || true
+xsetroot -solid '#2c5973' -cursor_name left_ptr 2>/dev/null || true
 
-exec openbox --config-file "${XDG_CONFIG_HOME}/openbox/rc.xml"
+exec startxfce4

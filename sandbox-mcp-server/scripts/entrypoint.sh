@@ -123,7 +123,8 @@ prepare_session_directories() {
     ensure_owned_directory "${SKY_CUA_BROWSER_USE_SESSIONS_DIR}" 0700
     ensure_owned_directory "${CHROMIUM_PROFILE_PATH}" 0700
     ensure_owned_directory "${HOME}/.vnc" 0700
-    ensure_owned_directory "${HOME}/.config/openbox" 0700
+    ensure_owned_directory "${HOME}/.config/xfce4/xfconf/xfce-perchannel-xml" 0700
+    ensure_owned_directory "${HOME}/.cache/sessions" 0700
 
     rm -f \
         "${XDG_RUNTIME_DIR}/bus" \
@@ -136,8 +137,8 @@ prepare_session_directories() {
     find "${SKY_CUA_BROWSER_USE_SOCKET_DIR}" -maxdepth 1 \
         -type s -name 'extension-*.sock' -delete
 
-    cp /etc/xdg/openbox/rc.xml "${HOME}/.config/openbox/rc.xml"
-    cp /etc/xdg/openbox/menu.xml "${HOME}/.config/openbox/menu.xml"
+    cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/*.xml \
+        "${HOME}/.config/xfce4/xfconf/xfce-perchannel-xml/"
     cp /etc/kasmvnc/xstartup.template "${HOME}/.vnc/xstartup"
     cp /etc/kasmvnc/kasmvnc.yaml "${HOME}/.vnc/kasmvnc.yaml"
     chmod 0755 "${HOME}/.vnc/xstartup"
@@ -233,7 +234,7 @@ start_kasmvnc() {
 }
 
 wait_for_x11_session() {
-    log_info "Waiting for X11 extensions, xrandr, and Openbox EWMH"
+    log_info "Waiting for X11 extensions, xrandr, and the Xfce desktop"
     local elapsed=0
     local extensions_file=/tmp/sky-cua-x11-extensions
 
@@ -246,14 +247,16 @@ wait_for_x11_session() {
             && xrandr --display "${DISPLAY}" --query >/dev/null 2>&1 \
             && xprop -display "${DISPLAY}" -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
                 | grep -q 'window id' \
-            && wmctrl -m 2>/dev/null | grep -Fq 'Name: Openbox'; then
-            log_success "X11, XTEST, MIT-SHM, xrandr, and Openbox are ready"
+            && wmctrl -m 2>/dev/null | grep -Fq 'Name: Xfwm4' \
+            && pgrep -x xfce4-panel >/dev/null \
+            && pgrep -x xfdesktop >/dev/null; then
+            log_success "X11, XTEST, MIT-SHM, xrandr, and Xfce are ready"
             return 0
         fi
         sleep 1
         elapsed=$((elapsed + 1))
     done
-    log_error "The shared Openbox/X11 session did not become ready"
+    log_error "The shared Xfce/X11 session did not become ready"
     tail -n 100 /tmp/kasmvnc.log >&2 || true
     return 1
 }
@@ -291,6 +294,35 @@ clear_stale_chromium_profile_locks() {
     done
 }
 
+restore_chromium_window() {
+    local window_id="$1"
+    local elapsed=0
+    local window_info=/tmp/sky-cua-chromium-window
+
+    log_info "Restoring Chromium window ${window_id}"
+    if ! wmctrl -i -R "${window_id}"; then
+        log_error "Failed to map and activate the Chromium window"
+        return 1
+    fi
+    if ! wmctrl -i -r "${window_id}" -b add,maximized_vert,maximized_horz; then
+        log_error "Failed to maximize the Chromium window"
+        return 1
+    fi
+
+    while [ "${elapsed}" -lt 10 ]; do
+        if xwininfo -id "${window_id}" >"${window_info}" 2>/dev/null \
+            && grep -Fq 'Map State: IsViewable' "${window_info}"; then
+            log_success "Chromium window is mapped and visible"
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    log_error "Chromium window did not become visible"
+    return 1
+}
+
 start_chromium() {
     log_info "Starting Chromium with the pinned sky-cua extension"
     chromium \
@@ -308,13 +340,18 @@ start_chromium() {
     CHROMIUM_PID=$!
 
     local elapsed=0
+    local chromium_window_id=""
     while [ "${elapsed}" -lt 45 ]; do
         if ! kill -0 "${CHROMIUM_PID}" 2>/dev/null; then
             log_error "Chromium exited before a browser window appeared"
             tail -n 100 /tmp/chromium.log >&2 || true
             return 1
         fi
-        if wmctrl -lx 2>/dev/null | grep -qi 'chromium'; then
+        chromium_window_id="$(
+            wmctrl -lx 2>/dev/null \
+                | awk 'tolower($3) ~ /chromium/ { print $1; exit }'
+        )"
+        if [ -n "${chromium_window_id}" ]; then
             break
         fi
         sleep 1
@@ -325,6 +362,8 @@ start_chromium() {
         tail -n 100 /tmp/chromium.log >&2 || true
         return 1
     fi
+
+    restore_chromium_window "${chromium_window_id}"
 
     elapsed=0
     while [ "${elapsed}" -lt 45 ]; do

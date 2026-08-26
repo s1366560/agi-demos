@@ -4,7 +4,7 @@
 **Environment**: Production
 **Last Updated**: 2026-08-21
 
-This guide covers production deployment of the Ubuntu 24.04 Openbox/X11 sandbox with
+This guide covers production deployment of the Ubuntu 24.04 Xfce/X11 sandbox with
 KasmVNC, Chromium, AT-SPI, and sky-cua.
 
 ---
@@ -552,7 +552,8 @@ docker inspect sandbox-mcp-prod
 
 ```bash
 # Check processes
-docker exec sandbox-mcp-prod ps aux | grep -E "Xkasmvnc|openbox|chromium"
+docker exec sandbox-mcp-prod \
+  ps aux | grep -E "Xkasmvnc|xfce4-session|xfwm4|xfce4-panel|xfdesktop|chromium"
 
 # Check X11 and the extension/native-host bridge
 docker exec sandbox-mcp-prod xdpyinfo -display :1 -queryExtensions
