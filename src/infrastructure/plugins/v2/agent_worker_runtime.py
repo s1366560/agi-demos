@@ -10,10 +10,13 @@ from typing import Any, Protocol, runtime_checkable
 from src.configuration.config import get_settings
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 from .agent_orchestration_runtime import (
     AgentOrchestrationRuntimeProtocolV2,
+    AgentSessionTurnExecutorV2,
+    AgentSpawnExecutorV2,
 )
 from .runtime import (
     ContextV2,
@@ -29,6 +32,7 @@ AGENT_WORKER_RUNTIME_SERVICE_V2 = "service:agent.worker-runtime"
 AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2 = "sandbox_runtime"
 AGENT_WORKER_SUBAGENT_RUNS_INJECT_V2 = "subagent_runs"
 AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2 = "orchestration_runtime"
+AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2 = "service:operation.agent-orchestrator"
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +101,57 @@ def current_agent_worker_runtime_services_v2() -> AgentWorkerRuntimeServicesV2:
     return services
 
 
+async def bind_current_agent_orchestrator_v2(
+    *,
+    owner: object,
+    spawn_executor: AgentSpawnExecutorV2,
+    session_turn_executor: AgentSessionTurnExecutorV2,
+) -> AgentOrchestrator:
+    """Bind and publish the exact generation's orchestrator in this operation."""
+    from .boundary import current_operation_context_v2
+
+    operation = current_operation_context_v2()
+    services = current_agent_worker_runtime_services_v2()
+    orchestrator = await services.orchestration_runtime.bind(
+        owner=owner,
+        spawn_executor=spawn_executor,
+        session_turn_executor=session_turn_executor,
+    )
+    try:
+        existing = operation.require(AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2)
+    except RuntimeV2Error as exc:
+        if exc.code != "missing_service":
+            raise
+    else:
+        if existing is not orchestrator:
+            raise RuntimeV2Error(
+                "agent_orchestrator_operation_conflict",
+                "operation already has a different Agent orchestrator binding",
+            )
+        return orchestrator
+
+    _ = operation.provide(
+        AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
+        orchestrator,
+        label="operation-agent-orchestrator",
+    )
+    return orchestrator
+
+
+def current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator pinned to the current operation and generation."""
+    from .boundary import current_operation_context_v2
+
+    operation = current_operation_context_v2()
+    orchestrator = operation.require(AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2)
+    if not isinstance(orchestrator, AgentOrchestrator):
+        raise RuntimeV2Error(
+            "invalid_operation_agent_orchestrator",
+            "operation Agent orchestrator service has an invalid implementation",
+        )
+    return orchestrator
+
+
 def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
     """Build the Agent Worker sandbox adapter owned by one V2 generation."""
     settings = get_settings()
@@ -157,6 +212,7 @@ def agent_worker_runtime_definition_v2() -> PluginDefinitionV2:
 
 
 __all__ = [
+    "AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2",
     "AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2",
     "AGENT_WORKER_RUNTIME_MODULE_V2",
     "AGENT_WORKER_RUNTIME_SERVICE_V2",
@@ -167,5 +223,7 @@ __all__ = [
     "AgentWorkerRuntimeServicesV2",
     "agent_worker_runtime_definition_v2",
     "agent_worker_sandbox_runtime_factory_v2",
+    "bind_current_agent_orchestrator_v2",
+    "current_agent_orchestrator_v2",
     "current_agent_worker_runtime_services_v2",
 ]

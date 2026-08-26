@@ -1299,28 +1299,19 @@ class AgentRuntimeBootstrapper:
 
     async def _bootstrap_agent_orchestrator(self) -> None:
         """Bind AgentOrchestrator through the admitted generation runtime."""
-        from src.infrastructure.agent.state.agent_worker_state import (
-            set_agent_orchestrator,
-        )
         from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
         try:
-            from src.configuration.config import get_settings as _get_ma_settings
+            from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                bind_current_agent_orchestrator_v2,
+            )
 
-            _ma_settings = _get_ma_settings()
-            if _ma_settings.multi_agent_enabled:
-                from src.infrastructure.plugins.v2.agent_worker_runtime import (
-                    current_agent_worker_runtime_services_v2,
-                )
-
-                services = current_agent_worker_runtime_services_v2()
-                orchestrator = await services.orchestration_runtime.bind(
-                    owner=AgentRuntimeBootstrapper,
-                    spawn_executor=self.launch_spawned_agent_session,
-                    session_turn_executor=self.launch_agent_session_turn,
-                )
-                set_agent_orchestrator(orchestrator)
-                logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")
+            _ = await bind_current_agent_orchestrator_v2(
+                owner=AgentRuntimeBootstrapper,
+                spawn_executor=self.launch_spawned_agent_session,
+                session_turn_executor=self.launch_agent_session_turn,
+            )
+            logger.info("[AgentService] AgentOrchestrator bootstrapped for Agent runtime")
         except RuntimeV2Error:
             raise
         except Exception as e:

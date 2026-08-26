@@ -164,8 +164,8 @@ async def test_native_agent_loader_has_no_builtin_lookup_branch() -> None:
             create=True,
         ) as builtin_lookup,
         patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
-            return_value=None,
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            return_value=SimpleNamespace(get_agent=AsyncMock(return_value=None)),
         ),
     ):
         result = await agent._load_selected_agent_native(
@@ -176,6 +176,21 @@ async def test_native_agent_loader_has_no_builtin_lookup_branch() -> None:
 
     assert result is None
     builtin_lookup.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_native_agent_loader_requires_operation_orchestrator() -> None:
+    agent = ReActAgent(model="test-model", tools={})
+    agent._session_factory = None
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await agent._load_selected_agent_native(
+            agent_id="agent-v2",
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+
+    assert error.value.code == "operation_context_not_pinned"
 
 
 @pytest.mark.unit

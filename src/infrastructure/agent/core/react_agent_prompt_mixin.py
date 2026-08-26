@@ -383,20 +383,23 @@ class PromptMixin:
         project_id: str,
     ) -> Agent | None:
         """Load one persisted runtime agent from the orchestrator or database."""
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is not None:
-            try:
-                agent_def = await orchestrator.get_agent(
-                    agent_id,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
-                )
-                if agent_def is not None:
-                    return cast(Agent, agent_def)
-            except Exception:
-                logger.exception("[ReActAgent] Failed orchestrator lookup for agent %s", agent_id)
+        orchestrator = current_agent_orchestrator_v2()
+        try:
+            agent_def = await orchestrator.get_agent(
+                agent_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+            if agent_def is not None:
+                return agent_def
+        except RuntimeV2Error:
+            raise
+        except Exception:
+            logger.exception("[ReActAgent] Failed orchestrator lookup for agent %s", agent_id)
 
         session_factory = self._session_factory
         if session_factory is None:

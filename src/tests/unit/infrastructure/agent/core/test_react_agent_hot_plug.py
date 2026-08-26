@@ -12,6 +12,7 @@ import pytest
 
 import src.infrastructure.agent.core.react_agent as react_agent_module
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 class MockTool:
@@ -37,7 +38,7 @@ class TestReActAgentHotPlug:
         orchestrator = SimpleNamespace(_session_registry=session_registry)
 
         with patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
             return_value=orchestrator,
         ):
             await react_agent_module._register_selected_agent_session(
@@ -51,6 +52,25 @@ class TestReActAgentHotPlug:
             conversation_id="conv-1",
             project_id="proj-1",
         )
+
+    @pytest.mark.asyncio
+    async def test_register_selected_agent_session_propagates_generation_errors(self):
+        error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
+
+        with (
+            patch(
+                "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+                side_effect=error,
+            ),
+            pytest.raises(RuntimeV2Error) as raised,
+        ):
+            await react_agent_module._register_selected_agent_session(
+                conversation_id="conv-1",
+                project_id="proj-1",
+                selected_agent_id="builtin:sisyphus",
+            )
+
+        assert raised.value is error
 
     def test_agent_with_static_tools(self):
         """Should work with static tools dict (backward compatibility)."""

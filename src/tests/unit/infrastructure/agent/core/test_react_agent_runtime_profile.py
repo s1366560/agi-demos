@@ -86,14 +86,14 @@ class TestModelRouteRef:
 @pytest.mark.unit
 class TestReActAgentRuntimeProfile:
     async def test_load_selected_agent_scopes_orchestrator_lookup(self, monkeypatch) -> None:
-        from src.infrastructure.agent.state import agent_worker_state
+        from src.infrastructure.plugins.v2 import agent_worker_runtime
 
         agent = _make_react_agent()
         selected_agent = SimpleNamespace(id="agent-123", name="Scoped Agent")
         orchestrator = SimpleNamespace(get_agent=AsyncMock(return_value=selected_agent))
         monkeypatch.setattr(
-            agent_worker_state,
-            "get_agent_orchestrator",
+            agent_worker_runtime,
+            "current_agent_orchestrator_v2",
             lambda: orchestrator,
         )
 

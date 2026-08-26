@@ -55,6 +55,7 @@ from src.infrastructure.agent.events.converter import normalize_event_dict
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.subagent.announce_service import AnnounceService
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 logger = logging.getLogger(__name__)
@@ -161,16 +162,18 @@ async def _update_spawn_status(
 ) -> None:
     """Best-effort mirror of spawned child execution status to the orchestrator."""
     try:
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            return
+        orchestrator = current_agent_orchestrator_v2()
         await orchestrator.update_spawn_status(
             child_session_id=child_session_id,
             new_status=status,
             conversation_id=parent_session_id,
         )
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "Failed to update spawn status: child_session=%s status=%s parent_session=%s",
@@ -189,17 +192,19 @@ async def _resolve_child_terminal_status(
     """Resolve the spawn status to mirror after a child turn finishes."""
     default_status = "completed" if success else "failed"
     try:
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            return default_status
+        orchestrator = current_agent_orchestrator_v2()
         record = await orchestrator.get_spawn_record(child_session_id)
         if record is None or record.mode != SpawnMode.SESSION:
             return default_status
         if record.status in {"stopped", "cancelled"}:
             return None
         return "running"
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "Failed to resolve child terminal spawn status: child_session=%s",

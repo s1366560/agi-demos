@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
     from src.domain.model.agent.agent_definition import Agent
@@ -89,11 +90,11 @@ async def _register_selected_agent_session(
 ) -> None:
     """Best-effort registration of the resolved agent owning a conversation."""
     try:
-        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            return
+        orchestrator = current_agent_orchestrator_v2()
         session_registry = getattr(orchestrator, "_session_registry", None)
         if session_registry is None:
             return
@@ -102,6 +103,8 @@ async def _register_selected_agent_session(
             conversation_id=conversation_id,
             project_id=project_id,
         )
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "[ReActAgent] Failed to register selected agent session: agent=%s conversation=%s "

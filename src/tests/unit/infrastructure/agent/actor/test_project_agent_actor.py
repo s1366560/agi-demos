@@ -223,11 +223,7 @@ async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -
 @pytest.mark.unit
 async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
     actor = _actor_instance()
-    orchestration_runtime = SimpleNamespace(bind=AsyncMock(return_value="agent-orchestrator"))
-    current_services = MagicMock(
-        return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime)
-    )
-    set_orchestrator = MagicMock()
+    bind_orchestrator = AsyncMock(return_value="agent-orchestrator")
     descriptor = PluginGenerationDescriptorV2(
         profile_id="memstack-default-v2",
         generation=7,
@@ -245,17 +241,8 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
 
     with (
         patch(
-            "src.infrastructure.agent.actor.project_agent_actor.get_settings",
-            return_value=SimpleNamespace(multi_agent_enabled=True),
-        ),
-        patch(
-            "src.infrastructure.plugins.v2.agent_worker_runtime."
-            "current_agent_worker_runtime_services_v2",
-            current_services,
-        ),
-        patch(
-            "src.infrastructure.agent.state.agent_worker_state.set_agent_orchestrator",
-            set_orchestrator,
+            "src.infrastructure.plugins.v2.agent_worker_runtime.bind_current_agent_orchestrator_v2",
+            new=bind_orchestrator,
         ),
         patch(
             "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
@@ -264,12 +251,10 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
     ):
         await actor._ensure_agent_orchestrator_v2()
 
-    current_services.assert_called_once_with()
-    orchestration_runtime.bind.assert_awaited_once()
-    assert orchestration_runtime.bind.await_args.kwargs["owner"] is actor
-    assert orchestration_runtime.bind.await_args.kwargs["spawn_executor"] is not None
-    assert orchestration_runtime.bind.await_args.kwargs["session_turn_executor"] is not None
-    set_orchestrator.assert_called_once_with("agent-orchestrator")
+    bind_orchestrator.assert_awaited_once()
+    assert bind_orchestrator.await_args.kwargs["owner"] is actor
+    assert bind_orchestrator.await_args.kwargs["spawn_executor"] is not None
+    assert bind_orchestrator.await_args.kwargs["session_turn_executor"] is not None
 
     conversation = SimpleNamespace(
         id="child-session",
@@ -297,7 +282,7 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
             new=AsyncMock(return_value=SimpleNamespace(to_dict=lambda: {"mode": "test"})),
         ),
     ):
-        await orchestration_runtime.bind.await_args.kwargs["spawn_executor"](
+        await bind_orchestrator.await_args.kwargs["spawn_executor"](
             SpawnExecutionRequest(
                 parent_agent_id="parent-agent",
                 child_agent_id="child-agent",
@@ -310,7 +295,7 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
                 message="spawn",
             )
         )
-        await orchestration_runtime.bind.await_args.kwargs["session_turn_executor"](
+        await bind_orchestrator.await_args.kwargs["session_turn_executor"](
             SessionTurnExecutionRequest(
                 child_agent_id="child-agent",
                 child_session_id="child-session",
@@ -336,22 +321,17 @@ async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
 async def test_actor_orchestrator_propagates_runtime_v2_errors() -> None:
     actor = _actor_instance()
     error = RuntimeV2Error("missing_service", "worker runtime is unavailable")
-    orchestration_runtime = SimpleNamespace(bind=AsyncMock(side_effect=error))
+    bind_orchestrator = AsyncMock(side_effect=error)
 
     with (
         patch(
-            "src.infrastructure.agent.actor.project_agent_actor.get_settings",
-            return_value=SimpleNamespace(multi_agent_enabled=True),
-        ),
-        patch(
-            "src.infrastructure.plugins.v2.agent_worker_runtime."
-            "current_agent_worker_runtime_services_v2",
-            return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime),
+            "src.infrastructure.plugins.v2.agent_worker_runtime.bind_current_agent_orchestrator_v2",
+            new=bind_orchestrator,
         ),
         pytest.raises(RuntimeV2Error) as raised,
     ):
         await actor._ensure_agent_orchestrator_v2()
 
     assert raised.value is error
-    orchestration_runtime.bind.assert_awaited_once()
+    bind_orchestrator.assert_awaited_once()
     await actor._plugin_admission_v2.close()

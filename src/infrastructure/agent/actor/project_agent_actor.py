@@ -12,7 +12,6 @@ from typing import Any
 
 import ray
 
-from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.actor.execution import (
@@ -612,21 +611,12 @@ class ProjectAgentActor:
 
     async def _ensure_agent_orchestrator_v2(self) -> None:
         """Build the actor orchestrator from the exact admitted V2 registry."""
-        settings = get_settings()
-        if not settings.multi_agent_enabled:
-            return
-
-        from src.infrastructure.agent.state.agent_worker_state import (
-            set_agent_orchestrator,
-        )
         from src.infrastructure.plugins.v2.agent_worker_runtime import (
-            current_agent_worker_runtime_services_v2,
+            bind_current_agent_orchestrator_v2,
         )
 
         try:
             async with self._bootstrap_lock:
-                services = current_agent_worker_runtime_services_v2()
-
                 from src.application.services.agent.runtime_bootstrapper import (
                     AgentRuntimeBootstrapper,
                 )
@@ -719,13 +709,12 @@ class ProjectAgentActor:
                         )
                     )
 
-                orchestrator = await services.orchestration_runtime.bind(
+                orchestrator = await bind_current_agent_orchestrator_v2(
                     owner=self,
                     spawn_executor=_spawn_executor,
                     session_turn_executor=_session_turn_executor,
                 )
                 self._agent_orchestrator_v2 = orchestrator
-                set_agent_orchestrator(orchestrator)
                 logger.info(
                     "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"
                 )

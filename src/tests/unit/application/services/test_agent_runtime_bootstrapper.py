@@ -874,55 +874,36 @@ async def test_start_chat_actor_workspace_worker_forces_ray_when_runtime_is_auto
 @pytest.mark.asyncio
 async def test_bootstrap_agent_orchestrator_binds_generation_owned_runtime(bootstrapper):
     """Multi-agent bootstrap must bind through the admitted generation runtime."""
-    settings = SimpleNamespace(multi_agent_enabled=True)
-    orchestration_runtime = SimpleNamespace(bind=AsyncMock(return_value="agent-orchestrator"))
-    current_worker_services_mock = MagicMock(
-        return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime)
-    )
-    get_settings_mock = MagicMock(return_value=settings)
-    set_agent_orchestrator_mock = MagicMock()
-
-    fake_config_module = _build_fake_module(
-        "src.configuration.config",
-        get_settings=get_settings_mock,
-    )
+    bind_orchestrator = AsyncMock(return_value="agent-orchestrator")
     fake_agent_worker_runtime_module = _build_fake_module(
         "src.infrastructure.plugins.v2.agent_worker_runtime",
-        current_agent_worker_runtime_services_v2=current_worker_services_mock,
-    )
-    fake_worker_state_module = _build_fake_module(
-        "src.infrastructure.agent.state.agent_worker_state",
-        set_agent_orchestrator=set_agent_orchestrator_mock,
+        bind_current_agent_orchestrator_v2=bind_orchestrator,
     )
 
     with patch.dict(
         "sys.modules",
         {
-            "src.configuration.config": fake_config_module,
             "src.infrastructure.plugins.v2.agent_worker_runtime": (
                 fake_agent_worker_runtime_module
             ),
-            "src.infrastructure.agent.state.agent_worker_state": fake_worker_state_module,
         },
     ):
         await bootstrapper._bootstrap_agent_orchestrator()
 
-    current_worker_services_mock.assert_called_once_with()
-    orchestration_runtime.bind.assert_awaited_once()
-    assert orchestration_runtime.bind.await_args.kwargs["owner"] is AgentRuntimeBootstrapper
-    spawn_executor = orchestration_runtime.bind.await_args.kwargs["spawn_executor"]
+    bind_orchestrator.assert_awaited_once()
+    assert bind_orchestrator.await_args.kwargs["owner"] is AgentRuntimeBootstrapper
+    spawn_executor = bind_orchestrator.await_args.kwargs["spawn_executor"]
     assert getattr(spawn_executor, "__self__", None) is bootstrapper
     assert (
         getattr(spawn_executor, "__func__", None)
         is AgentRuntimeBootstrapper.launch_spawned_agent_session
     )
-    session_turn_executor = orchestration_runtime.bind.await_args.kwargs["session_turn_executor"]
+    session_turn_executor = bind_orchestrator.await_args.kwargs["session_turn_executor"]
     assert getattr(session_turn_executor, "__self__", None) is bootstrapper
     assert (
         getattr(session_turn_executor, "__func__", None)
         is AgentRuntimeBootstrapper.launch_agent_session_turn
     )
-    set_agent_orchestrator_mock.assert_called_once_with("agent-orchestrator")
 
 
 @pytest.mark.unit

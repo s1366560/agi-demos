@@ -13,6 +13,7 @@ from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.actor.types import ProjectChatRequest
 from src.infrastructure.agent.hitl.state_store import HITLAgentState
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 
@@ -564,6 +565,11 @@ async def test_execute_project_chat_updates_spawn_status_for_child_session() -> 
         patch.object(execution, "_record_child_result_history", new=AsyncMock()) as history_writer,
         patch.object(execution, "_persist_events", new=AsyncMock()),
         patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="completed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
@@ -625,6 +631,11 @@ async def test_execute_project_chat_marks_failed_spawn_when_child_errors() -> No
         patch.object(execution, "_record_child_result_history", new=AsyncMock()) as history_writer,
         patch.object(execution, "_persist_events", new=AsyncMock()),
         patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="failed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
         patch.object(execution.agent_metrics, "increment"),
         patch.object(execution.agent_metrics, "observe"),
@@ -891,6 +902,11 @@ async def test_finalize_child_session_announce_uses_error_fallback() -> None:
 
     with (
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
+        patch.object(
+            execution,
+            "_resolve_child_terminal_status",
+            new=AsyncMock(return_value="failed"),
+        ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()),
         patch.object(execution, "_record_child_result_history", new=AsyncMock()),
         patch.object(
@@ -934,7 +950,7 @@ async def test_finalize_child_session_keeps_session_mode_running() -> None:
     with (
         patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
         patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
             return_value=orchestrator,
         ),
         patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_status,
@@ -963,6 +979,41 @@ async def test_finalize_child_session_keeps_session_mode_running() -> None:
     )
     history_writer.assert_awaited_once()
     announce_writer.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_spawn_status_helpers_propagate_generation_service_errors() -> None:
+    error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as update_error,
+    ):
+        await execution._update_spawn_status(
+            child_session_id="child-conv",
+            status="running",
+            parent_session_id="parent-conv",
+        )
+
+    assert update_error.value is error
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as resolve_error,
+    ):
+        await execution._resolve_child_terminal_status(
+            child_session_id="child-conv",
+            success=True,
+        )
+
+    assert resolve_error.value is error
 
 
 @pytest.mark.unit

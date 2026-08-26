@@ -116,9 +116,6 @@ __all__ = [  # noqa: RUF022
     "set_agent_graph_service",
     # HITL Response Listener (real-time delivery)
     "set_hitl_response_listener",
-    # Multi-Agent Orchestrator
-    "set_agent_orchestrator",
-    "get_agent_orchestrator",
     # Pool Manager (new 3-tier architecture)
     "set_pool_adapter",
     "update_mcp_tools_cache",
@@ -131,7 +128,6 @@ _tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
 _pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
-_agent_orchestrator: Any | None = None  # AgentOrchestrator (multi-agent)
 
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
@@ -246,16 +242,6 @@ def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
             "agent worker runtime resolved an invalid sandbox adapter",
         )
     return adapter
-
-
-def set_agent_orchestrator(orchestrator: Any) -> None:
-    global _agent_orchestrator
-    _agent_orchestrator = orchestrator
-    logger.info("Agent Worker: AgentOrchestrator registered for Activities")
-
-
-def get_agent_orchestrator() -> Any | None:
-    return _agent_orchestrator
 
 
 # ============================================================================
@@ -821,10 +807,11 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         if not settings.multi_agent_enabled:
             return
 
-        orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            logger.debug("Agent Worker: AgentOrchestrator not set, skipping agent tools")
-            return
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_orchestrator_v2,
+        )
+
+        orchestrator = current_agent_orchestrator_v2()
 
         from src.infrastructure.agent.tools.agent_definition_tool import (
             configure_agent_definition_manage,
@@ -884,6 +871,8 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
                 tools[name] = registry[name]
 
         logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
 

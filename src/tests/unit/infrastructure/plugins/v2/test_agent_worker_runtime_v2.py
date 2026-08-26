@@ -6,7 +6,8 @@ import json
 from dataclasses import replace
 from inspect import getsource
 from pathlib import Path
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,18 +15,26 @@ from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBoot
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
-from src.infrastructure.agent.actor import local_chat_worker, project_agent_actor
+from src.infrastructure.agent.actor import execution, local_chat_worker, project_agent_actor
+from src.infrastructure.agent.core import react_agent_profile, react_agent_prompt_mixin
+from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
+from src.infrastructure.agent.state import agent_worker_state
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2 import agent_worker_runtime
 from src.infrastructure.plugins.v2.agent_orchestration_runtime import (
     AGENT_ORCHESTRATION_RUNTIME_MODULE_V2,
     AgentOrchestrationRuntimeProtocolV2,
+    AgentOrchestratorResourceV2,
 )
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
     AGENT_WORKER_RUNTIME_MODULE_V2,
     AGENT_WORKER_RUNTIME_SERVICE_V2,
     AgentWorkerRuntimeResolverProtocolV2,
+    bind_current_agent_orchestrator_v2,
+    current_agent_orchestrator_v2,
 )
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -101,6 +110,141 @@ async def test_agent_worker_runtime_resolves_adapter_from_exact_generation() -> 
         run_registry.close()
 
     assert adapter.close_calls == 1
+
+
+async def test_agent_orchestrator_binding_is_published_to_current_operation() -> None:
+    orchestrator = MagicMock(spec=AgentOrchestrator)
+    orchestration_runtime = SimpleNamespace(bind=AsyncMock(return_value=orchestrator))
+    operation = MagicMock()
+    operation.require.side_effect = RuntimeV2Error("missing_service", "not bound")
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_runtime_services_v2",
+            return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime),
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+    ):
+        resolved = await bind_current_agent_orchestrator_v2(
+            owner="owner-a",
+            spawn_executor=AsyncMock(),
+            session_turn_executor=AsyncMock(),
+        )
+
+    assert resolved is orchestrator
+    orchestration_runtime.bind.assert_awaited_once()
+    operation.provide.assert_called_once_with(
+        AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
+        orchestrator,
+        label="operation-agent-orchestrator",
+    )
+
+    operation.require.side_effect = None
+    operation.require.return_value = orchestrator
+    with patch(
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        return_value=operation,
+    ):
+        assert current_agent_orchestrator_v2() is orchestrator
+
+
+async def test_agent_orchestrator_binding_rejects_operation_identity_conflict() -> None:
+    orchestrator = MagicMock(spec=AgentOrchestrator)
+    operation = MagicMock()
+    operation.require.return_value = MagicMock(spec=AgentOrchestrator)
+
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_runtime_services_v2",
+            return_value=SimpleNamespace(
+                orchestration_runtime=SimpleNamespace(bind=AsyncMock(return_value=orchestrator))
+            ),
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+            return_value=operation,
+        ),
+        pytest.raises(RuntimeV2Error) as error,
+    ):
+        await bind_current_agent_orchestrator_v2(
+            owner="owner-a",
+            spawn_executor=AsyncMock(),
+            session_turn_executor=AsyncMock(),
+        )
+
+    assert error.value.code == "agent_orchestrator_operation_conflict"
+    operation.provide.assert_not_called()
+
+
+async def test_agent_orchestrator_resolution_follows_nested_generation_operations() -> None:
+    first_orchestrator = MagicMock(spec=AgentOrchestrator)
+    second_orchestrator = MagicMock(spec=AgentOrchestrator)
+
+    async def first_factory(*_args: object) -> AgentOrchestratorResourceV2:
+        return AgentOrchestratorResourceV2(
+            orchestrator=first_orchestrator,
+            dispose=AsyncMock(),
+        )
+
+    async def second_factory(*_args: object) -> AgentOrchestratorResourceV2:
+        return AgentOrchestratorResourceV2(
+            orchestrator=second_orchestrator,
+            dispose=AsyncMock(),
+        )
+
+    first_host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(agent_orchestrator_factory=first_factory)
+    )
+    second_host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(agent_orchestrator_factory=second_factory)
+    )
+    for host, generation in ((first_host, 111), (second_host, 222)):
+        publication = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=generation,
+            version=generation,
+        )
+        assert publication.accepted is True
+
+    try:
+        async with pin_operation_context_v2(
+            first_host,
+            operation_id="first-generation",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            await bind_current_agent_orchestrator_v2(
+                owner="first-owner",
+                spawn_executor=AsyncMock(),
+                session_turn_executor=AsyncMock(),
+            )
+            assert current_agent_orchestrator_v2() is first_orchestrator
+
+            async with pin_operation_context_v2(
+                second_host,
+                operation_id="second-generation",
+                scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            ):
+                await bind_current_agent_orchestrator_v2(
+                    owner="second-owner",
+                    spawn_executor=AsyncMock(),
+                    session_turn_executor=AsyncMock(),
+                )
+                assert current_agent_orchestrator_v2() is second_orchestrator
+
+            assert current_agent_orchestrator_v2() is first_orchestrator
+    finally:
+        await second_host.close()
+        await first_host.close()
+
+    with pytest.raises(RuntimeV2Error) as error:
+        current_agent_orchestrator_v2()
+    assert error.value.code == "operation_context_not_pinned"
 
 
 async def test_agent_worker_runtime_preserves_explicit_optional_unavailability() -> None:
@@ -215,9 +359,9 @@ def test_agent_worker_runtime_is_an_explicit_profile_entry() -> None:
 
 def test_local_runtime_bootstrap_occurs_inside_the_generation_admission() -> None:
     bootstrap_source = getsource(AgentRuntimeBootstrapper._bootstrap_agent_orchestrator)
-    assert "current_agent_worker_runtime_services_v2" in bootstrap_source
-    assert "orchestration_runtime.bind" in bootstrap_source
+    assert "bind_current_agent_orchestrator_v2" in bootstrap_source
     assert "get_shared_subagent_run_registry" not in bootstrap_source
+    assert "set_agent_orchestrator" not in bootstrap_source
     assert "except RuntimeV2Error:" in bootstrap_source
 
     for source in (
@@ -236,8 +380,8 @@ def test_ray_actor_orchestrator_bootstrap_occurs_inside_generation_admission() -
     )
     assert "get_shared_subagent_run_registry" not in process_bootstrap_source
     assert "get_shared_subagent_run_registry" not in orchestrator_source
-    assert "current_agent_worker_runtime_services_v2" in orchestrator_source
-    assert "orchestration_runtime.bind" in orchestrator_source
+    assert "bind_current_agent_orchestrator_v2" in orchestrator_source
+    assert "set_agent_orchestrator" not in orchestrator_source
     assert "except RuntimeV2Error:" in orchestrator_source
 
     chat_source = getsource(project_agent_actor.ProjectAgentActor._run_chat)
@@ -249,6 +393,43 @@ def test_ray_actor_orchestrator_bootstrap_occurs_inside_generation_admission() -
     assert resume_source.index("async with self._plugin_admission_v2.admit(") < (
         resume_source.index("_ensure_agent_orchestrator_v2(")
     )
+
+
+def test_agent_orchestrator_has_no_process_global_authority() -> None:
+    state_source = getsource(agent_worker_state)
+    assert "def get_agent_orchestrator(" not in state_source
+    assert "def set_agent_orchestrator(" not in state_source
+
+    for source in (
+        getsource(execution._update_spawn_status),
+        getsource(execution._resolve_child_terminal_status),
+        getsource(react_agent_profile._register_selected_agent_session),
+        getsource(react_agent_prompt_mixin.PromptMixin._load_selected_agent_native),
+        getsource(agent_worker_state._add_agent_tools),
+        getsource(project_agent_actor.ProjectAgentActor._ensure_agent_orchestrator_v2),
+        getsource(AgentRuntimeBootstrapper._bootstrap_agent_orchestrator),
+    ):
+        assert "get_agent_orchestrator" not in source
+        assert "set_agent_orchestrator" not in source
+
+
+def test_agent_tool_builder_propagates_generation_service_errors() -> None:
+    error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
+
+    with (
+        patch(
+            "src.configuration.config.get_settings",
+            return_value=SimpleNamespace(multi_agent_enabled=True),
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
+            side_effect=error,
+        ),
+        pytest.raises(RuntimeV2Error) as raised,
+    ):
+        agent_worker_state._add_agent_tools({}, "project-a")
+
+    assert raised.value is error
 
 
 def test_agent_worker_sandbox_factory_reports_docker_unavailability_as_optional(

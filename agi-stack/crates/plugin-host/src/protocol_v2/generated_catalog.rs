@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:0622b026dae7507d69feb52fd8c93bc0fce3903d9c23fc9d24dcd42b0e307c",
-    "c5\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:fdeae9860bedb603c489abee8cbbc389871b9185019b66eb622b641c6307c8",
+    "75\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -403,7 +403,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "bda96c69e982\",\"entrypoint\":\"src.infrastructure.plugins.v2.github_capabilities:_apply_git",
     "hub_tool_contribution_v2\",\"module_ref\":\"builtin://memstack/agent/tool/github\",\"plugin_id",
     "\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_di",
-    "gest\":\"sha256:8343ade5cba66b12b3d7cf008d8b17d9c1e8662fa9091d0fa31b0ec34dc5bc07\",\"artifac",
+    "gest\":\"sha256:5e647e4f2ccb44bec9c31506de7f00ee82b53b8b3a29ddee07df0a41c6eb2756\",\"artifac",
     "t_source\":\"repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py\",\"contrac",
     "t\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additiona",
     "lProperties\":false,\"properties\":{\"strategy\":{\"const\":\"generation-sandbox-runtime\",\"type\"",
@@ -2603,4 +2603,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "s\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:0622b026dae7507d69feb52fd8c93bc0fce3903d9c23fc9d24dcd42b0e307cc5";
+    "sha256:fdeae9860bedb603c489abee8cbbc389871b9185019b66eb622b641c6307c875";
