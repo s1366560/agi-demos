@@ -4,9 +4,11 @@ import asyncio
 import inspect
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Any
 
 from src.domain.events.agent_events import SubAgentDepthLimitedEvent
@@ -15,40 +17,171 @@ from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlChannelPort, ControlMessage
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
 
-class _NestedToolRuntimeContext:
-    """Runtime context bridge for nested session ToolDefinitions."""
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SessionCoreRuntime:
+    run_registry: SubAgentRunRegistry
+    spawn_callback: Callable[..., Awaitable[str]] | None
+    max_active_runs: int
+    max_spawn_retries: int
+    retry_delay_ms: int
+    subagent_names: tuple[str, ...]
+    subagent_descriptions: Mapping[str, str]
+    conversation_id: str
+    requester_session_key: str
+    delegation_depth: int
+    max_delegation_depth: int
+    max_active_runs_per_lineage: int
+    max_children_per_requester: int
+    visibility_default: str
 
-    def __init__(self, *, conversation_id: str, agent_name: str = "subagent") -> None:
-        super().__init__()
-        self._conversation_id = conversation_id
-        self._agent_name = agent_name
-        self._context_var: ContextVar[ToolContext | None] = ContextVar(
-            f"{__name__}.nested_tool_context.{id(self)}",
-            default=None,
-        )
 
-    def set_runtime_context(self, ctx: ToolContext) -> None:
-        _ = self._context_var.set(ctx)
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SessionOverviewRuntime:
+    run_registry: SubAgentRunRegistry
+    conversation_id: str
+    requester_session_key: str
+    visibility_default: str
+    observability_provider: Callable[[], dict[str, Any]] | None
 
-    def get_context(self) -> ToolContext:
-        ctx = self._context_var.get()
-        if ctx is not None:
-            return ctx
-        return ToolContext(
-            session_id=self._conversation_id,
-            message_id="nested-tool",
-            call_id="nested-tool",
-            agent_name=self._agent_name,
-            conversation_id=self._conversation_id,
-            abort_signal=asyncio.Event(),
-            messages=[],
-        )
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SessionWaitRuntime:
+    run_registry: SubAgentRunRegistry
+    conversation_id: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SessionAckRuntime:
+    run_registry: SubAgentRunRegistry
+    conversation_id: str
+    requester_session_key: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SessionSendRuntime:
+    run_registry: SubAgentRunRegistry
+    conversation_id: str
+    spawn_callback: Callable[..., Awaitable[str]]
+    max_active_runs: int
+    max_active_runs_per_lineage: int
+    max_children_per_requester: int
+    requester_session_key: str
+    delegation_depth: int
+    max_delegation_depth: int
+    max_spawn_retries: int
+    retry_delay_ms: int
+    spawn_callback_params: frozenset[str] | None
+    spawn_callback_accepts_kwargs: bool
+
+
+@dataclass(kw_only=True, slots=True)
+class _ControlRuntimeState:
+    last_steer_at: dict[str, datetime] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SubAgentControlRuntime:
+    run_registry: SubAgentRunRegistry
+    conversation_id: str
+    subagent_names: tuple[str, ...]
+    subagent_descriptions: Mapping[str, str]
+    cancel_callback: Callable[[str], Awaitable[bool]]
+    restart_callback: Callable[[str, str, str], Awaitable[str]] | None
+    control_channel: ControlChannelPort | None
+    steer_rate_limit_ms: int
+    max_active_runs: int
+    max_active_runs_per_lineage: int
+    max_children_per_requester: int
+    requester_session_key: str
+    delegation_depth: int
+    max_delegation_depth: int
+    state: _ControlRuntimeState = field(default_factory=_ControlRuntimeState)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SubAgentSessionToolRuntime:
+    """Operation-local dependency groups for the SubAgent session tools."""
+
+    core: SessionCoreRuntime | None = None
+    overview: SessionOverviewRuntime | None = None
+    wait: SessionWaitRuntime | None = None
+    ack: SessionAckRuntime | None = None
+    send: SessionSendRuntime | None = None
+    control: SubAgentControlRuntime | None = None
+
+
+_session_tool_runtime: ContextVar[SubAgentSessionToolRuntime | None] = ContextVar(
+    f"{__name__}.session_tool_runtime",
+    default=None,
+)
+
+
+def _missing_runtime(tool_name: str) -> RuntimeV2Error:
+    return RuntimeV2Error(
+        "missing_subagent_tool_runtime",
+        f"{tool_name} requires an operation-bound runtime",
+    )
+
+
+def _current_tool_runtime() -> SubAgentSessionToolRuntime:
+    runtime = _session_tool_runtime.get()
+    if runtime is None:
+        raise _missing_runtime("SubAgent session tools")
+    return runtime
+
+
+def _require_core_runtime(tool_name: str) -> SessionCoreRuntime:
+    runtime = _current_tool_runtime().core
+    if runtime is None:
+        raise _missing_runtime(tool_name)
+    return runtime
+
+
+def _require_overview_runtime() -> SessionOverviewRuntime:
+    runtime = _current_tool_runtime().overview
+    if runtime is None:
+        raise _missing_runtime("sessions_overview")
+    return runtime
+
+
+def _require_wait_runtime() -> SessionWaitRuntime:
+    runtime = _current_tool_runtime().wait
+    if runtime is None:
+        raise _missing_runtime("sessions_wait")
+    return runtime
+
+
+def _require_ack_runtime() -> SessionAckRuntime:
+    runtime = _current_tool_runtime().ack
+    if runtime is None:
+        raise _missing_runtime("sessions_ack")
+    return runtime
+
+
+def _require_send_runtime() -> SessionSendRuntime:
+    runtime = _current_tool_runtime().send
+    if runtime is None:
+        raise _missing_runtime("sessions_send")
+    return runtime
+
+
+def _require_control_runtime() -> SubAgentControlRuntime:
+    runtime = _current_tool_runtime().control
+    if runtime is None:
+        raise _missing_runtime("subagents")
+    return runtime
+
+
+def _set_compatibility_runtime(**changes: Any) -> None:
+    current = _session_tool_runtime.get() or SubAgentSessionToolRuntime()
+    _ = _session_tool_runtime.set(replace(current, **changes))
 
 
 def _resolve_spawn_callback_signature(
@@ -151,24 +284,6 @@ def _build_lifecycle_metadata(
 # ---------------------------------------------------------------------------
 
 
-# Shared DI state for all decorator-based session tools
-
-_sess_run_registry: SubAgentRunRegistry | None = None
-_sess_spawn_callback: Callable[..., Awaitable[str]] | None = None
-_sess_max_active_runs: int = 3
-_sess_max_spawn_retries: int = 2
-_sess_retry_delay_ms: int = 200
-_sess_subagent_names: list[str] = []
-_sess_subagent_descriptions: dict[str, str] = {}
-_sess_conversation_id: str = ""
-_sess_requester_session_key: str = ""
-_sess_delegation_depth: int = 0
-_sess_max_delegation_depth: int = 1
-_sess_max_active_runs_per_lineage: int = 16
-_sess_max_children_per_requester: int = 16
-_sess_visibility_default: str = "tree"
-
-
 def configure_session_tools(  # noqa: PLR0913
     run_registry: SubAgentRunRegistry,
     spawn_callback: Callable[..., Awaitable[str]] | None = None,
@@ -186,37 +301,26 @@ def configure_session_tools(  # noqa: PLR0913
     max_children_per_requester: int = 16,
     visibility_default: str = "tree",
 ) -> None:
-    """Configure shared state for all decorator-based session tools."""
-    global \
-        _sess_run_registry, \
-        _sess_spawn_callback, \
-        _sess_max_active_runs, \
-        _sess_max_spawn_retries, \
-        _sess_retry_delay_ms, \
-        _sess_subagent_names, \
-        _sess_subagent_descriptions, \
-        _sess_conversation_id, \
-        _sess_requester_session_key, \
-        _sess_delegation_depth, \
-        _sess_max_delegation_depth, \
-        _sess_max_active_runs_per_lineage, \
-        _sess_max_children_per_requester, \
-        _sess_visibility_default
-    _sess_run_registry = run_registry
-    _sess_spawn_callback = spawn_callback
-    _sess_max_active_runs = max(1, max_active_runs)
-    _sess_max_spawn_retries = max(0, max_spawn_retries)
-    _sess_retry_delay_ms = max(1, retry_delay_ms)
-    _sess_subagent_names = subagent_names or []
-    _sess_subagent_descriptions = subagent_descriptions or {}
-    _sess_conversation_id = conversation_id
-    _sess_requester_session_key = (requester_session_key or conversation_id).strip()
-    _sess_delegation_depth = delegation_depth
-    _sess_max_delegation_depth = max(1, max_delegation_depth)
-    _sess_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage)
-    _sess_max_children_per_requester = max(1, max_children_per_requester)
-    _sess_visibility_default = (
-        visibility_default if visibility_default in {"self", "tree", "all"} else "tree"
+    """Bind a compatibility core runtime in the current context."""
+    _set_compatibility_runtime(
+        core=SessionCoreRuntime(
+            run_registry=run_registry,
+            spawn_callback=spawn_callback,
+            max_active_runs=max(1, max_active_runs),
+            max_spawn_retries=max(0, max_spawn_retries),
+            retry_delay_ms=max(1, retry_delay_ms),
+            subagent_names=tuple(subagent_names or ()),
+            subagent_descriptions=MappingProxyType(dict(subagent_descriptions or {})),
+            conversation_id=conversation_id,
+            requester_session_key=(requester_session_key or conversation_id).strip(),
+            delegation_depth=max(0, delegation_depth),
+            max_delegation_depth=max(1, max_delegation_depth),
+            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage),
+            max_children_per_requester=max(1, max_children_per_requester),
+            visibility_default=(
+                visibility_default if visibility_default in {"self", "tree", "all"} else "tree"
+            ),
+        )
     )
 
 
@@ -230,14 +334,15 @@ def _spawn_validate_basic(
     task: str,
 ) -> str | None:
     """Validate subagent_name, task, and delegation depth."""
-    if not subagent_name or subagent_name not in _sess_subagent_names:
-        return f"Error: invalid subagent_name. Available: {', '.join(_sess_subagent_names)}"
+    runtime = _require_core_runtime("sessions_spawn")
+    if not subagent_name or subagent_name not in runtime.subagent_names:
+        return f"Error: invalid subagent_name. Available: {', '.join(runtime.subagent_names)}"
     if not task or not task.strip():
         return "Error: task is required"
-    if _sess_delegation_depth >= _sess_max_delegation_depth:
+    if runtime.delegation_depth >= runtime.max_delegation_depth:
         return (
             "Error: sessions_spawn is disabled at current delegation depth "
-            f"({_sess_delegation_depth}/{_sess_max_delegation_depth})"
+            f"({runtime.delegation_depth}/{runtime.max_delegation_depth})"
         )
     return None
 
@@ -261,19 +366,17 @@ def _spawn_validate_mode_cleanup(
 
 def _spawn_check_capacity() -> str | None:
     """Check active run capacity limits, returning error if exceeded."""
-    assert _sess_run_registry is not None
-    active_runs = _sess_run_registry.count_active_runs(_sess_conversation_id)
-    if active_runs >= _sess_max_active_runs:
-        return (
-            f"Error: active SubAgent sessions limit reached ({active_runs}/{_sess_max_active_runs})"
-        )
-    requester_runs = _sess_run_registry.count_active_runs_for_requester(
-        _sess_conversation_id, _sess_requester_session_key
+    runtime = _require_core_runtime("sessions_spawn")
+    active_runs = runtime.run_registry.count_active_runs(runtime.conversation_id)
+    if active_runs >= runtime.max_active_runs:
+        return f"Error: active SubAgent sessions limit reached ({active_runs}/{runtime.max_active_runs})"
+    requester_runs = runtime.run_registry.count_active_runs_for_requester(
+        runtime.conversation_id, runtime.requester_session_key
     )
-    if requester_runs >= _sess_max_children_per_requester:
+    if requester_runs >= runtime.max_children_per_requester:
         return (
             "Error: requester SubAgent sessions limit reached "
-            f"({requester_runs}/{_sess_max_children_per_requester})"
+            f"({requester_runs}/{runtime.max_children_per_requester})"
         )
     return None
 
@@ -286,64 +389,65 @@ async def _spawn_with_retry_fn(
     spawn_options: dict[str, Any],
 ) -> int:
     """Retry spawn callback and record announce events."""
-    assert _sess_run_registry is not None
-    assert _sess_spawn_callback is not None
-    accepted_params, accepts_kwargs = _resolve_spawn_callback_signature(_sess_spawn_callback)
+    runtime = _require_core_runtime("sessions_spawn")
+    if runtime.spawn_callback is None:
+        raise _missing_runtime("sessions_spawn")
+    accepted_params, accepts_kwargs = _resolve_spawn_callback_signature(runtime.spawn_callback)
     filtered = _filter_spawn_options(spawn_options, accepted_params, accepts_kwargs)
     last_error: Exception | None = None
-    for attempt in range(_sess_max_spawn_retries + 1):
+    for attempt in range(runtime.max_spawn_retries + 1):
         try:
-            await _sess_spawn_callback(subagent_name, task, run_id, **filtered)
+            await runtime.spawn_callback(subagent_name, task, run_id, **filtered)
             return attempt
         except Exception as exc:
             last_error = exc
-            if attempt >= _sess_max_spawn_retries:
+            if attempt >= runtime.max_spawn_retries:
                 break
             await ctx.emit(
                 {
                     "type": "subagent_announce_retry",
                     "data": {
-                        "conversation_id": _sess_conversation_id,
+                        "conversation_id": runtime.conversation_id,
                         "run_id": run_id,
                         "subagent_name": subagent_name,
                         "attempt": attempt + 1,
                         "error": str(exc),
-                        "next_delay_ms": _sess_retry_delay_ms,
+                        "next_delay_ms": runtime.retry_delay_ms,
                     },
                 }
             )
             _record_announce_event(
-                run_registry=_sess_run_registry,
-                conversation_id=_sess_conversation_id,
+                run_registry=runtime.run_registry,
+                conversation_id=runtime.conversation_id,
                 run_id=run_id,
                 event_type="retry",
                 payload={
                     "attempt": attempt + 1,
                     "error": str(exc),
-                    "next_delay_ms": _sess_retry_delay_ms,
+                    "next_delay_ms": runtime.retry_delay_ms,
                 },
             )
-            await asyncio.sleep(_sess_retry_delay_ms / 1000)
+            await asyncio.sleep(runtime.retry_delay_ms / 1000)
 
     await ctx.emit(
         {
             "type": "subagent_announce_giveup",
             "data": {
-                "conversation_id": _sess_conversation_id,
+                "conversation_id": runtime.conversation_id,
                 "run_id": run_id,
                 "subagent_name": subagent_name,
-                "attempts": _sess_max_spawn_retries + 1,
+                "attempts": runtime.max_spawn_retries + 1,
                 "error": str(last_error) if last_error else "unknown error",
             },
         }
     )
     _record_announce_event(
-        run_registry=_sess_run_registry,
-        conversation_id=_sess_conversation_id,
+        run_registry=runtime.run_registry,
+        conversation_id=runtime.conversation_id,
         run_id=run_id,
         event_type="giveup",
         payload={
-            "attempts": _sess_max_spawn_retries + 1,
+            "attempts": runtime.max_spawn_retries + 1,
             "error": str(last_error) if last_error else "unknown error",
         },
     )
@@ -360,25 +464,25 @@ async def _spawn_create_and_run(
     spawn_options: dict[str, Any],
 ) -> ToolResult:
     """Create run record and invoke spawn callback."""
-    assert _sess_run_registry is not None
-    run = _sess_run_registry.create_run(
-        conversation_id=_sess_conversation_id,
+    runtime = _require_core_runtime("sessions_spawn")
+    run = runtime.run_registry.create_run(
+        conversation_id=runtime.conversation_id,
         subagent_name=target_subagent_name,
         task=task,
         metadata=_build_lifecycle_metadata(
             session_mode="spawn",
-            requester_session_key=_sess_requester_session_key,
+            requester_session_key=runtime.requester_session_key,
             lineage_root_run_id=None,
-            delegation_depth=_sess_delegation_depth,
+            delegation_depth=runtime.delegation_depth,
             extra={
                 **spawn_options,
                 "requested_subagent_name": subagent_name,
-                "max_active_runs_per_lineage": _sess_max_active_runs_per_lineage,
+                "max_active_runs_per_lineage": runtime.max_active_runs_per_lineage,
             },
         ),
-        requester_session_key=_sess_requester_session_key,
+        requester_session_key=runtime.requester_session_key,
     )
-    running = _sess_run_registry.mark_running(_sess_conversation_id, run.run_id)
+    running = runtime.run_registry.mark_running(runtime.conversation_id, run.run_id)
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
@@ -390,8 +494,8 @@ async def _spawn_create_and_run(
             spawn_options=spawn_options,
         )
         if retry_count > 0:
-            _sess_run_registry.attach_metadata(
-                _sess_conversation_id,
+            runtime.run_registry.attach_metadata(
+                runtime.conversation_id,
                 run.run_id,
                 {"announce_retry_count": retry_count},
             )
@@ -399,7 +503,7 @@ async def _spawn_create_and_run(
             {
                 "type": "subagent_session_spawned",
                 "data": {
-                    "conversation_id": _sess_conversation_id,
+                    "conversation_id": runtime.conversation_id,
                     "run_id": run.run_id,
                     "subagent_name": target_subagent_name,
                     "spawn_mode": spawn_options["spawn_mode"],
@@ -410,8 +514,8 @@ async def _spawn_create_and_run(
         )
         return _spawn_success_result(run.run_id, target_subagent_name, spawn_options)
     except Exception as exc:
-        failed = _sess_run_registry.mark_failed(
-            conversation_id=_sess_conversation_id,
+        failed = runtime.run_registry.mark_failed(
+            conversation_id=runtime.conversation_id,
             run_id=run.run_id,
             error=str(exc),
         )
@@ -518,11 +622,9 @@ async def sessions_spawn_tool(
     thinking: str = "",
 ) -> ToolResult:
     """Spawn a SubAgent run as a non-blocking session."""
-    if _sess_run_registry is None or _sess_spawn_callback is None:
-        return ToolResult(
-            output="Error: session tools are not configured.",
-            is_error=True,
-        )
+    runtime = _require_core_runtime("sessions_spawn")
+    if runtime.spawn_callback is None:
+        raise _missing_runtime("sessions_spawn")
     error = _spawn_validate_basic(subagent_name, task)
     if error:
         if "delegation depth" in error:
@@ -530,8 +632,8 @@ async def sessions_spawn_tool(
                 dict(
                     SubAgentDepthLimitedEvent(
                         subagent_name=subagent_name or "unknown",
-                        current_depth=_sess_delegation_depth,
-                        max_depth=_sess_max_delegation_depth,
+                        current_depth=runtime.delegation_depth,
+                        max_depth=runtime.max_delegation_depth,
                     ).to_event_dict()
                 )
             )
@@ -560,7 +662,7 @@ async def sessions_spawn_tool(
         "agent_id": (agent_id or "").strip() or target,
         "model": (model or "").strip() or None,
         "thinking": (thinking or "").strip() or None,
-        "requester_session_key": _sess_requester_session_key,
+        "requester_session_key": runtime.requester_session_key,
         "run_timeout_seconds": timeout_seconds,
     }
     return await _spawn_create_and_run(
@@ -577,12 +679,13 @@ def _spawn_resolve_agent_id(
     agent_id: str,
 ) -> str | ToolResult:
     """Resolve agent_id override to target subagent name."""
+    runtime = _require_core_runtime("sessions_spawn")
     requested = (agent_id or "").strip()
     if not requested:
         return subagent_name
-    if requested not in _sess_subagent_names:
+    if requested not in runtime.subagent_names:
         return ToolResult(
-            output=(f"Error: invalid agent_id. Available: {', '.join(_sess_subagent_names)}"),
+            output=(f"Error: invalid agent_id. Available: {', '.join(runtime.subagent_names)}"),
             is_error=True,
         )
     return requested
@@ -642,11 +745,7 @@ async def sessions_list_tool(
 ) -> ToolResult:
     """List active SubAgent sessions."""
     _ = ctx
-    if _sess_run_registry is None:
-        return ToolResult(
-            output="Error: session tools are not configured.",
-            is_error=True,
-        )
+    runtime = _require_core_runtime("sessions_list")
     statuses: list[SubAgentRunStatus] | None
     if status == "active":
         statuses = [SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING]
@@ -660,21 +759,21 @@ async def sessions_list_tool(
             )
     else:
         statuses = None
-    effective_visibility = (visibility or _sess_visibility_default).strip().lower()
+    effective_visibility = (visibility or runtime.visibility_default).strip().lower()
     if effective_visibility not in {"self", "tree", "all"}:
         return ToolResult(
             output=f"Error: invalid visibility '{effective_visibility}'",
             is_error=True,
         )
-    runs = _sess_run_registry.list_runs_for_requester(
-        _sess_conversation_id,
-        _sess_requester_session_key,
+    runs = runtime.run_registry.list_runs_for_requester(
+        runtime.conversation_id,
+        runtime.requester_session_key,
         visibility=effective_visibility,
         statuses=statuses,
     )[: max(1, limit)]
     output = json.dumps(
         {
-            "conversation_id": _sess_conversation_id,
+            "conversation_id": runtime.conversation_id,
             "visibility": effective_visibility,
             "count": len(runs),
             "runs": [run.to_event_data() for run in runs],
@@ -721,25 +820,21 @@ async def sessions_history_tool(
 ) -> ToolResult:
     """List SubAgent session history."""
     _ = ctx
-    if _sess_run_registry is None:
-        return ToolResult(
-            output="Error: session tools are not configured.",
-            is_error=True,
-        )
-    effective_visibility = (visibility or _sess_visibility_default).strip().lower()
+    runtime = _require_core_runtime("sessions_history")
+    effective_visibility = (visibility or runtime.visibility_default).strip().lower()
     if effective_visibility not in {"self", "tree", "all"}:
         return ToolResult(
             output=f"Error: invalid visibility '{effective_visibility}'",
             is_error=True,
         )
-    runs = _sess_run_registry.list_runs_for_requester(
-        _sess_conversation_id,
-        _sess_requester_session_key,
+    runs = runtime.run_registry.list_runs_for_requester(
+        runtime.conversation_id,
+        runtime.requester_session_key,
         visibility=effective_visibility,
     )[: max(1, limit)]
     output = json.dumps(
         {
-            "conversation_id": _sess_conversation_id,
+            "conversation_id": runtime.conversation_id,
             "visibility": effective_visibility,
             "count": len(runs),
             "runs": [run.to_event_data() for run in runs],
@@ -889,14 +984,10 @@ async def sessions_timeline_tool(
 ) -> ToolResult:
     """Replay lifecycle timeline for a run."""
     _ = ctx
-    if _sess_run_registry is None:
-        return ToolResult(
-            output="Error: session tools are not configured.",
-            is_error=True,
-        )
+    runtime = _require_core_runtime("sessions_timeline")
     if not run_id:
         return ToolResult(output="Error: run_id is required", is_error=True)
-    root_run = _sess_run_registry.get_run(_sess_conversation_id, run_id)
+    root_run = runtime.run_registry.get_run(runtime.conversation_id, run_id)
     if not root_run:
         return ToolResult(
             output=f"Error: run_id '{run_id}' not found",
@@ -904,8 +995,8 @@ async def sessions_timeline_tool(
         )
     runs: dict[str, SubAgentRun] = {root_run.run_id: root_run}
     if include_descendants:
-        descendants = _sess_run_registry.list_descendant_runs(
-            _sess_conversation_id,
+        descendants = runtime.run_registry.list_descendant_runs(
+            runtime.conversation_id,
             run_id,
             include_terminal=True,
         )
@@ -917,7 +1008,7 @@ async def sessions_timeline_tool(
     all_events.sort(key=lambda item: item.get("timestamp") or "")
     output = json.dumps(
         {
-            "conversation_id": _sess_conversation_id,
+            "conversation_id": runtime.conversation_id,
             "root_run_id": run_id,
             "run_count": len(runs),
             "event_count": len(all_events),
@@ -933,14 +1024,6 @@ async def sessions_timeline_tool(
 # @tool_define migrations: sessions_overview, sessions_wait, sessions_ack
 # ---------------------------------------------------------------------------
 
-# -- DI state for sessions_overview_tool --
-
-_sess_overview_run_registry: SubAgentRunRegistry | None = None
-_sess_overview_conversation_id: str = ""
-_sess_overview_requester_session_key: str = ""
-_sess_overview_visibility_default: str = "tree"
-_sess_overview_observability_provider: Callable[[], dict[str, Any]] | None = None
-
 
 def configure_sessions_overview(
     run_registry: SubAgentRunRegistry,
@@ -949,43 +1032,30 @@ def configure_sessions_overview(
     visibility_default: str = "tree",
     observability_provider: Callable[[], dict[str, Any]] | None = None,
 ) -> None:
-    """Configure DI state for sessions_overview_tool."""
-    global _sess_overview_run_registry
-    global _sess_overview_conversation_id
-    global _sess_overview_requester_session_key
-    global _sess_overview_visibility_default
-    global _sess_overview_observability_provider
-    _sess_overview_run_registry = run_registry
-    _sess_overview_conversation_id = conversation_id
-    _sess_overview_requester_session_key = (requester_session_key or conversation_id).strip()
+    """Bind a compatibility overview runtime in the current context."""
     valid = {"self", "tree", "all"}
-    _sess_overview_visibility_default = (
-        visibility_default if visibility_default in valid else "tree"
+    _set_compatibility_runtime(
+        overview=SessionOverviewRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            requester_session_key=(requester_session_key or conversation_id).strip(),
+            visibility_default=(visibility_default if visibility_default in valid else "tree"),
+            observability_provider=observability_provider,
+        )
     )
-    _sess_overview_observability_provider = observability_provider
-
-
-# -- DI state for sessions_wait_tool --
-
-_sess_wait_run_registry: SubAgentRunRegistry | None = None
-_sess_wait_conversation_id: str = ""
 
 
 def configure_sessions_wait(
     run_registry: SubAgentRunRegistry,
     conversation_id: str,
 ) -> None:
-    """Configure DI state for sessions_wait_tool."""
-    global _sess_wait_run_registry, _sess_wait_conversation_id
-    _sess_wait_run_registry = run_registry
-    _sess_wait_conversation_id = conversation_id
-
-
-# -- DI state for sessions_ack_tool --
-
-_sess_ack_run_registry: SubAgentRunRegistry | None = None
-_sess_ack_conversation_id: str = ""
-_sess_ack_requester_session_key: str = ""
+    """Bind a compatibility wait runtime in the current context."""
+    _set_compatibility_runtime(
+        wait=SessionWaitRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+        )
+    )
 
 
 def configure_sessions_ack(
@@ -993,13 +1063,14 @@ def configure_sessions_ack(
     conversation_id: str,
     requester_session_key: str | None = None,
 ) -> None:
-    """Configure DI state for sessions_ack_tool."""
-    global _sess_ack_run_registry
-    global _sess_ack_conversation_id
-    global _sess_ack_requester_session_key
-    _sess_ack_run_registry = run_registry
-    _sess_ack_conversation_id = conversation_id
-    _sess_ack_requester_session_key = (requester_session_key or conversation_id).strip()
+    """Bind a compatibility acknowledgement runtime in the current context."""
+    _set_compatibility_runtime(
+        ack=SessionAckRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            requester_session_key=(requester_session_key or conversation_id).strip(),
+        )
+    )
 
 
 # -- Shared constants --
@@ -1223,15 +1294,11 @@ async def sessions_overview_tool(
     visibility: str = "",
 ) -> ToolResult:
     """Show run observability summary for SubAgent runs."""
-    registry = _sess_overview_run_registry
-    if registry is None:
-        return ToolResult(
-            output="Error: sessions_overview not configured",
-            is_error=True,
-        )
-    conv_id = _sess_overview_conversation_id
-    req_key = _sess_overview_requester_session_key
-    vis = (visibility or _sess_overview_visibility_default).strip().lower()
+    runtime = _require_overview_runtime()
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id
+    req_key = runtime.requester_session_key
+    vis = (visibility or runtime.visibility_default).strip().lower()
     if vis not in {"self", "tree", "all"}:
         return ToolResult(
             output=f"Error: invalid visibility '{vis}'",
@@ -1240,9 +1307,7 @@ async def sessions_overview_tool(
     runs = registry.list_runs_for_requester(conv_id, req_key, visibility=vis)
     retention = max(int(registry.terminal_retention_seconds), 0)
     stats = _overview_collect_run_stats(runs, retention)
-    hook_failures = _overview_get_hook_failures(
-        _sess_overview_observability_provider,
-    )
+    hook_failures = _overview_get_hook_failures(runtime.observability_provider)
     output = _overview_build_response(conv_id, vis, runs, stats, hook_failures)
     return ToolResult(output=output, title="Sessions Overview")
 
@@ -1288,13 +1353,9 @@ async def sessions_wait_tool(
     poll_interval_ms: int = 200,
 ) -> ToolResult:
     """Wait for a SubAgent run to complete or timeout."""
-    registry = _sess_wait_run_registry
-    if registry is None:
-        return ToolResult(
-            output="Error: sessions_wait not configured",
-            is_error=True,
-        )
-    conv_id = _sess_wait_conversation_id
+    runtime = _require_wait_runtime()
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id
     if not run_id:
         return ToolResult(output="Error: run_id is required", is_error=True)
     try:
@@ -1385,14 +1446,10 @@ async def sessions_ack_tool(
     note: str = "",
 ) -> ToolResult:
     """Acknowledge a terminal SubAgent run."""
-    registry = _sess_ack_run_registry
-    if registry is None:
-        return ToolResult(
-            output="Error: sessions_ack not configured",
-            is_error=True,
-        )
-    conv_id = _sess_ack_conversation_id
-    req_key = _sess_ack_requester_session_key
+    runtime = _require_ack_runtime()
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id
+    req_key = runtime.requester_session_key
     if not run_id:
         return ToolResult(output="Error: run_id is required", is_error=True)
     run = registry.get_run(conv_id, run_id)
@@ -1471,23 +1528,6 @@ def _ack_prepare_events(run: SubAgentRun) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-# -- DI state for sessions_send_tool --
-
-_sess_send_run_registry: SubAgentRunRegistry | None = None
-_sess_send_conversation_id: str = ""
-_sess_send_spawn_callback: Callable[..., Awaitable[str]] | None = None
-_sess_send_max_active_runs: int = 16
-_sess_send_max_active_runs_per_lineage: int = 16
-_sess_send_max_children_per_requester: int = 16
-_sess_send_requester_session_key: str = ""
-_sess_send_delegation_depth: int = 0
-_sess_send_max_delegation_depth: int = 1
-_sess_send_max_spawn_retries: int = 2
-_sess_send_retry_delay_ms: int = 200
-_sess_send_spawn_callback_params: set[str] | None = None
-_sess_send_spawn_callback_accepts_kwargs: bool = True
-
-
 def configure_sessions_send(
     run_registry: SubAgentRunRegistry,
     conversation_id: str,
@@ -1502,38 +1542,28 @@ def configure_sessions_send(
     max_spawn_retries: int = 2,
     retry_delay_ms: int = 200,
 ) -> None:
-    """Configure DI state for sessions_send_tool."""
-    global _sess_send_run_registry
-    global _sess_send_conversation_id
-    global _sess_send_spawn_callback
-    global _sess_send_max_active_runs
-    global _sess_send_max_active_runs_per_lineage
-    global _sess_send_max_children_per_requester
-    global _sess_send_requester_session_key
-    global _sess_send_delegation_depth
-    global _sess_send_max_delegation_depth
-    global _sess_send_max_spawn_retries
-    global _sess_send_retry_delay_ms
-    global _sess_send_spawn_callback_params
-    global _sess_send_spawn_callback_accepts_kwargs
-    _sess_send_run_registry = run_registry
-    _sess_send_conversation_id = conversation_id
-    _sess_send_spawn_callback = spawn_callback
-    _sess_send_max_active_runs = max(1, max_active_runs)
-    _sess_send_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
-    _sess_send_max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
-    _sess_send_requester_session_key = (requester_session_key or conversation_id).strip()
-    _sess_send_delegation_depth = delegation_depth
-    _sess_send_max_delegation_depth = max(1, max_delegation_depth)
-    _sess_send_max_spawn_retries = max(0, max_spawn_retries)
-    _sess_send_retry_delay_ms = max(1, retry_delay_ms)
-    if spawn_callback is not None:
-        params, accepts_kw = _resolve_spawn_callback_signature(spawn_callback)
-        _sess_send_spawn_callback_params = params
-        _sess_send_spawn_callback_accepts_kwargs = accepts_kw
-    else:
-        _sess_send_spawn_callback_params = None
-        _sess_send_spawn_callback_accepts_kwargs = True
+    """Bind a compatibility send runtime in the current context."""
+    if spawn_callback is None:
+        _set_compatibility_runtime(send=None)
+        return
+    params, accepts_kw = _resolve_spawn_callback_signature(spawn_callback)
+    _set_compatibility_runtime(
+        send=SessionSendRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            spawn_callback=spawn_callback,
+            max_active_runs=max(1, max_active_runs),
+            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage or max_active_runs),
+            max_children_per_requester=max(1, max_children_per_requester or max_active_runs),
+            requester_session_key=(requester_session_key or conversation_id).strip(),
+            delegation_depth=max(0, delegation_depth),
+            max_delegation_depth=max(1, max_delegation_depth),
+            max_spawn_retries=max(0, max_spawn_retries),
+            retry_delay_ms=max(1, retry_delay_ms),
+            spawn_callback_params=frozenset(params) if params is not None else None,
+            spawn_callback_accepts_kwargs=accepts_kw,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1545,14 +1575,15 @@ def _send_validate_params(
     run_id: str, task: str, run_timeout_seconds: int
 ) -> tuple[str | None, int]:
     """Validate send parameters. Returns (error_message, timeout_seconds)."""
+    runtime = _require_send_runtime()
     if not run_id:
         return "Error: run_id is required", 0
     if not task or not task.strip():
         return "Error: task is required", 0
-    if _sess_send_delegation_depth >= _sess_send_max_delegation_depth:
+    if runtime.delegation_depth >= runtime.max_delegation_depth:
         return (
             "Error: sessions_send is disabled at current delegation depth "
-            f"({_sess_send_delegation_depth}/{_sess_send_max_delegation_depth})"
+            f"({runtime.delegation_depth}/{runtime.max_delegation_depth})"
         ), 0
     try:
         timeout_seconds = max(0, int(run_timeout_seconds or 0))
@@ -1563,34 +1594,41 @@ def _send_validate_params(
 
 def _send_check_capacity(lineage_root_run_id: str) -> str | None:
     """Check capacity limits for send. Returns error or None."""
-    assert _sess_send_run_registry is not None
-    active_runs = _sess_send_run_registry.count_active_runs(_sess_send_conversation_id)
-    if active_runs >= _sess_send_max_active_runs:
+    runtime = _require_send_runtime()
+    active_runs = runtime.run_registry.count_active_runs(runtime.conversation_id)
+    if active_runs >= runtime.max_active_runs:
         return (
             f"Error: active SubAgent sessions limit reached "
-            f"({active_runs}/{_sess_send_max_active_runs})"
+            f"({active_runs}/{runtime.max_active_runs})"
         )
-    requester_runs = _sess_send_run_registry.count_active_runs_for_requester(
-        _sess_send_conversation_id, _sess_send_requester_session_key
+    requester_runs = runtime.run_registry.count_active_runs_for_requester(
+        runtime.conversation_id, runtime.requester_session_key
     )
-    if requester_runs >= _sess_send_max_children_per_requester:
+    if requester_runs >= runtime.max_children_per_requester:
         return (
             "Error: requester SubAgent sessions limit reached "
-            f"({requester_runs}/{_sess_send_max_children_per_requester})"
+            f"({requester_runs}/{runtime.max_children_per_requester})"
         )
-    lineage_active = _sess_send_run_registry.count_active_runs_for_lineage(
-        _sess_send_conversation_id, lineage_root_run_id
+    lineage_active = runtime.run_registry.count_active_runs_for_lineage(
+        runtime.conversation_id, lineage_root_run_id
     )
-    if lineage_active >= _sess_send_max_active_runs_per_lineage:
+    if lineage_active >= runtime.max_active_runs_per_lineage:
         return (
             "Error: lineage SubAgent sessions limit reached "
-            f"({lineage_active}/{_sess_send_max_active_runs_per_lineage})"
+            f"({lineage_active}/{runtime.max_active_runs_per_lineage})"
         )
     return None
 
 
-def _send_build_follow_up_options(parent_run: SubAgentRun, timeout_seconds: int) -> dict[str, Any]:
+def _send_build_follow_up_options(
+    parent_run: SubAgentRun,
+    timeout_seconds: int,
+    *,
+    requester_session_key: str | None = None,
+) -> dict[str, Any]:
     """Build spawn options from parent run metadata."""
+    if requester_session_key is None:
+        requester_session_key = _require_send_runtime().requester_session_key
     try:
         parent_timeout = int(parent_run.metadata.get("run_timeout_seconds") or 0)
     except (TypeError, ValueError):
@@ -1610,7 +1648,7 @@ def _send_build_follow_up_options(parent_run: SubAgentRun, timeout_seconds: int)
             or str(parent_run.metadata.get("thinking_override") or "").strip()
             or None
         ),
-        "requester_session_key": _sess_send_requester_session_key,
+        "requester_session_key": requester_session_key,
         "run_timeout_seconds": timeout_seconds or parent_timeout,
     }
 
@@ -1622,13 +1660,13 @@ async def _send_invoke_spawn(
     spawn_options: dict[str, Any],
 ) -> str:
     """Invoke spawn callback with filtered options."""
-    assert _sess_send_spawn_callback is not None
+    runtime = _require_send_runtime()
     filtered = _filter_spawn_options(
         spawn_options,
-        _sess_send_spawn_callback_params,
-        _sess_send_spawn_callback_accepts_kwargs,
+        set(runtime.spawn_callback_params) if runtime.spawn_callback_params is not None else None,
+        runtime.spawn_callback_accepts_kwargs,
     )
-    return await _sess_send_spawn_callback(subagent_name, task, run_id, **filtered)
+    return await runtime.spawn_callback(subagent_name, task, run_id, **filtered)
 
 
 async def _send_spawn_with_retry(
@@ -1639,9 +1677,9 @@ async def _send_spawn_with_retry(
     spawn_options: dict[str, Any],
 ) -> int:
     """Retry spawn callback, emitting events via ctx."""
-    assert _sess_send_run_registry is not None
+    runtime = _require_send_runtime()
     last_error: Exception | None = None
-    for attempt in range(_sess_send_max_spawn_retries + 1):
+    for attempt in range(runtime.max_spawn_retries + 1):
         try:
             await _send_invoke_spawn(
                 subagent_name=subagent_name,
@@ -1652,53 +1690,53 @@ async def _send_spawn_with_retry(
             return attempt
         except Exception as exc:
             last_error = exc
-            if attempt >= _sess_send_max_spawn_retries:
+            if attempt >= runtime.max_spawn_retries:
                 break
             await ctx.emit(
                 {
                     "type": "subagent_announce_retry",
                     "data": {
-                        "conversation_id": _sess_send_conversation_id,
+                        "conversation_id": runtime.conversation_id,
                         "run_id": run_id,
                         "subagent_name": subagent_name,
                         "attempt": attempt + 1,
                         "error": str(exc),
-                        "next_delay_ms": _sess_send_retry_delay_ms,
+                        "next_delay_ms": runtime.retry_delay_ms,
                     },
                 }
             )
             _record_announce_event(
-                run_registry=_sess_send_run_registry,
-                conversation_id=_sess_send_conversation_id,
+                run_registry=runtime.run_registry,
+                conversation_id=runtime.conversation_id,
                 run_id=run_id,
                 event_type="retry",
                 payload={
                     "attempt": attempt + 1,
                     "error": str(exc),
-                    "next_delay_ms": _sess_send_retry_delay_ms,
+                    "next_delay_ms": runtime.retry_delay_ms,
                 },
             )
-            await asyncio.sleep(_sess_send_retry_delay_ms / 1000)
+            await asyncio.sleep(runtime.retry_delay_ms / 1000)
 
     await ctx.emit(
         {
             "type": "subagent_announce_giveup",
             "data": {
-                "conversation_id": _sess_send_conversation_id,
+                "conversation_id": runtime.conversation_id,
                 "run_id": run_id,
                 "subagent_name": subagent_name,
-                "attempts": _sess_send_max_spawn_retries + 1,
+                "attempts": runtime.max_spawn_retries + 1,
                 "error": str(last_error) if last_error else "unknown error",
             },
         }
     )
     _record_announce_event(
-        run_registry=_sess_send_run_registry,
-        conversation_id=_sess_send_conversation_id,
+        run_registry=runtime.run_registry,
+        conversation_id=runtime.conversation_id,
         run_id=run_id,
         event_type="giveup",
         payload={
-            "attempts": _sess_send_max_spawn_retries + 1,
+            "attempts": runtime.max_spawn_retries + 1,
             "error": str(last_error) if last_error else "unknown error",
         },
     )
@@ -1749,13 +1787,9 @@ async def sessions_send_tool(
     run_timeout_seconds: int = 0,
 ) -> ToolResult:
     """Send follow-up work to an existing SubAgent lineage."""
-    registry = _sess_send_run_registry
-    if registry is None or _sess_send_spawn_callback is None:
-        return ToolResult(
-            output="Error: sessions_send not configured",
-            is_error=True,
-        )
-    conv_id = _sess_send_conversation_id
+    runtime = _require_send_runtime()
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id
     error, timeout_seconds = _send_validate_params(run_id, task, run_timeout_seconds)
     if error:
         if "delegation depth" in error:
@@ -1763,8 +1797,8 @@ async def sessions_send_tool(
                 dict(
                     SubAgentDepthLimitedEvent(
                         subagent_name="",
-                        current_depth=_sess_send_delegation_depth,
-                        max_depth=_sess_send_max_delegation_depth,
+                        current_depth=runtime.delegation_depth,
+                        max_depth=runtime.max_delegation_depth,
                     ).to_event_dict()
                 )
             )
@@ -1786,16 +1820,16 @@ async def sessions_send_tool(
         task=task,
         metadata=_build_lifecycle_metadata(
             session_mode="send",
-            requester_session_key=_sess_send_requester_session_key,
+            requester_session_key=runtime.requester_session_key,
             parent_run_id=run_id,
             lineage_root_run_id=lineage_root_run_id,
-            delegation_depth=_sess_send_delegation_depth,
+            delegation_depth=runtime.delegation_depth,
             extra={
                 **follow_up_options,
-                "max_active_runs_per_lineage": (_sess_send_max_active_runs_per_lineage),
+                "max_active_runs_per_lineage": runtime.max_active_runs_per_lineage,
             },
         ),
-        requester_session_key=_sess_send_requester_session_key,
+        requester_session_key=runtime.requester_session_key,
         parent_run_id=run_id,
         lineage_root_run_id=lineage_root_run_id,
     )
@@ -1849,28 +1883,6 @@ async def sessions_send_tool(
 
 
 # ---------------------------------------------------------------------------
-# DI state for subagents_control_tool
-# ---------------------------------------------------------------------------
-
-_ctrl_run_registry: SubAgentRunRegistry | None = None
-_ctrl_conversation_id: str = ""
-_ctrl_subagent_names: list[str] = []
-_ctrl_subagent_descriptions: dict[str, str] = {}
-_ctrl_cancel_callback: Callable[[str], Awaitable[bool]] | None = None
-_ctrl_restart_callback: Callable[[str, str, str], Awaitable[str]] | None = None
-_ctrl_control_channel: ControlChannelPort | None = None
-_ctrl_steer_rate_limit_ms: int = 2000
-_ctrl_max_active_runs: int = 16
-_ctrl_max_active_runs_per_lineage: int = 16
-_ctrl_max_children_per_requester: int = 16
-_ctrl_requester_session_key: str = ""
-_ctrl_delegation_depth: int = 0
-_ctrl_max_delegation_depth: int = 1
-_ctrl_last_steer_at: dict[str, datetime] = {}
-_ctrl_spawn_callback_params: set[str] | None = None
-_ctrl_spawn_callback_accepts_kwargs: bool = True
-
-
 def configure_subagents_control(  # noqa: PLR0913
     run_registry: SubAgentRunRegistry,
     conversation_id: str,
@@ -1888,46 +1900,25 @@ def configure_subagents_control(  # noqa: PLR0913
     delegation_depth: int = 0,
     max_delegation_depth: int = 1,
 ) -> None:
-    """Configure DI state for subagents_control_tool."""
-    global _ctrl_run_registry
-    global _ctrl_conversation_id
-    global _ctrl_subagent_names
-    global _ctrl_subagent_descriptions
-    global _ctrl_cancel_callback
-    global _ctrl_restart_callback
-    global _ctrl_control_channel
-    global _ctrl_steer_rate_limit_ms
-    global _ctrl_max_active_runs
-    global _ctrl_max_active_runs_per_lineage
-    global _ctrl_max_children_per_requester
-    global _ctrl_requester_session_key
-    global _ctrl_delegation_depth
-    global _ctrl_max_delegation_depth
-    global _ctrl_last_steer_at
-    global _ctrl_spawn_callback_params
-    global _ctrl_spawn_callback_accepts_kwargs
-    _ctrl_run_registry = run_registry
-    _ctrl_conversation_id = conversation_id
-    _ctrl_subagent_names = subagent_names
-    _ctrl_subagent_descriptions = subagent_descriptions
-    _ctrl_cancel_callback = cancel_callback
-    _ctrl_restart_callback = restart_callback
-    _ctrl_control_channel = control_channel
-    _ctrl_steer_rate_limit_ms = max(1, steer_rate_limit_ms)
-    _ctrl_max_active_runs = max(1, max_active_runs)
-    _ctrl_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
-    _ctrl_max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
-    _ctrl_requester_session_key = (requester_session_key or conversation_id).strip()
-    _ctrl_delegation_depth = delegation_depth
-    _ctrl_max_delegation_depth = max(1, max_delegation_depth)
-    _ctrl_last_steer_at = {}
-    if restart_callback is not None:
-        params, accepts_kw = _resolve_spawn_callback_signature(restart_callback)
-        _ctrl_spawn_callback_params = params
-        _ctrl_spawn_callback_accepts_kwargs = accepts_kw
-    else:
-        _ctrl_spawn_callback_params = None
-        _ctrl_spawn_callback_accepts_kwargs = True
+    """Bind a compatibility control runtime in the current context."""
+    _set_compatibility_runtime(
+        control=SubAgentControlRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            subagent_names=tuple(subagent_names),
+            subagent_descriptions=MappingProxyType(dict(subagent_descriptions)),
+            cancel_callback=cancel_callback,
+            restart_callback=restart_callback,
+            control_channel=control_channel,
+            steer_rate_limit_ms=max(1, steer_rate_limit_ms),
+            max_active_runs=max(1, max_active_runs),
+            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage or max_active_runs),
+            max_children_per_requester=max(1, max_children_per_requester or max_active_runs),
+            requester_session_key=(requester_session_key or conversation_id).strip(),
+            delegation_depth=max(0, delegation_depth),
+            max_delegation_depth=max(1, max_delegation_depth),
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1958,15 +1949,15 @@ def _ctrl_resolve_by_index(
     raw_index_str: str,
 ) -> tuple[list[SubAgentRun], str | None]:
     """Resolve target by index (#N or index:N)."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     try:
         resolved_index = int(raw_index_str)
     except (TypeError, ValueError):
         return [], f"Error: invalid target index '{raw_index_str}'"
     if resolved_index <= 0:
         return [], "Error: target index must be >= 1"
-    active_runs = _ctrl_run_registry.list_runs(
-        _ctrl_conversation_id,
+    active_runs = runtime.run_registry.list_runs(
+        runtime.conversation_id,
         statuses=list(_CTRL_ACTIVE_STATUSES),
     )
     if resolved_index > len(active_runs):
@@ -1981,11 +1972,11 @@ def _ctrl_resolve_by_label(
     label: str, include_terminal: bool
 ) -> tuple[list[SubAgentRun], str | None]:
     """Resolve target by label."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     if not label:
         return [], "Error: label selector requires a non-empty value"
     statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-    runs = _ctrl_run_registry.list_runs(_ctrl_conversation_id, statuses=statuses)
+    runs = runtime.run_registry.list_runs(runtime.conversation_id, statuses=statuses)
     matched = [run for run in runs if (_ctrl_run_label(run) or "") == label]
     if not matched:
         return [], f"Error: no runs found for label '{label}'"
@@ -1998,20 +1989,20 @@ def _ctrl_resolve_target_runs(
     include_terminal: bool,
 ) -> tuple[list[SubAgentRun], str | None]:
     """Resolve target selector to a list of runs."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     token = target_token.strip()
     if not token:
         return [], "Error: target (or run_id) is required"
     if token.lower() == "all":
         statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-        runs = _ctrl_run_registry.list_runs(_ctrl_conversation_id, statuses=statuses)
+        runs = runtime.run_registry.list_runs(runtime.conversation_id, statuses=statuses)
         return runs, None
     if token.startswith("#") or token.lower().startswith("index:"):
         raw_idx = token[1:] if token.startswith("#") else token.split(":", 1)[1]
         return _ctrl_resolve_by_index(raw_idx)
     if token.lower().startswith("label:"):
         return _ctrl_resolve_by_label(token.split(":", 1)[1].strip(), include_terminal)
-    run = _ctrl_run_registry.get_run(_ctrl_conversation_id, token)
+    run = runtime.run_registry.get_run(runtime.conversation_id, token)
     if not run:
         return [], f"Error: run_id '{token}' not found"
     return [run], None
@@ -2039,11 +2030,12 @@ def _ctrl_serialize_run_snapshot(
 
 def _ctrl_ensure_mutation_allowed(action_name: str) -> str | None:
     """Check delegation depth permits mutation."""
-    if _ctrl_delegation_depth >= _ctrl_max_delegation_depth:
+    runtime = _require_control_runtime()
+    if runtime.delegation_depth >= runtime.max_delegation_depth:
         return (
             f"Error: subagents {action_name} is disabled at "
             "current delegation depth "
-            f"({_ctrl_delegation_depth}/{_ctrl_max_delegation_depth})"
+            f"({runtime.delegation_depth}/{runtime.max_delegation_depth})"
         )
     return None
 
@@ -2053,9 +2045,9 @@ def _ctrl_ensure_mutation_allowed(action_name: str) -> str | None:
 
 def _ctrl_handle_list() -> ToolResult:
     """Handle list action."""
-    assert _ctrl_run_registry is not None
-    active_runs = _ctrl_run_registry.list_runs(
-        _ctrl_conversation_id,
+    runtime = _require_control_runtime()
+    active_runs = runtime.run_registry.list_runs(
+        runtime.conversation_id,
         statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
     )
     snapshots = [
@@ -2076,14 +2068,14 @@ def _ctrl_handle_list() -> ToolResult:
     return ToolResult(
         output=json.dumps(
             {
-                "conversation_id": _ctrl_conversation_id,
+                "conversation_id": runtime.conversation_id,
                 "subagents": [
                     {
                         "name": name,
-                        "description": (_ctrl_subagent_descriptions.get(name, "")),
+                        "description": runtime.subagent_descriptions.get(name, ""),
                         "active_runs": (active_by_name.get(name, 0)),
                     }
-                    for name in _ctrl_subagent_names
+                    for name in runtime.subagent_names
                 ],
                 "active_run_count": len(active_runs),
                 "active_runs": snapshots,
@@ -2100,7 +2092,7 @@ def _ctrl_handle_list() -> ToolResult:
 
 def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> ToolResult:
     """Handle info action."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     target_token = _ctrl_resolve_target_token(run_id, target)
     matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
@@ -2109,8 +2101,8 @@ def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> To
     for run in matched_runs:
         run_by_id[run.run_id] = run
         if include_descendants:
-            descendants = _ctrl_run_registry.list_descendant_runs(
-                _ctrl_conversation_id,
+            descendants = runtime.run_registry.list_descendant_runs(
+                runtime.conversation_id,
                 run.run_id,
                 include_terminal=True,
             )
@@ -2120,7 +2112,7 @@ def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> To
     return ToolResult(
         output=json.dumps(
             {
-                "conversation_id": _ctrl_conversation_id,
+                "conversation_id": runtime.conversation_id,
                 "target": target_token,
                 "include_descendants": bool(include_descendants),
                 "run_count": len(runs),
@@ -2143,6 +2135,7 @@ async def _ctrl_handle_log(
     include_announce: bool,
 ) -> ToolResult:
     """Handle log action by building timeline from run registry."""
+    runtime = _require_control_runtime()
     target_token = _ctrl_resolve_target_token(run_id, target)
     matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
@@ -2152,12 +2145,11 @@ async def _ctrl_handle_log(
             output=(f"Error: log target '{target_token}' requires exactly one matched run"),
             is_error=True,
         )
-    assert _ctrl_run_registry is not None
     matched_run = matched_runs[0]
     runs: dict[str, SubAgentRun] = {matched_run.run_id: matched_run}
     if include_descendants:
-        descendants = _ctrl_run_registry.list_descendant_runs(
-            _ctrl_conversation_id,
+        descendants = runtime.run_registry.list_descendant_runs(
+            runtime.conversation_id,
             matched_run.run_id,
             include_terminal=True,
         )
@@ -2169,7 +2161,7 @@ async def _ctrl_handle_log(
     all_events.sort(key=lambda item: item.get("timestamp") or "")
     raw = json.dumps(
         {
-            "conversation_id": _ctrl_conversation_id,
+            "conversation_id": runtime.conversation_id,
             "root_run_id": matched_run.run_id,
             "run_count": len(runs),
             "event_count": len(all_events),
@@ -2194,38 +2186,42 @@ async def _ctrl_send_dispatch(
     timeout_seconds: int,
 ) -> ToolResult:
     """Create child run and invoke spawn for send action."""
-    assert _ctrl_run_registry is not None
-    assert _ctrl_restart_callback is not None
-    conv_id = _ctrl_conversation_id
+    runtime = _require_control_runtime()
+    if runtime.restart_callback is None:
+        raise _missing_runtime("subagents send")
+    conv_id = runtime.conversation_id
     lineage_root = str(parent_run.metadata.get("lineage_root_run_id") or parent_run.run_id).strip()
-    follow_up = _send_build_follow_up_options(parent_run, timeout_seconds)
-    follow_up["requester_session_key"] = _ctrl_requester_session_key
-    child_run = _ctrl_run_registry.create_run(
+    follow_up = _send_build_follow_up_options(
+        parent_run,
+        timeout_seconds,
+        requester_session_key=runtime.requester_session_key,
+    )
+    child_run = runtime.run_registry.create_run(
         conversation_id=conv_id,
         subagent_name=parent_run.subagent_name,
         task=task,
         metadata=_build_lifecycle_metadata(
             session_mode="send",
-            requester_session_key=_ctrl_requester_session_key,
+            requester_session_key=runtime.requester_session_key,
             parent_run_id=parent_run.run_id,
             lineage_root_run_id=lineage_root,
-            delegation_depth=_ctrl_delegation_depth,
+            delegation_depth=runtime.delegation_depth,
             extra={
                 **follow_up,
-                "max_active_runs_per_lineage": (_ctrl_max_active_runs_per_lineage),
+                "max_active_runs_per_lineage": runtime.max_active_runs_per_lineage,
             },
         ),
-        requester_session_key=_ctrl_requester_session_key,
+        requester_session_key=runtime.requester_session_key,
         parent_run_id=parent_run.run_id,
         lineage_root_run_id=lineage_root,
     )
-    running = _ctrl_run_registry.mark_running(conv_id, child_run.run_id)
+    running = runtime.run_registry.mark_running(conv_id, child_run.run_id)
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
-    params, accepts_kw = _resolve_spawn_callback_signature(_ctrl_restart_callback)
+    params, accepts_kw = _resolve_spawn_callback_signature(runtime.restart_callback)
     filtered = _filter_spawn_options(follow_up, params, accepts_kw)
     try:
-        await _ctrl_restart_callback(
+        await runtime.restart_callback(
             parent_run.subagent_name,
             task,
             child_run.run_id,
@@ -2250,7 +2246,7 @@ async def _ctrl_send_dispatch(
             title=f"SubAgents: send {child_run.run_id}",
         )
     except Exception as exc:
-        failed = _ctrl_run_registry.mark_failed(
+        failed = runtime.run_registry.mark_failed(
             conversation_id=conv_id,
             run_id=child_run.run_id,
             error=str(exc),
@@ -2271,12 +2267,13 @@ async def _ctrl_handle_send(
     run_timeout_seconds: int,
 ) -> ToolResult:
     """Handle send action."""
+    runtime = _require_control_runtime()
     if not task or not task.strip():
         return ToolResult(
             output="Error: task is required for send",
             is_error=True,
         )
-    if not _ctrl_restart_callback:
+    if not runtime.restart_callback:
         return ToolResult(
             output=("Error: send is unavailable because spawn callback is not configured"),
             is_error=True,
@@ -2304,13 +2301,13 @@ def _ctrl_collect_kill_candidates(
     matched_roots: list[SubAgentRun],
 ) -> dict[str, str]:
     """Collect candidate run_ids mapping to root_run_id."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     candidates: dict[str, str] = {}
     for root in matched_roots:
         if root.status in _CTRL_ACTIVE_STATUSES:
             candidates[root.run_id] = root.run_id
-        descendants = _ctrl_run_registry.list_descendant_runs(
-            _ctrl_conversation_id,
+        descendants = runtime.run_registry.list_descendant_runs(
+            runtime.conversation_id,
             root.run_id,
             include_terminal=False,
         )
@@ -2331,17 +2328,18 @@ async def _ctrl_send_control_message(
     Silently logs and ignores errors so that the existing cancel/steer
     flow is never disrupted by a channel failure.
     """
-    if _ctrl_control_channel is None:
+    runtime = _require_control_runtime()
+    if runtime.control_channel is None:
         return
     try:
         msg = ControlMessage(
             run_id=run_id,
             message_type=message_type,
             payload=payload,
-            sender_id=_ctrl_conversation_id,
+            sender_id=runtime.conversation_id,
             cascade=cascade,
         )
-        await _ctrl_control_channel.send_control(msg)
+        await runtime.control_channel.send_control(msg)
     except Exception:
         logger.warning(
             "Failed to send %s control message for run %s",
@@ -2357,21 +2355,20 @@ async def _ctrl_exec_cancellations(
     target_token: str,
 ) -> int:
     """Execute cancellations. Returns cancelled count."""
-    assert _ctrl_run_registry is not None
-    assert _ctrl_cancel_callback is not None
+    runtime = _require_control_runtime()
     cancelled_count = 0
     for cand_id, root_id in candidates.items():
-        cand = _ctrl_run_registry.get_run(_ctrl_conversation_id, cand_id)
+        cand = runtime.run_registry.get_run(runtime.conversation_id, cand_id)
         if not cand or cand.status not in _CTRL_ACTIVE_STATUSES:
             continue
-        cancelled = await _ctrl_cancel_callback(cand.run_id)
+        cancelled = await runtime.cancel_callback(cand.run_id)
         await _ctrl_send_control_message(
             cand.run_id,
             ControlMessageType.KILL,
             cascade=(root_id != cand_id),
         )
-        updated = _ctrl_run_registry.mark_cancelled(
-            conversation_id=_ctrl_conversation_id,
+        updated = runtime.run_registry.mark_cancelled(
+            conversation_id=runtime.conversation_id,
             run_id=cand.run_id,
             reason="Cancelled by subagents tool",
             metadata={
@@ -2463,17 +2460,18 @@ def _ctrl_steer_check_rate_limit(
     resolved_run_id: str,
 ) -> str | None:
     """Check steer rate limit, returning error if exceeded."""
+    runtime = _require_control_runtime()
     now = datetime.now(UTC)
-    last_steer = _ctrl_last_steer_at.get(resolved_run_id)
+    last_steer = runtime.state.last_steer_at.get(resolved_run_id)
     if last_steer:
         elapsed_ms = int((now - last_steer).total_seconds() * 1000)
-        if elapsed_ms < _ctrl_steer_rate_limit_ms:
+        if elapsed_ms < runtime.steer_rate_limit_ms:
             return (
                 "Error: steer rate limit exceeded. "
                 f"Wait at least "
-                f"{_ctrl_steer_rate_limit_ms - elapsed_ms}ms."
+                f"{runtime.steer_rate_limit_ms - elapsed_ms}ms."
             )
-    _ctrl_last_steer_at[resolved_run_id] = now
+    runtime.state.last_steer_at[resolved_run_id] = now
     return None
 
 
@@ -2481,10 +2479,10 @@ async def _ctrl_steer_metadata_only(
     ctx: ToolContext, resolved_run_id: str, instruction: str
 ) -> ToolResult:
     """Attach steer instruction as metadata without restart."""
-    assert _ctrl_run_registry is not None
+    runtime = _require_control_runtime()
     now = datetime.now(UTC)
-    updated = _ctrl_run_registry.attach_metadata(
-        conversation_id=_ctrl_conversation_id,
+    updated = runtime.run_registry.attach_metadata(
+        conversation_id=runtime.conversation_id,
         run_id=resolved_run_id,
         metadata={
             "steer_instruction": instruction,
@@ -2513,14 +2511,14 @@ async def _ctrl_steer_with_restart(
     ctx: ToolContext, run: SubAgentRun, instruction: str
 ) -> ToolResult:
     """Cancel run and restart with steering instruction."""
-    assert _ctrl_run_registry is not None
-    assert _ctrl_cancel_callback is not None
-    assert _ctrl_restart_callback is not None
+    runtime = _require_control_runtime()
+    if runtime.restart_callback is None:
+        raise _missing_runtime("subagents steer")
     resolved_run_id = run.run_id
     await _ctrl_send_control_message(resolved_run_id, ControlMessageType.KILL)
-    cancelled = await _ctrl_cancel_callback(resolved_run_id)
-    updated_old = _ctrl_run_registry.mark_cancelled(
-        conversation_id=_ctrl_conversation_id,
+    cancelled = await runtime.cancel_callback(resolved_run_id)
+    updated_old = runtime.run_registry.mark_cancelled(
+        conversation_id=runtime.conversation_id,
         run_id=resolved_run_id,
         reason="Cancelled by steer restart",
         metadata={"steer_instruction": instruction},
@@ -2531,8 +2529,8 @@ async def _ctrl_steer_with_restart(
     restart_task = f"{run.task}\n\n[Steering Instruction]\n{instruction.strip()}"
     now = datetime.now(UTC)
     lineage_root = str(run.metadata.get("lineage_root_run_id") or resolved_run_id).strip()
-    replacement = _ctrl_run_registry.create_run(
-        conversation_id=_ctrl_conversation_id,
+    replacement = runtime.run_registry.create_run(
+        conversation_id=runtime.conversation_id,
         subagent_name=run.subagent_name,
         task=restart_task,
         metadata={
@@ -2547,14 +2545,14 @@ async def _ctrl_steer_with_restart(
         parent_run_id=str(run.metadata.get("parent_run_id") or "").strip() or None,
         lineage_root_run_id=lineage_root,
     )
-    running = _ctrl_run_registry.mark_running(_ctrl_conversation_id, replacement.run_id)
+    running = runtime.run_registry.mark_running(runtime.conversation_id, replacement.run_id)
     if running:
         await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
-        await _ctrl_restart_callback(run.subagent_name, restart_task, replacement.run_id)
+        await runtime.restart_callback(run.subagent_name, restart_task, replacement.run_id)
     except Exception as exc:
-        failed = _ctrl_run_registry.mark_failed(
-            conversation_id=_ctrl_conversation_id,
+        failed = runtime.run_registry.mark_failed(
+            conversation_id=runtime.conversation_id,
             run_id=replacement.run_id,
             error=str(exc),
             expected_statuses=[SubAgentRunStatus.RUNNING],
@@ -2566,8 +2564,8 @@ async def _ctrl_steer_with_restart(
             is_error=True,
         )
     if updated_old:
-        _ = _ctrl_run_registry.attach_metadata(
-            conversation_id=_ctrl_conversation_id,
+        _ = runtime.run_registry.attach_metadata(
+            conversation_id=runtime.conversation_id,
             run_id=resolved_run_id,
             metadata={"replaced_by_run_id": replacement.run_id},
         )
@@ -2593,6 +2591,7 @@ async def _ctrl_handle_steer(
     ctx: ToolContext, run_id: str, target: str, instruction: str
 ) -> ToolResult:
     """Handle steer action."""
+    runtime = _require_control_runtime()
     target_token = _ctrl_resolve_target_token(run_id, target)
     if not target_token:
         return ToolResult(
@@ -2611,7 +2610,7 @@ async def _ctrl_handle_steer(
     rate_error = _ctrl_steer_check_rate_limit(run.run_id)
     if rate_error:
         return ToolResult(output=rate_error, is_error=True)
-    if not _ctrl_restart_callback:
+    if not runtime.restart_callback:
         return await _ctrl_steer_metadata_only(ctx, run.run_id, instruction)
     return await _ctrl_steer_with_restart(ctx, run, instruction)
 
@@ -2701,11 +2700,7 @@ async def subagents_control_tool(
     include_announce: bool = True,
 ) -> ToolResult:
     """SubAgent control plane with 6 actions."""
-    if _ctrl_run_registry is None:
-        return ToolResult(
-            output="Error: subagents_control not configured",
-            is_error=True,
-        )
+    _ = _require_control_runtime()
     normalized = (action or "list").strip().lower()
     if normalized == "list":
         return _ctrl_handle_list()
@@ -2735,6 +2730,7 @@ async def _ctrl_dispatch_mutation(
     run_timeout_seconds: int,
 ) -> ToolResult:
     """Dispatch mutation actions with permission check."""
+    runtime = _require_control_runtime()
     blocked = _ctrl_ensure_mutation_allowed(action)
     if blocked:
         if "delegation depth" in blocked:
@@ -2742,8 +2738,8 @@ async def _ctrl_dispatch_mutation(
                 dict(
                     SubAgentDepthLimitedEvent(
                         subagent_name="",
-                        current_depth=_ctrl_delegation_depth,
-                        max_depth=_ctrl_max_delegation_depth,
+                        current_depth=runtime.delegation_depth,
+                        max_depth=runtime.max_delegation_depth,
                     ).to_event_dict()
                 )
             )
@@ -2761,11 +2757,207 @@ async def _ctrl_dispatch_mutation(
 
 
 # ---------------------------------------------------------------------------
-# Factory for nested session ToolDefinitions
+# Runtime-bound session ToolDefinition factories
 # ---------------------------------------------------------------------------
 
 
-def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
+def _session_runtime_from_dependencies(  # noqa: PLR0913
+    *,
+    run_registry: SubAgentRunRegistry,
+    conversation_id: str,
+    requester_session_key: str,
+    visibility_default: str,
+    observability_stats_provider: Callable[[], dict[str, Any]] | None,
+    subagent_names: list[str],
+    subagent_descriptions: dict[str, str],
+    cancel_callback: Callable[[str], Awaitable[bool]],
+    restart_callback: Callable[[str, str, str], Awaitable[str]] | None,
+    max_active_runs: int,
+    max_active_runs_per_lineage: int,
+    max_children_per_requester: int,
+    delegation_depth: int,
+    max_delegation_depth: int,
+    spawn_callback: Callable[..., Awaitable[str]] | None = None,
+    control_channel: ControlChannelPort | None = None,
+    max_spawn_retries: int = 2,
+    retry_delay_ms: int = 200,
+) -> SubAgentSessionToolRuntime:
+    normalized_visibility = (
+        visibility_default if visibility_default in {"self", "tree", "all"} else "tree"
+    )
+    normalized_requester = (requester_session_key or conversation_id).strip()
+    normalized_names = tuple(subagent_names)
+    normalized_descriptions = MappingProxyType(dict(subagent_descriptions))
+    normalized_max_active = max(1, max_active_runs)
+    normalized_max_lineage = max(1, max_active_runs_per_lineage)
+    normalized_max_children = max(1, max_children_per_requester)
+    normalized_depth = max(0, delegation_depth)
+    normalized_max_depth = max(1, max_delegation_depth)
+
+    send_runtime: SessionSendRuntime | None = None
+    if spawn_callback is not None:
+        params, accepts_kwargs = _resolve_spawn_callback_signature(spawn_callback)
+        send_runtime = SessionSendRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            spawn_callback=spawn_callback,
+            max_active_runs=normalized_max_active,
+            max_active_runs_per_lineage=normalized_max_lineage,
+            max_children_per_requester=normalized_max_children,
+            requester_session_key=normalized_requester,
+            delegation_depth=normalized_depth,
+            max_delegation_depth=normalized_max_depth,
+            max_spawn_retries=max(0, max_spawn_retries),
+            retry_delay_ms=max(1, retry_delay_ms),
+            spawn_callback_params=frozenset(params) if params is not None else None,
+            spawn_callback_accepts_kwargs=accepts_kwargs,
+        )
+
+    return SubAgentSessionToolRuntime(
+        core=SessionCoreRuntime(
+            run_registry=run_registry,
+            spawn_callback=spawn_callback,
+            max_active_runs=normalized_max_active,
+            max_spawn_retries=max(0, max_spawn_retries),
+            retry_delay_ms=max(1, retry_delay_ms),
+            subagent_names=normalized_names,
+            subagent_descriptions=normalized_descriptions,
+            conversation_id=conversation_id,
+            requester_session_key=normalized_requester,
+            delegation_depth=normalized_depth,
+            max_delegation_depth=normalized_max_depth,
+            max_active_runs_per_lineage=normalized_max_lineage,
+            max_children_per_requester=normalized_max_children,
+            visibility_default=normalized_visibility,
+        ),
+        overview=SessionOverviewRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            requester_session_key=normalized_requester,
+            visibility_default=normalized_visibility,
+            observability_provider=observability_stats_provider,
+        ),
+        wait=SessionWaitRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+        ),
+        ack=SessionAckRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            requester_session_key=normalized_requester,
+        ),
+        send=send_runtime,
+        control=SubAgentControlRuntime(
+            run_registry=run_registry,
+            conversation_id=conversation_id,
+            subagent_names=normalized_names,
+            subagent_descriptions=normalized_descriptions,
+            cancel_callback=cancel_callback,
+            restart_callback=restart_callback,
+            control_channel=control_channel,
+            steer_rate_limit_ms=2000,
+            max_active_runs=normalized_max_active,
+            max_active_runs_per_lineage=normalized_max_lineage,
+            max_children_per_requester=normalized_max_children,
+            requester_session_key=normalized_requester,
+            delegation_depth=normalized_depth,
+            max_delegation_depth=normalized_max_depth,
+        ),
+    )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSessionToolExecutor:
+    template: ToolInfo
+    runtime: SubAgentSessionToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _session_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _session_tool_runtime.reset(token)
+
+
+def _bind_session_tool_info(
+    template: ToolInfo,
+    runtime: SubAgentSessionToolRuntime,
+) -> ToolInfo:
+    return replace(
+        template,
+        execute=_BoundSessionToolExecutor(template=template, runtime=runtime),
+    )
+
+
+def _convert_bound_session_tools(
+    runtime: SubAgentSessionToolRuntime,
+    templates: tuple[ToolInfo, ...],
+) -> list[Any]:
+    from src.infrastructure.agent.core.tool_converter import convert_tools
+
+    return [
+        convert_tools({template.name: _bind_session_tool_info(template, runtime)})[0]
+        for template in templates
+    ]
+
+
+def make_session_tool_defs(  # noqa: PLR0913
+    *,
+    run_registry: SubAgentRunRegistry | None,
+    conversation_id: str,
+    requester_session_key: str,
+    visibility_default: str,
+    observability_stats_provider: Callable[[], dict[str, Any]] | None,
+    subagent_names: list[str],
+    subagent_descriptions: dict[str, str],
+    spawn_callback: Callable[..., Awaitable[str]] | None,
+    cancel_callback: Callable[[str], Awaitable[bool]] | None,
+    max_active_runs: int,
+    max_active_runs_per_lineage: int,
+    max_children_per_requester: int,
+    delegation_depth: int,
+    max_delegation_depth: int,
+) -> list[Any]:
+    """Build the complete top-level session tool set with captured dependencies."""
+    if run_registry is None or spawn_callback is None or cancel_callback is None:
+        raise RuntimeV2Error(
+            "missing_subagent_tool_runtime",
+            "session tools require run_registry, spawn_callback, and cancel_callback",
+        )
+    runtime = _session_runtime_from_dependencies(
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        requester_session_key=requester_session_key,
+        visibility_default=visibility_default,
+        observability_stats_provider=observability_stats_provider,
+        subagent_names=subagent_names,
+        subagent_descriptions=subagent_descriptions,
+        cancel_callback=cancel_callback,
+        restart_callback=spawn_callback,
+        max_active_runs=max_active_runs,
+        max_active_runs_per_lineage=max_active_runs_per_lineage,
+        max_children_per_requester=max_children_per_requester,
+        delegation_depth=delegation_depth,
+        max_delegation_depth=max_delegation_depth,
+        spawn_callback=spawn_callback,
+    )
+    return _convert_bound_session_tools(
+        runtime,
+        (
+            sessions_spawn_tool,
+            sessions_list_tool,
+            sessions_history_tool,
+            sessions_timeline_tool,
+            sessions_overview_tool,
+            sessions_wait_tool,
+            sessions_ack_tool,
+            sessions_send_tool,
+            subagents_control_tool,
+        ),
+    )
+
+
+def make_nested_session_tool_defs(  # noqa: PLR0913
     *,
     run_registry: SubAgentRunRegistry,
     conversation_id: str,
@@ -2782,230 +2974,31 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
     delegation_depth: int,
     max_delegation_depth: int,
 ) -> list[Any]:
-    """Build nested session ToolDefinitions for use inside SubAgent scopes.
-
-    Returns a list of ``ToolDefinition`` objects for the 6 nested session tools
-    (list, history, timeline, overview, wait, control).
-
-    Because the ``@tool_define`` functions read from module-level globals, each
-    closure produced here snapshots the current globals, re-configures them for
-    the nested scope, delegates to the ``@tool_define`` execute, and restores
-    the originals in a ``finally`` block.
-    """
-    from src.infrastructure.agent.processor.processor import ToolDefinition
-
-    # References to the @tool_define ToolInfo objects (module-level singletons)
-    list_info = sessions_list_tool
-    history_info = sessions_history_tool
-    timeline_info = sessions_timeline_tool
-    overview_info = sessions_overview_tool
-    wait_info = sessions_wait_tool
-    control_info = subagents_control_tool
-    list_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    history_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    timeline_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    overview_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    wait_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    control_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-
-    # -- helpers to snapshot / restore module globals -----------------------
-
-    _sess_global_names = [
-        "_sess_run_registry",
-        "_sess_spawn_callback",
-        "_sess_max_active_runs",
-        "_sess_max_spawn_retries",
-        "_sess_retry_delay_ms",
-        "_sess_subagent_names",
-        "_sess_subagent_descriptions",
-        "_sess_conversation_id",
-        "_sess_requester_session_key",
-        "_sess_delegation_depth",
-        "_sess_max_delegation_depth",
-        "_sess_max_active_runs_per_lineage",
-        "_sess_max_children_per_requester",
-        "_sess_visibility_default",
-    ]
-    _overview_global_names = [
-        "_sess_overview_run_registry",
-        "_sess_overview_conversation_id",
-        "_sess_overview_requester_session_key",
-        "_sess_overview_visibility_default",
-        "_sess_overview_observability_provider",
-    ]
-    _wait_global_names = [
-        "_sess_wait_run_registry",
-        "_sess_wait_conversation_id",
-    ]
-    _ctrl_global_names = [
-        "_ctrl_run_registry",
-        "_ctrl_conversation_id",
-        "_ctrl_subagent_names",
-        "_ctrl_subagent_descriptions",
-        "_ctrl_cancel_callback",
-        "_ctrl_restart_callback",
-        "_ctrl_steer_rate_limit_ms",
-        "_ctrl_max_active_runs",
-        "_ctrl_max_active_runs_per_lineage",
-        "_ctrl_max_children_per_requester",
-        "_ctrl_requester_session_key",
-        "_ctrl_delegation_depth",
-        "_ctrl_max_delegation_depth",
-        "_ctrl_last_steer_at",
-        "_ctrl_spawn_callback_params",
-        "_ctrl_spawn_callback_accepts_kwargs",
-    ]
-
-    _mod = __import__(__name__)
-    # Resolve to actual submodule via dotted path
-    for part in __name__.split(".")[1:]:
-        _mod = getattr(_mod, part)
-
-    def _snapshot(names: list[str]) -> dict[str, Any]:
-        return {n: getattr(_mod, n) for n in names}
-
-    def _restore(snap: dict[str, Any]) -> None:
-        for n, v in snap.items():
-            setattr(_mod, n, v)
-
-    # -- closures that configure + execute + restore -----------------------
-
-    def _make_sess_tool(
-        tool_info: Any,
-        runtime_context: _NestedToolRuntimeContext,
-    ) -> Callable[..., Awaitable[Any]]:
-        """Wrap a session @tool_define for nested scope (list/history/timeline)."""
-
-        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
-            active_ctx = ctx if ctx is not None else runtime_context.get_context()
-            snap = _snapshot(_sess_global_names)
-            try:
-                configure_session_tools(
-                    run_registry=run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=requester_session_key,
-                    visibility_default=visibility_default,
-                    subagent_names=subagent_names,
-                    subagent_descriptions=subagent_descriptions,
-                    delegation_depth=delegation_depth,
-                    max_delegation_depth=max_delegation_depth,
-                    max_active_runs_per_lineage=max_active_runs_per_lineage,
-                    max_children_per_requester=max_children_per_requester,
-                )
-                return await tool_info.execute(active_ctx, **kwargs)
-            finally:
-                _restore(snap)
-
-        return _execute
-
-    def _make_overview_tool(
-        runtime_context: _NestedToolRuntimeContext,
-    ) -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
-            active_ctx = ctx if ctx is not None else runtime_context.get_context()
-            snap = _snapshot(_overview_global_names)
-            try:
-                configure_sessions_overview(
-                    run_registry=run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=requester_session_key,
-                    visibility_default=visibility_default,
-                    observability_provider=observability_stats_provider,
-                )
-                return await overview_info.execute(active_ctx, **kwargs)
-            finally:
-                _restore(snap)
-
-        return _execute
-
-    def _make_wait_tool(
-        runtime_context: _NestedToolRuntimeContext,
-    ) -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
-            active_ctx = ctx if ctx is not None else runtime_context.get_context()
-            snap = _snapshot(_wait_global_names)
-            try:
-                configure_sessions_wait(
-                    run_registry=run_registry,
-                    conversation_id=conversation_id,
-                )
-                return await wait_info.execute(active_ctx, **kwargs)
-            finally:
-                _restore(snap)
-
-        return _execute
-
-    def _make_ctrl_tool(
-        runtime_context: _NestedToolRuntimeContext,
-    ) -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
-            active_ctx = ctx if ctx is not None else runtime_context.get_context()
-            snap = _snapshot(_ctrl_global_names)
-            try:
-                configure_subagents_control(
-                    run_registry=run_registry,
-                    conversation_id=conversation_id,
-                    subagent_names=subagent_names,
-                    subagent_descriptions=subagent_descriptions,
-                    cancel_callback=cancel_callback,
-                    restart_callback=restart_callback,
-                    max_active_runs=max_active_runs,
-                    max_active_runs_per_lineage=max_active_runs_per_lineage,
-                    max_children_per_requester=max_children_per_requester,
-                    requester_session_key=requester_session_key,
-                    delegation_depth=delegation_depth,
-                    max_delegation_depth=max_delegation_depth,
-                )
-                return await control_info.execute(active_ctx, **kwargs)
-            finally:
-                _restore(snap)
-
-        return _execute
-
-    # -- assemble ToolDefinition list --------------------------------------
-
-    result: list[ToolDefinition] = []
-    for info, factory, runtime in [
-        (list_info, _make_sess_tool(list_info, list_runtime), list_runtime),
-        (history_info, _make_sess_tool(history_info, history_runtime), history_runtime),
-        (timeline_info, _make_sess_tool(timeline_info, timeline_runtime), timeline_runtime),
-    ]:
-        result.append(
-            ToolDefinition(
-                name=info.name,
-                description=info.description,
-                parameters=info.parameters,
-                execute=factory,
-                _tool_instance=runtime,
-            )
-        )
-
-    result.append(
-        ToolDefinition(
-            name=overview_info.name,
-            description=overview_info.description,
-            parameters=overview_info.parameters,
-            execute=_make_overview_tool(overview_runtime),
-            _tool_instance=overview_runtime,
-        )
+    """Build the bounded nested session tool subset with captured dependencies."""
+    runtime = _session_runtime_from_dependencies(
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        requester_session_key=requester_session_key,
+        visibility_default=visibility_default,
+        observability_stats_provider=observability_stats_provider,
+        subagent_names=subagent_names,
+        subagent_descriptions=subagent_descriptions,
+        cancel_callback=cancel_callback,
+        restart_callback=restart_callback,
+        max_active_runs=max_active_runs,
+        max_active_runs_per_lineage=max_active_runs_per_lineage,
+        max_children_per_requester=max_children_per_requester,
+        delegation_depth=delegation_depth,
+        max_delegation_depth=max_delegation_depth,
     )
-    result.append(
-        ToolDefinition(
-            name=wait_info.name,
-            description=wait_info.description,
-            parameters=wait_info.parameters,
-            execute=_make_wait_tool(wait_runtime),
-            _tool_instance=wait_runtime,
-        )
+    return _convert_bound_session_tools(
+        runtime,
+        (
+            sessions_list_tool,
+            sessions_history_tool,
+            sessions_timeline_tool,
+            sessions_overview_tool,
+            sessions_wait_tool,
+            subagents_control_tool,
+        ),
     )
-    result.append(
-        ToolDefinition(
-            name=control_info.name,
-            description=control_info.description,
-            parameters=control_info.parameters,
-            execute=_make_ctrl_tool(control_runtime),
-            _tool_instance=control_runtime,
-        )
-    )
-
-    return result

@@ -8,7 +8,6 @@ and nested orchestration. Uses an explicit deps dataclass (no back-references).
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -21,12 +20,9 @@ from src.domain.model.agent.subagent import SubAgent
 
 from .processor import ToolDefinition
 from .subagent_router import subagent_allows_tool
-from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
     pass
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -346,10 +342,7 @@ class SubAgentToolBuilder:
         cancel_callback: Callable[..., Coroutine[Any, Any, bool]],
         restart_callback: Callable[..., Coroutine[Any, Any, str]],
     ) -> list[ToolDefinition]:
-        """Build nested session ToolDefinitions via the factory function.
-
-        Each ToolDefinition uses a save/restore pattern for module globals.
-        """
+        """Build nested session ToolDefinitions with captured dependencies."""
         from ..tools.subagent_sessions import make_nested_session_tool_defs
 
         nested_visibility = "tree" if nested_depth < max_delegation_depth else "self"
@@ -384,10 +377,7 @@ class SubAgentToolBuilder:
         conversation_id: str,
         nested_depth: int,
     ) -> list[ToolDefinition]:
-        """Build nested delegate ToolDefinitions via the factory function.
-
-        Each ToolDefinition uses a save/restore pattern for module globals.
-        """
+        """Build nested delegate ToolDefinitions with captured dependencies."""
         from ..tools.delegate_subagent import make_nested_delegate_tool_defs
 
         return make_nested_delegate_tool_defs(
@@ -422,17 +412,11 @@ class SubAgentToolBuilder:
         max_children_per_requester: int | None = None,
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
-        from ..tools.define import get_registered_tools
         from ..tools.delegate_subagent import (
-            configure_delegate_subagent,
+            make_delegate_tool_defs,
         )
         from ..tools.subagent_sessions import (
-            configure_session_tools,
-            configure_sessions_ack,
-            configure_sessions_overview,
-            configure_sessions_send,
-            configure_sessions_wait,
-            configure_subagents_control,
+            make_session_tool_defs,
         )
 
         effective_max_delegation_depth = (
@@ -454,8 +438,7 @@ class SubAgentToolBuilder:
             else self.deps.max_subagent_children_per_requester
         )
 
-        # Configure decorator-based tool globals for this conversation
-        configure_delegate_subagent(
+        delegate_definitions = make_delegate_tool_defs(
             execute_callback=delegate_callback,
             run_registry=self.deps.subagent_run_registry,
             conversation_id=conversation_id,
@@ -463,92 +446,28 @@ class SubAgentToolBuilder:
             subagent_descriptions=subagent_descriptions,
             delegation_depth=0,
             max_active_runs=effective_max_active_runs,
+            include_parallel=len(enabled_subagents) >= 2,
         )
-        configure_session_tools(
-            run_registry=self.deps.subagent_run_registry,
-            spawn_callback=spawn_callback,
-            max_active_runs=effective_max_active_runs,
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
-            conversation_id=conversation_id,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=effective_max_delegation_depth,
-            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
-            max_children_per_requester=effective_max_children_per_requester,
-            visibility_default="tree",
+        tools_to_use.append(delegate_definitions[0])
+        tools_to_use.extend(
+            make_session_tool_defs(
+                run_registry=self.deps.subagent_run_registry,
+                conversation_id=conversation_id,
+                requester_session_key=conversation_id,
+                visibility_default="tree",
+                observability_stats_provider=self.deps.get_observability_stats_fn,
+                subagent_names=list(subagent_map.keys()),
+                subagent_descriptions=subagent_descriptions,
+                spawn_callback=spawn_callback,
+                cancel_callback=cancel_callback,
+                max_active_runs=effective_max_active_runs,
+                max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
+                max_children_per_requester=effective_max_children_per_requester,
+                delegation_depth=0,
+                max_delegation_depth=effective_max_delegation_depth,
+            )
         )
-        configure_sessions_overview(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            requester_session_key=conversation_id,
-            visibility_default="tree",
-            observability_provider=(self.deps.get_observability_stats_fn),
-        )
-        configure_sessions_wait(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-        )
-        configure_sessions_ack(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            requester_session_key=conversation_id,
-        )
-        configure_sessions_send(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            spawn_callback=spawn_callback,
-            max_active_runs=effective_max_active_runs,
-            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
-            max_children_per_requester=effective_max_children_per_requester,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=effective_max_delegation_depth,
-        )
-        configure_subagents_control(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
-            cancel_callback=cancel_callback,
-            restart_callback=spawn_callback,
-            max_active_runs=effective_max_active_runs,
-            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
-            max_children_per_requester=effective_max_children_per_requester,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=effective_max_delegation_depth,
-        )
-
-        # Look up all @tool_define tools (delegate + session) from the registry
-        _all_tool_names = [
-            "delegate_to_subagent",
-            "sessions_spawn",
-            "sessions_list",
-            "sessions_history",
-            "sessions_timeline",
-            "sessions_overview",
-            "sessions_wait",
-            "sessions_ack",
-            "sessions_send",
-            "subagents",
-        ]
-        registry = get_registered_tools()
-        tools_dict: dict[str, Any] = {}
-        for tool_name in _all_tool_names:
-            tool_info = registry.get(tool_name)
-            if tool_info is None:
-                logger.warning("Tool %r not found in registry", tool_name)
-                continue
-            tools_dict[tool_name] = tool_info
-        tools_to_use.extend(convert_tools(tools_dict))
-
-        # Inject parallel delegation tool when 2+ SubAgents available
-        if len(enabled_subagents) >= 2:
-            parallel_info = registry.get("parallel_delegate_subagents")
-            if parallel_info is not None:
-                tools_to_use.extend(convert_tools({"parallel_delegate_subagents": parallel_info}))
-            else:
-                logger.warning("Tool 'parallel_delegate_subagents' not found in registry")
+        if len(delegate_definitions) > 1:
+            tools_to_use.append(delegate_definitions[1])
 
         return tools_to_use

@@ -12,9 +12,13 @@ import pytest
 
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.model_route import ModelRouteRef
+from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
     PinnedAgentRuntimeDispatcherV2,
+)
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
 )
 
 
@@ -69,6 +73,24 @@ def _make_runtime_profile(**overrides):
     }
     defaults.update(overrides)
     return AgentRuntimeProfile(**defaults)
+
+
+def _make_operation_context(dispatcher):
+    session_registry = MagicMock()
+    session_registry.register = AsyncMock()
+    orchestrator = AgentOrchestrator(
+        agent_registry=MagicMock(),
+        session_registry=session_registry,
+        spawn_manager=MagicMock(),
+        message_bus=MagicMock(),
+    )
+
+    def _require(service_key: str):
+        if service_key == AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2:
+            return orchestrator
+        return dispatcher
+
+    return SimpleNamespace(require=_require)
 
 
 @pytest.mark.unit
@@ -373,9 +395,7 @@ class TestReActAgentWorkspaceDelegation:
             ),
             patch(
                 "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
-                return_value=SimpleNamespace(
-                    require=lambda _service: PinnedAgentRuntimeDispatcherV2(),
-                ),
+                return_value=_make_operation_context(PinnedAgentRuntimeDispatcherV2()),
             ),
         ):
             yield
@@ -1137,7 +1157,7 @@ class TestReActAgentWorkspaceDelegation:
             ),
             patch(
                 "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
-                return_value=SimpleNamespace(require=lambda _service: dispatcher),
+                return_value=_make_operation_context(dispatcher),
             ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
@@ -1224,7 +1244,7 @@ class TestReActAgentWorkspaceDelegation:
             ),
             patch(
                 "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
-                return_value=SimpleNamespace(require=lambda _service: dispatcher),
+                return_value=_make_operation_context(dispatcher),
             ),
         ):
             agent._stream_memory_context = "stale memory"

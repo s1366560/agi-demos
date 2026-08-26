@@ -18,18 +18,21 @@ import inspect
 import json
 import logging
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from contextvars import ContextVar
+from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import Any
 
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -58,50 +61,63 @@ def _supports_on_event_arg(callback: Callable[..., Coroutine[Any, Any, str]]) ->
 # @tool_define versions (new pattern)
 # ---------------------------------------------------------------------------
 
-# Module-level DI references for @tool_define versions
-_delegate_execute_callback: Callable[..., Coroutine[Any, Any, str]] | None = None
-_delegate_run_registry: SubAgentRunRegistry | None = None
-_delegate_conversation_id: str | None = None
-_delegate_subagent_names: list[str] = []
-_delegate_subagent_descriptions: dict[str, str] = {}
-_delegate_delegation_depth: int = 0
-_delegate_max_active_runs: int | None = None
-_delegate_max_concurrency: int = 5
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class DelegateToolRuntime:
+    """Immutable dependencies captured by one delegate tool set."""
+
+    execute_callback: Callable[..., Coroutine[Any, Any, str]]
+    run_registry: SubAgentRunRegistry
+    conversation_id: str | None
+    subagent_names: tuple[str, ...]
+    subagent_descriptions: Mapping[str, str]
+    delegation_depth: int
+    max_active_runs: int | None
+    max_concurrency: int
 
 
-class _NestedToolRuntimeContext:
-    """Runtime context bridge for nested ToolDefinitions.
+_delegate_runtime: ContextVar[DelegateToolRuntime | None] = ContextVar(
+    f"{__name__}.delegate_runtime",
+    default=None,
+)
 
-    The processor calls wrapper ToolDefinitions without ``ctx`` on the legacy
-    path, but it still injects runtime context into ``_tool_instance`` when that
-    object exposes ``set_runtime_context``.
-    """
 
-    def __init__(self, *, conversation_id: str, agent_name: str = "subagent") -> None:
-        super().__init__()
-        self._conversation_id = conversation_id
-        self._agent_name = agent_name
-        self._context_var: ContextVar[ToolContext | None] = ContextVar(
-            f"{__name__}.nested_tool_context.{id(self)}",
-            default=None,
+def _require_delegate_runtime() -> DelegateToolRuntime:
+    runtime = _delegate_runtime.get()
+    if runtime is None:
+        raise RuntimeV2Error(
+            "missing_subagent_tool_runtime",
+            "delegate tools require an operation-bound runtime",
         )
+    return runtime
 
-    def set_runtime_context(self, ctx: ToolContext) -> None:
-        _ = self._context_var.set(ctx)
 
-    def get_context(self) -> ToolContext:
-        ctx = self._context_var.get()
-        if ctx is not None:
-            return ctx
-        return ToolContext(
-            session_id=self._conversation_id,
-            message_id="nested-tool",
-            call_id="nested-tool",
-            agent_name=self._agent_name,
-            conversation_id=self._conversation_id,
-            abort_signal=asyncio.Event(),
-            messages=[],
+def _delegate_runtime_from_dependencies(
+    *,
+    execute_callback: Callable[..., Coroutine[Any, Any, str]] | None,
+    run_registry: SubAgentRunRegistry | None,
+    conversation_id: str | None,
+    subagent_names: list[str] | None,
+    subagent_descriptions: Mapping[str, str] | None,
+    delegation_depth: int,
+    max_active_runs: int | None,
+    max_concurrency: int,
+) -> DelegateToolRuntime:
+    if execute_callback is None or run_registry is None:
+        raise RuntimeV2Error(
+            "missing_subagent_tool_runtime",
+            "delegate tools require execute_callback and run_registry",
         )
+    return DelegateToolRuntime(
+        execute_callback=execute_callback,
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        subagent_names=tuple(subagent_names or ()),
+        subagent_descriptions=MappingProxyType(dict(subagent_descriptions or {})),
+        delegation_depth=max(0, delegation_depth),
+        max_active_runs=(max_active_runs if max_active_runs and max_active_runs > 0 else None),
+        max_concurrency=max(1, max_concurrency),
+    )
 
 
 def configure_delegate_subagent(
@@ -115,22 +131,24 @@ def configure_delegate_subagent(
     max_active_runs: int | None = None,
     max_concurrency: int = 5,
 ) -> None:
-    """Configure dependencies for delegate_subagent_tool and parallel variant.
+    """Bind a compatibility runtime in the current context.
 
-    Called at agent startup to inject the execution callback and registry.
+    Production composition uses :func:`make_delegate_tool_defs`, whose
+    definitions capture their own immutable runtime. This compatibility entry
+    point remains only for direct ``ToolInfo.execute`` callers while they are
+    migrated.
     """
-    global _delegate_execute_callback, _delegate_run_registry
-    global _delegate_conversation_id, _delegate_subagent_names
-    global _delegate_subagent_descriptions, _delegate_delegation_depth
-    global _delegate_max_active_runs, _delegate_max_concurrency
-    _delegate_execute_callback = execute_callback
-    _delegate_run_registry = run_registry
-    _delegate_conversation_id = conversation_id
-    _delegate_subagent_names = subagent_names or []
-    _delegate_subagent_descriptions = subagent_descriptions or {}
-    _delegate_delegation_depth = delegation_depth
-    _delegate_max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
-    _delegate_max_concurrency = max_concurrency
+    runtime = _delegate_runtime_from_dependencies(
+        execute_callback=execute_callback,
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        subagent_names=subagent_names,
+        subagent_descriptions=subagent_descriptions,
+        delegation_depth=delegation_depth,
+        max_active_runs=max_active_runs,
+        max_concurrency=max_concurrency,
+    )
+    _ = _delegate_runtime.set(runtime)
 
 
 @tool_define(
@@ -177,13 +195,9 @@ async def delegate_subagent_tool(
     workspace_task_id: str | None = None,
 ) -> ToolResult:
     """Delegate a task to a specialized SubAgent."""
-    if _delegate_execute_callback is None:
-        return ToolResult(
-            output="Error: delegate_subagent is not configured. No execute callback.",
-            is_error=True,
-        )
+    runtime = _require_delegate_runtime()
 
-    error = _validate_delegate_inputs(subagent_name, task)
+    error = _validate_delegate_inputs(runtime, subagent_name, task)
     if error:
         return ToolResult(output=error, is_error=True)
     workspace_guardrail_error = _validate_workspace_delegation_guardrail(
@@ -194,14 +208,14 @@ async def delegate_subagent_tool(
         return ToolResult(output=workspace_guardrail_error, is_error=True)
 
     started_at = time.time()
-    run_id = await _register_single_run(ctx, subagent_name, task)
+    run_id = await _register_single_run(runtime, ctx, subagent_name, task)
     if isinstance(run_id, str) and run_id.startswith("Error:"):
         return ToolResult(output=run_id, is_error=True)
 
     logger.info("[delegate_subagent_tool] Delegating to '%s': %s...", subagent_name, task[:100])
 
     # Capture callback in local to satisfy type narrowing
-    callback = _delegate_execute_callback
+    callback = runtime.execute_callback
     buffered_events: list[dict[str, Any]] = []
 
     try:
@@ -215,13 +229,13 @@ async def delegate_subagent_tool(
             result = await callback(subagent_name, task, **callback_kwargs)
         for ev in buffered_events:
             await ctx.emit(ev)
-        await _finalize_success(ctx, run_id, result, started_at)
+        await _finalize_success(runtime, ctx, run_id, result, started_at)
         return ToolResult(output=result, title=f"SubAgent: {subagent_name}")
     except Exception as exc:
         logger.error("[delegate_subagent_tool] Execution failed: %s", exc)
         for ev in buffered_events:
             await ctx.emit(ev)
-        await _finalize_failure(ctx, run_id, exc, started_at)
+        await _finalize_failure(runtime, ctx, run_id, exc, started_at)
         return ToolResult(
             output=f"Error: SubAgent '{subagent_name}' execution failed: {exc}",
             is_error=True,
@@ -276,13 +290,9 @@ async def parallel_delegate_subagent_tool(
     tasks: Any = None,
 ) -> ToolResult:
     """Delegate multiple independent tasks to SubAgents in parallel."""
-    if _delegate_execute_callback is None:
-        return ToolResult(
-            output="Error: delegate_subagent is not configured. No execute callback.",
-            is_error=True,
-        )
+    runtime = _require_delegate_runtime()
 
-    parsed_tasks, error = _parse_tasks(tasks)
+    parsed_tasks, error = _parse_tasks(runtime, tasks)
     if error:
         return ToolResult(output=error, is_error=True)
     for item in parsed_tasks:
@@ -293,7 +303,7 @@ async def parallel_delegate_subagent_tool(
         if workspace_guardrail_error:
             return ToolResult(output=workspace_guardrail_error, is_error=True)
 
-    run_ids = await _register_parallel_runs_new(ctx, parsed_tasks)
+    run_ids = await _register_parallel_runs_new(runtime, ctx, parsed_tasks)
     if isinstance(run_ids, str):
         return ToolResult(output=run_ids, is_error=True)
 
@@ -302,8 +312,8 @@ async def parallel_delegate_subagent_tool(
     start_time = time.time()
 
     # Capture callback in local to satisfy type narrowing
-    callback = _delegate_execute_callback
-    results = await _execute_all_new(ctx, callback, parsed_tasks, run_ids)
+    callback = runtime.execute_callback
+    results = await _execute_all_new(runtime, ctx, callback, parsed_tasks, run_ids)
     elapsed_ms = (time.time() - start_time) * 1000
 
     output = _format_results(results, task_count, elapsed_ms)
@@ -315,12 +325,16 @@ async def parallel_delegate_subagent_tool(
 # ---------------------------------------------------------------------------
 
 
-def _validate_delegate_inputs(subagent_name: str, task: str) -> str | None:
+def _validate_delegate_inputs(
+    runtime: DelegateToolRuntime,
+    subagent_name: str,
+    task: str,
+) -> str | None:
     """Validate inputs for single delegation."""
     if not subagent_name:
         return "Error: subagent_name is required"
-    if subagent_name not in _delegate_subagent_names:
-        avail = ", ".join(_delegate_subagent_names)
+    if subagent_name not in runtime.subagent_names:
+        avail = ", ".join(runtime.subagent_names)
         return f"Error: SubAgent '{subagent_name}' not found. Available: {avail}"
     if not task:
         return "Error: task description is required"
@@ -353,23 +367,24 @@ def _validate_workspace_delegation_guardrail(
 
 
 async def _register_single_run(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     subagent_name: str,
     task: str,
 ) -> str | None:
     """Register a single run in the registry and emit started event."""
-    registry = _delegate_run_registry
-    conv_id = _delegate_conversation_id or ctx.conversation_id
-    if not (registry and conv_id):
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id or ctx.conversation_id
+    if not conv_id:
         return None
     active = registry.count_active_runs(conv_id)
-    if _delegate_max_active_runs is not None and active >= _delegate_max_active_runs:
-        return f"Error: active SubAgent run limit reached ({active}/{_delegate_max_active_runs})"
+    if runtime.max_active_runs is not None and active >= runtime.max_active_runs:
+        return f"Error: active SubAgent run limit reached ({active}/{runtime.max_active_runs})"
     run = registry.create_run(
         conversation_id=conv_id,
         subagent_name=subagent_name,
         task=task,
-        metadata={"delegation_depth": _delegate_delegation_depth},
+        metadata={"delegation_depth": runtime.delegation_depth},
     )
     running = registry.mark_running(conv_id, run.run_id)
     if running:
@@ -378,15 +393,16 @@ async def _register_single_run(
 
 
 async def _finalize_success(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     run_id: str | None,
     result: str,
     started_at: float,
 ) -> None:
     """Mark a run as completed and emit event."""
-    registry = _delegate_run_registry
-    conv_id = _delegate_conversation_id or ctx.conversation_id
-    if not (registry and conv_id and run_id):
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id or ctx.conversation_id
+    if not (conv_id and run_id):
         return
     elapsed_ms = int((time.time() - started_at) * 1000)
     completed = registry.mark_completed(
@@ -400,15 +416,16 @@ async def _finalize_success(
 
 
 async def _finalize_failure(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     run_id: str | None,
     error: Exception,
     started_at: float,
 ) -> None:
     """Mark a run as failed and emit event."""
-    registry = _delegate_run_registry
-    conv_id = _delegate_conversation_id or ctx.conversation_id
-    if not (registry and conv_id and run_id):
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id or ctx.conversation_id
+    if not (conv_id and run_id):
         return
     elapsed_ms = int((time.time() - started_at) * 1000)
     failed = registry.mark_failed(
@@ -421,7 +438,10 @@ async def _finalize_failure(
         await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
 
 
-def _parse_tasks(tasks: Any) -> tuple[list[dict[str, Any]], str | None]:
+def _parse_tasks(
+    runtime: DelegateToolRuntime,
+    tasks: Any,
+) -> tuple[list[dict[str, Any]], str | None]:
     """Parse and validate the tasks parameter for parallel delegation."""
     if isinstance(tasks, str):
         try:
@@ -436,20 +456,24 @@ def _parse_tasks(tasks: Any) -> tuple[list[dict[str, Any]], str | None]:
         return [], "Error: parallel_delegate_subagents requires at least 2 tasks"
 
     for i, t in enumerate(tasks):
-        err = _validate_single_task_item(i, t)
+        err = _validate_single_task_item(runtime, i, t)
         if err:
             return [], err
 
     return tasks, None
 
 
-def _validate_single_task_item(index: int, task: Any) -> str | None:
+def _validate_single_task_item(
+    runtime: DelegateToolRuntime,
+    index: int,
+    task: Any,
+) -> str | None:
     """Validate a single task item in the parallel tasks list."""
     if not isinstance(task, dict):
         return f"Error: task[{index}] must be an object with subagent_name and task"
     name = task.get("subagent_name", "")
-    if not name or name not in _delegate_subagent_names:
-        avail = ", ".join(_delegate_subagent_names)
+    if not name or name not in runtime.subagent_names:
+        avail = ", ".join(runtime.subagent_names)
         return f"Error: task[{index}] has invalid subagent_name '{name}'. Available: {avail}"
     if not task.get("task"):
         return f"Error: task[{index}] is missing 'task' description"
@@ -457,22 +481,23 @@ def _validate_single_task_item(index: int, task: Any) -> str | None:
 
 
 async def _register_parallel_runs_new(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     tasks: list[dict[str, Any]],
 ) -> dict[int, str] | str:
     """Register parallel runs in the registry."""
     run_ids: dict[int, str] = {}
-    registry = _delegate_run_registry
-    conv_id = _delegate_conversation_id or ctx.conversation_id
-    if not (registry and conv_id):
+    registry = runtime.run_registry
+    conv_id = runtime.conversation_id or ctx.conversation_id
+    if not conv_id:
         return run_ids
 
     task_count = len(tasks)
     active = registry.count_active_runs(conv_id)
-    if _delegate_max_active_runs is not None and active + task_count > _delegate_max_active_runs:
+    if runtime.max_active_runs is not None and active + task_count > runtime.max_active_runs:
         return (
             f"Error: active SubAgent run limit reached "
-            f"({active + task_count}/{_delegate_max_active_runs})"
+            f"({active + task_count}/{runtime.max_active_runs})"
         )
     for idx, item in enumerate(tasks):
         run = registry.create_run(
@@ -480,7 +505,7 @@ async def _register_parallel_runs_new(
             subagent_name=item["subagent_name"],
             task=item["task"],
             metadata={
-                "delegation_depth": _delegate_delegation_depth,
+                "delegation_depth": runtime.delegation_depth,
                 "parallel_index": idx,
                 "parallel_total": task_count,
             },
@@ -493,19 +518,26 @@ async def _register_parallel_runs_new(
 
 
 async def _execute_all_new(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     callback: Callable[..., Coroutine[Any, Any, str]],
     tasks: list[dict[str, Any]],
     run_ids: dict[int, str],
 ) -> list[dict[str, Any]]:
     """Execute all parallel tasks with concurrency limit."""
-    semaphore = asyncio.Semaphore(_delegate_max_concurrency)
+    semaphore = asyncio.Semaphore(runtime.max_concurrency)
     supports_event = _supports_on_event_arg(callback)
 
     async def run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
             return await _run_single_parallel_task(
-                ctx, callback, supports_event, index, item, run_ids
+                runtime,
+                ctx,
+                callback,
+                supports_event,
+                index,
+                item,
+                run_ids,
             )
 
     coros = [run_one(i, t) for i, t in enumerate(tasks)]
@@ -530,6 +562,7 @@ async def _execute_all_new(
 
 
 async def _run_single_parallel_task(
+    runtime: DelegateToolRuntime,
     ctx: ToolContext,
     callback: Callable[..., Coroutine[Any, Any, str]],
     supports_event: bool,
@@ -555,13 +588,13 @@ async def _run_single_parallel_task(
             result = await callback(name, task_desc, **callback_kwargs)
         for ev in buffered_events:
             await ctx.emit(ev)
-        await _finalize_success(ctx, run_ids.get(index), result, subtask_start)
+        await _finalize_success(runtime, ctx, run_ids.get(index), result, subtask_start)
         return {"index": index, "subagent": name, "success": True, "result": result}
     except Exception as exc:
         logger.error("[parallel_delegate_tool] SubAgent '%s' failed: %s", name, exc)
         for ev in buffered_events:
             await ctx.emit(ev)
-        await _finalize_failure(ctx, run_ids.get(index), exc, subtask_start)
+        await _finalize_failure(runtime, ctx, run_ids.get(index), exc, subtask_start)
         return {"index": index, "subagent": name, "success": False, "error": str(exc)}
 
 
@@ -601,8 +634,58 @@ def _format_results(
 
 
 # ---------------------------------------------------------------------------
-# Factory for nested delegate ToolDefinitions
+# Runtime-bound delegate ToolDefinition factories
 # ---------------------------------------------------------------------------
+
+
+def _bind_delegate_tool_info(
+    template: ToolInfo,
+    runtime: DelegateToolRuntime,
+) -> ToolInfo:
+    """Clone static tool metadata with operation-local dependencies."""
+
+    async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _delegate_runtime.set(runtime)
+        try:
+            return await template.execute(ctx, **kwargs)
+        finally:
+            _delegate_runtime.reset(token)
+
+    return replace(template, execute=_execute)
+
+
+def make_delegate_tool_defs(
+    *,
+    subagent_names: list[str],
+    subagent_descriptions: Mapping[str, str],
+    execute_callback: Callable[..., Coroutine[Any, Any, str]] | None,
+    run_registry: SubAgentRunRegistry | None,
+    conversation_id: str | None,
+    delegation_depth: int,
+    max_active_runs: int,
+    include_parallel: bool = False,
+    max_concurrency: int = 5,
+) -> list[Any]:
+    """Build delegate definitions that capture one immutable runtime."""
+    from src.infrastructure.agent.core.tool_converter import convert_tools
+
+    runtime = _delegate_runtime_from_dependencies(
+        execute_callback=execute_callback,
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        subagent_names=subagent_names,
+        subagent_descriptions=subagent_descriptions,
+        delegation_depth=delegation_depth,
+        max_active_runs=max_active_runs,
+        max_concurrency=max_concurrency,
+    )
+    templates = [delegate_subagent_tool]
+    if include_parallel:
+        templates.append(parallel_delegate_subagent_tool)
+    return [
+        convert_tools({template.name: _bind_delegate_tool_info(template, runtime)})[0]
+        for template in templates
+    ]
 
 
 def make_nested_delegate_tool_defs(
@@ -617,99 +700,15 @@ def make_nested_delegate_tool_defs(
     include_parallel: bool = False,
     max_concurrency: int = 5,
 ) -> list[Any]:
-    """Build nested delegate ToolDefinitions for use inside SubAgent scopes.
-
-    Returns a list of ``ToolDefinition`` objects for the delegate tools
-    (single + optional parallel).
-
-    Because the ``@tool_define`` functions read from module-level globals, each
-    closure produced here snapshots the current globals, re-configures them for
-    the nested scope, delegates to the ``@tool_define`` execute, and restores
-    the originals in a ``finally`` block.
-    """
-    from src.infrastructure.agent.processor.processor import ToolDefinition
-
-    # References to the @tool_define ToolInfo objects (module-level singletons)
-    single_info = delegate_subagent_tool
-    parallel_info = parallel_delegate_subagent_tool
-    single_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-    parallel_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
-
-    # -- helpers to snapshot / restore module globals -----------------------
-
-    _delegate_global_names = [
-        "_delegate_execute_callback",
-        "_delegate_run_registry",
-        "_delegate_conversation_id",
-        "_delegate_subagent_names",
-        "_delegate_subagent_descriptions",
-        "_delegate_delegation_depth",
-        "_delegate_max_active_runs",
-        "_delegate_max_concurrency",
-    ]
-
-    _mod = __import__(__name__)
-    # Resolve to actual submodule via dotted path
-    for part in __name__.split(".")[1:]:
-        _mod = getattr(_mod, part)
-
-    def _snapshot(names: list[str]) -> dict[str, Any]:
-        return {n: getattr(_mod, n) for n in names}
-
-    def _restore(snap: dict[str, Any]) -> None:
-        for n, v in snap.items():
-            setattr(_mod, n, v)
-
-    # -- closures that configure + execute + restore -----------------------
-
-    def _make_delegate_tool(
-        tool_info: Any,
-        runtime_context: _NestedToolRuntimeContext,
-    ) -> Callable[..., Any]:
-        """Wrap a delegate @tool_define for nested scope."""
-
-        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
-            active_ctx = ctx if ctx is not None else runtime_context.get_context()
-            snap = _snapshot(_delegate_global_names)
-            try:
-                configure_delegate_subagent(
-                    execute_callback=execute_callback,
-                    run_registry=run_registry,
-                    conversation_id=conversation_id,
-                    subagent_names=subagent_names,
-                    subagent_descriptions=subagent_descriptions,
-                    delegation_depth=delegation_depth,
-                    max_active_runs=max_active_runs,
-                    max_concurrency=max_concurrency,
-                )
-                return await tool_info.execute(active_ctx, **kwargs)
-            finally:
-                _restore(snap)
-
-        return _execute
-
-    # -- assemble ToolDefinition list --------------------------------------
-
-    result: list[ToolDefinition] = []
-    result.append(
-        ToolDefinition(
-            name=single_info.name,
-            description=single_info.description,
-            parameters=single_info.parameters,
-            execute=_make_delegate_tool(single_info, single_runtime),
-            _tool_instance=single_runtime,
-        )
+    """Build operation-bound delegate definitions for a nested scope."""
+    return make_delegate_tool_defs(
+        subagent_names=subagent_names,
+        subagent_descriptions=subagent_descriptions,
+        execute_callback=execute_callback,
+        run_registry=run_registry,
+        conversation_id=conversation_id,
+        delegation_depth=delegation_depth,
+        max_active_runs=max_active_runs,
+        include_parallel=include_parallel,
+        max_concurrency=max_concurrency,
     )
-
-    if include_parallel:
-        result.append(
-            ToolDefinition(
-                name=parallel_info.name,
-                description=parallel_info.description,
-                parameters=parallel_info.parameters,
-                execute=_make_delegate_tool(parallel_info, parallel_runtime),
-                _tool_instance=parallel_runtime,
-            )
-        )
-
-    return result

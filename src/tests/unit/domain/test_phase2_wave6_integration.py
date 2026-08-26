@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -194,20 +194,19 @@ class TestE2EToolKillSteerViaTools:
 
         cancel_cb = AsyncMock(return_value=True)
 
-        with (
-            patch("src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry", registry),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_cancel_callback", cancel_cb
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "parent-conv",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel", channel
-            ),
-        ):
-            count = await _ctrl_exec_cancellations(ctx, {"run-target": "root"}, "target")
+        from src.infrastructure.agent.tools.subagent_sessions import (
+            configure_subagents_control,
+        )
+
+        configure_subagents_control(
+            run_registry=registry,
+            conversation_id="parent-conv",
+            subagent_names=["worker"],
+            subagent_descriptions={"worker": "Worker"},
+            cancel_callback=cancel_cb,
+            control_channel=channel,
+        )
+        count = await _ctrl_exec_cancellations(ctx, {"run-target": "root"}, "target")
 
         assert count == 1
         channel.send_control.assert_awaited_once()
@@ -234,17 +233,19 @@ class TestE2EToolKillSteerViaTools:
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
 
-        with (
-            patch("src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry", registry),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "parent-conv",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel", channel
-            ),
-        ):
-            result = await _ctrl_steer_metadata_only(ctx, "run-steer", "change focus")
+        from src.infrastructure.agent.tools.subagent_sessions import (
+            configure_subagents_control,
+        )
+
+        configure_subagents_control(
+            run_registry=registry,
+            conversation_id="parent-conv",
+            subagent_names=["worker"],
+            subagent_descriptions={"worker": "Worker"},
+            cancel_callback=AsyncMock(return_value=True),
+            control_channel=channel,
+        )
+        result = await _ctrl_steer_metadata_only(ctx, "run-steer", "change focus")
 
         assert not result.is_error
         channel.send_control.assert_awaited_once()

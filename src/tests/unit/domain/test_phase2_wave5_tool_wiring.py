@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -40,6 +40,29 @@ def _make_subagent_run() -> MagicMock:
     return run
 
 
+def _configure_control_runtime(
+    *,
+    registry: MagicMock | None = None,
+    channel: AsyncMock | None = None,
+    cancel_callback: AsyncMock | None = None,
+    restart_callback: AsyncMock | None = None,
+    conversation_id: str = "conv-1",
+) -> None:
+    from src.infrastructure.agent.tools.subagent_sessions import (
+        configure_subagents_control,
+    )
+
+    configure_subagents_control(
+        run_registry=registry or MagicMock(),
+        conversation_id=conversation_id,
+        subagent_names=["test-agent"],
+        subagent_descriptions={"test-agent": "Test agent"},
+        cancel_callback=cancel_callback or AsyncMock(return_value=True),
+        restart_callback=restart_callback,
+        control_channel=channel,
+    )
+
+
 @pytest.mark.unit
 class TestCtrlSendControlMessage:
     async def test_noop_when_channel_is_none(self) -> None:
@@ -47,11 +70,8 @@ class TestCtrlSendControlMessage:
             _ctrl_send_control_message,  # pyright: ignore[reportPrivateUsage]
         )
 
-        with patch(
-            "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-            None,
-        ):
-            await _ctrl_send_control_message("run-1", ControlMessageType.KILL)
+        _configure_control_runtime()
+        await _ctrl_send_control_message("run-1", ControlMessageType.KILL)
 
     async def test_sends_message_when_channel_present(self) -> None:
         from src.infrastructure.agent.tools.subagent_sessions import (
@@ -60,17 +80,8 @@ class TestCtrlSendControlMessage:
 
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-        ):
-            await _ctrl_send_control_message("run-1", ControlMessageType.STEER, "go left")
+        _configure_control_runtime(channel=channel)
+        await _ctrl_send_control_message("run-1", ControlMessageType.STEER, "go left")
         channel.send_control.assert_awaited_once()
         sent: ControlMessage = channel.send_control.call_args[0][0]
         assert sent.run_id == "run-1"
@@ -85,17 +96,8 @@ class TestCtrlSendControlMessage:
 
         channel = AsyncMock()
         channel.send_control = AsyncMock(side_effect=RuntimeError("redis down"))
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-        ):
-            await _ctrl_send_control_message("run-1", ControlMessageType.KILL)
+        _configure_control_runtime(channel=channel)
+        await _ctrl_send_control_message("run-1", ControlMessageType.KILL)
 
     async def test_cascade_flag_forwarded(self) -> None:
         from src.infrastructure.agent.tools.subagent_sessions import (
@@ -104,17 +106,8 @@ class TestCtrlSendControlMessage:
 
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-        ):
-            await _ctrl_send_control_message("run-1", ControlMessageType.KILL, cascade=True)
+        _configure_control_runtime(channel=channel)
+        await _ctrl_send_control_message("run-1", ControlMessageType.KILL, cascade=True)
         sent: ControlMessage = channel.send_control.call_args[0][0]
         assert sent.cascade is True
 
@@ -131,21 +124,8 @@ class TestSteerMetadataOnlySendsControlMessage:
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
 
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry",
-                registry,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-        ):
-            result = await _ctrl_steer_metadata_only(ctx, "run-1", "focus on tests")
+        _configure_control_runtime(registry=registry, channel=channel)
+        result = await _ctrl_steer_metadata_only(ctx, "run-1", "focus on tests")
 
         assert not result.is_error
         channel.send_control.assert_awaited_once()
@@ -165,21 +145,8 @@ class TestSteerMetadataOnlySendsControlMessage:
         channel = AsyncMock()
         channel.send_control = AsyncMock(return_value=True)
 
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry",
-                registry,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-        ):
-            result = await _ctrl_steer_metadata_only(ctx, "run-1", "focus on tests")
+        _configure_control_runtime(registry=registry, channel=channel)
+        result = await _ctrl_steer_metadata_only(ctx, "run-1", "focus on tests")
 
         assert result.is_error
         channel.send_control.assert_not_awaited()
@@ -227,29 +194,13 @@ class TestSteerWithRestartSendsKill:
         channel.send_control = AsyncMock(side_effect=track_send)
         cancel_cb = AsyncMock(side_effect=track_cancel)
 
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry",
-                registry,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_cancel_callback",
-                cancel_cb,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_restart_callback",
-                restart_cb,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-        ):
-            result = await _ctrl_steer_with_restart(ctx, run, "new direction")
+        _configure_control_runtime(
+            registry=registry,
+            channel=channel,
+            cancel_callback=cancel_cb,
+            restart_callback=restart_cb,
+        )
+        result = await _ctrl_steer_with_restart(ctx, run, "new direction")
 
         assert not result.is_error
         assert call_order == ["send_control", "cancel_callback"]
@@ -288,25 +239,12 @@ class TestExecCancellationsSendsKill:
         registry.mark_cancelled.return_value = cancelled_run
         cancel_cb = AsyncMock(return_value=True)
 
-        with (
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_run_registry",
-                registry,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_cancel_callback",
-                cancel_cb,
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_conversation_id",
-                "conv-1",
-            ),
-            patch(
-                "src.infrastructure.agent.tools.subagent_sessions._ctrl_control_channel",
-                channel,
-            ),
-        ):
-            count = await _ctrl_exec_cancellations(ctx, {"run-a": "run-root"}, "target")
+        _configure_control_runtime(
+            registry=registry,
+            channel=channel,
+            cancel_callback=cancel_cb,
+        )
+        count = await _ctrl_exec_cancellations(ctx, {"run-a": "run-root"}, "target")
 
         assert count == 1
         channel.send_control.assert_awaited_once()

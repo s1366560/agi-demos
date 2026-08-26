@@ -279,7 +279,9 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                 abort_signal=None,
             )
 
-            assert list(raw_tools) == ["echo"]
+            assert raw_tools["echo"] is echo
+            assert "agent_spawn" in raw_tools
+            assert "workspace_report_complete" in raw_tools
             assert [skill.name for skill in capabilities.skills] == ["echo-skill"]
             assert [subagent.name for subagent in capabilities.subagents] == ["echo-reviewer"]
             assert "delegate_to_subagent" in {tool.name for tool in tool_definitions}

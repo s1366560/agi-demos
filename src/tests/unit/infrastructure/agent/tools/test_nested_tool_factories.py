@@ -13,7 +13,7 @@ from src.infrastructure.agent.tools.subagent_sessions import make_nested_session
 @pytest.mark.unit
 class TestNestedDelegateToolDefinitions:
     @pytest.mark.asyncio
-    async def test_execute_without_ctx_uses_injected_runtime_context(self) -> None:
+    async def test_tool_info_execute_uses_pipeline_runtime_context(self) -> None:
         callback = AsyncMock(return_value="done")
         tool = make_nested_delegate_tool_defs(
             subagent_names=["worker"],
@@ -36,9 +36,11 @@ class TestNestedDelegateToolDefinitions:
                 "root_goal_task_id": "root-1",
             },
         )
-        tool._tool_instance.set_runtime_context(runtime_ctx)
-
-        result = await tool.execute(subagent_name="worker", task="Implement the task")
+        result = await tool._tool_instance.execute(
+            runtime_ctx,
+            subagent_name="worker",
+            task="Implement the task",
+        )
 
         assert result.is_error is True
         assert "workspace_task_id" in result.output

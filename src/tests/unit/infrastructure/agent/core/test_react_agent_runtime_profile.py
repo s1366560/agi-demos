@@ -376,8 +376,6 @@ class TestReActAgentRuntimeProfile:
         assert [tool.name for tool in result] == ["read"]
 
     def test_selected_agent_spawn_policy_filters_subagents_and_limits_sessions(self) -> None:
-        from src.infrastructure.agent.tools import subagent_sessions
-
         agent = _make_react_agent(
             subagents=[_make_subagent("planner"), _make_subagent("reviewer")],
             max_subagent_delegation_depth=5,
@@ -408,15 +406,15 @@ class TestReActAgentRuntimeProfile:
         )
 
         assert "delegate_to_subagent" in {tool.name for tool in result}
-        assert subagent_sessions._sess_subagent_names == ["planner"]
-        assert subagent_sessions._sess_max_delegation_depth == 2
-        assert subagent_sessions._sess_max_active_runs == 3
-        assert subagent_sessions._sess_max_active_runs_per_lineage == 3
-        assert subagent_sessions._sess_max_children_per_requester == 1
+        sessions_list = next(tool for tool in result if tool.name == "sessions_list")
+        runtime = sessions_list._tool_instance.execute.runtime
+        assert runtime.core.subagent_names == ("planner",)
+        assert runtime.core.max_delegation_depth == 2
+        assert runtime.core.max_active_runs == 3
+        assert runtime.core.max_active_runs_per_lineage == 3
+        assert runtime.core.max_children_per_requester == 1
 
-    def test_subagent_injection_uses_runtime_set_without_static_fallback(self) -> None:
-        from src.infrastructure.agent.tools import subagent_sessions
-
+    def test_subagent_injection_binds_runtime_without_static_fallback(self) -> None:
         agent = _make_react_agent(
             subagents=[_make_subagent("static-agent")],
         )
@@ -434,7 +432,9 @@ class TestReActAgentRuntimeProfile:
         )
 
         assert "delegate_to_subagent" in {tool.name for tool in result}
-        assert subagent_sessions._sess_subagent_names == ["runtime-agent"]
+        sessions_list = next(tool for tool in result if tool.name == "sessions_list")
+        runtime = sessions_list._tool_instance.execute.runtime
+        assert runtime.core.subagent_names == ("runtime-agent",)
 
     def test_workspace_worker_preserves_tenant_enabled_tool_policy_for_code_tools(self) -> None:
         agent = _make_react_agent()

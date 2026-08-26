@@ -32,23 +32,9 @@ def tool_ctx():
 def _reset_delegate_state():
     from src.infrastructure.agent.tools import delegate_subagent as mod
 
-    mod._delegate_execute_callback = None
-    mod._delegate_run_registry = None
-    mod._delegate_conversation_id = None
-    mod._delegate_subagent_names = []
-    mod._delegate_subagent_descriptions = {}
-    mod._delegate_delegation_depth = 0
-    mod._delegate_max_active_runs = None
-    mod._delegate_max_concurrency = 5
+    token = mod._delegate_runtime.set(None)  # pyright: ignore[reportPrivateUsage]
     yield
-    mod._delegate_execute_callback = None
-    mod._delegate_run_registry = None
-    mod._delegate_conversation_id = None
-    mod._delegate_subagent_names = []
-    mod._delegate_subagent_descriptions = {}
-    mod._delegate_delegation_depth = 0
-    mod._delegate_max_active_runs = None
-    mod._delegate_max_concurrency = 5
+    mod._delegate_runtime.reset(token)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.unit
