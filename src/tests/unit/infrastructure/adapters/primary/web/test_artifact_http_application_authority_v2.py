@@ -1,4 +1,4 @@
-"""Request-lifetime coverage for the Artifact lifecycle V2 authority."""
+"""Request-lifetime coverage for the unified Artifact HTTP V2 authority."""
 
 from __future__ import annotations
 
@@ -12,16 +12,16 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
-from src.infrastructure.adapters.primary.web.artifact_lifecycle_application_authority_v2 import (
-    ArtifactLifecycleApplicationAuthorityV2,
+from src.infrastructure.adapters.primary.web.artifact_http_application_authority_v2 import (
+    ArtifactHttpApplicationAuthorityV2,
     _route_template,
-    artifact_lifecycle_application_authority_dependency_v2,
+    artifact_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers import artifacts
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.plugins.v2.artifact_lifecycle_services import (
-    ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2,
-    ArtifactLifecycleApplicationServiceV2,
+from src.infrastructure.plugins.v2.artifact_http_services import (
+    ARTIFACT_HTTP_APPLICATION_SERVICE_V2,
+    ArtifactHttpApplicationResolverProtocolV2,
 )
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -38,18 +38,15 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[7]
 
 
-def _request(
-    *,
-    path: str = "/api/v1/artifacts",
-    route_template: str | None = "/api/v1/artifacts",
-) -> Request:
+def _request(*, route_template: str | None = "/api/v1/artifacts/{artifact_id}") -> Request:
     scope: dict[str, Any] = {
         "type": "http",
         "app": FastAPI(),
         "headers": [],
         "method": "GET",
-        "path": path,
-        "query_string": b"project_id=project-a",
+        "path": "/api/v1/artifacts/artifact-sensitive-id",
+        "path_params": {"artifact_id": "artifact-sensitive-id"},
+        "query_string": b"",
         "scheme": "http",
         "server": ("test", 80),
     }
@@ -59,53 +56,51 @@ def _request(
 
 
 def test_unresolved_route_template_never_records_raw_artifact_id() -> None:
-    request = _request(
-        path="/api/v1/artifacts/artifact-sensitive-id",
-        route_template=None,
-    )
-
-    route_template = _route_template(request)
+    route_template = _route_template(_request(route_template=None))
 
     assert route_template == "-"
     assert "artifact-sensitive-id" not in route_template
 
 
-async def test_authority_uses_pinned_generation_and_operation_metadata() -> None:
+async def test_authority_resolves_one_operation_owned_artifact_http_service() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
         profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
         manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
-        generation=162,
-        version=162,
+        generation=166,
+        version=166,
     )
     db = AsyncSession()
-    user = cast(User, SimpleNamespace(id="user-a"))
+    user = cast(
+        User,
+        SimpleNamespace(id="user-a", is_superuser=False),
+    )
     dependency = None
     authority = None
     try:
         async with pin_generation_v2(host):
-            dependency = artifact_lifecycle_application_authority_dependency_v2(
+            dependency = artifact_http_application_authority_dependency_v2(
                 request=_request(),
                 current_user=user,
                 db=db,
             )
             authority = await anext(dependency)
-            expected = authority.operation.require(ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2)
+            resolver = authority.operation.require(ARTIFACT_HTTP_APPLICATION_SERVICE_V2)
 
+            assert isinstance(authority, ArtifactHttpApplicationAuthorityV2)
+            assert isinstance(resolver, ArtifactHttpApplicationResolverProtocolV2)
             assert authority.operation.phase is FiberPhaseV2.ACTIVE
-            assert authority.operation.descriptor.generation == 162
-            assert authority.db is db
-            assert isinstance(expected, ArtifactLifecycleApplicationServiceV2)
-            assert authority.artifact is expected.artifact
+            assert authority.operation.descriptor.generation == 166
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": None,
                 "user_id": "user-a",
+                "is_superuser": False,
             }
             assert authority.operation.require(OPERATION_METADATA_SERVICE_V2) == {
                 "kind": "http-authority",
                 "method": "GET",
-                "path": "/api/v1/artifacts",
+                "path": "/api/v1/artifacts/{artifact_id}",
             }
             await dependency.aclose()
 
@@ -124,13 +119,13 @@ async def test_authority_fails_closed_without_a_pinned_generation(
         raise RuntimeV2Error("generation_not_pinned", "test")
 
     monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.artifact_lifecycle_application_authority_v2.current_generation_v2",
+        "src.infrastructure.adapters.primary.web.artifact_http_application_authority_v2.current_generation_v2",
         missing_generation,
     )
     db = AsyncSession()
-    dependency = artifact_lifecycle_application_authority_dependency_v2(
+    dependency = artifact_http_application_authority_dependency_v2(
         request=_request(),
-        current_user=cast(User, SimpleNamespace(id="user-a")),
+        current_user=cast(User, SimpleNamespace(id="user-a", is_superuser=False)),
         db=db,
     )
     try:
@@ -143,29 +138,39 @@ async def test_authority_fails_closed_without_a_pinned_generation(
     assert error.value.code == "generation_not_pinned"
 
 
-def test_lifecycle_routes_depend_only_on_the_v2_authority() -> None:
-    getter_parameters = signature(artifacts.get_artifact_service).parameters
-    authority_parameter = getter_parameters["artifact_lifecycle_application"]
-    assert authority_parameter.default.dependency is (
-        artifact_lifecycle_application_authority_dependency_v2
-    )
-    assert authority_parameter.annotation in {
-        "ArtifactLifecycleApplicationAuthorityV2",
-        ArtifactLifecycleApplicationAuthorityV2,
-    }
-    assert "request" not in getter_parameters
-    assert "db" not in getter_parameters
-
-    for endpoint in (
+def test_all_artifact_routes_depend_only_on_the_unified_v2_authority() -> None:
+    endpoints = (
         artifacts.list_artifacts,
         artifacts.get_artifact,
+        artifacts.download_artifact,
+        artifacts.get_artifact_content,
+        artifacts.get_artifact_content_bytes,
         artifacts.refresh_artifact_url,
+        artifacts.update_artifact_content,
         artifacts.delete_artifact,
-    ):
-        service_parameter = signature(endpoint).parameters["service"]
-        assert service_parameter.default.dependency is artifacts.get_artifact_service
+        artifacts.list_categories,
+    )
+    for endpoint in endpoints:
+        parameters = signature(endpoint).parameters
+        authority_parameter = parameters["artifact_application"]
+        assert authority_parameter.default.dependency is (
+            artifact_http_application_authority_dependency_v2
+        )
+        assert authority_parameter.annotation in {
+            "ArtifactHttpApplicationAuthorityV2",
+            ArtifactHttpApplicationAuthorityV2,
+        }
+        assert not {"current_user", "db", "service", "reconciler"}.intersection(parameters)
 
     source = getsource(artifacts)
-    assert "_artifact_service:" not in source
-    assert "global _artifact_service" not in source
-    assert "get_app_container" not in source
+    for forbidden in (
+        "get_current_user",
+        "get_db",
+        "UserProject",
+        "refresh_select_statement",
+        "verify_project_access",
+        "get_artifact_service",
+        "get_artifact_content_authority_service",
+        "get_artifact_content_commit_reconciler",
+    ):
+        assert forbidden not in source

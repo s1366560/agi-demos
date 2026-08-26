@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from src.application.services.artifact_content_authority_service import (
     MAX_ARTIFACT_PREVIEW_BYTES,
+    ArtifactContentAuthorityService,
     ArtifactContentBytes,
     ArtifactContentDownload,
     ArtifactContentSaveOutcome,
@@ -22,30 +24,30 @@ from src.application.services.artifact_content_contract import (
     ArtifactContentRevisionConflictError,
     ArtifactContentSaveReceipt,
 )
+from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import Artifact, ArtifactCategory, ArtifactStatus
 from src.domain.ports.repositories.artifact_content_authority_repository import (
     ArtifactContentScope,
 )
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.artifact_http_application_authority_v2 import (
+    ArtifactHttpApplicationAuthorityV2,
+    artifact_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers import artifacts as artifacts_router
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import UserProject
+from src.infrastructure.plugins.v2.artifact_content_persistence import (
+    ArtifactContentCommitReconcilerProtocolV2,
+)
+from src.infrastructure.plugins.v2.artifact_http_services import (
+    ArtifactHttpApplicationServicesV2,
+    ArtifactRequestTransactionProtocolV2,
+    SqlArtifactProjectAccessV2,
+)
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
 
 USER_ID = "user-artifacts"
 PROJECT_ID = "project-artifacts"
 OTHER_PROJECT_ID = "project-other"
-
-
-@pytest.fixture
-def artifact_user() -> User:
-    return User(
-        id=USER_ID,
-        email="artifact-user@example.com",
-        hashed_password="hashed",
-        full_name="Artifact User",
-        is_active=True,
-        is_superuser=False,
-    )
 
 
 @pytest.fixture
@@ -88,31 +90,47 @@ def artifact_content_commit_reconciler_mock() -> AsyncMock:
 
 
 @pytest.fixture
-def artifacts_client(
+def artifact_request_transaction_mock() -> AsyncMock:
+    return AsyncMock()
+
+
+@pytest.fixture
+def artifact_application(
     test_db,
-    artifact_user,
     artifact_service_mock,
     artifact_content_authority_mock,
     artifact_content_commit_reconciler_mock,
+    artifact_request_transaction_mock,
+) -> ArtifactHttpApplicationAuthorityV2:
+    return ArtifactHttpApplicationAuthorityV2(
+        operation=cast(OperationContextV2, object()),
+        services=ArtifactHttpApplicationServicesV2(
+            artifacts=cast(ArtifactService, artifact_service_mock),
+            content=cast(ArtifactContentAuthorityService, artifact_content_authority_mock),
+            reconciler=cast(
+                ArtifactContentCommitReconcilerProtocolV2,
+                artifact_content_commit_reconciler_mock,
+            ),
+            access=SqlArtifactProjectAccessV2(_session=test_db),
+            transaction=cast(
+                ArtifactRequestTransactionProtocolV2,
+                artifact_request_transaction_mock,
+            ),
+            user_id=USER_ID,
+            is_superuser=False,
+        ),
+    )
+
+
+@pytest.fixture
+def artifacts_client(
+    artifact_application: ArtifactHttpApplicationAuthorityV2,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(artifacts_router.router)
-
-    async def override_get_current_user() -> User:
-        return artifact_user
-
-    async def override_get_db():
-        yield test_db
-
-    app.dependency_overrides[get_current_user] = override_get_current_user
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[artifacts_router.get_artifact_content_authority_service] = (
-        lambda: artifact_content_authority_mock
+    app.dependency_overrides[artifact_http_application_authority_dependency_v2] = (
+        lambda: artifact_application
     )
-    app.dependency_overrides[artifacts_router.get_artifact_content_commit_reconciler] = (
-        lambda: artifact_content_commit_reconciler_mock
-    )
-    app.dependency_overrides[artifacts_router.get_artifact_service] = lambda: artifact_service_mock
     return TestClient(app)
 
 
@@ -420,7 +438,7 @@ class TestArtifactContentContractV2Router:
         artifacts_client,
         artifact_content_authority_mock,
         artifact_content_commit_reconciler_mock,
-        monkeypatch,
+        artifact_request_transaction_mock,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("updated")
@@ -437,15 +455,11 @@ class TestArtifactContentContractV2Router:
             request_hash=self._hash("request"),
         )
         artifact_content_authority_mock.save_content.return_value = outcome
-        monkeypatch.setattr(
-            test_db,
-            "commit",
-            AsyncMock(side_effect=RuntimeError("database commit failed")),
+        artifact_request_transaction_mock.commit.side_effect = RuntimeError(
+            "database commit failed"
         )
-        monkeypatch.setattr(
-            test_db,
-            "rollback",
-            AsyncMock(side_effect=RuntimeError("failed request session")),
+        artifact_request_transaction_mock.rollback.side_effect = RuntimeError(
+            "failed request session"
         )
 
         with pytest.raises(RuntimeError, match="database commit failed"):
@@ -466,10 +480,10 @@ class TestArtifactContentContractV2Router:
     async def test_content_put_waits_for_commit_success_before_propagating_cancellation(
         self,
         test_db,
-        artifact_user,
+        artifact_application,
         artifact_content_authority_mock,
         artifact_content_commit_reconciler_mock,
-        monkeypatch,
+        artifact_request_transaction_mock,
     ) -> None:
         await self._grant_project_access(test_db)
         content_hash = self._hash("commit-wins")
@@ -495,9 +509,7 @@ class TestArtifactContentContractV2Router:
             await release_commit.wait()
             commit_finished.set()
 
-        rollback = AsyncMock()
-        monkeypatch.setattr(test_db, "commit", controlled_commit)
-        monkeypatch.setattr(test_db, "rollback", rollback)
+        artifact_request_transaction_mock.commit.side_effect = controlled_commit
 
         request_task = asyncio.create_task(
             artifacts_router.update_artifact_content(
@@ -509,10 +521,7 @@ class TestArtifactContentContractV2Router:
                     idempotency_key="artifact-1:save:commit-wins",
                     content="commit-wins",
                 ),
-                current_user=artifact_user,
-                db=test_db,
-                service=artifact_content_authority_mock,
-                reconciler=artifact_content_commit_reconciler_mock,
+                artifact_application=artifact_application,
             )
         )
         await asyncio.wait_for(commit_started.wait(), timeout=1)
@@ -523,17 +532,17 @@ class TestArtifactContentContractV2Router:
             await asyncio.wait_for(request_task, timeout=1)
 
         assert commit_finished.is_set()
-        rollback.assert_not_awaited()
+        artifact_request_transaction_mock.rollback.assert_not_awaited()
         artifact_content_commit_reconciler_mock.reconcile.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_content_put_reconciles_commit_failure_before_propagating_cancellation(
         self,
         test_db,
-        artifact_user,
+        artifact_application,
         artifact_content_authority_mock,
         artifact_content_commit_reconciler_mock,
-        monkeypatch,
+        artifact_request_transaction_mock,
         caplog,
     ) -> None:
         await self._grant_project_access(test_db)
@@ -561,9 +570,7 @@ class TestArtifactContentContractV2Router:
             commit_failed.set()
             raise RuntimeError("database commit failed")
 
-        rollback = AsyncMock()
-        monkeypatch.setattr(test_db, "commit", controlled_commit)
-        monkeypatch.setattr(test_db, "rollback", rollback)
+        artifact_request_transaction_mock.commit.side_effect = controlled_commit
 
         request_task = asyncio.create_task(
             artifacts_router.update_artifact_content(
@@ -575,10 +582,7 @@ class TestArtifactContentContractV2Router:
                     idempotency_key="artifact-1:save:commit-fails",
                     content="commit-fails",
                 ),
-                current_user=artifact_user,
-                db=test_db,
-                service=artifact_content_authority_mock,
-                reconciler=artifact_content_commit_reconciler_mock,
+                artifact_application=artifact_application,
             )
         )
         await asyncio.wait_for(commit_started.wait(), timeout=1)
@@ -589,7 +593,7 @@ class TestArtifactContentContractV2Router:
             await asyncio.wait_for(request_task, timeout=1)
 
         assert commit_failed.is_set()
-        rollback.assert_awaited_once()
+        artifact_request_transaction_mock.rollback.assert_awaited_once()
         artifact_content_commit_reconciler_mock.reconcile.assert_awaited_once_with(outcome)
         assert any(
             record.levelname == "ERROR"
@@ -604,7 +608,7 @@ class TestArtifactContentContractV2Router:
         test_db,
         artifacts_client,
         artifact_content_authority_mock,
-        monkeypatch,
+        artifact_request_transaction_mock,
         tmp_path,
     ) -> None:
         await self._grant_project_access(test_db)
@@ -619,10 +623,8 @@ class TestArtifactContentContractV2Router:
             size_bytes=5,
             staged_path=staged_path,
         )
-        monkeypatch.setattr(
-            test_db,
-            "commit",
-            AsyncMock(side_effect=RuntimeError("database commit failed")),
+        artifact_request_transaction_mock.commit.side_effect = RuntimeError(
+            "database commit failed"
         )
 
         with pytest.raises(RuntimeError, match="database commit failed"):
@@ -634,9 +636,9 @@ class TestArtifactContentContractV2Router:
     async def test_download_cancellation_during_hash_commit_discards_staged_file(
         self,
         test_db,
-        artifact_user,
+        artifact_application,
         artifact_content_authority_mock,
-        monkeypatch,
+        artifact_request_transaction_mock,
         tmp_path,
     ) -> None:
         await self._grant_project_access(test_db)
@@ -657,13 +659,11 @@ class TestArtifactContentContractV2Router:
             commit_started.set()
             await release_commit.wait()
 
-        monkeypatch.setattr(test_db, "commit", controlled_commit)
+        artifact_request_transaction_mock.commit.side_effect = controlled_commit
         request_task = asyncio.create_task(
             artifacts_router.download_artifact(
                 artifact_id="artifact-1",
-                current_user=artifact_user,
-                db=test_db,
-                service=artifact_content_authority_mock,
+                artifact_application=artifact_application,
             )
         )
         await asyncio.wait_for(commit_started.wait(), timeout=1)

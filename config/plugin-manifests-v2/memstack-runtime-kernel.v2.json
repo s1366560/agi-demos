@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:15c77dc487ac44e4bee30e17c0952ceb78de2611f15f7e2dca758d3f85c9bb57",
+        "digest": "sha256:24ca2747d7cf5daa425f49b4c7e495475b56d3d5d24de2d1fb7ee56e6c632365",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2783,6 +2783,84 @@
       "artifact": {
         "digest": "sha256:a105276315578732aa4f0375e0c041d994b6f8c95448f720ad41e7b84b2de8e5",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/artifact-http-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_http_services:artifact_http_persistence_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.artifact-http-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:dde91993a015a86e96659e76ddf988d3b418be39e3ed1f685fc230c002b9e9ee",
+      "artifact": {
+        "digest": "sha256:b785f89e3c920200555414f6b60ed2a5dc6090f28954b4bd0cc56110c845989f",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_http_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/artifact-http-services",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_http_services:artifact_http_application_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.artifact-http-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.artifact-http-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "lifecycle",
+              "service": "service:application.artifact-lifecycle-services",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "content",
+              "service": "service:application.artifact-content-services",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3e5d5fabe174db2830ec452d6ccfa761e192e5bbda532d41dee76b07ad5a8a5c",
+      "artifact": {
+        "digest": "sha256:b785f89e3c920200555414f6b60ed2a5dc6090f28954b4bd0cc56110c845989f",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_http_services.py"
       }
     },
     {

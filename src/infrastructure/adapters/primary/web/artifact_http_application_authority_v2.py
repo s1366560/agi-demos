@@ -1,5 +1,5 @@
 # pyright: reportImportCycles=false
-"""FastAPI authority for generation-owned Artifact lifecycle services."""
+"""FastAPI authority dependency for generation-owned Artifact HTTP services."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from uuid import uuid4
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.artifact_service import ArtifactService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.plugins.v2.artifact_lifecycle_services import (
-    ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2,
-    ArtifactLifecycleApplicationServiceV2,
+from src.infrastructure.plugins.v2.artifact_http_services import (
+    ARTIFACT_HTTP_APPLICATION_SERVICE_V2,
+    ArtifactHttpApplicationResolverProtocolV2,
+    ArtifactHttpApplicationServicesV2,
 )
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -29,12 +29,11 @@ from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2E
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArtifactLifecycleApplicationAuthorityV2:
-    """Request-owned generation lease and Artifact lifecycle service."""
+class ArtifactHttpApplicationAuthorityV2:
+    """Request-owned Artifact services and their disposable operation boundary."""
 
     operation: OperationContextV2
-    db: AsyncSession
-    artifact: ArtifactService
+    services: ArtifactHttpApplicationServicesV2
 
 
 def _route_template(request: Request) -> str:
@@ -43,22 +42,26 @@ def _route_template(request: Request) -> str:
     return route_path if isinstance(route_path, str) else "-"
 
 
-async def artifact_lifecycle_application_authority_dependency_v2(
+async def artifact_http_application_authority_dependency_v2(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> AsyncIterator[ArtifactLifecycleApplicationAuthorityV2]:
-    """Yield the Artifact service from the generation pinned to this request."""
+) -> AsyncIterator[ArtifactHttpApplicationAuthorityV2]:
+    """Yield complete Artifact HTTP services from the request-pinned generation."""
     operation = OperationContextV2(
         generation=current_generation_v2(),
-        operation_id=f"http-artifact-lifecycle-application:{uuid4()}",
+        operation_id=f"http-artifact-application:{uuid4()}",
         scope=ScopeV2(kind=ScopeKindV2.ROOT),
     )
     async with operation:
         _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
         _ = operation.provide(
             OPERATION_IDENTITY_SERVICE_V2,
-            {"tenant_id": None, "user_id": str(current_user.id)},
+            {
+                "tenant_id": None,
+                "user_id": str(current_user.id),
+                "is_superuser": bool(current_user.is_superuser),
+            },
         )
         _ = operation.provide(
             OPERATION_METADATA_SERVICE_V2,
@@ -68,20 +71,19 @@ async def artifact_lifecycle_application_authority_dependency_v2(
                 "path": _route_template(request),
             },
         )
-        service = operation.require(ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2)
-        if not isinstance(service, ArtifactLifecycleApplicationServiceV2):
+        resolver = operation.require(ARTIFACT_HTTP_APPLICATION_SERVICE_V2)
+        if not isinstance(resolver, ArtifactHttpApplicationResolverProtocolV2):
             raise RuntimeV2Error(
-                "invalid_artifact_lifecycle_application_service",
-                "Artifact lifecycle application service has an invalid implementation",
+                "invalid_artifact_http_application_resolver",
+                "Artifact HTTP application service has an invalid implementation",
             )
-        yield ArtifactLifecycleApplicationAuthorityV2(
+        yield ArtifactHttpApplicationAuthorityV2(
             operation=operation,
-            db=db,
-            artifact=service.artifact,
+            services=resolver.resolve(operation),
         )
 
 
 __all__ = [
-    "ArtifactLifecycleApplicationAuthorityV2",
-    "artifact_lifecycle_application_authority_dependency_v2",
+    "ArtifactHttpApplicationAuthorityV2",
+    "artifact_http_application_authority_dependency_v2",
 ]
