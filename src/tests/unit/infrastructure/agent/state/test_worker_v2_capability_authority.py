@@ -390,6 +390,50 @@ async def test_worker_skill_loader_binds_sandbox_without_global_mutation(
 
 
 @pytest.mark.unit
+def test_worker_skill_installer_binds_project_without_global_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = object()
+    captured: dict[str, object] = {}
+
+    def _make_skill_installer(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return marker
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker skill installer must not mutate module-level runtime state")
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.skill_installer.make_skill_installer_tool",
+        _make_skill_installer,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.skill_installer.configure_skill_installer",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        agent_worker_state,
+        "resolve_project_base_path",
+        lambda project_id: Path(f"/projects/{project_id}"),
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_skill_installer_tools(
+        tools,
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+
+    assert tools["skill_installer"] is marker
+    assert captured == {
+        "project_path": Path("/projects/project-a"),
+        "tenant_id": "tenant-a",
+        "project_id": "project-a",
+    }
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

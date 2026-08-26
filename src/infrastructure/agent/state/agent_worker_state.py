@@ -626,17 +626,17 @@ def _add_skill_installer_tools(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Configure the skill_installer @tool_define tool."""
+    """Add a generation-bound skill_installer tool."""
     try:
-        from src.infrastructure.agent.tools.skill_installer import configure_skill_installer
+        from src.infrastructure.agent.tools.skill_installer import make_skill_installer_tool
 
         project_path = resolve_project_base_path(project_id)
-        configure_skill_installer(
+        tools["skill_installer"] = make_skill_installer_tool(
             project_path=project_path,
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        logger.info(f"Agent Worker: skill_installer configured for project {project_id}")
+        logger.info(f"Agent Worker: skill_installer added for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure skill_installer: {e}")
 

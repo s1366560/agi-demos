@@ -20,9 +20,13 @@ Features:
 - Permission manager integration (optional)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,19 +34,35 @@ from typing import Any
 import httpx
 
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
-
 
 
 # === New @tool_define based implementation ===
 
 
 # ---------------------------------------------------------------------------
-# Module-level state for dependency injection
+# Generation-bound runtime with module-level compatibility fallback
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SkillInstallerRuntime:
+    """Dependencies captured by one generation's skill-installer contribution."""
+
+    project_path: Path | None
+    tenant_id: str
+    project_id: str
+    permission_manager: Any
+    session_id: str
+
+
+_skill_installer_runtime: ContextVar[SkillInstallerRuntime | None] = ContextVar(
+    f"{__name__}.skill_installer_runtime",
+    default=None,
+)
 
 _skill_inst_project_path: Path | None = None
 _skill_inst_tenant_id: str = ""
@@ -72,6 +92,19 @@ def configure_skill_installer(
     _skill_inst_session_id = session_id
 
 
+def _current_skill_installer_runtime() -> SkillInstallerRuntime:
+    runtime = _skill_installer_runtime.get()
+    if runtime is not None:
+        return runtime
+    return SkillInstallerRuntime(
+        project_path=_skill_inst_project_path,
+        tenant_id=_skill_inst_tenant_id,
+        project_id=_skill_inst_project_id,
+        permission_manager=_skill_inst_permission_manager,
+        session_id=_skill_inst_session_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Constants (mirrored from class)
 # ---------------------------------------------------------------------------
@@ -90,7 +123,7 @@ def _inst_get_install_path(install_location: str, skill_name: str) -> Path:
     if install_location == "global":
         base_path = Path(os.path.expanduser("~/.memstack/skills"))
     else:
-        project_path = _skill_inst_project_path or Path.cwd()
+        project_path = _current_skill_installer_runtime().project_path or Path.cwd()
         base_path = project_path / ".memstack" / "skills"
     return base_path / skill_name
 
@@ -380,7 +413,10 @@ async def _inst_do_install(
 
     logger.info(
         "Installing skill '%s' from %s/%s to %s",
-        skill_name, owner, repo, install_path,
+        skill_name,
+        owner,
+        repo,
+        install_path,
     )
     result = await _inst_install_skill(owner, repo, skill_name, install_path, branch)
 
@@ -455,10 +491,10 @@ def _inst_validate_inputs(
         return _inst_error_response("skill_source parameter is required")
     if install_location not in ("project", "global"):
         return _inst_error_response(
-            f"Invalid install_location: {install_location}. "
-            "Must be 'project' or 'global'"
+            f"Invalid install_location: {install_location}. Must be 'project' or 'global'"
         )
     return None
+
 
 # ---------------------------------------------------------------------------
 # Tool definition
@@ -532,13 +568,14 @@ async def skill_installer_tool(
     branch: str = "main",
 ) -> ToolResult:
     """Install a skill from the skills.sh ecosystem."""
+    runtime = _current_skill_installer_runtime()
     skill_source = skill_source.strip()
     resolved_name: str | None = skill_name.strip() or None
     install_location = install_location.strip()
     branch = branch.strip()
 
-    tenant_id = _skill_inst_tenant_id
-    project_id = _skill_inst_project_id
+    tenant_id = runtime.tenant_id
+    project_id = runtime.project_id
 
     validation_err = _inst_validate_inputs(skill_source, install_location)
     if validation_err is not None:
@@ -562,8 +599,14 @@ async def skill_installer_tool(
         final_name: str = resolved
 
         return await _inst_do_install(
-            ctx, owner, repo, final_name, install_location, branch,
-            tenant_id, project_id,
+            ctx,
+            owner,
+            repo,
+            final_name,
+            install_location,
+            branch,
+            tenant_id,
+            project_id,
         )
 
     except ValueError as e:
@@ -571,3 +614,38 @@ async def skill_installer_tool(
     except Exception as e:
         logger.error("Failed to install skill from '%s': %s", skill_source, e)
         return _inst_error_response(f"Installation failed: {e!s}")
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSkillInstallerExecutor:
+    template: ToolInfo
+    runtime: SkillInstallerRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _skill_installer_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _skill_installer_runtime.reset(token)
+
+
+def make_skill_installer_tool(
+    *,
+    project_path: Path | None = None,
+    tenant_id: str = "",
+    project_id: str = "",
+    permission_manager: Any = None,
+    session_id: str = "",
+) -> ToolInfo:
+    """Return a skill-installer ToolInfo bound to one generation dependency set."""
+    runtime = SkillInstallerRuntime(
+        project_path=project_path,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        permission_manager=permission_manager,
+        session_id=session_id,
+    )
+    return replace(
+        skill_installer_tool,
+        execute=_BoundSkillInstallerExecutor(template=skill_installer_tool, runtime=runtime),
+    )
