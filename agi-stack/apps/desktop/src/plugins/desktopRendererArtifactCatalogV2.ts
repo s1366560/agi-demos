@@ -1,18 +1,3 @@
-import {
-  createAppAuxiliaryRouteRegistry,
-  createAppProjectAdministrationRouteRegistry,
-  createAppProjectAgentRouteRegistry,
-  createAppProjectDiscoveryRouteRegistry,
-  createAppProjectKnowledgeRouteRegistry,
-  createAppProjectWorkspaceRouteRegistry,
-  createAppRuntimeInfrastructureRouteRegistry,
-  createAppTenantAgentBuildingRouteRegistry,
-  createAppTenantCoreRouteRegistry,
-  createAppTenantExtensionsIntegrationsRouteRegistry,
-  createAppTenantGovernanceRouteRegistry,
-  createAppTenantCreationRouteRegistry,
-  type AppRouteRegistryRefs,
-} from '../features/navigation/appRouteRegistry';
 import { AGENT_WORKSPACE_ROUTE_ID } from '../features/agent-workspace/agentWorkspaceRouteModule';
 import {
   CANONICAL_DESKTOP_NAVIGATION_METADATA,
@@ -73,8 +58,6 @@ import {
   TENANT_WORKSPACES_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
 
-import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
-import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import { PROFILE_ROUTE_ID } from '../features/settings-routes/profileRoutePresentationModel';
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
@@ -129,6 +112,8 @@ export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2 =
 export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.tenant-governance.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
+export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workbench-surface.v1';
 
 const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
 const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
@@ -322,6 +307,17 @@ const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freez
     sandbox: true,
   }),
 ]);
+const WORKBENCH_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workbench_surface',
+    id: 'workbench',
+    contract: 'ui-builtin:desktop-workbench-surface',
+    moduleRef: 'builtin:desktop-workbench-surface',
+    permission: 'ui.workbench',
+    sandbox: true,
+  }),
+]);
 
 interface DesktopRendererArtifactBaseV2 {
   readonly id: string;
@@ -329,7 +325,6 @@ interface DesktopRendererArtifactBaseV2 {
 }
 
 export interface DesktopRouteArtifactV2 extends DesktopRendererArtifactBaseV2 {
-  readonly createRegistry: (refs: AppRouteRegistryRefs) => DesktopRouteRegistry<DesktopRouteModule>;
   readonly kind: 'route';
   readonly routeIds: readonly string[];
 }
@@ -366,7 +361,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
       TENANT_CREATION_ROUTE_IDS_V2,
-      createAppTenantCreationRouteRegistry,
     ),
   ],
   [
@@ -374,7 +368,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
       AUXILIARY_ROUTE_IDS_V2,
-      createAppAuxiliaryRouteRegistry,
     ),
   ],
   [
@@ -382,7 +375,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2,
       PROJECT_KNOWLEDGE_ROUTE_IDS_V2,
-      createAppProjectKnowledgeRouteRegistry,
     ),
   ],
   [
@@ -390,7 +382,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
       PROJECT_AGENT_ROUTE_IDS_V2,
-      createAppProjectAgentRouteRegistry,
     ),
   ],
   [
@@ -398,7 +389,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
       PROJECT_ADMINISTRATION_ROUTE_IDS_V2,
-      createAppProjectAdministrationRouteRegistry,
     ),
   ],
   [
@@ -406,7 +396,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2,
       RUNTIME_INFRASTRUCTURE_ROUTE_IDS_V2,
-      createAppRuntimeInfrastructureRouteRegistry,
     ),
   ],
   [
@@ -414,7 +403,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2,
       PROJECT_WORKSPACE_ROUTE_IDS_V2,
-      createAppProjectWorkspaceRouteRegistry,
     ),
   ],
   [
@@ -422,7 +410,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2,
       PROJECT_DISCOVERY_ROUTE_IDS_V2,
-      createAppProjectDiscoveryRouteRegistry,
     ),
   ],
   [
@@ -430,7 +417,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2,
       TENANT_CORE_ROUTE_IDS_V2,
-      createAppTenantCoreRouteRegistry,
     ),
   ],
   [
@@ -438,7 +424,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2,
       TENANT_AGENT_BUILDING_ROUTE_IDS_V2,
-      createAppTenantAgentBuildingRouteRegistry,
     ),
   ],
   [
@@ -446,7 +431,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2,
       TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_IDS_V2,
-      createAppTenantExtensionsIntegrationsRouteRegistry,
     ),
   ],
   [
@@ -454,7 +438,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopRouteArtifactV2(
       DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
       TENANT_GOVERNANCE_ROUTE_IDS_V2,
-      createAppTenantGovernanceRouteRegistry,
     ),
   ],
   [
@@ -557,6 +540,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     }),
   ],
   [
+    DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
+      WORKBENCH_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
     DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
     defineDesktopUiSlotArtifactV2(
       DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
@@ -568,7 +558,6 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
 export function defineDesktopRouteArtifactV2(
   id: string,
   routeIds: readonly string[],
-  createRegistry: (refs: AppRouteRegistryRefs) => DesktopRouteRegistry<DesktopRouteModule>,
 ): DesktopRouteArtifactV2 {
   if (!id.trim()) {
     throw artifactErrorV2('desktop_renderer_route_artifact_id_required', id);
@@ -580,7 +569,6 @@ export function defineDesktopRouteArtifactV2(
     throw artifactErrorV2('desktop_renderer_route_artifact_routes_duplicate', id);
   }
   return Object.freeze({
-    createRegistry,
     id,
     kind: 'route',
     routeIds: Object.freeze([...routeIds]),
@@ -629,6 +617,7 @@ export function resolveDesktopRendererArtifactsV2(
   const routeOwners = new Map<string, string>();
   const navigationOwners = new Map<string, string>();
   const uiSlotArtifactOwners = new Map<string, string>();
+  const uiSlotOwners = new Map<string, string>();
   const ordered = [...contributions].sort(
     (left, right) =>
       left.order - right.order ||
@@ -652,7 +641,12 @@ export function resolveDesktopRendererArtifactsV2(
       } else if (artifact.kind === 'navigation') {
         validateRouteOwnershipV2(navigationOwners, artifact.routeIds, contribution);
       } else {
-        validateUiSlotArtifactOwnershipV2(uiSlotArtifactOwners, artifact, contribution);
+        validateUiSlotArtifactOwnershipV2(
+          uiSlotArtifactOwners,
+          uiSlotOwners,
+          artifact,
+          contribution,
+        );
       }
       artifacts.push(artifact);
     }
@@ -698,18 +692,30 @@ function validateRouteOwnershipV2(
 }
 
 function validateUiSlotArtifactOwnershipV2(
-  owners: Map<string, string>,
+  artifactOwners: Map<string, string>,
+  slotOwners: Map<string, string>,
   artifact: DesktopUiSlotArtifactV2,
   contribution: DesktopRendererContributionV2,
 ): void {
-  const existingOwner = owners.get(artifact.id);
+  const existingOwner = artifactOwners.get(artifact.id);
   if (existingOwner !== undefined) {
     throw artifactErrorV2(
       'desktop_renderer_ui_slot_artifact_conflict',
       `${artifact.id}:${existingOwner}:${contribution.id}`,
     );
   }
-  owners.set(artifact.id, contribution.id);
+  artifactOwners.set(artifact.id, contribution.id);
+  for (const definition of artifact.slotDefinitions) {
+    const slotKey = `${definition.slot}:${definition.id}`;
+    const existingSlotOwner = slotOwners.get(slotKey);
+    if (existingSlotOwner !== undefined) {
+      throw artifactErrorV2(
+        'desktop_renderer_ui_slot_conflict',
+        `${slotKey}:${existingSlotOwner}:${contribution.id}`,
+      );
+    }
+    slotOwners.set(slotKey, contribution.id);
+  }
 }
 
 function artifactErrorV2(code: string, detail: string): DesktopRendererArtifactErrorV2 {

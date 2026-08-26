@@ -83,6 +83,7 @@ import {
 } from './features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
+import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
 import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
@@ -897,10 +898,14 @@ export function App() {
     }),
     [],
   );
+  const desktopRendererCompositionV2 = useMemo(
+    () => createDesktopRendererAppCompositionPortV2(desktopRendererRouteRefsV2),
+    [desktopRendererRouteRefsV2],
+  );
   const desktopRendererGenerationV2 = useDesktopRendererGenerationHostV2(
     config,
     identityAuthenticated,
-    desktopRendererRouteRefsV2,
+    desktopRendererCompositionV2,
   );
   const {
     authority: desktopRendererAuthorityV2,
@@ -6533,6 +6538,7 @@ export function App() {
         >
           <DesktopRendererProductionRouterV2
             authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
+            childrenAuthority="authentication-kernel"
             forceLegacyChildren={invitationSignInRequested}
             location={desktopProductionRouteLocation}
             mode={productionRouteRuntimeMode}

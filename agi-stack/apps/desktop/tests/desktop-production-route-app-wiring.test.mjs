@@ -7,8 +7,8 @@ const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
-const rendererArtifactCatalogSource = readFileSync(
-  new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
+const rendererAppCompositionSource = readFileSync(
+  new URL('../src/plugins/desktopRendererAppCompositionV2.tsx', import.meta.url),
   'utf8',
 );
 const routerSource = readFileSync(
@@ -63,7 +63,7 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
 });
 
-test('auxiliary V2 route artifact owns its three native loaders and Profile route', () => {
+test('auxiliary V2 route composition binds its three native loaders and Profile route', () => {
   const auxiliaryFactoryStart = registrySource.indexOf(
     'export function createAppAuxiliaryRouteRegistry',
   );
@@ -91,7 +91,7 @@ test('auxiliary V2 route artifact owns its three native loaders and Profile rout
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppAuxiliaryRouteRegistry/u,
   );
   assert.match(auxiliaryFactorySource, /id:\s*PROFILE_ROUTE_ID/u);
@@ -105,7 +105,7 @@ test('auxiliary V2 route artifact owns its three native loaders and Profile rout
   );
 });
 
-test('project knowledge V2 route artifact owns only its five native loaders', () => {
+test('project knowledge V2 route composition binds only its five native loaders', () => {
   const projectKnowledgeFactoryStart = registrySource.indexOf(
     'export function createAppProjectKnowledgeRouteRegistry',
   );
@@ -135,12 +135,12 @@ test('project knowledge V2 route artifact owns only its five native loaders', ()
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_PROJECT_KNOWLEDGE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectKnowledgeRouteRegistry/u,
   );
 });
 
-test('project agent V2 route artifact owns only its three native loaders', () => {
+test('project agent V2 route composition binds only its three native loaders', () => {
   const projectAgentFactoryStart = registrySource.indexOf(
     'export function createAppProjectAgentRouteRegistry',
   );
@@ -168,12 +168,12 @@ test('project agent V2 route artifact owns only its three native loaders', () =>
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAgentRouteRegistry/u,
   );
 });
 
-test('project administration V2 route artifact owns its five configuration loaders', () => {
+test('project administration V2 route composition binds its five configuration loaders', () => {
   const projectAdministrationFactoryStart = registrySource.indexOf(
     'export function createAppProjectAdministrationRouteRegistry',
   );
@@ -203,12 +203,12 @@ test('project administration V2 route artifact owns its five configuration loade
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAdministrationRouteRegistry/u,
   );
 });
 
-test('runtime infrastructure V2 route artifact owns its seven canonical loaders', () => {
+test('runtime infrastructure V2 route composition binds its seven canonical loaders', () => {
   const runtimeInfrastructureFactoryStart = registrySource.indexOf(
     'export function createAppRuntimeInfrastructureRouteRegistry',
   );
@@ -240,12 +240,12 @@ test('runtime infrastructure V2 route artifact owns its seven canonical loaders'
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_RUNTIME_INFRASTRUCTURE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppRuntimeInfrastructureRouteRegistry/u,
   );
 });
 
-test('project workspace V2 route artifact owns only its three native loaders', () => {
+test('project workspace V2 route composition binds only its three native loaders', () => {
   const projectWorkspaceFactoryStart = registrySource.indexOf(
     'export function createAppProjectWorkspaceRouteRegistry',
   );
@@ -273,12 +273,12 @@ test('project workspace V2 route artifact owns only its three native loaders', (
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_PROJECT_WORKSPACE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectWorkspaceRouteRegistry/u,
   );
 });
 
-test('project discovery V2 route artifact owns only its search loader', () => {
+test('project discovery V2 route composition binds only its search loader', () => {
   const projectDiscoveryFactoryStart = registrySource.indexOf(
     'export function createAppProjectDiscoveryRouteRegistry',
   );
@@ -300,12 +300,12 @@ test('project discovery V2 route artifact owns only its search loader', () => {
   assert.match(projectDiscoveryFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
   assert.doesNotMatch(tenantCreationFactorySource, /\[PROJECT_SEARCH_ROUTE_ID\]/u);
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_PROJECT_DISCOVERY_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectDiscoveryRouteRegistry/u,
   );
 });
 
-test('tenant core V2 route artifact owns its six canonical loaders', () => {
+test('tenant core V2 route composition binds its six canonical loaders', () => {
   const tenantCoreFactoryStart = registrySource.indexOf(
     'export function createAppTenantCoreRouteRegistry',
   );
@@ -336,12 +336,12 @@ test('tenant core V2 route artifact owns its six canonical loaders', () => {
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantCoreRouteRegistry/u,
   );
 });
 
-test('tenant agent building V2 route artifact owns its six canonical loaders', () => {
+test('tenant agent building V2 route composition binds its six canonical loaders', () => {
   const tenantAgentBuildingFactoryStart = registrySource.indexOf(
     'export function createAppTenantAgentBuildingRouteRegistry',
   );
@@ -372,12 +372,12 @@ test('tenant agent building V2 route artifact owns its six canonical loaders', (
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_TENANT_AGENT_BUILDING_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantAgentBuildingRouteRegistry/u,
   );
 });
 
-test('tenant extensions and integrations V2 route artifact owns its six canonical loaders', () => {
+test('tenant extensions and integrations V2 route composition binds its six canonical loaders', () => {
   const tenantExtensionsIntegrationsFactoryStart = registrySource.indexOf(
     'export function createAppTenantExtensionsIntegrationsRouteRegistry',
   );
@@ -408,12 +408,12 @@ test('tenant extensions and integrations V2 route artifact owns its six canonica
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantExtensionsIntegrationsRouteRegistry/u,
   );
 });
 
-test('tenant governance V2 route artifact owns its nine canonical loaders', () => {
+test('tenant governance V2 route composition binds its nine canonical loaders', () => {
   const tenantGovernanceFactoryStart = registrySource.indexOf(
     'export function createAppTenantGovernanceRouteRegistry',
   );
@@ -443,12 +443,12 @@ test('tenant governance V2 route artifact owns its nine canonical loaders', () =
     assert.doesNotMatch(tenantCreationFactorySource, new RegExp(`\\[${routeId}\\]`));
   }
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantGovernanceRouteRegistry/u,
   );
 });
 
-test('tenant creation V2 route artifact preserves catalog refresh and navigation semantics', () => {
+test('tenant creation V2 route composition preserves catalog refresh and navigation semantics', () => {
   const tenantCreationFactoryStart = registrySource.indexOf(
     'export function createAppTenantCreationRouteRegistry',
   );
@@ -477,7 +477,7 @@ test('tenant creation V2 route artifact preserves catalog refresh and navigation
     /onNavigateBack:\s*desktopProductionRouteNavigation\.clearHash/u,
   );
   assert.match(
-    rendererArtifactCatalogSource,
+    rendererAppCompositionSource,
     /DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppTenantCreationRouteRegistry/u,
   );
   assert.doesNotMatch(registrySource, /export function createAppRouteRegistry/u);

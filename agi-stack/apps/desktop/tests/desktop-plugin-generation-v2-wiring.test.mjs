@@ -9,7 +9,9 @@ function source(relativePath) {
 test("desktop renderer owns a protocol-v2 generation host through the public fetch seam", () => {
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
   const host = source("src/plugins/DesktopRendererGenerationHostV2.tsx");
+  const context = source("src/plugins/desktopRendererGenerationContextV2.tsx");
   const routeBoundary = source("src/plugins/DesktopRendererProductionRouterV2.tsx");
+  const composition = source("src/plugins/desktopRendererAppCompositionV2.tsx");
   const routeHost = source("src/features/navigation/desktopHashRouteHost.ts");
   const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
@@ -41,15 +43,21 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
     "local bootstrap must activate before the first remote request",
   );
   assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled\s*,?\s*\)/u);
+  assert.match(host, /DesktopRendererCompositionPortV2/u);
+  assert.doesNotMatch(host, /AppRouteRegistryRefs/u);
   assert.match(host, /resolveDesktopRendererAuthorityStateV2/u);
   assert.match(host, /projectDesktopRouteRegistryV2/u);
   assert.match(host, /projectDesktopNavigationRegistryV2/u);
-  assert.match(host, /DesktopRendererGenerationContextV2/u);
-  assert.match(host, /DesktopRendererAuthorityContextV2/u);
+  assert.match(context, /DesktopRendererGenerationContextV2/u);
+  assert.match(context, /DesktopRendererAuthorityContextV2/u);
+  assert.doesNotMatch(context, /@agistack\/plugin-runtime/u);
   assert.match(host, /const actions:[^=]+?=\s*Object\.freeze/su);
   assert.match(host, /acquireOperationLease/u);
-  assert.match(host, /children/u);
+  assert.match(context, /children/u);
   assert.match(routeBoundary, /useDesktopRendererGenerationV2\(\)/u);
+  assert.match(routeBoundary, /projectDesktopWorkbenchCompositionV2/u);
+  assert.match(routeBoundary, /childrenAuthority/u);
+  assert.match(routeBoundary, /workbench-contribution/u);
   assert.match(routeBoundary, /registry=\{state\.routeRegistry\}/u);
   assert.match(routeBoundary, /acquireOperationLease=\{actions\.acquireOperationLease\}/u);
   assert.match(
@@ -59,6 +67,7 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(routeHost, /acquireOperationLease/u);
   assert.match(routeHost, /finally\s*\{\s*await operationLease\?\.release\(\)/u);
   assert.match(app, /useDesktopRendererGenerationHostV2\(/u);
+  assert.match(app, /createDesktopRendererAppCompositionPortV2/u);
   assert.match(app, /DesktopRendererGenerationProviderV2/u);
   assert.match(app, /DesktopRendererProductionRouterV2/u);
   assert.doesNotMatch(app, /<DesktopProductionRouter/u);
@@ -71,12 +80,17 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.doesNotMatch(app, /projectDesktopNavigationRegistryV2/u);
   assert.doesNotMatch(app, /DesktopRendererAuthorityContextV2/u);
   assert.doesNotMatch(app, /createAppRouteRegistry/u);
+  assert.doesNotMatch(app, /AppRouteRegistryRefs/u);
   assert.doesNotMatch(app, /CANONICAL_DESKTOP_ROUTE_IDS\.map/u);
-  assert.match(artifactCatalog, /createRegistry:\s*\(/u);
-  assert.match(artifactCatalog, /createAppTenantCreationRouteRegistry/u);
+  assert.doesNotMatch(artifactCatalog, /createRegistry|AppRouteRegistryRefs/u);
+  assert.doesNotMatch(artifactCatalog, /createAppTenantCreationRouteRegistry/u);
   assert.doesNotMatch(artifactCatalog, /DESKTOP_DEFAULT_(?:ROUTE|NAVIGATION)_ARTIFACT_ID_V2/u);
   assert.doesNotMatch(artifactCatalog, /desktop\.(?:routes\.production|navigation\.default)\.v1/u);
-  assert.match(authority, /artifact\.createRegistry\(refs\)/u);
+  assert.match(authority, /composition\.createRouteRegistry\(artifact\.id\)/u);
+  assert.doesNotMatch(authority, /AppRouteRegistryRefs/u);
+  assert.match(composition, /createAppAuthenticationRouteRegistry/u);
+  assert.match(composition, /createAppTenantCreationRouteRegistry/u);
+  assert.match(composition, /DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2/u);
   assert.match(main, /activateDesktopPluginGenerationRootV2\(\)/u);
   assert.match(main, /root\.unmount\(\)/u);
   assert.match(main, /deactivateDesktopPluginGenerationRootV2\(\)/u);

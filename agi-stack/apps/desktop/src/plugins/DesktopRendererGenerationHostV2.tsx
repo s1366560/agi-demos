@@ -1,53 +1,22 @@
-import { createContext, use, useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 
-import type { RendererPluginGenerationStateV2 } from '@agistack/plugin-runtime';
-
-import type { AppRouteRegistryRefs } from '../features/navigation/appRouteRegistry';
-import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
-import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import type { DesktopRuntimeConfig } from '../types';
 import { resolveDesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityProjectionV2';
+import type { DesktopRendererCompositionPortV2 } from './desktopRendererCompositionPortV2';
 import {
-  DesktopRendererAuthorityContextV2,
+  DESKTOP_RENDERER_TARGET_V2,
+  type DesktopRendererGenerationActionsV2,
+  type DesktopRendererGenerationContextValueV2,
+  type DesktopRendererOperationLeaseV2,
+} from './desktopRendererGenerationContextV2';
+import {
   projectDesktopNavigationRegistryV2,
   projectDesktopRouteRegistryV2,
-  type DesktopRendererAuthorityStateV2,
 } from './desktopRendererAuthorityStateV2';
 import {
   acquireDesktopPluginGenerationLeaseV2,
   useDesktopPluginGenerationV2,
 } from './useDesktopPluginGenerationV2';
-
-const DESKTOP_RENDERER_TARGET_V2 = 'desktop-renderer' as const;
-
-export interface DesktopRendererGenerationStateV2 {
-  readonly authority: DesktopRendererAuthorityStateV2;
-  readonly navigationRegistry: DesktopRouteRegistry<DesktopRouteModule>;
-  readonly routeRegistry: DesktopRouteRegistry<DesktopRouteModule>;
-}
-
-export interface DesktopRendererGenerationMetaV2 {
-  readonly digest: string | undefined;
-  readonly error: unknown | undefined;
-  readonly status: RendererPluginGenerationStateV2['status'];
-  readonly target: typeof DESKTOP_RENDERER_TARGET_V2;
-}
-
-export interface DesktopRendererOperationLeaseV2 {
-  readonly digest: string | undefined;
-  readonly kind: 'authentication-kernel' | 'generation';
-  readonly release: () => Promise<void>;
-}
-
-export interface DesktopRendererGenerationActionsV2 {
-  readonly acquireOperationLease: () => DesktopRendererOperationLeaseV2;
-}
-
-export interface DesktopRendererGenerationContextValueV2 {
-  readonly actions: DesktopRendererGenerationActionsV2;
-  readonly meta: DesktopRendererGenerationMetaV2;
-  readonly state: DesktopRendererGenerationStateV2;
-}
 
 const AUTHENTICATION_KERNEL_OPERATION_LEASE_V2: DesktopRendererOperationLeaseV2 = Object.freeze({
   digest: undefined,
@@ -55,39 +24,21 @@ const AUTHENTICATION_KERNEL_OPERATION_LEASE_V2: DesktopRendererOperationLeaseV2 
   release: async () => undefined,
 });
 
-const DesktopRendererGenerationContextV2 =
-  createContext<DesktopRendererGenerationContextValueV2 | null>(null);
-
-export interface DesktopRendererGenerationProviderV2Props {
-  readonly children: ReactNode;
-  readonly value: DesktopRendererGenerationContextValueV2;
-}
-
-export function DesktopRendererGenerationProviderV2({
-  children,
-  value,
-}: DesktopRendererGenerationProviderV2Props) {
-  return (
-    <DesktopRendererGenerationContextV2 value={value}>
-      <DesktopRendererAuthorityContextV2 value={value.state.authority}>
-        {children}
-      </DesktopRendererAuthorityContextV2>
-    </DesktopRendererGenerationContextV2>
-  );
-}
-
-export function useDesktopRendererGenerationV2(): DesktopRendererGenerationContextValueV2 {
-  const value = use(DesktopRendererGenerationContextV2);
-  if (value === null) {
-    throw new Error('desktop_renderer_generation_host_missing');
-  }
-  return value;
-}
+export {
+  DesktopRendererGenerationProviderV2,
+  useDesktopRendererGenerationV2,
+} from './desktopRendererGenerationContextV2';
+export type {
+  DesktopRendererGenerationContextValueV2,
+  DesktopRendererGenerationMetaV2,
+  DesktopRendererGenerationProviderV2Props,
+  DesktopRendererGenerationStateV2,
+} from './desktopRendererGenerationContextV2';
 
 export function useDesktopRendererGenerationHostV2(
   config: DesktopRuntimeConfig,
   enabled: boolean,
-  routeRefs: AppRouteRegistryRefs,
+  composition: DesktopRendererCompositionPortV2,
 ): DesktopRendererGenerationContextValueV2 {
   const generationState = useDesktopPluginGenerationV2(config, enabled);
   const generation = generationState.generation;
@@ -97,7 +48,7 @@ export function useDesktopRendererGenerationHostV2(
 
   return useMemo(() => {
     const authority = resolveDesktopRendererAuthorityStateV2(generation, enabled);
-    const routeRegistry = projectDesktopRouteRegistryV2(routeRefs, authority);
+    const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
     const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
     const actions: DesktopRendererGenerationActionsV2 = Object.freeze({
       acquireOperationLease: () => {
@@ -112,6 +63,7 @@ export function useDesktopRendererGenerationHostV2(
     });
     return Object.freeze({
       actions,
+      composition,
       meta: Object.freeze({
         digest: generationDigest,
         error: generationError,
@@ -120,5 +72,5 @@ export function useDesktopRendererGenerationHostV2(
       }),
       state: Object.freeze({ authority, navigationRegistry, routeRegistry }),
     });
-  }, [enabled, generation, generationDigest, generationError, generationStatus, routeRefs]);
+  }, [composition, enabled, generation, generationDigest, generationError, generationStatus]);
 }

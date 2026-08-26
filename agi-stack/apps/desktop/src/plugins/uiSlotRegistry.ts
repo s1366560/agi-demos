@@ -10,7 +10,8 @@ export type UiSlotKind =
   | 'conversation_renderer'
   | 'tool_result_renderer'
   | 'composer_action'
-  | 'mcp_canvas';
+  | 'mcp_canvas'
+  | 'workbench_surface';
 
 export type PluginTrust = 'builtin' | 'signed' | 'tenant-approved' | 'untrusted';
 

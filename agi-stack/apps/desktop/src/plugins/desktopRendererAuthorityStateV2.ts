@@ -1,10 +1,6 @@
 import { createContext, useContext, useMemo } from 'react';
 
 import {
-  createAppAuthenticationRouteRegistry,
-  type AppRouteRegistryRefs,
-} from '../features/navigation/appRouteRegistry';
-import {
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
 } from '../features/navigation/desktopProductionRouteRegistry';
@@ -15,6 +11,7 @@ import {
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteArtifactV2 } from './desktopRendererArtifactCatalogV2';
+import type { DesktopRendererCompositionPortV2 } from './desktopRendererCompositionPortV2';
 import type { UiSlotDefinition, UiSlotKind } from './uiSlotRegistry';
 
 export type DesktopRendererAuthorityStatusV2 = 'disabled' | 'loading' | 'ready' | 'unavailable';
@@ -59,15 +56,12 @@ export function useDesktopRendererAuthorityV2(): DesktopRendererAuthorityStateV2
 }
 
 export function projectDesktopRouteRegistryV2(
-  refs: AppRouteRegistryRefs,
+  composition: DesktopRendererCompositionPortV2,
   state: DesktopRendererAuthorityStateV2,
-  createAuthenticationRegistry: (
-    refs: AppRouteRegistryRefs,
-  ) => DesktopRouteRegistry<DesktopRouteModule> = createAppAuthenticationRouteRegistry,
 ): DesktopRouteRegistry<DesktopRouteModule> {
   const definitions: DesktopRouteRegistry<DesktopRouteModule>['definitions'][number][] = [];
   const seenRouteIds = new Set<string>();
-  const authenticationRegistry = createAuthenticationRegistry(refs);
+  const authenticationRegistry = composition.createAuthenticationRouteRegistry();
   appendRouteDefinitionsV2(
     definitions,
     seenRouteIds,
@@ -88,7 +82,7 @@ export function projectDesktopRouteRegistryV2(
       appendRouteDefinitionsV2(
         definitions,
         seenRouteIds,
-        artifact.createRegistry(refs),
+        composition.createRouteRegistry(artifact.id),
         artifact.routeIds,
         artifact.id,
       );

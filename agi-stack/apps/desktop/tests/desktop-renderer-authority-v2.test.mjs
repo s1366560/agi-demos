@@ -32,7 +32,11 @@ const {
   DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
   defineDesktopUiSlotArtifactV2,
   resolveDesktopRendererArtifactsV2,
+  DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererArtifactCatalogV2.js");
+const {
+  createDesktopRendererAppCompositionPortV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererAppCompositionV2.js");
 const {
   isDesktopNavigationRouteEnabledV2,
   projectDesktopNavigationRegistryV2,
@@ -81,6 +85,25 @@ function readyState(overrides = {}) {
     ...overrides,
   };
 }
+
+const appComposition = createDesktopRendererAppCompositionPortV2({
+  api: {},
+  authRef: { current: { tenants: [] } },
+  configRef: { current: {} },
+  desktopProductionRouteLocation: { readHash: () => "", subscribe: () => () => {} },
+  desktopProductionRouteNavigation: {
+    clearHash: () => undefined,
+    openPath: () => undefined,
+  },
+  projectCronJobsRouteBindingRef: { current: null },
+  projectSearchRouteBindingRef: { current: null },
+  setAuth: () => undefined,
+  setInvitationSignInRequested: () => undefined,
+  setSettingsInitialSection: () => undefined,
+  setSettingsWindowOpen: () => undefined,
+  settingsRouteCloseNavigationRef: { current: null },
+  commitRuntimeConfig: () => undefined,
+});
 
 test("desktop V2 UI-slot artifacts reject runtime signed module references", () => {
   assert.throws(
@@ -238,6 +261,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       297,
     ),
     contribution(
+      "desktop.workbench-surface",
+      "ui-slot",
+      [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2],
+      299,
+    ),
+    contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
@@ -271,10 +300,11 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
-  assert.equal(typeof artifacts[0].createRegistry, "function");
+  assert.equal(Object.hasOwn(artifacts[0], "createRegistry"), false);
   assert.deepEqual(artifacts[0].routeIds, ["tenant-creation"]);
   assert.equal(artifacts[0].routeIds.includes("backend-stores"), false);
   assert.equal(artifacts[0].routeIds.includes("project-project-team"), false);
@@ -297,10 +327,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-playbooks",
     "user-profile",
   ]);
-  const auxiliaryRegistry = artifacts[1].createRegistry({
-    configRef: { current: {} },
-    setAuth: () => undefined,
-  });
+  const auxiliaryRegistry = appComposition.createRouteRegistry(artifacts[1].id);
   assert.deepEqual(
     artifacts[1].routeIds.map((routeId) => auxiliaryRegistry.byId.get(routeId).structuralReadiness),
     [
@@ -321,9 +348,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-project-communities",
     "project-project-graph",
   ]);
-  const projectKnowledgeRegistry = artifacts[2].createRegistry({
-    configRef: { current: {} },
-  });
+  const projectKnowledgeRegistry = appComposition.createRouteRegistry(artifacts[2].id);
   assert.deepEqual(
     artifacts[2].routeIds.map(
       (routeId) => projectKnowledgeRegistry.byId.get(routeId).structuralReadiness,
@@ -341,7 +366,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-agent-logs",
     "project-agent-patterns",
   ]);
-  const projectAgentRegistry = artifacts[3].createRegistry({ configRef: { current: {} } });
+  const projectAgentRegistry = appComposition.createRouteRegistry(artifacts[3].id);
   assert.deepEqual(
     artifacts[3].routeIds.map(
       (routeId) => projectAgentRegistry.byId.get(routeId).structuralReadiness,
@@ -355,10 +380,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-project-cron-jobs",
     "project-project-settings",
   ]);
-  const projectAdministrationRegistry = artifacts[4].createRegistry({
-    configRef: { current: {} },
-    projectCronJobsRouteBindingRef: { current: null },
-  });
+  const projectAdministrationRegistry = appComposition.createRouteRegistry(artifacts[4].id);
   assert.deepEqual(
     artifacts[4].routeIds.map(
       (routeId) => projectAdministrationRegistry.byId.get(routeId).structuralReadiness,
@@ -380,9 +402,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-instance-templates",
     "tenant-tenant-genes",
   ]);
-  const runtimeInfrastructureRegistry = artifacts[5].createRegistry({
-    configRef: { current: {} },
-  });
+  const runtimeInfrastructureRegistry = appComposition.createRouteRegistry(artifacts[5].id);
   assert.deepEqual(
     artifacts[5].routeIds.map(
       (routeId) => runtimeInfrastructureRegistry.byId.get(routeId).structuralReadiness,
@@ -402,13 +422,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "project-project-workspaces",
     "project-blackboard-dynamic-project-blackboard",
   ]);
-  const projectWorkspaceRegistry = artifacts[6].createRegistry({
-    configRef: { current: {} },
-    desktopProductionRouteNavigation: {
-      clearHash: () => undefined,
-      openPath: () => undefined,
-    },
-  });
+  const projectWorkspaceRegistry = appComposition.createRouteRegistry(artifacts[6].id);
   assert.deepEqual(
     artifacts[6].routeIds.map(
       (routeId) => projectWorkspaceRegistry.byId.get(routeId).structuralReadiness,
@@ -416,10 +430,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     [{ status: "ready" }, { status: "ready" }, { status: "ready" }],
   );
   assert.deepEqual(artifacts[7].routeIds, ["project-project-search"]);
-  const projectDiscoveryRegistry = artifacts[7].createRegistry({
-    configRef: { current: {} },
-    projectSearchRouteBindingRef: { current: null },
-  });
+  const projectDiscoveryRegistry = appComposition.createRouteRegistry(artifacts[7].id);
   assert.equal(
     projectDiscoveryRegistry.byId.get("project-project-search").structuralReadiness.status,
     "ready",
@@ -432,10 +443,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-tasks",
     "tenant-tenant-analytics",
   ]);
-  const tenantCoreRegistry = artifacts[8].createRegistry({
-    authRef: { current: { tenants: [] } },
-    configRef: { current: {} },
-  });
+  const tenantCoreRegistry = appComposition.createRouteRegistry(artifacts[8].id);
   assert.deepEqual(
     artifacts[8].routeIds.map((routeId) => tenantCoreRegistry.byId.get(routeId).structuralReadiness),
     [
@@ -455,16 +463,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-evolution",
     "tenant-tenant-patterns",
   ]);
-  const tenantAgentBuildingRegistry = artifacts[9].createRegistry({
-    configRef: { current: {} },
-    desktopProductionRouteNavigation: {
-      clearHash: () => undefined,
-      openPath: () => undefined,
-    },
-    setSettingsInitialSection: () => undefined,
-    setSettingsWindowOpen: () => undefined,
-    settingsRouteCloseNavigationRef: { current: null },
-  });
+  const tenantAgentBuildingRegistry = appComposition.createRouteRegistry(artifacts[9].id);
   assert.deepEqual(
     artifacts[9].routeIds.map(
       (routeId) => tenantAgentBuildingRegistry.byId.get(routeId).structuralReadiness,
@@ -486,16 +485,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-providers",
     "tenant-tenant-webhooks",
   ]);
-  const tenantExtensionsIntegrationsRegistry = artifacts[10].createRegistry({
-    configRef: { current: {} },
-    desktopProductionRouteNavigation: {
-      clearHash: () => undefined,
-      openPath: () => undefined,
-    },
-    setSettingsInitialSection: () => undefined,
-    setSettingsWindowOpen: () => undefined,
-    settingsRouteCloseNavigationRef: { current: null },
-  });
+  const tenantExtensionsIntegrationsRegistry = appComposition.createRouteRegistry(
+    artifacts[10].id,
+  );
   assert.deepEqual(
     artifacts[10].routeIds.map(
       (routeId) => tenantExtensionsIntegrationsRegistry.byId.get(routeId).structuralReadiness,
@@ -520,10 +512,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-org-settings",
     "tenant-tenant-settings",
   ]);
-  const tenantGovernanceRegistry = artifacts[11].createRegistry({
-    configRef: { current: {} },
-    desktopProductionRouteLocation: { readHash: () => "" },
-  });
+  const tenantGovernanceRegistry = appComposition.createRouteRegistry(artifacts[11].id);
   assert.deepEqual(
     artifacts[11].routeIds.map(
       (routeId) => tenantGovernanceRegistry.byId.get(routeId).structuralReadiness,
@@ -614,9 +603,20 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
     "tenant-tenant-org-settings",
     "tenant-tenant-settings",
   ]);
-  assert.equal(artifacts[23].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[23].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
+      slot: "workbench_surface",
+      id: "workbench",
+      contract: "ui-builtin:desktop-workbench-surface",
+      moduleRef: "builtin:desktop-workbench-surface",
+      permission: "ui.workbench",
+      sandbox: true,
+    },
+  ]);
+  assert.equal(artifacts[24].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[23].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[24].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );
@@ -664,17 +664,21 @@ test("route projection always retains only the authentication kernel without V2 
     route("tenant-tenant-overview", "/tenant/:tenantId", ["tenant"]),
   ]);
   const routeArtifact = {
-    createRegistry: () => {
-      artifactRegistryCalls += 1;
-      return candidate;
-    },
     id: DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2,
     kind: "route",
     routeIds: ["tenant-tenant-overview"],
   };
-  const kernelFactory = () => candidate;
+  const composition = Object.freeze({
+    createAuthenticationRouteRegistry: () => candidate,
+    createRouteRegistry: (artifactId) => {
+      assert.equal(artifactId, DESKTOP_TENANT_CORE_ROUTE_ARTIFACT_ID_V2);
+      artifactRegistryCalls += 1;
+      return candidate;
+    },
+    resolveWorkbenchSurface: () => null,
+  });
   const disabled = projectDesktopRouteRegistryV2(
-    {},
+    composition,
     {
       ...readyState(),
       routeArtifactIds: [],
@@ -682,7 +686,6 @@ test("route projection always retains only the authentication kernel without V2 
       routeIds: [],
       status: "disabled",
     },
-    kernelFactory,
   );
   assert.deepEqual(
     disabled.definitions.map(({ id }) => id),
@@ -691,9 +694,8 @@ test("route projection always retains only the authentication kernel without V2 
   assert.equal(artifactRegistryCalls, 0);
 
   const active = projectDesktopRouteRegistryV2(
-    {},
+    composition,
     readyState({ routeArtifacts: [routeArtifact] }),
-    kernelFactory,
   );
   assert.deepEqual(
     active.definitions.map(({ id }) => id),

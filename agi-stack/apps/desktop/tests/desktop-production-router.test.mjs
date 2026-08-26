@@ -30,6 +30,15 @@ const {
 const {
   createDesktopRouteRegistry,
 } = require("/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRouteRegistry.js");
+const {
+  DesktopRendererGenerationProviderV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererGenerationContextV2.js");
+const {
+  DesktopRendererProductionRouterV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopRendererProductionRouterV2.js");
+const {
+  DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js");
 
 const source = readFileSync(
   new URL(
@@ -136,6 +145,26 @@ test("production router delegates to the React host and keeps legacy children mo
   assert.match(source, /useDesktopHashRouteHost\(/u);
   assert.match(source, /const hostOptions = useMemo</u);
   assert.doesNotMatch(source, /useState|features\/session|stores\//u);
+});
+
+test("production V2 router admits empty-hash workbench children only through its contribution", () => {
+  const contributed = renderRendererRouter({ workbenchContributed: true });
+  assert.match(contributed, /data-workbench-contribution="true"/u);
+  assert.match(contributed, /data-business-workbench="true"/u);
+
+  const missing = renderRendererRouter({ workbenchContributed: false });
+  assert.doesNotMatch(missing, /data-business-workbench="true"/u);
+  assert.match(
+    missing,
+    /data-reason-code="desktop_renderer_workbench_contribution_missing"/u,
+  );
+
+  const authenticationKernel = renderRendererRouter({
+    childrenAuthority: "authentication-kernel",
+    workbenchContributed: false,
+  });
+  assert.match(authenticationKernel, /data-business-workbench="true"/u);
+  assert.doesNotMatch(authenticationKernel, /desktop_renderer_workbench_contribution_missing/u);
 });
 
 test("ready and degraded states render the exact module Surface and route context", () => {
@@ -548,6 +577,86 @@ function renderView({
 
 function render(element) {
   return renderToStaticMarkup(React.createElement(I18nProvider, null, element));
+}
+
+function renderRendererRouter({
+  childrenAuthority = "workbench-contribution",
+  workbenchContributed,
+}) {
+  function WorkbenchSurface({ children }) {
+    return React.createElement(
+      "section",
+      { "data-workbench-contribution": true },
+      children,
+    );
+  }
+  const slotDefinitions = workbenchContributed
+    ? [
+        {
+          pluginId: "builtin-shell",
+          slot: "workbench_surface",
+          id: "workbench",
+          contract: "ui-builtin:desktop-workbench-surface",
+          moduleRef: DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
+          permission: "ui.workbench",
+          sandbox: true,
+        },
+      ]
+    : [];
+  const authority = Object.freeze({
+    navigationArtifactIds: [],
+    navigationDiscoveryRouteIds: [],
+    navigationRouteIds: [],
+    routeArtifactIds: [],
+    routeArtifacts: [],
+    routeIds: [],
+    slotDefinitions,
+    status: "ready",
+    uiSlotArtifactIds: [],
+  });
+  const generation = Object.freeze({
+    actions: Object.freeze({
+      acquireOperationLease: () => ({ release: async () => undefined }),
+    }),
+    composition: Object.freeze({
+      createAuthenticationRouteRegistry: () => registry,
+      createRouteRegistry: () => registry,
+      resolveWorkbenchSurface: ({ moduleRef }) =>
+        moduleRef === DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2
+          ? WorkbenchSurface
+          : null,
+    }),
+    meta: Object.freeze({
+      digest: "sha256:test-generation",
+      error: undefined,
+      status: "ready",
+      target: "desktop-renderer",
+    }),
+    state: Object.freeze({
+      authority,
+      navigationRegistry: createDesktopRouteRegistry([]),
+      routeRegistry: registry,
+    }),
+  });
+  return render(
+    React.createElement(
+      DesktopRendererGenerationProviderV2,
+      { value: generation },
+      React.createElement(
+        DesktopRendererProductionRouterV2,
+        {
+          childrenAuthority,
+          location: hashLocation("").port,
+          mode: "cloud",
+          navigation: { clearHash() {} },
+          permissions: new Set(["authenticated", "project_member"]),
+          resolveCapability: () => capability,
+          switchScope: async () => undefined,
+        },
+        React.createElement("article", { "data-business-workbench": true }),
+      ),
+    ),
+  );
 }
 
 function hashLocation(initialHash) {

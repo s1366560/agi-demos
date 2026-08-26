@@ -1,0 +1,73 @@
+import type { ComponentType, ReactNode } from 'react';
+
+import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
+import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
+import type { UiSlotDefinition } from './uiSlotRegistry';
+
+export const DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2 = 'builtin:desktop-workbench-surface' as const;
+
+export interface DesktopRendererWorkbenchSurfacePropsV2 {
+  readonly children: ReactNode;
+}
+
+export type DesktopRendererWorkbenchSurfaceV2 =
+  ComponentType<DesktopRendererWorkbenchSurfacePropsV2>;
+
+export interface DesktopRendererCompositionPortV2 {
+  readonly createAuthenticationRouteRegistry: () => DesktopRouteRegistry<DesktopRouteModule>;
+  readonly createRouteRegistry: (artifactId: string) => DesktopRouteRegistry<DesktopRouteModule>;
+  readonly resolveWorkbenchSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererWorkbenchSurfaceV2 | null;
+}
+
+export type DesktopRendererWorkbenchCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererWorkbenchSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable'
+        | 'desktop_renderer_workbench_contribution_ambiguous'
+        | 'desktop_renderer_workbench_contribution_missing'
+        | 'desktop_renderer_workbench_module_unavailable';
+    }>;
+
+export function projectDesktopWorkbenchCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererWorkbenchCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableWorkbenchV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableWorkbenchV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(({ slot }) => slot === 'workbench_surface');
+  if (definitions.length === 0) {
+    return unavailableWorkbenchV2('desktop_renderer_workbench_contribution_missing');
+  }
+  if (definitions.length !== 1) {
+    return unavailableWorkbenchV2('desktop_renderer_workbench_contribution_ambiguous');
+  }
+  const Surface = composition.resolveWorkbenchSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableWorkbenchV2('desktop_renderer_workbench_module_unavailable');
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
+function unavailableWorkbenchV2(
+  reasonCode: Extract<
+    DesktopRendererWorkbenchCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererWorkbenchCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}

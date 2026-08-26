@@ -9,7 +9,8 @@ export type UiSlotKind =
   | 'conversation_renderer'
   | 'tool_result_renderer'
   | 'composer_action'
-  | 'mcp_canvas';
+  | 'mcp_canvas'
+  | 'workbench_surface';
 
 export interface UiSlotDefinition {
   pluginId: string;
