@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from src.domain.ports.agent.agent_tool_port import AgentToolBase
+from typing import Any
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -548,45 +545,13 @@ class AgentContainer:
     def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
         """Get ExecuteStepUseCase with dependencies injected.
 
-        Tools are configured via module-level configure_*() functions for the
-        main ReAct agent system. This use case currently receives an empty
-        explicit tool registry and falls back to LLM execution for free-form
-        steps.
+        This legacy surface has no explicit tools and therefore performs only
+        free-form LLM steps. Agent tools belong to the pinned V2 generation;
+        constructing this use case must not mutate their process-wide state.
         """
-        from src.infrastructure.agent.tools.desktop_tool import (
-            configure_desktop,
-        )
-        from src.infrastructure.agent.tools.terminal_tool import (
-            configure_terminal,
-        )
-        from src.infrastructure.agent.tools.web_scrape import (
-            configure_web_scrape,
-        )
-        from src.infrastructure.agent.tools.web_search import (
-            configure_web_search,
-        )
-        from src.infrastructure.plugins.v2.sandbox_projection import (
-            current_sandbox_application_services_v2,
-        )
-
-        sandbox_orchestrator = current_sandbox_application_services_v2().orchestrator
-
-        # Configure decorator-based tool globals (used by the main agent system)
-        configure_web_search(redis_client=self._redis_client)
-        configure_web_scrape()
-        configure_desktop(sandbox_orchestrator=sandbox_orchestrator)
-        configure_terminal(sandbox_orchestrator=sandbox_orchestrator)
-
-        from src.infrastructure.agent.tools.handoff_tool import configure_handoff
-
-        configure_handoff(graph_orchestrator=self.graph_orchestrator())
-
-        # Decorator-based tools are configured globally above.
-        tools: dict[str, AgentToolBase] = {}
-
         return ExecuteStepUseCase(
             llm=llm,
-            tools=tools,
+            tools={},
         )
 
     def synthesize_results_use_case(self, llm: LLMClient) -> SynthesizeResultsUseCase:
