@@ -136,7 +136,7 @@ def test_custom_tools_are_an_explicit_tagged_profile_contribution() -> None:
         "required_tool": custom_tools_status.name,
     }
     assert custom_entries[0].inject == {"catalog": "service:tool-set-catalog"}
-    assert agent_owned.config["excluded_tags"] == [CUSTOM_TOOL_SOURCE_TAG_V2]
+    assert CUSTOM_TOOL_SOURCE_TAG_V2 in agent_owned.config["excluded_tags"]
 
 
 @pytest.mark.unit

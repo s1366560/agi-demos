@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:d173b53ac5c925b5a5bc1266359acd5689c683a105ea4219fa031c90244847b1",
+        "digest": "sha256:04736addead7e1607c868bcea815c0d837e037da1643077d775210ae0c426783",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6901,6 +6901,46 @@
       "artifact": {
         "digest": "sha256:92bd84c33e76f70539a0b06036e08e1f28db1718396acbdad72e40d0efc2aa7a",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_custom_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/sandbox-mcp",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_sandbox_mcp_tools:_apply_agent_sandbox_mcp_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "required_tags"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-sandbox-mcp-tools",
+              "type": "string"
+            },
+            "required_tags": {
+              "const": ["mcp", "sandbox"],
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:df809779d5f6273eb37fb7b9461fc22907680834c79ca0b4f8c9ac34c95ecb17",
+      "artifact": {
+        "digest": "sha256:77d04f22ebdadf507b29a4b5f99bf11cb4fa12615dcfcf96e9646aa150a48aa8",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_sandbox_mcp_tools.py"
       }
     },
     {

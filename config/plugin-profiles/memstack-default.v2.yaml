@@ -2662,6 +2662,7 @@ profile:
           - register_mcp_server
         excluded_tags:
           - custom
+          - sandbox
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
@@ -2754,6 +2755,24 @@ profile:
         source_id: builtin-agent-custom-tools
         source_tag: custom
         required_tool: custom_tools_status
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-sandbox-mcp-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/sandbox-mcp
+      enabled: true
+      config:
+        source_id: builtin-agent-sandbox-mcp-tools
+        required_tags:
+          - mcp
+          - sandbox
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
