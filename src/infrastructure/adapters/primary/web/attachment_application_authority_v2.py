@@ -10,7 +10,6 @@ from uuid import uuid4
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.attachment_service import AttachmentService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -18,6 +17,7 @@ from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.attachment_services import (
     ATTACHMENT_APPLICATION_SERVICE_V2,
     AttachmentApplicationResolverProtocolV2,
+    AttachmentApplicationServicesV2,
 )
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -30,11 +30,18 @@ from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2E
 
 @dataclass(frozen=True, kw_only=True)
 class AttachmentApplicationAuthorityV2:
-    """Request-owned attachment service and its disposable operation boundary."""
+    """Request-owned attachment services and their disposable operation boundary."""
 
     operation: OperationContextV2
     db: AsyncSession
-    service: AttachmentService
+    current_user: User
+    services: AttachmentApplicationServicesV2
+
+
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    return route_path if isinstance(route_path, str) else "-"
 
 
 async def attachment_application_authority_dependency_v2(
@@ -52,11 +59,19 @@ async def attachment_application_authority_dependency_v2(
         _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
         _ = operation.provide(
             OPERATION_IDENTITY_SERVICE_V2,
-            {"tenant_id": None, "user_id": str(current_user.id)},
+            {
+                "tenant_id": None,
+                "user_id": str(current_user.id),
+                "is_superuser": bool(current_user.is_superuser),
+            },
         )
         _ = operation.provide(
             OPERATION_METADATA_SERVICE_V2,
-            {"kind": "http-authority", "method": request.method, "path": request.url.path},
+            {
+                "kind": "http-authority",
+                "method": request.method,
+                "path": _route_template(request),
+            },
         )
         resolver = operation.require(ATTACHMENT_APPLICATION_SERVICE_V2)
         if not isinstance(resolver, AttachmentApplicationResolverProtocolV2):
@@ -67,7 +82,8 @@ async def attachment_application_authority_dependency_v2(
         yield AttachmentApplicationAuthorityV2(
             operation=operation,
             db=db,
-            service=resolver.resolve(operation),
+            current_user=current_user,
+            services=resolver.resolve(operation),
         )
 
 

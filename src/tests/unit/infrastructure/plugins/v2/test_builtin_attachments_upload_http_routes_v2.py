@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import httpx
 import pytest
+from fastapi import FastAPI
 
 from src.configuration.workspace_core import get_workspace_core_settings
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.adapters.primary.web.attachment_application_authority_v2 import (
+    attachment_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
+    mount_generation_http_dispatcher_v2,
+)
 from src.infrastructure.plugins.v2 import builtin_attachments_upload_http_routes as subject
+from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 pytestmark = pytest.mark.unit
 
@@ -56,14 +72,68 @@ def test_attachments_upload_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )
     assert claimed.table.openapi_snapshot(descriptor).schema["openapi"].startswith("3.")
     assert claimed.v2_owned_row_ids == ("attachments-upload",)
+
+
+async def test_generation_dispatcher_executes_attachments_v2_before_static_fallback() -> None:
+    attachments = SimpleNamespace(list_visible=AsyncMock(return_value=[]))
+    authority = SimpleNamespace(services=SimpleNamespace(attachments=attachments))
+
+    async def attachment_application_override() -> object:
+        return authority
+
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=subject.attachments_upload_route_definitions_v2(),
+        dependency_overrides={
+            attachment_application_authority_dependency_v2: attachment_application_override,
+        },
+    )
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+    )
+    distribution = host.current_distribution
+    assert distribution is not None
+    registry = RouteTableRegistryV2()
+    await registry.publish(distribution.descriptor, graph.table)
+    outer = FastAPI()
+    outer.state.platform_plugin_route_registry_v2 = registry
+    mount_generation_http_dispatcher_v2(outer)
+    path = "/api/v1/attachments"
+
+    @outer.get(path)
+    async def static_fallback() -> dict[str, str]:
+        return {"source": "static"}
+
+    async with (
+        pin_operation_context_v2(
+            host,
+            operation_id="attachment-route-authority",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=outer),
+            base_url="http://test",
+        ) as client,
+    ):
+        response = await client.get(path, params={"conversation_id": "conversation-a"})
+
+    assert response.status_code == 200
+    assert response.json() == {"attachments": [], "total": 0}
+    attachments.list_visible.assert_awaited_once_with(
+        conversation_id="conversation-a",
+        status=None,
+    )
+    await host.close()
 
 
 def test_attachments_upload_module_definition_uses_generated_contract_binding() -> None:

@@ -16,6 +16,7 @@ from src.application.services.attachment_service import AttachmentService
 from src.domain.model.plugins.generated_v2 import ScopeKindV2
 from src.infrastructure.adapters.primary.web.attachment_application_authority_v2 import (
     AttachmentApplicationAuthorityV2,
+    _route_template,
     attachment_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers import attachments_upload
@@ -41,17 +42,32 @@ def _request() -> Request:
             "type": "http",
             "app": FastAPI(),
             "headers": [],
-            "method": "POST",
-            "path": "/api/v1/attachments/upload/simple",
-            "path_params": {},
+            "method": "GET",
+            "path": "/api/v1/attachments/private-id",
+            "path_params": {"attachment_id": "private-id"},
             "query_string": b"",
+            "route": SimpleNamespace(path="/api/v1/attachments/{attachment_id}"),
             "scheme": "http",
             "server": ("test", 80),
         }
     )
 
 
-async def test_authority_uses_pinned_generation_and_operation_session() -> None:
+def _user() -> User:
+    return cast(User, SimpleNamespace(id="user-a", is_superuser=False))
+
+
+def test_unresolved_route_template_never_records_raw_request_path() -> None:
+    request = _request()
+    request.scope.pop("route")
+
+    route_template = _route_template(request)
+
+    assert route_template == "-"
+    assert "private-id" not in route_template
+
+
+async def test_authority_uses_pinned_generation_identity_and_operation_session() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
         profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
@@ -60,7 +76,7 @@ async def test_authority_uses_pinned_generation_and_operation_session() -> None:
         version=153,
     )
     db = AsyncSession()
-    user = cast(User, SimpleNamespace(id="user-a"))
+    user = _user()
     dependency = None
     authority = None
     try:
@@ -76,17 +92,20 @@ async def test_authority_uses_pinned_generation_and_operation_session() -> None:
             assert authority.operation.descriptor.generation == 153
             assert authority.operation.context.scope.kind is ScopeKindV2.ROOT
             assert authority.db is db
-            assert isinstance(authority.service, AttachmentService)
-            assert getattr(authority.service._repo, "_session", None) is db
+            assert authority.current_user is user
+            assert isinstance(authority.services.attachments.service, AttachmentService)
+            assert getattr(authority.services.attachments.service._repo, "_session", None) is db
+            assert getattr(authority.services.attachments.access, "_session", None) is db
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": None,
                 "user_id": "user-a",
+                "is_superuser": False,
             }
             assert authority.operation.require(OPERATION_METADATA_SERVICE_V2) == {
                 "kind": "http-authority",
-                "method": "POST",
-                "path": "/api/v1/attachments/upload/simple",
+                "method": "GET",
+                "path": "/api/v1/attachments/{attachment_id}",
             }
             await dependency.aclose()
 
@@ -111,7 +130,7 @@ async def test_authority_fails_closed_without_a_pinned_generation(
     db = AsyncSession()
     dependency = attachment_application_authority_dependency_v2(
         request=_request(),
-        current_user=cast(User, SimpleNamespace(id="user-a")),
+        current_user=_user(),
         db=db,
     )
     try:
@@ -124,16 +143,26 @@ async def test_authority_fails_closed_without_a_pinned_generation(
     assert error.value.code == "generation_not_pinned"
 
 
-def test_router_dependency_resolves_only_from_v2_authority() -> None:
-    parameter = signature(attachments_upload.get_attachment_service).parameters[
-        "attachment_application"
-    ]
+def test_every_router_handler_resolves_only_from_v2_authority() -> None:
+    for handler_name in (
+        "initiate_multipart_upload",
+        "upload_part",
+        "complete_multipart_upload",
+        "abort_multipart_upload",
+        "upload_simple",
+        "list_attachments",
+        "get_attachment",
+        "download_attachment",
+        "delete_attachment",
+    ):
+        parameters = signature(getattr(attachments_upload, handler_name)).parameters
+        authority = parameters["attachment_application"]
 
-    assert parameter.default.dependency is attachment_application_authority_dependency_v2
-    assert parameter.annotation in {
-        "AttachmentApplicationAuthorityV2",
-        AttachmentApplicationAuthorityV2,
-    }
-    assert "session" not in signature(attachments_upload.get_attachment_service).parameters
-    assert "_storage_service" not in vars(attachments_upload)
-    assert "_get_storage_service" not in vars(attachments_upload)
+        assert authority.default.dependency is attachment_application_authority_dependency_v2
+        assert authority.annotation in {
+            "AttachmentApplicationAuthorityV2",
+            AttachmentApplicationAuthorityV2,
+        }
+        assert "current_user" not in parameters
+        assert "db" not in parameters
+        assert "attachment_service" not in parameters

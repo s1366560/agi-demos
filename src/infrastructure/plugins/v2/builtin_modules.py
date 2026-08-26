@@ -31,7 +31,7 @@ from .ai_tool_services import ai_tool_service_definitions_v2
 from .artifact_content_gc_runtime import artifact_content_gc_definitions_v2
 from .artifact_content_services import artifact_content_application_definition_v2
 from .artifact_lifecycle_services import artifact_lifecycle_service_definitions_v2
-from .attachment_services import attachment_application_service_definition_v2
+from .attachment_services import attachment_service_definitions_v2
 from .audit_services import audit_service_definitions_v2
 from .backend_store_services import backend_store_service_definitions_v2
 from .background_task_services import background_task_service_definitions_v2
@@ -287,7 +287,7 @@ def builtin_runtime_definitions_v2(
         *artifact_content_gc_definitions_v2(),
         artifact_content_application_definition_v2(),
         *artifact_lifecycle_service_definitions_v2(),
-        attachment_application_service_definition_v2(),
+        *attachment_service_definitions_v2(),
         *cluster_service_definitions_v2(),
         *gene_service_definitions_v2(),
         *tenant_skill_config_service_definitions_v2(),

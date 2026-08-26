@@ -259,6 +259,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-attachment-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/attachment-provider
+      enabled: true
+      config:
+        strategy: operation-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-attachment-services
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -268,6 +282,7 @@ profile:
         strategy: operation-scoped-provider
         limits_from_settings: true
       inject:
+        provider: service:persistence.attachment-provider
         storage: service:storage.object-storage
       isolate: {}
       scope:

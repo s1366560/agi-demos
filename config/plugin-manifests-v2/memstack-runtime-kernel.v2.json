@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:addd60d6b386b374e6cfaa3ffd6c2461c696cef0f0a9dfa64ffe87508c54143e",
+        "digest": "sha256:bed8bac9d4db64f1676162336e078b6927efb7a035c68949d724f4436bcdef14",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -818,6 +818,37 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/attachment-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.attachment_services:attachment_persistence_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.attachment-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9693302cfa182b32e304a1974ac43fb9d7f647b3c331032bb53c274f871c1f3c",
+      "artifact": {
+        "digest": "sha256:34928979cd4265bdedd069bf03ad4180fefd1bfbdad59217843c95bfa54d6a76",
+        "source": "repo+python://src/infrastructure/plugins/v2/attachment_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/application/attachment-services",
       "entrypoint": "src.infrastructure.plugins.v2.attachment_services:attachment_application_service_definition_v2",
       "targets": ["python"],
@@ -830,6 +861,11 @@
             }
           ],
           "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.attachment-provider",
+              "version": "1.0.0"
+            },
             {
               "alias": "storage",
               "service": "service:storage.object-storage",
@@ -849,9 +885,9 @@
           }
         }
       },
-      "contract_digest": "sha256:1183410adc1ae23124d2d863e93d3b7fa9c05e8221ba267b631a457a7e82572b",
+      "contract_digest": "sha256:e17734ae5ef32a09e86312cfbf257e81a72c6a3179284c252045d5f99aae6bef",
       "artifact": {
-        "digest": "sha256:86e1c0e45ac4d9a70f39217b136e1246c15c60172c603ab87430e103e84e64b7",
+        "digest": "sha256:34928979cd4265bdedd069bf03ad4180fefd1bfbdad59217843c95bfa54d6a76",
         "source": "repo+python://src/infrastructure/plugins/v2/attachment_services.py"
       }
     },
