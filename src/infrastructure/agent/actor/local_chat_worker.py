@@ -76,7 +76,6 @@ async def _run(request_file: Path) -> int:
 
     try:
         bootstrapper = AgentRuntimeBootstrapper()
-        await bootstrapper._ensure_local_runtime_bootstrapped()
         agent = ProjectReActAgent(_agent_config_from_actor_config(config))
         _attach_plan_repository(agent)
         admission = DataPlaneGenerationAdmissionV2(
@@ -107,6 +106,7 @@ async def _run(request_file: Path) -> int:
                     },
                 },
             ):
+                await bootstrapper._ensure_local_runtime_bootstrapped()
                 initialized = await agent.initialize()
                 if not initialized:
                     raise RuntimeV2Error(

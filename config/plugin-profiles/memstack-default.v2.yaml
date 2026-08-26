@@ -141,6 +141,7 @@ profile:
         strategy: generation-sandbox-runtime
       inject:
         sandbox_runtime: service:sandbox.runtime
+        subagent_runs: service:agent.subagent-run-registry
       isolate: {}
       scope:
         kind: root

@@ -872,20 +872,14 @@ async def test_start_chat_actor_workspace_worker_forces_ray_when_runtime_is_auto
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_bootstrap_agent_orchestrator_wires_shared_run_registry(bootstrapper):
-    """Multi-agent bootstrap should attach the shared SubAgent run registry."""
+async def test_bootstrap_agent_orchestrator_wires_pinned_v2_run_registry(bootstrapper):
+    """Multi-agent bootstrap must consume the admitted generation's registry."""
     sentinel_registry = object()
-    settings = SimpleNamespace(
-        multi_agent_enabled=True,
-        agent_subagent_terminal_retention_seconds=321,
-        agent_subagent_run_registry_path="/tmp/runs.json",
-        agent_subagent_run_postgres_dsn="postgresql://example/db",
-        agent_subagent_run_sqlite_path="/tmp/runs.sqlite",
-        agent_subagent_run_redis_cache_url="redis://localhost:6379/0",
-        agent_subagent_run_redis_cache_ttl_seconds=45,
+    settings = SimpleNamespace(multi_agent_enabled=True)
+    current_worker_services_mock = MagicMock(
+        return_value=SimpleNamespace(subagent_run_registry=sentinel_registry)
     )
     get_settings_mock = MagicMock(return_value=settings)
-    get_shared_registry_mock = MagicMock(return_value=sentinel_registry)
     get_agent_orchestrator_mock = MagicMock(return_value=None)
     set_agent_orchestrator_mock = MagicMock()
     get_redis_client_mock = AsyncMock(return_value="redis-client")
@@ -924,9 +918,9 @@ async def test_bootstrap_agent_orchestrator_wires_shared_run_registry(bootstrapp
         "src.infrastructure.agent.orchestration.spawn_manager",
         SpawnManager=spawn_manager_ctor,
     )
-    fake_run_registry_module = _build_fake_module(
-        "src.infrastructure.agent.subagent.run_registry",
-        get_shared_subagent_run_registry=get_shared_registry_mock,
+    fake_agent_worker_runtime_module = _build_fake_module(
+        "src.infrastructure.plugins.v2.agent_worker_runtime",
+        current_agent_worker_runtime_services_v2=current_worker_services_mock,
     )
     fake_worker_state_module = _build_fake_module(
         "src.infrastructure.agent.state.agent_worker_state",
@@ -951,20 +945,15 @@ async def test_bootstrap_agent_orchestrator_wires_shared_run_registry(bootstrapp
                 fake_session_registry_module
             ),
             "src.infrastructure.agent.orchestration.spawn_manager": fake_spawn_manager_module,
-            "src.infrastructure.agent.subagent.run_registry": fake_run_registry_module,
+            "src.infrastructure.plugins.v2.agent_worker_runtime": (
+                fake_agent_worker_runtime_module
+            ),
             "src.infrastructure.agent.state.agent_worker_state": fake_worker_state_module,
         },
     ):
         await bootstrapper._bootstrap_agent_orchestrator()
 
-    get_shared_registry_mock.assert_called_once_with(
-        persistence_path="/tmp/runs.json",
-        postgres_persistence_dsn="postgresql://example/db",
-        sqlite_persistence_path="/tmp/runs.sqlite",
-        redis_cache_url="redis://localhost:6379/0",
-        redis_cache_ttl_seconds=45,
-        terminal_retention_seconds=321,
-    )
+    current_worker_services_mock.assert_called_once_with()
     spawn_manager_ctor.assert_called_once_with(
         session_registry="session-registry",
         run_registry=sentinel_registry,

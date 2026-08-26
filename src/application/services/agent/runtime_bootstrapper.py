@@ -1129,8 +1129,6 @@ class AgentRuntimeBootstrapper:
         )
 
         try:
-            await self._ensure_local_runtime_bootstrapped()
-
             agent_config = ProjectAgentConfig(
                 tenant_id=config.tenant_id,
                 project_id=config.project_id,
@@ -1210,6 +1208,7 @@ class AgentRuntimeBootstrapper:
                         },
                     },
                 ):
+                    await self._ensure_local_runtime_bootstrapped()
                     initialized = await agent.initialize()
                     if not initialized:
                         raise RuntimeV2Error(
@@ -1302,6 +1301,7 @@ class AgentRuntimeBootstrapper:
             get_agent_orchestrator,
             set_agent_orchestrator,
         )
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
         if get_agent_orchestrator():
             return
@@ -1332,33 +1332,14 @@ class AgentRuntimeBootstrapper:
                 from src.infrastructure.agent.state.agent_worker_state import (
                     get_redis_client,
                 )
-                from src.infrastructure.agent.subagent.run_registry import (
-                    get_shared_subagent_run_registry,
+                from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                    current_agent_worker_runtime_services_v2,
                 )
 
                 _db_session = async_session_factory()
                 _redis = await get_redis_client()
                 _session_registry = AgentSessionRegistry()
-                _run_registry = get_shared_subagent_run_registry(
-                    persistence_path=getattr(
-                        _ma_settings, "agent_subagent_run_registry_path", None
-                    ),
-                    postgres_persistence_dsn=getattr(
-                        _ma_settings, "agent_subagent_run_postgres_dsn", None
-                    ),
-                    sqlite_persistence_path=getattr(
-                        _ma_settings, "agent_subagent_run_sqlite_path", None
-                    ),
-                    redis_cache_url=getattr(
-                        _ma_settings, "agent_subagent_run_redis_cache_url", None
-                    ),
-                    redis_cache_ttl_seconds=(
-                        getattr(_ma_settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
-                    ),
-                    terminal_retention_seconds=(
-                        _ma_settings.agent_subagent_terminal_retention_seconds
-                    ),
-                )
+                _run_registry = current_agent_worker_runtime_services_v2().subagent_run_registry
                 _orchestrator = AgentOrchestrator(
                     agent_registry=SqlAgentRegistryRepository(_db_session),
                     session_registry=_session_registry,
@@ -1373,6 +1354,8 @@ class AgentRuntimeBootstrapper:
                 )
                 set_agent_orchestrator(_orchestrator)
                 logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")
+        except RuntimeV2Error:
+            raise
         except Exception as e:
             logger.warning(
                 "[AgentService] AgentOrchestrator init failed (multi-agent tools disabled): %s",

@@ -534,6 +534,11 @@
               "alias": "sandbox_runtime",
               "service": "service:sandbox.runtime",
               "version": "1.0.0"
+            },
+            {
+              "alias": "subagent_runs",
+              "service": "service:agent.subagent-run-registry",
+              "version": "1.0.0"
             }
           ]
         },
@@ -548,9 +553,9 @@
           }
         }
       },
-      "contract_digest": "sha256:5f215f5bba64b5399dd98551b217aa4c560501d7d1c682dd8853c2f8861c0f0e",
+      "contract_digest": "sha256:789bdc9698b1dd376e1ef9d0cb15b222898c6f89a4705942096b6e91c0ee852b",
       "artifact": {
-        "digest": "sha256:65822a33d1edabfd15874f8f0c1a25bfa94447f7248b10309b00eae77ebe04d8",
+        "digest": "sha256:7cdc101605b9af5c09e3589e6becffcf28837e535ff70954f0b795f1f48318b6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
